@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1615" />
+    <meta
+      name="description"
+      content="PORTIA — вымышленный исследовательский терминал с архивом вирусных субъектов."
+    />
+    <title>PORTIA — вирусный архив</title>
+    <link rel="icon" type="image/png" href="assets/portia-logo.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="desktop" id="desktop">
+      <header class="system-bar">
+        <div class="system-brand">
+          <img src="assets/portia-logo.png" alt="" />
+          <span>PORTIA</span>
+          <span class="system-division">RESEARCH OS / NODE 04</span>
+        </div>
+        <div class="system-status" aria-label="Состояние системы">
+          <span class="status-item"><i class="status-dot"></i>КОНТУР ЗАКРЫТ</span>
+          <time id="systemClock">--:--</time>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="desktop-dock" aria-label="Приложения">
+          <button class="dock-app active" type="button" aria-label="Открыть вирусный архив" id="focusArchive">
+            <span class="dock-icon" aria-hidden="true">DB</span>
+            <span>Архив</span>
+          </button>
+          <div class="dock-divider"></div>
+          <div class="dock-slot" aria-hidden="true"><span>+</span><small>Место для папки</small></div>
+        </aside>
+
+        <section class="app-window" id="archiveWindow" aria-label="Вирусный архив PORTIA">
+          <div class="window-titlebar">
+            <div class="window-identity">
+              <img src="assets/portia-logo.png" alt="" />
+              <span>PORTIA://VIRUS_ARCHIVE</span>
+            </div>
+            <div class="window-meta">ДОПУСК <strong>IV</strong></div>
+            <div class="window-controls" aria-hidden="true"><i></i><i></i><i></i></div>
+          </div>
+
+          <div class="archive-grid">
+            <aside class="archive-browser" aria-label="Список вирусов">
+              <div class="browser-heading">
+                <div>
+                  <span class="eyebrow">ЛОКАЛЬНОЕ ХРАНИЛИЩЕ</span>
+                  <h1>База вирусов</h1>
+                </div>
+                <span class="record-count" id="recordCount">00</span>
+              </div>
+
+              <label class="search-box">
+                <span aria-hidden="true">⌕</span>
+                <span class="sr-only">Поиск по базе</span>
+                <input id="virusSearch" type="search" placeholder="Поиск по имени или коду" autocomplete="off" />
+              </label>
+
+              <div class="browser-labels" aria-hidden="true"><span>СУБЪЕКТ</span><span>СТАТУС</span></div>
+              <div class="virus-list" id="virusList" role="listbox" aria-label="Записи вирусов"></div>
+
+              <div class="browser-footer">
+                <span><i class="status-dot"></i>СИНХРОНИЗИРОВАНО</span>
+                <span>PORTIA LABS</span>
+              </div>
+            </aside>
+
+            <article class="record-view" id="recordView" aria-live="polite"></article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="taskbar">
+        <button class="start-button" type="button" id="startButton" aria-expanded="false">
+          <img src="assets/portia-logo.png" alt="" />
+          <span>PORTIA</span>
+        </button>
+        <div class="taskbar-app"><span class="mini-app-icon">DB</span><span>Вирусный архив</span></div>
+        <span class="taskbar-note">ВЫМЫШЛЕННЫЙ ИССЛЕДОВАТЕЛЬСКИЙ МАТЕРИАЛ</span>
+      </footer>
+
+      <div class="start-panel" id="startPanel" hidden>
+        <div class="start-panel-brand">
+          <img src="assets/portia-logo.png" alt="PORTIA" />
+          <div><strong>PORTIA OS</strong><span>Научная станция</span></div>
+        </div>
+        <button type="button" id="menuArchive"><span>DB</span>Вирусный архив</button>
+        <div class="start-placeholder">Дополнительные папки будут добавлены позже</div>
+      </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
