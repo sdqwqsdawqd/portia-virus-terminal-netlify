@@ -160,10 +160,6 @@ function renderRecord(virus) {
 
       <section class="dossier-section scientist-log-section">
         <div class="section-kicker"><span>06</span>ЗАПИСИ УЧЁНЫХ</div>
-        <div class="scientist-directory">
-          <div><span>КАДРОВЫЙ РЕЕСТР / 2059</span><p>В целях конфиденциальности учёные скрывают настоящие имена и используют псевдонимы.</p></div>
-          <a href="https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww" target="_blank" rel="noopener noreferrer">СПИСОК УЧЁНЫХ</a>
-        </div>
         <div class="access-summary"><span>ТЕКУЩИЙ УРОВЕНЬ ДОСТУПА</span><strong>II</strong></div>
         <div class="scientist-log-list">${scientistLogs}</div>
       </section>
