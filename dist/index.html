@@ -42,7 +42,7 @@
               <img src="assets/portia-logo.png" alt="" />
               <span>PORTIA://VIRUS_ARCHIVE</span>
             </div>
-            <div class="window-meta">ДОПУСК <strong>IV</strong></div>
+            <div class="window-meta">ДОПУСК <strong>II</strong></div>
             <div class="window-controls" aria-hidden="true"><i></i><i></i><i></i></div>
           </div>
 
@@ -93,6 +93,19 @@
         <button type="button" id="menuArchive"><span>DB</span>Вирусный архив</button>
         <div class="start-placeholder">Дополнительные папки будут добавлены позже</div>
       </div>
+
+      <dialog class="log-dialog" id="scientistLogDialog" aria-labelledby="scientistLogTitle">
+        <div class="log-dialog-shell">
+          <header class="log-dialog-header">
+            <div>
+              <span id="scientistLogPath">PORTIA://ARCHIVE/LOG</span>
+              <h2 id="scientistLogTitle">ЗАПИСЬ УЧЁНОГО</h2>
+            </div>
+            <form method="dialog"><button type="submit" aria-label="Закрыть запись">×</button></form>
+          </header>
+          <div class="log-dialog-body" id="scientistLogBody"></div>
+        </div>
+      </dialog>
     </div>
 
     <script type="module" src="app.js"></script>

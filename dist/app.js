@@ -1,4 +1,4 @@
-import { viruses } from "./data/viruses.js";
+import { CURRENT_ACCESS_LEVEL, viruses } from "./data/viruses.js";
 
 const listElement = document.querySelector("#virusList");
 const viewElement = document.querySelector("#recordView");
@@ -8,8 +8,23 @@ const clockElement = document.querySelector("#systemClock");
 const archiveWindow = document.querySelector("#archiveWindow");
 const startButton = document.querySelector("#startButton");
 const startPanel = document.querySelector("#startPanel");
+const scientistLogDialog = document.querySelector("#scientistLogDialog");
+const scientistLogTitle = document.querySelector("#scientistLogTitle");
+const scientistLogPath = document.querySelector("#scientistLogPath");
+const scientistLogBody = document.querySelector("#scientistLogBody");
 
 let activeId = viruses[0]?.id ?? null;
+
+// Для каждого вируса одна случайная запись доступна до перезагрузки страницы.
+const unlockedLogByVirus = new Map(
+  viruses.map((virus) => {
+    const logs = virus.scientistLogs ?? [];
+    const selected = logs.length ? logs[Math.floor(Math.random() * logs.length)].id : null;
+    return [virus.id, selected];
+  })
+);
+
+const accessLevelLabel = (level) => ({ 2: "II", 3: "III", 4: "IV" })[level] ?? String(level);
 
 const escapeHtml = (value = "") =>
   String(value)
@@ -84,6 +99,20 @@ function renderRecord(virus) {
     )
     .join("");
 
+  const unlockedLogId = unlockedLogByVirus.get(virus.id);
+  const scientistLogs = (virus.scientistLogs ?? [])
+    .map((log, index) => {
+      const isOpen = log.id === unlockedLogId;
+      const shownLevel = isOpen ? CURRENT_ACCESS_LEVEL : log.lockedLevel;
+      return `<button class="scientist-log-row ${isOpen ? "available" : "locked"}" type="button" data-log-id="${escapeHtml(log.id)}">
+        <span class="log-number">LOG-${String(index + 1).padStart(2, "0")}</span>
+        <span class="log-name"><strong>${escapeHtml(log.title)}</strong><small>${escapeHtml(log.scientist)}</small></span>
+        <span class="log-clearance">УРОВЕНЬ ${accessLevelLabel(shownLevel)}</span>
+        <span class="log-action">${isOpen ? "ОТКРЫТЬ" : "ЗАБЛОКИРОВАНО"}</span>
+      </button>`;
+    })
+    .join("");
+
   viewElement.innerHTML = `
     <header class="record-header">
       <div>
@@ -95,7 +124,7 @@ function renderRecord(virus) {
 
     <div class="record-document">
       <section class="record-hero">
-        ${mediaBlock(virus.image, `Субъект после распыления вируса ${virus.name}`, "Субъект после распыления вируса")}
+        ${mediaBlock(virus.infectedImage, `Субъект после заражения вирусом ${virus.name}`, "Фото после заражения")}
         <div class="classification-panel">
           <div class="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div>
           <div class="classification-grid">
@@ -132,10 +161,43 @@ function renderRecord(virus) {
         <div class="mutation-grid">${mutations}</div>
       </section>
 
+      <section class="dossier-section scientist-log-section">
+        <div class="section-kicker"><span>06</span>ЗАПИСИ УЧЁНЫХ</div>
+        <div class="access-summary"><span>ТЕКУЩИЙ УРОВЕНЬ ДОСТУПА</span><strong>II</strong></div>
+        <div class="scientist-log-list">${scientistLogs}</div>
+      </section>
+
       <footer class="record-footer"><span>PORTIA / SCIENCE EXPEDITION</span><span>ЗАПИСЬ ${escapeHtml(virus.code)}</span></footer>
     </div>`;
 
+  viewElement.querySelectorAll("[data-log-id]").forEach((button) => {
+    button.addEventListener("click", () => openScientistLog(virus, button.dataset.logId));
+  });
+
   viewElement.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function openScientistLog(virus, logId) {
+  const log = (virus.scientistLogs ?? []).find((item) => item.id === logId);
+  if (!log) return;
+
+  const isOpen = unlockedLogByVirus.get(virus.id) === log.id;
+  const requiredLevel = isOpen ? CURRENT_ACCESS_LEVEL : log.lockedLevel;
+  scientistLogPath.textContent = `PORTIA://VIRUS_ARCHIVE/${virus.code}/LOGS/${log.id}`;
+  scientistLogTitle.textContent = log.title;
+
+  if (isOpen) {
+    scientistLogBody.innerHTML = `
+      <div class="dialog-access granted"><span>ДОСТУП РАЗРЕШЁН</span><strong>УРОВЕНЬ ${accessLevelLabel(requiredLevel)}</strong></div>
+      <div class="dialog-scientist"><span>УЧЁНЫЙ</span><strong>${escapeHtml(log.scientist)}</strong></div>
+      <div class="dialog-copy">${log.content.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("")}</div>`;
+  } else {
+    scientistLogBody.innerHTML = `
+      <div class="dialog-access denied"><span>ДОСТУП ОТКЛОНЁН</span><strong>УРОВЕНЬ ${accessLevelLabel(requiredLevel)}</strong></div>
+      <div class="denied-message"><strong>НЕДОСТАТОЧНЫЙ УРОВЕНЬ ДОСТУПА</strong><p>Текущий уровень: II. Для открытия записи требуется уровень ${accessLevelLabel(requiredLevel)}.</p></div>`;
+  }
+
+  scientistLogDialog.showModal();
 }
 
 function selectVirus(id) {
