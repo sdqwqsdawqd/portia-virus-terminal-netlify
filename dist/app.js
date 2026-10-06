@@ -8,12 +8,9 @@ const clockElement = document.querySelector("#systemClock");
 const archiveWindow = document.querySelector("#archiveWindow");
 const startButton = document.querySelector("#startButton");
 const startPanel = document.querySelector("#startPanel");
-const scientistLogDialog = document.querySelector("#scientistLogDialog");
-const scientistLogTitle = document.querySelector("#scientistLogTitle");
-const scientistLogPath = document.querySelector("#scientistLogPath");
-const scientistLogBody = document.querySelector("#scientistLogBody");
 
 let activeId = viruses[0]?.id ?? null;
+let switchTimer = null;
 
 // Для каждого вируса одна случайная запись доступна до перезагрузки страницы.
 const unlockedLogByVirus = new Map(
@@ -163,6 +160,10 @@ function renderRecord(virus) {
 
       <section class="dossier-section scientist-log-section">
         <div class="section-kicker"><span>06</span>ЗАПИСИ УЧЁНЫХ</div>
+        <div class="scientist-directory">
+          <div><span>КАДРОВЫЙ РЕЕСТР / 2059</span><p>В целях конфиденциальности учёные скрывают настоящие имена и используют псевдонимы.</p></div>
+          <a href="https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww" target="_blank" rel="noopener noreferrer">СПИСОК УЧЁНЫХ</a>
+        </div>
         <div class="access-summary"><span>ТЕКУЩИЙ УРОВЕНЬ ДОСТУПА</span><strong>II</strong></div>
         <div class="scientist-log-list">${scientistLogs}</div>
       </section>
@@ -174,7 +175,7 @@ function renderRecord(virus) {
     button.addEventListener("click", () => openScientistLog(virus, button.dataset.logId));
   });
 
-  viewElement.scrollTo({ top: 0, behavior: "smooth" });
+  viewElement.scrollTo({ top: 0, behavior: "auto" });
 }
 
 function openScientistLog(virus, logId) {
@@ -183,32 +184,64 @@ function openScientistLog(virus, logId) {
 
   const isOpen = unlockedLogByVirus.get(virus.id) === log.id;
   const requiredLevel = isOpen ? CURRENT_ACCESS_LEVEL : log.lockedLevel;
-  scientistLogPath.textContent = `PORTIA://VIRUS_ARCHIVE/${virus.code}/LOGS/${log.id}`;
-  scientistLogTitle.textContent = log.title;
+  const documentBody = isOpen
+    ? `<section class="archive-document-section">
+        <h2>ТЕКСТ ЗАПИСИ</h2>
+        ${log.content.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("")}
+      </section>`
+    : `<section class="archive-document-section restricted-document">
+        <div class="restriction-mark">ДОСТУП ОГРАНИЧЕН</div>
+        <h2>НЕДОСТАТОЧНЫЙ УРОВЕНЬ ДОСТУПА</h2>
+        <p>Текущий уровень: II. Для чтения этого документа требуется уровень ${accessLevelLabel(requiredLevel)}.</p>
+        <div class="redaction-lines" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      </section>`;
 
-  if (isOpen) {
-    scientistLogBody.innerHTML = `
-      <div class="dialog-access granted"><span>ДОСТУП РАЗРЕШЁН</span><strong>УРОВЕНЬ ${accessLevelLabel(requiredLevel)}</strong></div>
-      <div class="dialog-scientist"><span>УЧЁНЫЙ</span><strong>${escapeHtml(log.scientist)}</strong></div>
-      <div class="dialog-copy">${log.content.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("")}</div>`;
-  } else {
-    scientistLogBody.innerHTML = `
-      <div class="dialog-access denied"><span>ДОСТУП ОТКЛОНЁН</span><strong>УРОВЕНЬ ${accessLevelLabel(requiredLevel)}</strong></div>
-      <div class="denied-message"><strong>НЕДОСТАТОЧНЫЙ УРОВЕНЬ ДОСТУПА</strong><p>Текущий уровень: II. Для открытия записи требуется уровень ${accessLevelLabel(requiredLevel)}.</p></div>`;
+  viewElement.innerHTML = `
+    <article class="archive-document-view">
+      <header class="archive-document-bar">
+        <button type="button" id="backToDossier">ВЕРНУТЬСЯ К ДОСЬЕ</button>
+        <span>PORTIA / АРХИВ 2059 / УРОВЕНЬ ${accessLevelLabel(requiredLevel)}</span>
+      </header>
+      <div class="archive-document-paper">
+        <div class="archive-document-stamp">${isOpen ? "ДОПУСК РАЗРЕШЁН" : "ДОПУСК ОТКЛОНЁН"}</div>
+        <div class="archive-document-code">PORTIA://VIRUS_ARCHIVE/${escapeHtml(virus.code)}/LOGS/${escapeHtml(log.id)}</div>
+        <h1>${escapeHtml(log.title)}</h1>
+        <dl class="archive-document-meta">
+          <div><dt>ОБЪЕКТ</dt><dd>${escapeHtml(virus.name)} / ${escapeHtml(virus.code)}</dd></div>
+          <div><dt>УЧЁНЫЙ</dt><dd>${escapeHtml(log.scientist)}</dd></div>
+          <div><dt>УРОВЕНЬ</dt><dd>${accessLevelLabel(requiredLevel)}</dd></div>
+        </dl>
+        ${documentBody}
+        <footer><span>ВНУТРЕННИЙ АРХИВ PORTIA</span><span>2059</span></footer>
+      </div>
+    </article>`;
+
+  viewElement.querySelector("#backToDossier").addEventListener("click", () => renderRecord(virus));
+  viewElement.scrollTo({ top: 0, behavior: "auto" });
+  if (window.innerWidth < 760) {
+    viewElement.scrollIntoView({ behavior: "auto", block: "start" });
   }
-
-  scientistLogDialog.showModal();
 }
 
 function selectVirus(id) {
   const virus = viruses.find((item) => item.id === id);
   if (!virus) return;
-  activeId = id;
-  renderList(searchElement.value);
-  renderRecord(virus);
-  if (window.innerWidth < 760) {
-    viewElement.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  if (id === activeId) return;
+
+  clearTimeout(switchTimer);
+  viewElement.classList.remove("record-transition-in");
+  viewElement.classList.add("record-transition-out");
+  switchTimer = setTimeout(() => {
+    activeId = id;
+    renderList(searchElement.value);
+    renderRecord(virus);
+    viewElement.classList.remove("record-transition-out");
+    viewElement.classList.add("record-transition-in");
+    setTimeout(() => viewElement.classList.remove("record-transition-in"), 190);
+    if (window.innerWidth < 760) {
+      viewElement.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, 85);
 }
 
 function updateClock() {
