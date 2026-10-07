@@ -28,24 +28,36 @@
 
       <main class="workspace" id="desktopArea">
         <nav class="desktop-icons" aria-label="Рабочий стол PORTIA">
-          <button class="desktop-icon" type="button" data-open-app="archive">
-            <span class="desktop-icon-symbol db-icon" aria-hidden="true">DB</span>
-            <span>Вирусный архив</span>
-          </button>
           <button class="desktop-icon" type="button" data-open-app="search">
-            <span class="desktop-icon-symbol search-icon" aria-hidden="true">⌕</span>
+            <span class="desktop-icon-symbol" aria-hidden="true"><img src="assets/app-search.png" alt="" /></span>
             <span>Глобальный поиск</span>
           </button>
+          <button class="desktop-icon" type="button" data-open-app="archive">
+            <span class="desktop-icon-symbol" aria-hidden="true"><img src="assets/app-virus.png" alt="" /></span>
+            <span>База вирусов</span>
+          </button>
           <a class="desktop-icon" href="https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww" target="_blank" rel="noopener noreferrer">
-            <span class="desktop-icon-symbol people-icon" aria-hidden="true">ID</span>
+            <span class="desktop-icon-symbol" aria-hidden="true"><img src="assets/app-scientists.png" alt="" /></span>
             <span>Список учёных</span>
           </a>
+          <button class="desktop-icon" type="button" data-open-app="info">
+            <span class="desktop-icon-symbol" aria-hidden="true"><img src="assets/app-info.png" alt="" /></span>
+            <span>Информация</span>
+          </button>
+          <button class="desktop-icon" type="button" data-open-app="settings">
+            <span class="desktop-icon-symbol" aria-hidden="true"><img src="assets/app-settings.png" alt="" /></span>
+            <span>Настройки</span>
+          </button>
+          <button class="desktop-icon desktop-icon-trash" type="button" data-open-app="trash">
+            <span class="desktop-icon-symbol" aria-hidden="true"><img src="assets/app-trash.svg" alt="" /></span>
+            <span>Корзина</span>
+          </button>
         </nav>
 
         <section class="app-window archive-window" id="archiveWindow" data-app="archive" aria-label="Вирусный архив PORTIA">
           <div class="window-titlebar" data-drag-handle>
             <div class="window-identity">
-              <img src="assets/portia-logo.png" alt="" />
+              <span class="window-app-mark"><img src="assets/app-virus.png" alt="" /></span>
               <span>PORTIA://VIRUS_ARCHIVE</span>
             </div>
             <div class="window-meta">ДОПУСК <strong>II</strong></div>
@@ -88,7 +100,7 @@
         <section class="app-window global-search-window" id="globalSearchWindow" data-app="search" aria-label="Глобальный поиск PORTIA" hidden>
           <div class="window-titlebar" data-drag-handle>
             <div class="window-identity">
-              <span class="window-app-mark" aria-hidden="true">⌕</span>
+              <span class="window-app-mark" aria-hidden="true"><img src="assets/app-search.png" alt="" /></span>
               <span>PORTIA://GLOBAL_SEARCH</span>
             </div>
             <div class="window-meta">ИНДЕКС <strong>АКТИВЕН</strong></div>
@@ -114,6 +126,108 @@
             <div class="global-search-results" id="globalSearchResults" aria-live="polite"></div>
           </div>
         </section>
+
+        <section class="app-window utility-window info-window" id="infoWindow" data-app="info" aria-label="Информация PORTIA" hidden>
+          <div class="window-titlebar" data-drag-handle>
+            <div class="window-identity">
+              <span class="window-app-mark" aria-hidden="true"><img src="assets/app-info.png" alt="" /></span>
+              <span>PORTIA://INFORMATION</span>
+            </div>
+            <div class="window-meta">РАЗДЕЛ <strong>06</strong></div>
+            <div class="window-controls">
+              <button type="button" data-window-action="minimize" aria-label="Свернуть информацию"><span aria-hidden="true">―</span></button>
+              <button type="button" data-window-action="maximize" aria-label="Развернуть информацию"><span aria-hidden="true">□</span></button>
+              <button type="button" data-window-action="close" aria-label="Закрыть информацию"><span aria-hidden="true">×</span></button>
+            </div>
+          </div>
+          <article class="info-app">
+            <span class="eyebrow">ВНУТРЕННИЙ УСТАВ ОТДЕЛА PORTIA</span>
+            <h1>Документация и утверждение</h1>
+            <div class="info-ledger">
+              <div><span>Создатель первого устава</span><strong>maryerrar</strong></div>
+              <div><span>Создатель нынешнего устава</span><strong>anuargovni1</strong></div>
+              <div><span>Редакторы</span><strong>wewewewestrelok, anuargovni1</strong></div>
+              <div><span>Утверждено</span><strong>wewewewestrelok</strong></div>
+            </div>
+            <footer><span>РАЗДЕЛ 06 / ИНФОРМАЦИЯ</span><span>Последнее изменение: 01.10.26</span></footer>
+          </article>
+        </section>
+
+        <section class="app-window utility-window settings-window" id="settingsWindow" data-app="settings" aria-label="Настройки рабочего стола PORTIA" hidden>
+          <div class="window-titlebar" data-drag-handle>
+            <div class="window-identity">
+              <span class="window-app-mark" aria-hidden="true"><img src="assets/app-settings.png" alt="" /></span>
+              <span>PORTIA://DESKTOP_SETTINGS</span>
+            </div>
+            <div class="window-meta">ПРОФИЛЬ <strong>ЛОКАЛЬНЫЙ</strong></div>
+            <div class="window-controls">
+              <button type="button" data-window-action="minimize" aria-label="Свернуть настройки"><span aria-hidden="true">―</span></button>
+              <button type="button" data-window-action="maximize" aria-label="Развернуть настройки"><span aria-hidden="true">□</span></button>
+              <button type="button" data-window-action="close" aria-label="Закрыть настройки"><span aria-hidden="true">×</span></button>
+            </div>
+          </div>
+          <div class="settings-app">
+            <header><span class="eyebrow">ПЕРСОНАЛИЗАЦИЯ PORTIA OS</span><h1>Настройки рабочего стола</h1><p>Изменения сохраняются на этом устройстве автоматически.</p></header>
+            <section class="settings-section">
+              <h2>Цвет интерфейса</h2>
+              <div class="setting-options color-options">
+                <button type="button" data-setting="accent" data-value="teal"><i class="swatch teal"></i><span>PORTIA</span></button>
+                <button type="button" data-setting="accent" data-value="ice"><i class="swatch ice"></i><span>Холодный</span></button>
+                <button type="button" data-setting="accent" data-value="amber"><i class="swatch amber"></i><span>Янтарный</span></button>
+                <button type="button" data-setting="accent" data-value="red"><i class="swatch red"></i><span>Тревога</span></button>
+              </div>
+            </section>
+            <section class="settings-section">
+              <h2>Фон рабочего стола</h2>
+              <div class="setting-options">
+                <button type="button" data-setting="wallpaper" data-value="radar"><span>Радар</span></button>
+                <button type="button" data-setting="wallpaper" data-value="grid"><span>Сетка</span></button>
+                <button type="button" data-setting="wallpaper" data-value="quiet"><span>Чистый</span></button>
+              </div>
+            </section>
+            <section class="settings-section">
+              <h2>Размер ярлыков</h2>
+              <div class="setting-options">
+                <button type="button" data-setting="iconSize" data-value="compact"><span>Компактный</span></button>
+                <button type="button" data-setting="iconSize" data-value="standard"><span>Стандартный</span></button>
+                <button type="button" data-setting="iconSize" data-value="large"><span>Крупный</span></button>
+              </div>
+            </section>
+            <div class="settings-footer">
+              <button class="factory-reset" type="button" id="factoryReset">СБРОСИТЬ ДО ЗАВОДСКИХ</button>
+              <span id="settingsStatus" role="status">Настройки сохранены</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="app-window utility-window trash-window" id="trashWindow" data-app="trash" aria-label="Корзина PORTIA" hidden>
+          <div class="window-titlebar" data-drag-handle>
+            <div class="window-identity">
+              <span class="window-app-mark" aria-hidden="true"><img src="assets/app-trash.svg" alt="" /></span>
+              <span>PORTIA://RECYCLE_BIN</span>
+            </div>
+            <div class="window-meta">ФАЙЛОВ <strong>03</strong></div>
+            <div class="window-controls">
+              <button type="button" data-window-action="minimize" aria-label="Свернуть корзину"><span aria-hidden="true">―</span></button>
+              <button type="button" data-window-action="maximize" aria-label="Развернуть корзину"><span aria-hidden="true">□</span></button>
+              <button type="button" data-window-action="close" aria-label="Закрыть корзину"><span aria-hidden="true">×</span></button>
+            </div>
+          </div>
+          <div class="trash-app">
+            <header><span class="eyebrow">ЛОКАЛЬНЫЕ КОПИИ</span><h1>Корзина</h1><p>Три текстовых файла вирусов. Изменения сохраняются только на этом устройстве.</p></header>
+            <div class="trash-layout">
+              <section class="trash-files" aria-label="Файлы в корзине">
+                <div class="trash-list-head"><span>Имя</span><span>Исходное расположение</span><span>Тип</span></div>
+                <div id="trashFileList"></div>
+              </section>
+              <section class="trash-editor" id="trashEditor" hidden>
+                <div class="trash-editor-head"><div><span>РЕДАКТОР ФАЙЛА</span><strong id="trashEditorName">—</strong></div><button type="button" id="closeTrashEditor" aria-label="Закрыть редактор">×</button></div>
+                <textarea id="trashFileContent" spellcheck="false" aria-label="Содержимое файла"></textarea>
+                <div class="trash-editor-actions"><button type="button" id="saveTrashFile">СОХРАНИТЬ</button><button type="button" id="restoreTrashFile">ВОССТАНОВИТЬ ИСХОДНЫЙ ТЕКСТ</button><span id="trashStatus" role="status"></span></div>
+              </section>
+            </div>
+          </div>
+        </section>
       </main>
 
       <footer class="taskbar">
@@ -122,8 +236,11 @@
           <span>PORTIA</span>
         </button>
         <div class="taskbar-apps" aria-label="Открытые программы">
-          <button class="taskbar-app active" type="button" data-task-app="archive"><span class="mini-app-icon">DB</span><span>Вирусный архив</span></button>
-          <button class="taskbar-app" type="button" data-task-app="search" hidden><span class="mini-app-icon">⌕</span><span>Поиск</span></button>
+          <button class="taskbar-app active" type="button" data-task-app="archive"><span class="mini-app-icon"><img src="assets/app-virus.png" alt="" /></span><span>База вирусов</span></button>
+          <button class="taskbar-app" type="button" data-task-app="search" hidden><span class="mini-app-icon"><img src="assets/app-search.png" alt="" /></span><span>Поиск</span></button>
+          <button class="taskbar-app" type="button" data-task-app="info" hidden><span class="mini-app-icon"><img src="assets/app-info.png" alt="" /></span><span>Информация</span></button>
+          <button class="taskbar-app" type="button" data-task-app="settings" hidden><span class="mini-app-icon"><img src="assets/app-settings.png" alt="" /></span><span>Настройки</span></button>
+          <button class="taskbar-app" type="button" data-task-app="trash" hidden><span class="mini-app-icon"><img src="assets/app-trash.svg" alt="" /></span><span>Корзина</span></button>
         </div>
         <span class="taskbar-note">ВЫМЫШЛЕННЫЙ ИССЛЕДОВАТЕЛЬСКИЙ МАТЕРИАЛ</span>
       </footer>
@@ -133,21 +250,23 @@
           <img src="assets/portia-logo.png" alt="PORTIA" />
           <div><strong>PORTIA OS</strong><span>Научная станция</span></div>
         </div>
-        <button type="button" id="menuArchive"><span>DB</span>Вирусный архив</button>
-        <button type="button" id="menuSearch"><span>⌕</span>Глобальный поиск</button>
+        <button type="button" id="menuSearch"><span class="start-panel-icon"><img src="assets/app-search.png" alt="" /></span>Глобальный поиск</button>
+        <button type="button" id="menuArchive"><span class="start-panel-icon"><img src="assets/app-virus.png" alt="" /></span>База вирусов</button>
         <a
           class="start-panel-link"
           href="https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww"
           target="_blank"
           rel="noopener noreferrer"
         >
-          <span class="start-panel-icon" aria-hidden="true">ID</span>
+          <span class="start-panel-icon" aria-hidden="true"><img src="assets/app-scientists.png" alt="" /></span>
           <span class="start-panel-link-copy">
             <strong>Список учёных</strong>
             <small>Сотрудники используют псевдонимы · 2059</small>
           </span>
         </a>
-        <div class="start-placeholder">Дополнительные папки будут добавлены позже</div>
+        <button type="button" id="menuInfo"><span class="start-panel-icon"><img src="assets/app-info.png" alt="" /></span>Информация</button>
+        <button type="button" id="menuSettings"><span class="start-panel-icon"><img src="assets/app-settings.png" alt="" /></span>Настройки</button>
+        <button type="button" id="menuTrash"><span class="start-panel-icon"><img src="assets/app-trash.svg" alt="" /></span>Корзина</button>
       </div>
 
     </div>

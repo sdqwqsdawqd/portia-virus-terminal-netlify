@@ -12,6 +12,15 @@ const globalSearchInput = document.querySelector("#globalSearchInput");
 const globalSearchResults = document.querySelector("#globalSearchResults");
 const globalSearchStatus = document.querySelector("#globalSearchStatus");
 const globalSearchCount = document.querySelector("#globalSearchCount");
+const infoWindow = document.querySelector("#infoWindow");
+const settingsWindow = document.querySelector("#settingsWindow");
+const trashWindow = document.querySelector("#trashWindow");
+const settingsStatus = document.querySelector("#settingsStatus");
+const trashFileList = document.querySelector("#trashFileList");
+const trashEditor = document.querySelector("#trashEditor");
+const trashEditorName = document.querySelector("#trashEditorName");
+const trashFileContent = document.querySelector("#trashFileContent");
+const trashStatus = document.querySelector("#trashStatus");
 const startButton = document.querySelector("#startButton");
 const startPanel = document.querySelector("#startPanel");
 
@@ -20,10 +29,13 @@ let switchTimer = null;
 let activeApp = "archive";
 let topWindowLayer = 50;
 
-const mobileLayout = window.matchMedia("(max-width: 760px)");
+const mobileLayout = window.matchMedia("(max-width: 900px)");
 const appStates = new Map([
   ["archive", { window: archiveWindow, task: document.querySelector('[data-task-app="archive"]'), open: true, minimized: false }],
-  ["search", { window: globalSearchWindow, task: document.querySelector('[data-task-app="search"]'), open: false, minimized: false }]
+  ["search", { window: globalSearchWindow, task: document.querySelector('[data-task-app="search"]'), open: false, minimized: false }],
+  ["info", { window: infoWindow, task: document.querySelector('[data-task-app="info"]'), open: false, minimized: false }],
+  ["settings", { window: settingsWindow, task: document.querySelector('[data-task-app="settings"]'), open: false, minimized: false }],
+  ["trash", { window: trashWindow, task: document.querySelector('[data-task-app="trash"]'), open: false, minimized: false }]
 ]);
 
 // Для каждого вируса одна случайная запись доступна до перезагрузки страницы.
@@ -46,6 +58,119 @@ const escapeHtml = (value = "") =>
     .replaceAll("'", "&#039;");
 
 const normalizeText = (value = "") => String(value).toLocaleLowerCase("ru").replaceAll("ё", "е");
+
+const SETTINGS_STORAGE_KEY = "portia-desktop-settings-v1";
+const TRASH_STORAGE_KEY = "portia-trash-files-v1";
+const defaultDesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard" };
+
+function readLocalData(key, fallback) {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLocalData(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let desktopSettings = { ...defaultDesktopSettings, ...readLocalData(SETTINGS_STORAGE_KEY, {}) };
+
+const defaultTrashFiles = viruses.map((virus) => ({
+  id: virus.id,
+  name: `${virus.name}_${virus.code}.virus`,
+  location: "C:\\PORTIA\\VIRUS_ARCHIVE",
+  type: "Документ вируса",
+  content: [
+    "PORTIA / ЛОКАЛЬНАЯ КОПИЯ",
+    `ОБЪЕКТ: ${virus.name}`,
+    `КОД: ${virus.code}`,
+    `СТАТУС: ${virus.status}`,
+    "",
+    "ВНЕШНИЕ ХАРАКТЕРИСТИКИ:",
+    virus.external,
+    "",
+    "ФИЗИОЛОГИЯ:",
+    virus.physiology
+  ].join("\n")
+}));
+
+const storedTrashFiles = readLocalData(TRASH_STORAGE_KEY, []);
+let trashFiles = defaultTrashFiles.map((defaultFile) => {
+  const storedFile = Array.isArray(storedTrashFiles) ? storedTrashFiles.find((file) => file.id === defaultFile.id) : null;
+  return storedFile ? { ...defaultFile, content: storedFile.content } : defaultFile;
+});
+let activeTrashFileId = null;
+
+function applyDesktopSettings(announce = false) {
+  const root = document.documentElement;
+  root.dataset.accent = desktopSettings.accent;
+  root.dataset.wallpaper = desktopSettings.wallpaper;
+  root.dataset.iconSize = desktopSettings.iconSize;
+
+  document.querySelectorAll("[data-setting]").forEach((button) => {
+    const selected = desktopSettings[button.dataset.setting] === button.dataset.value;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+
+  if (announce) {
+    const saved = writeLocalData(SETTINGS_STORAGE_KEY, desktopSettings);
+    settingsStatus.textContent = saved ? "Настройки сохранены" : "Не удалось сохранить настройки";
+  }
+}
+
+function renderTrashFiles() {
+  trashFileList.replaceChildren();
+  trashFiles.forEach((file) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `trash-file-row${file.id === activeTrashFileId ? " active" : ""}`;
+    button.innerHTML = `
+      <span class="trash-file-name"><img src="assets/app-virus.png" alt="" /><strong>${escapeHtml(file.name)}</strong></span>
+      <span>${escapeHtml(file.location)}</span>
+      <span>${escapeHtml(file.type)}</span>`;
+    button.addEventListener("click", () => openTrashFile(file.id));
+    trashFileList.append(button);
+  });
+}
+
+function openTrashFile(fileId) {
+  const file = trashFiles.find((item) => item.id === fileId);
+  if (!file) return;
+  activeTrashFileId = fileId;
+  trashEditor.hidden = false;
+  trashEditorName.textContent = file.name;
+  trashFileContent.value = file.content;
+  trashStatus.textContent = "";
+  renderTrashFiles();
+  if (mobileLayout.matches) trashEditor.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+function saveTrashFile() {
+  const file = trashFiles.find((item) => item.id === activeTrashFileId);
+  if (!file) return;
+  file.content = trashFileContent.value;
+  const saved = writeLocalData(TRASH_STORAGE_KEY, trashFiles.map(({ id, content }) => ({ id, content })));
+  trashStatus.textContent = saved ? "Файл сохранён" : "Не удалось сохранить файл";
+}
+
+function restoreTrashFile() {
+  const original = defaultTrashFiles.find((item) => item.id === activeTrashFileId);
+  const file = trashFiles.find((item) => item.id === activeTrashFileId);
+  if (!original || !file) return;
+  file.content = original.content;
+  trashFileContent.value = original.content;
+  writeLocalData(TRASH_STORAGE_KEY, trashFiles.map(({ id, content }) => ({ id, content })));
+  trashStatus.textContent = "Исходный текст восстановлен";
+}
 
 function syncWindows() {
   let visibleMobileApp = false;
@@ -84,6 +209,8 @@ function openApp(appId) {
     renderGlobalSearch(globalSearchInput.value);
     setTimeout(() => globalSearchInput.focus(), 0);
   }
+  if (appId === "settings") applyDesktopSettings();
+  if (appId === "trash") renderTrashFiles();
 }
 
 function activateAnotherApp(excludedId) {
@@ -416,7 +543,7 @@ function openScientistLog(virus, logId) {
 
   viewElement.querySelector("#backToDossier").addEventListener("click", () => renderRecord(virus));
   viewElement.scrollTo({ top: 0, behavior: "auto" });
-  if (window.innerWidth < 760) {
+  if (mobileLayout.matches) {
     viewElement.scrollIntoView({ behavior: "auto", block: "start" });
   }
 }
@@ -436,7 +563,7 @@ function selectVirus(id) {
     viewElement.classList.remove("record-transition-out");
     viewElement.classList.add("record-transition-in");
     setTimeout(() => viewElement.classList.remove("record-transition-in"), 190);
-    if (window.innerWidth < 760) {
+    if (mobileLayout.matches) {
       viewElement.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, 85);
@@ -465,6 +592,30 @@ document.querySelector("#menuArchive").addEventListener("click", () => {
   openApp("archive");
 });
 document.querySelector("#menuSearch").addEventListener("click", () => openApp("search"));
+document.querySelector("#menuInfo").addEventListener("click", () => openApp("info"));
+document.querySelector("#menuSettings").addEventListener("click", () => openApp("settings"));
+document.querySelector("#menuTrash").addEventListener("click", () => openApp("trash"));
+
+document.querySelectorAll("[data-setting]").forEach((button) => {
+  button.addEventListener("click", () => {
+    desktopSettings = { ...desktopSettings, [button.dataset.setting]: button.dataset.value };
+    applyDesktopSettings(true);
+  });
+});
+
+document.querySelector("#factoryReset").addEventListener("click", () => {
+  desktopSettings = { ...defaultDesktopSettings };
+  applyDesktopSettings(true);
+  settingsStatus.textContent = "Заводские настройки восстановлены";
+});
+
+document.querySelector("#saveTrashFile").addEventListener("click", saveTrashFile);
+document.querySelector("#restoreTrashFile").addEventListener("click", restoreTrashFile);
+document.querySelector("#closeTrashEditor").addEventListener("click", () => {
+  activeTrashFileId = null;
+  trashEditor.hidden = true;
+  renderTrashFiles();
+});
 
 document.querySelectorAll("[data-open-app]").forEach((button) => {
   button.addEventListener("click", () => openApp(button.dataset.openApp));
@@ -508,6 +659,8 @@ mobileLayout.addEventListener("change", () => {
 
 renderList();
 renderGlobalSearch();
+renderTrashFiles();
+applyDesktopSettings();
 if (viruses[0]) renderRecord(viruses[0]);
 focusApp("archive");
 updateClock();
