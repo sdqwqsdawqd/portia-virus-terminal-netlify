@@ -26,24 +26,34 @@
         </div>
       </header>
 
-      <main class="workspace">
-        <aside class="desktop-dock" aria-label="Приложения">
-          <button class="dock-app active" type="button" aria-label="Открыть вирусный архив" id="focusArchive">
-            <span class="dock-icon" aria-hidden="true">DB</span>
-            <span>Архив</span>
+      <main class="workspace" id="desktopArea">
+        <nav class="desktop-icons" aria-label="Рабочий стол PORTIA">
+          <button class="desktop-icon" type="button" data-open-app="archive">
+            <span class="desktop-icon-symbol db-icon" aria-hidden="true">DB</span>
+            <span>Вирусный архив</span>
           </button>
-          <div class="dock-divider"></div>
-          <div class="dock-slot" aria-hidden="true"><span>+</span><small>Место для папки</small></div>
-        </aside>
+          <button class="desktop-icon" type="button" data-open-app="search">
+            <span class="desktop-icon-symbol search-icon" aria-hidden="true">⌕</span>
+            <span>Глобальный поиск</span>
+          </button>
+          <a class="desktop-icon" href="https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww" target="_blank" rel="noopener noreferrer">
+            <span class="desktop-icon-symbol people-icon" aria-hidden="true">ID</span>
+            <span>Список учёных</span>
+          </a>
+        </nav>
 
-        <section class="app-window" id="archiveWindow" aria-label="Вирусный архив PORTIA">
-          <div class="window-titlebar">
+        <section class="app-window archive-window" id="archiveWindow" data-app="archive" aria-label="Вирусный архив PORTIA">
+          <div class="window-titlebar" data-drag-handle>
             <div class="window-identity">
               <img src="assets/portia-logo.png" alt="" />
               <span>PORTIA://VIRUS_ARCHIVE</span>
             </div>
             <div class="window-meta">ДОПУСК <strong>II</strong></div>
-            <div class="window-controls" aria-hidden="true"><i></i><i></i><i></i></div>
+            <div class="window-controls">
+              <button type="button" data-window-action="minimize" aria-label="Свернуть вирусный архив"><span aria-hidden="true">―</span></button>
+              <button type="button" data-window-action="maximize" aria-label="Развернуть вирусный архив"><span aria-hidden="true">□</span></button>
+              <button type="button" data-window-action="close" aria-label="Закрыть вирусный архив"><span aria-hidden="true">×</span></button>
+            </div>
           </div>
 
           <div class="archive-grid">
@@ -74,6 +84,36 @@
             <article class="record-view" id="recordView" aria-live="polite"></article>
           </div>
         </section>
+
+        <section class="app-window global-search-window" id="globalSearchWindow" data-app="search" aria-label="Глобальный поиск PORTIA" hidden>
+          <div class="window-titlebar" data-drag-handle>
+            <div class="window-identity">
+              <span class="window-app-mark" aria-hidden="true">⌕</span>
+              <span>PORTIA://GLOBAL_SEARCH</span>
+            </div>
+            <div class="window-meta">ИНДЕКС <strong>АКТИВЕН</strong></div>
+            <div class="window-controls">
+              <button type="button" data-window-action="minimize" aria-label="Свернуть глобальный поиск"><span aria-hidden="true">―</span></button>
+              <button type="button" data-window-action="maximize" aria-label="Развернуть глобальный поиск"><span aria-hidden="true">□</span></button>
+              <button type="button" data-window-action="close" aria-label="Закрыть глобальный поиск"><span aria-hidden="true">×</span></button>
+            </div>
+          </div>
+          <div class="global-search-app">
+            <header class="global-search-header">
+              <span class="eyebrow">ЕДИНЫЙ ИНДЕКС PORTIA</span>
+              <h1>Глобальный поиск</h1>
+              <p>Поиск по вирусам, кодам, характеристикам, мутациям и псевдонимам учёных.</p>
+            </header>
+            <label class="global-search-box">
+              <span aria-hidden="true">⌕</span>
+              <span class="sr-only">Глобальный поиск по базе PORTIA</span>
+              <input id="globalSearchInput" type="search" placeholder="Введите название, код, мутацию или учёного" autocomplete="off" />
+              <kbd>Ctrl K</kbd>
+            </label>
+            <div class="global-search-summary"><span id="globalSearchStatus">Все записи базы</span><strong id="globalSearchCount">00</strong></div>
+            <div class="global-search-results" id="globalSearchResults" aria-live="polite"></div>
+          </div>
+        </section>
       </main>
 
       <footer class="taskbar">
@@ -81,7 +121,10 @@
           <img src="assets/portia-logo.png" alt="" />
           <span>PORTIA</span>
         </button>
-        <div class="taskbar-app"><span class="mini-app-icon">DB</span><span>Вирусный архив</span></div>
+        <div class="taskbar-apps" aria-label="Открытые программы">
+          <button class="taskbar-app active" type="button" data-task-app="archive"><span class="mini-app-icon">DB</span><span>Вирусный архив</span></button>
+          <button class="taskbar-app" type="button" data-task-app="search" hidden><span class="mini-app-icon">⌕</span><span>Поиск</span></button>
+        </div>
         <span class="taskbar-note">ВЫМЫШЛЕННЫЙ ИССЛЕДОВАТЕЛЬСКИЙ МАТЕРИАЛ</span>
       </footer>
 
@@ -91,6 +134,7 @@
           <div><strong>PORTIA OS</strong><span>Научная станция</span></div>
         </div>
         <button type="button" id="menuArchive"><span>DB</span>Вирусный архив</button>
+        <button type="button" id="menuSearch"><span>⌕</span>Глобальный поиск</button>
         <a
           class="start-panel-link"
           href="https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww"

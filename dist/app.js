@@ -5,12 +5,26 @@ const viewElement = document.querySelector("#recordView");
 const searchElement = document.querySelector("#virusSearch");
 const countElement = document.querySelector("#recordCount");
 const clockElement = document.querySelector("#systemClock");
+const desktopArea = document.querySelector("#desktopArea");
 const archiveWindow = document.querySelector("#archiveWindow");
+const globalSearchWindow = document.querySelector("#globalSearchWindow");
+const globalSearchInput = document.querySelector("#globalSearchInput");
+const globalSearchResults = document.querySelector("#globalSearchResults");
+const globalSearchStatus = document.querySelector("#globalSearchStatus");
+const globalSearchCount = document.querySelector("#globalSearchCount");
 const startButton = document.querySelector("#startButton");
 const startPanel = document.querySelector("#startPanel");
 
 let activeId = viruses[0]?.id ?? null;
 let switchTimer = null;
+let activeApp = "archive";
+let topWindowLayer = 50;
+
+const mobileLayout = window.matchMedia("(max-width: 760px)");
+const appStates = new Map([
+  ["archive", { window: archiveWindow, task: document.querySelector('[data-task-app="archive"]'), open: true, minimized: false }],
+  ["search", { window: globalSearchWindow, task: document.querySelector('[data-task-app="search"]'), open: false, minimized: false }]
+]);
 
 // Для каждого вируса одна случайная запись доступна до перезагрузки страницы.
 const unlockedLogByVirus = new Map(
@@ -30,6 +44,122 @@ const escapeHtml = (value = "") =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+
+const normalizeText = (value = "") => String(value).toLocaleLowerCase("ru").replaceAll("ё", "е");
+
+function syncWindows() {
+  let visibleMobileApp = false;
+
+  appStates.forEach((state, appId) => {
+    const visible = state.open && !state.minimized && (!mobileLayout.matches || appId === activeApp);
+    state.window.hidden = !visible;
+    state.task.hidden = !state.open;
+    state.task.classList.toggle("active", visible && appId === activeApp);
+    state.task.classList.toggle("minimized", state.minimized);
+    if (mobileLayout.matches && visible) visibleMobileApp = true;
+  });
+
+  desktopArea.classList.toggle("mobile-app-open", visibleMobileApp);
+}
+
+function focusApp(appId) {
+  const state = appStates.get(appId);
+  if (!state || !state.open || state.minimized) return;
+  activeApp = appId;
+  topWindowLayer += 1;
+  state.window.style.zIndex = String(topWindowLayer);
+  appStates.forEach((item, id) => item.window.classList.toggle("is-active", id === appId));
+  syncWindows();
+}
+
+function openApp(appId) {
+  const state = appStates.get(appId);
+  if (!state) return;
+  state.open = true;
+  state.minimized = false;
+  focusApp(appId);
+  toggleStart(false);
+
+  if (appId === "search") {
+    renderGlobalSearch(globalSearchInput.value);
+    setTimeout(() => globalSearchInput.focus(), 0);
+  }
+}
+
+function activateAnotherApp(excludedId) {
+  const fallback = [...appStates.entries()].find(([id, state]) => id !== excludedId && state.open && !state.minimized);
+  activeApp = fallback?.[0] ?? null;
+  if (activeApp) focusApp(activeApp);
+  else syncWindows();
+}
+
+function minimizeApp(appId) {
+  const state = appStates.get(appId);
+  if (!state) return;
+  state.minimized = true;
+  activateAnotherApp(appId);
+}
+
+function closeApp(appId) {
+  const state = appStates.get(appId);
+  if (!state) return;
+  state.open = false;
+  state.minimized = false;
+  state.window.classList.remove("is-maximized");
+  activateAnotherApp(appId);
+}
+
+function toggleMaximize(appId) {
+  const state = appStates.get(appId);
+  if (!state || mobileLayout.matches) return;
+  const isMaximized = state.window.classList.toggle("is-maximized");
+  const button = state.window.querySelector('[data-window-action="maximize"]');
+  button.setAttribute("aria-label", isMaximized ? "Восстановить размер окна" : "Развернуть окно");
+  focusApp(appId);
+}
+
+function enableWindowDragging(state, appId) {
+  const handle = state.window.querySelector("[data-drag-handle]");
+  let drag = null;
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (mobileLayout.matches || state.window.classList.contains("is-maximized") || event.target.closest(".window-controls")) return;
+    const areaRect = desktopArea.getBoundingClientRect();
+    const windowRect = state.window.getBoundingClientRect();
+    drag = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - windowRect.left,
+      offsetY: event.clientY - windowRect.top,
+      areaRect,
+      width: windowRect.width,
+      height: windowRect.height
+    };
+    state.window.style.transform = "none";
+    state.window.style.right = "auto";
+    state.window.style.bottom = "auto";
+    state.window.style.width = `${windowRect.width}px`;
+    state.window.style.height = `${windowRect.height}px`;
+    handle.setPointerCapture(event.pointerId);
+    focusApp(appId);
+  });
+
+  handle.addEventListener("pointermove", (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const maxLeft = Math.max(8, drag.areaRect.width - drag.width - 8);
+    const maxTop = Math.max(8, drag.areaRect.height - 46);
+    const left = Math.min(maxLeft, Math.max(8, event.clientX - drag.areaRect.left - drag.offsetX));
+    const top = Math.min(maxTop, Math.max(8, event.clientY - drag.areaRect.top - drag.offsetY));
+    state.window.style.left = `${left}px`;
+    state.window.style.top = `${top}px`;
+  });
+
+  const endDrag = (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    drag = null;
+  };
+  handle.addEventListener("pointerup", endDrag);
+  handle.addEventListener("pointercancel", endDrag);
+}
 
 const mediaBlock = (src, alt, label) => {
   if (src) {
@@ -72,6 +202,78 @@ function renderList(query = "") {
       <span class="row-status">${escapeHtml(virus.status)}</span>`;
     button.addEventListener("click", () => selectVirus(virus.id));
     listElement.append(button);
+  });
+}
+
+function searchableGroups(virus) {
+  return [
+    {
+      label: "ОСНОВНЫЕ ДАННЫЕ",
+      text: [virus.name, virus.code, virus.status]
+    },
+    {
+      label: "КЛАССИФИКАЦИЯ",
+      text: Object.values(virus.classification ?? {})
+    },
+    {
+      label: "ХАРАКТЕРИСТИКИ",
+      text: [virus.external, virus.physiology, ...Object.values(virus.ppu ?? {})]
+    },
+    {
+      label: "МУТАЦИИ",
+      text: (virus.mutations ?? []).flatMap((mutation) => [mutation.name, mutation.description])
+    },
+    {
+      label: "УЧЁНЫЕ",
+      text: (virus.scientistLogs ?? []).flatMap((log) => [log.title, log.scientist])
+    }
+  ].map((group) => ({ ...group, haystack: normalizeText(group.text.filter(Boolean).join(" ")) }));
+}
+
+function renderGlobalSearch(query = "") {
+  const normalized = normalizeText(query.trim());
+  const terms = normalized.split(/\s+/).filter(Boolean);
+  const matches = viruses
+    .map((virus) => {
+      const groups = searchableGroups(virus);
+      const completeIndex = groups.map((group) => group.haystack).join(" ");
+      const isMatch = terms.length === 0 || terms.every((term) => completeIndex.includes(term));
+      const matchedGroups = terms.length
+        ? groups.filter((group) => terms.some((term) => group.haystack.includes(term))).map((group) => group.label)
+        : ["КАРТОЧКА ВИРУСА"];
+      return { virus, isMatch, matchedGroups };
+    })
+    .filter((result) => result.isMatch);
+
+  globalSearchCount.textContent = String(matches.length).padStart(2, "0");
+  globalSearchStatus.textContent = normalized ? `Результаты для «${query.trim()}»` : "Все записи базы";
+  globalSearchResults.replaceChildren();
+
+  if (!matches.length) {
+    const empty = document.createElement("div");
+    empty.className = "global-search-empty";
+    empty.innerHTML = "<strong>СОВПАДЕНИЙ НЕТ</strong><span>Измените запрос или проверьте написание.</span>";
+    globalSearchResults.append(empty);
+    return;
+  }
+
+  matches.forEach(({ virus, matchedGroups }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "global-result";
+    button.innerHTML = `
+      <span class="global-result-mark" aria-hidden="true">DB</span>
+      <span class="global-result-main">
+        <span class="global-result-heading"><strong>${escapeHtml(virus.name)}</strong><small>${escapeHtml(virus.code)}</small></span>
+        <span class="global-result-matches">${matchedGroups.map((label) => `<i>${escapeHtml(label)}</i>`).join("")}</span>
+      </span>
+      <span class="global-result-status">${escapeHtml(virus.status)}</span>`;
+    button.addEventListener("click", () => {
+      openApp("archive");
+      if (virus.id === activeId) renderRecord(virus);
+      else selectVirus(virus.id);
+    });
+    globalSearchResults.append(button);
   });
 }
 
@@ -257,15 +459,35 @@ function toggleStart(force) {
 }
 
 searchElement.addEventListener("input", (event) => renderList(event.target.value));
+globalSearchInput.addEventListener("input", (event) => renderGlobalSearch(event.target.value));
 startButton.addEventListener("click", () => toggleStart());
 document.querySelector("#menuArchive").addEventListener("click", () => {
-  toggleStart(false);
-  archiveWindow.scrollIntoView({ behavior: "smooth", block: "start" });
+  openApp("archive");
 });
-document.querySelector("#focusArchive").addEventListener("click", () => {
-  archiveWindow.classList.remove("window-flash");
-  requestAnimationFrame(() => archiveWindow.classList.add("window-flash"));
+document.querySelector("#menuSearch").addEventListener("click", () => openApp("search"));
+
+document.querySelectorAll("[data-open-app]").forEach((button) => {
+  button.addEventListener("click", () => openApp(button.dataset.openApp));
 });
+
+appStates.forEach((state, appId) => {
+  state.window.addEventListener("pointerdown", () => focusApp(appId));
+  state.task.addEventListener("click", () => {
+    if (state.open && !state.minimized && activeApp === appId) minimizeApp(appId);
+    else openApp(appId);
+  });
+  state.window.querySelectorAll("[data-window-action]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const action = button.dataset.windowAction;
+      if (action === "minimize") minimizeApp(appId);
+      if (action === "maximize") toggleMaximize(appId);
+      if (action === "close") closeApp(appId);
+    });
+  });
+  enableWindowDragging(state, appId);
+});
+
 document.addEventListener("click", (event) => {
   if (!startPanel.hidden && !startPanel.contains(event.target) && !startButton.contains(event.target)) toggleStart(false);
 });
@@ -273,11 +495,20 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") toggleStart(false);
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
-    searchElement.focus();
+    openApp("search");
   }
 });
 
+mobileLayout.addEventListener("change", () => {
+  if (mobileLayout.matches) {
+    appStates.forEach((state) => state.window.classList.remove("is-maximized"));
+  }
+  syncWindows();
+});
+
 renderList();
+renderGlobalSearch();
 if (viruses[0]) renderRecord(viruses[0]);
+focusApp("archive");
 updateClock();
 setInterval(updateClock, 1000);
