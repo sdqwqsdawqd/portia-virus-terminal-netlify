@@ -391,13 +391,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .assistant-bubble::after { content: ""; position: absolute; right: -8px; bottom: 18px; width: 14px; height: 14px; transform: rotate(45deg); border-top: 1px solid var(--teal-dim); border-right: 1px solid var(--teal-dim); background: #081411; }
 .assistant-bubble span { display: block; margin-bottom: 7px; color: var(--teal); font: 700 8px var(--mono); letter-spacing: .09em; }
 .assistant-bubble p { margin: 0; color: #d2e0dc; font-size: 12px; line-height: 1.55; }
-.assistant-web-shot { position: absolute; z-index: 1; left: 43%; bottom: 64%; width: 72px; height: clamp(135px, 27vh, 225px); transform-origin: 50% 100%; pointer-events: none; animation: assistant-web-shot 1.2s cubic-bezier(.2,.76,.26,1) both; }
-.assistant-web-shot i { position: absolute; top: 48px; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); background: linear-gradient(to top, rgba(0,188,166,.85), rgba(0,188,166,.08)); box-shadow: 0 0 8px rgba(0,188,166,.5); }
-.assistant-web-shot img { position: absolute; top: 0; left: 50%; width: 68px; height: 68px; transform: translateX(-50%); object-fit: contain; filter: invert(62%) sepia(74%) saturate(745%) hue-rotate(121deg) brightness(91%) contrast(101%) drop-shadow(0 0 8px rgba(0,188,166,.4)); }
-.desktop-assistant.is-shooting .assistant-button img { animation: assistant-recoil .34s ease-out both; }
 @keyframes assistant-bubble-in { from { opacity: 0; transform: translate(8px, 8px) scale(.96); } to { opacity: 1; transform: none; } }
-@keyframes assistant-web-shot { 0% { opacity: 0; transform: translateY(62%) scaleY(.12) rotate(-7deg); } 34% { opacity: 1; transform: translateY(0) scaleY(1) rotate(-7deg); } 70% { opacity: .95; transform: translateY(8px) scaleY(.94) rotate(-7deg); } 100% { opacity: 0; transform: translateY(70%) scaleY(.14) rotate(-7deg); } }
-@keyframes assistant-recoil { 0%, 100% { transform: none; } 35% { transform: translateY(8px) scale(.94); } }
 
 .archive-browser {
   min-width: 0;
@@ -695,9 +689,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 60px; height: 54px; }
   .assistant-label { display: none; }
   .assistant-bubble { right: 0; bottom: 77%; width: min(255px, calc(100vw - 24px)); padding: 11px 12px; }
   .assistant-bubble p { font-size: 11px; }
-  .assistant-web-shot { width: 58px; height: clamp(92px, 18vh, 128px); }
-  .assistant-web-shot i { top: 39px; }
-  .assistant-web-shot img { width: 55px; height: 55px; }
   .taskbar { position: fixed; left: 0; right: 0; }
   .taskbar-apps { overflow: hidden; }
   .taskbar-app:not(.active) { display: none; }
@@ -723,6 +714,4 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 60px; height: 54px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
-  .assistant-web-shot { animation: none !important; opacity: 1; transform: rotate(-7deg); }
-  .desktop-assistant.is-shooting .assistant-button img { animation: none !important; }
 }

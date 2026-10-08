@@ -82,11 +82,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [trashStatus, setTrashStatus] = useState("");
   const [assistantTipIndex, setAssistantTipIndex] = useState(-1);
   const [assistantTipVisible, setAssistantTipVisible] = useState(false);
-  const [assistantWebShot, setAssistantWebShot] = useState(0);
-  const assistantRapidClicks = useRef(0);
-  const assistantRapidResetTimer = useRef<number | null>(null);
   const assistantTipTimer = useRef<number | null>(null);
-  const assistantWebTimer = useRef<number | null>(null);
 
   const fetchContent = useCallback(async () => {
     try {
@@ -156,8 +152,6 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   useEffect(() => () => {
     if (assistantTipTimer.current) window.clearTimeout(assistantTipTimer.current);
-    if (assistantWebTimer.current) window.clearTimeout(assistantWebTimer.current);
-    if (assistantRapidResetTimer.current) window.clearTimeout(assistantRapidResetTimer.current);
   }, []);
 
   useEffect(() => {
@@ -256,22 +250,6 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     setAssistantTipVisible(true);
     if (assistantTipTimer.current) window.clearTimeout(assistantTipTimer.current);
     assistantTipTimer.current = window.setTimeout(() => setAssistantTipVisible(false), 5200);
-
-    if (assistantRapidClicks.current === 0) {
-      assistantRapidResetTimer.current = window.setTimeout(() => {
-        assistantRapidClicks.current = 0;
-        assistantRapidResetTimer.current = null;
-      }, 3000);
-    }
-    assistantRapidClicks.current += 1;
-    if (assistantRapidClicks.current >= 5) {
-      assistantRapidClicks.current = 0;
-      if (assistantRapidResetTimer.current) window.clearTimeout(assistantRapidResetTimer.current);
-      assistantRapidResetTimer.current = null;
-      setAssistantWebShot((current) => current + 1);
-      if (assistantWebTimer.current) window.clearTimeout(assistantWebTimer.current);
-      assistantWebTimer.current = window.setTimeout(() => setAssistantWebShot(0), 1250);
-    }
   };
 
   const unlockedLogIds = useMemo(() => {
@@ -420,9 +398,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
         </main>
 
-        <div className={`desktop-assistant${assistantTipVisible ? " is-speaking" : ""}${assistantWebShot ? " is-shooting" : ""}`}>
+        <div className={`desktop-assistant${assistantTipVisible ? " is-speaking" : ""}`}>
           {assistantTipVisible && <div className="assistant-bubble" role="status"><span>PORTIA // СОВЕТ</span><p>{assistantTipIndex >= 0 ? content.assistantAdvice[assistantTipIndex] : "Добавьте советы в редакторе PORTIA."}</p></div>}
-          {assistantWebShot > 0 && <span className="assistant-web-shot" key={assistantWebShot} aria-hidden="true"><i /><img src="/assets/spider-web.png" alt="" draggable={false} /></span>}
           <button className="assistant-button" type="button" onClick={activateAssistant} aria-label="Получить совет помощника PORTIA"><img src="/assets/portia-assistant.png" alt="" draggable={false} /></button>
           <span className="assistant-label">PORTIA // ПОМОЩНИК</span>
         </div>
