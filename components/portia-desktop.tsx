@@ -45,7 +45,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [globalQuery, setGlobalQuery] = useState("");
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [selectedInfoId, setSelectedInfoId] = useState(initialContent.infoSections[0]?.id ?? "");
-  const [sessionSeed] = useState(() => Math.floor(Math.random() * 100000));
+  const [sessionSeed, setSessionSeed] = useState(0);
   const [desktopSettings, setDesktopSettings] = useState({ accent: "teal", wallpaper: "radar", iconSize: "standard" });
 
   const fetchContent = useCallback(async () => {
@@ -67,6 +67,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   useEffect(() => {
     const bootTimer = window.setTimeout(() => setBooting(false), 1650);
+    setSessionSeed(Math.floor(Math.random() * 100000) + 1);
     const tick = () => setClock(new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()));
     tick();
     const clockTimer = window.setInterval(tick, 1000);
