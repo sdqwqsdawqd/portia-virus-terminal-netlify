@@ -4,7 +4,7 @@ import { defaultPortiaContent, type PortiaContent } from "@/lib/portia-content";
 export const dynamic = "force-dynamic";
 
 type ContentRow = { payload: string; revision: number; updated_at: string };
-const PORTIA_OWNER_USER_ID = "0c119c3e-e641-49ae-995f-3b57f89f7b37";
+const PORTIA_OWNER_EMAIL = "qloxzick@gmail.com";
 
 function database() {
   if (!env.DB) throw new Error("PORTIA database binding is unavailable");
@@ -23,7 +23,8 @@ function currentUser(request: Request) {
 async function ensureAdmin(request: Request) {
   const user = currentUser(request);
   const isLocalPreview = user.id === "local-preview-owner";
-  return { canEdit: isLocalPreview || user.id === PORTIA_OWNER_USER_ID, user };
+  const isSiteOwner = user.email.toLocaleLowerCase("en-US") === PORTIA_OWNER_EMAIL;
+  return { canEdit: isLocalPreview || isSiteOwner, user };
 }
 
 function isPortiaContent(value: unknown): value is PortiaContent {
