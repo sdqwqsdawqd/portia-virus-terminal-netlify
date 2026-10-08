@@ -27,15 +27,25 @@ async function ensureAdmin(request: Request) {
   return { canEdit: isLocalPreview || isSiteOwner, user };
 }
 
-function isPortiaContent(value: unknown): value is PortiaContent {
-  if (!value || typeof value !== "object") return false;
+function normalizePortiaContent(value: unknown): PortiaContent | null {
+  if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<PortiaContent>;
-  return (
-    Array.isArray(candidate.viruses) &&
-    Array.isArray(candidate.infoSections) &&
-    Array.isArray(candidate.broadcasts) &&
-    Array.isArray(candidate.searchRecommendations)
-  );
+  if (
+    !Array.isArray(candidate.viruses) ||
+    !Array.isArray(candidate.infoSections) ||
+    !Array.isArray(candidate.broadcasts) ||
+    !Array.isArray(candidate.searchRecommendations)
+  ) return null;
+
+  return {
+    viruses: candidate.viruses,
+    infoSections: candidate.infoSections,
+    broadcasts: candidate.broadcasts,
+    searchRecommendations: candidate.searchRecommendations.filter((item): item is string => typeof item === "string"),
+    assistantAdvice: Array.isArray(candidate.assistantAdvice)
+      ? candidate.assistantAdvice.filter((item): item is string => typeof item === "string")
+      : [...defaultPortiaContent.assistantAdvice],
+  };
 }
 
 export async function GET(request: Request) {
@@ -53,7 +63,8 @@ export async function GET(request: Request) {
     let content = defaultPortiaContent;
     if (row?.payload) {
       const parsed = JSON.parse(row.payload) as unknown;
-      if (isPortiaContent(parsed)) content = parsed;
+      const normalized = normalizePortiaContent(parsed);
+      if (normalized) content = normalized;
     }
 
     return Response.json({
@@ -80,7 +91,8 @@ export async function PUT(request: Request) {
     const raw = await request.text();
     if (raw.length > 2_000_000) return Response.json({ error: "Данные слишком большие." }, { status: 413 });
     const body = JSON.parse(raw) as { content?: unknown };
-    if (!isPortiaContent(body.content)) {
+    const normalized = normalizePortiaContent(body.content);
+    if (!normalized) {
       return Response.json({ error: "Некорректная структура данных." }, { status: 400 });
     }
 
@@ -94,7 +106,7 @@ export async function PUT(request: Request) {
          updated_at = excluded.updated_at,
          updated_by = excluded.updated_by`,
     )
-      .bind("main", JSON.stringify(body.content), now, user.id)
+      .bind("main", JSON.stringify(normalized), now, user.id)
       .run();
 
     const saved = await db.prepare(

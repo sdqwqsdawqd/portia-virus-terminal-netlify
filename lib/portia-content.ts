@@ -53,6 +53,7 @@ export type PortiaContent = {
   infoSections: InfoSection[];
   broadcasts: Broadcast[];
   searchRecommendations: string[];
+  assistantAdvice: string[];
 };
 
 const placeholderLogs = (prefix: string): ScientistLog[] => [
@@ -219,9 +220,14 @@ export const defaultPortiaContent: PortiaContent = {
   ],
   broadcasts: [],
   searchRecommendations: ["МОРОК", "АРАХНА", "КАЛЛИСТО", "Протей", "Воздушно-пылевой"],
+  assistantAdvice: [
+    "Глобальный поиск видит названия, коды, классификации и сообщения станции.",
+    "В каждой карточке только одна запись учёного доступна с уровнем II.",
+    "После сохранения изменения автоматически появляются у посетителей.",
+    "Файлы в Корзине — локальные копии: их текст можно редактировать на этом устройстве.",
+  ],
 };
 
 export function cloneDefaultContent(): PortiaContent {
   return JSON.parse(JSON.stringify(defaultPortiaContent)) as PortiaContent;
 }
-

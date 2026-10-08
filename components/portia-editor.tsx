@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Broadcast, PortiaContent, Virus } from "@/lib/portia-content";
 
-type EditorTab = "viruses" | "info" | "broadcasts" | "search";
+type EditorTab = "viruses" | "info" | "broadcasts" | "search" | "assistant";
 
 type Props = {
   content: PortiaContent;
@@ -46,10 +46,12 @@ export function PortiaEditor({ content, saveState, onSave }: Props) {
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    if (!dirty) {
+    if (dirty) return;
+    const syncTimer = window.setTimeout(() => {
       setDraft(clone(content));
       setSelectedVirusId((current) => (content.viruses.some((virus) => virus.id === current) ? current : content.viruses[0]?.id ?? ""));
-    }
+    }, 0);
+    return () => window.clearTimeout(syncTimer);
   }, [content, dirty]);
 
   const selectedVirusIndex = useMemo(
@@ -102,6 +104,7 @@ export function PortiaEditor({ content, saveState, onSave }: Props) {
           ["info", "Информация"],
           ["broadcasts", "Сообщения"],
           ["search", "Рекомендации"],
+          ["assistant", "Помощник"],
         ] as [EditorTab, string][]).map(([id, label]) => (
           <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>
         ))}
@@ -224,6 +227,15 @@ export function PortiaEditor({ content, saveState, onSave }: Props) {
           <p className="editor-guidance">Каждая строка станет ненавязчивой рекомендацией под строкой глобального поиска.</p>
           <Field label="Рекомендации" wide>
             <textarea className="tall-textarea" value={draft.searchRecommendations.join("\n")} onChange={(event) => changeDraft((next) => { next.searchRecommendations = event.target.value.split("\n").map((value) => value.trim()).filter(Boolean); })} />
+          </Field>
+        </div>
+      )}
+
+      {tab === "assistant" && (
+        <div className="editor-form flat-editor-form compact-editor">
+          <p className="editor-guidance">Каждая строка станет отдельным советом помощника. При каждом нажатии он покажет следующий совет.</p>
+          <Field label="Советы помощника" wide>
+            <textarea className="tall-textarea" value={draft.assistantAdvice.join("\n")} onChange={(event) => changeDraft((next) => { next.assistantAdvice = event.target.value.split("\n").map((value) => value.trim()).filter(Boolean); })} />
           </Field>
         </div>
       )}

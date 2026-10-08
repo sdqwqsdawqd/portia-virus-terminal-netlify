@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PortiaEditor } from "@/components/portia-editor";
 import type { PortiaContent, Virus } from "@/lib/portia-content";
 
-type AppId = "archive" | "search" | "info" | "settings" | "broadcasts" | "editor";
+type AppId = "archive" | "search" | "info" | "settings" | "broadcasts" | "trash" | "editor";
 type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number };
 type SaveState = "idle" | "saving" | "saved" | "error";
+type TrashFile = { id: string; name: string; location: string; type: string; original: string; content: string };
 
 const appMeta: Record<AppId, { label: string; path: string; icon: string }> = {
   archive: { label: "База вирусов", path: "PORTIA://VIRUS_ARCHIVE", icon: "/assets/app-virus.png" },
@@ -14,6 +15,7 @@ const appMeta: Record<AppId, { label: string; path: string; icon: string }> = {
   info: { label: "Информация", path: "PORTIA://INFORMATION", icon: "/assets/app-info.png" },
   settings: { label: "Настройки", path: "PORTIA://DESKTOP_SETTINGS", icon: "/assets/app-settings.png" },
   broadcasts: { label: "Сводка", path: "PORTIA://BULLETIN", icon: "/assets/app-broadcasts.png" },
+  trash: { label: "Корзина", path: "PORTIA://RECYCLE_BIN", icon: "/assets/app-trash.svg" },
   editor: { label: "Редактор", path: "PORTIA://CONTENT_CONTROL", icon: "/assets/app-settings.png" },
 };
 
@@ -23,11 +25,38 @@ const initialWindows: Record<AppId, WindowState> = {
   info: { open: false, minimized: false, maximized: false, z: 10 },
   settings: { open: false, minimized: false, maximized: false, z: 10 },
   broadcasts: { open: false, minimized: false, maximized: false, z: 10 },
+  trash: { open: false, minimized: false, maximized: false, z: 10 },
   editor: { open: false, minimized: false, maximized: false, z: 10 },
 };
 
 const escapeSearch = (value: string) => value.toLocaleLowerCase("ru").replace(/ё/g, "е");
 const roman = (level: number) => ({ 1: "I", 2: "II", 3: "III", 4: "IV" })[level] ?? String(level);
+const TRASH_STORAGE_KEY = "portia-trash-files-v1";
+
+function makeTrashFiles(viruses: Virus[], overrides: Record<string, string>): TrashFile[] {
+  return viruses.slice(0, 3).map((virus) => {
+    const original = [
+      "PORTIA / ЛОКАЛЬНАЯ КОПИЯ",
+      `ОБЪЕКТ: ${virus.name}`,
+      `КОД: ${virus.code}`,
+      `СТАТУС: ${virus.status}`,
+      "",
+      "ВНЕШНИЕ ХАРАКТЕРИСТИКИ:",
+      virus.external,
+      "",
+      "ФИЗИОЛОГИЯ:",
+      virus.physiology,
+    ].join("\n");
+    return {
+      id: virus.id,
+      name: `${virus.name}_${virus.code}.virus`,
+      location: "C:\\PORTIA\\VIRUS_ARCHIVE",
+      type: "Документ вируса",
+      original,
+      content: overrides[virus.id] ?? original,
+    };
+  });
+}
 
 export function PortiaDesktop({ initialContent }: { initialContent: PortiaContent }) {
   const [content, setContent] = useState<PortiaContent>(initialContent);
@@ -39,7 +68,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [startOpen, setStartOpen] = useState(false);
   const [windows, setWindows] = useState<Record<AppId, WindowState>>(initialWindows);
   const [activeApp, setActiveApp] = useState<AppId>("archive");
-  const [topZ, setTopZ] = useState(20);
+  const [, setTopZ] = useState(20);
   const [activeVirusId, setActiveVirusId] = useState(initialContent.viruses[0]?.id ?? "");
   const [virusQuery, setVirusQuery] = useState("");
   const [globalQuery, setGlobalQuery] = useState("");
@@ -47,6 +76,17 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [selectedInfoId, setSelectedInfoId] = useState(initialContent.infoSections[0]?.id ?? "");
   const [sessionSeed, setSessionSeed] = useState(0);
   const [desktopSettings, setDesktopSettings] = useState({ accent: "teal", wallpaper: "radar", iconSize: "standard" });
+  const [trashOverrides, setTrashOverrides] = useState<Record<string, string>>({});
+  const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
+  const [trashDraft, setTrashDraft] = useState("");
+  const [trashStatus, setTrashStatus] = useState("");
+  const [assistantTipIndex, setAssistantTipIndex] = useState(-1);
+  const [assistantTipVisible, setAssistantTipVisible] = useState(false);
+  const [assistantWebShot, setAssistantWebShot] = useState(0);
+  const assistantRapidClicks = useRef(0);
+  const assistantRapidResetTimer = useRef<number | null>(null);
+  const assistantTipTimer = useRef<number | null>(null);
+  const assistantWebTimer = useRef<number | null>(null);
 
   const fetchContent = useCallback(async () => {
     try {
@@ -67,26 +107,57 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   useEffect(() => {
     const bootTimer = window.setTimeout(() => setBooting(false), 1650);
-    setSessionSeed(Math.floor(Math.random() * 100000) + 1);
+    const seedTimer = window.setTimeout(() => setSessionSeed(Math.floor(Math.random() * 100000) + 1), 0);
     const tick = () => setClock(new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()));
     tick();
     const clockTimer = window.setInterval(tick, 1000);
-    void fetchContent();
+    const initialFetchTimer = window.setTimeout(() => void fetchContent(), 0);
     const syncTimer = window.setInterval(fetchContent, 8000);
     return () => {
       window.clearTimeout(bootTimer);
+      window.clearTimeout(seedTimer);
+      window.clearTimeout(initialFetchTimer);
       window.clearInterval(clockTimer);
       window.clearInterval(syncTimer);
     };
   }, [fetchContent]);
 
   useEffect(() => {
+    let restoreTimer: number | undefined;
     try {
       const saved = window.localStorage.getItem("portia-desktop-settings-v1");
-      if (saved) setDesktopSettings({ ...desktopSettings, ...JSON.parse(saved) });
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<typeof desktopSettings>;
+        restoreTimer = window.setTimeout(() => setDesktopSettings((current) => ({ ...current, ...parsed })), 0);
+      }
     } catch {}
-    // Read once after hydration.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { if (restoreTimer) window.clearTimeout(restoreTimer); };
+  }, []);
+
+  useEffect(() => {
+    let restored: Record<string, string> | null = null;
+    try {
+      const saved = window.localStorage.getItem(TRASH_STORAGE_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as unknown;
+      if (Array.isArray(parsed)) {
+        restored = parsed.reduce<Record<string, string>>((result, item) => {
+          if (item && typeof item === "object" && typeof item.id === "string" && typeof item.content === "string") result[item.id] = item.content;
+          return result;
+        }, {});
+      } else if (parsed && typeof parsed === "object") {
+        restored = Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+      }
+    } catch {}
+    if (!restored) return;
+    const restoreTimer = window.setTimeout(() => setTrashOverrides(restored ?? {}), 0);
+    return () => window.clearTimeout(restoreTimer);
+  }, []);
+
+  useEffect(() => () => {
+    if (assistantTipTimer.current) window.clearTimeout(assistantTipTimer.current);
+    if (assistantWebTimer.current) window.clearTimeout(assistantWebTimer.current);
+    if (assistantRapidResetTimer.current) window.clearTimeout(assistantRapidResetTimer.current);
   }, []);
 
   useEffect(() => {
@@ -148,6 +219,60 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
   const filteredViruses = content.viruses.filter((virus) => escapeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(escapeSearch(virusQuery)));
   const selectedInfo = content.infoSections.find((section) => section.id === selectedInfoId) ?? content.infoSections[0];
+  const trashFiles = useMemo(() => makeTrashFiles(content.viruses, trashOverrides), [content.viruses, trashOverrides]);
+  const activeTrashFile = trashFiles.find((file) => file.id === activeTrashFileId) ?? null;
+
+  const storeTrashOverrides = (next: Record<string, string>) => {
+    setTrashOverrides(next);
+    try {
+      window.localStorage.setItem(TRASH_STORAGE_KEY, JSON.stringify(Object.entries(next).map(([id, fileContent]) => ({ id, content: fileContent }))));
+    } catch {}
+  };
+
+  const openTrashFile = (file: TrashFile) => {
+    setActiveTrashFileId(file.id);
+    setTrashDraft(file.content);
+    setTrashStatus("");
+  };
+
+  const saveTrashFile = () => {
+    if (!activeTrashFile) return;
+    storeTrashOverrides({ ...trashOverrides, [activeTrashFile.id]: trashDraft });
+    setTrashStatus("СОХРАНЕНО НА ЭТОМ УСТРОЙСТВЕ");
+  };
+
+  const restoreTrashFile = () => {
+    if (!activeTrashFile) return;
+    const next = { ...trashOverrides };
+    delete next[activeTrashFile.id];
+    storeTrashOverrides(next);
+    setTrashDraft(activeTrashFile.original);
+    setTrashStatus("ИСХОДНАЯ КОПИЯ ВОССТАНОВЛЕНА");
+  };
+
+  const activateAssistant = () => {
+    const tips = content.assistantAdvice ?? [];
+    setAssistantTipIndex((current) => tips.length ? (current + 1) % tips.length : -1);
+    setAssistantTipVisible(true);
+    if (assistantTipTimer.current) window.clearTimeout(assistantTipTimer.current);
+    assistantTipTimer.current = window.setTimeout(() => setAssistantTipVisible(false), 5200);
+
+    if (assistantRapidClicks.current === 0) {
+      assistantRapidResetTimer.current = window.setTimeout(() => {
+        assistantRapidClicks.current = 0;
+        assistantRapidResetTimer.current = null;
+      }, 3000);
+    }
+    assistantRapidClicks.current += 1;
+    if (assistantRapidClicks.current >= 5) {
+      assistantRapidClicks.current = 0;
+      if (assistantRapidResetTimer.current) window.clearTimeout(assistantRapidResetTimer.current);
+      assistantRapidResetTimer.current = null;
+      setAssistantWebShot((current) => current + 1);
+      if (assistantWebTimer.current) window.clearTimeout(assistantWebTimer.current);
+      assistantWebTimer.current = window.setTimeout(() => setAssistantWebShot(0), 1250);
+    }
+  };
 
   const unlockedLogIds = useMemo(() => {
     const map = new Map<string, string>();
@@ -199,6 +324,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <DesktopIcon app="broadcasts" onOpen={openApp} />
             <DesktopIcon app="info" onOpen={openApp} />
             <DesktopIcon app="settings" onOpen={openApp} />
+            <DesktopIcon app="trash" onOpen={openApp} className="desktop-icon-trash" />
           </nav>
 
           <AppWindow app="archive" state={windows.archive} active={activeApp === "archive"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} className="archive-window" meta="ДОПУСК II">
@@ -260,13 +386,31 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             </div>
           </AppWindow>
 
+          <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashFiles.length).padStart(2, "0")}`}>
+            <div className="trash-app">
+              <header><span className="eyebrow">ЛОКАЛЬНОЕ ХРАНИЛИЩЕ</span><h1>Корзина</h1><p>Три локальные копии вирусных досье. Изменения сохраняются только на этом устройстве.</p></header>
+              <div className="trash-layout">
+                <div className="trash-files">
+                  <div className="trash-list-head" aria-hidden="true"><span>ИМЯ</span><span>ИСХОДНОЕ РАСПОЛОЖЕНИЕ</span><span>ТИП</span></div>
+                  {trashFiles.map((file) => <button className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}`} type="button" key={file.id} onClick={() => openTrashFile(file)}><span className="trash-file-name"><img src="/assets/app-virus.png" alt="" /><strong>{file.name}</strong></span><span>{file.location}</span><span>{file.type}</span></button>)}
+                  {!trashFiles.length && <div className="editor-empty">В Корзине нет локальных копий.</div>}
+                </div>
+                {activeTrashFile && <div className="trash-editor">
+                  <div className="trash-editor-head"><div><span>ЛОКАЛЬНЫЙ РЕДАКТОР</span><strong>{activeTrashFile.name}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div>
+                  <textarea id="trashFileContent" value={trashDraft} onChange={(event) => { setTrashDraft(event.target.value); setTrashStatus(""); }} aria-label={`Содержимое файла ${activeTrashFile.name}`} />
+                  <div className="trash-editor-actions"><button type="button" onClick={saveTrashFile}>СОХРАНИТЬ ФАЙЛ</button><button type="button" onClick={restoreTrashFile}>ВОССТАНОВИТЬ ИСХОДНЫЙ</button><span id="trashStatus" role="status">{trashStatus}</span></div>
+                </div>}
+              </div>
+            </div>
+          </AppWindow>
+
           <AppWindow app="settings" state={windows.settings} active={activeApp === "settings"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} className="utility-window settings-window" meta="ПРОФИЛЬ ЛОКАЛЬНЫЙ">
             <div className="settings-app">
               <header><span className="eyebrow">ПЕРСОНАЛИЗАЦИЯ PORTIA OS</span><h1>Настройки рабочего стола</h1><p>Оформление сохраняется на этом устройстве.</p></header>
               <SettingGroup title="Цвет интерфейса" values={[['teal','PORTIA'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => setDesktopSettings((state) => ({ ...state, accent: value }))} />
               <SettingGroup title="Фон рабочего стола" values={[['radar','Радар'],['grid','Сетка'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => setDesktopSettings((state) => ({ ...state, wallpaper: value }))} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => setDesktopSettings((state) => ({ ...state, iconSize: value }))} />
-              <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сообщения и рекомендации поиска." : "Редактор закреплён за владельцем сайта."}</p></div><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button></section>
+              <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сообщения, поиск и советы помощника." : "Редактор закреплён за владельцем сайта."}</p></div><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button></section>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={() => setDesktopSettings({ accent: "teal", wallpaper: "radar", iconSize: "standard" })}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span>Настройки сохранены</span></div>
             </div>
           </AppWindow>
@@ -275,6 +419,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             {canEdit ? <PortiaEditor content={content} saveState={saveState} onSave={saveContent} /> : <div className="editor-empty">Редактирование доступно только владельцу.</div>}
           </AppWindow>
         </main>
+
+        <div className={`desktop-assistant${assistantTipVisible ? " is-speaking" : ""}${assistantWebShot ? " is-shooting" : ""}`}>
+          {assistantTipVisible && <div className="assistant-bubble" role="status"><span>PORTIA // СОВЕТ</span><p>{assistantTipIndex >= 0 ? content.assistantAdvice[assistantTipIndex] : "Добавьте советы в редакторе PORTIA."}</p></div>}
+          {assistantWebShot > 0 && <span className="assistant-web-shot" key={assistantWebShot} aria-hidden="true"><i /><img src="/assets/spider-web.png" alt="" draggable={false} /></span>}
+          <button className="assistant-button" type="button" onClick={activateAssistant} aria-label="Получить совет помощника PORTIA"><img src="/assets/portia-assistant.png" alt="" draggable={false} /></button>
+          <span className="assistant-label">PORTIA // ПОМОЩНИК</span>
+        </div>
 
         <footer className="taskbar">
           <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><img src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
@@ -299,8 +450,8 @@ function BootScreen({ visible }: { visible: boolean }) {
   return <div className={`boot-screen${visible ? "" : " boot-complete"}`} aria-hidden={!visible}><div className="boot-core"><img src="/assets/portia-logo.png" alt="" /><span>PORTIA OS</span><strong>INITIALIZING RESEARCH NODE</strong><div className="boot-progress"><i /></div><div className="boot-lines"><small>ARCHIVE INDEX</small><small>SECURITY CONTOUR</small><small>CONTENT LINK</small></div></div></div>;
 }
 
-function DesktopIcon({ app, onOpen }: { app: AppId; onOpen: (app: AppId) => void }) {
-  return <button className="desktop-icon" type="button" onClick={() => onOpen(app)}><span className="desktop-icon-symbol"><img src={appMeta[app].icon} alt="" /></span><span>{appMeta[app].label}</span></button>;
+function DesktopIcon({ app, onOpen, className = "" }: { app: AppId; onOpen: (app: AppId) => void; className?: string }) {
+  return <button className={`desktop-icon${className ? ` ${className}` : ""}`} type="button" onClick={() => onOpen(app)}><span className="desktop-icon-symbol"><img src={appMeta[app].icon} alt="" /></span><span>{appMeta[app].label}</span></button>;
 }
 
 function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClose, className, meta, children }: {
