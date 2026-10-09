@@ -76,7 +76,11 @@ export function PortiaEditor({ content, saveState, onSave }: Props) {
 
   const save = async () => {
     try {
-      await onSave(draft);
+      const normalized = clone(draft);
+      normalized.searchRecommendations = normalized.searchRecommendations.map((value) => value.trim()).filter(Boolean);
+      normalized.assistantAdvice = normalized.assistantAdvice.map((value) => value.trim()).filter(Boolean);
+      await onSave(normalized);
+      setDraft(normalized);
       setDirty(false);
     } catch {
       // Keep the local draft marked as changed so a temporary network error
@@ -226,7 +230,7 @@ export function PortiaEditor({ content, saveState, onSave }: Props) {
         <div className="editor-form flat-editor-form compact-editor">
           <p className="editor-guidance">Каждая строка станет ненавязчивой рекомендацией под строкой глобального поиска.</p>
           <Field label="Рекомендации" wide>
-            <textarea className="tall-textarea" value={draft.searchRecommendations.join("\n")} onChange={(event) => changeDraft((next) => { next.searchRecommendations = event.target.value.split("\n").map((value) => value.trim()).filter(Boolean); })} />
+            <textarea className="tall-textarea" value={draft.searchRecommendations.join("\n")} onChange={(event) => changeDraft((next) => { next.searchRecommendations = event.target.value.split("\n"); })} />
           </Field>
         </div>
       )}
@@ -235,7 +239,7 @@ export function PortiaEditor({ content, saveState, onSave }: Props) {
         <div className="editor-form flat-editor-form compact-editor">
           <p className="editor-guidance">Каждая строка станет отдельным советом помощника. При каждом нажатии он покажет следующий совет.</p>
           <Field label="Советы помощника" wide>
-            <textarea className="tall-textarea" value={draft.assistantAdvice.join("\n")} onChange={(event) => changeDraft((next) => { next.assistantAdvice = event.target.value.split("\n").map((value) => value.trim()).filter(Boolean); })} />
+            <textarea className="tall-textarea" value={draft.assistantAdvice.join("\n")} onChange={(event) => changeDraft((next) => { next.assistantAdvice = event.target.value.split("\n"); })} />
           </Field>
         </div>
       )}

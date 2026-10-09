@@ -1,30 +1,13 @@
-import { env } from "cloudflare:workers";
 import { defaultPortiaContent, type PortiaContent } from "@/lib/portia-content";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-type ContentRow = { payload: string; revision: number; updated_at: string };
-const PORTIA_OWNER_EMAIL = "qloxzick@gmail.com";
+type ContentRow = { payload: unknown; revision: number; updated_at: string };
 
-function database() {
-  if (!env.DB) throw new Error("PORTIA database binding is unavailable");
-  return env.DB;
-}
-
-function currentUser(request: Request) {
-  const hostname = new URL(request.url).hostname;
-  const isLocalPreview = hostname === "127.0.0.1" || hostname === "localhost";
-  return {
-    id: request.headers.get("oai-authenticated-user-id")?.trim() || (isLocalPreview ? "local-preview-owner" : ""),
-    email: request.headers.get("oai-authenticated-user-email")?.trim() || (isLocalPreview ? "preview@local" : ""),
-  };
-}
-
-async function ensureAdmin(request: Request) {
-  const user = currentUser(request);
-  const isLocalPreview = user.id === "local-preview-owner";
-  const isSiteOwner = user.email.toLocaleLowerCase("en-US") === PORTIA_OWNER_EMAIL;
-  return { canEdit: isLocalPreview || isSiteOwner, user };
+function isOwnerEmail(email: string | undefined | null) {
+  const ownerEmail = process.env.PORTIA_OWNER_EMAIL?.trim().toLocaleLowerCase("en-US");
+  return Boolean(ownerEmail && email?.trim().toLocaleLowerCase("en-US") === ownerEmail);
 }
 
 function normalizePortiaContent(value: unknown): PortiaContent | null {
@@ -48,28 +31,28 @@ function normalizePortiaContent(value: unknown): PortiaContent | null {
   };
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const db = database();
-    const [{ canEdit }, row] = await Promise.all([
-      ensureAdmin(request),
-      db.prepare(
-        "SELECT payload, revision, updated_at FROM portia_content WHERE id = ? LIMIT 1",
-      )
-        .bind("main")
-        .first<ContentRow>(),
+    const supabase = await createServerSupabaseClient();
+    const [{ data: authData }, { data: row, error }] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase
+        .from("portia_content")
+        .select("payload, revision, updated_at")
+        .eq("id", "main")
+        .maybeSingle<ContentRow>(),
     ]);
+    if (error) throw error;
 
     let content = defaultPortiaContent;
     if (row?.payload) {
-      const parsed = JSON.parse(row.payload) as unknown;
-      const normalized = normalizePortiaContent(parsed);
+      const normalized = normalizePortiaContent(row.payload);
       if (normalized) content = normalized;
     }
 
     return Response.json({
       content,
-      canEdit,
+      canEdit: isOwnerEmail(authData.user?.email),
       revision: row?.revision ?? 0,
       updatedAt: row?.updated_at ?? null,
     });
@@ -84,9 +67,12 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const db = database();
-    const { canEdit, user } = await ensureAdmin(request);
-    if (!canEdit) return Response.json({ error: "Редактирование доступно только владельцу." }, { status: 403 });
+    const supabase = await createServerSupabaseClient();
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData.user;
+    if (!user || !isOwnerEmail(user.email)) {
+      return Response.json({ error: "Редактирование доступно только владельцу." }, { status: 403 });
+    }
 
     const raw = await request.text();
     if (raw.length > 2_000_000) return Response.json({ error: "Данные слишком большие." }, { status: 413 });
@@ -96,26 +82,29 @@ export async function PUT(request: Request) {
       return Response.json({ error: "Некорректная структура данных." }, { status: 400 });
     }
 
+    const { data: previous, error: readError } = await supabase
+      .from("portia_content")
+      .select("revision")
+      .eq("id", "main")
+      .maybeSingle<{ revision: number }>();
+    if (readError) throw readError;
+
     const now = new Date().toISOString();
-    await db.prepare(
-      `INSERT INTO portia_content (id, payload, revision, updated_at, updated_by)
-       VALUES (?, ?, 1, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         payload = excluded.payload,
-         revision = portia_content.revision + 1,
-         updated_at = excluded.updated_at,
-         updated_by = excluded.updated_by`,
-    )
-      .bind("main", JSON.stringify(normalized), now, user.id)
-      .run();
+    const revision = (previous?.revision ?? 0) + 1;
+    const { data: saved, error: saveError } = await supabase
+      .from("portia_content")
+      .upsert({
+        id: "main",
+        payload: normalized,
+        revision,
+        updated_at: now,
+        updated_by: user.id,
+      })
+      .select("revision, updated_at")
+      .single<{ revision: number; updated_at: string }>();
+    if (saveError) throw saveError;
 
-    const saved = await db.prepare(
-      "SELECT revision, updated_at FROM portia_content WHERE id = ? LIMIT 1",
-    )
-      .bind("main")
-      .first<{ revision: number; updated_at: string }>();
-
-    return Response.json({ ok: true, revision: saved?.revision ?? 1, updatedAt: saved?.updated_at ?? now });
+    return Response.json({ ok: true, revision: saved.revision, updatedAt: saved.updated_at });
   } catch (error) {
     console.error("PORTIA content save failed", error);
     return Response.json({ error: "Не удалось сохранить изменения." }, { status: 500 });
