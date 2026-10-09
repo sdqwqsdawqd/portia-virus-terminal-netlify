@@ -9,6 +9,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "check": "npm run build && npm run lint",
+    "vercel:preview": "npx --cache .npm-cache vercel --global-config .vercel-cli-global deploy",
+    "vercel:publish": "npx --cache .npm-cache vercel --global-config .vercel-cli-global deploy --prod",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
