@@ -4,13 +4,77 @@ export type Mutation = {
   image: string;
 };
 
+export type RichTextStyle = {
+  color?: string;
+  fontSize?: number;
+  fontWeight?: number;
+  backgroundColor?: string;
+  backgroundOpacity?: number;
+};
+
+export type RichTextRun = {
+  text: string;
+  style?: RichTextStyle;
+};
+
+export type RichTextDocument = {
+  runs: RichTextRun[];
+};
+
 export type ScientistLog = {
   id: string;
   title: string;
   scientist: string;
   lockedLevel: number;
   content: string[];
+  richContent?: RichTextDocument;
 };
+
+export const classificationOptions = {
+  danger: [
+    { value: "Гефест", level: 1 },
+    { value: "Протей", level: 2 },
+    { value: "Апейрон", level: 3 },
+  ],
+  spread: [
+    { value: "Номос", level: 1 },
+    { value: "Тезей", level: 2 },
+    { value: "Абраксас", level: 3 },
+  ],
+  transmission: [
+    { value: "Воздушно-капельный" },
+    { value: "Воздушно-пылевой" },
+    { value: "Контактно-бытовой" },
+    { value: "Фекально-оральный" },
+    { value: "Половой" },
+    { value: "Неизвестно" },
+  ],
+  escapeRisk: [
+    { value: "Предупреждение", level: 1 },
+    { value: "Риск", level: 2 },
+    { value: "Эснов", level: 3 },
+  ],
+  mind: [
+    { value: "Рубедо", level: 1 },
+    { value: "Альбедо", level: 2 },
+    { value: "Нигредо", level: 3 },
+  ],
+  appearance: [
+    { value: "Нюктея", level: 1 },
+    { value: "Морфея", level: 2 },
+    { value: "Дедалея", level: 3 },
+  ],
+  behavior: [
+    { value: "Фобус", level: 1 },
+    { value: "Ареус", level: 2 },
+    { value: "Селенус", level: 3 },
+  ],
+} satisfies Record<keyof Virus["classification"], readonly { value: string; level?: number }[]>;
+
+export function scientistLogPlainText(log: ScientistLog) {
+  if (log.richContent?.runs?.length) return log.richContent.runs.map((run) => run.text).join("");
+  return log.content.join("\n\n");
+}
 
 export type Virus = {
   id: string;
@@ -48,13 +112,60 @@ export type Broadcast = {
   published: boolean;
 };
 
+export type RecycleFile = {
+  id: string;
+  name: string;
+  location: string;
+  kind: "virus" | "text" | "image";
+  content: string;
+  image: string;
+  virusId: string;
+};
+
 export type PortiaContent = {
   viruses: Virus[];
   infoSections: InfoSection[];
   broadcasts: Broadcast[];
+  recycleFiles: RecycleFile[];
   searchRecommendations: string[];
   assistantAdvice: string[];
+  assistantOffendedPhrase: string;
+  assistantOffendedPhrases: string[];
+  assistantPatienceSeconds: number;
+  assistantPatienceVariants: number[];
+  assistantIdlePhrases: string[];
+  assistantActivityPhrases: string[];
+  assistantAutoTimingMode: "fixed" | "random";
+  assistantAutoIntervalSeconds: number;
+  assistantAutoMinSeconds: number;
+  assistantAutoMaxSeconds: number;
+  formattedText: Record<string, RichTextDocument>;
 };
+
+export const portiaTextKey = {
+  virus: (virusId: string, field: "external" | "physiology" | "ppu-health" | "ppu-speed" | "ppu-abilities") => `virus:${virusId}:${field}`,
+  mutation: (virusId: string, index: number) => `virus:${virusId}:mutation:${index}:description`,
+  info: (sectionId: string) => `info:${sectionId}:body`,
+  broadcast: (broadcastId: string) => `broadcast:${broadcastId}:body`,
+  recycle: (fileId: string) => `recycle:${fileId}:content`,
+  searchRecommendations: "search:recommendations",
+  assistantAdvice: "assistant:advice",
+  assistantOffended: "assistant:offended",
+  assistantIdle: "assistant:idle",
+  assistantActivity: "assistant:activity",
+} as const;
+
+export function createVirusRecycleFiles(viruses: Virus[]): RecycleFile[] {
+  return viruses.slice(0, 3).map((virus) => ({
+    id: `recycle-${virus.id}`,
+    name: `${virus.name}_${virus.code}.virus`,
+    location: "C:\\PORTIA\\VIRUS_ARCHIVE",
+    kind: "virus",
+    content: "",
+    image: "",
+    virusId: virus.id,
+  }));
+}
 
 const placeholderLogs = (prefix: string): ScientistLog[] => [
   {
@@ -192,6 +303,35 @@ export const defaultPortiaContent: PortiaContent = {
       scientistLogs: placeholderLogs("kallisto"),
     },
   ],
+  recycleFiles: [
+    {
+      id: "recycle-vir-d17",
+      name: "МОРОК_VIR-Δ17.virus",
+      location: "C:\\PORTIA\\VIRUS_ARCHIVE",
+      kind: "virus",
+      content: "",
+      image: "",
+      virusId: "vir-d17",
+    },
+    {
+      id: "recycle-vir-t04",
+      name: "АРАХНА_VIR-Θ04.virus",
+      location: "C:\\PORTIA\\VIRUS_ARCHIVE",
+      kind: "virus",
+      content: "",
+      image: "",
+      virusId: "vir-t04",
+    },
+    {
+      id: "recycle-vir-s12",
+      name: "КАЛЛИСТО_VIR-Σ12.virus",
+      location: "C:\\PORTIA\\VIRUS_ARCHIVE",
+      kind: "virus",
+      content: "",
+      image: "",
+      virusId: "vir-s12",
+    },
+  ],
   infoSections: [
     {
       id: "what-is-virus",
@@ -224,8 +364,31 @@ export const defaultPortiaContent: PortiaContent = {
     "Глобальный поиск видит названия, коды, классификации и сообщения станции.",
     "В каждой карточке только одна запись учёного доступна с уровнем II.",
     "После сохранения изменения автоматически появляются у посетителей.",
-    "Файлы в Корзине — локальные копии: их текст можно редактировать на этом устройстве.",
+    "Файлы в Корзине доступны только для чтения. Управление ими находится в редакторе владельца.",
   ],
+  assistantOffendedPhrase: "Я обиделась. Дайте мне немного времени.",
+  assistantOffendedPhrases: [
+    "Я обиделась. Дайте мне немного времени.",
+    "Слишком много нажатий. Я беру короткую паузу.",
+    "Мои лапки устали. Вернусь через десять секунд.",
+  ],
+  assistantPatienceSeconds: 3,
+  assistantPatienceVariants: [3],
+  assistantIdlePhrases: [
+    "Вы давно ничего не делали. Я всё ещё здесь.",
+    "Станция притихла. Может, пора продолжить работу?",
+    "Тишина затянулась. Позвать вас ещё раз?",
+  ],
+  assistantActivityPhrases: [
+    "Вижу, работа идёт. Не отвлекаю — просто наблюдаю.",
+    "Хороший темп. Продолжайте в том же духе.",
+    "Вы заняты, а значит станция не простаивает.",
+  ],
+  assistantAutoTimingMode: "random",
+  assistantAutoIntervalSeconds: 60,
+  assistantAutoMinSeconds: 45,
+  assistantAutoMaxSeconds: 120,
+  formattedText: {},
 };
 
 export function cloneDefaultContent(): PortiaContent {

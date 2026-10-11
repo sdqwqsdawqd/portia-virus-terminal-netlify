@@ -5,6 +5,14 @@ import { getSupabaseConfig } from "@/lib/supabase/env";
 export async function updateSupabaseSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  // Anonymous visitors do not have a session to refresh. Avoid an unnecessary
+  // external request on public API reads and keep the site responsive even if
+  // the authentication service is temporarily slow or unreachable.
+  const hasAuthCookie = request.cookies.getAll().some(({ name }) =>
+    name.startsWith("sb-") && name.includes("-auth-token"),
+  );
+  if (!hasAuthCookie) return response;
+
   try {
     const { url, publishableKey } = getSupabaseConfig();
     const supabase = createServerClient(url, publishableKey, {

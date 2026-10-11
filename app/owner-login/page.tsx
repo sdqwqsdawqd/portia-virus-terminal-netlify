@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { ownerLogin, ownerLogout } from "./actions";
+import { getEditorAccess } from "@/lib/editor-access";
+import { editorSignUp, ownerLogin, ownerLogout } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function OwnerLoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; success?: string }>;
 }) {
   let configured = true;
   let signedIn = false;
@@ -15,22 +16,19 @@ export default async function OwnerLoginPage({
   try {
     const supabase = await createServerSupabaseClient();
     const { data } = await supabase.auth.getUser();
-    signedIn = Boolean(
-      data.user?.email &&
-      data.user.email.toLocaleLowerCase("en-US") === process.env.PORTIA_OWNER_EMAIL?.trim().toLocaleLowerCase("en-US"),
-    );
+    signedIn = (await getEditorAccess(supabase, data.user)).canEdit;
   } catch {
     configured = false;
   }
 
-  const { error } = await searchParams;
+  const { error, success } = await searchParams;
 
   return (
     <main className="owner-login-page">
       <section className="owner-login-card">
-        <span className="eyebrow">PORTIA // ЗАЩИЩЁННЫЙ КОНТУР</span>
-        <h1>Вход владельца</h1>
-        <p>Посетители видят базу данных, но изменение записей доступно только владельцу.</p>
+        <span className="eyebrow">PORTIA // РЕДАКТОР</span>
+        <h1>Вход</h1>
+        <p>Каждый редактор входит под своим email. Доступ выдаёт владелец сайта.</p>
 
         {!configured ? (
           <div className="owner-login-alert">Подключение к Supabase ещё не настроено.</div>
@@ -42,11 +40,22 @@ export default async function OwnerLoginPage({
         ) : (
           <form action={ownerLogin}>
             <label>
-              <span>Пароль владельца</span>
-              <input name="password" type="password" autoComplete="current-password" required />
+              <span>Email</span>
+              <input name="email" type="email" autoComplete="email" required />
             </label>
-            {error && <div className="owner-login-alert">Не удалось войти. Проверьте пароль.</div>}
-            <button type="submit">ПОДТВЕРДИТЬ ДОСТУП</button>
+            <label>
+              <span>Пароль</span>
+              <input name="password" type="password" autoComplete="current-password" minLength={8} required />
+            </label>
+            {success && <div className="owner-login-success">Аккаунт создан. Если Supabase просит подтвердить email, откройте письмо, затем войдите.</div>}
+            {error === "denied" && <div className="owner-login-alert">Этот аккаунт существует, но владелец не выдал ему доступ.</div>}
+            {error === "not-approved" && <div className="owner-login-alert">Владелец ещё не добавил этот email в список редакторов.</div>}
+            {error === "setup" && <div className="owner-login-alert">Управление аккаунтами ещё не настроено в Supabase.</div>}
+            {error && !["denied", "not-approved", "setup"].includes(error) && <div className="owner-login-alert">Не удалось выполнить действие. Проверьте email, пароль и подтверждение почты.</div>}
+            <div className="owner-login-actions">
+              <button type="submit">ВОЙТИ</button>
+              <button type="submit" formAction={editorSignUp}>СОЗДАТЬ АККАУНТ</button>
+            </div>
           </form>
         )}
 

@@ -4,7 +4,7 @@ import "./portia.css";
 
 export const metadata: Metadata = {
   title: "PORTIA — вирусный архив",
-  description: "Вымышленный исследовательский терминал PORTIA с редактируемой базой вирусов, информацией и сообщениями станции.",
+  description: "PORTIA OS это операционная система, имеющая в себе база данных вирусов и важной информации.",
   icons: {
     icon: "/assets/portia-virus-icon.png",
     shortcut: "/assets/portia-virus-icon.png",
