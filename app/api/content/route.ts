@@ -103,7 +103,7 @@ function normalizePortiaContent(value: unknown): PortiaContent | null {
     !Array.isArray(candidate.searchRecommendations)
   ) return null;
 
-  const viruses = candidate.viruses.map((virus) => ({
+  const normalizeVirus = (virus: PortiaContent["viruses"][number]) => ({
     ...virus,
     infectedImage: normalizeMediaUrl(virus.infectedImage),
     mutations: Array.isArray(virus.mutations)
@@ -116,7 +116,11 @@ function normalizePortiaContent(value: unknown): PortiaContent | null {
           richContent: normalizeRichText(log.richContent),
         }))
       : [],
-  }));
+  });
+  const viruses = candidate.viruses.map(normalizeVirus);
+  const recycledViruses = Array.isArray(candidate.recycledViruses)
+    ? candidate.recycledViruses.map(normalizeVirus)
+    : [];
   const assistantOffendedPhrases = Array.isArray(candidate.assistantOffendedPhrases)
     ? candidate.assistantOffendedPhrases.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
     : typeof candidate.assistantOffendedPhrase === "string" && candidate.assistantOffendedPhrase.trim()
@@ -155,6 +159,7 @@ function normalizePortiaContent(value: unknown): PortiaContent | null {
 
   return {
     viruses,
+    recycledViruses,
     infoSections: candidate.infoSections,
     broadcasts: candidate.broadcasts,
     recycleFiles: normalizeRecycleFiles(candidate.recycleFiles, viruses),
@@ -172,6 +177,8 @@ function normalizePortiaContent(value: unknown): PortiaContent | null {
     assistantPatienceVariants,
     assistantIdlePhrases,
     assistantActivityPhrases,
+    assistantIdleEnabled: typeof candidate.assistantIdleEnabled === "boolean" ? candidate.assistantIdleEnabled : true,
+    assistantActivityEnabled: typeof candidate.assistantActivityEnabled === "boolean" ? candidate.assistantActivityEnabled : true,
     assistantAutoTimingMode: candidate.assistantAutoTimingMode === "fixed" || candidate.assistantAutoTimingMode === "random"
       ? candidate.assistantAutoTimingMode
       : defaultPortiaContent.assistantAutoTimingMode,

@@ -308,6 +308,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
   const [tab, setTab] = useState<EditorTab>("viruses");
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
+  const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycledViruses?.[0]?.id ?? "");
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">("idle");
   const [dirty, setDirty] = useState(false);
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
@@ -320,6 +321,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
       setDraft(clone(content));
       setSelectedVirusId((current) => (content.viruses.some((virus) => virus.id === current) ? current : content.viruses[0]?.id ?? ""));
       setSelectedRecycleFileId((current) => (content.recycleFiles.some((file) => file.id === current) ? current : content.recycleFiles[0]?.id ?? ""));
+      setSelectedRecycledVirusId((current) => (content.recycledViruses?.some((virus) => virus.id === current) ? current : content.recycledViruses?.[0]?.id ?? ""));
     }, 0);
     return () => window.clearTimeout(syncTimer);
   }, [content, dirty]);
@@ -334,6 +336,11 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
     [draft.recycleFiles, selectedRecycleFileId],
   );
   const selectedRecycleFile = selectedRecycleFileIndex >= 0 ? draft.recycleFiles[selectedRecycleFileIndex] : null;
+  const selectedRecycledVirusIndex = useMemo(
+    () => (draft.recycledViruses ?? []).findIndex((virus) => virus.id === selectedRecycledVirusId),
+    [draft.recycledViruses, selectedRecycledVirusId],
+  );
+  const selectedRecycledVirus = selectedRecycledVirusIndex >= 0 ? draft.recycledViruses[selectedRecycledVirusIndex] : null;
 
   const changeDraft = (updater: (next: PortiaContent) => void) => {
     setDraft((current) => {
@@ -541,11 +548,17 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
                 <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= 5} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / 5</span></div>
               </EditorGroup>
 
-              <button className="danger-control" type="button" disabled={draft.viruses.length <= 1} onClick={() => {
+              <button className="danger-control" type="button" onClick={() => {
+                if (!window.confirm(`Переместить «${selectedVirus.name}» в Корзину? В основной базе вирус исчезнет, но его можно будет редактировать и восстановить из Корзины.`)) return;
                 const nextId = draft.viruses.find((virus) => virus.id !== selectedVirus.id)?.id ?? "";
-                changeDraft((next) => { next.viruses = next.viruses.filter((virus) => virus.id !== selectedVirus.id); });
+                changeDraft((next) => {
+                  next.recycledViruses ??= [];
+                  next.recycledViruses.push(next.viruses[selectedVirusIndex]);
+                  next.viruses = next.viruses.filter((virus) => virus.id !== selectedVirus.id);
+                });
                 setSelectedVirusId(nextId);
-              }}>УДАЛИТЬ ЭТОТ ВИРУС</button>
+                setSelectedRecycledVirusId(selectedVirus.id);
+              }}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
             </div>
           ) : <div className="editor-empty">Добавьте первую запись вируса.</div>}
         </div>
@@ -585,8 +598,13 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
       {tab === "recycle" && (
         <div className="virus-editor-layout recycle-editor-layout">
           <aside className="editor-record-list">
+            {(draft.recycledViruses ?? []).map((virus) => (
+              <button key={virus.id} type="button" className={virus.id === selectedRecycledVirusId && !selectedRecycleFileId ? "active" : ""} onClick={() => { setSelectedRecycledVirusId(virus.id); setSelectedRecycleFileId(""); }}>
+                <strong>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small>ВИРУС В КОРЗИНЕ</small>
+              </button>
+            ))}
             {draft.recycleFiles.map((file) => (
-              <button key={file.id} type="button" className={file.id === selectedRecycleFileId ? "active" : ""} onClick={() => setSelectedRecycleFileId(file.id)}>
+              <button key={file.id} type="button" className={file.id === selectedRecycleFileId ? "active" : ""} onClick={() => { setSelectedRecycleFileId(file.id); setSelectedRecycledVirusId(""); }}>
                 <strong>{file.name || "БЕЗ ИМЕНИ"}</strong><small>{file.kind === "virus" ? "ФАЙЛ ВИРУСА" : file.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ"}</small>
               </button>
             ))}
@@ -594,10 +612,39 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
               const file = blankRecycleFile();
               changeDraft((next) => next.recycleFiles.push(file));
               setSelectedRecycleFileId(file.id);
+              setSelectedRecycledVirusId("");
             }}>+ ДОБАВИТЬ ФАЙЛ</button>
+            <button className="add-record" type="button" onClick={() => {
+              const virus = blankVirus();
+              changeDraft((next) => { next.recycledViruses ??= []; next.recycledViruses.push(virus); });
+              setSelectedRecycledVirusId(virus.id);
+              setSelectedRecycleFileId("");
+            }}>+ НАПИСАТЬ ВИРУС</button>
           </aside>
 
-          {selectedRecycleFile ? (
+          {selectedRecycledVirus ? (
+            <ArchivedVirusEditor
+              virus={selectedRecycledVirus}
+              uploadState={uploadState}
+              onUpload={uploadImage}
+              onChange={(updater) => changeDraft((next) => updater(next.recycledViruses[selectedRecycledVirusIndex]))}
+              onRestore={() => {
+                if (!window.confirm(`Вернуть «${selectedRecycledVirus.name}» в основную базу вирусов?`)) return;
+                changeDraft((next) => {
+                  next.viruses.push(next.recycledViruses[selectedRecycledVirusIndex]);
+                  next.recycledViruses.splice(selectedRecycledVirusIndex, 1);
+                });
+                setSelectedVirusId(selectedRecycledVirus.id);
+                setSelectedRecycledVirusId("");
+              }}
+              onDelete={() => {
+                if (!window.confirm(`Удалить «${selectedRecycledVirus.name}» навсегда? Это действие нельзя отменить.`)) return;
+                const nextId = draft.recycledViruses.find((virus) => virus.id !== selectedRecycledVirus.id)?.id ?? "";
+                changeDraft((next) => { next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== selectedRecycledVirus.id); });
+                setSelectedRecycledVirusId(nextId);
+              }}
+            />
+          ) : selectedRecycleFile ? (
             <div className="editor-form">
               <p className="editor-guidance">Посетители могут только открыть файл. Создание, изменение и удаление доступны здесь владельцу.</p>
               <EditorGroup title="Свойства файла">
@@ -639,7 +686,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
                 setSelectedRecycleFileId(nextId);
               }}>УДАЛИТЬ ЭТОТ ФАЙЛ</button>
             </div>
-          ) : <div className="editor-empty">Корзина пуста. Добавьте вирусный файл, текст или фотографию.</div>}
+          ) : <div className="editor-empty">Корзина пуста. Добавьте файл или создайте полную запись вируса.</div>}
         </div>
       )}
 
@@ -653,6 +700,10 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
       {tab === "assistant" && (
         <div className="editor-form flat-editor-form assistant-editor">
           <p className="editor-guidance">Каждая строка — отдельный совет. В одной строке можно совместить текст и GIF.</p>
+          <div className="assistant-switches">
+            <label className="publish-toggle"><input type="checkbox" checked={draft.assistantIdleEnabled} onChange={(event) => changeDraft((next) => { next.assistantIdleEnabled = event.target.checked; })} /><span>Фразы при долгом бездействии</span></label>
+            <label className="publish-toggle"><input type="checkbox" checked={draft.assistantActivityEnabled} onChange={(event) => changeDraft((next) => { next.assistantActivityEnabled = event.target.checked; })} /><span>Фразы во время активности</span></label>
+          </div>
           <FormattedTextarea label="Советы помощника" tall value={draft.assistantAdvice.join("\n")} document={draft.formattedText[portiaTextKey.assistantAdvice]} formatKey={portiaTextKey.assistantAdvice} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.assistantAdvice, value, document, (next, text) => { next.assistantAdvice = text.split("\n"); })} />
           <FormattedTextarea label="Фразы после исчерпания терпения — по одной на строку" tall value={(draft.assistantOffendedPhrases ?? [draft.assistantOffendedPhrase]).join("\n")} document={draft.formattedText[portiaTextKey.assistantOffended]} formatKey={portiaTextKey.assistantOffended} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.assistantOffended, value, document, (next, text) => { next.assistantOffendedPhrases = text.split("\n"); next.assistantOffendedPhrase = next.assistantOffendedPhrases.find((item) => item.trim()) ?? ""; })} />
           <Field label="Варианты терпения в секундах — через запятую">
@@ -688,6 +739,58 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
     </div>
     </ActiveFormatContext.Provider>
   );
+}
+
+function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRestore, onDelete }: {
+  virus: Virus;
+  uploadState: "idle" | "uploading" | "error";
+  onUpload: (file: File, onUploaded: (url: string) => void) => void;
+  onChange: (updater: (virus: Virus) => void) => void;
+  onRestore: () => void;
+  onDelete: () => void;
+}) {
+  return <div className="editor-form virus-editor-form">
+    <p className="editor-guidance">Это полная запись вируса в Корзине. Она не показывается в основной базе, но остаётся доступной посетителям в Корзине и может быть восстановлена.</p>
+    <EditorGroup title="Основные данные">
+      <Field label="Название"><input value={virus.name} onChange={(event) => onChange((item) => { item.name = event.target.value; })} /></Field>
+      <Field label="Код"><input value={virus.code} onChange={(event) => onChange((item) => { item.code = event.target.value; })} /></Field>
+      <Field label="Статус"><input value={virus.status} onChange={(event) => onChange((item) => { item.status = event.target.value; })} /></Field>
+      <ImageEditorField label="Фото или GIF после заражения" value={virus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.infectedImage = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.infectedImage = url; }))} />
+    </EditorGroup>
+    <EditorGroup title="Описание" stack>
+      <Field label="Внешние характеристики" wide><textarea value={virus.external} onChange={(event) => onChange((item) => { item.external = event.target.value; })} /></Field>
+      <Field label="Физиологические характеристики" wide><textarea value={virus.physiology} onChange={(event) => onChange((item) => { item.physiology = event.target.value; })} /></Field>
+    </EditorGroup>
+    <EditorGroup title="Характеристики PPU" stack>
+      {(["health", "speed", "abilities"] as const).map((key) => <Field key={key} label={{ health: "Здоровье", speed: "Скорость", abilities: "Способности" }[key]} wide><textarea value={virus.ppu[key]} onChange={(event) => onChange((item) => { item.ppu[key] = event.target.value; })} /></Field>)}
+    </EditorGroup>
+    <EditorGroup title="Классификация">
+      {([
+        ["danger", "Общий уровень опасности"], ["spread", "Распространение"], ["transmission", "Способ распространения"],
+        ["escapeRisk", "Угроза и риск побега"], ["mind", "Разум"], ["appearance", "Вид / внешность"], ["behavior", "Поведение"],
+      ] as [keyof Virus["classification"], string][]).map(([key, label]) => <ClassificationField key={key} label={label} classificationKey={key} value={virus.classification[key]} onChange={(value) => onChange((item) => { item.classification[key] = value; })} />)}
+    </EditorGroup>
+    <EditorGroup title="Мутации" stack>
+      {virus.mutations.map((mutation, index) => <div className="nested-editor-card" key={`${virus.id}-mutation-${index}`}>
+        <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.mutations.splice(index, 1); })}>Удалить</button></div>
+        <Field label="Название"><input value={mutation.name} onChange={(event) => onChange((item) => { item.mutations[index].name = event.target.value; })} /></Field>
+        <Field label="Описание" wide><textarea value={mutation.description} onChange={(event) => onChange((item) => { item.mutations[index].description = event.target.value; })} /></Field>
+        <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.mutations[index].image = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.mutations[index].image = url; }))} />
+      </div>)}
+      <button className="secondary-control" type="button" onClick={() => onChange((item) => { item.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }); })}>+ ДОБАВИТЬ МУТАЦИЮ</button>
+    </EditorGroup>
+    <EditorGroup title="Записи учёных" stack>
+      {virus.scientistLogs.map((log, index) => <div className="nested-editor-card" key={log.id}>
+        <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.scientistLogs.splice(index, 1); })}>Удалить</button></div>
+        <Field label="Название"><input value={log.title} onChange={(event) => onChange((item) => { item.scientistLogs[index].title = event.target.value; })} /></Field>
+        <Field label="Псевдоним учёного"><input value={log.scientist} onChange={(event) => onChange((item) => { item.scientistLogs[index].scientist = event.target.value; })} /></Field>
+        <Field label="Уровень доступа"><select value={log.lockedLevel} onChange={(event) => onChange((item) => { item.scientistLogs[index].lockedLevel = Number(event.target.value); })}><option value={2}>II — доступна</option><option value={3}>III — заблокирована</option><option value={4}>IV — заблокирована</option></select></Field>
+        <Field label="Текст записи" wide><textarea value={scientistLogPlainText(log)} onChange={(event) => onChange((item) => { item.scientistLogs[index].content = event.target.value.split(/\n\s*\n/); item.scientistLogs[index].richContent = { runs: [{ text: event.target.value }] }; })} /></Field>
+      </div>)}
+      <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= 5} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
+    </EditorGroup>
+    <div className="archive-virus-actions"><button className="secondary-control" type="button" onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
+  </div>;
 }
 
 function ClassificationField({ label, classificationKey, value, onChange }: {

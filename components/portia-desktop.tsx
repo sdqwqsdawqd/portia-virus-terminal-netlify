@@ -3,24 +3,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
+import type { PortiaEmployee } from "@/lib/portia-employees";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
   { ssr: false, loading: () => <div className="editor-empty">Загрузка редактора…</div> },
 );
 
-type AppId = "archive" | "search" | "info" | "settings" | "broadcasts" | "trash" | "editor";
+type AppId = "archive" | "employees" | "search" | "info" | "settings" | "broadcasts" | "trash" | "editor";
 type WindowGeometry = { x: number; y: number; width: number; height: number };
 type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number; geometry?: WindowGeometry };
 type SaveState = "idle" | "saving" | "saved" | "error";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string };
-type DesktopShortcutId = "search" | "archive" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
+type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
 type ShortcutPosition = { x: number; y: number };
 
 const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard" };
 
 const appMeta: Record<AppId, { label: string; path: string; icon: string }> = {
   archive: { label: "База вирусов", path: "PORTIA://VIRUS_ARCHIVE", icon: "/assets/app-virus.png" },
+  employees: { label: "Сотрудники", path: "PORTIA://PERSONNEL", icon: "/assets/app-sheet.png" },
   search: { label: "Глобальный поиск", path: "PORTIA://GLOBAL_SEARCH", icon: "/assets/app-search.png" },
   info: { label: "Информация", path: "PORTIA://INFORMATION", icon: "/assets/app-info.png" },
   settings: { label: "Настройки", path: "PORTIA://DESKTOP_SETTINGS", icon: "/assets/app-settings.png" },
@@ -31,6 +33,7 @@ const appMeta: Record<AppId, { label: string; path: string; icon: string }> = {
 
 const initialWindows: Record<AppId, WindowState> = {
   archive: { open: false, minimized: false, maximized: false, z: 11 },
+  employees: { open: false, minimized: false, maximized: false, z: 10 },
   search: { open: false, minimized: false, maximized: false, z: 10 },
   info: { open: false, minimized: false, maximized: false, z: 10 },
   settings: { open: false, minimized: false, maximized: false, z: 10 },
@@ -45,6 +48,7 @@ function createWindowGeometry(appId: AppId, cascadeIndex: number): WindowGeometr
   const workspaceHeight = window.innerHeight - 78;
   const preferred = {
     archive: [1040, 720],
+    employees: [960, 680],
     search: [760, 590],
     info: [820, 650],
     settings: [820, 650],
@@ -64,6 +68,7 @@ const escapeSearch = (value: string) => value.toLocaleLowerCase("ru").replace(/�
 const roman = (level: number) => ({ 1: "I", 2: "II", 3: "III", 4: "IV" })[level] ?? String(level);
 const broadcastReadStorageKey = "portia-broadcasts-read-signature-v1";
 const contentCacheStorageKey = "portia-content-last-success-v1";
+const employeesCacheStorageKey = "portia-employees-last-success-v1";
 
 type ContentResponse = {
   content?: PortiaContent;
@@ -210,6 +215,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [shortcutPositionsLoaded, setShortcutPositionsLoaded] = useState(false);
   const [settingsSavedVisible, setSettingsSavedVisible] = useState(false);
   const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
+  const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
+  const [employeesSyncedAt, setEmployeesSyncedAt] = useState<string | null>(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [employeeQuery, setEmployeeQuery] = useState("");
+  const [employeeDraft, setEmployeeDraft] = useState<{ biography: string; photoUrl: string; knowledgeRating: number } | null>(null);
+  const [employeeSaveState, setEmployeeSaveState] = useState<SaveState>("idle");
   const [assistantTipIndex, setAssistantTipIndex] = useState(-1);
   const [assistantOffendedPhraseIndex, setAssistantOffendedPhraseIndex] = useState(-1);
   const [assistantIdlePhraseIndex, setAssistantIdlePhraseIndex] = useState(-1);
@@ -269,6 +280,21 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
   }, []);
 
+  const fetchEmployees = useCallback(async () => {
+    try {
+      const response = await fetchWithTimeout("/api/employees", { cache: "no-store" }, 12_000);
+      if (!response.ok) return;
+      const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null };
+      if (!Array.isArray(payload.employees) || !payload.employees.length) return;
+      setEmployees(payload.employees);
+      setEmployeesSyncedAt(payload.syncedAt ?? null);
+      setSelectedEmployeeId((current) => payload.employees!.some((employee) => employee.id === current) ? current : payload.employees![0].id);
+      try { window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify(payload)); } catch {}
+    } catch {
+      // The last successful personnel snapshot remains visible on this device.
+    }
+  }, []);
+
   useEffect(() => {
     const cacheTimer = window.setTimeout(() => {
       try {
@@ -283,6 +309,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             setSelectedInfoId((current) => cachedContent.infoSections.some((section) => section.id === current) ? current : cachedContent.infoSections[0]?.id ?? "");
           }
         }
+        const employeeCache = window.localStorage.getItem(employeesCacheStorageKey);
+        if (employeeCache) {
+          const parsed = JSON.parse(employeeCache) as { employees?: PortiaEmployee[]; syncedAt?: string | null };
+          if (Array.isArray(parsed.employees) && parsed.employees.length) {
+            setEmployees(parsed.employees);
+            setEmployeesSyncedAt(parsed.syncedAt ?? null);
+            setSelectedEmployeeId((current) => current || parsed.employees![0].id);
+          }
+        }
       } catch {}
     }, 0);
     const bootTimer = window.setTimeout(() => setBooting(false), 1650);
@@ -290,15 +325,19 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     tick();
     const clockTimer = window.setInterval(tick, 1000);
     const initialFetchTimer = window.setTimeout(() => void fetchContent(), 0);
+    const initialEmployeesTimer = window.setTimeout(() => void fetchEmployees(), 0);
     const syncTimer = window.setInterval(fetchContent, 30_000);
+    const employeeSyncTimer = window.setInterval(fetchEmployees, 60 * 60 * 1000);
     return () => {
       window.clearTimeout(cacheTimer);
       window.clearTimeout(bootTimer);
       window.clearTimeout(initialFetchTimer);
+      window.clearTimeout(initialEmployeesTimer);
       window.clearInterval(clockTimer);
       window.clearInterval(syncTimer);
+      window.clearInterval(employeeSyncTimer);
     };
-  }, [fetchContent]);
+  }, [fetchContent, fetchEmployees]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -330,7 +369,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     try {
       const saved = window.localStorage.getItem("portia-desktop-shortcuts-v1");
       const parsed = saved ? JSON.parse(saved) as Record<string, ShortcutPosition> : {};
-      const allowed = new Set<DesktopShortcutId>(["search", "archive", "broadcasts", "info", "settings", "charter", "sheet", "trash"]);
+      const allowed = new Set<DesktopShortcutId>(["search", "archive", "employees", "broadcasts", "info", "settings", "charter", "sheet", "trash"]);
       const restored = Object.fromEntries(Object.entries(parsed).filter(([key, value]) => allowed.has(key as DesktopShortcutId) && Number.isFinite(value?.x) && Number.isFinite(value?.y))) as Partial<Record<DesktopShortcutId, ShortcutPosition>>;
       if (!window.localStorage.getItem("portia-desktop-shortcuts-bottom-links-v1")) {
         delete restored.charter;
@@ -389,6 +428,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
         if (!assistantOffendedRef.current) {
           const latest = assistantContentRef.current;
+          const enabled = kind === "activity" ? latest.assistantActivityEnabled !== false : latest.assistantIdleEnabled !== false;
+          if (!enabled) {
+            scheduleNextPhrase();
+            return;
+          }
           const phrases = kind === "activity" ? latest.assistantActivityPhrases : latest.assistantIdlePhrases;
           const signatureRef = kind === "activity" ? assistantActivitySignature : assistantIdleSignature;
           const bagRef = kind === "activity" ? assistantActivityBag : assistantIdleBag;
@@ -421,7 +465,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       activityEvents.forEach((eventName) => window.removeEventListener(eventName, markActivity));
       if (assistantAutomaticTimer.current) window.clearTimeout(assistantAutomaticTimer.current);
     };
-  }, [content.assistantAutoIntervalSeconds, content.assistantAutoMaxSeconds, content.assistantAutoMinSeconds, content.assistantAutoTimingMode]);
+  }, [content.assistantActivityEnabled, content.assistantAutoIntervalSeconds, content.assistantAutoMaxSeconds, content.assistantAutoMinSeconds, content.assistantAutoTimingMode, content.assistantIdleEnabled]);
 
   useEffect(() => {
     document.documentElement.dataset.accent = desktopSettings.accent;
@@ -548,9 +592,43 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const selectedInfo = content.infoSections.find((section) => section.id === selectedInfoId) ?? content.infoSections[0];
   const trashFiles = content.recycleFiles;
   const activeTrashFile = trashFiles.find((file) => file.id === activeTrashFileId) ?? null;
+  const recycledViruses = useMemo(() => content.recycledViruses ?? [], [content.recycledViruses]);
+  const activeTrashVirus = activeTrashFileId?.startsWith("virus:")
+    ? recycledViruses.find((virus) => virus.id === activeTrashFileId.slice(6)) ?? null
+    : null;
+  const filteredEmployees = employees.filter((employee) => escapeSearch(`${employee.nickname} ${employee.callsign} ${employee.title} ${employee.rank}`).includes(escapeSearch(employeeQuery)));
+  const selectedEmployee = employees.find((employee) => employee.id === selectedEmployeeId) ?? employees[0] ?? null;
 
   const openTrashFile = (file: RecycleFile) => {
     setActiveTrashFileId(file.id);
+  };
+
+  const openTrashVirus = (virus: Virus) => setActiveTrashFileId(`virus:${virus.id}`);
+
+  const beginEmployeeEdit = () => {
+    if (!selectedEmployee) return;
+    setEmployeeDraft({ biography: selectedEmployee.biography, photoUrl: selectedEmployee.photoUrl, knowledgeRating: selectedEmployee.knowledgeRating });
+  };
+
+  const saveEmployeeProfile = async () => {
+    if (!selectedEmployee || !employeeDraft) return;
+    setEmployeeSaveState("saving");
+    try {
+      const response = await fetchWithTimeout("/api/employees", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: selectedEmployee.id, changes: employeeDraft }),
+      }, 12_000);
+      if (!response.ok) throw new Error("save failed");
+      const payload = await response.json() as { employee?: PortiaEmployee; syncedAt?: string };
+      if (payload.employee) setEmployees((current) => current.map((employee) => employee.id === payload.employee!.id ? payload.employee! : employee));
+      setEmployeesSyncedAt(payload.syncedAt ?? employeesSyncedAt);
+      setEmployeeDraft(null);
+      setEmployeeSaveState("saved");
+      window.setTimeout(() => setEmployeeSaveState("idle"), 1800);
+    } catch {
+      setEmployeeSaveState("error");
+    }
   };
 
   const activateAssistant = () => {
@@ -631,11 +709,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       ...content.viruses.map((virus) => ({ id: virus.id, type: "virus" as const, title: virus.name, meta: virus.code, body: `${virus.status} ${virus.external} ${virus.physiology} ${Object.values(virus.classification).join(" ")} ${virus.mutations.map((mutation) => `${mutation.name} ${mutation.description}`).join(" ")}` })),
       ...content.infoSections.map((section) => ({ id: section.id, type: "info" as const, title: section.title, meta: "ИНФОРМАЦИЯ", body: section.body })),
       ...content.broadcasts.filter((item) => item.published).map((item) => ({ id: item.id, type: "broadcast" as const, title: item.title, meta: broadcastType(item.type), body: item.body })),
-      ...content.recycleFiles.map((file) => ({ id: file.id, type: "file" as const, title: file.name, meta: recycleFileType(file.kind), body: recycleFileBody(file, content.viruses) })),
+      ...content.recycleFiles.map((file) => ({ id: file.id, type: "file" as const, title: file.name, meta: recycleFileType(file.kind), body: recycleFileBody(file, [...content.viruses, ...recycledViruses]) })),
+      ...recycledViruses.map((virus) => ({ id: `virus:${virus.id}`, type: "file" as const, title: virus.name, meta: "ВИРУС В КОРЗИНЕ", body: `${virus.code} ${virus.status} ${virus.external} ${virus.physiology}` })),
     ];
     if (!query) return items.slice(0, 8);
     return items.filter((item) => escapeSearch(`${item.title} ${item.meta} ${item.body}`).includes(query));
-  }, [content, globalQuery]);
+  }, [content, globalQuery, recycledViruses]);
 
   const openSearchResult = (result: (typeof searchResults)[number]) => {
     if (result.type === "virus") {
@@ -697,6 +776,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <nav className="desktop-icons" aria-label="Рабочий стол PORTIA">
             <DesktopIcon app="search" onOpen={openApp} position={shortcutPositions.search} onMove={moveDesktopShortcut} />
             <DesktopIcon app="archive" onOpen={openApp} position={shortcutPositions.archive} onMove={moveDesktopShortcut} />
+            <DesktopIcon app="employees" onOpen={openApp} position={shortcutPositions.employees} onMove={moveDesktopShortcut} />
             <DesktopIcon app="broadcasts" onOpen={openApp} position={shortcutPositions.broadcasts} onMove={moveDesktopShortcut} badge={broadcastUnread} />
             <DesktopIcon app="info" onOpen={openApp} position={shortcutPositions.info} onMove={moveDesktopShortcut} />
             <DesktopIcon app="settings" onOpen={openApp} position={shortcutPositions.settings} onMove={moveDesktopShortcut} />
@@ -725,6 +805,37 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               </aside>
               <article className="record-view" aria-live="polite">
                 {activeVirus ? openLog ? <ScientistDocument virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} /> : <div className="record-empty">В базе пока нет записей.</div>}
+              </article>
+            </div>
+          </AppWindow>
+
+          <AppWindow app="employees" state={windows.employees} active={activeApp === "employees"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window personnel-window" meta={`${employees.length} ПРОФИЛЕЙ`}>
+            <div className="personnel-app">
+              <aside className="personnel-index">
+                <header><span className="eyebrow">ЛИЧНЫЙ СОСТАВ</span><h1>Сотрудники</h1></header>
+                <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск сотрудника</span><input type="search" value={employeeQuery} onChange={(event) => setEmployeeQuery(event.target.value)} placeholder="Ник, позывной, звание" /></label>
+                <div className="personnel-list">
+                  {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={employee.id === selectedEmployee?.id ? "active" : ""} onClick={() => { setSelectedEmployeeId(employee.id); setEmployeeDraft(null); }}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.callsign || employee.nickname}</strong><small>{employee.title} · {employee.rank}</small></button>)}
+                  {!filteredEmployees.length && <div className="list-empty">Сотрудники не найдены</div>}
+                </div>
+                <footer>СИНХРОНИЗАЦИЯ: {employeesSyncedAt ? new Date(employeesSyncedAt).toLocaleString("ru-RU") : "ОЖИДАНИЕ"}</footer>
+              </aside>
+              <article className="personnel-profile">
+                {selectedEmployee ? <>
+                  <header className="personnel-profile-head">
+                    <figure>{(employeeDraft?.photoUrl || selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl) ? <img src={employeeDraft?.photoUrl || selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Аватар ${selectedEmployee.nickname}`} referrerPolicy="no-referrer" /> : <img src="/assets/portia-logo.png" alt="" className="personnel-fallback" />}</figure>
+                    <div><span className="eyebrow">ПРОФИЛЬ СОТРУДНИКА</span><h2>{selectedEmployee.callsign || selectedEmployee.nickname}</h2>{selectedEmployee.robloxUserId ? <a href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer">@{selectedEmployee.nickname}</a> : <span className="personnel-nickname">@{selectedEmployee.nickname}</span>}</div>
+                  </header>
+                  <dl className="personnel-stats"><div><dt>ЗВАНИЕ</dt><dd>{selectedEmployee.title || "Не указано"}</dd></div><div><dt>РАНГ</dt><dd>{selectedEmployee.rank || "Не указан"}</dd></div><div><dt>ОЦЕНКА ЗНАНИЙ</dt><dd>{employeeDraft?.knowledgeRating ?? selectedEmployee.knowledgeRating} / 10</dd></div></dl>
+                  {employeeDraft ? <div className="personnel-edit-form">
+                    <label><span>Оценка знаний — от 1 до 10</span><select value={employeeDraft.knowledgeRating} onChange={(event) => setEmployeeDraft((current) => current ? { ...current, knowledgeRating: Number(event.target.value) } : current)}>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+                    <label><span>Ссылка на фото</span><input value={employeeDraft.photoUrl} onChange={(event) => setEmployeeDraft((current) => current ? { ...current, photoUrl: event.target.value } : current)} placeholder="Оставьте пустым для аватара Roblox" /></label>
+                    <label><span>Биография</span><textarea value={employeeDraft.biography} onChange={(event) => setEmployeeDraft((current) => current ? { ...current, biography: event.target.value } : current)} /></label>
+                    <div className="personnel-actions"><button type="button" className="secondary-control" onClick={() => setEmployeeDraft(null)}>ОТМЕНА</button><button type="button" className="primary-control" onClick={() => void saveEmployeeProfile()} disabled={employeeSaveState === "saving"}>{employeeSaveState === "saving" ? "СОХРАНЕНИЕ…" : "СОХРАНИТЬ"}</button></div>
+                    {employeeSaveState === "error" && <p className="personnel-save-error">Не удалось сохранить профиль.</p>}
+                  </div> : <section className="personnel-biography"><span>БИОГРАФИЯ</span><p>{selectedEmployee.biography || "Биография сотрудника пока не заполнена."}</p></section>}
+                  {canEdit && !employeeDraft && <button className="secondary-control personnel-edit-button" type="button" onClick={beginEmployeeEdit}>РЕДАКТИРОВАТЬ ПРОФИЛЬ</button>}
+                </> : <div className="editor-empty">Данные сотрудников ещё не синхронизированы.</div>}
               </article>
             </div>
           </AppWindow>
@@ -764,15 +875,17 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             </div>
           </AppWindow>
 
-          <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashFiles.length).padStart(2, "0")}`}>
+          <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashFiles.length + recycledViruses.length).padStart(2, "0")}`}>
             <div className="trash-app">
               <header><span className="eyebrow">ЛОКАЛЬНОЕ ХРАНИЛИЩЕ</span><h1>Корзина</h1><p>Бесполезный хлам — кому вообще придет в голову его перебирать?</p></header>
               <div className="trash-layout">
                 <div className="trash-files">
                   <div className="trash-list-head" aria-hidden="true"><span>ИМЯ</span><span>ИСХОДНОЕ РАСПОЛОЖЕНИЕ</span><span>ТИП</span></div>
+                  {recycledViruses.map((virus) => <button className={`trash-file-row${activeTrashFileId === `virus:${virus.id}` ? " active" : ""}`} type="button" key={virus.id} onClick={() => openTrashVirus(virus)}><span className="trash-file-name"><i className="trash-file-icon virus">V</i><strong>{virus.name}</strong></span><span>C:\PORTIA\VIRUS_ARCHIVE</span><span>Вирус в корзине</span></button>)}
                   {trashFiles.map((file) => <button className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}`} type="button" key={file.id} onClick={() => openTrashFile(file)}><span className="trash-file-name"><i className={`trash-file-icon ${file.kind}`}>{file.kind === "virus" ? "V" : file.kind === "image" ? "IMG" : "TXT"}</i><strong>{file.name}</strong></span><span>{file.location}</span><span>{recycleFileType(file.kind)}</span></button>)}
-                  {!trashFiles.length && <div className="editor-empty">Корзина пуста.</div>}
+                  {!trashFiles.length && !recycledViruses.length && <div className="editor-empty">Корзина пуста.</div>}
                 </div>
+                {activeTrashVirus && <div className="trash-viewer virus"><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} onOpenLog={() => undefined} /></div></div>}
                 {activeTrashFile && <div className={`trash-viewer ${activeTrashFile.kind}`}>
                   <div className="trash-viewer-head"><div><span>ТОЛЬКО ДЛЯ ЧТЕНИЯ</span><strong>{activeTrashFile.name}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div>
                   <div className="trash-viewer-body">
@@ -782,7 +895,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                         {activeTrashFile.content && <figcaption><FormattedText text={activeTrashFile.content} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} /></figcaption>}
                       </figure>
                     ) : (
-                       <article className="trash-text-document"><div className="trash-document-meta">{recycleFileType(activeTrashFile.kind)} / {activeTrashFile.location}</div>{activeTrashFile.kind === "virus" ? <>{recycleFileBody({ ...activeTrashFile, content: "" }, content.viruses) && <pre>{recycleFileBody({ ...activeTrashFile, content: "" }, content.viruses)}</pre>}{activeTrashFile.content && <FormattedText className="trash-formatted-text" text={activeTrashFile.content} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} />}{!recycleFileBody({ ...activeTrashFile, content: "" }, content.viruses) && !activeTrashFile.content && <span>Файл не содержит текста.</span>}</> : <FormattedText className="trash-formatted-text" text={activeTrashFile.content || "Файл не содержит текста."} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} />}</article>
+                       <article className="trash-text-document"><div className="trash-document-meta">{recycleFileType(activeTrashFile.kind)} / {activeTrashFile.location}</div>{activeTrashFile.kind === "virus" ? <>{recycleFileBody({ ...activeTrashFile, content: "" }, [...content.viruses, ...recycledViruses]) && <pre>{recycleFileBody({ ...activeTrashFile, content: "" }, [...content.viruses, ...recycledViruses])}</pre>}{activeTrashFile.content && <FormattedText className="trash-formatted-text" text={activeTrashFile.content} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} />}{!recycleFileBody({ ...activeTrashFile, content: "" }, [...content.viruses, ...recycledViruses]) && !activeTrashFile.content && <span>Файл не содержит текста.</span>}</> : <FormattedText className="trash-formatted-text" text={activeTrashFile.content || "Файл не содержит текста."} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} />}</article>
                     )}
                   </div>
                 </div>}
@@ -824,6 +937,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <div className="start-panel-brand"><img src="/assets/portia-logo.png" alt="PORTIA" /><div><strong>PORTIA OS</strong><span>Панель быстрого запуска</span></div></div>
           <button type="button" onClick={() => openApp("search")}><span className="start-panel-icon"><img src="/assets/app-search.png" alt="" /></span>Глобальный поиск</button>
           <button type="button" onClick={() => openApp("archive")}><span className="start-panel-icon"><img src="/assets/app-virus.png" alt="" /></span>База вирусов</button>
+          <button type="button" onClick={() => openApp("employees")}><span className="start-panel-icon"><img src="/assets/app-sheet.png" alt="" /></span>Сотрудники</button>
           <button type="button" onClick={() => openApp("settings")}><span className="start-panel-icon"><img src="/assets/app-settings.png" alt="" /></span>Настройки</button>
         </div>}
 

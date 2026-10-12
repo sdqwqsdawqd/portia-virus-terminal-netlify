@@ -124,6 +124,7 @@ export type RecycleFile = {
 
 export type PortiaContent = {
   viruses: Virus[];
+  recycledViruses: Virus[];
   infoSections: InfoSection[];
   broadcasts: Broadcast[];
   recycleFiles: RecycleFile[];
@@ -135,6 +136,8 @@ export type PortiaContent = {
   assistantPatienceVariants: number[];
   assistantIdlePhrases: string[];
   assistantActivityPhrases: string[];
+  assistantIdleEnabled: boolean;
+  assistantActivityEnabled: boolean;
   assistantAutoTimingMode: "fixed" | "random";
   assistantAutoIntervalSeconds: number;
   assistantAutoMinSeconds: number;
@@ -303,6 +306,7 @@ export const defaultPortiaContent: PortiaContent = {
       scientistLogs: placeholderLogs("kallisto"),
     },
   ],
+  recycledViruses: [],
   recycleFiles: [
     {
       id: "recycle-vir-d17",
@@ -384,6 +388,8 @@ export const defaultPortiaContent: PortiaContent = {
     "Хороший темп. Продолжайте в том же духе.",
     "Вы заняты, а значит станция не простаивает.",
   ],
+  assistantIdleEnabled: true,
+  assistantActivityEnabled: true,
   assistantAutoTimingMode: "random",
   assistantAutoIntervalSeconds: 60,
   assistantAutoMinSeconds: 45,
