@@ -919,7 +919,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <EmbeddedDocument src={embeddedApps[app].src} external={embeddedApps[app].external} title={appMeta[app].label} />
           </AppWindow>)}
           <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashFiles.length + recycledViruses.length).padStart(2, "0")}`}>
-            <div className="trash-app">
+            <div className={`trash-app${activeTrashFile || activeTrashVirus ? " is-viewing" : ""}`}>
               <header><h1>Корзина</h1><p>Бесполезный хлам — кому вообще придет в голову его перебирать?</p></header>
               <div className="trash-layout">
                 <div className="trash-files">

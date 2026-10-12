@@ -582,6 +582,9 @@ html { scrollbar-color: #2f4a45 transparent; caret-color: var(--teal); }
 .archive-grid, .global-search-app, .info-library, .personnel-app, .broadcasts-app, .settings-app, .trash-app, .content-editor { min-height: 0; max-height: calc(100% - 46px); }
 .trash-app { height: calc(100% - 46px); display: flex; flex-direction: column; overflow: hidden; padding: 25px; }
 .trash-app header { flex: 0 0 auto; margin-bottom: 22px; }
+.trash-app.is-viewing { padding: 0; }
+.trash-app.is-viewing > header { display: none; }
+.trash-app.is-viewing .trash-layout { border: 0; }
 .trash-layout { position: relative; flex: 1 1 370px; min-height: 0; max-height: 100%; overflow: hidden; border: 1px solid #304942; background: #091310; }
 .trash-files { min-width: 0; height: 100%; overflow: auto; }
 .trash-list-head, .trash-file-row { min-width: 650px; display: grid; grid-template-columns: minmax(250px, 1.2fr) minmax(220px, 1fr) 150px; align-items: center; gap: 15px; }
@@ -600,6 +603,7 @@ html { scrollbar-color: #2f4a45 transparent; caret-color: var(--teal); }
 .trash-viewer-head span { color: #657c75; font: 11px var(--sans); letter-spacing: .06em; }
 .trash-viewer-head strong { overflow: hidden; color: #dce7e4; font: 600 12px var(--sans); text-overflow: ellipsis; white-space: nowrap; }
 .trash-viewer-head button { width: 32px; height: 32px; border: 1px solid #3a514c; background: transparent; color: #9cb0aa; cursor: pointer; }
+.trash-viewer-head button:hover { border-color: var(--teal); color: var(--teal); }
 .trash-viewer-body { min-height: 0; overflow: auto; padding: clamp(16px, 3vw, 30px); background: #08110f; }
 .trash-text-document { width: min(760px, 100%); min-height: 100%; margin: 0 auto; padding: clamp(20px, 4vw, 38px); border: 1px solid #aaa8a1; background: #eeeee9; color: #171a19; box-shadow: 0 18px 42px rgba(0,0,0,.24); }
 .trash-document-meta { margin-bottom: 24px; padding-bottom: 10px; border-bottom: 2px solid #1b211f; color: #606865; font: 11px var(--mono); letter-spacing: .05em; overflow-wrap: anywhere; }
@@ -961,6 +965,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .settings-footer { align-items: flex-start; flex-direction: column; }
   .trash-app { padding: 18px 12px 40px; }
   .trash-layout { min-height: 390px; }
+  .trash-app.is-viewing .trash-layout { min-height: calc(100svh - 140px); }
   .trash-list-head { display: none; }
   .trash-file-row { min-width: 0; grid-template-columns: 1fr; gap: 5px; padding: 13px; }
   .trash-file-row > span { white-space: normal; }
