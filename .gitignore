@@ -55,3 +55,5 @@ next-env.d.ts
 .impeccable/config.local.json
 .impeccable/mocks/
 .impeccable/review/
+.impeccable/questions/
+*.tsbuildinfo

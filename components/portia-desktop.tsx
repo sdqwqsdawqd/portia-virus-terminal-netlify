@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
 import type { PortiaEmployee } from "@/lib/portia-employees";
-import { PortiaIcon, PortiaMark, type PortiaIconName } from "@/components/portia-icons";
+import { PortiaIcon, type PortiaIconName } from "@/components/portia-icons";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -771,7 +771,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       <BootScreen visible={booting} />
       <div className="desktop" id="desktop">
         <header className="system-bar">
-          <div className="system-brand"><PortiaMark className="portia-mark" /><span>PORTIA</span><span className="system-division">PORTIA OS</span></div>
+          <div className="system-brand"><img className="portia-mark" src="/assets/portia-logo.svg" alt="" /><span>PORTIA</span><span className="system-division">PORTIA OS</span></div>
           <div className="system-status" aria-label="Состояние системы"><span className="status-item"><i className="status-dot" />В СЕТИ</span><time>{clock}</time></div>
         </header>
 
@@ -932,7 +932,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         </div>
 
         <footer className="taskbar">
-          <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><PortiaMark className="portia-mark" /><span>PORTIA</span></button>
+          <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.svg" alt="" /><span>PORTIA</span></button>
           <div className="taskbar-apps" aria-label="Открытые программы">
             {(Object.keys(appMeta) as AppId[]).filter((app) => windows[app].open).map((app) => <button key={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}`} type="button" onClick={() => windows[app].minimized ? openApp(app) : activeApp === app ? minimizeApp(app) : focusApp(app)}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>)}
           </div>
@@ -940,7 +940,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         </footer>
 
         {startOpen && <div className="start-panel">
-          <div className="start-panel-brand"><PortiaMark className="portia-mark" detailed /><div><strong>PORTIA OS</strong><span>Панель быстрого запуска</span></div></div>
+          <div className="start-panel-brand"><img className="portia-mark" src="/assets/portia-logo.svg" alt="" /><div><strong>PORTIA OS</strong><span>Панель быстрого запуска</span></div></div>
           <button type="button" onClick={() => openApp("search")}><span className="start-panel-icon"><PortiaIcon name="search" /></span>Глобальный поиск</button>
           <button type="button" onClick={() => openApp("archive")}><span className="start-panel-icon"><PortiaIcon name="virus" /></span>База вирусов</button>
           <button type="button" onClick={() => openApp("employees")}><span className="start-panel-icon"><PortiaIcon name="employees" /></span>Сотрудники</button>
@@ -953,7 +953,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 }
 
 function BootScreen({ visible }: { visible: boolean }) {
-  return <div className={`boot-screen${visible ? "" : " boot-complete"}`} aria-hidden={!visible}><div className="boot-core"><PortiaMark className="portia-mark" detailed /><span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong><div className="boot-progress"><i /></div><div className="boot-lines"><small>ARCHIVE INDEX</small><small>SECURITY CONTOUR</small><small>CONTENT LINK</small></div></div></div>;
+  return <div className={`boot-screen${visible ? "" : " boot-complete"}`} aria-hidden={!visible}><div className="boot-core"><img className="portia-mark" src="/assets/portia-logo.svg" alt="" /><span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong><div className="boot-progress"><i /></div><div className="boot-lines"><small>ARCHIVE INDEX</small><small>SECURITY CONTOUR</small><small>CONTENT LINK</small></div></div></div>;
 }
 
 function EmployeeImage({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {

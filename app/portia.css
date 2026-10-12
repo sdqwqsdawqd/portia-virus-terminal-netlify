@@ -76,7 +76,7 @@ html { scrollbar-color: #2f4a45 transparent; caret-color: var(--teal); }
 ::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 10px; background: #2f4a45 padding-box; }
 ::-webkit-scrollbar-thumb:hover { background: #426a63 padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
-.portia-mark { flex: 0 0 auto; color: var(--teal); }
+.portia-mark { flex: 0 0 auto; object-fit: contain; }
 
 .sr-only {
   position: absolute;
@@ -638,7 +638,7 @@ html { scrollbar-color: #2f4a45 transparent; caret-color: var(--teal); }
 .desktop-assistant.is-offended .assistant-bubble { border-color: #a76d34; }
 .desktop-assistant.is-offended .assistant-bubble::after { border-color: #a76d34; }
 .desktop-assistant.is-offended .assistant-bubble span { color: #efb84e; }
-.assistant-label { position: relative; z-index: 2; margin-top: -5px; padding: 4px 6px; border: 1px solid rgba(0,188,166,.17); border-radius: 3px; background: rgba(7,16,15,.86); color: rgba(125,155,148,.7); font: 700 11px var(--sans); letter-spacing: .08em; white-space: nowrap; }
+.assistant-label { position: relative; z-index: 2; align-self: flex-end; white-space: nowrap; margin-top: -5px; padding: 4px 6px; border: 1px solid rgba(0,188,166,.17); border-radius: 3px; background: rgba(7,16,15,.86); color: rgba(125,155,148,.7); font: 700 11px var(--sans); letter-spacing: .04em; white-space: nowrap; }
 .assistant-bubble { position: absolute; z-index: 3; right: calc(100% + 4px); bottom: 56%; width: min(220px, calc(100vw - 124px)); padding: 10px; border: 1px solid rgba(0,188,166,.42); border-radius: 6px 6px 2px 6px; background: rgba(8,20,17,.98); box-shadow: 0 10px 29px rgba(0,0,0,.4); filter: brightness(.7); animation: assistant-bubble-in 160ms ease-out both; pointer-events: auto; }
 .assistant-bubble::after { content: ""; position: absolute; right: -8px; bottom: 8px; width: 14px; height: 14px; transform: rotate(45deg); border-top: 1px solid rgba(0,188,166,.42); border-right: 1px solid rgba(0,188,166,.42); background: #081411; }
 .assistant-bubble > span { display: block; margin-bottom: 6px; color: var(--teal); font: 800 11px var(--sans); letter-spacing: .09em; }
