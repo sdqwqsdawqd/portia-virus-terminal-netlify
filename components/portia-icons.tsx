@@ -62,3 +62,33 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
 export function PortiaIcon({ name, ...props }: { name: PortiaIconName } & SVGProps<SVGSVGElement>) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{iconPaths[name]}</svg>;
 }
+
+export type PortiaIllustrationName = "dish" | "microscope" | "flask";
+
+// Empty-state drawings on a 96px grid, in the same line language as the icons.
+const illustrations: Record<PortiaIllustrationName, React.ReactNode> = {
+  dish: <>
+    <ellipse cx="48" cy="56" rx="36" ry="13" />
+    <path d="M12 56v6c0 7.2 16.1 13 36 13s36-5.8 36-13v-6" />
+    <ellipse cx="48" cy="50" rx="30" ry="9" strokeDasharray="3 5" opacity=".6" />
+    <circle cx="36" cy="54" r="2.5" /><circle cx="56" cy="51" r="3.5" /><circle cx="62" cy="57" r="1.8" /><circle cx="44" cy="58" r="1.5" />
+    <path d="M48 22v10M44 26h8" opacity=".7" />
+  </>,
+  microscope: <>
+    <path d="M24 82h48M34 82v-8h28v8" />
+    <path d="M40 74c-8-4-11-12-9-21" />
+    <path d="m46 14 10 5-12 24-10-5Z" />
+    <path d="M40 43l-3 7 6 3 3-7M51 16l3-6" />
+    <path d="M50 56h18M58 56v18" />
+    <circle cx="66" cy="42" r="5" opacity=".7" />
+  </>,
+  flask: <>
+    <path d="M40 14h16M43 14v22L24 72a6 6 0 0 0 5.3 9h37.4a6 6 0 0 0 5.3-9L53 36V14" />
+    <path d="M30 62c8-4 14 4 22 0s12-3 16 0" opacity=".7" />
+    <circle cx="44" cy="70" r="2.5" /><circle cx="55" cy="73" r="1.8" /><circle cx="50" cy="52" r="1.5" opacity=".6" />
+  </>,
+};
+
+export function PortiaIllustration({ name, ...props }: { name: PortiaIllustrationName } & SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{illustrations[name]}</svg>;
+}

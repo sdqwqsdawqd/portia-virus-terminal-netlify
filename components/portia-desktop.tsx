@@ -4,15 +4,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
 import type { PortiaEmployee } from "@/lib/portia-employees";
-import { PortiaIcon, type PortiaIconName } from "@/components/portia-icons";
+import { PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
+import { DesktopWallpaper } from "@/components/portia-wallpaper";
+import { fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
   { ssr: false, loading: () => <div className="editor-empty">Загрузка редактора…</div> },
 );
 
-type AppId = "archive" | "employees" | "search" | "info" | "settings" | "broadcasts" | "trash" | "editor";
-type WindowGeometry = { x: number; y: number; width: number; height: number };
+type AppId = "archive" | "employees" | "search" | "info" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor";
+
+// Squad documents that live elsewhere, shown inside PORTIA as app windows.
+const embeddedApps = {
+  sheet: { src: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/htmlview?widget=true&headers=false", external: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" },
+  charter: { src: "https://sdqwqsdawqd.github.io/S.E-Portia/", external: "https://sdqwqsdawqd.github.io/S.E-Portia/" },
+} as const;
 type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number; geometry?: WindowGeometry };
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string };
@@ -29,6 +36,8 @@ const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName
   settings: { label: "Настройки", path: "PORTIA://DESKTOP_SETTINGS", icon: "settings" },
   broadcasts: { label: "Сводка", path: "PORTIA://NEWS", icon: "broadcasts" },
   trash: { label: "Корзина", path: "PORTIA://RECYCLE_BIN", icon: "trash" },
+  sheet: { label: "Таблица", path: "PORTIA://SQUAD_SHEET", icon: "sheet" },
+  charter: { label: "Устав", path: "PORTIA://CHARTER", icon: "charter" },
   editor: { label: "Редактор", path: "PORTIA://CONTENT_CONTROL", icon: "editor" },
 };
 
@@ -40,13 +49,15 @@ const initialWindows: Record<AppId, WindowState> = {
   settings: { open: false, minimized: false, maximized: false, z: 10 },
   broadcasts: { open: false, minimized: false, maximized: false, z: 10 },
   trash: { open: false, minimized: false, maximized: false, z: 10 },
+  sheet: { open: false, minimized: false, maximized: false, z: 10 },
+  charter: { open: false, minimized: false, maximized: false, z: 10 },
   editor: { open: false, minimized: false, maximized: false, z: 10 },
 };
 
 function createWindowGeometry(appId: AppId, cascadeIndex: number): WindowGeometry | undefined {
   if (typeof window === "undefined" || window.innerWidth <= 900) return undefined;
   const workspaceWidth = window.innerWidth;
-  const workspaceHeight = window.innerHeight - 78;
+  const workspaceHeight = window.innerHeight - 88;
   const preferred = {
     archive: [1040, 720],
     employees: [960, 680],
@@ -55,6 +66,8 @@ function createWindowGeometry(appId: AppId, cascadeIndex: number): WindowGeometr
     settings: [820, 650],
     broadcasts: [820, 650],
     trash: [980, 680],
+    sheet: [1180, 760],
+    charter: [980, 760],
     editor: [1120, 760],
   }[appId];
   const width = Math.min(preferred[0], workspaceWidth - 32);
@@ -62,8 +75,19 @@ function createWindowGeometry(appId: AppId, cascadeIndex: number): WindowGeometr
   const cascade = (cascadeIndex % 5) * 28;
   const x = Math.min(Math.max(12, (workspaceWidth - width) / 2 - 56 + cascade), Math.max(12, workspaceWidth - width - 12));
   const y = Math.min(Math.max(12, (workspaceHeight - height) / 2 - 28 + cascade), Math.max(12, workspaceHeight - height - 12));
-  return { x, y, width, height };
+  return fitGeometry({ x, y, width, height }, { width: workspaceWidth, height: workspaceHeight }, minimumWindowSize(appId));
 }
+
+function workspaceBounds() {
+  const workspace = document.querySelector(".workspace")?.getBoundingClientRect();
+  return { width: workspace?.width ?? window.innerWidth, height: workspace?.height ?? window.innerHeight - 88 };
+}
+
+function minimumWindowSize(appId: AppId) {
+  return { width: appId === "editor" ? 680 : 440, height: 320 };
+}
+
+const resizeEdges: ResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
 const escapeSearch = (value: string) => value.toLocaleLowerCase("ru").replace(/ё/g, "е");
 const roman = (level: number) => ({ 1: "I", 2: "II", 3: "III", 4: "IV" })[level] ?? String(level);
@@ -531,7 +555,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           ...state[appId],
           open: true,
           minimized: false,
-          geometry: state[appId].geometry ?? createWindowGeometry(appId, openCount),
+          // A size remembered from a bigger screen is refitted, so the window never opens past the edge.
+          geometry: state[appId].geometry ? fitGeometry(state[appId].geometry, workspaceBounds(), minimumWindowSize(appId)) : createWindowGeometry(appId, openCount),
         },
       };
     });
@@ -563,6 +588,20 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       setActiveApp(fallback ?? "archive");
     }
   };
+
+  // Shrinking the browser refits every window so its frame and controls stay reachable.
+  useEffect(() => {
+    const refit = () => {
+      if (window.innerWidth <= 900) return;
+      const bounds = workspaceBounds();
+      setWindows((state) => Object.fromEntries((Object.keys(state) as AppId[]).map((id) => {
+        const geometry = state[id].geometry;
+        return [id, geometry ? { ...state[id], geometry: fitGeometry(geometry, bounds, minimumWindowSize(id)) } : state[id]];
+      })) as Record<AppId, WindowState>);
+    };
+    window.addEventListener("resize", refit);
+    return () => window.removeEventListener("resize", refit);
+  }, []);
 
   const toggleMaximize = (appId: AppId) => {
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], maximized: !state[appId].maximized } }));
@@ -770,8 +809,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     <>
       <BootScreen visible={booting} />
       <div className="desktop" id="desktop">
+        <DesktopWallpaper kind={desktopSettings.wallpaper} />
         <header className="system-bar">
-          <div className="system-brand"><img className="portia-mark" src="/assets/portia-logo.svg" alt="" /><span>PORTIA</span><span className="system-division">PORTIA OS</span></div>
+          <div className="system-brand"><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span><span className="system-division">PORTIA OS</span></div>
           <div className="system-status" aria-label="Состояние системы"><span className="status-item"><i className="status-dot" />В СЕТИ</span><time>{clock}</time></div>
         </header>
 
@@ -783,16 +823,16 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <DesktopIcon app="broadcasts" onOpen={openApp} position={shortcutPositions.broadcasts} onMove={moveDesktopShortcut} badge={broadcastUnread} />
             <DesktopIcon app="info" onOpen={openApp} position={shortcutPositions.info} onMove={moveDesktopShortcut} />
             <DesktopIcon app="settings" onOpen={openApp} position={shortcutPositions.settings} onMove={moveDesktopShortcut} />
-            <ExternalDesktopIcon shortcutId="charter" label="Устав" icon="charter" href="https://sdqwqsdawqd.github.io/S.E-Portia/" position={shortcutPositions.charter} onMove={moveDesktopShortcut} />
-            <ExternalDesktopIcon shortcutId="sheet" label="Таблица" icon="sheet" href="https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" position={shortcutPositions.sheet} onMove={moveDesktopShortcut} />
+            <DesktopIcon app="charter" onOpen={openApp} position={shortcutPositions.charter} onMove={moveDesktopShortcut} />
+            <DesktopIcon app="sheet" onOpen={openApp} position={shortcutPositions.sheet} onMove={moveDesktopShortcut} />
             <DesktopIcon app="trash" onOpen={openApp} position={shortcutPositions.trash} onMove={moveDesktopShortcut} className="desktop-icon-trash" />
           </nav>
-
+
 
           <AppWindow app="archive" state={windows.archive} active={activeApp === "archive"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="archive-window" meta="ДОПУСК II">
             <div className="archive-grid">
               <aside className="archive-browser" aria-label="Список вирусов">
-                <div className="browser-heading"><div><span className="eyebrow">ОБЩАЯ БАЗА</span><h1>База вирусов</h1></div><span className="record-count">{String(content.viruses.length).padStart(2, "0")}</span></div>
+                <div className="browser-heading"><div><h1>База вирусов</h1></div><span className="record-count">{String(content.viruses.length).padStart(2, "0")}</span></div>
                 <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск по базе</span><input value={virusQuery} onChange={(event) => setVirusQuery(event.target.value)} type="search" placeholder="Поиск по имени или коду" /></label>
                 <div className="browser-labels" aria-hidden="true"><span>СУБЪЕКТ</span><span>СТАТУС</span></div>
                 <div className="virus-list" role="listbox" aria-label="Записи вирусов">
@@ -808,7 +848,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <div className="browser-footer"><span><i className="status-dot" />СИНХРОНИЗИРОВАНО</span><span>РЕВИЗИЯ {String(revision).padStart(2, "0")}</span></div>
               </aside>
               <article className="record-view" aria-live="polite">
-                {activeVirus ? openLog ? <ScientistDocument virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} /> : <div className="record-empty">В базе пока нет записей.</div>}
+                {activeVirus ? openLog ? <ScientistDocument virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} /> : <div className="record-empty empty-state"><PortiaIllustration name="dish" /><strong>В базе пока нет вирусов</strong><span>Новые записи появятся здесь, как только их добавят в редакторе.</span></div>}
               </article>
             </div>
           </AppWindow>
@@ -816,10 +856,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <AppWindow app="employees" state={windows.employees} active={activeApp === "employees"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window personnel-window" meta={`${employees.length} ПРОФИЛЕЙ`}>
             <div className="personnel-app">
               <aside className="personnel-index">
-                <header><span className="eyebrow">ЛИЧНЫЙ СОСТАВ</span><h1>Сотрудники</h1></header>
+                <header><h1>Сотрудники</h1></header>
                 <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск сотрудника</span><input type="search" value={employeeQuery} onChange={(event) => setEmployeeQuery(event.target.value)} placeholder="Ник, позывной, звание" /></label>
                 <div className="personnel-list">
-                  {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={employee.id === selectedEmployee?.id ? "active" : ""} onClick={() => setSelectedEmployeeId(employee.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.callsign || employee.nickname}</strong><small>{employee.title} · {employee.rank}</small></button>)}
+                  {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={employee.id === selectedEmployee?.id ? "active" : ""} onClick={() => setSelectedEmployeeId(employee.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
                   {!filteredEmployees.length && <div className="list-empty">Сотрудники не найдены</div>}
                 </div>
                 <footer>СИНХРОНИЗАЦИЯ: {employeesSyncedAt ? new Date(employeesSyncedAt).toLocaleString("ru-RU") : "ОЖИДАНИЕ"}</footer>
@@ -831,7 +871,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                       <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
                       <figure className="personnel-portrait"><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></figure>
                     </div>
-                    <div className="personnel-profile-identity"><span className="eyebrow">ПРОФИЛЬ СОТРУДНИКА</span><h2>{selectedEmployee.callsign || selectedEmployee.nickname}</h2>{selectedEmployee.robloxUserId ? <a href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer">@{selectedEmployee.nickname}</a> : <span className="personnel-nickname">@{selectedEmployee.nickname}</span>}<small>ЛИЧНОЕ ДЕЛО · PORTIA</small></div>
+                    <div className="personnel-profile-identity"><h2>{selectedEmployee.nickname}</h2><p className="personnel-callsign">{selectedEmployee.callsign || "Без позывного"}</p>{selectedEmployee.robloxUserId ? <a href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer">Профиль Roblox</a> : null}</div>
                   </header>
                   <dl className="personnel-stats"><div><dt>ЗВАНИЕ</dt><dd>{selectedEmployee.title || "Не указано"}</dd></div><div><dt>РАНГ</dt><dd>{selectedEmployee.rank || "Не указан"}</dd></div><div><dt>ОЦЕНКА ЗНАНИЙ</dt><dd>{selectedEmployee.knowledgeRating} / 10</dd></div></dl>
                   <section className="personnel-biography"><span>БИОГРАФИЯ</span><p>{selectedEmployee.biography || "Биография сотрудника пока не заполнена."}</p></section>
@@ -842,7 +882,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
           <AppWindow app="search" state={windows.search} active={activeApp === "search"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="global-search-window" meta="ГЛОБАЛЬНЫЙ ПОИСК">
             <div className="global-search-app">
-              <header className="global-search-header"><span className="eyebrow">ПОИСКОВИК</span><h1>Глобальный поиск</h1><p>Поиск по вирусам, характеристикам, информации.</p></header>
+              <header className="global-search-header"><h1>Глобальный поиск</h1><p>Поиск по вирусам, характеристикам, информации.</p></header>
               <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input value={globalQuery} onChange={(event) => setGlobalQuery(event.target.value)} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
               <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{content.searchRecommendations.slice(0, 6).map((item, index) => <button key={`${item}-${index}`} type="button" onClick={() => setGlobalQuery(item)}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>)}</div></div>
               <div className="global-search-summary"><span>{globalQuery ? `Результаты для «${globalQuery}»` : "Доступные записи"}</span><strong>{String(searchResults.length).padStart(2, "0")}</strong></div>
@@ -853,31 +893,37 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                     <span className="global-result-main"><span className="global-result-heading"><strong>{result.title || "БЕЗ НАЗВАНИЯ"}</strong><small>{result.meta}</small></span><span className="global-result-preview">{result.body}</span></span>
                   </button>
                 ))}
-                {!searchResults.length && <div className="global-search-empty"><strong>СОВПАДЕНИЙ НЕТ</strong><span>Измените запрос или выберите рекомендацию.</span></div>}
+                {!searchResults.length && <div className="global-search-empty empty-state"><PortiaIllustration name="microscope" /><strong>Совпадений нет</strong><span>Измените запрос или выберите рекомендацию.</span></div>}
               </div>
             </div>
           </AppWindow>
 
           <AppWindow app="info" state={windows.info} active={activeApp === "info"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window info-window" meta="АРХИВ ЗНАНИЙ">
             <div className="info-library">
-              <aside className="info-index"><span className="eyebrow">РАЗДЕЛЫ</span>{content.infoSections.map((section, index) => <button key={section.id} type="button" className={section.id === selectedInfo?.id ? "active" : ""} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span></button>)}</aside>
-              <article className="info-document">{selectedInfo ? <><span className="eyebrow">НОВОСТИ PORTIA</span><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></> : <div className="editor-empty">Разделов пока нет.</div>}</article>
+              <aside className="info-index">{content.infoSections.map((section, index) => <button key={section.id} type="button" className={section.id === selectedInfo?.id ? "active" : ""} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span></button>)}</aside>
+              <article className="info-document">{selectedInfo ? <><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></> : <div className="editor-empty">Разделов пока нет.</div>}</article>
             </div>
           </AppWindow>
 
           <AppWindow app="broadcasts" state={windows.broadcasts} active={activeApp === "broadcasts"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window broadcasts-window" meta="КАНАЛ СТАНЦИИ">
             <div className="broadcasts-app">
-              <header><span className="eyebrow">ОБЪЯВЛЕНИЯ PORTIA</span><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>
+              <header><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>
               <div className="broadcast-grid">
                 {content.broadcasts.filter((item) => item.published).map((item) => <article className={`broadcast-card ${item.type}`} key={item.id}><span>{broadcastType(item.type)}</span><h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2><FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>)}
-                {!content.broadcasts.some((item) => item.published) && <div className="broadcast-empty"><strong>СООБЩЕНИЙ ПОКА НЕТ</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
+                {!content.broadcasts.some((item) => item.published) && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>Сообщений пока нет</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
               </div>
             </div>
           </AppWindow>
 
+          {(["sheet", "charter"] as const).map((app) => <AppWindow key={app} app={app} state={windows[app]} active={activeApp === app} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window document-window" meta="ДОКУМЕНТ ОТРЯДА">
+            <div className="document-app">
+              <iframe src={embeddedApps[app].src} title={appMeta[app].label} loading="lazy" referrerPolicy="no-referrer" />
+              <a className="document-app-external" href={embeddedApps[app].external} target="_blank" rel="noreferrer">Открыть отдельно</a>
+            </div>
+          </AppWindow>)}
           <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashFiles.length + recycledViruses.length).padStart(2, "0")}`}>
             <div className="trash-app">
-              <header><span className="eyebrow">ЛОКАЛЬНОЕ ХРАНИЛИЩЕ</span><h1>Корзина</h1><p>Бесполезный хлам — кому вообще придет в голову его перебирать?</p></header>
+              <header><h1>Корзина</h1><p>Бесполезный хлам — кому вообще придет в голову его перебирать?</p></header>
               <div className="trash-layout">
                 <div className="trash-files">
                   <div className="trash-list-head" aria-hidden="true"><span>ИМЯ</span><span>ИСХОДНОЕ РАСПОЛОЖЕНИЕ</span><span>ТИП</span></div>
@@ -889,7 +935,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                     const file = trashFiles.find((item) => item.id === key.slice(5));
                     return file ? <button className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}`} type="button" key={key} onClick={() => openTrashFile(file)}><span className="trash-file-name"><i className={`trash-file-icon ${file.kind}`}>{file.kind === "virus" ? "V" : file.kind === "image" ? "IMG" : "TXT"}</i><strong>{file.name}</strong></span><span>{file.location}</span><span>{recycleFileType(file.kind)}</span></button> : null;
                   })}
-                  {!trashFiles.length && !recycledViruses.length && <div className="editor-empty">Корзина пуста.</div>}
+                  {!trashFiles.length && !recycledViruses.length && <div className="editor-empty empty-state"><PortiaIllustration name="flask" /><strong>Корзина пуста</strong></div>}
                 </div>
                 {activeTrashVirus && <div className="trash-viewer virus"><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} onOpenLog={() => undefined} /></div></div>}
                 {activeTrashFile && <div className={`trash-viewer ${activeTrashFile.kind}`}>
@@ -911,9 +957,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
           <AppWindow app="settings" state={windows.settings} active={activeApp === "settings"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window settings-window" meta="НАСТРОЙКИ">
             <div className="settings-app">
-              <header><span className="eyebrow">ПЕРСОНАЛИЗАЦИЯ PORTIA OS</span><h1>Настройки рабочего стола</h1><p>Оформление и расположение ярлыков сохраняются на этом устройстве.</p></header>
+              <header><h1>Настройки рабочего стола</h1><p>Оформление и расположение ярлыков сохраняются на этом устройстве.</p></header>
               <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => updateDesktopSetting("accent", value)} />
-              <SettingGroup title="Фон рабочего стола" values={[['radar','Радар'],['grid','Сетка'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
+              <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
               <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сообщения, поиск и советы помощника." : "Войдите в разрешённый аккаунт редактора."}</p></div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>
@@ -932,15 +978,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         </div>
 
         <footer className="taskbar">
-          <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.svg" alt="" /><span>PORTIA</span></button>
+          <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
           <div className="taskbar-apps" aria-label="Открытые программы">
             {(Object.keys(appMeta) as AppId[]).filter((app) => windows[app].open).map((app) => <button key={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}`} type="button" onClick={() => windows[app].minimized ? openApp(app) : activeApp === app ? minimizeApp(app) : focusApp(app)}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>)}
           </div>
-          <span className="taskbar-note">VIRUS DATABASE</span>
+          
         </footer>
 
         {startOpen && <div className="start-panel">
-          <div className="start-panel-brand"><img className="portia-mark" src="/assets/portia-logo.svg" alt="" /><div><strong>PORTIA OS</strong><span>Панель быстрого запуска</span></div></div>
+          <div className="start-panel-brand"><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><div><strong>PORTIA OS</strong></div></div>
           <button type="button" onClick={() => openApp("search")}><span className="start-panel-icon"><PortiaIcon name="search" /></span>Глобальный поиск</button>
           <button type="button" onClick={() => openApp("archive")}><span className="start-panel-icon"><PortiaIcon name="virus" /></span>База вирусов</button>
           <button type="button" onClick={() => openApp("employees")}><span className="start-panel-icon"><PortiaIcon name="employees" /></span>Сотрудники</button>
@@ -953,7 +999,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 }
 
 function BootScreen({ visible }: { visible: boolean }) {
-  return <div className={`boot-screen${visible ? "" : " boot-complete"}`} aria-hidden={!visible}><div className="boot-core"><img className="portia-mark" src="/assets/portia-logo.svg" alt="" /><span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong><div className="boot-progress"><i /></div><div className="boot-lines"><small>ARCHIVE INDEX</small><small>SECURITY CONTOUR</small><small>CONTENT LINK</small></div></div></div>;
+  return <div className={`boot-screen${visible ? "" : " boot-complete"}`} aria-hidden={!visible}><div className="boot-core"><span className="boot-thread" /><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong><div className="boot-progress"><i /></div></div></div>;
 }
 
 function EmployeeImage({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
@@ -969,15 +1015,10 @@ function DesktopIcon({ app, onOpen, position, onMove, className = "", badge = fa
   return <DraggableDesktopIcon shortcutId={app} label={appMeta[app].label} icon={appMeta[app].icon} position={position} onMove={onMove} onActivate={() => onOpen(app)} className={className} badge={badge} />;
 }
 
-function ExternalDesktopIcon({ shortcutId, label, icon, href, position, onMove }: { shortcutId: DesktopShortcutId; label: string; icon: PortiaIconName; href: string; position?: ShortcutPosition; onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void }) {
-  return <DraggableDesktopIcon shortcutId={shortcutId} label={label} icon={icon} href={href} position={position} onMove={onMove} />;
-}
-
-function DraggableDesktopIcon({ shortcutId, label, icon, href, position, onMove, onActivate, className = "", badge = false }: {
+function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onActivate, className = "", badge = false }: {
   shortcutId: DesktopShortcutId;
   label: string;
   icon: PortiaIconName;
-  href?: string;
   position?: ShortcutPosition;
   onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void;
   onActivate?: () => void;
@@ -1041,14 +1082,14 @@ function DraggableDesktopIcon({ shortcutId, label, icon, href, position, onMove,
       event.preventDefault();
       return;
     }
-    if (!href) onActivate?.();
+    onActivate?.();
   };
 
   const sharedProps = {
     className: `desktop-icon${className ? ` ${className}` : ""}${dragging ? " is-dragging" : ""}`,
     "data-shortcut": shortcutId,
-    style: position ? { left: `${position.x}px`, top: `${position.y}px`, right: "auto", bottom: "auto" } : undefined,
-    title: "Перетащите ярлык, чтобы изменить его расположение",
+    // A position saved on a bigger screen is held inside the desktop so the icon never disappears.
+    style: position ? { left: `max(0px, min(${position.x}px, calc(100% - 100px)))`, top: `max(0px, min(${position.y}px, calc(100% - 110px)))`, right: "auto", bottom: "auto" } : undefined,
     onPointerDown: handlePointerDown,
     onPointerMove: handlePointerMove,
     onPointerUp: finishDrag,
@@ -1058,7 +1099,6 @@ function DraggableDesktopIcon({ shortcutId, label, icon, href, position, onMove,
   };
   const content = <><span className="desktop-icon-symbol"><PortiaIcon name={icon} />{badge && <i className="desktop-icon-badge" aria-label="Есть новая сводка" />}</span><span>{label}</span></>;
 
-  if (href) return <a {...sharedProps} href={href} target="_blank" rel="noreferrer" draggable={false}>{content}</a>;
   return <button {...sharedProps} type="button">{content}</button>;
 }
 
@@ -1077,7 +1117,7 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
 }) {
   const windowRef = useRef<HTMLElement>(null);
   const dragRef = useRef<null | (WindowGeometry & { pointerId: number; startX: number; startY: number; parentWidth: number; parentHeight: number })>(null);
-  const resizeRef = useRef<null | (WindowGeometry & { pointerId: number; startX: number; startY: number; parentWidth: number; parentHeight: number })>(null);
+  const resizeRef = useRef<null | (WindowGeometry & { edge: ResizeEdge; pointerId: number; startX: number; startY: number; parentWidth: number; parentHeight: number })>(null);
 
   const readGeometry = () => {
     const element = windowRef.current;
@@ -1117,30 +1157,24 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
   };
 
-  const beginResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+  const beginResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLSpanElement>) => {
     if (state.maximized || window.matchMedia("(max-width: 900px)").matches) return;
     const geometry = readGeometry();
     if (!geometry) return;
     event.stopPropagation();
     onFocus(app);
     event.currentTarget.setPointerCapture(event.pointerId);
-    resizeRef.current = { ...geometry, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY };
+    resizeRef.current = { ...geometry, edge, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY };
     onGeometry(app, geometry);
   };
 
-  const moveResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+  const moveResize = (event: React.PointerEvent<HTMLSpanElement>) => {
     const operation = resizeRef.current;
     if (!operation || operation.pointerId !== event.pointerId) return;
-    const minimumWidth = app === "editor" ? 680 : 440;
-    const minimumHeight = 320;
-    const maximumWidth = Math.max(minimumWidth, operation.parentWidth - operation.x - 8);
-    const maximumHeight = Math.max(minimumHeight, operation.parentHeight - operation.y - 8);
-    const width = Math.min(Math.max(minimumWidth, operation.width + event.clientX - operation.startX), maximumWidth);
-    const height = Math.min(Math.max(minimumHeight, operation.height + event.clientY - operation.startY), maximumHeight);
-    onGeometry(app, { x: operation.x, y: operation.y, width, height });
+    onGeometry(app, resizeGeometry(operation, operation.edge, event.clientX - operation.startX, event.clientY - operation.startY, { width: operation.parentWidth, height: operation.parentHeight }, minimumWindowSize(app)));
   };
 
-  const endResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+  const endResize = (event: React.PointerEvent<HTMLSpanElement>) => {
     if (resizeRef.current?.pointerId === event.pointerId) resizeRef.current = null;
   };
 
@@ -1158,7 +1192,7 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   return <section ref={windowRef} className={`app-window ${className}${active ? " is-active" : ""}${state.maximized ? " is-maximized" : ""}`} style={{ zIndex: state.z, display: state.minimized ? "none" : undefined, ...geometryStyle }} onPointerDown={() => onFocus(app)} aria-label={appMeta[app].label}>
     <div className="window-titlebar" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest("button")) onMaximize(app); }}><div className="window-identity"><span className="window-app-mark"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].path}</span></div><div className="window-meta">{meta}</div><div className="window-controls"><button type="button" data-window-action="minimize" onClick={(event) => { event.stopPropagation(); onMinimize(app); }} aria-label={`Свернуть ${appMeta[app].label}`}>―</button><button type="button" data-window-action="maximize" onClick={(event) => { event.stopPropagation(); onMaximize(app); }} aria-label={`Развернуть ${appMeta[app].label}`}>□</button><button type="button" data-window-action="close" onClick={(event) => { event.stopPropagation(); onClose(app); }} aria-label={`Закрыть ${appMeta[app].label}`}>×</button></div></div>
     {children}
-    <button className="window-resize-handle" type="button" aria-label={`Изменить размер окна ${appMeta[app].label}`} onPointerDown={beginResize} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} />
+    {resizeEdges.map((edge) => <span key={edge} className={`window-edge window-edge-${edge}`} aria-hidden="true" onPointerDown={beginResize(edge)} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} />)}
   </section>;
 }
 
@@ -1168,7 +1202,7 @@ function VirusRecord({ virus, formattedText, onOpenLog }: { virus: Virus; format
     ["escapeRisk", "Угроза и риск побега", virus.classification.escapeRisk, "escape"], ["mind", "Разум", virus.classification.mind, "mind"], ["appearance", "Вид / внешность", virus.classification.appearance, "appearance"], ["behavior", "Поведение", virus.classification.behavior, "behavior"],
   ] as const;
   return <div className="record-transition-in" key={virus.id}>
-    <header className="record-header"><div><span className="eyebrow">ИНФОРМАЦИЯ ВИРУСА / {virus.code}</span><h2>{virus.name}</h2></div><div className="record-status"><span />{virus.status}</div></header>
+    <header className="record-header"><div><span className="record-code">{virus.code}</span><h2>{virus.name}</h2></div><div className="record-status"><span />{virus.status}</div></header>
     <div className="record-document">
       <section className="record-hero"><MediaBlock src={virus.infectedImage} alt={`Субъект после заражения вирусом ${virus.name}`} label="Фото после заражения" /><div className="classification-panel"><div className="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div><div className="classification-grid">{classification.map(([key, label, value, tone]) => { const level = classificationLevel(key, value); return <div className={`class-cell ${tone}${level ? ` level-${level}` : ""}`} key={label}><span>{label}</span><strong>{value}</strong>{level && <small>УРОВЕНЬ {level}</small>}</div>; })}</div></div></section>
       <DossierSection index="02" title="ВНЕШНИЕ ХАРАКТЕРИСТИКИ"><FormattedText className="lead-copy" text={virus.external} document={formattedText[portiaTextKey.virus(virus.id, "external")]} /></DossierSection>
