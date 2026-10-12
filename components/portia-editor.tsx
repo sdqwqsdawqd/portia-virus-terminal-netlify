@@ -251,6 +251,7 @@ function rgba(hex: string | undefined, opacity: number | undefined) {
 
 function renderRichTextEditor(root: HTMLElement, document: RichTextDocument) {
   const fragment = window.document.createDocumentFragment();
+  const plainText = document.runs.map((run) => run.text).join("");
   document.runs.forEach((run) => {
     if (!run.text) return;
     const span = window.document.createElement("span");
@@ -262,7 +263,17 @@ function renderRichTextEditor(root: HTMLElement, document: RichTextDocument) {
     if (background) span.style.backgroundColor = background;
     fragment.append(span);
   });
+  if (!plainText || plainText.endsWith("\n")) {
+    const sentinel = window.document.createElement("br");
+    sentinel.dataset.editorSentinel = "true";
+    fragment.append(sentinel);
+  }
   root.replaceChildren(fragment);
+}
+
+function editorPlainText(root: HTMLElement) {
+  const text = root.innerText.replace(/\r/g, "").replace(/\u00a0/g, " ");
+  return root.querySelector("[data-editor-sentinel]") && text.endsWith("\n") ? text.slice(0, -1) : text;
 }
 
 function richTextStyleAt(document: RichTextDocument, position: number) {
@@ -847,6 +858,7 @@ function EmployeeProfilesEditor() {
   const [selectedId, setSelectedId] = useState("");
   const [draft, setDraft] = useState({ biography: "", photoUrl: "", knowledgeRating: 1 });
   const [state, setState] = useState<"loading" | "idle" | "saving" | "saved" | "error">("loading");
+  const [errorMessage, setErrorMessage] = useState("");
   const selected = employees.find((employee) => employee.id === selectedId) ?? employees[0] ?? null;
 
   useEffect(() => {
@@ -872,18 +884,27 @@ function EmployeeProfilesEditor() {
   const save = async () => {
     if (!selected) return;
     setState("saving");
+    setErrorMessage("");
     try {
       const response = await fetch("/api/employees", {
         method: "PATCH",
+        credentials: "same-origin",
+        cache: "no-store",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: selected.id, changes: draft }),
       });
       const payload = await response.json() as { employee?: PortiaEmployee; error?: string };
-      if (!response.ok || !payload.employee) throw new Error(payload.error ?? "save failed");
+      if (!response.ok || !payload.employee) {
+        const message = response.status === 403
+          ? "Сессия редактора истекла. Войдите в редактор снова."
+          : payload.error || `Сервер отклонил сохранение (${response.status}).`;
+        throw new Error(message);
+      }
       setEmployees((current) => current.map((employee) => employee.id === payload.employee!.id ? payload.employee! : employee));
       setState("saved");
       window.setTimeout(() => setState("idle"), 1800);
-    } catch {
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Не удалось сохранить профиль.");
       setState("error");
     }
   };
@@ -907,7 +928,7 @@ function EmployeeProfilesEditor() {
         <Field label="Ссылка на фото"><input value={draft.photoUrl} onChange={(event) => setDraft((current) => ({ ...current, photoUrl: event.target.value }))} placeholder="Пусто — использовать аватар Roblox" /></Field>
         <Field label="Биография" wide><textarea className="tall-textarea" value={draft.biography} onChange={(event) => setDraft((current) => ({ ...current, biography: event.target.value }))} /></Field>
       </EditorGroup>
-      <div className="employee-editor-save"><span className={`editor-save-status ${state}`}>{state === "saving" ? "СОХРАНЕНИЕ…" : state === "saved" ? "СОХРАНЕНО" : state === "error" ? "ОШИБКА СОХРАНЕНИЯ" : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span><button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
+      <div className="employee-editor-save"><span className={`editor-save-status ${state}`}>{state === "saving" ? "СОХРАНЕНИЕ…" : state === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
     </div>
   </div>;
 }
@@ -1072,7 +1093,7 @@ function FormattedTextarea({ label, value, document, formatKey, onChange, onActi
         commitEditorValue(editor, nextValue, { start: caretPosition, end: caretPosition });
       }}
       onInput={(event) => {
-        const nextValue = event.currentTarget.innerText.replace(/\r/g, "").replace(/\u00a0/g, " ");
+        const nextValue = editorPlainText(event.currentTarget);
         const selection = selectionOffsets(event.currentTarget);
         commitEditorValue(event.currentTarget, nextValue, selection);
       }}

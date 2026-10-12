@@ -332,12 +332,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .personnel-profile { min-width: 0; overflow-y: auto; padding: clamp(22px, 4vw, 42px); color: #dce7e4; }
 .personnel-profile-transition { animation: personnel-profile-enter 240ms cubic-bezier(.2,.72,.28,1) both; }
 @keyframes personnel-profile-enter { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
-.personnel-profile-head { display: grid; grid-template-columns: 112px minmax(0,1fr) minmax(140px, 190px); align-items: center; gap: 22px; }
-.personnel-profile-head figure { width: 112px; aspect-ratio: 1; margin: 0; overflow: hidden; border: 1px solid #3a5b53; border-radius: 7px; background: #07110f; }
+.personnel-profile-head { display: grid; grid-template-columns: minmax(190px, 238px) minmax(0,1fr); align-items: center; gap: clamp(26px, 5vw, 54px); padding: clamp(16px, 3vw, 28px); border: 1px solid #304942; background: linear-gradient(130deg, rgba(0,188,166,.055), transparent 48%), rgba(4,13,11,.42); }
+.personnel-profile-head figure { margin: 0; overflow: hidden; border: 1px solid #3a5b53; background: #07110f; }
 .personnel-profile-head img { width: 100%; height: 100%; object-fit: cover; }
 .personnel-profile-head img.personnel-fallback { padding: 24px; object-fit: contain; opacity: .45; }
-.personnel-profile-head .personnel-full-avatar { width: 100%; height: 220px; aspect-ratio: auto; background: radial-gradient(circle at 50% 40%, rgba(0,188,166,.11), transparent 62%), #07110f; }
+.personnel-avatar-stage { position: relative; min-width: 0; height: clamp(218px, 31vh, 278px); }
+.personnel-avatar-stage::before { content: "ROBLOX // PERSONNEL"; position: absolute; z-index: 3; top: 10px; left: 12px; color: #47635b; font: 7px var(--mono); letter-spacing: .1em; pointer-events: none; }
+.personnel-profile-head .personnel-full-avatar { width: 100%; height: 100%; border-radius: 4px; background: radial-gradient(circle at 50% 40%, rgba(0,188,166,.11), transparent 62%), repeating-linear-gradient(90deg, transparent 0 31px, rgba(61,102,91,.08) 32px), #07110f; }
 .personnel-full-avatar img { object-fit: contain; }
+.personnel-profile-head .personnel-portrait { position: absolute; z-index: 4; right: -14px; bottom: -14px; width: 76px; aspect-ratio: 1; border: 3px solid #0d1b18; border-radius: 4px; box-shadow: 0 0 0 1px #3a5b53, 0 10px 24px rgba(0,0,0,.32); }
 .personnel-image-loader { position: relative; width: 100%; height: 100%; overflow: hidden; }
 .personnel-image-loader img { position: relative; z-index: 1; opacity: 0; transform: scale(.985); transition: opacity 220ms ease, transform 260ms ease; }
 .personnel-image-loader.is-loaded img { opacity: 1; transform: scale(1); }
@@ -347,8 +350,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .personnel-full-avatar-empty { height: 100%; display: grid; place-items: center; align-content: center; gap: 8px; padding: 18px; color: #587069; text-align: center; }
 .personnel-full-avatar-empty span { color: var(--teal); font: 700 10px var(--mono); letter-spacing: .1em; }
 .personnel-full-avatar-empty small { font: 8px/1.5 var(--mono); letter-spacing: .05em; }
-.personnel-profile-head h2 { margin: 7px 0 8px; color: #f0f6f4; font: 700 clamp(25px, 4vw, 42px)/1.05 var(--mono); overflow-wrap: anywhere; }
+.personnel-profile-identity { min-width: 0; }
+.personnel-profile-head h2 { max-width: 12ch; margin: 10px 0 9px; color: #f0f6f4; font: 700 clamp(27px, 4vw, 44px)/1.02 var(--mono); overflow-wrap: anywhere; }
 .personnel-profile-head a, .personnel-nickname { color: var(--teal); font: 11px var(--mono); text-decoration: none; }
+.personnel-profile-identity > small { display: block; margin-top: 27px; color: #526a63; font: 8px var(--mono); letter-spacing: .12em; }
 .personnel-stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin: 28px 0 0; border-top: 1px solid #355049; border-left: 1px solid #355049; }
 .personnel-stats div { min-width: 0; padding: 15px; border-right: 1px solid #355049; border-bottom: 1px solid #355049; }
 .personnel-stats dt { margin-bottom: 8px; color: #6e857e; font: 8px var(--mono); letter-spacing: .08em; }
@@ -929,9 +934,11 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 60px; height: 54px; }
   .personnel-list > button { flex: 0 0 210px; }
   .personnel-index footer { display: none; }
   .personnel-profile { overflow: visible; padding: 24px 16px 46px; }
-  .personnel-profile-head { grid-template-columns: 96px minmax(0,1fr); gap: 16px; }
-  .personnel-profile-head figure { width: 96px; }
-  .personnel-profile-head .personnel-full-avatar { grid-column: 1 / -1; width: min(100%, 280px); height: 250px; justify-self: center; }
+  .personnel-profile-head { grid-template-columns: 1fr; gap: 28px; padding: 18px; }
+  .personnel-avatar-stage { width: min(100%, 280px); height: 260px; justify-self: center; }
+  .personnel-profile-head .personnel-portrait { right: 10px; bottom: -13px; width: 72px; }
+  .personnel-profile-head h2 { max-width: none; font-size: clamp(27px, 10vw, 40px); }
+  .personnel-profile-identity > small { margin-top: 20px; }
   .personnel-stats { grid-template-columns: 1fr; }
   .personnel-biography p { max-height: 260px; }
   .broadcast-card { padding: 18px; }
