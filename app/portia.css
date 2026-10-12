@@ -1058,7 +1058,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
 .document-window { width: min(1180px, calc(100% - 170px)); height: min(760px, calc(100% - 42px)); }
 .document-app { position: relative; height: calc(100% - 46px); background: #f6f7f6; }
 @media (max-width: 900px) {
-  .document-app { height: calc(100svh - 150px); }
+  .document-app { height: calc(100svh - 142px); }
 }
 .personnel-callsign { margin: 0 0 10px; color: var(--teal); font: 600 18px var(--sans); }
 .record-code { color: #5c6b67; font: 500 13px var(--mono); }
@@ -1096,8 +1096,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .desktop-wallpaper { opacity: .55; }
 }
 
-.document-app-viewport { position: relative; height: 100%; overflow: hidden; }
-.document-app-viewport iframe { display: block; border: 0; background: #f6f7f6; transform-origin: 0 0; }
+.document-app-viewport { position: absolute; inset: 0; overflow: hidden; }
+.document-app-viewport iframe { position: absolute; top: 0; left: 0; display: block; border: 0; background: #f6f7f6; transform-origin: 0 0; }
 .document-app-zoom-layer { position: absolute; inset: 0; cursor: zoom-in; }
 .document-app-bar { position: absolute; right: 14px; bottom: 14px; display: flex; gap: 8px; }
 .document-app-zoom { display: flex; border: 1px solid #2c4a44; border-radius: 10px; background: rgba(8, 17, 15, .92); overflow: hidden; }
