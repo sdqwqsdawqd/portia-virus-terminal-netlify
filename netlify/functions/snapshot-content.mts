@@ -1,18 +1,13 @@
-import { getStore } from "@netlify/blobs";
 import type { Config } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
+import { writePortiaContentSnapshot } from "../../lib/portia-content-cache";
+import { getSupabaseConfig } from "../../lib/supabase/env";
 
 type ContentRow = { payload: unknown; revision: number; updated_at: string | null };
 
 export default async function snapshotContent() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const key = (
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-    || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  )?.trim();
-  if (!url || !key) throw new Error("Supabase environment variables are not configured.");
-
-  const supabase = createClient(url, key, {
+  const { url, publishableKey } = getSupabaseConfig();
+  const supabase = createClient(url, publishableKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   const { data, error } = await supabase
@@ -23,14 +18,13 @@ export default async function snapshotContent() {
   if (error) throw error;
   if (!data?.payload) throw new Error("PORTIA content row is empty.");
 
-  const store = getStore({ name: "portia-content-cache", consistency: "strong" });
-  const cachedAt = new Date().toISOString();
-  await store.setJSON("latest", {
+  const written = await writePortiaContentSnapshot({
     content: data.payload,
     revision: data.revision ?? 0,
     updatedAt: data.updated_at ?? null,
-    cachedAt,
-  }, { metadata: { revision: data.revision ?? 0, cachedAt } });
+    cachedAt: new Date().toISOString(),
+  });
+  if (!written) throw new Error("PORTIA content snapshot was not written.");
 }
 
 export const config: Config = {

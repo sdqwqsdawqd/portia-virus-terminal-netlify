@@ -10,12 +10,8 @@ export type PortiaContentSnapshot = {
 const storeName = "portia-content-cache";
 const snapshotKey = "latest";
 
-function hasNetlifyRuntime() {
-  return Boolean(process.env.NETLIFY || process.env.NETLIFY_SITE_ID);
-}
-
+// getStore throws outside Netlify (local dev); the cache is then simply skipped.
 export async function readPortiaContentSnapshot() {
-  if (!hasNetlifyRuntime()) return null;
   try {
     const store = getStore({ name: storeName, consistency: "strong" });
     const snapshot = await store.get(snapshotKey, { type: "json", consistency: "strong" }) as PortiaContentSnapshot | null;
@@ -28,7 +24,6 @@ export async function readPortiaContentSnapshot() {
 }
 
 export async function writePortiaContentSnapshot(snapshot: PortiaContentSnapshot) {
-  if (!hasNetlifyRuntime()) return false;
   try {
     const store = getStore({ name: storeName, consistency: "strong" });
     await store.setJSON(snapshotKey, snapshot, {
