@@ -848,7 +848,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <div className="browser-footer"><span><i className="status-dot" />СИНХРОНИЗИРОВАНО</span><span>РЕВИЗИЯ {String(revision).padStart(2, "0")}</span></div>
               </aside>
               <article className="record-view" aria-live="polite">
-                {activeVirus ? openLog ? <ScientistDocument virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} /> : <div className="record-empty empty-state"><PortiaIllustration name="dish" /><strong>В базе пока нет вирусов</strong><span>Новые записи появятся здесь, как только их добавят в редакторе.</span></div>}
+                {activeVirus ? openLog ? <ScientistDocument virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} /> : <div className="record-empty empty-state"><PortiaIllustration name="dish" /><strong>В базе пока нет вирусов</strong></div>}
               </article>
             </div>
           </AppWindow>
@@ -916,10 +916,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           {(["sheet", "charter"] as const).map((app) => <AppWindow key={app} app={app} state={windows[app]} active={activeApp === app} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window document-window" meta="ДОКУМЕНТ ОТРЯДА">
-            <div className="document-app">
-              <iframe src={embeddedApps[app].src} title={appMeta[app].label} loading="lazy" referrerPolicy="no-referrer" />
-              <a className="document-app-external" href={embeddedApps[app].external} target="_blank" rel="noreferrer">Открыть отдельно</a>
-            </div>
+            <EmbeddedDocument src={embeddedApps[app].src} external={embeddedApps[app].external} title={appMeta[app].label} />
           </AppWindow>)}
           <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashFiles.length + recycledViruses.length).padStart(2, "0")}`}>
             <div className="trash-app">
@@ -1100,6 +1097,61 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
   const content = <><span className="desktop-icon-symbol"><PortiaIcon name={icon} />{badge && <i className="desktop-icon-badge" aria-label="Есть новая сводка" />}</span><span>{label}</span></>;
 
   return <button {...sharedProps} type="button">{content}</button>;
+}
+
+const zoomSteps = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+
+function EmbeddedDocument({ src, external, title }: { src: string; external: string; title: string }) {
+  const [zoom, setZoom] = useState(1);
+  const [ctrlHeld, setCtrlHeld] = useState(false);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const step = useCallback((direction: 1 | -1) => setZoom((current) => {
+    const index = zoomSteps.findIndex((value) => value >= current - 0.001);
+    return zoomSteps[Math.min(zoomSteps.length - 1, Math.max(0, index + direction))];
+  }), []);
+
+  // Wheel events over the embedded page never reach PORTIA, so while Ctrl is held a clear
+  // layer covers the document and takes the wheel for our own zoom.
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => setCtrlHeld(event.ctrlKey || event.metaKey);
+    const release = () => setCtrlHeld(false);
+    window.addEventListener("keydown", key);
+    window.addEventListener("keyup", key);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", key);
+      window.removeEventListener("keyup", key);
+      window.removeEventListener("blur", release);
+    };
+  }, []);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    // Non-passive so Ctrl+wheel zooms the document instead of the whole browser tab.
+    const wheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      step(event.deltaY < 0 ? 1 : -1);
+    };
+    frame.addEventListener("wheel", wheel, { passive: false });
+    return () => frame.removeEventListener("wheel", wheel);
+  }, [step]);
+
+  return <div className="document-app" ref={frameRef}>
+    <div className="document-app-viewport">
+      <iframe src={src} title={title} loading="lazy" referrerPolicy="no-referrer" style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})` }} />
+      {ctrlHeld && <div className="document-app-zoom-layer" aria-hidden="true" />}
+    </div>
+    <div className="document-app-bar">
+      <div className="document-app-zoom" role="group" aria-label="Масштаб документа">
+        <button type="button" onClick={() => step(-1)} aria-label="Уменьшить">−</button>
+        <button type="button" onClick={() => setZoom(1)} aria-label="Сбросить масштаб">{Math.round(zoom * 100)}%</button>
+        <button type="button" onClick={() => step(1)} aria-label="Увеличить">+</button>
+      </div>
+      <a className="document-app-external" href={external} target="_blank" rel="noreferrer">Открыть отдельно</a>
+    </div>
+  </div>;
 }
 
 function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClose, onGeometry, className, meta, children }: {

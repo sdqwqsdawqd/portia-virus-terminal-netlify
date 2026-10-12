@@ -15,6 +15,8 @@ export const metadata: Metadata = {
     icon: "/assets/portia-virus-icon.png",
     shortcut: "/assets/portia-virus-icon.png",
   },
+  // The site is already dark; this tells Dark Reader to leave it alone instead of rewriting the HTML.
+  other: { "darkreader-lock": "" },
 };
 
 export default function RootLayout({
@@ -23,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" className={`${golos.variable} ${unbounded.variable} ${jetbrains.variable}`}>
+    <html lang="ru" className={`${golos.variable} ${unbounded.variable} ${jetbrains.variable}`} suppressHydrationWarning>
       <body>{children}</body>
     </html>
   );
