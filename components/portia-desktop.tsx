@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
 import type { PortiaEmployee } from "@/lib/portia-employees";
+import { PortiaIcon, PortiaMark, type PortiaIconName } from "@/components/portia-icons";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -20,15 +21,15 @@ type ShortcutPosition = { x: number; y: number };
 
 const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard" };
 
-const appMeta: Record<AppId, { label: string; path: string; icon: string }> = {
-  archive: { label: "База вирусов", path: "PORTIA://VIRUS_ARCHIVE", icon: "/assets/app-virus.png" },
-  employees: { label: "Сотрудники", path: "PORTIA://PERSONNEL", icon: "/assets/app-employees.svg" },
-  search: { label: "Глобальный поиск", path: "PORTIA://GLOBAL_SEARCH", icon: "/assets/app-search.png" },
-  info: { label: "Информация", path: "PORTIA://INFORMATION", icon: "/assets/app-info.png" },
-  settings: { label: "Настройки", path: "PORTIA://DESKTOP_SETTINGS", icon: "/assets/app-settings.png" },
-  broadcasts: { label: "Сводка", path: "PORTIA://NEWS", icon: "/assets/app-broadcasts.png" },
-  trash: { label: "Корзина", path: "PORTIA://RECYCLE_BIN", icon: "/assets/app-trash.svg" },
-  editor: { label: "Редактор", path: "PORTIA://CONTENT_CONTROL", icon: "/assets/app-settings.png" },
+const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName }> = {
+  archive: { label: "База вирусов", path: "PORTIA://VIRUS_ARCHIVE", icon: "virus" },
+  employees: { label: "Сотрудники", path: "PORTIA://PERSONNEL", icon: "employees" },
+  search: { label: "Глобальный поиск", path: "PORTIA://GLOBAL_SEARCH", icon: "search" },
+  info: { label: "Информация", path: "PORTIA://INFORMATION", icon: "info" },
+  settings: { label: "Настройки", path: "PORTIA://DESKTOP_SETTINGS", icon: "settings" },
+  broadcasts: { label: "Сводка", path: "PORTIA://NEWS", icon: "broadcasts" },
+  trash: { label: "Корзина", path: "PORTIA://RECYCLE_BIN", icon: "trash" },
+  editor: { label: "Редактор", path: "PORTIA://CONTENT_CONTROL", icon: "editor" },
 };
 
 const initialWindows: Record<AppId, WindowState> = {
@@ -69,6 +70,8 @@ const roman = (level: number) => ({ 1: "I", 2: "II", 3: "III", 4: "IV" })[level]
 const broadcastReadStorageKey = "portia-broadcasts-read-signature-v1";
 const contentCacheStorageKey = "portia-content-last-success-v1";
 const employeesCacheStorageKey = "portia-employees-last-success-v1";
+// v2: the icon grid step grew with the new icon wells, so v1 positions would overlap.
+const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v2";
 
 type ContentResponse = {
   content?: PortiaContent;
@@ -333,7 +336,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       } catch {}
     }, 0);
     const bootTimer = window.setTimeout(() => setBooting(false), 1650);
-    const tick = () => setClock(new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()));
+    const tick = () => {
+      const now = new Date();
+      setClock(new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(now));
+    };
     tick();
     const clockTimer = window.setInterval(tick, 1000);
     const initialFetchTimer = window.setTimeout(() => { void fetchContent(); void fetchAccess(); }, 0);
@@ -380,15 +386,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   useEffect(() => {
     let restoreTimer: number | undefined;
     try {
-      const saved = window.localStorage.getItem("portia-desktop-shortcuts-v1");
+      const saved = window.localStorage.getItem(shortcutPositionsStorageKey);
       const parsed = saved ? JSON.parse(saved) as Record<string, ShortcutPosition> : {};
       const allowed = new Set<DesktopShortcutId>(["search", "archive", "employees", "broadcasts", "info", "settings", "charter", "sheet", "trash"]);
       const restored = Object.fromEntries(Object.entries(parsed).filter(([key, value]) => allowed.has(key as DesktopShortcutId) && Number.isFinite(value?.x) && Number.isFinite(value?.y))) as Partial<Record<DesktopShortcutId, ShortcutPosition>>;
-      if (!window.localStorage.getItem("portia-desktop-shortcuts-bottom-links-v1")) {
-        delete restored.charter;
-        delete restored.sheet;
-        window.localStorage.setItem("portia-desktop-shortcuts-bottom-links-v1", "1");
-      }
       restoreTimer = window.setTimeout(() => {
         setShortcutPositions(restored);
         setShortcutPositionsLoaded(true);
@@ -400,7 +401,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   useEffect(() => {
     if (!shortcutPositionsLoaded) return;
-    try { window.localStorage.setItem("portia-desktop-shortcuts-v1", JSON.stringify(shortcutPositions)); } catch {}
+    try { window.localStorage.setItem(shortcutPositionsStorageKey, JSON.stringify(shortcutPositions)); } catch {}
   }, [shortcutPositions, shortcutPositionsLoaded]);
 
   useEffect(() => () => {
@@ -770,7 +771,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       <BootScreen visible={booting} />
       <div className="desktop" id="desktop">
         <header className="system-bar">
-          <div className="system-brand"><img src="/assets/portia-logo.png" alt="" /><span>PORTIA</span><span className="system-division">PORTIA OS</span></div>
+          <div className="system-brand"><PortiaMark className="portia-mark" /><span>PORTIA</span><span className="system-division">PORTIA OS</span></div>
           <div className="system-status" aria-label="Состояние системы"><span className="status-item"><i className="status-dot" />В СЕТИ</span><time>{clock}</time></div>
         </header>
 
@@ -782,10 +783,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <DesktopIcon app="broadcasts" onOpen={openApp} position={shortcutPositions.broadcasts} onMove={moveDesktopShortcut} badge={broadcastUnread} />
             <DesktopIcon app="info" onOpen={openApp} position={shortcutPositions.info} onMove={moveDesktopShortcut} />
             <DesktopIcon app="settings" onOpen={openApp} position={shortcutPositions.settings} onMove={moveDesktopShortcut} />
-            <ExternalDesktopIcon shortcutId="charter" label="Устав" icon="/assets/app-charter.png" href="https://sdqwqsdawqd.github.io/S.E-Portia/" position={shortcutPositions.charter} onMove={moveDesktopShortcut} />
-            <ExternalDesktopIcon shortcutId="sheet" label="Таблица" icon="/assets/app-sheet.png" href="https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" position={shortcutPositions.sheet} onMove={moveDesktopShortcut} />
+            <ExternalDesktopIcon shortcutId="charter" label="Устав" icon="charter" href="https://sdqwqsdawqd.github.io/S.E-Portia/" position={shortcutPositions.charter} onMove={moveDesktopShortcut} />
+            <ExternalDesktopIcon shortcutId="sheet" label="Таблица" icon="sheet" href="https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" position={shortcutPositions.sheet} onMove={moveDesktopShortcut} />
             <DesktopIcon app="trash" onOpen={openApp} position={shortcutPositions.trash} onMove={moveDesktopShortcut} className="desktop-icon-trash" />
           </nav>
+
 
           <AppWindow app="archive" state={windows.archive} active={activeApp === "archive"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="archive-window" meta="ДОПУСК II">
             <div className="archive-grid">
@@ -930,19 +932,19 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         </div>
 
         <footer className="taskbar">
-          <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><img src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
+          <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><PortiaMark className="portia-mark" /><span>PORTIA</span></button>
           <div className="taskbar-apps" aria-label="Открытые программы">
-            {(Object.keys(appMeta) as AppId[]).filter((app) => windows[app].open).map((app) => <button key={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}`} type="button" onClick={() => windows[app].minimized ? openApp(app) : activeApp === app ? minimizeApp(app) : focusApp(app)}><span className="mini-app-icon"><img src={appMeta[app].icon} alt="" /></span><span>{appMeta[app].label}</span></button>)}
+            {(Object.keys(appMeta) as AppId[]).filter((app) => windows[app].open).map((app) => <button key={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}`} type="button" onClick={() => windows[app].minimized ? openApp(app) : activeApp === app ? minimizeApp(app) : focusApp(app)}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>)}
           </div>
           <span className="taskbar-note">VIRUS DATABASE</span>
         </footer>
 
         {startOpen && <div className="start-panel">
-          <div className="start-panel-brand"><img src="/assets/portia-logo.png" alt="PORTIA" /><div><strong>PORTIA OS</strong><span>Панель быстрого запуска</span></div></div>
-          <button type="button" onClick={() => openApp("search")}><span className="start-panel-icon"><img src="/assets/app-search.png" alt="" /></span>Глобальный поиск</button>
-          <button type="button" onClick={() => openApp("archive")}><span className="start-panel-icon"><img src="/assets/app-virus.png" alt="" /></span>База вирусов</button>
-          <button type="button" onClick={() => openApp("employees")}><span className="start-panel-icon"><img src="/assets/app-sheet.png" alt="" /></span>Сотрудники</button>
-          <button type="button" onClick={() => openApp("settings")}><span className="start-panel-icon"><img src="/assets/app-settings.png" alt="" /></span>Настройки</button>
+          <div className="start-panel-brand"><PortiaMark className="portia-mark" detailed /><div><strong>PORTIA OS</strong><span>Панель быстрого запуска</span></div></div>
+          <button type="button" onClick={() => openApp("search")}><span className="start-panel-icon"><PortiaIcon name="search" /></span>Глобальный поиск</button>
+          <button type="button" onClick={() => openApp("archive")}><span className="start-panel-icon"><PortiaIcon name="virus" /></span>База вирусов</button>
+          <button type="button" onClick={() => openApp("employees")}><span className="start-panel-icon"><PortiaIcon name="employees" /></span>Сотрудники</button>
+          <button type="button" onClick={() => openApp("settings")}><span className="start-panel-icon"><PortiaIcon name="settings" /></span>Настройки</button>
         </div>}
 
       </div>
@@ -951,7 +953,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 }
 
 function BootScreen({ visible }: { visible: boolean }) {
-  return <div className={`boot-screen${visible ? "" : " boot-complete"}`} aria-hidden={!visible}><div className="boot-core"><img src="/assets/portia-logo.png" alt="" /><span>PORTIA OS</span><strong>INITIALIZING RESEARCH NODE</strong><div className="boot-progress"><i /></div><div className="boot-lines"><small>ARCHIVE INDEX</small><small>SECURITY CONTOUR</small><small>CONTENT LINK</small></div></div></div>;
+  return <div className={`boot-screen${visible ? "" : " boot-complete"}`} aria-hidden={!visible}><div className="boot-core"><PortiaMark className="portia-mark" detailed /><span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong><div className="boot-progress"><i /></div><div className="boot-lines"><small>ARCHIVE INDEX</small><small>SECURITY CONTOUR</small><small>CONTENT LINK</small></div></div></div>;
 }
 
 function EmployeeImage({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
@@ -967,14 +969,14 @@ function DesktopIcon({ app, onOpen, position, onMove, className = "", badge = fa
   return <DraggableDesktopIcon shortcutId={app} label={appMeta[app].label} icon={appMeta[app].icon} position={position} onMove={onMove} onActivate={() => onOpen(app)} className={className} badge={badge} />;
 }
 
-function ExternalDesktopIcon({ shortcutId, label, icon, href, position, onMove }: { shortcutId: DesktopShortcutId; label: string; icon: string; href: string; position?: ShortcutPosition; onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void }) {
+function ExternalDesktopIcon({ shortcutId, label, icon, href, position, onMove }: { shortcutId: DesktopShortcutId; label: string; icon: PortiaIconName; href: string; position?: ShortcutPosition; onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void }) {
   return <DraggableDesktopIcon shortcutId={shortcutId} label={label} icon={icon} href={href} position={position} onMove={onMove} />;
 }
 
 function DraggableDesktopIcon({ shortcutId, label, icon, href, position, onMove, onActivate, className = "", badge = false }: {
   shortcutId: DesktopShortcutId;
   label: string;
-  icon: string;
+  icon: PortiaIconName;
   href?: string;
   position?: ShortcutPosition;
   onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void;
@@ -1054,7 +1056,7 @@ function DraggableDesktopIcon({ shortcutId, label, icon, href, position, onMove,
     onClick: handleClick,
     onDragStart: (event: React.DragEvent<HTMLElement>) => event.preventDefault(),
   };
-  const content = <><span className="desktop-icon-symbol"><img src={icon} alt="" draggable={false} />{badge && <i className="desktop-icon-badge" aria-label="Есть новая сводка" />}</span><span>{label}</span></>;
+  const content = <><span className="desktop-icon-symbol"><PortiaIcon name={icon} />{badge && <i className="desktop-icon-badge" aria-label="Есть новая сводка" />}</span><span>{label}</span></>;
 
   if (href) return <a {...sharedProps} href={href} target="_blank" rel="noreferrer" draggable={false}>{content}</a>;
   return <button {...sharedProps} type="button">{content}</button>;
@@ -1154,7 +1156,7 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   } : {};
 
   return <section ref={windowRef} className={`app-window ${className}${active ? " is-active" : ""}${state.maximized ? " is-maximized" : ""}`} style={{ zIndex: state.z, display: state.minimized ? "none" : undefined, ...geometryStyle }} onPointerDown={() => onFocus(app)} aria-label={appMeta[app].label}>
-    <div className="window-titlebar" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest("button")) onMaximize(app); }}><div className="window-identity"><span className="window-app-mark"><img src={appMeta[app].icon} alt="" /></span><span>{appMeta[app].path}</span></div><div className="window-meta">{meta}</div><div className="window-controls"><button type="button" data-window-action="minimize" onClick={(event) => { event.stopPropagation(); onMinimize(app); }} aria-label={`Свернуть ${appMeta[app].label}`}>―</button><button type="button" data-window-action="maximize" onClick={(event) => { event.stopPropagation(); onMaximize(app); }} aria-label={`Развернуть ${appMeta[app].label}`}>□</button><button type="button" data-window-action="close" onClick={(event) => { event.stopPropagation(); onClose(app); }} aria-label={`Закрыть ${appMeta[app].label}`}>×</button></div></div>
+    <div className="window-titlebar" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest("button")) onMaximize(app); }}><div className="window-identity"><span className="window-app-mark"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].path}</span></div><div className="window-meta">{meta}</div><div className="window-controls"><button type="button" data-window-action="minimize" onClick={(event) => { event.stopPropagation(); onMinimize(app); }} aria-label={`Свернуть ${appMeta[app].label}`}>―</button><button type="button" data-window-action="maximize" onClick={(event) => { event.stopPropagation(); onMaximize(app); }} aria-label={`Развернуть ${appMeta[app].label}`}>□</button><button type="button" data-window-action="close" onClick={(event) => { event.stopPropagation(); onClose(app); }} aria-label={`Закрыть ${appMeta[app].label}`}>×</button></div></div>
     {children}
     <button className="window-resize-handle" type="button" aria-label={`Изменить размер окна ${appMeta[app].label}`} onPointerDown={beginResize} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} />
   </section>;
