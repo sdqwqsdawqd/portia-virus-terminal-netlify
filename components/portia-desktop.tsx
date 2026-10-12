@@ -13,7 +13,7 @@ const PortiaEditor = dynamic(
 type AppId = "archive" | "employees" | "search" | "info" | "settings" | "broadcasts" | "trash" | "editor";
 type WindowGeometry = { x: number; y: number; width: number; height: number };
 type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number; geometry?: WindowGeometry };
-type SaveState = "idle" | "saving" | "saved" | "error";
+type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string };
 type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
 type ShortcutPosition = { x: number; y: number };
@@ -563,8 +563,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       const response = await fetchWithTimeout("/api/content", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content: next }),
+        body: JSON.stringify({ content: next, revision }),
       });
+      if (response.status === 409) {
+        setSaveState("conflict");
+        throw new Error("PORTIA content changed by another editor");
+      }
       if (!response.ok) throw new Error("save failed");
       const payload = (await response.json()) as { revision?: number };
       setContent(next);
@@ -579,9 +583,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       } catch {}
       setSaveState("saved");
       window.setTimeout(() => setSaveState("idle"), 1800);
-    } catch {
-      setSaveState("error");
-      throw new Error("PORTIA content save failed");
+    } catch (error) {
+      setSaveState((current) => current === "conflict" ? current : "error");
+      throw error;
     }
   };
 

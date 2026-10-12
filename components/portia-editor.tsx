@@ -18,7 +18,7 @@ type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "ass
 
 type Props = {
   content: PortiaContent;
-  saveState: "idle" | "saving" | "saved" | "error";
+  saveState: "idle" | "saving" | "saved" | "error" | "conflict";
   canManageEditors: boolean;
   onSave: (content: PortiaContent) => Promise<void>;
 };
@@ -543,7 +543,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
           <p>Изменения сохраняются в общей базе!</p>
         </div>
         <div className="editor-save-zone">
-          <span className={`editor-save-status ${saveState}`}>{saveState === "saving" ? "СОХРАНЕНИЕ…" : saveState === "saved" ? "СОХРАНЕНО" : saveState === "error" ? "ОШИБКА" : dirty ? "ЕСТЬ ИЗМЕНЕНИЯ" : "БЕЗ ИЗМЕНЕНИЙ"}</span>
+          <span className={`editor-save-status ${saveState}`}>{saveState === "saving" ? "СОХРАНЕНИЕ…" : saveState === "saved" ? "СОХРАНЕНО" : saveState === "error" ? "ОШИБКА" : saveState === "conflict" ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ" : dirty ? "ЕСТЬ ИЗМЕНЕНИЯ" : "БЕЗ ИЗМЕНЕНИЙ"}</span>
           <button className="primary-control" type="button" onClick={save} disabled={!dirty || saveState === "saving"}>СОХРАНИТЬ ВСЁ</button>
         </div>
       </header>
