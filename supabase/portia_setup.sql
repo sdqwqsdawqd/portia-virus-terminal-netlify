@@ -1,5 +1,5 @@
--- Run this once in Supabase Dashboard -> SQL Editor.
--- Replace the email below before running if your owner email is different.
+-- Run this in Supabase Dashboard -> SQL Editor. It is safe to run again after code updates.
+-- The owner email is set in exactly one place: portia_owner_email() below.
 
 create table if not exists public.portia_content (
   id text primary key,
@@ -15,8 +15,76 @@ create table if not exists public.portia_editors (
   created_at timestamptz not null default now()
 );
 
-alter table public.portia_editors enable row level security;
+-- Editor-written personnel fields. The roster itself comes from Google Sheets.
+create table if not exists public.portia_employee_profiles (
+  employee_id text primary key,
+  biography text not null default '' check (length(biography) <= 20000),
+  photo_url text not null default '' check (photo_url = '' or photo_url like 'https://%' or photo_url like '/%'),
+  knowledge_rating integer not null default 1 check (knowledge_rating between 1 and 10),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id)
+);
 
+-- Not granted to anon/authenticated, so the email cannot be read through the API.
+create or replace function public.portia_owner_email()
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select 'qloxzick@gmail.com'::text;
+$$;
+
+create or replace function public.portia_is_owner()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select lower(coalesce(auth.jwt() ->> 'email', '')) = public.portia_owner_email();
+$$;
+
+create or replace function public.portia_can_edit()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.portia_is_owner() or exists (
+    select 1 from public.portia_editors
+    where email = lower(coalesce(auth.jwt() ->> 'email', ''))
+  );
+$$;
+
+create or replace function public.portia_editor_is_approved(candidate_email text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    lower(trim(candidate_email)) = public.portia_owner_email()
+    or exists (
+      select 1 from public.portia_editors
+      where email = lower(trim(candidate_email))
+    );
+$$;
+
+revoke all on function public.portia_owner_email() from public, anon, authenticated;
+revoke all on function public.portia_is_owner() from public, anon;
+revoke all on function public.portia_can_edit() from public, anon;
+revoke all on function public.portia_editor_is_approved(text) from public;
+grant execute on function public.portia_is_owner() to authenticated;
+grant execute on function public.portia_can_edit() to authenticated;
+-- Needed before sign-up, so anonymous visitors may call it.
+grant execute on function public.portia_editor_is_approved(text) to anon, authenticated;
+
+-- Editors
+
+alter table public.portia_editors enable row level security;
 revoke all on table public.portia_editors from anon, authenticated;
 grant select, insert, delete on table public.portia_editors to authenticated;
 
@@ -24,42 +92,23 @@ drop policy if exists "Editors can see their access" on public.portia_editors;
 create policy "Editors can see their access"
 on public.portia_editors for select
 to authenticated
-using (
-  lower(email) = lower((select auth.jwt() ->> 'email'))
-  or lower((select auth.jwt() ->> 'email')) = 'qloxzick@gmail.com'
-);
+using (email = lower((select auth.jwt() ->> 'email')) or (select public.portia_is_owner()));
 
 drop policy if exists "Owner can grant editor access" on public.portia_editors;
 create policy "Owner can grant editor access"
 on public.portia_editors for insert
 to authenticated
-with check (lower((select auth.jwt() ->> 'email')) = 'qloxzick@gmail.com');
+with check ((select public.portia_is_owner()));
 
 drop policy if exists "Owner can revoke editor access" on public.portia_editors;
 create policy "Owner can revoke editor access"
 on public.portia_editors for delete
 to authenticated
-using (lower((select auth.jwt() ->> 'email')) = 'qloxzick@gmail.com');
+using ((select public.portia_is_owner()));
 
-create or replace function public.portia_editor_is_approved(candidate_email text)
-returns boolean
-language sql
-security definer
-set search_path = public
-as $$
-  select
-    lower(trim(candidate_email)) = 'qloxzick@gmail.com'
-    or exists (
-      select 1 from public.portia_editors
-      where email = lower(trim(candidate_email))
-    );
-$$;
-
-revoke all on function public.portia_editor_is_approved(text) from public;
-grant execute on function public.portia_editor_is_approved(text) to anon, authenticated;
+-- Content
 
 alter table public.portia_content enable row level security;
-
 revoke all on table public.portia_content from anon, authenticated;
 grant select on table public.portia_content to anon, authenticated;
 grant insert, update on table public.portia_content to authenticated;
@@ -75,33 +124,43 @@ drop policy if exists "Editors can create PORTIA content" on public.portia_conte
 create policy "Editors can create PORTIA content"
 on public.portia_content for insert
 to authenticated
-with check (
-  lower((select auth.jwt() ->> 'email')) = 'qloxzick@gmail.com'
-  or exists (
-    select 1 from public.portia_editors
-    where email = lower((select auth.jwt() ->> 'email'))
-  )
-);
+with check ((select public.portia_can_edit()));
 
 drop policy if exists "Owner can update PORTIA content" on public.portia_content;
 drop policy if exists "Editors can update PORTIA content" on public.portia_content;
 create policy "Editors can update PORTIA content"
 on public.portia_content for update
 to authenticated
-using (
-  lower((select auth.jwt() ->> 'email')) = 'qloxzick@gmail.com'
-  or exists (
-    select 1 from public.portia_editors
-    where email = lower((select auth.jwt() ->> 'email'))
-  )
-)
-with check (
-  lower((select auth.jwt() ->> 'email')) = 'qloxzick@gmail.com'
-  or exists (
-    select 1 from public.portia_editors
-    where email = lower((select auth.jwt() ->> 'email'))
-  )
-);
+using ((select public.portia_can_edit()))
+with check ((select public.portia_can_edit()));
+
+-- Employee profiles
+
+alter table public.portia_employee_profiles enable row level security;
+revoke all on table public.portia_employee_profiles from anon, authenticated;
+grant select on table public.portia_employee_profiles to anon, authenticated;
+grant insert, update on table public.portia_employee_profiles to authenticated;
+
+drop policy if exists "Public can read PORTIA employee profiles" on public.portia_employee_profiles;
+create policy "Public can read PORTIA employee profiles"
+on public.portia_employee_profiles for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "Editors can create PORTIA employee profiles" on public.portia_employee_profiles;
+create policy "Editors can create PORTIA employee profiles"
+on public.portia_employee_profiles for insert
+to authenticated
+with check ((select public.portia_can_edit()));
+
+drop policy if exists "Editors can update PORTIA employee profiles" on public.portia_employee_profiles;
+create policy "Editors can update PORTIA employee profiles"
+on public.portia_employee_profiles for update
+to authenticated
+using ((select public.portia_can_edit()))
+with check ((select public.portia_can_edit()));
+
+-- Media
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -127,46 +186,19 @@ drop policy if exists "Editors can upload PORTIA media" on storage.objects;
 create policy "Editors can upload PORTIA media"
 on storage.objects for insert
 to authenticated
-with check (
-  bucket_id = 'portia-media'
-  and (
-    lower((select auth.jwt() ->> 'email')) = 'qloxzick@gmail.com'
-    or exists (
-      select 1 from public.portia_editors
-      where email = lower((select auth.jwt() ->> 'email'))
-    )
-  )
-);
+with check (bucket_id = 'portia-media' and (select public.portia_can_edit()));
 
 drop policy if exists "Owner can update PORTIA media" on storage.objects;
 drop policy if exists "Editors can update PORTIA media" on storage.objects;
 create policy "Editors can update PORTIA media"
 on storage.objects for update
 to authenticated
-using (
-  bucket_id = 'portia-media'
-  and (
-    lower((select auth.jwt() ->> 'email')) = 'qloxzick@gmail.com'
-    or exists (select 1 from public.portia_editors where email = lower((select auth.jwt() ->> 'email')))
-  )
-)
-with check (
-  bucket_id = 'portia-media'
-  and (
-    lower((select auth.jwt() ->> 'email')) = 'qloxzick@gmail.com'
-    or exists (select 1 from public.portia_editors where email = lower((select auth.jwt() ->> 'email')))
-  )
-);
+using (bucket_id = 'portia-media' and (select public.portia_can_edit()))
+with check (bucket_id = 'portia-media' and (select public.portia_can_edit()));
 
 drop policy if exists "Owner can delete PORTIA media" on storage.objects;
 drop policy if exists "Editors can delete PORTIA media" on storage.objects;
 create policy "Editors can delete PORTIA media"
 on storage.objects for delete
 to authenticated
-using (
-  bucket_id = 'portia-media'
-  and (
-    lower((select auth.jwt() ->> 'email')) = 'qloxzick@gmail.com'
-    or exists (select 1 from public.portia_editors where email = lower((select auth.jwt() ->> 'email')))
-  )
-);
+using (bucket_id = 'portia-media' and (select public.portia_can_edit()));

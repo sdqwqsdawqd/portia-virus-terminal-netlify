@@ -1,31 +1,24 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
-const normalizeEmail = (email: string | null | undefined) => email?.trim().toLocaleLowerCase("en-US") ?? "";
+const noAccess = { canEdit: false, canManageEditors: false };
 
-export function isOwnerEmail(email: string | null | undefined) {
-  const ownerEmail = normalizeEmail(process.env.PORTIA_OWNER_EMAIL);
-  return Boolean(ownerEmail && normalizeEmail(email) === ownerEmail);
-}
-
+// The rules live in Supabase (portia_can_edit / portia_is_owner), so the site and
+// the database policies can never disagree about who may edit.
 export async function getEditorAccess(supabase: SupabaseClient, user: User | null | undefined) {
-  if (!user?.email) return { canEdit: false, canManageEditors: false };
-  if (isOwnerEmail(user.email)) return { canEdit: true, canManageEditors: true };
+  if (!user?.email) return noAccess;
 
-  const email = normalizeEmail(user.email);
-  const { data, error } = await supabase
-    .from("portia_editors")
-    .select("email")
-    .eq("email", email)
-    .maybeSingle<{ email: string }>();
-
-  if (error) {
-    console.error("PORTIA editor access lookup failed", error);
-    return { canEdit: false, canManageEditors: false };
+  const [canEdit, isOwner] = await Promise.all([
+    supabase.rpc("portia_can_edit"),
+    supabase.rpc("portia_is_owner"),
+  ]);
+  if (canEdit.error || isOwner.error) {
+    console.error("PORTIA editor access lookup failed", canEdit.error ?? isOwner.error);
+    return noAccess;
   }
 
-  return { canEdit: Boolean(data), canManageEditors: false };
+  return { canEdit: canEdit.data === true, canManageEditors: isOwner.data === true };
 }
 
 export function normalizeEditorEmail(email: string) {
-  return normalizeEmail(email);
+  return email.trim().toLocaleLowerCase("en-US");
 }
