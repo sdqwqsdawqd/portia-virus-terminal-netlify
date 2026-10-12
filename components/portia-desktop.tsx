@@ -72,12 +72,8 @@ const employeesCacheStorageKey = "portia-employees-last-success-v1";
 
 type ContentResponse = {
   content?: PortiaContent;
-  canEdit?: boolean;
-  canManageEditors?: boolean;
   revision?: number;
   updatedAt?: string | null;
-  degraded?: boolean;
-  source?: "supabase" | "netlify-cache" | "bundled-default";
 };
 
 function isUsableContent(value: unknown): value is PortiaContent {
@@ -250,37 +246,55 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const assistantContentRef = useRef(content);
   const assistantOffendedRef = useRef(false);
 
+  // Served from the CDN cache, which every save purges; the browser itself always revalidates.
   const fetchContent = useCallback(async () => {
     try {
-      const response = await fetchWithTimeout("/api/content", { cache: "no-store" });
+      const response = await fetchWithTimeout("/api/content");
       if (!response.ok) return;
       const payload = (await response.json()) as ContentResponse;
-      if (payload.content && !(payload.source === "bundled-default" && window.localStorage.getItem(contentCacheStorageKey))) {
-        setContent(payload.content);
-        setActiveVirusId((current) => payload.content!.viruses.some((virus) => virus.id === current) ? current : payload.content!.viruses[0]?.id ?? "");
-        setSelectedInfoId((current) => payload.content!.infoSections.some((section) => section.id === current) ? current : payload.content!.infoSections[0]?.id ?? "");
-        if (payload.source !== "bundled-default") {
-          try {
-            window.localStorage.setItem(contentCacheStorageKey, JSON.stringify({
-              content: payload.content,
-              revision: payload.revision ?? 0,
-              updatedAt: payload.updatedAt ?? null,
-              savedAt: new Date().toISOString(),
-            }));
-          } catch {}
-        }
-      }
-      setCanEdit(Boolean(payload.canEdit));
-      setCanManageEditors(Boolean(payload.canManageEditors));
+      if (!payload.content) return;
+      setContent(payload.content);
+      setActiveVirusId((current) => payload.content!.viruses.some((virus) => virus.id === current) ? current : payload.content!.viruses[0]?.id ?? "");
+      setSelectedInfoId((current) => payload.content!.infoSections.some((section) => section.id === current) ? current : payload.content!.infoSections[0]?.id ?? "");
       setRevision(payload.revision ?? 0);
+      try {
+        window.localStorage.setItem(contentCacheStorageKey, JSON.stringify({
+          content: payload.content,
+          revision: payload.revision ?? 0,
+          updatedAt: payload.updatedAt ?? null,
+          savedAt: new Date().toISOString(),
+        }));
+      } catch {}
     } catch {
-      // The bundled defaults keep the terminal usable if synchronization is briefly unavailable.
+      // The last copy saved on this device keeps the terminal usable while offline.
     }
+  }, []);
+
+  const fetchAccess = useCallback(async () => {
+    try {
+      const response = await fetchWithTimeout("/api/access", { cache: "no-store" });
+      if (!response.ok) return;
+      const access = await response.json() as { canEdit?: boolean; canManageEditors?: boolean };
+      setCanEdit(Boolean(access.canEdit));
+      setCanManageEditors(Boolean(access.canManageEditors));
+    } catch {}
+  }, []);
+
+  // Keeps the Personnel window in step with the editor without waiting for the next sync.
+  const updateEmployee = useCallback((saved: PortiaEmployee) => {
+    setEmployees((current) => {
+      const next = current.map((employee) => employee.id === saved.id ? saved : employee);
+      try {
+        const cached = JSON.parse(window.localStorage.getItem(employeesCacheStorageKey) ?? "{}") as { syncedAt?: string | null };
+        window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify({ ...cached, employees: next }));
+      } catch {}
+      return next;
+    });
   }, []);
 
   const fetchEmployees = useCallback(async () => {
     try {
-      const response = await fetchWithTimeout("/api/employees", { cache: "no-store" }, 12_000);
+      const response = await fetchWithTimeout("/api/employees", {}, 15_000);
       if (!response.ok) return;
       const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null };
       if (!Array.isArray(payload.employees) || !payload.employees.length) return;
@@ -322,10 +336,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const tick = () => setClock(new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()));
     tick();
     const clockTimer = window.setInterval(tick, 1000);
-    const initialFetchTimer = window.setTimeout(() => void fetchContent(), 0);
+    const initialFetchTimer = window.setTimeout(() => { void fetchContent(); void fetchAccess(); }, 0);
     const initialEmployeesTimer = window.setTimeout(() => void fetchEmployees(), 0);
     const syncTimer = window.setInterval(fetchContent, 30_000);
-    const employeeSyncTimer = window.setInterval(fetchEmployees, 60 * 60 * 1000);
+    // Cheap: answered by the CDN, so other visitors see profile edits within minutes.
+    const employeeSyncTimer = window.setInterval(fetchEmployees, 5 * 60 * 1000);
     return () => {
       window.clearTimeout(cacheTimer);
       window.clearTimeout(bootTimer);
@@ -335,7 +350,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       window.clearInterval(syncTimer);
       window.clearInterval(employeeSyncTimer);
     };
-  }, [fetchContent, fetchEmployees]);
+  }, [fetchAccess, fetchContent, fetchEmployees]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -904,7 +919,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="editor" state={windows.editor} active={activeApp === "editor"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="editor-window" meta="ДОСТУП ВЛАДЕЛЬЦА">
-            {canEdit ? <PortiaEditor content={content} saveState={saveState} canManageEditors={canManageEditors} onSave={saveContent} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
+            {canEdit ? <PortiaEditor content={content} saveState={saveState} canManageEditors={canManageEditors} onSave={saveContent} onEmployeeSaved={updateEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
           </AppWindow>
         </main>
 
