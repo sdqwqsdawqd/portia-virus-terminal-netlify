@@ -129,7 +129,6 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
     className="order-drag-handle"
     type="button"
     aria-label={`Изменить порядок: ${label}`}
-    title="Удерживайте и перетащите"
     onPointerDown={(event) => {
       const target = event.currentTarget;
       target.setPointerCapture(event.pointerId);
@@ -150,7 +149,7 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
     }}
     onPointerUp={(event) => { delete event.currentTarget.dataset.dragging; stop(event); }}
     onPointerCancel={(event) => { delete event.currentTarget.dataset.dragging; stop(event); }}
-  ><span aria-hidden="true">≡</span><small>ТЯНИТЕ</small></button>;
+  ><span aria-hidden="true">≡</span></button>;
 }
 
 const emptyRichTextStyle: RichTextStyle = {};
@@ -586,10 +585,10 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
           <aside className="editor-record-list">
             {draft.viruses.map((virus, index) => (
               <div className="editor-record-row" data-sort-index={index} key={virus.id}>
+                <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.viruses, from, to))} />
                 <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => setSelectedVirusId(virus.id)}>
                   <strong>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small>{virus.code || "БЕЗ КОДА"}</small>
                 </button>
-                <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.viruses, from, to))} />
               </div>
             ))}
             <button className="add-record" type="button" onClick={() => {
@@ -678,7 +677,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация».</p>
           {draft.infoSections.map((section, index) => (
             <div className="nested-editor-card" data-sort-index={index} key={section.id}>
-              <div className="nested-editor-head"><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} /><button type="button" onClick={() => changeDraft((next) => { next.infoSections.splice(index, 1); })}>Удалить</button></div></div>
+              <div className="nested-editor-head"><OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} /><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => { next.infoSections.splice(index, 1); })}>Удалить</button></div></div>
               <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => { next.infoSections[index].title = event.target.value; })} /></Field>
               <FormattedTextarea label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => { next.infoSections[index].body = text; })} />
             </div>
@@ -715,13 +714,13 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
               if (!virus && !file) return null;
               const title = virus?.name || file?.name || "БЕЗ ИМЕНИ";
               return <div className="editor-record-row" data-sort-index={index} key={key}>
+                <OrderDragHandle index={index} label={title} onMove={(from, to) => changeDraft((next) => { const order = recycleKeys(next); moveArrayItem(order, from, to); next.recycleOrder = order; })} />
                 <button type="button" className={virus ? virus.id === selectedRecycledVirusId && !selectedRecycleFileId ? "active" : "" : file!.id === selectedRecycleFileId ? "active" : ""} onClick={() => {
                   if (virus) { setSelectedRecycledVirusId(virus.id); setSelectedRecycleFileId(""); }
                   else { setSelectedRecycleFileId(file!.id); setSelectedRecycledVirusId(""); }
                 }}>
                   <strong>{title}</strong><small>{virus ? "ВИРУС В КОРЗИНЕ" : file!.kind === "virus" ? "ФАЙЛ ВИРУСА" : file!.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ"}</small>
                 </button>
-                <OrderDragHandle index={index} label={title} onMove={(from, to) => changeDraft((next) => { const order = recycleKeys(next); moveArrayItem(order, from, to); next.recycleOrder = order; })} />
               </div>;
             })}
             <button className="add-record" type="button" onClick={() => {
@@ -812,12 +811,12 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
           <p className="editor-guidance">Каждая строка станет ненавязчивой рекомендацией под строкой глобального поиска.</p>
           <FormattedTextarea label="Рекомендации" tall value={draft.searchRecommendations.join("\n")} document={draft.formattedText[portiaTextKey.searchRecommendations]} formatKey={portiaTextKey.searchRecommendations} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.searchRecommendations, value, document, (next, text) => { next.searchRecommendations = text.split("\n"); })} />
           <div className="recommendation-order-list" aria-label="Порядок рекомендаций">
-            {draft.searchRecommendations.map((recommendation, index) => <div className="recommendation-order-row" data-sort-index={index} key={`${recommendation}:${draft.searchRecommendations.slice(0, index).filter((item) => item === recommendation).length}`}><span><small>{String(index + 1).padStart(2, "0")}</small>{recommendation || "ПУСТАЯ СТРОКА"}</span><OrderDragHandle index={index} label={recommendation || "рекомендация"} onMove={(from, to) => changeDraft((next) => {
+            {draft.searchRecommendations.map((recommendation, index) => <div className="recommendation-order-row" data-sort-index={index} key={`${recommendation}:${draft.searchRecommendations.slice(0, index).filter((item) => item === recommendation).length}`}><OrderDragHandle index={index} label={recommendation || "рекомендация"} onMove={(from, to) => changeDraft((next) => {
               const currentText = next.searchRecommendations.join("\n");
               const reordered = reorderRichTextLines(currentText, next.formattedText[portiaTextKey.searchRecommendations], from, to);
               next.searchRecommendations = reordered.text.split("\n");
               next.formattedText[portiaTextKey.searchRecommendations] = reordered.document;
-            })} /></div>)}
+            })} /><span><small>{String(index + 1).padStart(2, "0")}</small>{recommendation || "ПУСТАЯ СТРОКА"}</span></div>)}
           </div>
         </div>
       )}

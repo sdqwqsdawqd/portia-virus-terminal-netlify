@@ -402,12 +402,11 @@ html { scrollbar-color: #2f4a45 transparent; caret-color: var(--teal); }
 .editor-record-list strong { font: 700 12px var(--sans); }
 .editor-record-list small { color: #637a73; font: 11px var(--sans); }
 .editor-record-list .add-record { align-items: center; margin-top: 5px; border-style: dashed; color: var(--teal); }
-.editor-record-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 34px; gap: 5px; }
-.editor-record-row > button:first-child { min-width: 0; }
+.editor-record-row { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 5px; }
+.editor-record-row > button:last-child { min-width: 0; }
 .editor-record-list .editor-record-row .order-drag-handle, .order-drag-handle { width: 34px; min-width: 34px; min-height: 34px; display: grid; place-items: center; align-content: center; gap: 1px; padding: 3px; border: 1px dashed #3c5b54; background: rgba(0,188,166,.035); color: #719089; cursor: grab; touch-action: none; user-select: none; }
 .order-drag-handle:hover, .order-drag-handle[data-dragging="true"] { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); cursor: grabbing; }
 .order-drag-handle span { font: 700 17px/1 var(--sans); }
-.order-drag-handle small { font: 11px/1 var(--sans); letter-spacing: .04em; }
 .archive-virus-actions, .assistant-switches { display: flex; flex-wrap: wrap; gap: 9px; }
 .assistant-switches { margin-bottom: 18px; }
 .editor-form { min-width: 0; }
@@ -427,13 +426,13 @@ html { scrollbar-color: #2f4a45 transparent; caret-color: var(--teal); }
 .nested-editor-card + .nested-editor-card { margin-top: 10px; }
 .nested-editor-card .editor-field { margin-top: 11px; }
 .nested-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
-.nested-editor-head strong { color: var(--teal); font: 700 11px var(--sans); letter-spacing: .07em; }
+.nested-editor-head strong { margin-right: auto; color: var(--teal); font: 700 11px var(--sans); letter-spacing: .07em; }
 .nested-editor-head button { border: 0; background: transparent; color: #b96a63; font: 11px var(--sans); cursor: pointer; }
 .nested-editor-head button:disabled { opacity: .35; cursor: not-allowed; }
 .nested-editor-actions { display: flex; align-items: center; gap: 9px; }
 .nested-editor-head .order-drag-handle { border: 1px dashed #3c5b54; color: #719089; }
 .recommendation-order-list { display: grid; gap: 6px; margin-top: 14px; }
-.recommendation-order-row { display: grid; grid-template-columns: minmax(0, 1fr) 40px; align-items: stretch; gap: 7px; padding: 7px; border: 1px solid #29413b; background: rgba(255,255,255,.012); }
+.recommendation-order-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: stretch; gap: 7px; padding: 7px; border: 1px solid #29413b; background: rgba(255,255,255,.012); }
 .recommendation-order-row > span { min-width: 0; display: flex; align-items: center; gap: 10px; overflow: hidden; color: #aebfba; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .recommendation-order-row > span small { flex: 0 0 auto; color: var(--teal); font: 11px var(--sans); }
 .employee-editor-summary { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 18px; margin-bottom: 18px; padding: 16px; border: 1px solid #2c4540; background: rgba(255,255,255,.012); }
@@ -947,7 +946,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .editor-record-list { position: static; display: flex; overflow-x: auto; }
   .editor-record-list button { flex: 0 0 170px; }
   .editor-record-row { flex: 0 0 214px; }
-  .editor-record-row > button:first-child { flex: 1 1 auto; }
+  .editor-record-row > button:last-child { flex: 1 1 auto; }
   .editor-field-grid { grid-template-columns: 1fr; }
   .editor-field.wide { grid-column: auto; }
   .floating-text-format { right: 8px; bottom: 42px; width: min(620px, calc(100% - 16px)); max-height: min(44svh, 340px); overflow-y: auto; }
