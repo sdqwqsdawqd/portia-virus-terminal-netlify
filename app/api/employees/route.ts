@@ -5,13 +5,14 @@ import { loadEmployees, sanitizeEmployeeUpdate, saveEmployeeProfile } from "@/li
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  const fresh = new URL(request.url).searchParams.has("fresh");
+// The Netlify Next.js runtime keys this cache by path only (its Netlify-Vary lists
+// just its own query params), so freshness comes from purging on save, not URLs.
+export async function GET() {
   try {
     const { employees, syncedAt, complete } = await loadEmployees(createPublicSupabaseClient());
     return Response.json(
       { employees, syncedAt, degraded: !complete },
-      { headers: fresh ? noStoreHeaders : publicCacheHeaders(employeesCacheTag, complete ? 600 : 30) },
+      { headers: publicCacheHeaders(employeesCacheTag, complete ? 600 : 30) },
     );
   } catch (error) {
     console.error("PORTIA employee sync failed", error);

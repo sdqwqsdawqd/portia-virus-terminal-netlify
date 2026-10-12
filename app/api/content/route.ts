@@ -1,66 +1,32 @@
 import { defaultPortiaContent } from "@/lib/portia-content";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
+import { contentCacheTag, noStoreHeaders, publicCacheHeaders, purgeCacheTag } from "@/lib/portia-cdn";
 
 export const dynamic = "force-dynamic";
 
 type ContentRow = { payload: unknown; revision: number; updated_at: string };
 
-const contentReadTimeoutMs = 4_500;
-
-function withTimeout<T>(promise: PromiseLike<T>, milliseconds: number, label: string) {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label} timed out`)), milliseconds);
-    Promise.resolve(promise).then(
-      (value) => { clearTimeout(timer); resolve(value); },
-      (error) => { clearTimeout(timer); reject(error); },
-    );
-  });
-}
-
+// Identical for every visitor, so the CDN serves it; each save purges the cache.
+// Who may edit comes from /api/access.
 export async function GET() {
-  try {
-    const supabase = await createServerSupabaseClient();
-    const authPromise = withTimeout(supabase.auth.getUser(), 2_500, "Supabase auth").catch(() => null);
-    const { data: row, error } = await withTimeout(
-      supabase
-        .from("portia_content")
-        .select("payload, revision, updated_at")
-        .eq("id", "main")
-        .maybeSingle<ContentRow>(),
-      contentReadTimeoutMs,
-      "Supabase content",
-    );
-    if (error) throw error;
-    const authResult = await authPromise;
-    const access = authResult?.data.user
-      ? await withTimeout(getEditorAccess(supabase, authResult.data.user), 2_000, "Editor access").catch(() => ({ canEdit: false, canManageEditors: false }))
-      : { canEdit: false, canManageEditors: false };
-
-    let content = defaultPortiaContent;
-    if (row?.payload) {
-      const normalized = normalizePortiaContent(row.payload);
-      if (normalized) content = normalized;
-    }
-
-    return Response.json({
-      content,
-      canEdit: access.canEdit,
-      canManageEditors: access.canManageEditors,
-      revision: row?.revision ?? 0,
-      updatedAt: row?.updated_at ?? null,
-      degraded: false,
-      source: "supabase",
-    });
-  } catch (error) {
-    // The browser keeps its last good copy when it receives the bundled defaults.
+  const { data: row, error } = await createPublicSupabaseClient()
+    .from("portia_content")
+    .select("payload, revision, updated_at")
+    .eq("id", "main")
+    .maybeSingle<ContentRow>();
+  if (error) {
+    // The CDN keeps serving its last good copy and browsers keep their own.
     console.error("PORTIA content read failed", error);
-    return Response.json(
-      { content: defaultPortiaContent, canEdit: false, canManageEditors: false, revision: 0, updatedAt: null, degraded: true, source: "bundled-default" },
-      { status: 200 },
-    );
+    return Response.json({ error: "База временно недоступна." }, { status: 503, headers: noStoreHeaders });
   }
+
+  return Response.json({
+    content: (row?.payload ? normalizePortiaContent(row.payload) : null) ?? defaultPortiaContent,
+    revision: row?.revision ?? 0,
+    updatedAt: row?.updated_at ?? null,
+  }, { headers: publicCacheHeaders(contentCacheTag, 300) });
 }
 
 export async function PUT(request: Request) {
@@ -95,7 +61,9 @@ export async function PUT(request: Request) {
     }
     if (saveError || !saved) throw saveError;
 
-    return Response.json({ ok: true, revision: saved.revision, updatedAt: saved.updated_at });
+    await purgeCacheTag(contentCacheTag);
+
+    return Response.json({ ok: true, revision: saved.revision, updatedAt: saved.updated_at }, { headers: noStoreHeaders });
   } catch (error) {
     console.error("PORTIA content save failed", error);
     return Response.json({ error: "Не удалось сохранить изменения." }, { status: 500 });

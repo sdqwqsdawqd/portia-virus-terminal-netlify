@@ -50,3 +50,6 @@ next-env.d.ts
 
 # Local Netlify folder
 .netlify
+
+# Impeccable per-developer settings
+.impeccable/config.local.json

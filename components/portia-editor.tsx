@@ -21,6 +21,7 @@ type Props = {
   saveState: "idle" | "saving" | "saved" | "error" | "conflict";
   canManageEditors: boolean;
   onSave: (content: PortiaContent) => Promise<void>;
+  onEmployeeSaved: (employee: PortiaEmployee) => void;
 };
 
 type FormatTarget = {
@@ -404,7 +405,7 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, saveState, canManageEditors, onSave }: Props) {
+export function PortiaEditor({ content, saveState, canManageEditors, onSave, onEmployeeSaved }: Props) {
   const [draft, setDraft] = useState(() => clone(content));
   const [tab, setTab] = useState<EditorTab>("viruses");
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
@@ -858,7 +859,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
         </div>
       )}
 
-      {tab === "employees" && <EmployeeProfilesEditor />}
+      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} />}
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && <FloatingTextFormatPanel key={`${formatTarget.key}:${formatTarget.selection.start}:${formatTarget.selection.end}:${previewSurface}`} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />}
@@ -867,7 +868,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
   );
 }
 
-function EmployeeProfilesEditor() {
+function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmployee) => void }) {
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [draft, setDraft] = useState({ biography: "", photoUrl: "", knowledgeRating: 1 });
@@ -877,7 +878,7 @@ function EmployeeProfilesEditor() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/employees?fresh=1", { cache: "no-store" })
+    void fetch("/api/employees")
       .then(async (response) => {
         if (!response.ok) throw new Error("load failed");
         return response.json() as Promise<{ employees?: PortiaEmployee[] }>;
@@ -915,6 +916,7 @@ function EmployeeProfilesEditor() {
         throw new Error(message);
       }
       setEmployees((current) => current.map((employee) => employee.id === payload.employee!.id ? payload.employee! : employee));
+      onSaved(payload.employee);
       setState("saved");
       window.setTimeout(() => setState("idle"), 1800);
     } catch (error) {
@@ -924,18 +926,18 @@ function EmployeeProfilesEditor() {
   };
 
   if (state === "loading") return <div className="editor-empty">Загрузка сотрудников…</div>;
-  if (!selected) return <div className="editor-empty">Сотрудники ещё не синхронизированы.</div>;
+  if (!selected) return <div className="editor-empty">{state === "error" ? "Не удалось загрузить сотрудников из таблицы. Обновите страницу через минуту." : "В таблице пока нет сотрудников."}</div>;
 
   const preview = draft.photoUrl || selected.robloxAvatarUrl;
   return <div className="virus-editor-layout employee-editor-layout">
     <aside className="editor-record-list">
-      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => { setSelectedId(employee.id); setDraft({ biography: employee.biography, photoUrl: employee.photoUrl, knowledgeRating: employee.knowledgeRating }); setState("idle"); }}><strong>{employee.callsign || employee.nickname}</strong><small>{employee.title} · {employee.rank}</small></button>)}
+      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => { setSelectedId(employee.id); setDraft({ biography: employee.biography, photoUrl: employee.photoUrl, knowledgeRating: employee.knowledgeRating }); setState("idle"); }}><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
     </aside>
     <div className="editor-form employee-profile-editor">
       <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять только фотографию, оценку знаний и биографию.</p>
       <div className="employee-editor-summary">
         <figure>{preview ? <img src={preview} alt={`Аватар ${selected.nickname}`} referrerPolicy="no-referrer" /> : <img src="/assets/portia-logo.png" alt="" />}</figure>
-        <div><span className="eyebrow">{selected.title || "БЕЗ ЗВАНИЯ"}</span><h2>{selected.callsign || selected.nickname}</h2><p>@{selected.nickname} · {selected.rank || "ранг не указан"}</p></div>
+        <div><span className="eyebrow">{selected.title || "БЕЗ ЗВАНИЯ"}</span><h2>{selected.nickname}</h2><p>{[selected.callsign || "без позывного", selected.rank || "ранг не указан"].join(" · ")}</p></div>
       </div>
       <EditorGroup title="Профиль сотрудника">
         <Field label="Оценка знаний — от 1 до 10"><select value={draft.knowledgeRating} onChange={(event) => setDraft((current) => ({ ...current, knowledgeRating: Number(event.target.value) }))}>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
