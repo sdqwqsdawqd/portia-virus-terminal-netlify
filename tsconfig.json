@@ -27,9 +27,9 @@
         "./*"
       ]
     },
+    "allowImportingTsExtensions": true,
     "types": [
-      "node",
-      "@cloudflare/workers-types"
+      "node"
     ]
   },
   "include": [

@@ -386,7 +386,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .editor-save-zone { display: flex; align-items: center; gap: 12px; }
 .editor-save-status { color: #718780; font: 9px var(--mono); letter-spacing: .07em; white-space: nowrap; }
 .editor-save-status.saved { color: var(--teal); }
-.editor-save-status.error { color: #e07d74; }
+.editor-save-status.error, .editor-save-status.conflict { color: #e07d74; white-space: normal; }
 .primary-control, .secondary-control, .danger-control { padding: 11px 14px; border: 1px solid var(--teal-dim); background: var(--teal-soft); color: var(--teal); font: 700 10px var(--mono); letter-spacing: .04em; cursor: pointer; }
 .primary-control:disabled, .secondary-control:disabled, .danger-control:disabled { opacity: .4; cursor: not-allowed; }
 .secondary-control { background: transparent; color: #b5c6c1; }

@@ -1,4 +1,5 @@
 import { getStore } from "@netlify/blobs";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type PortiaEmployee = {
   id: string;
@@ -15,21 +16,27 @@ export type PortiaEmployee = {
   order: number;
 };
 
-export type PortiaEmployeesSnapshot = {
-  employees: PortiaEmployee[];
+type EditableFields = "knowledgeRating" | "biography" | "photoUrl";
+export type RosterEmployee = Omit<PortiaEmployee, EditableFields>;
+export type EmployeeProfile = Pick<PortiaEmployee, EditableFields>;
+
+// The roster is a cache of Google Sheets + Roblox. Editor-written fields live in
+// Supabase (portia_employee_profiles), so the hourly sync can never overwrite them.
+export type PortiaRosterSnapshot = {
+  employees: RosterEmployee[];
   syncedAt: string;
   source: "google-sheets";
 };
 
+type ProfileRow = { employee_id: string; biography: string; photo_url: string; knowledge_rating: number };
+
 const sheetCsvUrl = "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/gviz/tq?tqx=out:csv&sheet=Portia";
 const storeName = "portia-employees";
-const snapshotKey = "latest";
+const snapshotKey = "roster-v2";
+// The sheet has 34 numbered staff slots (rows 2-35); row 36 onwards holds totals and notes.
+const staffRowsEnd = 35;
 
-function hasNetlifyRuntime() {
-  return Boolean(process.env.NETLIFY || process.env.NETLIFY_SITE_ID);
-}
-
-function parseCsv(source: string) {
+export function parseCsv(source: string) {
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
@@ -65,8 +72,13 @@ function cleanText(value: string | undefined) {
   return cleaned === "—" || cleaned === "-" || cleaned === "N/A" ? "" : cleaned;
 }
 
-function stableId(nickname: string) {
-  return nickname.trim().toLocaleLowerCase("en-US").replace(/[^a-z0-9_]+/g, "-");
+function nicknameKey(nickname: string) {
+  return nickname.trim().toLocaleLowerCase("en-US");
+}
+
+// A Roblox user id survives nickname changes; the nickname is only a fallback.
+export function employeeId(nickname: string, robloxUserId: number | null) {
+  return robloxUserId ? `roblox-${robloxUserId}` : `nick-${nicknameKey(nickname).replace(/[^a-z0-9_]+/g, "-")}`;
 }
 
 async function resolveRobloxProfiles(usernames: string[]) {
@@ -97,8 +109,7 @@ async function resolveRobloxProfiles(usernames: string[]) {
     const headshots = new Map((headshotsPayload.data ?? []).map((item) => [item.targetId, item.imageUrl ?? ""]));
     const fullAvatars = new Map((fullAvatarsPayload.data ?? []).map((item) => [item.targetId, item.imageUrl ?? ""]));
     users.forEach((user) => {
-      const key = (user.requestedUsername || user.name).trim().toLocaleLowerCase("en-US");
-      byName.set(key, { id: user.id, avatarUrl: headshots.get(user.id) ?? "", fullAvatarUrl: fullAvatars.get(user.id) ?? "" });
+      byName.set(nicknameKey(user.requestedUsername || user.name), { id: user.id, avatarUrl: headshots.get(user.id) ?? "", fullAvatarUrl: fullAvatars.get(user.id) ?? "" });
     });
   } catch (error) {
     console.error("PORTIA Roblox profile lookup failed", error);
@@ -106,28 +117,31 @@ async function resolveRobloxProfiles(usernames: string[]) {
   return byName;
 }
 
-export async function readEmployeesSnapshot() {
-  if (!hasNetlifyRuntime()) return null;
+// getStore throws outside Netlify (local dev); the roster is then fetched live.
+export async function readRosterSnapshot() {
   try {
     const store = getStore({ name: storeName, consistency: "strong" });
-    return await store.get(snapshotKey, { type: "json", consistency: "strong" }) as PortiaEmployeesSnapshot | null;
+    return await store.get(snapshotKey, { type: "json", consistency: "strong" }) as PortiaRosterSnapshot | null;
   } catch (error) {
-    console.error("PORTIA employee snapshot read failed", error);
+    console.error("PORTIA roster snapshot read failed", error);
     return null;
   }
 }
 
-export async function writeEmployeesSnapshot(snapshot: PortiaEmployeesSnapshot) {
-  if (!hasNetlifyRuntime()) return false;
-  const store = getStore({ name: storeName, consistency: "strong" });
-  await store.setJSON(snapshotKey, snapshot, { metadata: { syncedAt: snapshot.syncedAt, count: snapshot.employees.length } });
-  return true;
+async function writeRosterSnapshot(snapshot: PortiaRosterSnapshot) {
+  try {
+    const store = getStore({ name: storeName, consistency: "strong" });
+    await store.setJSON(snapshotKey, snapshot, { metadata: { syncedAt: snapshot.syncedAt, count: snapshot.employees.length } });
+  } catch (error) {
+    console.error("PORTIA roster snapshot write failed", error);
+  }
 }
 
-export async function syncEmployeesSnapshot() {
-  const response = await fetch(sheetCsvUrl, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) throw new Error(`Google Sheets returned ${response.status}`);
-  const rows = parseCsv(await response.text());
+export function rosterFromRows(
+  rows: string[][],
+  robloxProfiles: Map<string, { id: number; avatarUrl: string; fullAvatarUrl: string }>,
+  previous: RosterEmployee[] = [],
+): RosterEmployee[] {
   const header = rows[0] ?? [];
   const nicknameIndex = header.indexOf("Никнейм сотрудника");
   const callsignIndex = header.indexOf("Позывной");
@@ -137,47 +151,83 @@ export async function syncEmployeesSnapshot() {
     throw new Error("The Portia sheet headers have changed.");
   }
 
-  const previous = await readEmployeesSnapshot();
-  const previousById = new Map((previous?.employees ?? []).map((employee) => [employee.id, employee]));
-  const sheetEmployeesRaw = rows.slice(1, 35).flatMap((row, rowIndex) => {
+  const previousByNickname = new Map(previous.map((employee) => [nicknameKey(employee.nickname), employee]));
+  const seenIds = new Set<string>();
+  return rows.slice(1, staffRowsEnd).flatMap((row, rowIndex) => {
     const nickname = cleanText(row[nicknameIndex]);
     if (!nickname) return [];
+    const key = nicknameKey(nickname);
+    const profile = robloxProfiles.get(key);
+    const earlier = previousByNickname.get(key);
+    // If Roblox is briefly unreachable, keep the last known account so the id stays stable.
+    const robloxUserId = profile?.id ?? earlier?.robloxUserId ?? null;
+    const id = employeeId(nickname, robloxUserId);
+    if (seenIds.has(id)) return [];
+    seenIds.add(id);
     return [{
-      id: stableId(nickname),
+      id,
       nickname,
       callsign: cleanText(row[callsignIndex]),
       title: cleanText(row[titleIndex]),
       rank: cleanText(row[rankIndex]),
+      robloxUserId,
+      robloxAvatarUrl: profile?.avatarUrl ?? earlier?.robloxAvatarUrl ?? "",
+      robloxFullAvatarUrl: profile?.fullAvatarUrl ?? earlier?.robloxFullAvatarUrl ?? "",
       order: rowIndex,
     }];
   });
-  const seenIds = new Set<string>();
-  const sheetEmployees = sheetEmployeesRaw.filter((employee) => employee.id && !seenIds.has(employee.id) && Boolean(seenIds.add(employee.id)));
-  const robloxProfiles = await resolveRobloxProfiles(sheetEmployees.map((employee) => employee.nickname));
-  const employees = sheetEmployees.map((sheetEmployee) => {
-    const previousEmployee = previousById.get(sheetEmployee.id);
-    const profile = robloxProfiles.get(sheetEmployee.nickname.toLocaleLowerCase("en-US"));
-    return {
-      id: sheetEmployee.id,
-      nickname: sheetEmployee.nickname,
-      callsign: sheetEmployee.callsign,
-      title: sheetEmployee.title,
-      rank: sheetEmployee.rank,
-      knowledgeRating: previousEmployee?.knowledgeRating ?? 1,
-      biography: previousEmployee?.biography ?? "",
-      photoUrl: previousEmployee?.photoUrl ?? "",
-      robloxUserId: profile?.id ?? previousEmployee?.robloxUserId ?? null,
-      robloxAvatarUrl: profile?.avatarUrl ?? previousEmployee?.robloxAvatarUrl ?? "",
-      robloxFullAvatarUrl: profile?.fullAvatarUrl ?? previousEmployee?.robloxFullAvatarUrl ?? "",
-      order: sheetEmployee.order,
-    } satisfies PortiaEmployee;
-  });
-  const snapshot: PortiaEmployeesSnapshot = { employees, syncedAt: new Date().toISOString(), source: "google-sheets" };
-  await writeEmployeesSnapshot(snapshot);
+}
+
+export async function syncRosterSnapshot() {
+  const response = await fetch(sheetCsvUrl, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+  if (!response.ok) throw new Error(`Google Sheets returned ${response.status}`);
+  const rows = parseCsv(await response.text());
+  const previous = await readRosterSnapshot();
+  const sheetOnly = rosterFromRows(rows, new Map(), previous?.employees);
+  const robloxProfiles = await resolveRobloxProfiles(sheetOnly.map((employee) => employee.nickname));
+  const snapshot: PortiaRosterSnapshot = {
+    employees: rosterFromRows(rows, robloxProfiles, previous?.employees),
+    syncedAt: new Date().toISOString(),
+    source: "google-sheets",
+  };
+  await writeRosterSnapshot(snapshot);
   return snapshot;
 }
 
-export function sanitizeEmployeeUpdate(value: unknown) {
+const emptyProfile: EmployeeProfile = { knowledgeRating: 1, biography: "", photoUrl: "" };
+
+export async function readEmployeeProfiles(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("portia_employee_profiles")
+    .select("employee_id, biography, photo_url, knowledge_rating")
+    .returns<ProfileRow[]>();
+  if (error) throw error;
+  return new Map((data ?? []).map((row) => [row.employee_id, {
+    biography: row.biography,
+    photoUrl: row.photo_url,
+    knowledgeRating: row.knowledge_rating,
+  } satisfies EmployeeProfile]));
+}
+
+export function withProfile(employee: RosterEmployee, profiles: Map<string, EmployeeProfile>): PortiaEmployee {
+  // A profile saved before the Roblox account was resolved stays reachable by nickname.
+  const profile = profiles.get(employee.id) ?? profiles.get(employeeId(employee.nickname, null)) ?? emptyProfile;
+  return { ...employee, ...profile };
+}
+
+export async function saveEmployeeProfile(supabase: SupabaseClient, employeeIdValue: string, profile: EmployeeProfile, userId: string) {
+  const { error } = await supabase.from("portia_employee_profiles").upsert({
+    employee_id: employeeIdValue,
+    biography: profile.biography,
+    photo_url: profile.photoUrl,
+    knowledge_rating: profile.knowledgeRating,
+    updated_at: new Date().toISOString(),
+    updated_by: userId,
+  });
+  if (error) throw error;
+}
+
+export function sanitizeEmployeeUpdate(value: unknown): EmployeeProfile | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as { biography?: unknown; photoUrl?: unknown; knowledgeRating?: unknown };
   const photoUrl = typeof candidate.photoUrl === "string" ? candidate.photoUrl.trim().slice(0, 2048) : "";
