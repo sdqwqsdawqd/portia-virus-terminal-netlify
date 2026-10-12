@@ -272,6 +272,8 @@ function renderRichTextEditor(root: HTMLElement, document: RichTextDocument) {
 }
 
 function editorPlainText(root: HTMLElement) {
+  // Clearing the field natively leaves a bare <br>, which innerText reports as "\n".
+  if (!root.textContent) return "";
   const text = root.innerText.replace(/\r/g, "").replace(/\u00a0/g, " ");
   return root.querySelector("[data-editor-sentinel]") && text.endsWith("\n") ? text.slice(0, -1) : text;
 }
@@ -299,16 +301,20 @@ function restoreSelection(root: HTMLElement, offsets: { start: number; end: numb
   if (window.document.activeElement !== root) return;
   const walker = window.document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const range = window.document.createRange();
+  // A caret right after a node's trailing "\n" belongs to the next line. Firefox and
+  // Safari draw it on the previous line, so Enter seemed to need a second press.
+  const fits = (offset: number, text: string, consumed: number) =>
+    offset < consumed + text.length || (offset === consumed + text.length && !text.endsWith("\n"));
   let node = walker.nextNode();
   let consumed = 0;
   let startSet = false;
   while (node) {
-    const length = node.textContent?.length ?? 0;
-    if (!startSet && offsets.start <= consumed + length) {
+    const text = node.textContent ?? "";
+    if (!startSet && fits(offsets.start, text, consumed)) {
       range.setStart(node, Math.max(0, offsets.start - consumed));
       startSet = true;
     }
-    if (offsets.end <= consumed + length) {
+    if (fits(offsets.end, text, consumed)) {
       if (!startSet) range.setStart(node, 0);
       range.setEnd(node, Math.max(0, offsets.end - consumed));
       const selection = window.getSelection();
@@ -316,11 +322,19 @@ function restoreSelection(root: HTMLElement, offsets: { start: number; end: numb
       selection?.addRange(range);
       return;
     }
-    consumed += length;
+    consumed += text.length;
     node = walker.nextNode();
   }
-  range.selectNodeContents(root);
-  range.collapse(false);
+  const sentinel = root.querySelector("[data-editor-sentinel]");
+  if (sentinel) {
+    if (!startSet) range.setStartBefore(sentinel);
+    range.setEndBefore(sentinel);
+  } else if (startSet) {
+    range.setEnd(root, root.childNodes.length);
+  } else {
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
