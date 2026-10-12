@@ -26,11 +26,15 @@
   4. Файл из Корзины открывается на всё окно
   5. В «Сотрудниках» нет ссылки «Профиль Roblox», клик по окошку с лицом открывает профиль
 
-**Plans**: 2/2 plans executed
+**Plans**: 2/3 plans executed
 
 Plans:
+**Wave 1**
 - [x] 01-01-PLAN.md — коммит готовой работы (зум, Dark Reader), Устав на всё окно (FIX-02), IBM Plex Serif (FIX-03)
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [x] 01-02-PLAN.md — ручка ≡ в начале строки (FIX-01), файл Корзины на всё окно (FIX-04), Roblox по клику на портрет (FIX-05)
+- [ ] 01-03-PLAN.md — (gap) мета darkreader-lock реально попадает в <head> собранной страницы (CR-01)
 
 ### Phase 2: Внешний вид
 
