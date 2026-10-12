@@ -21,6 +21,7 @@
   --mono: var(--font-jetbrains), "Cascadia Code", Consolas, monospace;
   --sans: var(--font-golos), system-ui, -apple-system, "Segoe UI", sans-serif;
   --display: var(--font-unbounded), var(--font-golos), sans-serif;
+  --serif: var(--font-plex-serif), serif;
 }
 
 .owner-login-page { min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #07110f; color: #dbe7e4; }
@@ -462,10 +463,10 @@ html { scrollbar-color: #2f4a45 transparent; caret-color: var(--teal); }
 .formatted-text-field-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .formatted-text-field-head > span { color: #748a83; font: 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
 .formatted-text-field-head > small { color: #506a63; font: 11px var(--sans); letter-spacing: .05em; }
-.formatted-rich-input { min-width: 0; min-height: 126px; max-height: 340px; padding: 13px 15px; overflow: auto; border: 1px solid #304942; border-radius: 3px; outline: none; background: #08110f; color: #c1d0cc; box-shadow: inset 0 0 0 1px rgba(255,255,255,.015); font: 17px/1.65 Georgia, "Times New Roman", serif; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; caret-color: #0b7568; transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease; }
+.formatted-rich-input { min-width: 0; min-height: 126px; max-height: 340px; padding: 13px 15px; overflow: auto; border: 1px solid #304942; border-radius: 3px; outline: none; background: #08110f; color: #c1d0cc; box-shadow: inset 0 0 0 1px rgba(255,255,255,.015); font: 17px/1.65 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; caret-color: #0b7568; transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease; }
 .formatted-rich-input.tall { min-height: 205px; }
 .formatted-rich-input:not(:focus):not(.is-editor-active) > span { color: #c1d0cc !important; background-color: transparent !important; }
-.formatted-rich-input:focus:not(.preview-dark), .formatted-rich-input.is-editor-active.preview-light { border-color: var(--teal); background: #f3f1e9; color: #252827; box-shadow: 0 0 0 3px rgba(0,188,166,.12), inset 0 0 0 1px rgba(255,255,255,.45); font-family: Georgia, "Times New Roman", serif; }
+.formatted-rich-input:focus:not(.preview-dark), .formatted-rich-input.is-editor-active.preview-light { border-color: var(--teal); background: #f3f1e9; color: #252827; box-shadow: 0 0 0 3px rgba(0,188,166,.12), inset 0 0 0 1px rgba(255,255,255,.45); }
 .formatted-rich-input.is-editor-active.preview-dark { border-color: var(--teal); background: #08110f; color: #aebfba; box-shadow: 0 0 0 3px rgba(0,188,166,.12), inset 0 0 0 1px rgba(255,255,255,.025); font-family: var(--sans); }
 .formatted-rich-input:empty::before { content: "Введите текст…"; color: #858b87; font: italic 13px/1.55 var(--sans); pointer-events: none; }
 .formatted-text-field-hint { color: #56716a; font-size: 10px; line-height: 1.4; }
@@ -516,7 +517,7 @@ html { scrollbar-color: #2f4a45 transparent; caret-color: var(--teal); }
 .floating-text-format > footer > div { display: flex; gap: 8px; }
 .floating-text-format > footer button { min-height: 30px; padding: 5px 10px; border: 1px solid #3c514c; border-radius: 4px; background: transparent; color: #9eb1ac; font: 700 11px var(--sans); cursor: pointer; }
 .floating-text-format > footer button.finish-format { border-color: var(--teal-dim); background: var(--teal-soft); color: var(--teal); }
-.scientist-rich-text { max-width: 100%; color: #252827; font: 17px/1.78 Georgia, "Times New Roman", serif; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.scientist-rich-text { max-width: 100%; color: #252827; font: 17px/1.78 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .access-editor { max-width: 760px; }
 .access-editor-intro { padding: 20px; border: 1px solid #304942; background: rgba(255,255,255,.015); }
 .access-editor-intro h2 { margin: 7px 0 9px; color: #eef5f3; font: 700 25px var(--sans); }
@@ -769,7 +770,7 @@ html { scrollbar-color: #2f4a45 transparent; caret-color: var(--teal); }
 .archive-document-meta dd { margin: 0; color: #171918; font: 700 13px var(--sans); overflow-wrap: anywhere; }
 .archive-document-section { position: relative; padding-top: 5px; }
 .archive-document-section h2 { margin: 0 0 18px; padding-bottom: 8px; border-bottom: 1px solid #777975; color: #181a19; font: 800 15px var(--sans); letter-spacing: .05em; }
-.archive-document-section p { margin: 0 0 18px; color: #252827; font: 17px/1.78 Georgia, "Times New Roman", serif; }
+.archive-document-section p { margin: 0 0 18px; color: #252827; font: 17px/1.78 var(--serif); }
 .archive-document-section .scientist-rich-text { margin: 0 0 18px; }
 .archive-document-paper footer { position: relative; display: flex; justify-content: space-between; gap: 20px; margin-top: 70px; padding-top: 12px; border-top: 2px solid #181a19; color: #616461; font: 11px var(--sans); letter-spacing: .06em; }
 .restriction-mark { display: inline-block; margin-bottom: 24px; padding: 8px 11px; background: #8e2b28; color: #fff; font: 800 11px var(--sans); letter-spacing: .08em; }
