@@ -25,6 +25,9 @@ create table if not exists public.portia_employee_profiles (
   updated_by uuid references auth.users(id)
 );
 
+-- Last known nickname: finds the profile while Roblox is unreachable.
+alter table public.portia_employee_profiles add column if not exists nickname text not null default '' check (length(nickname) <= 64);
+
 -- Not granted to anon/authenticated, so the email cannot be read through the API.
 create or replace function public.portia_owner_email()
 returns text

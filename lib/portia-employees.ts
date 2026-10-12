@@ -1,4 +1,3 @@
-import { getStore } from "@netlify/blobs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type PortiaEmployee = {
@@ -20,19 +19,13 @@ type EditableFields = "knowledgeRating" | "biography" | "photoUrl";
 export type RosterEmployee = Omit<PortiaEmployee, EditableFields>;
 export type EmployeeProfile = Pick<PortiaEmployee, EditableFields>;
 
-// The roster is a cache of Google Sheets + Roblox. Editor-written fields live in
-// Supabase (portia_employee_profiles), so the hourly sync can never overwrite them.
-export type PortiaRosterSnapshot = {
-  employees: RosterEmployee[];
-  syncedAt: string;
-  source: "google-sheets";
-};
-
-type ProfileRow = { employee_id: string; biography: string; photo_url: string; knowledge_rating: number };
+// The roster comes live from Google Sheets + Roblox (the CDN caches the API response).
+// Editor-written fields live in Supabase (portia_employee_profiles).
+type ProfileRow = { employee_id: string; nickname: string; biography: string; photo_url: string; knowledge_rating: number };
+type RobloxProfile = { id: number; avatarUrl: string; fullAvatarUrl: string };
+export type ProfileIndex = { byId: Map<string, EmployeeProfile>; robloxIdByNickname: Map<string, number> };
 
 const sheetCsvUrl = "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/gviz/tq?tqx=out:csv&sheet=Portia";
-const storeName = "portia-employees";
-const snapshotKey = "roster-v2";
 // The sheet has 34 numbered staff slots (rows 2-35); row 36 onwards holds totals and notes.
 const staffRowsEnd = 35;
 
@@ -82,23 +75,23 @@ export function employeeId(nickname: string, robloxUserId: number | null) {
 }
 
 async function resolveRobloxProfiles(usernames: string[]) {
-  const byName = new Map<string, { id: number; avatarUrl: string; fullAvatarUrl: string }>();
-  if (!usernames.length) return byName;
+  const byName = new Map<string, RobloxProfile>();
+  if (!usernames.length) return { byName, ok: true };
   try {
     const usersResponse = await fetch("https://users.roblox.com/v1/usernames/users", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ usernames, excludeBannedUsers: false }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(5_000),
     });
-    if (!usersResponse.ok) return byName;
+    if (!usersResponse.ok) return { byName, ok: false };
     const usersPayload = await usersResponse.json() as { data?: Array<{ id: number; name: string; requestedUsername?: string }> };
     const users = (usersPayload.data ?? []).filter((user) => Number.isFinite(user.id));
-    if (!users.length) return byName;
+    if (!users.length) return { byName, ok: true };
     const userIds = users.map((user) => user.id).join(",");
     const [headshotsResponse, fullAvatarsResponse] = await Promise.all([
-      fetch(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userIds}&size=420x420&format=Png&isCircular=false`, { signal: AbortSignal.timeout(10_000) }),
-      fetch(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${userIds}&size=720x720&format=Png&isCircular=false`, { signal: AbortSignal.timeout(10_000) }),
+      fetch(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userIds}&size=420x420&format=Png&isCircular=false`, { signal: AbortSignal.timeout(5_000) }),
+      fetch(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${userIds}&size=720x720&format=Png&isCircular=false`, { signal: AbortSignal.timeout(5_000) }),
     ]);
     const headshotsPayload = headshotsResponse.ok
       ? await headshotsResponse.json() as { data?: Array<{ targetId: number; imageUrl?: string; state?: string }> }
@@ -111,36 +104,17 @@ async function resolveRobloxProfiles(usernames: string[]) {
     users.forEach((user) => {
       byName.set(nicknameKey(user.requestedUsername || user.name), { id: user.id, avatarUrl: headshots.get(user.id) ?? "", fullAvatarUrl: fullAvatars.get(user.id) ?? "" });
     });
+    return { byName, ok: headshotsResponse.ok && fullAvatarsResponse.ok };
   } catch (error) {
     console.error("PORTIA Roblox profile lookup failed", error);
-  }
-  return byName;
-}
-
-// getStore throws outside Netlify (local dev); the roster is then fetched live.
-export async function readRosterSnapshot() {
-  try {
-    const store = getStore({ name: storeName, consistency: "strong" });
-    return await store.get(snapshotKey, { type: "json", consistency: "strong" }) as PortiaRosterSnapshot | null;
-  } catch (error) {
-    console.error("PORTIA roster snapshot read failed", error);
-    return null;
-  }
-}
-
-async function writeRosterSnapshot(snapshot: PortiaRosterSnapshot) {
-  try {
-    const store = getStore({ name: storeName, consistency: "strong" });
-    await store.setJSON(snapshotKey, snapshot, { metadata: { syncedAt: snapshot.syncedAt, count: snapshot.employees.length } });
-  } catch (error) {
-    console.error("PORTIA roster snapshot write failed", error);
+    return { byName, ok: false };
   }
 }
 
 export function rosterFromRows(
   rows: string[][],
-  robloxProfiles: Map<string, { id: number; avatarUrl: string; fullAvatarUrl: string }>,
-  previous: RosterEmployee[] = [],
+  robloxProfiles: Map<string, RobloxProfile>,
+  knownRobloxIds: Map<string, number> = new Map(),
 ): RosterEmployee[] {
   const header = rows[0] ?? [];
   const nicknameIndex = header.indexOf("Никнейм сотрудника");
@@ -151,16 +125,14 @@ export function rosterFromRows(
     throw new Error("The Portia sheet headers have changed.");
   }
 
-  const previousByNickname = new Map(previous.map((employee) => [nicknameKey(employee.nickname), employee]));
   const seenIds = new Set<string>();
   return rows.slice(1, staffRowsEnd).flatMap((row, rowIndex) => {
     const nickname = cleanText(row[nicknameIndex]);
     if (!nickname) return [];
     const key = nicknameKey(nickname);
     const profile = robloxProfiles.get(key);
-    const earlier = previousByNickname.get(key);
-    // If Roblox is briefly unreachable, keep the last known account so the id stays stable.
-    const robloxUserId = profile?.id ?? earlier?.robloxUserId ?? null;
+    // If Roblox is briefly unreachable, the account saved with the profile keeps the id stable.
+    const robloxUserId = profile?.id ?? knownRobloxIds.get(key) ?? null;
     const id = employeeId(nickname, robloxUserId);
     if (seenIds.has(id)) return [];
     seenIds.add(id);
@@ -171,53 +143,66 @@ export function rosterFromRows(
       title: cleanText(row[titleIndex]),
       rank: cleanText(row[rankIndex]),
       robloxUserId,
-      robloxAvatarUrl: profile?.avatarUrl ?? earlier?.robloxAvatarUrl ?? "",
-      robloxFullAvatarUrl: profile?.fullAvatarUrl ?? earlier?.robloxFullAvatarUrl ?? "",
+      robloxAvatarUrl: profile?.avatarUrl ?? "",
+      robloxFullAvatarUrl: profile?.fullAvatarUrl ?? "",
       order: rowIndex,
     }];
   });
 }
 
-export async function syncRosterSnapshot() {
-  const response = await fetch(sheetCsvUrl, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) throw new Error(`Google Sheets returned ${response.status}`);
-  const rows = parseCsv(await response.text());
-  const previous = await readRosterSnapshot();
-  const sheetOnly = rosterFromRows(rows, new Map(), previous?.employees);
-  const robloxProfiles = await resolveRobloxProfiles(sheetOnly.map((employee) => employee.nickname));
-  const snapshot: PortiaRosterSnapshot = {
-    employees: rosterFromRows(rows, robloxProfiles, previous?.employees),
-    syncedAt: new Date().toISOString(),
-    source: "google-sheets",
-  };
-  await writeRosterSnapshot(snapshot);
-  return snapshot;
-}
-
 const emptyProfile: EmployeeProfile = { knowledgeRating: 1, biography: "", photoUrl: "" };
 
-export async function readEmployeeProfiles(supabase: SupabaseClient) {
+export async function readEmployeeProfiles(supabase: SupabaseClient): Promise<ProfileIndex> {
   const { data, error } = await supabase
     .from("portia_employee_profiles")
-    .select("employee_id, biography, photo_url, knowledge_rating")
+    .select("employee_id, nickname, biography, photo_url, knowledge_rating")
     .returns<ProfileRow[]>();
   if (error) throw error;
-  return new Map((data ?? []).map((row) => [row.employee_id, {
-    biography: row.biography,
-    photoUrl: row.photo_url,
-    knowledgeRating: row.knowledge_rating,
-  } satisfies EmployeeProfile]));
+  const rows = data ?? [];
+  return {
+    byId: new Map(rows.map((row) => [row.employee_id, {
+      biography: row.biography,
+      photoUrl: row.photo_url,
+      knowledgeRating: row.knowledge_rating,
+    } satisfies EmployeeProfile])),
+    robloxIdByNickname: new Map(rows.flatMap((row) => {
+      const robloxId = Number(row.employee_id.match(/^roblox-(\d+)$/)?.[1]);
+      return row.nickname && robloxId ? [[nicknameKey(row.nickname), robloxId] as const] : [];
+    })),
+  };
 }
 
-export function withProfile(employee: RosterEmployee, profiles: Map<string, EmployeeProfile>): PortiaEmployee {
+export function withProfile(employee: RosterEmployee, profiles: ProfileIndex): PortiaEmployee {
   // A profile saved before the Roblox account was resolved stays reachable by nickname.
-  const profile = profiles.get(employee.id) ?? profiles.get(employeeId(employee.nickname, null)) ?? emptyProfile;
+  const profile = profiles.byId.get(employee.id) ?? profiles.byId.get(employeeId(employee.nickname, null)) ?? emptyProfile;
   return { ...employee, ...profile };
 }
 
-export async function saveEmployeeProfile(supabase: SupabaseClient, employeeIdValue: string, profile: EmployeeProfile, userId: string) {
+export async function loadEmployees(supabase: SupabaseClient) {
+  const [sheetResponse, profiles] = await Promise.all([
+    fetch(sheetCsvUrl, { cache: "no-store", signal: AbortSignal.timeout(8_000) }),
+    readEmployeeProfiles(supabase).catch((error) => {
+      console.error("PORTIA employee profiles read failed", error);
+      return null;
+    }),
+  ]);
+  if (!sheetResponse.ok) throw new Error(`Google Sheets returned ${sheetResponse.status}`);
+  const rows = parseCsv(await sheetResponse.text());
+  const index = profiles ?? { byId: new Map(), robloxIdByNickname: new Map() };
+  const sheetOnly = rosterFromRows(rows, new Map(), index.robloxIdByNickname);
+  const roblox = await resolveRobloxProfiles(sheetOnly.map((employee) => employee.nickname));
+  return {
+    employees: rosterFromRows(rows, roblox.byName, index.robloxIdByNickname).map((employee) => withProfile(employee, index)),
+    syncedAt: new Date().toISOString(),
+    // An incomplete answer is cached only briefly so avatars and biographies return quickly.
+    complete: Boolean(profiles) && roblox.ok,
+  };
+}
+
+export async function saveEmployeeProfile(supabase: SupabaseClient, employee: RosterEmployee, profile: EmployeeProfile, userId: string) {
   const { error } = await supabase.from("portia_employee_profiles").upsert({
-    employee_id: employeeIdValue,
+    employee_id: employee.id,
+    nickname: employee.nickname,
     biography: profile.biography,
     photo_url: profile.photoUrl,
     knowledge_rating: profile.knowledgeRating,

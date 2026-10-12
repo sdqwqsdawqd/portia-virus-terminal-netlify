@@ -24,21 +24,19 @@ test("only the 34 staff slots are read, empty slots are skipped", () => {
 
 test("the Roblox id keeps an employee's id stable across nickname changes", () => {
   const before = rosterFromRows(sheet(['"1","OldName","Fox","",""']), new Map([["oldname", { id: 42, avatarUrl: "", fullAvatarUrl: "" }]]));
-  const after = rosterFromRows(sheet(['"1","NewName","Fox","",""']), new Map([["newname", { id: 42, avatarUrl: "", fullAvatarUrl: "" }]]), before);
+  const after = rosterFromRows(sheet(['"1","NewName","Fox","",""']), new Map([["newname", { id: 42, avatarUrl: "", fullAvatarUrl: "" }]]));
   assert.equal(before[0].id, "roblox-42");
   assert.equal(after[0].id, before[0].id);
 });
 
-test("a temporary Roblox outage keeps the last known id", () => {
-  const before = rosterFromRows(sheet(['"1","Akemi_Fox36","","",""']), new Map([["akemi_fox36", { id: 7, avatarUrl: "a", fullAvatarUrl: "b" }]]));
-  const during = rosterFromRows(sheet(['"1","Akemi_Fox36","","",""']), new Map(), before);
+test("a temporary Roblox outage keeps the id saved with the profile", () => {
+  const during = rosterFromRows(sheet(['"1","Akemi_Fox36","","",""']), new Map(), new Map([["akemi_fox36", 7]]));
   assert.equal(during[0].id, "roblox-7");
-  assert.equal(during[0].robloxAvatarUrl, "a");
 });
 
 test("profiles saved before the Roblox id was known are still found", () => {
   const [employee] = rosterFromRows(sheet(['"1","Serias227","","",""']), new Map([["serias227", { id: 9, avatarUrl: "", fullAvatarUrl: "" }]]));
-  const profiles = new Map([[employeeId("Serias227", null), { biography: "bio", photoUrl: "", knowledgeRating: 4 }]]);
-  assert.equal(withProfile(employee, profiles).biography, "bio");
-  assert.equal(withProfile(employee, new Map()).knowledgeRating, 1);
+  const index = (byId: Map<string, { biography: string; photoUrl: string; knowledgeRating: number }>) => ({ byId, robloxIdByNickname: new Map<string, number>() });
+  assert.equal(withProfile(employee, index(new Map([[employeeId("Serias227", null), { biography: "bio", photoUrl: "", knowledgeRating: 4 }]]))).biography, "bio");
+  assert.equal(withProfile(employee, index(new Map())).knowledgeRating, 1);
 });
