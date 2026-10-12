@@ -11,6 +11,7 @@ export type PortiaEmployee = {
   photoUrl: string;
   robloxUserId: number | null;
   robloxAvatarUrl: string;
+  robloxFullAvatarUrl: string;
   order: number;
 };
 
@@ -69,7 +70,7 @@ function stableId(nickname: string) {
 }
 
 async function resolveRobloxProfiles(usernames: string[]) {
-  const byName = new Map<string, { id: number; avatarUrl: string }>();
+  const byName = new Map<string, { id: number; avatarUrl: string; fullAvatarUrl: string }>();
   if (!usernames.length) return byName;
   try {
     const usersResponse = await fetch("https://users.roblox.com/v1/usernames/users", {
@@ -82,16 +83,22 @@ async function resolveRobloxProfiles(usernames: string[]) {
     const usersPayload = await usersResponse.json() as { data?: Array<{ id: number; name: string; requestedUsername?: string }> };
     const users = (usersPayload.data ?? []).filter((user) => Number.isFinite(user.id));
     if (!users.length) return byName;
-    const thumbnailsResponse = await fetch(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${users.map((user) => user.id).join(",")}&size=420x420&format=Png&isCircular=false`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    const thumbnailsPayload = thumbnailsResponse.ok
-      ? await thumbnailsResponse.json() as { data?: Array<{ targetId: number; imageUrl?: string; state?: string }> }
+    const userIds = users.map((user) => user.id).join(",");
+    const [headshotsResponse, fullAvatarsResponse] = await Promise.all([
+      fetch(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userIds}&size=420x420&format=Png&isCircular=false`, { signal: AbortSignal.timeout(10_000) }),
+      fetch(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${userIds}&size=720x720&format=Png&isCircular=false`, { signal: AbortSignal.timeout(10_000) }),
+    ]);
+    const headshotsPayload = headshotsResponse.ok
+      ? await headshotsResponse.json() as { data?: Array<{ targetId: number; imageUrl?: string; state?: string }> }
       : { data: [] };
-    const thumbnails = new Map((thumbnailsPayload.data ?? []).map((item) => [item.targetId, item.imageUrl ?? ""]));
+    const fullAvatarsPayload = fullAvatarsResponse.ok
+      ? await fullAvatarsResponse.json() as { data?: Array<{ targetId: number; imageUrl?: string; state?: string }> }
+      : { data: [] };
+    const headshots = new Map((headshotsPayload.data ?? []).map((item) => [item.targetId, item.imageUrl ?? ""]));
+    const fullAvatars = new Map((fullAvatarsPayload.data ?? []).map((item) => [item.targetId, item.imageUrl ?? ""]));
     users.forEach((user) => {
       const key = (user.requestedUsername || user.name).trim().toLocaleLowerCase("en-US");
-      byName.set(key, { id: user.id, avatarUrl: thumbnails.get(user.id) ?? "" });
+      byName.set(key, { id: user.id, avatarUrl: headshots.get(user.id) ?? "", fullAvatarUrl: fullAvatars.get(user.id) ?? "" });
     });
   } catch (error) {
     console.error("PORTIA Roblox profile lookup failed", error);
@@ -161,6 +168,7 @@ export async function syncEmployeesSnapshot() {
       photoUrl: previousEmployee?.photoUrl ?? "",
       robloxUserId: profile?.id ?? previousEmployee?.robloxUserId ?? null,
       robloxAvatarUrl: profile?.avatarUrl ?? previousEmployee?.robloxAvatarUrl ?? "",
+      robloxFullAvatarUrl: profile?.fullAvatarUrl ?? previousEmployee?.robloxFullAvatarUrl ?? "",
       order: sheetEmployee.order,
     } satisfies PortiaEmployee;
   });

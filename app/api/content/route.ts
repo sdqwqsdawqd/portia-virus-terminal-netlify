@@ -121,6 +121,19 @@ function normalizePortiaContent(value: unknown): PortiaContent | null {
   const recycledViruses = Array.isArray(candidate.recycledViruses)
     ? candidate.recycledViruses.map(normalizeVirus)
     : [];
+  const recycleFiles = normalizeRecycleFiles(candidate.recycleFiles, viruses);
+  const validRecycleKeys = new Set([
+    ...recycleFiles.map((file) => `file:${file.id}`),
+    ...recycledViruses.map((virus) => `virus:${virus.id}`),
+  ]);
+  const requestedRecycleOrder = Array.isArray(candidate.recycleOrder)
+    ? candidate.recycleOrder.filter((key): key is string => typeof key === "string" && validRecycleKeys.has(key))
+    : [];
+  const recycleOrder = [...new Set([
+    ...requestedRecycleOrder,
+    ...recycleFiles.map((file) => `file:${file.id}`),
+    ...recycledViruses.map((virus) => `virus:${virus.id}`),
+  ])];
   const assistantOffendedPhrases = Array.isArray(candidate.assistantOffendedPhrases)
     ? candidate.assistantOffendedPhrases.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
     : typeof candidate.assistantOffendedPhrase === "string" && candidate.assistantOffendedPhrase.trim()
@@ -162,7 +175,8 @@ function normalizePortiaContent(value: unknown): PortiaContent | null {
     recycledViruses,
     infoSections: candidate.infoSections,
     broadcasts: candidate.broadcasts,
-    recycleFiles: normalizeRecycleFiles(candidate.recycleFiles, viruses),
+    recycleFiles,
+    recycleOrder,
     searchRecommendations: candidate.searchRecommendations.filter((item): item is string => typeof item === "string"),
     assistantAdvice: Array.isArray(candidate.assistantAdvice)
       ? candidate.assistantAdvice.filter((item): item is string => typeof item === "string")

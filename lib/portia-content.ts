@@ -128,6 +128,7 @@ export type PortiaContent = {
   infoSections: InfoSection[];
   broadcasts: Broadcast[];
   recycleFiles: RecycleFile[];
+  recycleOrder: string[];
   searchRecommendations: string[];
   assistantAdvice: string[];
   assistantOffendedPhrase: string;
@@ -336,6 +337,7 @@ export const defaultPortiaContent: PortiaContent = {
       virusId: "vir-s12",
     },
   ],
+  recycleOrder: ["file:recycle-vir-d17", "file:recycle-vir-t04", "file:recycle-vir-s12"],
   infoSections: [
     {
       id: "what-is-virus",

@@ -12,8 +12,9 @@ import {
   type RichTextStyle,
   type Virus,
 } from "@/lib/portia-content";
+import type { PortiaEmployee } from "@/lib/portia-employees";
 
-type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "access";
+type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
 
 type Props = {
   content: PortiaContent;
@@ -75,6 +76,81 @@ const backgroundColorPalette = [
 
 const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const clone = (content: PortiaContent) => JSON.parse(JSON.stringify(content)) as PortiaContent;
+
+function moveArrayItem<T>(items: T[], from: number, to: number) {
+  if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) return;
+  const [item] = items.splice(from, 1);
+  items.splice(to, 0, item);
+}
+
+function recycleKeys(content: PortiaContent) {
+  const valid = new Set([
+    ...content.recycleFiles.map((file) => `file:${file.id}`),
+    ...(content.recycledViruses ?? []).map((virus) => `virus:${virus.id}`),
+  ]);
+  return [...new Set([
+    ...(content.recycleOrder ?? []).filter((key) => valid.has(key)),
+    ...content.recycleFiles.map((file) => `file:${file.id}`),
+    ...(content.recycledViruses ?? []).map((virus) => `virus:${virus.id}`),
+  ])];
+}
+
+function reorderRichTextLines(text: string, document: RichTextDocument | undefined, from: number, to: number) {
+  const sourceStyles = (document?.runs ?? []).flatMap((run) => Array.from({ length: run.text.length }, () => run.style ?? {}));
+  while (sourceStyles.length < text.length) sourceStyles.push({});
+  const lines = text.split("\n");
+  let offset = 0;
+  const parts = lines.map((line) => {
+    const part = { text: line, styles: sourceStyles.slice(offset, offset + line.length) };
+    offset += line.length + 1;
+    return part;
+  });
+  moveArrayItem(parts, from, to);
+  const nextText = parts.map((part) => part.text).join("\n");
+  const nextStyles = parts.flatMap((part, index) => index < parts.length - 1 ? [...part.styles, {}] : part.styles);
+  return { text: nextText, document: compactRuns(nextText, nextStyles) };
+}
+
+function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (from: number, to: number) => void; label: string }) {
+  const indexRef = useRef(index);
+  const holdTimer = useRef<number | null>(null);
+  const active = useRef(false);
+  useEffect(() => { indexRef.current = index; }, [index]);
+
+  const stop = (event?: React.PointerEvent<HTMLButtonElement>) => {
+    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+    active.current = false;
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  return <button
+    className="order-drag-handle"
+    type="button"
+    aria-label={`Изменить порядок: ${label}`}
+    title="Удерживайте и перетащите"
+    onPointerDown={(event) => {
+      const target = event.currentTarget;
+      target.setPointerCapture(event.pointerId);
+      holdTimer.current = window.setTimeout(() => {
+        active.current = true;
+        target.dataset.dragging = "true";
+      }, 170);
+    }}
+    onPointerMove={(event) => {
+      if (!active.current) return;
+      const row = document.elementsFromPoint(event.clientX, event.clientY)
+        .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
+        .find(Boolean);
+      const target = Number(row?.dataset.sortIndex);
+      if (!Number.isInteger(target) || target === indexRef.current) return;
+      onMove(indexRef.current, target);
+      indexRef.current = target;
+    }}
+    onPointerUp={(event) => { delete event.currentTarget.dataset.dragging; stop(event); }}
+    onPointerCancel={(event) => { delete event.currentTarget.dataset.dragging; stop(event); }}
+  ><span aria-hidden="true">≡</span><small>ТЯНИТЕ</small></button>;
+}
 
 const emptyRichTextStyle: RichTextStyle = {};
 
@@ -341,6 +417,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
     [draft.recycledViruses, selectedRecycledVirusId],
   );
   const selectedRecycledVirus = selectedRecycledVirusIndex >= 0 ? draft.recycledViruses[selectedRecycledVirusIndex] : null;
+  const orderedRecycleKeys = useMemo(() => recycleKeys(draft), [draft]);
 
   const changeDraft = (updater: (next: PortiaContent) => void) => {
     setDraft((current) => {
@@ -454,6 +531,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
           ["recycle", "Корзина"],
           ["search", "Рекомендации"],
           ["assistant", "Помощник"],
+          ["employees", "Сотрудники"],
           ...(canManageEditors ? [["access", "Доступ"]] : []),
         ] as [EditorTab, string][]).map(([id, label]) => (
           <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => { setTab(id); setPreviewSurface(id === "viruses" || id === "recycle" ? "light" : "dark"); setFormatTarget(null); setFormatterOpen(false); }}>{label}</button>
@@ -480,10 +558,13 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
       {tab === "viruses" && (
         <div className="virus-editor-layout">
           <aside className="editor-record-list">
-            {draft.viruses.map((virus) => (
-              <button key={virus.id} type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => setSelectedVirusId(virus.id)}>
-                <strong>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small>{virus.code || "БЕЗ КОДА"}</small>
-              </button>
+            {draft.viruses.map((virus, index) => (
+              <div className="editor-record-row" data-sort-index={index} key={virus.id}>
+                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => setSelectedVirusId(virus.id)}>
+                  <strong>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small>{virus.code || "БЕЗ КОДА"}</small>
+                </button>
+                <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.viruses, from, to))} />
+              </div>
             ))}
             <button className="add-record" type="button" onClick={() => {
               const virus = blankVirus();
@@ -553,8 +634,10 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
                 const nextId = draft.viruses.find((virus) => virus.id !== selectedVirus.id)?.id ?? "";
                 changeDraft((next) => {
                   next.recycledViruses ??= [];
-                  next.recycledViruses.push(next.viruses[selectedVirusIndex]);
+                  const recycled = next.viruses[selectedVirusIndex];
+                  next.recycledViruses.push(recycled);
                   next.viruses = next.viruses.filter((virus) => virus.id !== selectedVirus.id);
+                  next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `virus:${recycled.id}`), `virus:${recycled.id}`];
                 });
                 setSelectedVirusId(nextId);
                 setSelectedRecycledVirusId(selectedVirus.id);
@@ -568,8 +651,8 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
         <div className="editor-form flat-editor-form">
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация».</p>
           {draft.infoSections.map((section, index) => (
-            <div className="nested-editor-card" key={section.id}>
-              <div className="nested-editor-head"><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => changeDraft((next) => { next.infoSections.splice(index, 1); })}>Удалить</button></div>
+            <div className="nested-editor-card" data-sort-index={index} key={section.id}>
+              <div className="nested-editor-head"><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} /><button type="button" onClick={() => changeDraft((next) => { next.infoSections.splice(index, 1); })}>Удалить</button></div></div>
               <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => { next.infoSections[index].title = event.target.value; })} /></Field>
               <FormattedTextarea label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => { next.infoSections[index].body = text; })} />
             </div>
@@ -598,25 +681,32 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
       {tab === "recycle" && (
         <div className="virus-editor-layout recycle-editor-layout">
           <aside className="editor-record-list">
-            {(draft.recycledViruses ?? []).map((virus) => (
-              <button key={virus.id} type="button" className={virus.id === selectedRecycledVirusId && !selectedRecycleFileId ? "active" : ""} onClick={() => { setSelectedRecycledVirusId(virus.id); setSelectedRecycleFileId(""); }}>
-                <strong>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small>ВИРУС В КОРЗИНЕ</small>
-              </button>
-            ))}
-            {draft.recycleFiles.map((file) => (
-              <button key={file.id} type="button" className={file.id === selectedRecycleFileId ? "active" : ""} onClick={() => { setSelectedRecycleFileId(file.id); setSelectedRecycledVirusId(""); }}>
-                <strong>{file.name || "БЕЗ ИМЕНИ"}</strong><small>{file.kind === "virus" ? "ФАЙЛ ВИРУСА" : file.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ"}</small>
-              </button>
-            ))}
+            {orderedRecycleKeys.map((key, index) => {
+              const isVirus = key.startsWith("virus:");
+              const id = key.slice(key.indexOf(":") + 1);
+              const virus = isVirus ? draft.recycledViruses.find((item) => item.id === id) : null;
+              const file = !isVirus ? draft.recycleFiles.find((item) => item.id === id) : null;
+              if (!virus && !file) return null;
+              const title = virus?.name || file?.name || "БЕЗ ИМЕНИ";
+              return <div className="editor-record-row" data-sort-index={index} key={key}>
+                <button type="button" className={virus ? virus.id === selectedRecycledVirusId && !selectedRecycleFileId ? "active" : "" : file!.id === selectedRecycleFileId ? "active" : ""} onClick={() => {
+                  if (virus) { setSelectedRecycledVirusId(virus.id); setSelectedRecycleFileId(""); }
+                  else { setSelectedRecycleFileId(file!.id); setSelectedRecycledVirusId(""); }
+                }}>
+                  <strong>{title}</strong><small>{virus ? "ВИРУС В КОРЗИНЕ" : file!.kind === "virus" ? "ФАЙЛ ВИРУСА" : file!.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ"}</small>
+                </button>
+                <OrderDragHandle index={index} label={title} onMove={(from, to) => changeDraft((next) => { const order = recycleKeys(next); moveArrayItem(order, from, to); next.recycleOrder = order; })} />
+              </div>;
+            })}
             <button className="add-record" type="button" onClick={() => {
               const file = blankRecycleFile();
-              changeDraft((next) => next.recycleFiles.push(file));
+              changeDraft((next) => { next.recycleFiles.push(file); next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `file:${file.id}`), `file:${file.id}`]; });
               setSelectedRecycleFileId(file.id);
               setSelectedRecycledVirusId("");
             }}>+ ДОБАВИТЬ ФАЙЛ</button>
             <button className="add-record" type="button" onClick={() => {
               const virus = blankVirus();
-              changeDraft((next) => { next.recycledViruses ??= []; next.recycledViruses.push(virus); });
+              changeDraft((next) => { next.recycledViruses ??= []; next.recycledViruses.push(virus); next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `virus:${virus.id}`), `virus:${virus.id}`]; });
               setSelectedRecycledVirusId(virus.id);
               setSelectedRecycleFileId("");
             }}>+ НАПИСАТЬ ВИРУС</button>
@@ -633,6 +723,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
                 changeDraft((next) => {
                   next.viruses.push(next.recycledViruses[selectedRecycledVirusIndex]);
                   next.recycledViruses.splice(selectedRecycledVirusIndex, 1);
+                  next.recycleOrder = recycleKeys(next);
                 });
                 setSelectedVirusId(selectedRecycledVirus.id);
                 setSelectedRecycledVirusId("");
@@ -640,7 +731,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
               onDelete={() => {
                 if (!window.confirm(`Удалить «${selectedRecycledVirus.name}» навсегда? Это действие нельзя отменить.`)) return;
                 const nextId = draft.recycledViruses.find((virus) => virus.id !== selectedRecycledVirus.id)?.id ?? "";
-                changeDraft((next) => { next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== selectedRecycledVirus.id); });
+                changeDraft((next) => { next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
                 setSelectedRecycledVirusId(nextId);
               }}
             />
@@ -682,7 +773,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
 
               <button className="danger-control" type="button" onClick={() => {
                 const nextId = draft.recycleFiles.find((file) => file.id !== selectedRecycleFile.id)?.id ?? "";
-                changeDraft((next) => { next.recycleFiles = next.recycleFiles.filter((file) => file.id !== selectedRecycleFile.id); });
+                changeDraft((next) => { next.recycleFiles = next.recycleFiles.filter((file) => file.id !== selectedRecycleFile.id); next.recycleOrder = recycleKeys(next); });
                 setSelectedRecycleFileId(nextId);
               }}>УДАЛИТЬ ЭТОТ ФАЙЛ</button>
             </div>
@@ -694,6 +785,14 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
         <div className="editor-form flat-editor-form compact-editor">
           <p className="editor-guidance">Каждая строка станет ненавязчивой рекомендацией под строкой глобального поиска.</p>
           <FormattedTextarea label="Рекомендации" tall value={draft.searchRecommendations.join("\n")} document={draft.formattedText[portiaTextKey.searchRecommendations]} formatKey={portiaTextKey.searchRecommendations} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.searchRecommendations, value, document, (next, text) => { next.searchRecommendations = text.split("\n"); })} />
+          <div className="recommendation-order-list" aria-label="Порядок рекомендаций">
+            {draft.searchRecommendations.map((recommendation, index) => <div className="recommendation-order-row" data-sort-index={index} key={`${recommendation}:${draft.searchRecommendations.slice(0, index).filter((item) => item === recommendation).length}`}><span><small>{String(index + 1).padStart(2, "0")}</small>{recommendation || "ПУСТАЯ СТРОКА"}</span><OrderDragHandle index={index} label={recommendation || "рекомендация"} onMove={(from, to) => changeDraft((next) => {
+              const currentText = next.searchRecommendations.join("\n");
+              const reordered = reorderRichTextLines(currentText, next.formattedText[portiaTextKey.searchRecommendations], from, to);
+              next.searchRecommendations = reordered.text.split("\n");
+              next.formattedText[portiaTextKey.searchRecommendations] = reordered.document;
+            })} /></div>)}
+          </div>
         </div>
       )}
 
@@ -734,11 +833,83 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave }: P
         </div>
       )}
 
+      {tab === "employees" && <EmployeeProfilesEditor />}
+
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && <FloatingTextFormatPanel key={`${formatTarget.key}:${formatTarget.selection.start}:${formatTarget.selection.end}:${previewSurface}`} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />}
     </div>
     </ActiveFormatContext.Provider>
   );
+}
+
+function EmployeeProfilesEditor() {
+  const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [draft, setDraft] = useState({ biography: "", photoUrl: "", knowledgeRating: 1 });
+  const [state, setState] = useState<"loading" | "idle" | "saving" | "saved" | "error">("loading");
+  const selected = employees.find((employee) => employee.id === selectedId) ?? employees[0] ?? null;
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/employees", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("load failed");
+        return response.json() as Promise<{ employees?: PortiaEmployee[] }>;
+      })
+      .then((payload) => {
+        if (!active) return;
+        const next = payload.employees ?? [];
+        const first = next[0];
+        setEmployees(next);
+        setSelectedId(first?.id ?? "");
+        if (first) setDraft({ biography: first.biography, photoUrl: first.photoUrl, knowledgeRating: first.knowledgeRating });
+        setState("idle");
+      })
+      .catch(() => { if (active) setState("error"); });
+    return () => { active = false; };
+  }, []);
+
+  const save = async () => {
+    if (!selected) return;
+    setState("saving");
+    try {
+      const response = await fetch("/api/employees", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: selected.id, changes: draft }),
+      });
+      const payload = await response.json() as { employee?: PortiaEmployee; error?: string };
+      if (!response.ok || !payload.employee) throw new Error(payload.error ?? "save failed");
+      setEmployees((current) => current.map((employee) => employee.id === payload.employee!.id ? payload.employee! : employee));
+      setState("saved");
+      window.setTimeout(() => setState("idle"), 1800);
+    } catch {
+      setState("error");
+    }
+  };
+
+  if (state === "loading") return <div className="editor-empty">Загрузка сотрудников…</div>;
+  if (!selected) return <div className="editor-empty">Сотрудники ещё не синхронизированы.</div>;
+
+  const preview = draft.photoUrl || selected.robloxAvatarUrl;
+  return <div className="virus-editor-layout employee-editor-layout">
+    <aside className="editor-record-list">
+      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => { setSelectedId(employee.id); setDraft({ biography: employee.biography, photoUrl: employee.photoUrl, knowledgeRating: employee.knowledgeRating }); setState("idle"); }}><strong>{employee.callsign || employee.nickname}</strong><small>{employee.title} · {employee.rank}</small></button>)}
+    </aside>
+    <div className="editor-form employee-profile-editor">
+      <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять только фотографию, оценку знаний и биографию.</p>
+      <div className="employee-editor-summary">
+        <figure>{preview ? <img src={preview} alt={`Аватар ${selected.nickname}`} referrerPolicy="no-referrer" /> : <img src="/assets/portia-logo.png" alt="" />}</figure>
+        <div><span className="eyebrow">{selected.title || "БЕЗ ЗВАНИЯ"}</span><h2>{selected.callsign || selected.nickname}</h2><p>@{selected.nickname} · {selected.rank || "ранг не указан"}</p></div>
+      </div>
+      <EditorGroup title="Профиль сотрудника">
+        <Field label="Оценка знаний — от 1 до 10"><select value={draft.knowledgeRating} onChange={(event) => setDraft((current) => ({ ...current, knowledgeRating: Number(event.target.value) }))}>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
+        <Field label="Ссылка на фото"><input value={draft.photoUrl} onChange={(event) => setDraft((current) => ({ ...current, photoUrl: event.target.value }))} placeholder="Пусто — использовать аватар Roblox" /></Field>
+        <Field label="Биография" wide><textarea className="tall-textarea" value={draft.biography} onChange={(event) => setDraft((current) => ({ ...current, biography: event.target.value }))} /></Field>
+      </EditorGroup>
+      <div className="employee-editor-save"><span className={`editor-save-status ${state}`}>{state === "saving" ? "СОХРАНЕНИЕ…" : state === "saved" ? "СОХРАНЕНО" : state === "error" ? "ОШИБКА СОХРАНЕНИЯ" : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span><button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
+    </div>
+  </div>;
 }
 
 function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRestore, onDelete }: {

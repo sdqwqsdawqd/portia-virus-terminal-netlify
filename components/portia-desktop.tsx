@@ -22,7 +22,7 @@ const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "ra
 
 const appMeta: Record<AppId, { label: string; path: string; icon: string }> = {
   archive: { label: "База вирусов", path: "PORTIA://VIRUS_ARCHIVE", icon: "/assets/app-virus.png" },
-  employees: { label: "Сотрудники", path: "PORTIA://PERSONNEL", icon: "/assets/app-sheet.png" },
+  employees: { label: "Сотрудники", path: "PORTIA://PERSONNEL", icon: "/assets/app-employees.svg" },
   search: { label: "Глобальный поиск", path: "PORTIA://GLOBAL_SEARCH", icon: "/assets/app-search.png" },
   info: { label: "Информация", path: "PORTIA://INFORMATION", icon: "/assets/app-info.png" },
   settings: { label: "Настройки", path: "PORTIA://DESKTOP_SETTINGS", icon: "/assets/app-settings.png" },
@@ -219,8 +219,6 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [employeesSyncedAt, setEmployeesSyncedAt] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [employeeQuery, setEmployeeQuery] = useState("");
-  const [employeeDraft, setEmployeeDraft] = useState<{ biography: string; photoUrl: string; knowledgeRating: number } | null>(null);
-  const [employeeSaveState, setEmployeeSaveState] = useState<SaveState>("idle");
   const [assistantTipIndex, setAssistantTipIndex] = useState(-1);
   const [assistantOffendedPhraseIndex, setAssistantOffendedPhraseIndex] = useState(-1);
   const [assistantIdlePhraseIndex, setAssistantIdlePhraseIndex] = useState(-1);
@@ -593,6 +591,17 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const trashFiles = content.recycleFiles;
   const activeTrashFile = trashFiles.find((file) => file.id === activeTrashFileId) ?? null;
   const recycledViruses = useMemo(() => content.recycledViruses ?? [], [content.recycledViruses]);
+  const trashOrder = useMemo(() => {
+    const valid = new Set([
+      ...content.recycleFiles.map((file) => `file:${file.id}`),
+      ...recycledViruses.map((virus) => `virus:${virus.id}`),
+    ]);
+    return [...new Set([
+      ...(content.recycleOrder ?? []).filter((key) => valid.has(key)),
+      ...content.recycleFiles.map((file) => `file:${file.id}`),
+      ...recycledViruses.map((virus) => `virus:${virus.id}`),
+    ])];
+  }, [content.recycleFiles, content.recycleOrder, recycledViruses]);
   const activeTrashVirus = activeTrashFileId?.startsWith("virus:")
     ? recycledViruses.find((virus) => virus.id === activeTrashFileId.slice(6)) ?? null
     : null;
@@ -604,32 +613,6 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   };
 
   const openTrashVirus = (virus: Virus) => setActiveTrashFileId(`virus:${virus.id}`);
-
-  const beginEmployeeEdit = () => {
-    if (!selectedEmployee) return;
-    setEmployeeDraft({ biography: selectedEmployee.biography, photoUrl: selectedEmployee.photoUrl, knowledgeRating: selectedEmployee.knowledgeRating });
-  };
-
-  const saveEmployeeProfile = async () => {
-    if (!selectedEmployee || !employeeDraft) return;
-    setEmployeeSaveState("saving");
-    try {
-      const response = await fetchWithTimeout("/api/employees", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: selectedEmployee.id, changes: employeeDraft }),
-      }, 12_000);
-      if (!response.ok) throw new Error("save failed");
-      const payload = await response.json() as { employee?: PortiaEmployee; syncedAt?: string };
-      if (payload.employee) setEmployees((current) => current.map((employee) => employee.id === payload.employee!.id ? payload.employee! : employee));
-      setEmployeesSyncedAt(payload.syncedAt ?? employeesSyncedAt);
-      setEmployeeDraft(null);
-      setEmployeeSaveState("saved");
-      window.setTimeout(() => setEmployeeSaveState("idle"), 1800);
-    } catch {
-      setEmployeeSaveState("error");
-    }
-  };
 
   const activateAssistant = () => {
     if (assistantOffended) return;
@@ -815,27 +798,21 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <header><span className="eyebrow">ЛИЧНЫЙ СОСТАВ</span><h1>Сотрудники</h1></header>
                 <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск сотрудника</span><input type="search" value={employeeQuery} onChange={(event) => setEmployeeQuery(event.target.value)} placeholder="Ник, позывной, звание" /></label>
                 <div className="personnel-list">
-                  {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={employee.id === selectedEmployee?.id ? "active" : ""} onClick={() => { setSelectedEmployeeId(employee.id); setEmployeeDraft(null); }}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.callsign || employee.nickname}</strong><small>{employee.title} · {employee.rank}</small></button>)}
+                  {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={employee.id === selectedEmployee?.id ? "active" : ""} onClick={() => setSelectedEmployeeId(employee.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.callsign || employee.nickname}</strong><small>{employee.title} · {employee.rank}</small></button>)}
                   {!filteredEmployees.length && <div className="list-empty">Сотрудники не найдены</div>}
                 </div>
                 <footer>СИНХРОНИЗАЦИЯ: {employeesSyncedAt ? new Date(employeesSyncedAt).toLocaleString("ru-RU") : "ОЖИДАНИЕ"}</footer>
               </aside>
               <article className="personnel-profile">
-                {selectedEmployee ? <>
+                {selectedEmployee ? <div className="personnel-profile-transition" key={selectedEmployee.id}>
                   <header className="personnel-profile-head">
-                    <figure>{(employeeDraft?.photoUrl || selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl) ? <img src={employeeDraft?.photoUrl || selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Аватар ${selectedEmployee.nickname}`} referrerPolicy="no-referrer" /> : <img src="/assets/portia-logo.png" alt="" className="personnel-fallback" />}</figure>
+                    <figure className="personnel-portrait"><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Аватар ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></figure>
                     <div><span className="eyebrow">ПРОФИЛЬ СОТРУДНИКА</span><h2>{selectedEmployee.callsign || selectedEmployee.nickname}</h2>{selectedEmployee.robloxUserId ? <a href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer">@{selectedEmployee.nickname}</a> : <span className="personnel-nickname">@{selectedEmployee.nickname}</span>}</div>
+                    <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
                   </header>
-                  <dl className="personnel-stats"><div><dt>ЗВАНИЕ</dt><dd>{selectedEmployee.title || "Не указано"}</dd></div><div><dt>РАНГ</dt><dd>{selectedEmployee.rank || "Не указан"}</dd></div><div><dt>ОЦЕНКА ЗНАНИЙ</dt><dd>{employeeDraft?.knowledgeRating ?? selectedEmployee.knowledgeRating} / 10</dd></div></dl>
-                  {employeeDraft ? <div className="personnel-edit-form">
-                    <label><span>Оценка знаний — от 1 до 10</span><select value={employeeDraft.knowledgeRating} onChange={(event) => setEmployeeDraft((current) => current ? { ...current, knowledgeRating: Number(event.target.value) } : current)}>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-                    <label><span>Ссылка на фото</span><input value={employeeDraft.photoUrl} onChange={(event) => setEmployeeDraft((current) => current ? { ...current, photoUrl: event.target.value } : current)} placeholder="Оставьте пустым для аватара Roblox" /></label>
-                    <label><span>Биография</span><textarea value={employeeDraft.biography} onChange={(event) => setEmployeeDraft((current) => current ? { ...current, biography: event.target.value } : current)} /></label>
-                    <div className="personnel-actions"><button type="button" className="secondary-control" onClick={() => setEmployeeDraft(null)}>ОТМЕНА</button><button type="button" className="primary-control" onClick={() => void saveEmployeeProfile()} disabled={employeeSaveState === "saving"}>{employeeSaveState === "saving" ? "СОХРАНЕНИЕ…" : "СОХРАНИТЬ"}</button></div>
-                    {employeeSaveState === "error" && <p className="personnel-save-error">Не удалось сохранить профиль.</p>}
-                  </div> : <section className="personnel-biography"><span>БИОГРАФИЯ</span><p>{selectedEmployee.biography || "Биография сотрудника пока не заполнена."}</p></section>}
-                  {canEdit && !employeeDraft && <button className="secondary-control personnel-edit-button" type="button" onClick={beginEmployeeEdit}>РЕДАКТИРОВАТЬ ПРОФИЛЬ</button>}
-                </> : <div className="editor-empty">Данные сотрудников ещё не синхронизированы.</div>}
+                  <dl className="personnel-stats"><div><dt>ЗВАНИЕ</dt><dd>{selectedEmployee.title || "Не указано"}</dd></div><div><dt>РАНГ</dt><dd>{selectedEmployee.rank || "Не указан"}</dd></div><div><dt>ОЦЕНКА ЗНАНИЙ</dt><dd>{selectedEmployee.knowledgeRating} / 10</dd></div></dl>
+                  <section className="personnel-biography"><span>БИОГРАФИЯ</span><p>{selectedEmployee.biography || "Биография сотрудника пока не заполнена."}</p></section>
+                </div> : <div className="editor-empty">Данные сотрудников ещё не синхронизированы.</div>}
               </article>
             </div>
           </AppWindow>
@@ -881,8 +858,14 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <div className="trash-layout">
                 <div className="trash-files">
                   <div className="trash-list-head" aria-hidden="true"><span>ИМЯ</span><span>ИСХОДНОЕ РАСПОЛОЖЕНИЕ</span><span>ТИП</span></div>
-                  {recycledViruses.map((virus) => <button className={`trash-file-row${activeTrashFileId === `virus:${virus.id}` ? " active" : ""}`} type="button" key={virus.id} onClick={() => openTrashVirus(virus)}><span className="trash-file-name"><i className="trash-file-icon virus">V</i><strong>{virus.name}</strong></span><span>C:\PORTIA\VIRUS_ARCHIVE</span><span>Вирус в корзине</span></button>)}
-                  {trashFiles.map((file) => <button className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}`} type="button" key={file.id} onClick={() => openTrashFile(file)}><span className="trash-file-name"><i className={`trash-file-icon ${file.kind}`}>{file.kind === "virus" ? "V" : file.kind === "image" ? "IMG" : "TXT"}</i><strong>{file.name}</strong></span><span>{file.location}</span><span>{recycleFileType(file.kind)}</span></button>)}
+                  {trashOrder.map((key) => {
+                    if (key.startsWith("virus:")) {
+                      const virus = recycledViruses.find((item) => item.id === key.slice(6));
+                      return virus ? <button className={`trash-file-row${activeTrashFileId === `virus:${virus.id}` ? " active" : ""}`} type="button" key={key} onClick={() => openTrashVirus(virus)}><span className="trash-file-name"><i className="trash-file-icon virus">V</i><strong>{virus.name}</strong></span><span>C:\PORTIA\VIRUS_ARCHIVE</span><span>Вирус в корзине</span></button> : null;
+                    }
+                    const file = trashFiles.find((item) => item.id === key.slice(5));
+                    return file ? <button className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}`} type="button" key={key} onClick={() => openTrashFile(file)}><span className="trash-file-name"><i className={`trash-file-icon ${file.kind}`}>{file.kind === "virus" ? "V" : file.kind === "image" ? "IMG" : "TXT"}</i><strong>{file.name}</strong></span><span>{file.location}</span><span>{recycleFileType(file.kind)}</span></button> : null;
+                  })}
                   {!trashFiles.length && !recycledViruses.length && <div className="editor-empty">Корзина пуста.</div>}
                 </div>
                 {activeTrashVirus && <div className="trash-viewer virus"><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} onOpenLog={() => undefined} /></div></div>}
@@ -948,6 +931,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
 function BootScreen({ visible }: { visible: boolean }) {
   return <div className={`boot-screen${visible ? "" : " boot-complete"}`} aria-hidden={!visible}><div className="boot-core"><img src="/assets/portia-logo.png" alt="" /><span>PORTIA OS</span><strong>INITIALIZING RESEARCH NODE</strong><div className="boot-progress"><i /></div><div className="boot-lines"><small>ARCHIVE INDEX</small><small>SECURITY CONTOUR</small><small>CONTENT LINK</small></div></div></div>;
+}
+
+function EmployeeImage({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
+  const [loaded, setLoaded] = useState(false);
+  const source = src || "/assets/portia-logo.png";
+  return <div className={`personnel-image-loader${loaded ? " is-loaded" : ""}`}>
+    <span className="personnel-image-skeleton" aria-hidden="true" />
+    <img src={source} alt={alt} className={!src ? fallbackClassName : ""} referrerPolicy="no-referrer" onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} />
+  </div>;
 }
 
 function DesktopIcon({ app, onOpen, position, onMove, className = "", badge = false }: { app: Exclude<AppId, "editor">; onOpen: (app: AppId) => void; position?: ShortcutPosition; onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void; className?: string; badge?: boolean }) {
