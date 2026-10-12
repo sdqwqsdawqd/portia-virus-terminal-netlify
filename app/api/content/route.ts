@@ -2,7 +2,6 @@ import { defaultPortiaContent } from "@/lib/portia-content";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
-import { readPortiaContentSnapshot, writePortiaContentSnapshot } from "@/lib/portia-content-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -55,21 +54,8 @@ export async function GET() {
       source: "supabase",
     });
   } catch (error) {
+    // The browser keeps its last good copy when it receives the bundled defaults.
     console.error("PORTIA content read failed", error);
-    const snapshot = await readPortiaContentSnapshot();
-    const normalizedSnapshot = snapshot ? normalizePortiaContent(snapshot.content) : null;
-    if (snapshot && normalizedSnapshot) {
-      return Response.json({
-        content: normalizedSnapshot,
-        canEdit: false,
-        canManageEditors: false,
-        revision: snapshot.revision,
-        updatedAt: snapshot.updatedAt,
-        cachedAt: snapshot.cachedAt,
-        degraded: true,
-        source: "netlify-cache",
-      }, { status: 200 });
-    }
     return Response.json(
       { content: defaultPortiaContent, canEdit: false, canManageEditors: false, revision: 0, updatedAt: null, degraded: true, source: "bundled-default" },
       { status: 200 },
@@ -108,13 +94,6 @@ export async function PUT(request: Request) {
       return Response.json({ error: "Пока вы редактировали, кто-то другой сохранил изменения. Скопируйте свои правки и обновите страницу." }, { status: 409 });
     }
     if (saveError || !saved) throw saveError;
-
-    await writePortiaContentSnapshot({
-      content: normalized,
-      revision: saved.revision,
-      updatedAt: saved.updated_at,
-      cachedAt: new Date().toISOString(),
-    });
 
     return Response.json({ ok: true, revision: saved.revision, updatedAt: saved.updated_at });
   } catch (error) {

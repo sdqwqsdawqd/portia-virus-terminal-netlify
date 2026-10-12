@@ -1,42 +1,25 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
-import {
-  readEmployeeProfiles,
-  readRosterSnapshot,
-  sanitizeEmployeeUpdate,
-  saveEmployeeProfile,
-  syncRosterSnapshot,
-  withProfile,
-} from "@/lib/portia-employees";
+import { employeesCacheTag, noStoreHeaders, publicCacheHeaders, purgeCacheTag } from "@/lib/portia-cdn";
+import { loadEmployees, sanitizeEmployeeUpdate, saveEmployeeProfile } from "@/lib/portia-employees";
 
 export const dynamic = "force-dynamic";
 
-async function loadRoster() {
-  return await readRosterSnapshot() ?? await syncRosterSnapshot();
-}
-
-export async function GET() {
-  let roster;
+export async function GET(request: Request) {
+  const fresh = new URL(request.url).searchParams.has("fresh");
   try {
-    roster = await loadRoster();
+    const { employees, syncedAt, complete } = await loadEmployees(createPublicSupabaseClient());
+    return Response.json(
+      { employees, syncedAt, degraded: !complete },
+      { headers: fresh ? noStoreHeaders : publicCacheHeaders(employeesCacheTag, complete ? 600 : 30) },
+    );
   } catch (error) {
-    console.error("PORTIA employee live sync failed", error);
-    return Response.json({ employees: [], syncedAt: null, degraded: true });
+    console.error("PORTIA employee sync failed", error);
+    return Response.json(
+      { employees: [], syncedAt: null, degraded: true, error: "Не удалось получить список сотрудников из таблицы." },
+      { status: 502, headers: noStoreHeaders },
+    );
   }
-
-  let profiles: Awaited<ReturnType<typeof readEmployeeProfiles>> = new Map();
-  let degraded = false;
-  try {
-    profiles = await readEmployeeProfiles(await createServerSupabaseClient());
-  } catch (error) {
-    console.error("PORTIA employee profiles read failed", error);
-    degraded = true;
-  }
-  return Response.json({
-    employees: roster.employees.map((employee) => withProfile(employee, profiles)),
-    syncedAt: roster.syncedAt,
-    degraded,
-  });
 }
 
 export async function PATCH(request: Request) {
@@ -50,12 +33,13 @@ export async function PATCH(request: Request) {
     const id = typeof body.id === "string" ? body.id : "";
     const changes = sanitizeEmployeeUpdate(body.changes);
     if (!changes) return Response.json({ error: "Некорректные данные." }, { status: 400 });
-    const roster = await loadRoster();
-    const employee = roster.employees.find((item) => item.id === id);
+    const { employees } = await loadEmployees(supabase);
+    const employee = employees.find((item) => item.id === id);
     if (!employee) return Response.json({ error: "Сотрудник не найден. Обновите страницу." }, { status: 404 });
 
-    await saveEmployeeProfile(supabase, employee.id, changes, data.user.id);
-    return Response.json({ employee: { ...employee, ...changes }, syncedAt: roster.syncedAt });
+    await saveEmployeeProfile(supabase, employee, changes, data.user.id);
+    await purgeCacheTag(employeesCacheTag);
+    return Response.json({ employee: { ...employee, ...changes } }, { headers: noStoreHeaders });
   } catch (error) {
     console.error("PORTIA employee update failed", error);
     return Response.json({ error: "Не удалось сохранить профиль." }, { status: 500 });

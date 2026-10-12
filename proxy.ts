@@ -8,5 +8,7 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // The desktop is public and must be served immediately. Refreshing an auth
   // session on `/` makes the first document depend on Supabase availability.
-  matcher: ["/owner-login/:path*", "/api/:path*"],
+  // /api/employees is left out: its GET is CDN-cached and must never carry
+  // Set-Cookie; its PATCH refreshes the session in the handler.
+  matcher: ["/owner-login/:path*", "/api/content", "/api/editors", "/api/uploads"],
 };

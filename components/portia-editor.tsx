@@ -877,7 +877,7 @@ function EmployeeProfilesEditor() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/employees", { cache: "no-store" })
+    void fetch("/api/employees?fresh=1", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("load failed");
         return response.json() as Promise<{ employees?: PortiaEmployee[] }>;
