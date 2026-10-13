@@ -1144,8 +1144,24 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   );
 }
 
+const bootLines = ["ПОДКЛЮЧЕНИЕ К АРХИВУ… OK", "ПРОВЕРКА ДОПУСКА… УРОВЕНЬ II", "ЗАГРУЗКА ДОСЬЕ… OK", "ТЕРМИНАЛ PORTIA ГОТОВ"];
+
 function BootScreen({ visible }: { visible: boolean }) {
-  return <div className={`boot-screen${visible ? "" : " boot-complete"}`} aria-hidden={!visible}><div className="boot-core"><span className="boot-thread" /><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong><div className="boot-progress"><i /></div></div></div>;
+  // The spider waits on its thread until its PNG is decoded, so it descends instead of popping in late.
+  const [markReady, setMarkReady] = useState(false);
+  const markRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    // Loaded before hydration: React never sees that load event.
+    if (!markRef.current?.complete) return;
+    const timer = window.setTimeout(() => setMarkReady(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return <div className={`boot-screen${visible ? "" : " boot-complete"}`} aria-hidden={!visible}><div className={`boot-core${markReady ? " is-ready" : ""}`}>
+    <span className="boot-thread" />
+    <img ref={markRef} className="portia-mark" src="/assets/portia-logo.png" alt="" fetchPriority="high" onLoad={() => setMarkReady(true)} onError={() => setMarkReady(true)} />
+    <span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong>
+    <div className="boot-lines">{bootLines.map((line, index) => <p key={line} style={{ animationDelay: `${200 + index * 280}ms` }}>{line}</p>)}</div>
+  </div></div>;
 }
 
 function EmployeeImage({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {

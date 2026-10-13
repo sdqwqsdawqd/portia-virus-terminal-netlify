@@ -587,14 +587,16 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .boot-screen.boot-complete { opacity: 0; visibility: hidden; pointer-events: none; }
 .javascript-warning { position: fixed; z-index: 998; left: 12px; right: 12px; bottom: 46px; padding: 12px 14px; border: 1px solid oklch(.405 .039 var(--accent-hue)); background: oklch(.163 .015 var(--accent-hue)); color: oklch(.918 .013 var(--accent-hue)); font: 11px/1.5 var(--sans); text-align: center; }
 .boot-core { position: relative; width: min(430px, calc(100vw - 46px)); display: flex; flex-direction: column; align-items: center; text-align: center; }
-.boot-core > .portia-mark { position: relative; width: 112px; height: 112px; animation: spider-descend 900ms cubic-bezier(.16, 1, .3, 1) both; }
+.boot-core > .portia-mark { position: relative; width: 112px; height: 112px; animation: spider-descend 900ms cubic-bezier(.16, 1, .3, 1) both; animation-play-state: paused; }
+.boot-core.is-ready > :is(.portia-mark, .boot-thread) { animation-play-state: running; }
 .boot-core > span { margin-top: 15px; color: oklch(.953 .011 var(--accent-hue)); font: 700 25px var(--sans); letter-spacing: .12em; }
 .boot-core > strong { margin-top: 7px; color: oklch(.532 .038 var(--accent-hue)); font: 700 11px var(--sans); letter-spacing: .18em; }
-.boot-progress { width: 100%; height: 4px; margin-top: 35px; background: oklch(.228 .023 var(--accent-hue)); overflow: hidden; }
-.boot-progress i { display: block; width: 100%; height: 100%; transform-origin: left; background: var(--teal); animation: boot-load 1.45s cubic-bezier(.2,.7,.2,1) both; }
-.boot-lines { width: 100%; display: flex; justify-content: space-between; gap: 9px; margin-top: 12px; color: oklch(.455 .039 var(--accent-hue)); font: 11px var(--sans); letter-spacing: .06em; }
-@keyframes boot-load { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-@keyframes boot-pulse { from { opacity: .72; } to { opacity: 1; } }
+/* Terminal lines typed under the spider; under reduced motion they fade in on the same beats. */
+.boot-lines { width: 100%; display: grid; gap: 4px; margin-top: 28px; text-align: left; color: var(--teal-dim); font: 500 11px/1.5 var(--sans); letter-spacing: .04em; }
+.boot-lines p { margin: 0; white-space: nowrap; overflow: hidden; }
+html[data-motion="full"] .boot-lines p { clip-path: inset(0 100% 0 0); animation: boot-type 260ms steps(18, end) both; }
+html[data-motion="reduce"] .boot-lines p { animation: fade-in 160ms ease-out both !important; }
+@keyframes boot-type { to { clip-path: inset(0 0 0 0); } }
 @keyframes boot-screen-failsafe { to { opacity: 0; visibility: hidden; pointer-events: none; } }
 
 .archive-grid, .global-search-app, .info-library, .personnel-app, .broadcasts-app, .settings-app, .trash-app, .content-editor { min-height: 0; max-height: calc(100% - 46px); }
@@ -1103,7 +1105,7 @@ html[data-motion="reduce"] .wallpaper-web path { animation: none; stroke-dashoff
 html[data-motion="reduce"] .wallpaper-helix { animation: none; }
 
 /* The spider lowers itself on a silk thread while the terminal boots. */
-.boot-thread { position: absolute; left: 50%; bottom: calc(100% - 46px); width: 1px; height: 50vh; background: linear-gradient(transparent, var(--teal)); transform-origin: top; animation: thread-spin 900ms cubic-bezier(.16, 1, .3, 1) both; }
+.boot-thread { position: absolute; left: 50%; bottom: calc(100% - 46px); width: 1px; height: 50vh; background: linear-gradient(transparent, var(--teal)); transform-origin: top; animation: thread-spin 900ms cubic-bezier(.16, 1, .3, 1) both; animation-play-state: paused; }
 @keyframes spider-descend { from { opacity: 0; transform: translateY(-46vh); } 70% { opacity: 1; } to { opacity: 1; transform: translateY(0); } }
 @keyframes thread-spin { from { transform: translateX(-50%) scaleY(0); } to { transform: translateX(-50%) scaleY(1); } }
 /* An exiting window takes no input; its animation runs only when motion is welcome. */
