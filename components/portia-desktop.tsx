@@ -20,7 +20,10 @@ const embeddedApps = {
   sheet: { src: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/htmlview?widget=true&headers=false", external: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" },
   charter: { src: "https://sdqwqsdawqd.github.io/S.E-Portia/", external: "https://sdqwqsdawqd.github.io/S.E-Portia/" },
 } as const;
-type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number; geometry?: WindowGeometry };
+type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number; geometry?: WindowGeometry; exiting?: "close" | "minimize" };
+// Must equal the window-close and window-genie durations in app/portia.css.
+const WINDOW_CLOSE_MS = 160;
+const WINDOW_MINIMIZE_MS = 320;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string };
 type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
@@ -255,6 +258,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const assistantCooldownTimer = useRef<number | null>(null);
   const assistantAutomaticTimer = useRef<number | null>(null);
   const settingsSavedTimer = useRef<number | null>(null);
+  const exitTimers = useRef<Partial<Record<AppId, number>>>({});
   const assistantClickStreak = useRef<{ startedAt: number; lastClickAt: number } | null>(null);
   const assistantAdviceBag = useRef<number[]>([]);
   const assistantAdviceSignature = useRef("");
@@ -434,6 +438,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     if (assistantCooldownTimer.current) window.clearTimeout(assistantCooldownTimer.current);
     if (assistantAutomaticTimer.current) window.clearTimeout(assistantAutomaticTimer.current);
     if (settingsSavedTimer.current) window.clearTimeout(settingsSavedTimer.current);
+    Object.values(exitTimers.current).forEach((timer) => window.clearTimeout(timer));
   }, []);
 
   useEffect(() => {
@@ -547,14 +552,21 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   };
 
   const openApp = (appId: AppId) => {
+    // Re-opening a window while it closes or minimises cancels the exit and keeps it.
+    const pendingExit = exitTimers.current[appId];
+    if (pendingExit) {
+      window.clearTimeout(pendingExit);
+      delete exitTimers.current[appId];
+    }
     setWindows((state) => {
-      const openCount = Object.values(state).filter((windowState) => windowState.open && !windowState.minimized).length;
+      const openCount = Object.values(state).filter((windowState) => windowState.open && !windowState.minimized && !windowState.exiting).length;
       return {
         ...state,
         [appId]: {
           ...state[appId],
           open: true,
           minimized: false,
+          exiting: undefined,
           // A size remembered from a bigger screen is refitted, so the window never opens past the edge.
           geometry: state[appId].geometry ? fitGeometry(state[appId].geometry, workspaceBounds(), minimumWindowSize(appId)) : createWindowGeometry(appId, openCount),
         },
@@ -569,15 +581,38 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
   };
 
-  const closeApp = (appId: AppId) => {
-    setWindows((state) => ({ ...state, [appId]: { ...state[appId], open: false, minimized: false, maximized: false } }));
+  // Functional update only: a late timer must never act on a stale render's windows.
+  const finishExit = (appId: AppId, kind: "close" | "minimize") => {
+    setWindows((state) => ({
+      ...state,
+      [appId]: kind === "close"
+        ? { ...state[appId], open: false, minimized: false, maximized: false, exiting: undefined }
+        : { ...state[appId], minimized: true, exiting: undefined },
+    }));
+  };
+
+  // Phase 3: the editor's unsaved-changes guard must run before an exit starts.
+  const requestExit = (appId: AppId, kind: "close" | "minimize") => {
+    if (windows[appId].exiting) return;
     if (activeApp === appId) {
       const fallback = (Object.keys(windows) as AppId[])
-        .filter((id) => id !== appId && windows[id].open && !windows[id].minimized)
+        .filter((id) => id !== appId && windows[id].open && !windows[id].minimized && !windows[id].exiting)
         .sort((a, b) => windows[b].z - windows[a].z)[0];
       setActiveApp(fallback ?? "archive");
     }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      finishExit(appId, kind);
+      return;
+    }
+    setWindows((state) => ({ ...state, [appId]: { ...state[appId], exiting: kind } }));
+    // A timer, not animationend: in a hidden tab the animation event may never fire.
+    exitTimers.current[appId] = window.setTimeout(() => {
+      delete exitTimers.current[appId];
+      finishExit(appId, kind);
+    }, kind === "close" ? WINDOW_CLOSE_MS : WINDOW_MINIMIZE_MS);
   };
+
+  const closeApp = (appId: AppId) => requestExit(appId, "close");
 
   const minimizeApp = (appId: AppId) => {
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], minimized: true } }));
@@ -1241,7 +1276,7 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     transform: "none",
   } : {};
 
-  return <section ref={windowRef} className={`app-window ${className}${active ? " is-active" : ""}${state.maximized ? " is-maximized" : ""}`} style={{ zIndex: state.z, display: state.minimized ? "none" : undefined, ...geometryStyle }} onPointerDown={() => onFocus(app)} aria-label={appMeta[app].label}>
+  return <section ref={windowRef} className={`app-window ${className}${active ? " is-active" : ""}${state.maximized ? " is-maximized" : ""}${state.exiting === "close" ? " is-closing" : ""}`} style={{ zIndex: state.z, display: state.minimized ? "none" : undefined, ...geometryStyle }} onPointerDown={() => onFocus(app)} aria-label={appMeta[app].label}>
     <div className="window-titlebar" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest("button")) onMaximize(app); }}><div className="window-identity"><span className="window-app-mark"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].path}</span></div><div className="window-meta">{meta}</div><div className="window-controls"><button type="button" data-window-action="minimize" onClick={(event) => { event.stopPropagation(); onMinimize(app); }} aria-label={`Свернуть ${appMeta[app].label}`}>―</button><button type="button" data-window-action="maximize" onClick={(event) => { event.stopPropagation(); onMaximize(app); }} aria-label={`Развернуть ${appMeta[app].label}`}>□</button><button type="button" data-window-action="close" onClick={(event) => { event.stopPropagation(); onClose(app); }} aria-label={`Закрыть ${appMeta[app].label}`}>×</button></div></div>
     {children}
     {resizeEdges.map((edge) => <span key={edge} className={`window-edge window-edge-${edge}`} aria-hidden="true" onPointerDown={beginResize(edge)} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} />)}
