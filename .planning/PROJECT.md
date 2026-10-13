@@ -18,7 +18,13 @@
 
 - ✓ Рабочий стол PORTIA OS: окна с перетаскиванием и изменением размера за любой край, ярлыки, панель задач, обои SVG по цвету акцента — existing
 - ✓ Архив вирусов, сотрудники (синхронизация с таблицей, максимум 34), рассылки, информация — existing
-- ✓ Встроенные окна «Таблица» и «Устав» с масштабом Ctrl+колесо — existing (не закоммичено)
+- ✓ Встроенные окна «Таблица» и «Устав» с масштабом Ctrl+колесо — existing (закоммичено в Phase 1)
+- ✓ FIX-01 ручка ≡ в начале строки, без подписи — Phase 1
+- ✓ FIX-02 «Устав»/«Таблица» на всё окно при любом масштабе — Phase 1
+- ✓ FIX-03 поле редактора = шрифт той области сайта, которую оно правит (WYSIWYG) — Phase 1
+- ✓ FIX-04 файл из Корзины на всё окно — Phase 1
+- ✓ FIX-05 профиль Roblox по клику на портрет — Phase 1
+- ✓ Dark Reader не перекрашивает сайт (meta darkreader-lock) — Phase 1
 - ✓ Редактор с ревизиями (оптимистичное сохранение, защита от перезаписи), корзина, рекомендации — existing
 - ✓ Вход владельца/редакторов через Supabase, RLS-функции portia_* — existing
 - ✓ Кэш Netlify CDN с очисткой по тегам — existing
@@ -39,7 +45,7 @@
 - Карта кода: `.planning/codebase/` (7 документов, 2026-10-12).
 - Направление дизайна «Электрофорез» (дорожки геля), договор в `.impeccable/surfaces/components-portia-desktop-tsx.md`; продуктовый контекст в `PRODUCT.md`.
 - Палитра тёмно-бирюзовая, акценты ice/amber/red через `data-accent`; SVG-иконки в currentColor.
-- Шрифты сейчас: Golos Text / Unbounded / JetBrains Mono (next/font); в полях редактора остался Georgia.
+- Шрифты сейчас: Golos Text (интерфейс и тексты), Unbounded (заголовки), JetBrains Mono (коды, часы), IBM Plex Serif (только записи учёных); Georgia удалён. Поля редактора берут шрифт из общего CSS-правила с областью сайта (`.formatted-rich-input[data-area=…]`).
 - Ветки: `fix/employee-refresh-and-speed` (ждёт PR), `design/stage-1-desktop` (текущая).
 
 ## Constraints
@@ -58,6 +64,8 @@
 | Публикация только локально | Решение пользователя | — Pending |
 | «РЕВИЗИЯ N» оставить | Решение пользователя | — Pending |
 | Общую расстановку ярлыков задаёт только владелец | Решение пользователя | — Pending |
+| Поле редактора выглядит как область сайта, которую оно правит (шрифт/размер/интервал из одного правила) | Уточнение пользователя в UAT Phase 1 | ✓ Phase 1 (01-04) |
+| Переключатель БЕЛЫЙ/ЧЁРНЫЙ меняет только цвет и фон | Следствие WYSIWYG | ✓ Phase 1 |
 
 ## Evolution
 
@@ -77,4 +85,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-12 after initialization*
+*Last updated: 2026-10-13 after Phase 1*

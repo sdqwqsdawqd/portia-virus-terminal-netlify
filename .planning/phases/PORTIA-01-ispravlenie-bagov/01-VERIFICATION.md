@@ -1,7 +1,7 @@
 ---
 phase: PORTIA-01-ispravlenie-bagov
 verified: 2026-10-13T14:00:00Z
-status: human_needed
+status: passed
 score: 12/12 must-haves verified
 covered_files:
   - .planning/phases/PORTIA-01-ispravlenie-bagov/01-01-PLAN.md

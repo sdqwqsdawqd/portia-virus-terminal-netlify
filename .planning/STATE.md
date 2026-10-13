@@ -1,38 +1,38 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 01
-current_phase_name: ispravlenie-bagov
-status: executing
-stopped_at: Completed PORTIA-01-04-PLAN.md
-last_updated: "2026-10-13T06:59:17.132Z"
+current_phase: 2
+current_phase_name: Внешний вид
+status: planning
+stopped_at: Phase PORTIA-01 complete, ready to plan Phase 2
+last_updated: "2026-10-13T07:08:59.658Z"
 last_activity: 2026-10-13
-last_activity_desc: Phase PORTIA-01 execution resumed (wave continue)
-state_head: a9241e60f56f58924e78eeed1ec691835ddce340
+last_activity_desc: Phase PORTIA-01 complete, transitioned to Phase 2
+state_head: 2f802f0933c3be72e468f41108e291eed8a31640
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
   completed_plans: 4
-  percent: 0
+  percent: 20
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-12)
+See: .planning/PROJECT.md (updated 2026-10-13)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-01 — Исправление багов
+**Current focus:** Phase 2 — Внешний вид (контекст собран, готово к планированию)
 
 ## Current Position
 
-Phase: PORTIA-01 (ispravlenie-bagov) — READY TO EXECUTE
-Plan: 2 of 2
-Status: Executing Phase PORTIA-01
-Last activity: 2026-10-13 — Phase PORTIA-01 execution resumed (wave continue)
+Phase: 2 — Внешний вид
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-13 — Phase PORTIA-01 complete, transitioned to Phase 2
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 20%
 
 ## Accumulated Context
 
@@ -46,16 +46,18 @@ Decisions are logged in PROJECT.md Key Decisions table.
 
 ### Pending Todos
 
-- Незакоммиченные изменения на design/stage-1-desktop: зум документов, darkreader-lock, удалённый подзаголовок пустого архива
+None — незакоммиченная работа закоммичена в Phase 1 (ecaf6a4).
 
 ### Blockers/Concerns
 
-None yet.
+- ⚠️ [Phase 1] `.assistant-bubble > span` перекрывает корень текста помощника (межбуквенный интервал/интерлиньяж пузыря чуть отличаются от поля редактора) — не исправлено, см. 01-04-SUMMARY.
+- ⚠️ [Phase 1] Пресеты размера панели оформления (13/17/22/30) не совпадают с базовыми размерами большинства областей — фаза 5 (TEXT-01).
+- ⚠️ [Project] Проект лежит только во временной папке сессии Claude — перенести в постоянную папку.
 
 ## Session Continuity
 
 Last session: 2026-10-13T06:59:17.076Z
-Stopped at: Completed PORTIA-01-04-PLAN.md
+Stopped at: Phase PORTIA-01 complete, ready to plan Phase 2
 Resume file: None
 
 ## Performance Metrics
