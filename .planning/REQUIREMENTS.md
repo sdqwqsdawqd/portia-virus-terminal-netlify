@@ -14,7 +14,7 @@
 
 - [x] **LOOK-01**: Смена цвета интерфейса перекрашивает боковые панели, помощника и лого-паука
 - [x] **LOOK-02**: Шрифт более «терминальный», но приятный глазу (варианты предложить заранее)
-- [ ] **LOOK-03**: Новые SVG и SVG-анимации (варианты предложить заранее)
+- [x] **LOOK-03**: Новые SVG и SVG-анимации (варианты предложить заранее)
 
 ### Редактор (EDIT)
 
@@ -50,7 +50,7 @@
 | FIX-05 | Phase 1 | Complete |
 | LOOK-01 | Phase 2 | Complete |
 | LOOK-02 | Phase 2 | Complete |
-| LOOK-03 | Phase 2 | Pending |
+| LOOK-03 | Phase 2 | Complete |
 | EDIT-01 | Phase 3 | Pending |
 | EDIT-02 | Phase 3 | Pending |
 | EDIT-03 | Phase 3 | Pending |
