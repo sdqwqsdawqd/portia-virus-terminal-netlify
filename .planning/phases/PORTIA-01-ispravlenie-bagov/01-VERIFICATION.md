@@ -1,8 +1,8 @@
 ---
 phase: PORTIA-01-ispravlenie-bagov
-verified: 2026-10-13T11:30:00Z
+verified: 2026-10-13T14:00:00Z
 status: human_needed
-score: 6/6 must-haves verified
+score: 12/12 must-haves verified
 covered_files:
   - .planning/phases/PORTIA-01-ispravlenie-bagov/01-01-PLAN.md
   - .planning/phases/PORTIA-01-ispravlenie-bagov/01-01-SUMMARY.md
@@ -10,43 +10,32 @@ covered_files:
   - .planning/phases/PORTIA-01-ispravlenie-bagov/01-02-SUMMARY.md
   - .planning/phases/PORTIA-01-ispravlenie-bagov/01-03-PLAN.md
   - .planning/phases/PORTIA-01-ispravlenie-bagov/01-03-SUMMARY.md
+  - .planning/phases/PORTIA-01-ispravlenie-bagov/01-04-PLAN.md
+  - .planning/phases/PORTIA-01-ispravlenie-bagov/01-04-SUMMARY.md
   - app/layout.tsx
   - app/portia.css
   - components/portia-desktop.tsx
   - components/portia-editor.tsx
-covered_digest: "v3:sha256:d68d4220180dd92c610ce314c337b433c549bb53c342179d1f897db732790daa"
-behavior_unverified: 1
+covered_digest: "v3:sha256:11c6a4369d1acc0dfb90249468c80d9b8c70ca75e0dc26dccb377aa14083e819"
+behavior_unverified: 0
 re_verification:
-  previous_status: gaps_found
-  previous_score: 5/6
+  previous_status: human_needed
+  previous_score: 6/6
   gaps_closed:
-    - "Dark Reader is locked: the committed WIP `darkreader-lock` meta actually reaches the page (CR-01)"
+    - "G-PORTIA-01-5 (UAT test 5): editor field font must match the site area being edited (user clarification, supersedes 01-CONTEXT D-03)"
+    - "Ctrl+wheel zoom with iframe focus (previously behavior_unverified): UAT test 1 passed by the user"
   gaps_remaining: []
   regressions: []
-behavior_unverified_items:
-  - truth: "Ctrl+wheel zoom of the embedded «Устав»/«Таблица» works (committed WIP; plan 01-01 truth)"
-    test: "Open «Устав», click inside the document so the iframe has focus, then hold Ctrl and scroll the wheel. Repeat after clicking the window title bar (parent focus). Also hold the Win key while over the document."
-    expected: "Document zoom steps 50-200 % in both cases and the browser tab does not zoom; Win key does not raise the overlay or block clicks/scroll"
-    why_human: "Code review WR-01/WR-02/WR-03: ctrlHeld is driven by keydown/keyup on the parent window only, so with focus inside the iframe the overlay never mounts and the wheel is swallowed by the iframe; `metaKey` also counts as a modifier. Event routing across a cross-origin iframe is not assertable by grep and no test covers it."
 human_verification:
-  - test: "Open «Устав» and «Таблица»: step 50/100/200 % with − / + and Ctrl+wheel, windowed, maximized, 375px. Also click into the document first, then Ctrl+wheel."
-    expected: "Page covers the whole area under the title bar at every step; bar stays a bottom-right pill; Ctrl+wheel zooms the document, not the tab, even with iframe focus."
-    why_human: "Cross-origin iframe under transform; key/wheel routing (WR-01)."
-  - test: "Owner login (/owner-login): virus list, «Информация» sections, «Корзина», «Рекомендации» at desktop and 375px; long-press (about 170 ms) and drag to reorder."
-    expected: "Only ≡ at row start, fully inside the row, no label or tooltip; reorder works."
-    why_human: "Owner session required; containment is a rendered property."
-  - test: "«Корзина»: open a text file, an image and a recycled virus, windowed/maximized/375px; press ×."
-    expected: "Heading hidden, viewer meets the title bar and window edges, virus record keeps its header, × restores the list."
-    why_human: "Rendered geometry."
-  - test: "«Сотрудники»: employee with and without Roblox id; hover, Tab, click the portrait."
-    expected: "No «Профиль Roblox» text; hover ring and hand cursor; click opens roblox.com/users/{id}/profile in a new tab; no link without id."
-    why_human: "Hover/focus/new-tab behaviour."
-  - test: "DevTools Computed/Rendered Fonts on rich-text field, scientist log, archive paragraph; compare «ЖИРНЫЙ» vs «СРЕДНИЙ»."
-    expected: "IBM Plex Serif with Cyrillic, no change on focus, visible weight difference."
-    why_human: "Glyph and weight rendering."
-  - test: "With the Dark Reader extension enabled, open the site."
-    expected: "The extension reports the site as locked / already dark and does not rewrite the page."
-    why_human: "Extension behaviour is not observable from build output (the tag itself is verified below)."
+  - test: "Owner login (/owner-login). For each of the 10 areas open the editor field and the matching site area side by side (lead: virus dossier sections 02/04; metric: section 03; mutation: section 05; scientist: log; info: «Информация»; broadcast: «Сводка»; trash text file and image caption: «Корзина»; search: «Рекомендации»; assistant: Вивьян bubble). Toggle БЕЛЫЙ/ЧЁРНЫЙ. Repeat at 375px."
+    expected: "Each field shows the same typeface, base size and line height as the site text it edits; only the scientist field is serif; the preview toggle changes colour and background only. This is the UAT test 5 re-test."
+    why_human: "Rendered side-by-side comparison inside the owner session; computed styles were checked by the orchestrator at 397px but not visually compared."
+  - test: "Judge the two small fields: «Рекомендации» (search, 11px) and the assistant phrase fields (700 10px Segoe UI stack)."
+    expected: "The user accepts that these editor fields are now as small as the site text they mirror."
+    why_human: "Product decision: a faithful mirror makes these fields much smaller than the old 17px field."
+  - test: "Open «Сводка» with a published broadcast."
+    expected: "Type label (ЗАДАЧА / НОВОСТЬ / ЕЖЕНЕДЕЛЬНЫЙ КВЕСТ) stays 11px bold in teal/amber/blue; the body is now 15px regular grey-green."
+    why_human: "Intentional visible change on the public site (listed in 01-04 SUMMARY); needs the user's eye."
 ---
 
 # Phase PORTIA-01: Исправление багов Verification Report
@@ -54,11 +43,13 @@ human_verification:
 **Phase Goal:** Пять видимых багов из списка пользователя устранены, незакоммиченная работа (зум, Dark Reader, подзаголовок) закоммичена
 **Verified:** 2026-10-13
 **Status:** human_needed
-**Re-verification:** Yes, after gap closure (plan 01-03)
+**Re-verification:** Yes, after UAT gap closure (plan 01-04)
 
 ## Re-verification Summary
 
-The single previous gap (CR-01, `darkreader-lock` meta never emitted) is closed. Truths 1-5 were re-checked quickly for regressions (existence and sanity); none found. Plan 01-03 touched only `app/layout.tsx` (`git diff --stat 83d176b..HEAD -- app components lib` after a4df852 shows the layout file as the only change from that commit), so no regression surface exists in the other files.
+Gap G-PORTIA-01-5 (UAT test 5) is closed in code. The previously tracked behavior-unverified item (Ctrl+wheel zoom with iframe focus) is resolved by the user's UAT test 1 pass. UAT test 6 (Dark Reader extension) was skipped by the user ("не важно"); the meta tag itself stays verified in the code. What remains is the human re-test of test 5: a rendered side-by-side comparison of editor field vs site text in the owner session, plus acceptance of the small search and assistant fields.
+
+Truths 1-6 from the previous report were regression-checked (existence and sanity): `ТЯНИТЕ` count 0 in `components/portia-editor.tsx`; `.document-app-viewport` absolute (portia.css:1118-1119); `is-viewing` at portia-desktop.tsx:922; `a.personnel-portrait` with roblox.com href at :872; `darkreader-lock` at layout.tsx:22; no Georgia anywhere in app/components/lib. Plan 01-04 touched only `components/portia-editor.tsx` and `app/portia.css` (git diff fe2fbf8..a9241e6), so layout.tsx and portia-desktop.tsx are unchanged.
 
 ## Goal Achievement
 
@@ -66,21 +57,30 @@ The single previous gap (CR-01, `darkreader-lock` meta never emitted) is closed.
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | SC1 / FIX-01: drag handle fully inside the row | ✓ VERIFIED (static) | `ТЯНИТЕ` count in portia-editor.tsx is 0; `OrderDragHandle` unchanged since the previous pass. Rendered check is a human item. |
-| 2 | SC2 / FIX-02: «Устав» fills the whole window at any zoom | ✓ VERIFIED (static) | `.document-app-viewport { position:absolute; inset:0 }` and absolutely positioned scaled iframe present (portia.css:1106-1107). Visual check is a human item. |
-| 3 | SC3 / FIX-03: no Georgia in editor fields | ✓ VERIFIED | `grep -i georgia` over app/components/lib returns nothing; `plexSerif` still wired in layout.tsx (`--font-plex-serif` on `<html>`). |
-| 4 | SC4 / FIX-04: file from «Корзина» opens over the whole window | ✓ VERIFIED (static) | `is-viewing` toggle present at portia-desktop.tsx:922. Geometry is a human item. |
-| 5 | SC5 / FIX-05: portrait click opens Roblox profile, no text link | ✓ VERIFIED (static) | `a.personnel-portrait` with roblox.com href at portia-desktop.tsx:872, `<figure>` fallback without id. |
-| 6 | Goal clause: uncommitted WIP (zoom, Dark Reader, subtitle) committed, and the Dark Reader lock actually works | ✓ VERIFIED (Dark Reader, subtitle); ⚠️ PRESENT_BEHAVIOR_UNVERIFIED (zoom) | Commit ecaf6a4 holds the WIP. Commit a4df852 sets `other: { "darkreader-lock": "true" }` (layout.tsx:22). Built `.next/server/app/index.html` (mtime 11:11:56, after layout.tsx 11:10:04) contains `<meta name="darkreader-lock" content="true"/>` at offset 2908, inside `<head>` (226..3175). Zoom behavior with iframe focus is the tracked human item below. |
+| 1 | SC1 / FIX-01: drag handle fully inside the row | ✓ VERIFIED (static; UAT 2 pass) | `ТЯНИТЕ` count 0; UAT test 2 passed by the user |
+| 2 | SC2 / FIX-02: «Устав» fills the whole window at any zoom | ✓ VERIFIED (static; UAT 1 pass) | portia.css:1118-1119; UAT test 1 passed, including Ctrl+wheel with iframe focus |
+| 3 | SC3 / FIX-03: no Georgia, editor fields use the font of the site area they edit | ✓ VERIFIED (code + computed styles); visual re-test pending | See truths 7-11; `grep -i georgia` over app/components/lib: none |
+| 4 | SC4 / FIX-04: file from «Корзина» opens over the whole window | ✓ VERIFIED (static; UAT 3 pass) | portia-desktop.tsx:922; UAT test 3 passed |
+| 5 | SC5 / FIX-05: portrait click opens Roblox profile, no text link | ✓ VERIFIED (static; UAT 4 pass) | portia-desktop.tsx:872; UAT test 4 passed |
+| 6 | Goal clause: WIP (zoom, Dark Reader, subtitle) committed; lock reaches the page | ✓ VERIFIED | Commit ecaf6a4 (UAT test 7 auto-pass); `other: { "darkreader-lock": "true" }` at layout.tsx:22; extension reaction not tested (test 6 skipped by the user) |
+| 7 | 01-04: every editor field mirrors the font family, size and line height of its site area; only scientist is serif | ✓ VERIFIED | `type DisplayArea` (10 literals, editor:38); required `area: DisplayArea` prop (:1031); `data-area={area}` on the contentEditable div with `ref={editorRef}` (:1081); `area=` at all 13 call sites (613, 614, 619, 637, 653, 684, 700, 798 via image/text ternary, 814, 833, 834, 841, 842); shared block portia.css:475-484, all `var(--sans)` except scientist `var(--serif)` and assistant `var(--assistant-font)` |
+| 8 | 01-04: each area font declared once in a shared rule (display selector + `[data-area]` field); ≤900px overrides carry the field | ✓ VERIFIED | Display rules no longer declare font (diff shows font/size/line-height removed from the 9 display rules); grep of all area classes finds no competing font rule on the same elements except the dead `p` rules and the unrelated children; overrides at portia.css:911 (lead), :945 (info), :989 (trash) list the field |
+| 9 | 01-04: БЕЛЫЙ/ЧЁРНЫЙ toggle changes only background and colour; base `.formatted-rich-input` sets no font | ✓ VERIFIED | portia.css:468 and :472 carry no font/font-family; only `:empty::before` placeholder font (:473) remains, which is not text content |
+| 10 | 01-04: broadcast body renders 15px/1.7 regular; label keeps 700 11px | ✓ VERIFIED | portia.css:376-378 narrowed to `> span:first-child`; label is the first span of `.broadcast-card` (portia-desktop.tsx:912) and the body `FormattedText.broadcast-card-copy` is a later sibling |
+| 11 | 01-04: other areas keep their previous values; no Georgia | ✓ VERIFIED | Shared values equal the removed display values (16/1.75, 14/1.6, 14/1.65, 17/1.78 serif, 16/1.78, 14/1.75, 14/1.65, 11px, 700 10px/1.5); ≤900px values unchanged (15/1.7, 15, 12/1.65); assistant `!important` rule at :658 now uses `var(--assistant-font)`, literal Segoe stack appears once (:25) |
+| 12 | 01-04: three local commits on design/stage-1-desktop; tsc, tests, build green | ✓ VERIFIED | `git log fe2fbf8..HEAD`: 5dfa482, 374335a, a9241e6 (+ docs 439b69c) on branch design/stage-1-desktop; `npx tsc --noEmit` exit 0 and `npm test` 13 pass / 0 fail re-run by the verifier; `npm run build` exit 0 and live computed fonts per area at 397px are the orchestrator's report (not re-run here); lint not re-run |
 
-**Score:** 6/6 truths verified (1 present, behavior-unverified: Ctrl+wheel zoom, counted within truth 6 only for its commit/presence part and tracked separately)
+**Score:** 12/12 truths verified, 0 behavior-unverified. The only open items are visual/product confirmations for UAT test 5.
 
-### Gap Closure Check (CR-01)
+### Prohibitions (01-04)
 
-- Source: `app/layout.tsx:21-22`, comment explains why content must be non-empty; value `"true"`. Title, description, icons, the four font instances, `<html>` className and `suppressHydrationWarning` are unchanged (read in full).
-- Commit: a4df852 `fix(layout): emit darkreader-lock meta (CR-01)`, one file, +2/-1. Summary commit 4afbdeb is docs only.
-- Artifact: `grep -o '<meta[^>]*darkreader[^>]*>'` on the fresh build returns the single expected tag.
-- Prohibitions in 01-03 (no forced colour/colour-scheme overrides, no script, no push/PR/branch change): diff is a single meta value; nothing else added. Judgment tier, no violation seen; NON-AUTHORITATIVE judgment, human review of the diff is trivial (2 lines).
+All three are judgment tier; NON-AUTHORITATIVE verdicts, no violation seen.
+
+| Prohibition | Verdict | Evidence |
+|-------------|---------|----------|
+| Saved content unchanged (formatKey, RichTextDocument shape, save path) | no violation (judgment) | Editor diff is only the type, the prop in the destructuring and signature, `data-area`, and `area=` attributes at call sites |
+| role=textbox, aria-multiline, spellCheck, handlers unchanged | no violation (judgment) | Lines :1082-1090 untouched in the diff |
+| No change to formatting panel controls or layout; no push/PR/branch switch | no violation (judgment) | Diff touches only portia-editor.tsx and portia.css font declarations plus selectors; branch is design/stage-1-desktop |
 
 ### Deferred Items
 
@@ -90,34 +90,30 @@ None.
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `app/layout.tsx` | IBM_Plex_Serif as `--font-plex-serif`; darkreader-lock with non-empty content | ✓ VERIFIED | Font wiring intact; meta now emitted |
-| `app/portia.css` | `--serif` token, absolute viewport, 34px-first grids, `.trash-app.is-viewing`, portrait link | ✓ VERIFIED | Unchanged since previous pass; spot-checked |
-| `components/portia-desktop.tsx` | `EmbeddedDocument`, `is-viewing`, portrait link | ✓ VERIFIED | lines 872, 922 |
-| `components/portia-editor.tsx` | `OrderDragHandle` only ≡ | ✓ VERIFIED | no `ТЯНИТЕ` |
+| `components/portia-editor.tsx` | `DisplayArea` union, required `area` prop rendered as `data-area`, 13 call sites | ✓ VERIFIED | contains `data-area={area}`; all 13 sites pass `area` |
+| `app/portia.css` | one shared typography rule per area, `--assistant-font` token, narrowed broadcast label selectors, no font on base/preview-dark | ✓ VERIFIED | lines 25, 376-378, 468-484, 658, 911, 945, 989 |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| layout.tsx `other["darkreader-lock"]` | rendered `<meta>` in `<head>` | Next metadata | WIRED | tag present in built HTML at offset 2908 |
-| layout.tsx plexSerif.variable | portia.css `--serif` | `--font-plex-serif` on `<html>` | WIRED | unchanged |
-| activeTrashFile/Virus | `.trash-app.is-viewing` | className toggle | WIRED | unchanged |
-| `selectedEmployee.robloxUserId` | roblox.com profile URL | href on `a.personnel-portrait` | WIRED | unchanged |
+| FormattedTextarea `area` | `.formatted-rich-input[data-area=...]` | `data-area={area}` | WIRED | specificity (0,2,0) beats base (0,1,0); orchestrator computed fonts confirm each area applies |
+| Site display selectors | shared rule | selector list | WIRED | display rules have no font of their own, shared block is the sole source |
+| `--assistant-font` | `.assistant-formatted-text > span` and shared assistant rule | `var(--assistant-font)` | WIRED | portia.css:484, :658 |
 
 ### Data-Flow Trace (Level 4)
 
-Not applicable: layout/CSS/font/link/metadata changes. Portrait `href` derives from real employee data.
+Not applicable: presentation-only change (prop to attribute to CSS). `area` is never stored.
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| darkreader meta in built HTML | `grep -o '<meta[^>]*darkreader[^>]*>' .next/server/app/index.html` | `<meta name="darkreader-lock" content="true"/>`, inside `<head>` | ✓ PASS |
 | Typecheck | `npx tsc --noEmit` | exit 0 | ✓ PASS |
-| Unit tests | `npm test` | 13 pass / 0 fail | ✓ PASS (none cover the UI changes) |
-| No Georgia left | `grep -rIil georgia app components lib` | none | ✓ PASS |
-
-Build was not re-run by the verifier; the orchestrator reported exit 0 and the on-disk `.next` output is newer than the last source edit and was inspected directly.
+| Unit tests | `npm test` | 13 pass / 0 fail | ✓ PASS (none cover the UI) |
+| 13 call sites pass `area` | grep `area=` in portia-editor.tsx | 13 sites | ✓ PASS |
+| Computed field fonts at 397px | orchestrator report | lead Golos 15/1.7, metric 14, mutation 14, scientist IBM Plex Serif 17/1.78, info 15, broadcast 15/1.7, trash 12, caption 14, search 11, assistant Segoe UI 10 bold | ✓ PASS (reported, not reproduced) |
+| No Georgia | `grep -rIil georgia app components lib` | none | ✓ PASS |
 
 ### Probe Execution
 
@@ -127,32 +123,32 @@ SKIPPED, no probes declared by any plan.
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|------------|-------------|--------|----------|
-| FIX-01 | 01-02 | Drag handle stays inside row | ✓ SATISFIED (rendered check pending) | truth 1 |
-| FIX-02 | 01-01 | Устав fills window | ✓ SATISFIED (rendered check pending) | truth 2 |
-| FIX-03 | 01-01 | Site font instead of Georgia | ✓ SATISFIED | truth 3 |
-| FIX-04 | 01-02 | Trash file full window | ✓ SATISFIED (rendered check pending) | truth 4 |
-| FIX-05 | 01-02 | Roblox via portrait click | ✓ SATISFIED (interactive check pending) | truth 5 |
+| FIX-01 | 01-02 | Drag handle inside row | ✓ SATISFIED | truth 1, UAT 2 pass |
+| FIX-02 | 01-01 | Устав fills window | ✓ SATISFIED | truth 2, UAT 1 pass |
+| FIX-03 | 01-01, 01-04 | Editor fields use site font, clarified: font of the edited area | ✓ SATISFIED in code; visual re-test pending | truths 3, 7-11 |
+| FIX-04 | 01-02 | Trash file full window | ✓ SATISFIED | truth 4, UAT 3 pass |
+| FIX-05 | 01-02 | Roblox via portrait click | ✓ SATISFIED | truth 5, UAT 4 pass |
 
-All five IDs appear in PLAN frontmatter (01-01, 01-02) and REQUIREMENTS.md (lines 7-11, traceability table lines 46-50). Plan 01-03 declares `requirements: []` by design (closes a goal clause, not a FIX-xx). No orphaned IDs. Note: REQUIREMENTS.md currently shows `[ ]` / "Gaps Found" for all five (reverted in commit 59b99e0); it should be flipped back to Complete by the orchestrator since the gap is now closed.
+All five IDs appear in PLAN frontmatter (01-01, 01-02, 01-04) and in REQUIREMENTS.md (lines 7-11, table 46-50). No orphaned IDs. Plan 01-03 declares `requirements: []` by design. Tracking mismatch for the orchestrator: REQUIREMENTS.md still shows `[ ]` / "Gaps Found" for FIX-01, 02, 04, 05 (only FIX-03 is Complete), although UAT tests 1-4 passed. FIX-03 should stay Complete only once the test 5 re-test passes.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| components/portia-desktop.tsx | 1109-1119, 1128 | zoom modifier driven by parent-window key events; `metaKey` counted | ⚠️ Warning | WR-01/02/03: Ctrl+wheel zoom lost when iframe focused; explicitly out of scope for 01-03, human item, not a gap |
-| components/portia-desktop.tsx | 872 | unlabelled portrait link, no `title` | ℹ️ Info | IN-01 (deliberate per D-05) |
-| components/portia-editor.tsx | 131-152 | no hint for 170 ms hold-to-drag | ℹ️ Info | IN-02 (deliberate per D-01) |
-| components/portia-desktop.tsx | 1148 | aria-label hides zoom value | ℹ️ Info | IN-03 |
+| app/portia.css | 655 | `.assistant-bubble > span` (0,1,1) also matches the assistant text root | ℹ️ Info | Pre-existing, same defect class as the broadcast one; out of scope in 01-04 and listed in its SUMMARY ("Noticed, not fixed"); live family/size/weight are unaffected |
+| app/portia.css | 993, 1008 | assistant ≤900px size (9px/10px, line-height 1.45) not mirrored by the field | ℹ️ Info | Deliberate per plan; field stays 10px/1.5 |
+| components/portia-editor.tsx | 1135, 1176 | formatting panel default size 17 / preset "M" no longer equals the base size for most areas | ℹ️ Info | Deliberate; belongs to phase 5 (TEXT-01) |
+| components/portia-desktop.tsx | 1109-1128 | zoom modifier key handling (WR-01..03) | ℹ️ Info | UAT test 1 passed including iframe focus; no longer a verification blocker |
 
-The previous blocker (layout.tsx empty-content meta) is resolved. No TBD/FIXME/XXX markers in files touched by 01-03.
+No TBD/FIXME/XXX markers in files modified by 01-04.
 
 ### Human Verification Required
 
-See frontmatter `human_verification`: six items (zoom fill and Ctrl+wheel with iframe focus; drag handle under owner login; Корзина viewer geometry; Roblox portrait; IBM Plex Serif rendering; Dark Reader extension reaction). These are rendering/interaction checks that code inspection cannot cover.
+See frontmatter `human_verification`: (1) UAT test 5 re-test, side-by-side per area in the owner session, both preview surfaces, desktop and 375px; (2) user acceptance of the small search (11px) and assistant (10px bold) fields; (3) the intentional visible change to broadcast bodies in «Сводка».
 
 ### Gaps Summary
 
-No gaps remain. All five roadmap success criteria (FIX-01..FIX-05) are implemented, wired and committed, and the Dark Reader lock now demonstrably reaches the built HTML. Status is `human_needed` because of one behavior-unverified truth (Ctrl+wheel zoom with iframe focus, WR-01..03, deliberately left for a later decision) and the rendering checks above.
+No gaps. G-PORTIA-01-5 is implemented, wired, committed and consistent with the user's clarified intent. Status is `human_needed` only because the confirming evidence for the clarified FIX-03 is a rendered comparison that requires an owner login, and the product acceptability of the small fields is the user's call.
 
 ---
 
