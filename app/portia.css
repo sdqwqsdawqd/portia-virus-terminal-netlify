@@ -21,9 +21,11 @@
   --accent-hue: 180.4;
   --mark-filter: hue-rotate(0deg);
   --assistant-filter: hue-rotate(0deg);
-  --mono: var(--font-jetbrains), "Cascadia Code", Consolas, monospace;
-  --sans: var(--font-golos), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --display: var(--font-unbounded), var(--font-golos), sans-serif;
+  /* --sans is the interface face (IBM Plex Mono, D-05/D-06); --doc keeps long document text in Golos (D-07). */
+  --mono: var(--font-plex-mono), "Cascadia Code", Consolas, monospace;
+  --sans: var(--font-plex-mono), "Cascadia Code", Consolas, monospace;
+  --display: var(--font-plex-mono), "Cascadia Code", Consolas, monospace;
+  --doc: var(--font-golos), system-ui, -apple-system, "Segoe UI", sans-serif;
   --serif: var(--font-plex-serif), serif;
   --assistant-font: "Segoe UI", Arial, sans-serif;
 }
@@ -476,14 +478,14 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .formatted-rich-input.is-editor-active.preview-dark { border-color: var(--teal); background: oklch(.168 .014 var(--accent-hue)); color: oklch(.79 .02 var(--accent-hue)); box-shadow: 0 0 0 3px rgba(var(--desktop-glow), .12), inset 0 0 0 1px rgba(255,255,255,.025); }
 .formatted-rich-input:empty::before { content: "Введите текст…"; color: #858b87; font: italic 13px/1.55 var(--sans); pointer-events: none; }
 /* Each editor field shares one font rule with the site area that shows its text, so changing an area here changes its field too. */
-.lead-copy, .formatted-rich-input[data-area="lead"] { font: 16px/1.75 var(--sans); }
-.metric-grid > div > .formatted-content, .formatted-rich-input[data-area="metric"] { font: 14px/1.6 var(--sans); }
-.mutation-copy > .formatted-content, .formatted-rich-input[data-area="mutation"] { font: 14px/1.65 var(--sans); }
+.lead-copy, .formatted-rich-input[data-area="lead"] { font: 16px/1.75 var(--doc); }
+.metric-grid > div > .formatted-content, .formatted-rich-input[data-area="metric"] { font: 14px/1.6 var(--doc); }
+.mutation-copy > .formatted-content, .formatted-rich-input[data-area="mutation"] { font: 14px/1.65 var(--doc); }
 .scientist-rich-text, .formatted-rich-input[data-area="scientist"] { font: 17px/1.78 var(--serif); }
-.info-document-copy, .formatted-rich-input[data-area="info"] { font: 16px/1.78 var(--sans); }
-.broadcast-card-copy, .formatted-rich-input[data-area="broadcast"] { font: 15px/1.7 var(--sans); }
-.trash-formatted-text, .formatted-rich-input[data-area="trash"] { font: 14px/1.75 var(--sans); }
-.trash-image-document figcaption, .formatted-rich-input[data-area="caption"] { font: 14px/1.65 var(--sans); }
+.info-document-copy, .formatted-rich-input[data-area="info"] { font: 16px/1.78 var(--doc); }
+.broadcast-card-copy, .formatted-rich-input[data-area="broadcast"] { font: 15px/1.7 var(--doc); }
+.trash-formatted-text, .formatted-rich-input[data-area="trash"] { font: 14px/1.75 var(--doc); }
+.trash-image-document figcaption, .formatted-rich-input[data-area="caption"] { font: 14px/1.65 var(--doc); }
 .search-recommendations button, .formatted-rich-input[data-area="search"] { font: 11px var(--sans); }
 .assistant-formatted-text, .formatted-rich-input[data-area="assistant"] { font: 700 10px/1.5 var(--assistant-font); }
 .formatted-text-field-hint { color: oklch(.525 .033 var(--accent-hue)); font-size: 10px; line-height: 1.4; }

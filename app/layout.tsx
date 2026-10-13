@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Golos_Text, IBM_Plex_Serif, JetBrains_Mono, Unbounded } from "next/font/google";
+import { Golos_Text, IBM_Plex_Mono, IBM_Plex_Serif, JetBrains_Mono, Unbounded } from "next/font/google";
 import { accentBootScript } from "@/lib/accent-boot";
 import "./globals.css";
 import "./portia.css";
@@ -10,6 +10,7 @@ const unbounded = Unbounded({ subsets: ["latin", "cyrillic"], weight: ["500", "7
 const jetbrains = JetBrains_Mono({ subsets: ["latin", "cyrillic"], weight: ["500", "700"], variable: "--font-jetbrains", display: "swap" });
 // Weights 400/600/700: the editor offers 400/600/800 and Plex Serif tops out at 700. No italic: rich text has none.
 const plexSerif = IBM_Plex_Serif({ subsets: ["latin", "cyrillic"], weight: ["400", "600", "700"], variable: "--font-plex-serif", display: "swap" });
+const plexMono = IBM_Plex_Mono({ subsets: ["latin", "cyrillic"], weight: ["400", "500", "600", "700"], variable: "--font-plex-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "PORTIA — вирусный архив",
@@ -29,7 +30,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" className={`${golos.variable} ${unbounded.variable} ${jetbrains.variable} ${plexSerif.variable}`} suppressHydrationWarning>
+    <html lang="ru" className={`${golos.variable} ${unbounded.variable} ${jetbrains.variable} ${plexSerif.variable} ${plexMono.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: accentBootScript }} />
       </head>
