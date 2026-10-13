@@ -26,7 +26,7 @@
   4. Файл из Корзины открывается на всё окно
   5. В «Сотрудниках» нет ссылки «Профиль Roblox», клик по окошку с лицом открывает профиль
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans executed
 
 Plans:
 **Wave 1**
@@ -34,7 +34,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 01-02-PLAN.md — ручка ≡ в начале строки (FIX-01), файл Корзины на всё окно (FIX-04), Roblox по клику на портрет (FIX-05)
-- [ ] 01-03-PLAN.md — (gap) мета darkreader-lock реально попадает в <head> собранной страницы (CR-01)
+- [x] 01-03-PLAN.md — (gap) мета darkreader-lock реально попадает в <head> собранной страницы (CR-01)
 
 ### Phase 2: Внешний вид
 
@@ -86,7 +86,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Исправление багов | 2/2 | In Progress | - |
+| 1. Исправление багов | 3/3 | In Progress | - |
 | 2. Внешний вид | 0/TBD | Not started | - |
 | 3. Редактор | 0/TBD | Not started | - |
 | 4. Общая расстановка ярлыков | 0/TBD | Not started | - |
