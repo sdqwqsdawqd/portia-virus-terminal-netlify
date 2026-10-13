@@ -1107,8 +1107,19 @@ html[data-motion="reduce"] .wallpaper-helix { animation: none; }
 @keyframes window-open { from { opacity: 0; scale: .96; } to { opacity: 1; scale: 1; } }
 /* An exiting window takes no input; its animation runs only when motion is welcome. */
 .app-window.is-closing, .app-window.is-minimizing { pointer-events: none; }
+/* macOS-like: zoom out of the desktop icon, genie into / out of the taskbar button. Exit rules come last so they win. */
+html[data-motion="full"] .app-window.from-icon { animation: window-open-icon 260ms cubic-bezier(.16, 1, .3, 1); }
+html[data-motion="full"] .app-window.from-taskbar { animation: window-genie 300ms cubic-bezier(.2, .8, .2, 1) reverse both; }
 html[data-motion="full"] .app-window.is-closing { animation: window-close 160ms cubic-bezier(.4, 0, 1, 1) forwards; }
+html[data-motion="full"] .app-window.is-minimizing { animation: window-genie 320ms cubic-bezier(.55, 0, .7, .4) forwards; }
 @keyframes window-close { to { opacity: 0; scale: .92; } }
+@keyframes window-open-icon { from { opacity: 0; scale: .1; } }
+/* CSS approximation of the genie: the bottom edge narrows toward the button (--genie-x) while the window sinks into it. */
+@keyframes window-genie {
+  0% { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); scale: 1; opacity: 1; }
+  45% { clip-path: polygon(0 0, 100% 0, calc(var(--genie-x, 50%) + 9%) 100%, calc(var(--genie-x, 50%) - 9%) 100%); scale: .92 .78; opacity: 1; }
+  100% { clip-path: polygon(calc(var(--genie-x, 50%) - 3%) 0, calc(var(--genie-x, 50%) + 3%) 0, calc(var(--genie-x, 50%) + 1%) 100%, calc(var(--genie-x, 50%) - 1%) 100%); scale: .05; opacity: 0; }
+}
 .empty-state { display: grid; justify-items: center; gap: 8px; padding: 40px 20px; color: oklch(.742 .025 var(--accent-hue)); text-align: center; }
 .empty-state svg { width: 96px; height: 96px; margin-bottom: 6px; color: var(--teal); opacity: .85; }
 .empty-state strong { color: oklch(.945 .01 var(--accent-hue)); font: 600 16px var(--sans); letter-spacing: 0; }

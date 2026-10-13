@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
 import type { PortiaEmployee } from "@/lib/portia-employees";
@@ -20,7 +20,13 @@ const embeddedApps = {
   sheet: { src: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/htmlview?widget=true&headers=false", external: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" },
   charter: { src: "https://sdqwqsdawqd.github.io/S.E-Portia/", external: "https://sdqwqsdawqd.github.io/S.E-Portia/" },
 } as const;
-type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number; geometry?: WindowGeometry; exiting?: "close" | "minimize" };
+// Where a window appears from: a desktop icon (zoom) or its taskbar button (genie in reverse).
+type OpenOrigin = { x: number; y: number; kind: "icon" | "taskbar" };
+type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number; geometry?: WindowGeometry; exiting?: "close" | "minimize"; openOrigin?: OpenOrigin };
+const originOf = (element: Element, kind: OpenOrigin["kind"]): OpenOrigin => {
+  const rect = element.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, kind };
+};
 // Must equal the window-close and window-genie durations in app/portia.css.
 const WINDOW_CLOSE_MS = 160;
 const WINDOW_MINIMIZE_MS = 320;
@@ -566,7 +572,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     setActiveApp(appId);
   };
 
-  const openApp = (appId: AppId) => {
+  const openApp = (appId: AppId, origin?: OpenOrigin) => {
     // Re-opening a window while it closes or minimises cancels the exit and keeps it.
     const pendingExit = exitTimers.current[appId];
     if (pendingExit) {
@@ -575,6 +581,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
     setWindows((state) => {
       const openCount = Object.values(state).filter((windowState) => windowState.open && !windowState.minimized && !windowState.exiting).length;
+      // The origin only matters when the window appears; changing it on a visible window would replay its animation.
+      const appears = !state[appId].open || state[appId].minimized || Boolean(state[appId].exiting);
       return {
         ...state,
         [appId]: {
@@ -582,6 +590,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           open: true,
           minimized: false,
           exiting: undefined,
+          openOrigin: appears ? origin : state[appId].openOrigin,
           // A size remembered from a bigger screen is refitted, so the window never opens past the edge.
           geometry: state[appId].geometry ? fitGeometry(state[appId].geometry, workspaceBounds(), minimumWindowSize(appId)) : createWindowGeometry(appId, openCount),
         },
@@ -629,15 +638,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   const closeApp = (appId: AppId) => requestExit(appId, "close");
 
-  const minimizeApp = (appId: AppId) => {
-    setWindows((state) => ({ ...state, [appId]: { ...state[appId], minimized: true } }));
-    if (activeApp === appId) {
-      const fallback = (Object.keys(windows) as AppId[])
-        .filter((id) => id !== appId && windows[id].open && !windows[id].minimized)
-        .sort((a, b) => windows[b].z - windows[a].z)[0];
-      setActiveApp(fallback ?? "archive");
-    }
-  };
+  const minimizeApp = (appId: AppId) => requestExit(appId, "minimize");
 
   // Shrinking the browser refits every window so its frame and controls stay reachable.
   useEffect(() => {
@@ -1028,7 +1029,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         <footer className="taskbar">
           <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
           <div className="taskbar-apps" aria-label="Открытые программы">
-            {(Object.keys(appMeta) as AppId[]).filter((app) => windows[app].open).map((app) => <button key={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}`} type="button" onClick={() => windows[app].minimized ? openApp(app) : activeApp === app ? minimizeApp(app) : focusApp(app)}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>)}
+            {(Object.keys(appMeta) as AppId[]).filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}`} type="button" onClick={(event) => windows[app].minimized ? openApp(app, originOf(event.currentTarget, "taskbar")) : activeApp === app ? minimizeApp(app) : focusApp(app)}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>)}
           </div>
           
         </footer>
@@ -1059,8 +1060,8 @@ function EmployeeImage({ src, alt, fallbackClassName = "" }: { src: string; alt:
   </div>;
 }
 
-function DesktopIcon({ app, onOpen, position, onMove, className = "", badge = false }: { app: Exclude<AppId, "editor">; onOpen: (app: AppId) => void; position?: ShortcutPosition; onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void; className?: string; badge?: boolean }) {
-  return <DraggableDesktopIcon shortcutId={app} label={appMeta[app].label} icon={appMeta[app].icon} position={position} onMove={onMove} onActivate={() => onOpen(app)} className={className} badge={badge} />;
+function DesktopIcon({ app, onOpen, position, onMove, className = "", badge = false }: { app: Exclude<AppId, "editor">; onOpen: (app: AppId, origin?: OpenOrigin) => void; position?: ShortcutPosition; onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void; className?: string; badge?: boolean }) {
+  return <DraggableDesktopIcon shortcutId={app} label={appMeta[app].label} icon={appMeta[app].icon} position={position} onMove={onMove} onActivate={(origin) => onOpen(app, origin)} className={className} badge={badge} />;
 }
 
 function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onActivate, className = "", badge = false }: {
@@ -1069,7 +1070,7 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
   icon: PortiaIconName;
   position?: ShortcutPosition;
   onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void;
-  onActivate?: () => void;
+  onActivate?: (origin: OpenOrigin) => void;
   className?: string;
   badge?: boolean;
 }) {
@@ -1130,7 +1131,8 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
       event.preventDefault();
       return;
     }
-    onActivate?.();
+    const symbol = event.currentTarget.querySelector(".desktop-icon-symbol") ?? event.currentTarget;
+    onActivate?.(originOf(symbol, "icon"));
   };
 
   const sharedProps = {
@@ -1281,6 +1283,26 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     if (resizeRef.current?.pointerId === event.pointerId) resizeRef.current = null;
   };
 
+  // Points the zoom / genie at its source. Offsets, not getBoundingClientRect, for the window:
+  // during a restore the animation has already shrunk the rect.
+  const genieFromTaskbar = state.exiting === "minimize" || (state.openOrigin?.kind === "taskbar" && !state.exiting);
+  useLayoutEffect(() => {
+    const element = windowRef.current;
+    const parent = element?.offsetParent;
+    if (!element || !parent || state.minimized) return;
+    const parentRect = parent.getBoundingClientRect();
+    const box = { left: parentRect.left + element.offsetLeft - parent.scrollLeft, top: parentRect.top + element.offsetTop - parent.scrollTop, width: element.offsetWidth };
+    let target: { x: number; y: number } | undefined = state.openOrigin?.kind === "icon" && !state.exiting ? state.openOrigin : undefined;
+    if (genieFromTaskbar) {
+      const button = document.querySelector(`[data-taskbar-app="${app}"]`);
+      if (button) target = originOf(button, "taskbar");
+    }
+    if (!target) return;
+    const x = target.x - box.left;
+    element.style.transformOrigin = `${Math.round(x)}px ${Math.round(target.y - box.top)}px`;
+    element.style.setProperty("--genie-x", `${Math.min(100, Math.max(0, (x / Math.max(1, box.width)) * 100)).toFixed(1)}%`);
+  }, [app, genieFromTaskbar, state.exiting, state.minimized, state.open, state.openOrigin]);
+
   if (!state.open) return null;
   const geometryStyle = state.geometry && !state.maximized ? {
     left: state.geometry.x,
@@ -1292,7 +1314,7 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     transform: "none",
   } : {};
 
-  return <section ref={windowRef} className={`app-window ${className}${active ? " is-active" : ""}${state.maximized ? " is-maximized" : ""}${state.exiting === "close" ? " is-closing" : ""}`} style={{ zIndex: state.z, display: state.minimized ? "none" : undefined, ...geometryStyle }} onPointerDown={() => onFocus(app)} aria-label={appMeta[app].label}>
+  return <section ref={windowRef} className={`app-window ${className}${active ? " is-active" : ""}${state.maximized ? " is-maximized" : ""}${state.exiting === "close" ? " is-closing" : ""}${state.exiting === "minimize" ? " is-minimizing" : ""}${state.openOrigin?.kind === "icon" ? " from-icon" : state.openOrigin?.kind === "taskbar" ? " from-taskbar" : ""}`} style={{ zIndex: state.z, display: state.minimized ? "none" : undefined, ...geometryStyle }} onPointerDown={() => onFocus(app)} aria-label={appMeta[app].label}>
     <div className="window-titlebar" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest("button")) onMaximize(app); }}><div className="window-identity"><span className="window-app-mark"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].path}</span></div><div className="window-meta">{meta}</div><div className="window-controls"><button type="button" data-window-action="minimize" onClick={(event) => { event.stopPropagation(); onMinimize(app); }} aria-label={`Свернуть ${appMeta[app].label}`}>―</button><button type="button" data-window-action="maximize" onClick={(event) => { event.stopPropagation(); onMaximize(app); }} aria-label={`Развернуть ${appMeta[app].label}`}>□</button><button type="button" data-window-action="close" onClick={(event) => { event.stopPropagation(); onClose(app); }} aria-label={`Закрыть ${appMeta[app].label}`}>×</button></div></div>
     {children}
     {resizeEdges.map((edge) => <span key={edge} className={`window-edge window-edge-${edge}`} aria-hidden="true" onPointerDown={beginResize(edge)} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} />)}
