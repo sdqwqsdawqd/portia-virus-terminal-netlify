@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { changedSections, editorSections, sectionLabels } from "@/lib/editor-changes";
+import { shortcutOf } from "@/lib/editor-shortcuts";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import {
   classificationOptions,
@@ -22,6 +23,7 @@ type Props = {
   content: PortiaContent;
   saveState: "idle" | "saving" | "saved" | "error" | "conflict";
   canManageEditors: boolean;
+  active: boolean;
   onSave: (content: PortiaContent) => Promise<void>;
   onEmployeeSaved: (employee: PortiaEmployee) => void;
 };
@@ -429,7 +431,7 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, saveState, canManageEditors, onSave, onEmployeeSaved }: Props) {
+export function PortiaEditor({ content, saveState, canManageEditors, active, onSave, onEmployeeSaved }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
   const draft = history.present;
   const changed = useMemo(() => changedSections(history.baseline, history.present), [history.baseline, history.present]);
@@ -581,6 +583,38 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
       return false;
     }
   };
+
+  // save and step are new functions every render; the listeners read the latest pair through a ref instead of re-subscribing.
+  const actionsRef = useRef({ save, step });
+  useEffect(() => { actionsRef.current = { save, step }; });
+
+  // Window-level shortcuts only while this window is the active, non-minimized one and no dialog is open (D-10, D-11).
+  useEffect(() => {
+    if (!active || dialog) return;
+    // Сотрудники and Доступ are saved separately; their fields keep the browser's native undo.
+    const historyTab = tab !== "employees" && tab !== "access";
+    const onKeyDown = (event: KeyboardEvent) => {
+      const action = shortcutOf(event);
+      if (!action) return;
+      if (action !== "save" && !historyTab) return;
+      // Save is always taken, even when clean, so the browser's «Сохранить страницу» never opens.
+      event.preventDefault();
+      if (action === "save") void actionsRef.current.save();
+      else actionsRef.current.step(action);
+    };
+    // Phone keyboards and the Edit menu undo through beforeinput and never fire keydown.
+    const onBeforeInput = (event: InputEvent) => {
+      if (!historyTab || (event.inputType !== "historyUndo" && event.inputType !== "historyRedo")) return;
+      event.preventDefault();
+      actionsRef.current.step(event.inputType === "historyUndo" ? "undo" : "redo");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("beforeinput", onBeforeInput);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("beforeinput", onBeforeInput);
+    };
+  }, [active, dialog, tab]);
 
   const barVisible = dirty || saveState === "saving" || saveState === "saved" || saveState === "conflict";
   const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
