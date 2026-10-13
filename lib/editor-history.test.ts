@@ -129,3 +129,43 @@ test("sync with a new object rebuilds the history on it", () => {
   assert.equal(state.present, state.baseline);
   assert.deepEqual(state.past, []);
 });
+
+test("undo moves present to future and redo brings it back", () => {
+  const edited = [edit("b", null, 1000), edit("c", null, 2000)].reduce(reduce, start());
+  const undone = reduce(edited, { type: "undo" });
+  assert.equal(undone.present.text, "b");
+  assert.equal(undone.past.length, 1);
+  assert.deepEqual(undone.future.map((item) => item.text), ["c"]);
+  const redone = reduce(undone, { type: "redo" });
+  assert.equal(redone.present.text, "c");
+  assert.equal(redone.past.length, 2);
+  assert.deepEqual(redone.future, []);
+});
+
+test("undo and redo end the typing coalescing, so the next keystroke is a new step", () => {
+  const typed = [edit("b", "field:1", 1000), edit("bc", "field:1", 1100)].reduce(reduce, start());
+  const stepped = reduce(reduce(typed, { type: "undo" }), { type: "redo" });
+  assert.equal(stepped.key, null);
+  assert.equal(reduce(stepped, edit("bcd", "field:1", 1200)).past.length, stepped.past.length + 1);
+});
+
+test("undo with nothing to undo and redo with nothing to redo return the same state", () => {
+  const first = start();
+  assert.equal(reduce(first, { type: "undo" }), first);
+  assert.equal(reduce(first, { type: "redo" }), first);
+});
+
+test("a new change after an undo clears the redo stack", () => {
+  const undone = reduce([edit("b", null, 1000), edit("c", null, 2000)].reduce(reduce, start()), { type: "undo" });
+  const next = reduce(undone, edit("x", null, 3000));
+  assert.deepEqual(next.future, []);
+  assert.equal(next.present.text, "x");
+});
+
+test("undoing every step returns the baseline object itself", () => {
+  const first = start();
+  const undone = [edit("b", null, 1000), edit("c", null, 2000)].reduce(reduce, first);
+  const back = reduce(reduce(undone, { type: "undo" }), { type: "undo" });
+  assert.equal(back.present, back.baseline);
+  assert.equal(back.past.length, 0);
+});

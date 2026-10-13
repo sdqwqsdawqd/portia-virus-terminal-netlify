@@ -15,6 +15,8 @@ export type EditorHistory<T> = {
 
 export type HistoryAction<T> =
   | { type: "change"; updater: (next: T) => void; key: string | null; now: number }
+  | { type: "undo" }
+  | { type: "redo" }
   | { type: "saved"; normalized: T; savedFrom: T }
   | { type: "sync"; content: T };
 
@@ -36,6 +38,9 @@ export function historyReducer<T>(state: EditorHistory<T>, action: HistoryAction
       if (coalesce) return { ...state, present: next, at: now };
       return { ...state, present: next, past: [...state.past, state.present].slice(-HISTORY_LIMIT), future: [], key, at: now, since: now };
     }
+    case "undo":
+    case "redo":
+      return state; // RED stub: stepping arrives in the GREEN commit.
     case "saved": {
       const saved = { ...state, baseline: action.normalized, source: action.normalized };
       // Edits typed while the request ran keep their draft and history; otherwise history ends at the save.
