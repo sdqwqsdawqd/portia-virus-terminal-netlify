@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { changedSections, editorSections, sectionLabels } from "@/lib/editor-changes";
+import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import {
   classificationOptions,
   portiaTextKey,
@@ -79,6 +81,8 @@ const backgroundColorPalette = [
 
 const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const clone = (content: PortiaContent) => JSON.parse(JSON.stringify(content)) as PortiaContent;
+const editorReducer = (state: EditorHistory<PortiaContent>, action: HistoryAction<PortiaContent>) => historyReducer(state, action, clone);
+const initEditorHistory = (value: PortiaContent) => initHistory(value, clone);
 
 function moveArrayItem<T>(items: T[], from: number, to: number) {
   if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) return;
@@ -407,24 +411,31 @@ const blankRecycleFile = (): RecycleFile => ({
 });
 
 export function PortiaEditor({ content, saveState, canManageEditors, onSave, onEmployeeSaved }: Props) {
-  const [draft, setDraft] = useState(() => clone(content));
+  const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
+  const draft = history.present;
+  const changed = useMemo(() => changedSections(history.baseline, history.present), [history.baseline, history.present]);
+  const dirty = changed.length > 0;
   const [tab, setTab] = useState<EditorTab>("viruses");
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
   const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycledViruses?.[0]?.id ?? "");
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">("idle");
-  const [dirty, setDirty] = useState(false);
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface>("light");
 
+  // Falls back to the first record when the selected one is gone from `next`.
+  const repairSelections = (next: PortiaContent) => {
+    setSelectedVirusId((current) => (next.viruses.some((virus) => virus.id === current) ? current : next.viruses[0]?.id ?? ""));
+    setSelectedRecycleFileId((current) => (next.recycleFiles.some((file) => file.id === current) ? current : next.recycleFiles[0]?.id ?? ""));
+    setSelectedRecycledVirusId((current) => (next.recycledViruses?.some((virus) => virus.id === current) ? current : next.recycledViruses?.[0]?.id ?? ""));
+  };
+
   useEffect(() => {
     if (dirty) return;
     const syncTimer = window.setTimeout(() => {
-      setDraft(clone(content));
-      setSelectedVirusId((current) => (content.viruses.some((virus) => virus.id === current) ? current : content.viruses[0]?.id ?? ""));
-      setSelectedRecycleFileId((current) => (content.recycleFiles.some((file) => file.id === current) ? current : content.recycleFiles[0]?.id ?? ""));
-      setSelectedRecycledVirusId((current) => (content.recycledViruses?.some((virus) => virus.id === current) ? current : content.recycledViruses?.[0]?.id ?? ""));
+      dispatch({ type: "sync", content });
+      repairSelections(content);
     }, 0);
     return () => window.clearTimeout(syncTimer);
   }, [content, dirty]);
@@ -447,12 +458,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
   const orderedRecycleKeys = useMemo(() => recycleKeys(draft), [draft]);
 
   const changeDraft = (updater: (next: PortiaContent) => void) => {
-    setDraft((current) => {
-      const next = clone(current);
-      updater(next);
-      return next;
-    });
-    setDirty(true);
+    dispatch({ type: "change", updater, key: null, now: Date.now() });
   };
 
   const updateVirus = (updater: (virus: Virus) => void) => {
@@ -499,7 +505,10 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
     }
   };
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
+    if (!dirty || saveState === "saving") return false;
+    // The reducer compares this very object after the request to tell whether the owner kept typing meanwhile.
+    const savedFrom = draft;
     try {
       const normalized = clone(draft);
       normalized.searchRecommendations = normalized.searchRecommendations.map((value) => value.trim()).filter(Boolean);
@@ -534,13 +543,21 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
       }
       normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, 5); });
       await onSave(normalized);
-      setDraft(normalized);
-      setDirty(false);
+      dispatch({ type: "saved", normalized, savedFrom });
+      return true;
     } catch {
       // Keep the local draft marked as changed so a temporary network error
       // can never discard the owner's work.
+      return false;
     }
   };
+
+  const barVisible = dirty || saveState === "saving" || saveState === "saved" || saveState === "conflict";
+  const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
+    : saveState === "conflict" ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
+    : saveState === "error" ? "ОШИБКА"
+    : saveState === "saved" && !dirty ? "СОХРАНЕНО"
+    : "";
 
   return (
     <ActiveFormatContext.Provider value={{ key: formatTarget?.key ?? null, surface: previewSurface }}>
@@ -551,20 +568,11 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
           <h1>Редактор PORTIA</h1>
           <p>Изменения сохраняются в общей базе!</p>
         </div>
-        <div className="editor-save-zone">
-          <span className={`editor-save-status ${saveState}`}>{saveState === "saving" ? "СОХРАНЕНИЕ…" : saveState === "saved" ? "СОХРАНЕНО" : saveState === "error" ? "ОШИБКА" : saveState === "conflict" ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ" : dirty ? "ЕСТЬ ИЗМЕНЕНИЯ" : "БЕЗ ИЗМЕНЕНИЙ"}</span>
-          <button className="primary-control" type="button" onClick={save} disabled={!dirty || saveState === "saving"}>СОХРАНИТЬ ВСЁ</button>
-        </div>
       </header>
 
       <nav className="editor-tabs" aria-label="Разделы редактора">
         {([
-          ["viruses", "База вирусов"],
-          ["info", "Информация"],
-          ["broadcasts", "Сообщения"],
-          ["recycle", "Корзина"],
-          ["search", "Рекомендации"],
-          ["assistant", "Помощник"],
+          ...editorSections.map((id) => [id, sectionLabels[id]]),
           ["employees", "Сотрудники"],
           ...(canManageEditors ? [["access", "Доступ"]] : []),
         ] as [EditorTab, string][]).map(([id, label]) => (
@@ -873,6 +881,17 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && <FloatingTextFormatPanel key={`${formatTarget.key}:${formatTarget.selection.start}:${formatTarget.selection.end}:${previewSurface}`} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />}
+      {barVisible && (
+        <div className="editor-savebar" data-dirty={dirty || undefined}>
+          <p role="status" aria-live="polite">
+            {statusText && <span className={`editor-save-status ${saveState}`}>{statusText}</span>}
+            {dirty && <span className="editor-savebar-sections">{`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}</span>}
+          </p>
+          <div className="editor-savebar-actions">
+            <button type="button" className="primary-control" disabled={!dirty || saveState === "saving"} onClick={() => void save()}>СОХРАНИТЬ</button>
+          </div>
+        </div>
+      )}
     </div>
     </ActiveFormatContext.Provider>
   );

@@ -387,14 +387,22 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .broadcast-empty strong { color: oklch(.818 .02 var(--accent-hue)); font: 700 13px var(--sans); }
 .broadcast-empty span { font-size: 13px; }
 
-.content-editor { height: calc(100% - 46px); overflow-y: auto; padding: 28px; background: oklch(.189 .017 var(--accent-hue)); color: oklch(.918 .013 var(--accent-hue)); }
+.content-editor { height: calc(100% - 46px); overflow-y: auto; padding: 28px; background: oklch(.189 .017 var(--accent-hue)); color: oklch(.918 .013 var(--accent-hue)); display: flex; flex-direction: column; }
+.content-editor > * { flex-shrink: 0; }
 .editor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; padding-bottom: 22px; border-bottom: 1px solid oklch(.383 .033 var(--accent-hue)); }
 .editor-header h1 { margin: 7px 0 8px; color: #f1f6f4; font: 700 clamp(28px, 4vw, 42px)/1.05 var(--display); letter-spacing: -.02em; }
 .editor-header p { margin: 0; color: oklch(.632 .029 var(--accent-hue)); font-size: 13px; line-height: 1.55; }
-.editor-save-zone { display: flex; align-items: center; gap: 12px; }
 .editor-save-status { color: oklch(.604 .027 var(--accent-hue)); font: 11px var(--sans); letter-spacing: .07em; white-space: nowrap; }
 .editor-save-status.saved { color: var(--teal); }
 .editor-save-status.error, .editor-save-status.conflict { color: #e07d74; white-space: normal; }
+.editor-savebar { position: sticky; z-index: 120; bottom: 0; margin: auto -28px -28px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 28px; border-top: 1px solid oklch(.383 .033 var(--accent-hue)); background: oklch(.208 .02 var(--accent-hue)); box-shadow: 0 -10px 24px rgba(0,0,0,.28); }
+.editor-savebar[data-dirty] { border-top-color: var(--warning); }
+.editor-savebar > p { min-width: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font: 11px/1.35 var(--sans); letter-spacing: .04em; }
+.editor-savebar-sections { color: var(--warning); }
+.editor-savebar-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+@media (min-width: 901px) {
+  .content-editor:has(> .editor-savebar) .floating-text-format { bottom: 76px; }
+}
 .primary-control, .secondary-control, .danger-control { padding: 11px 14px; border: 1px solid var(--teal-dim); background: var(--teal-soft); color: var(--teal); font: 700 11px var(--sans); letter-spacing: .04em; cursor: pointer; }
 .primary-control:disabled, .secondary-control:disabled, .danger-control:disabled { opacity: .4; cursor: not-allowed; }
 .secondary-control { background: transparent; color: oklch(.812 .02 var(--accent-hue)); }
@@ -979,7 +987,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .personnel-biography p { max-height: 260px; }
   .broadcast-card { padding: 18px; }
   .editor-header { align-items: stretch; flex-direction: column; gap: 16px; }
-  .editor-save-zone { justify-content: space-between; }
   .virus-editor-layout { grid-template-columns: 1fr; }
   .editor-record-list { position: static; display: flex; overflow-x: auto; }
   .editor-record-list button { flex: 0 0 170px; }
@@ -988,6 +995,13 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .editor-field-grid { grid-template-columns: 1fr; }
   .editor-field.wide { grid-column: auto; }
   .floating-text-format { right: 8px; bottom: 42px; width: min(620px, calc(100% - 16px)); max-height: min(44svh, 340px); overflow-y: auto; }
+  /* Sticky cannot hold here: the page scrolls and .app-window clips, so the bar is fixed above the 44px taskbar. */
+  .editor-savebar { position: fixed; left: 0; right: 0; bottom: 44px; margin: 0; padding: 8px 12px; min-height: 56px; }
+  .editor-savebar > p { display: block; font-size: 10px; }
+  .editor-savebar > p > span { display: block; }
+  .editor-savebar-actions button { min-height: 40px; }
+  .content-editor:has(> .editor-savebar) { padding-bottom: 110px; }
+  .content-editor:has(.floating-text-format) .editor-savebar { display: none; }
   .rich-text-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .access-editor-add { grid-template-columns: 1fr; }
   .content-control-entry { align-items: stretch; flex-direction: column; }
@@ -1029,6 +1043,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .assistant-formatted-text > span { font-size: 10px !important; line-height: inherit; }
   .formatted-text-field-head { align-items: flex-start; flex-direction: column; }
   .global-format-launch { top: auto; right: 8px; bottom: 54px; transform: none; }
+  .content-editor:has(> .editor-savebar) .global-format-launch { bottom: 112px; }
   .global-format-launch > button, .global-format-launch > button:hover, .global-format-launch > button:focus-visible, .global-format-launch > button[aria-expanded="true"] { width: 38px; padding-inline: 9px; }
 }
 
@@ -1063,7 +1078,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .class-cell { min-height: 62px; }
   .media-empty { min-height: 195px; }
   .taskbar-app { max-width: 42px; overflow: hidden; }
-  .editor-save-zone { align-items: stretch; flex-direction: column; }
   .editor-tabs { margin-inline: -4px; }
   .nested-editor-card { padding: 12px; }
   .content-editor:has(.floating-text-format) { padding-bottom: 155px; }
