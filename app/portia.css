@@ -1130,30 +1130,30 @@ html[data-motion="full"] .loading-spinner { animation: loading-spin 900ms linear
 
 /* Windows. Default open (start menu, search): rise and settle. From a desktop icon: grow out of the icon.
    Minimise: shrink into the taskbar button (macOS "Scale"); restore grows back out of it. Exit rules come last so they win. */
-.app-window { animation: window-open var(--motion-base) var(--ease-out); }
-html[data-motion="full"] .app-window.from-icon { animation: window-zoom 280ms var(--ease-out); }
-html[data-motion="full"] .app-window.from-taskbar { animation: window-restore var(--motion-slow) var(--ease-out); }
-html[data-motion="full"] .app-window.is-closing { animation: window-close var(--motion-fast) var(--ease-in) forwards; }
-html[data-motion="full"] .app-window.is-minimizing { animation: window-minimize 280ms var(--ease-in) forwards; }
+.app-window { animation: window-open 280ms var(--ease-out); }
+html[data-motion="full"] .app-window.from-icon { animation: window-zoom 340ms var(--ease-out); }
+html[data-motion="full"] .app-window.from-taskbar { animation: window-restore 340ms var(--ease-out); }
+html[data-motion="full"] .app-window.is-closing { animation: window-close 180ms var(--ease-in) forwards; }
+html[data-motion="full"] .app-window.is-minimizing { animation: window-minimize 320ms var(--ease-in) forwards; }
 html[data-motion="reduce"] .app-window { animation: fade-in 160ms ease-out !important; }
 html[data-motion="reduce"] .app-window:is(.is-closing, .is-minimizing) { animation: fade-out 120ms ease-in forwards !important; }
-@keyframes window-open { from { opacity: 0; scale: .97; translate: 0 10px; } }
-@keyframes window-zoom { from { opacity: 0; scale: .5; } 60% { opacity: 1; } }
-@keyframes window-restore { from { opacity: 0; scale: .12; } 50% { opacity: 1; } }
-@keyframes window-close { to { opacity: 0; scale: .96; } }
-@keyframes window-minimize { 40% { opacity: 1; } to { opacity: 0; scale: .12; } }
+@keyframes window-open { from { opacity: 0; scale: .93; translate: 0 18px; } }
+@keyframes window-zoom { from { opacity: 0; scale: .3; } 55% { opacity: 1; } }
+@keyframes window-restore { from { opacity: 0; scale: .08; } 45% { opacity: 1; } }
+@keyframes window-close { to { opacity: 0; scale: .92; } }
+@keyframes window-minimize { 45% { opacity: 1; } to { opacity: 0; scale: .08; } }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes fade-out { to { opacity: 0; } }
 
 /* Documents (Корзина files, scientist logs): the viewer settles in while the page feeds out top to bottom, like a terminal printout. */
-html[data-motion="full"] .doc-open { animation: doc-open var(--motion-base) var(--ease-out); }
-html[data-motion="full"] .doc-print { animation: doc-print 380ms 60ms var(--ease-out) backwards; }
+html[data-motion="full"] .doc-open { animation: doc-open 320ms var(--ease-out); }
+html[data-motion="full"] .doc-print { animation: doc-print 560ms 80ms var(--ease-out) backwards; }
 html[data-motion="reduce"] .doc-open { animation: fade-in 160ms ease-out !important; }
-@keyframes doc-open { from { opacity: 0; translate: 0 12px; } }
+@keyframes doc-open { from { opacity: 0; translate: 0 26px; scale: .98; } }
 @keyframes doc-print { from { clip-path: inset(0 0 100% 0); opacity: .4; } }
 
 /* Switching a record, profile or section: a short cross-fade, no movement, in both modes. */
-.content-fade { animation: fade-in var(--motion-fast) ease-out; }
+.content-fade { animation: fade-in 200ms ease-out; }
 html[data-motion="reduce"] .content-fade { animation-duration: var(--motion-fast) !important; }
 
 /* Feedback. Icons press in and come back without overshoot; a window that appears makes its taskbar entry hop once. */
@@ -1166,13 +1166,58 @@ html[data-motion="full"] .taskbar-app.is-bouncing .mini-app-icon { animation: ta
   100% { translate: 0 0; }
 }
 
-/* Hover, pointer devices only: the glyph grows a little; the virus also turns and settles (it is not 4-fold symmetric). */
+/* Hover (and keyboard focus) on app icons: each icon acts out what it depicts, once per hover.
+   Pointer devices only, full motion only. Parts are addressed by their order in components/portia-icons.tsx. */
 html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg { transition: scale var(--motion-fast) var(--ease-out); }
+html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg > * { transform-box: fill-box; transform-origin: center; }
 @media (hover: hover) {
-  html[data-motion="full"] :is(.desktop-icon:hover .desktop-icon-symbol, .start-panel > button:hover .start-panel-icon) svg { scale: 1.08; }
-  html[data-motion="full"] .desktop-icon:hover .desktop-icon-symbol[data-icon="virus"] svg { animation: icon-twist 420ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon) svg { scale: 1.06; }
+  /* Search: the lens sweeps the field, the crosshair turns into focus. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="search"] svg { animation: icon-scan 640ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="search"] svg > :nth-child(3) { animation: icon-focus 640ms var(--ease-out); }
+  /* Virus: the body turns while spikes and tips push outward and pull back. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="virus"] svg { animation: icon-turn 600ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="virus"] svg > :nth-child(n+2):nth-child(-n+6) { transform-box: view-box; transform-origin: 12px 12px; animation: icon-spike 600ms var(--ease-out); }
+  /* Employees: the two people hop one after the other. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="employees"] svg > :nth-child(-n+2) { animation: icon-hop 460ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="employees"] svg > :nth-child(n+3) { animation: icon-hop 460ms 110ms var(--ease-out) backwards; }
+  /* Broadcasts: the signal arcs ripple out from the mast twice. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="broadcasts"] svg > :nth-child(2) { transform-box: view-box; transform-origin: 12px 11px; animation: icon-ripple 320ms ease-out 2; }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="broadcasts"] svg > :nth-child(1) { animation: icon-blink 320ms ease-out 2; }
+  /* Information: the corner folds in and the lines write themselves. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="info"] svg > :nth-child(2) { transform-origin: right top; animation: icon-fold 520ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="info"] svg > :nth-child(3) { stroke-dasharray: 10; animation: icon-write-10 520ms 80ms var(--ease-out) backwards; }
+  /* Settings: the three knobs slide to new positions and back. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] svg > :nth-child(2) { animation: icon-slide-left 620ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] svg > :nth-child(3) { animation: icon-slide-right 620ms 60ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] svg > :nth-child(4) { animation: icon-slide-left 620ms 120ms var(--ease-out); }
+  /* Charter: the clip lifts, the seal stamps down. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="charter"] svg > :nth-child(2) { animation: icon-lift 480ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="charter"] svg > :nth-child(4) { animation: icon-stamp 480ms 140ms var(--ease-out) backwards; }
+  /* Sheet: the grid draws itself in. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="sheet"] svg > :nth-child(2) { stroke-dasharray: 16; animation: icon-write-16 560ms var(--ease-out); }
+  /* Trash: the lid tips open and drops back. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="trash"] svg > :nth-child(1) { transform-origin: left bottom; animation: icon-lid 560ms var(--ease-out); }
+  /* Editor: the pen scribbles while the lines write in. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="editor"] svg > :nth-child(2) { animation: icon-scribble 600ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="editor"] svg > :nth-child(1) { stroke-dasharray: 16; animation: icon-write-16 600ms var(--ease-out); }
 }
-@keyframes icon-twist { 35% { rotate: 14deg; } }
+@keyframes icon-scan { 30% { translate: -1.6px -1px; } 65% { translate: 1.6px .6px; } }
+@keyframes icon-focus { 50% { rotate: 45deg; scale: .7; } }
+@keyframes icon-turn { 45% { rotate: 22deg; } }
+@keyframes icon-spike { 40% { scale: 1.14; } 70% { scale: .97; } }
+@keyframes icon-hop { 40% { translate: 0 -2.4px; } 75% { translate: 0 .4px; } }
+@keyframes icon-ripple { from { scale: .78; opacity: .35; } }
+@keyframes icon-blink { 50% { scale: 1.45; } }
+@keyframes icon-fold { 40% { scale: .2; } }
+@keyframes icon-write-10 { from { stroke-dashoffset: 10; } }
+@keyframes icon-write-16 { from { stroke-dashoffset: 16; } }
+@keyframes icon-slide-left { 45% { translate: -4.5px 0; } }
+@keyframes icon-slide-right { 45% { translate: 4.5px 0; } }
+@keyframes icon-lift { 40% { translate: 0 -2.2px; } }
+@keyframes icon-stamp { from { scale: 1.8; opacity: 0; } 60% { scale: .9; opacity: 1; } }
+@keyframes icon-lid { 40% { translate: 0 -1.6px; rotate: -16deg; } 75% { rotate: 2deg; translate: 0 0; } }
+@keyframes icon-scribble { 20% { translate: -1px 1px; } 40% { translate: 1px -.5px; } 60% { translate: -.8px .8px; } 80% { translate: .6px -.4px; } }
 
 /* Boot under reduced motion: the spider and thread appear in place instead of descending. */
 html[data-motion="reduce"] :is(.boot-core > .portia-mark, .boot-thread) { animation: fade-in 200ms ease-out !important; }

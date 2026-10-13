@@ -28,8 +28,8 @@ const originOf = (element: Element, kind: OpenOrigin["kind"]): OpenOrigin => {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, kind };
 };
 // Must equal the window-close / window-minimize (full motion) and window-fade-out (reduced) durations in app/portia.css.
-const WINDOW_CLOSE_MS = 160;
-const WINDOW_MINIMIZE_MS = 280;
+const WINDOW_CLOSE_MS = 180;
+const WINDOW_MINIMIZE_MS = 320;
 const WINDOW_FADE_OUT_MS = 120;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string };
@@ -1133,10 +1133,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
         {startOpen && <div className="start-panel">
           <div className="start-panel-brand"><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><div><strong>PORTIA OS</strong></div></div>
-          <button type="button" onClick={() => openApp("search")}><span className="start-panel-icon"><PortiaIcon name="search" /></span>Глобальный поиск</button>
-          <button type="button" onClick={() => openApp("archive")}><span className="start-panel-icon"><PortiaIcon name="virus" /></span>База вирусов</button>
-          <button type="button" onClick={() => openApp("employees")}><span className="start-panel-icon"><PortiaIcon name="employees" /></span>Сотрудники</button>
-          <button type="button" onClick={() => openApp("settings")}><span className="start-panel-icon"><PortiaIcon name="settings" /></span>Настройки</button>
+          <button type="button" onClick={() => openApp("search")}><span className="start-panel-icon" data-icon="search"><PortiaIcon name="search" /></span>Глобальный поиск</button>
+          <button type="button" onClick={() => openApp("archive")}><span className="start-panel-icon" data-icon="virus"><PortiaIcon name="virus" /></span>База вирусов</button>
+          <button type="button" onClick={() => openApp("employees")}><span className="start-panel-icon" data-icon="employees"><PortiaIcon name="employees" /></span>Сотрудники</button>
+          <button type="button" onClick={() => openApp("settings")}><span className="start-panel-icon" data-icon="settings"><PortiaIcon name="settings" /></span>Настройки</button>
         </div>}
 
       </div>
