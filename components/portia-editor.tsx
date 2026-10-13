@@ -24,6 +24,10 @@ type Props = {
   saveState: "idle" | "saving" | "saved" | "error" | "conflict";
   canManageEditors: boolean;
   active: boolean;
+  onDirtyChange: (dirty: boolean) => void;
+  // Bumped by the window manager each time × is pressed while the editor reports unsaved edits.
+  closeRequest: number;
+  onCloseApproved: () => void;
   onSave: (content: PortiaContent) => Promise<void>;
   onEmployeeSaved: (employee: PortiaEmployee) => void;
 };
@@ -431,7 +435,7 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, saveState, canManageEditors, active, onSave, onEmployeeSaved }: Props) {
+export function PortiaEditor({ content, saveState, canManageEditors, active, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
   const draft = history.present;
   const changed = useMemo(() => changedSections(history.baseline, history.present), [history.baseline, history.present]);
@@ -441,7 +445,10 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onS
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
   const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycledViruses?.[0]?.id ?? "");
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">("idle");
-  const [dialog, setDialog] = useState<"discard" | null>(null);
+  const [dialog, setDialog] = useState<"discard" | "recycle" | "delete" | null>(null);
+  // A request made before this mount is not replayed; the dialog shows while a newer one is unanswered.
+  const [handledCloseRequest, setHandledCloseRequest] = useState(closeRequest);
+  const closeAsked = closeRequest !== handledCloseRequest;
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface>("light");
@@ -491,6 +498,28 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onS
     setFormatterOpen(false);
     repairSelections(target);
     dispatch({ type: kind });
+  };
+
+  // Both run after the PORTIA confirm dialog (never window.confirm: embedded browsers answer it "no" unseen).
+  const moveSelectedVirusToRecycle = () => {
+    if (!selectedVirus) return;
+    const nextId = draft.viruses.find((virus) => virus.id !== selectedVirus.id)?.id ?? "";
+    changeDraft((next) => {
+      next.recycledViruses ??= [];
+      const recycled = next.viruses[selectedVirusIndex];
+      next.recycledViruses.push(recycled);
+      next.viruses = next.viruses.filter((virus) => virus.id !== selectedVirus.id);
+      next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `virus:${recycled.id}`), `virus:${recycled.id}`];
+    });
+    setSelectedVirusId(nextId);
+    setSelectedRecycledVirusId(selectedVirus.id);
+  };
+
+  const deleteSelectedRecycledVirus = () => {
+    if (!selectedRecycledVirus) return;
+    const nextId = draft.recycledViruses.find((virus) => virus.id !== selectedRecycledVirus.id)?.id ?? "";
+    changeDraft((next) => { next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
+    setSelectedRecycledVirusId(nextId);
   };
 
   const updateVirus = (updater: (virus: Virus) => void) => {
@@ -590,7 +619,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onS
 
   // Window-level shortcuts only while this window is the active, non-minimized one and no dialog is open (D-10, D-11).
   useEffect(() => {
-    if (!active || dialog) return;
+    if (!active || dialog || closeAsked) return;
     // Сотрудники and Доступ are saved separately; their fields keep the browser's native undo.
     const historyTab = tab !== "employees" && tab !== "access";
     const onKeyDown = (event: KeyboardEvent) => {
@@ -614,7 +643,21 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onS
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("beforeinput", onBeforeInput);
     };
-  }, [active, dialog, tab]);
+  }, [active, dialog, closeAsked, tab]);
+
+  useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
+
+  // Reload or leaving the page with unsaved edits: the browser shows its own fixed warning text (D-12).
+  // The cleanup also runs when the editor unmounts on close, so a closed editor never blocks leaving.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   const barVisible = dirty || saveState === "saving" || saveState === "saved" || saveState === "conflict";
   const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
@@ -740,19 +783,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onS
                 <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= 5} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / 5</span></div>
               </EditorGroup>
 
-              <button className="danger-control" type="button" onClick={() => {
-                if (!window.confirm(`Переместить «${selectedVirus.name}» в Корзину? В основной базе вирус исчезнет, но его можно будет редактировать и восстановить из Корзины.`)) return;
-                const nextId = draft.viruses.find((virus) => virus.id !== selectedVirus.id)?.id ?? "";
-                changeDraft((next) => {
-                  next.recycledViruses ??= [];
-                  const recycled = next.viruses[selectedVirusIndex];
-                  next.recycledViruses.push(recycled);
-                  next.viruses = next.viruses.filter((virus) => virus.id !== selectedVirus.id);
-                  next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `virus:${recycled.id}`), `virus:${recycled.id}`];
-                });
-                setSelectedVirusId(nextId);
-                setSelectedRecycledVirusId(selectedVirus.id);
-              }}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
+              <button className="danger-control" type="button" onClick={() => setDialog("recycle")}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
             </div>
           ) : <div className="editor-empty">Добавьте первую запись вируса.</div>}
         </div>
@@ -841,12 +872,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onS
                 setSelectedRecycledVirusId("");
                 switchTab("viruses");
               }}
-              onDelete={() => {
-                if (!window.confirm(`Удалить «${selectedRecycledVirus.name}» навсегда? Это действие нельзя отменить.`)) return;
-                const nextId = draft.recycledViruses.find((virus) => virus.id !== selectedRecycledVirus.id)?.id ?? "";
-                changeDraft((next) => { next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
-                setSelectedRecycledVirusId(nextId);
-              }}
+              onDelete={() => setDialog("delete")}
             />
           ) : selectedRecycleFile ? (
             <div className="editor-form">
@@ -982,6 +1008,45 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onS
             { label: "НЕ ОТМЕНЯТЬ", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
           ]}
           onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog === "recycle" && selectedVirus && (
+        <ConfirmDialog
+          title="ПЕРЕМЕСТИТЬ В КОРЗИНУ"
+          text={`Переместить «${selectedVirus.name}» в Корзину? В основной базе вирус исчезнет, но его можно будет редактировать и восстановить из Корзины.`}
+          actions={[
+            { label: "ПЕРЕМЕСТИТЬ", tone: "danger", onClick: () => { setDialog(null); moveSelectedVirusToRecycle(); } },
+            { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+          ]}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog === "delete" && selectedRecycledVirus && (
+        <ConfirmDialog
+          title="УДАЛИТЬ НАВСЕГДА"
+          text={`Удалить «${selectedRecycledVirus.name}» навсегда? Это действие нельзя отменить.`}
+          actions={[
+            { label: "УДАЛИТЬ НАВСЕГДА", tone: "danger", onClick: () => { setDialog(null); deleteSelectedRecycledVirus(); } },
+            { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+          ]}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {closeAsked && (
+        <ConfirmDialog
+          title="Закрыть редактор?"
+          text={`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}
+          actions={[
+            {
+              label: "СОХРАНИТЬ",
+              tone: "primary",
+              // Closes only after the save succeeded; on failure the window stays and the bar shows ОШИБКА or the conflict.
+              onClick: () => { setHandledCloseRequest(closeRequest); void save().then((ok) => { if (ok) onCloseApproved(); }); },
+            },
+            { label: "НЕ СОХРАНЯТЬ", tone: "danger", onClick: () => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },
+            { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setHandledCloseRequest(closeRequest) },
+          ]}
+          onCancel={() => setHandledCloseRequest(closeRequest)}
         />
       )}
     </div>

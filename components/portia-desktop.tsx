@@ -293,6 +293,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const assistantAutomaticTimer = useRef<number | null>(null);
   const settingsSavedTimer = useRef<number | null>(null);
   const exitTimers = useRef<Partial<Record<AppId, number>>>({});
+  // The editor reports unsaved edits through a ref: closing is decided inside an event handler, never during render.
+  const editorDirtyRef = useRef(false);
+  const reportEditorDirty = useCallback((dirty: boolean) => { editorDirtyRef.current = dirty; }, []);
+  const [editorCloseRequest, setEditorCloseRequest] = useState(0);
+  const saveStateTimer = useRef<number | null>(null);
   const assistantClickStreak = useRef<{ startedAt: number; lastClickAt: number } | null>(null);
   const assistantAdviceBag = useRef<number[]>([]);
   const assistantAdviceSignature = useRef("");
@@ -745,11 +750,16 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }));
   };
 
-  // Phase 3: the editor's unsaved-changes guard must run before an exit starts.
-  const requestExit = (appId: AppId, kind: "close" | "minimize") => {
+  // `force` is the editor's own dialog approving the close; minimize is never guarded (the window stays mounted).
+  const requestExit = (appId: AppId, kind: "close" | "minimize", force = false) => {
     // A repeat is ignored, but a close may overtake a minimise that is still playing.
     const exiting = windows[appId].exiting;
     if (exiting === kind || exiting === "close") return;
+    // The editor's unsaved-changes dialog decides closes while it has unsaved edits.
+    if (appId === "editor" && kind === "close" && !force && editorDirtyRef.current) {
+      setEditorCloseRequest((count) => count + 1);
+      return;
+    }
     const pending = exitTimers.current[appId];
     if (pending) window.clearTimeout(pending);
     if (activeApp === appId) {
@@ -796,6 +806,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   };
 
   const saveContent = async (next: PortiaContent) => {
+    // An earlier «СОХРАНЕНО» timer must not flip a newer request back to idle mid-save.
+    if (saveStateTimer.current !== null) window.clearTimeout(saveStateTimer.current);
     setSaveState("saving");
     try {
       const response = await fetchWithTimeout("/api/content", {
@@ -820,7 +832,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         }));
       } catch {}
       setSaveState("saved");
-      window.setTimeout(() => setSaveState("idle"), 1800);
+      saveStateTimer.current = window.setTimeout(() => setSaveState("idle"), 1800);
     } catch (error) {
       setSaveState((current) => current === "conflict" ? current : "error");
       throw error;
@@ -1164,7 +1176,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="editor" state={windows.editor} active={activeApp === "editor"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="editor-window" meta="ДОСТУП ВЛАДЕЛЬЦА">
-            {canEdit ? <PortiaEditor content={content} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} onSave={saveContent} onEmployeeSaved={updateEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
+            {canEdit ? <PortiaEditor content={content} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
           </AppWindow>
         </main>
 
