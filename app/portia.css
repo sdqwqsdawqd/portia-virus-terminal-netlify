@@ -470,6 +470,8 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .formatted-rich-input:focus:not(.preview-dark), .formatted-rich-input.is-editor-active.preview-light { border-color: var(--teal); background: #f3f1e9; color: #252827; box-shadow: 0 0 0 3px rgba(0,188,166,.12), inset 0 0 0 1px rgba(255,255,255,.45); }
 .formatted-rich-input.is-editor-active.preview-dark { border-color: var(--teal); background: #08110f; color: #aebfba; box-shadow: 0 0 0 3px rgba(0,188,166,.12), inset 0 0 0 1px rgba(255,255,255,.025); font-family: var(--sans); }
 .formatted-rich-input:empty::before { content: "Введите текст…"; color: #858b87; font: italic 13px/1.55 var(--sans); pointer-events: none; }
+/* Each editor field shares one font rule with the site area that shows its text, so changing an area here changes its field too. */
+.lead-copy, .formatted-rich-input[data-area="lead"] { font: 16px/1.75 var(--sans); }
 .formatted-text-field-hint { color: #56716a; font-size: 10px; line-height: 1.4; }
 .formatted-text-field:focus-within .formatted-text-field-head > span { color: var(--teal); }
 .content-editor:has(.floating-text-format) { padding-bottom: 170px; }
@@ -719,7 +721,7 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .class-cell.transmission strong { color: #0b7568; }
 
 .dossier-section { margin-top: clamp(34px, 5vw, 58px); }
-.lead-copy { display: block; max-width: 86ch; margin: 0; color: #35413e; font-size: 16px; line-height: 1.75; }
+.lead-copy { display: block; max-width: 86ch; margin: 0; color: #35413e; }
 .metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #c4beb0; }
 .metric-grid > div { min-height: 0; padding: 18px; border-right: 1px solid #c4beb0; }
 .metric-grid > div:last-child { border-right: 0; }
@@ -896,7 +898,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .classification-grid { grid-template-columns: 1fr 1fr; }
   .class-cell { min-height: 70px; padding: 10px; }
   .class-cell strong { font-size: 13px; }
-  .lead-copy { font-size: 15px; line-height: 1.7; }
+  .lead-copy, .formatted-rich-input[data-area="lead"] { font-size: 15px; line-height: 1.7; }
   .mutation-card { grid-template-columns: 1fr; }
   .mutation-card .subject-media { border-right: 0; border-bottom: 1px solid #c4beb0; }
   .mutation-card .media-empty { aspect-ratio: 16 / 9; min-height: 180px; }
