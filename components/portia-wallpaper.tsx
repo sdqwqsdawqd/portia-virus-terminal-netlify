@@ -88,6 +88,55 @@ function gelLanes() {
 
 const gel = gelLanes();
 
+// An irregular cell outline: a circle wobbled by two sine harmonics with random phase.
+function blob(cx: number, cy: number, radius: number, rand: () => number) {
+  const phaseA = rand() * 6, phaseB = rand() * 6, points = 28;
+  return "M" + Array.from({ length: points }, (_, index) => {
+    const angle = (index / points) * Math.PI * 2;
+    const k = 1 + 0.13 * Math.sin(3 * angle + phaseA) + 0.07 * Math.sin(5 * angle + phaseB);
+    return `${round(cx + Math.cos(angle) * radius * k)} ${round(cy + Math.sin(angle) * radius * k)}`;
+  }).join("L") + "Z";
+}
+
+// «Клетки под микроскопом» (sketch #cells-b): the eyepiece with a graduated crosshair, a dense field of cells
+// with nuclei, virus particles and a scale bar. Particles are separate so only they drift and tumble.
+function cellField() {
+  const rand = seeded(5);
+  const cx = 1060, cy = 430, radius = 380;
+  const place = (count: number, margin: number) => {
+    const found: Point[] = [];
+    for (let guard = 0; found.length < count && guard < 2000; guard += 1) {
+      const x = cx - radius + rand() * 2 * radius, y = cy - radius + rand() * 2 * radius;
+      if (Math.hypot(x - cx, y - cy) < radius - margin && found.every(([a, b]) => Math.hypot(a - x, b - y) > margin * 1.6)) found.push([x, y]);
+    }
+    return found;
+  };
+  const cells = place(12, 48).map(([x, y]) => {
+    const size = 34 + rand() * 18;
+    return { wall: blob(x, y, size, rand), nucleus: blob(x + size * 0.15, y - size * 0.1, size * 0.32, rand) };
+  });
+  const particles = place(20, 22).map(([x, y]) => ({
+    x: round(x), y: round(y),
+    spikes: Array.from({ length: 8 }, (_, index) => {
+      const angle = (index / 8) * Math.PI * 2;
+      return `M${round(x + Math.cos(angle) * 9)} ${round(y + Math.sin(angle) * 9)}L${round(x + Math.cos(angle) * 15)} ${round(y + Math.sin(angle) * 15)}`;
+    }).join(""),
+  }));
+  const ticks = Array.from({ length: 19 }, (_, index) => {
+    const offset = (index - 9) * 40, major = index % 5 === 4, half = major ? 12 : 6;
+    return `M${cx + offset} ${cy - half}v${half * 2}M${cx - half} ${cy + offset}h${half * 2}`;
+  }).join("");
+  return {
+    centre: { cx, cy, radius },
+    reticle: `M${cx - radius} ${cy}H${cx + radius}M${cx} ${cy - radius}V${cy + radius}${ticks}`,
+    scaleBar: `M${cx + 120} ${cy + 300}h140M${cx + 120} ${cy + 292}v16M${cx + 260} ${cy + 292}v16`,
+    cells,
+    particles,
+  };
+}
+
+const cells = cellField();
+
 export function DesktopWallpaper({ kind }: { kind: string }) {
   if (kind === "quiet") return null;
   return <svg className={`desktop-wallpaper desktop-wallpaper-${kind}`} viewBox="0 0 1440 900" preserveAspectRatio="xMaxYMin slice" aria-hidden="true">
@@ -103,6 +152,19 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
           <g className="wallpaper-gel-bands">
             {gel.bands.map((band, index) => <path key={index} d={band.d} style={{ strokeWidth: band.weight, opacity: band.opacity }} />)}
           </g>
+        </g>
+      : kind === "cells"
+      ? <g className="wallpaper-cells">
+          <circle cx={cells.centre.cx} cy={cells.centre.cy} r={cells.centre.radius} className="wallpaper-cells-eyepiece" />
+          <circle cx={cells.centre.cx} cy={cells.centre.cy} r={cells.centre.radius + 14} className="wallpaper-cells-rim" />
+          <path d={cells.reticle} className="wallpaper-cells-reticle" />
+          {cells.cells.map((cell, index) => <g key={index} className="wallpaper-cell"><path d={cell.wall} /><path d={cell.nucleus} className="wallpaper-cell-nucleus" /></g>)}
+          <g className="wallpaper-cells-particles">
+            {cells.particles.map((particle, index) => <g key={index} className="wallpaper-particle" style={{ animationDelay: `${-((index * 3.7) % 20)}s` }}>
+              <circle cx={particle.x} cy={particle.y} r={9} /><path d={particle.spikes} />
+            </g>)}
+          </g>
+          <path d={cells.scaleBar} className="wallpaper-cells-scale" />
         </g>
       : <g className="wallpaper-web">
           {web.spokePaths.map((d, index) => <path key={`s${index}`} d={d} pathLength={1} style={{ animationDelay: `${index * 40}ms` }} />)}

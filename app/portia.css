@@ -1117,6 +1117,20 @@ html[data-motion="reduce"] .wallpaper-helix { animation: none; }
 .wallpaper-gel-bands path { stroke-linecap: butt; }
 html[data-motion="full"] .wallpaper-gel-bands { animation: gel-run 24s ease-in-out infinite alternate; }
 @keyframes gel-run { to { translate: 0 40px; } }
+/* «Клетки под микроскопом»: the field stays; the virus particles drift inside the eyepiece and each tumbles
+   around its own centre (fill-box), never around the corner of the drawing. */
+.wallpaper-cells-eyepiece { stroke-width: 1.4; opacity: .3; }
+.wallpaper-cells-rim { stroke-width: 1.2; opacity: .12; }
+.wallpaper-cells-reticle { stroke-width: 1.1; opacity: .2; }
+.wallpaper-cell path { stroke-width: 1.3; opacity: .26; }
+.wallpaper-cell .wallpaper-cell-nucleus { opacity: .3; }
+.wallpaper-cells-particles { stroke-width: 1.4; opacity: .3; }
+.wallpaper-cells-scale { stroke-width: 1.4; opacity: .3; }
+.wallpaper-particle { transform-box: fill-box; transform-origin: center; }
+html[data-motion="full"] .wallpaper-cells-particles { animation: cells-drift 36s ease-in-out infinite alternate; }
+html[data-motion="full"] .wallpaper-particle { animation: particle-tumble 20s linear infinite; }
+@keyframes cells-drift { 50% { translate: 10px -8px; } to { translate: -6px 10px; } }
+@keyframes particle-tumble { to { rotate: 360deg; } }
 
 /* The spider lowers itself on a silk thread while the terminal boots. */
 .boot-thread { position: absolute; left: 50%; bottom: calc(100% - 46px); width: 1px; height: 50vh; background: linear-gradient(transparent, var(--teal)); transform-origin: top; animation: thread-spin 900ms cubic-bezier(.16, 1, .3, 1) both; animation-play-state: paused; }
