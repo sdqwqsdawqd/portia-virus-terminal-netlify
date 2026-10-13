@@ -229,6 +229,8 @@ function recycleFileBody(file: RecycleFile, viruses: Virus[]) {
 
 export function PortiaDesktop({ initialContent }: { initialContent: PortiaContent }) {
   const [content, setContent] = useState<PortiaContent>(initialContent);
+  // False until the cached copy or the first /api/content answer arrives; until then content windows show a loader, not defaults.
+  const [contentReady, setContentReady] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
   const [canManageEditors, setCanManageEditors] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -257,6 +259,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [settingsSavedVisible, setSettingsSavedVisible] = useState(false);
   const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
+  const [employeesReady, setEmployeesReady] = useState(false);
   const [employeesSyncedAt, setEmployeesSyncedAt] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [employeeQuery, setEmployeeQuery] = useState("");
@@ -313,6 +316,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       } catch {}
     } catch {
       // The last copy saved on this device keeps the terminal usable while offline.
+    } finally {
+      // Even a failed answer ends the wait: what is on screen then is all there is.
+      setContentReady(true);
     }
   }, []);
 
@@ -350,6 +356,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       try { window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify(payload)); } catch {}
     } catch {
       // The last successful personnel snapshot remains visible on this device.
+    } finally {
+      setEmployeesReady(true);
     }
   }, []);
 
@@ -365,6 +373,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             setRevision(typeof parsed.revision === "number" ? parsed.revision : 0);
             setActiveVirusId((current) => cachedContent.viruses.some((virus) => virus.id === current) ? current : cachedContent.viruses[0]?.id ?? "");
             setSelectedInfoId((current) => cachedContent.infoSections.some((section) => section.id === current) ? current : cachedContent.infoSections[0]?.id ?? "");
+            setContentReady(true);
           }
         }
         const employeeCache = window.localStorage.getItem(employeesCacheStorageKey);
@@ -374,6 +383,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             setEmployees(parsed.employees);
             setEmployeesSyncedAt(parsed.syncedAt ?? null);
             setSelectedEmployeeId((current) => current || parsed.employees![0].id);
+            setEmployeesReady(true);
           }
         }
       } catch {}
@@ -964,6 +974,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск по базе</span><input value={virusQuery} onChange={(event) => setVirusQuery(event.target.value)} type="search" placeholder="Поиск по имени или коду" /></label>
                 <div className="browser-labels" aria-hidden="true"><span>СУБЪЕКТ</span><span>СТАТУС</span></div>
                 <div className="virus-list" role="listbox" aria-label="Записи вирусов">
+                  {!contentReady ? <LoadingState label="Загрузка архива…" /> : <>
                   {filteredViruses.map((virus, index) => (
                     <button key={virus.id} type="button" className={`virus-row${virus.id === activeVirus?.id ? " active" : ""}`} onClick={() => { setActiveVirusId(virus.id); setOpenLog(null); }}>
                       <span className="row-index">{String(index + 1).padStart(2, "0")}</span>
@@ -972,11 +983,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                     </button>
                   ))}
                   {!filteredViruses.length && <div className="list-empty">Совпадений в архиве нет</div>}
+                  </>}
                 </div>
                 <div className="browser-footer"><span><i className="status-dot" />СИНХРОНИЗИРОВАНО</span><span>РЕВИЗИЯ {String(revision).padStart(2, "0")}</span></div>
               </aside>
               <article className="record-view" aria-live="polite">
-                {activeVirus ? openLog ? <ScientistDocument virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} /> : <div className="record-empty empty-state"><PortiaIllustration name="dish" /><strong>В базе пока нет вирусов</strong></div>}
+                {!contentReady ? <LoadingState label="Загрузка досье…" /> : activeVirus ? openLog ? <ScientistDocument virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} /> : <div className="record-empty empty-state"><PortiaIllustration name="dish" /><strong>В базе пока нет вирусов</strong></div>}
               </article>
             </div>
           </AppWindow>
@@ -987,13 +999,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <header><h1>Сотрудники</h1></header>
                 <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск сотрудника</span><input type="search" value={employeeQuery} onChange={(event) => setEmployeeQuery(event.target.value)} placeholder="Ник, позывной, звание" /></label>
                 <div className="personnel-list">
+                  {!employeesReady ? <LoadingState label="Загрузка сотрудников…" /> : <>
                   {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={employee.id === selectedEmployee?.id ? "active" : ""} onClick={() => setSelectedEmployeeId(employee.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
                   {!filteredEmployees.length && <div className="list-empty">Сотрудники не найдены</div>}
+                  </>}
                 </div>
                 <footer>СИНХРОНИЗАЦИЯ: {employeesSyncedAt ? new Date(employeesSyncedAt).toLocaleString("ru-RU") : "ОЖИДАНИЕ"}</footer>
               </aside>
               <article className="personnel-profile">
-                {selectedEmployee ? <div className="personnel-profile-transition" key={selectedEmployee.id}>
+                {!employeesReady ? <LoadingState label="Загрузка профиля…" /> : selectedEmployee ? <div className="personnel-profile-body" key={selectedEmployee.id}>
                   <header className="personnel-profile-head">
                     <div className="personnel-avatar-stage">
                       <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
@@ -1015,6 +1029,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{content.searchRecommendations.slice(0, 6).map((item, index) => <button key={`${item}-${index}`} type="button" onClick={() => setGlobalQuery(item)}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>)}</div></div>
               <div className="global-search-summary"><span>{globalQuery ? `Результаты для «${globalQuery}»` : "Доступные записи"}</span><strong>{String(searchResults.length).padStart(2, "0")}</strong></div>
               <div className="global-search-results">
+                {!contentReady ? <LoadingState label="Загрузка архива…" /> : <>
                 {searchResults.map((result) => (
                   <button key={`${result.type}-${result.id}`} type="button" className="global-result" onClick={() => openSearchResult(result)}>
                     <span className="global-result-mark">{result.type === "virus" ? "VIS" : result.type === "info" ? "INF" : result.type === "file" ? "FILE" : "MSG"}</span>
@@ -1022,24 +1037,25 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   </button>
                 ))}
                 {!searchResults.length && <div className="global-search-empty empty-state"><PortiaIllustration name="microscope" /><strong>Совпадений нет</strong><span>Измените запрос или выберите рекомендацию.</span></div>}
+                </>}
               </div>
             </div>
           </AppWindow>
 
           <AppWindow app="info" state={windows.info} active={activeApp === "info"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window info-window" meta="АРХИВ ЗНАНИЙ">
-            <div className="info-library">
+            {!contentReady ? <LoadingState label="Загрузка разделов…" /> : <div className="info-library">
               <aside className="info-index">{content.infoSections.map((section, index) => <button key={section.id} type="button" className={section.id === selectedInfo?.id ? "active" : ""} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span></button>)}</aside>
               <article className="info-document">{selectedInfo ? <><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></> : <div className="editor-empty">Разделов пока нет.</div>}</article>
-            </div>
+            </div>}
           </AppWindow>
 
           <AppWindow app="broadcasts" state={windows.broadcasts} active={activeApp === "broadcasts"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window broadcasts-window" meta="КАНАЛ СТАНЦИИ">
             <div className="broadcasts-app">
               <header><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>
-              <div className="broadcast-grid">
+              {!contentReady ? <LoadingState label="Загрузка объявлений…" /> : <div className="broadcast-grid">
                 {content.broadcasts.filter((item) => item.published).map((item) => <article className={`broadcast-card ${item.type}`} key={item.id}><span>{broadcastType(item.type)}</span><h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2><FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>)}
                 {!content.broadcasts.some((item) => item.published) && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>Сообщений пока нет</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
-              </div>
+              </div>}
             </div>
           </AppWindow>
 
@@ -1049,7 +1065,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashFiles.length + recycledViruses.length).padStart(2, "0")}`}>
             <div className={`trash-app${activeTrashFile || activeTrashVirus ? " is-viewing" : ""}`}>
               <header><h1>Корзина</h1><p>Бесполезный хлам — кому вообще придет в голову его перебирать?</p></header>
-              <div className="trash-layout">
+              {!contentReady ? <LoadingState label="Загрузка корзины…" /> : <div className="trash-layout">
                 <div className="trash-files">
                   <div className="trash-list-head" aria-hidden="true"><span>ИМЯ</span><span>ИСХОДНОЕ РАСПОЛОЖЕНИЕ</span><span>ТИП</span></div>
                   {trashOrder.map((key) => {
@@ -1076,7 +1092,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                     )}
                   </div>
                 </div>}
-              </div>
+              </div>}
             </div>
           </AppWindow>
 
@@ -1239,6 +1255,7 @@ const zoomSteps = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 function EmbeddedDocument({ src, external, title }: { src: string; external: string; title: string }) {
   const [zoom, setZoom] = useState(1);
   const [ctrlHeld, setCtrlHeld] = useState(false);
+  const [frameLoading, setFrameLoading] = useState(true);
   const frameRef = useRef<HTMLDivElement>(null);
   const step = useCallback((direction: 1 | -1) => setZoom((current) => {
     const index = zoomSteps.findIndex((value) => value >= current - 0.001);
@@ -1275,7 +1292,8 @@ function EmbeddedDocument({ src, external, title }: { src: string; external: str
 
   return <div className="document-app" ref={frameRef}>
     <div className="document-app-viewport">
-      <iframe src={src} title={title} loading="lazy" referrerPolicy="no-referrer" style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})` }} />
+      <iframe src={src} title={title} loading="lazy" referrerPolicy="no-referrer" onLoad={() => setFrameLoading(false)} style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})` }} />
+      {frameLoading && <LoadingState label="Загрузка документа…" />}
       {ctrlHeld && <div className="document-app-zoom-layer" aria-hidden="true" />}
     </div>
     <div className="document-app-bar">
@@ -1408,7 +1426,7 @@ function VirusRecord({ virus, formattedText, onOpenLog }: { virus: Virus; format
     ["danger", "Общий уровень опасности", virus.classification.danger, "danger"], ["spread", "Распространение", virus.classification.spread, "spread"], ["transmission", "Способ распространения", virus.classification.transmission, "transmission"],
     ["escapeRisk", "Угроза и риск побега", virus.classification.escapeRisk, "escape"], ["mind", "Разум", virus.classification.mind, "mind"], ["appearance", "Вид / внешность", virus.classification.appearance, "appearance"], ["behavior", "Поведение", virus.classification.behavior, "behavior"],
   ] as const;
-  return <div className="record-transition-in" key={virus.id}>
+  return <div className="record-body" key={virus.id}>
     <header className="record-header"><div><span className="record-code">{virus.code}</span><h2>{virus.name}</h2></div><div className="record-status"><span />{virus.status}</div></header>
     <div className="record-document">
       <section className="record-hero"><MediaBlock src={virus.infectedImage} alt={`Субъект после заражения вирусом ${virus.name}`} label="Фото после заражения" /><div className="classification-panel"><div className="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div><div className="classification-grid">{classification.map(([key, label, value, tone]) => { const level = classificationLevel(key, value); return <div className={`class-cell ${tone}${level ? ` level-${level}` : ""}`} key={label}><span>{label}</span><strong>{value}</strong>{level && <small>УРОВЕНЬ {level}</small>}</div>; })}</div></div></section>
@@ -1529,12 +1547,26 @@ function FormattedText({ text, document, className = "" }: { text: string; docum
   return <span className={`formatted-content${className ? ` ${className}` : ""}`}>{nodes}</span>;
 }
 
+function LoadingMedia({ src, alt, label }: { src: string; alt: string; label: string }) {
+  const [loading, setLoading] = useState(true);
+  return <figure className={`subject-media${loading ? " is-loading" : ""}`}>
+    <img src={src} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" onLoad={() => setLoading(false)} onError={() => setLoading(false)} />
+    {loading && <LoadingState label="Загрузка изображения…" />}
+    <figcaption>{label}</figcaption>
+  </figure>;
+}
+
 function DossierSection({ index, title, children }: { index: string; title: string; children: React.ReactNode }) {
   return <section className="dossier-section"><div className="section-kicker"><span>{index}</span>{title}</div>{children}</section>;
 }
 
+// Shown while data is on its way. It fades in only after a short wait, so cached data never flashes it.
+function LoadingState({ label }: { label: string }) {
+  return <div className="loading-state" role="status" aria-live="polite"><span className="loading-spinner" aria-hidden="true" /><span>{label}</span></div>;
+}
+
 function MediaBlock({ src, alt, label }: { src: string; alt: string; label: string }) {
-  if (src) return <figure className="subject-media"><img src={src} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" /><figcaption>{label}</figcaption></figure>;
+  if (src) return <LoadingMedia key={src} src={src} alt={alt} label={label} />;
   return <figure className="subject-media media-empty"><img src="/assets/portia-logo.png" alt="" aria-hidden="true" /><div><span>ВИЗУАЛЬНЫЙ МАТЕРИАЛ</span><strong>ОЖИДАЕТ ЗАГРУЗКИ</strong><small>{label}</small></div></figure>;
 }
 

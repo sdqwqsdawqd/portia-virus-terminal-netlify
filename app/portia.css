@@ -338,8 +338,6 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .personnel-list > button > small { overflow: hidden; color: oklch(.604 .027 var(--accent-hue)); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .personnel-index footer { padding: 11px 15px; border-top: 1px solid oklch(.383 .033 var(--accent-hue)); color: oklch(.546 .028 var(--accent-hue)); font: 11px var(--sans); }
 .personnel-profile { min-width: 0; overflow-y: auto; padding: clamp(22px, 4vw, 42px); color: oklch(.919 .012 var(--accent-hue)); }
-.personnel-profile-transition { animation: personnel-profile-enter 240ms cubic-bezier(.2,.72,.28,1) both; }
-@keyframes personnel-profile-enter { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
 .personnel-profile-head { display: grid; grid-template-columns: minmax(190px, 238px) minmax(0,1fr); align-items: center; gap: clamp(26px, 5vw, 54px); padding: clamp(16px, 3vw, 28px); border: 1px solid oklch(.383 .033 var(--accent-hue)); background: linear-gradient(130deg, rgba(var(--desktop-glow), .055), transparent 48%), oklch(.148 .016 var(--accent-hue) / .42); }
 .personnel-profile-head figure { margin: 0; overflow: hidden; border: 1px solid oklch(.443 .041 var(--accent-hue)); background: oklch(.167 .016 var(--accent-hue)); }
 .personnel-profile-head img { width: 100%; height: 100%; object-fit: cover; }
@@ -353,10 +351,10 @@ a.personnel-portrait { overflow: hidden; background: oklch(.167 .016 var(--accen
 a.personnel-portrait:hover, a.personnel-portrait:focus-visible { box-shadow: 0 0 0 1px var(--teal), 0 10px 24px rgba(0,0,0,.32); }
 a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .personnel-image-loader { position: relative; width: 100%; height: 100%; overflow: hidden; }
-.personnel-image-loader img { position: relative; z-index: 1; opacity: 0; transform: scale(.985); transition: opacity 220ms ease, transform 260ms ease; }
-.personnel-image-loader.is-loaded img { opacity: 1; transform: scale(1); }
-.personnel-image-skeleton { position: absolute; inset: 0; background: linear-gradient(105deg, oklch(.184 .017 var(--accent-hue)) 24%, oklch(.287 .033 var(--accent-hue)) 39%, oklch(.184 .017 var(--accent-hue)) 55%); background-size: 220% 100%; animation: personnel-image-loading 1.05s linear infinite; }
-.personnel-image-loader.is-loaded .personnel-image-skeleton { opacity: 0; transition: opacity 180ms ease; }
+.personnel-image-loader img { position: relative; z-index: 1; opacity: 0; }
+.personnel-image-loader.is-loaded img { opacity: 1; }
+.personnel-image-skeleton { position: absolute; inset: 0; background: linear-gradient(105deg, oklch(.184 .017 var(--accent-hue)) 24%, oklch(.287 .033 var(--accent-hue)) 39%, oklch(.184 .017 var(--accent-hue)) 55%); background-size: 220% 100%; opacity: 0; animation: personnel-image-loading 1.05s linear infinite, loader-appear 1ms linear 150ms forwards; }
+.personnel-image-loader.is-loaded .personnel-image-skeleton { display: none; }
 @keyframes personnel-image-loading { to { background-position: -220% 0; } }
 .personnel-full-avatar-empty { height: 100%; display: grid; place-items: center; align-content: center; gap: 8px; padding: 18px; color: oklch(.524 .03 var(--accent-hue)); text-align: center; }
 .personnel-full-avatar-empty span { color: var(--teal); font: 700 11px var(--sans); letter-spacing: .1em; }
@@ -702,9 +700,6 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 
 .record-view { min-width: 0; overflow-y: auto; color: var(--ink); background: var(--paper); scrollbar-color: #8e998f #d8d4c8; }
 .record-view.record-transition-out { opacity: .25; transform: translateX(-5px); transition: opacity 85ms ease, transform 85ms ease; }
-.record-view.record-transition-in { animation: record-enter 180ms cubic-bezier(.2,.75,.3,1) both; }
-.record-transition-in { animation: record-enter 180ms cubic-bezier(.2,.75,.3,1) both; }
-@keyframes record-enter { from { opacity: .25; transform: translateX(7px); } to { opacity: 1; transform: translateX(0); } }
 .record-header { position: sticky; z-index: 5; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 92px; padding: 17px clamp(20px, 4vw, 52px); border-bottom: 1px solid #cdc9bd; background: rgba(243, 240, 230, .94); backdrop-filter: blur(12px); }
 .record-header h2 { margin: 5px 0 0; color: oklch(.2 .013 var(--accent-hue)); font: 700 clamp(26px, 3vw, 40px)/1 var(--display); letter-spacing: -.02em; }
 .record-status { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #beb8aa; color: oklch(.418 .014 var(--accent-hue)); font: 11px var(--mono); letter-spacing: .06em; }
@@ -1107,6 +1102,17 @@ html[data-motion="reduce"] .wallpaper-helix { animation: none; }
 @keyframes window-open { from { opacity: 0; scale: .96; } to { opacity: 1; scale: 1; } }
 /* An exiting window takes no input; its animation runs only when motion is welcome. */
 .app-window.is-closing, .app-window.is-minimizing { pointer-events: none; }
+/* Loading indicator: appears only after 150ms, so data that is already here never flashes it.
+   The delay is kept under reduced motion (only durations are cut); the spinner turns only with motion on. */
+.loading-state { display: grid; place-content: center; justify-items: center; gap: 12px; min-height: 180px; padding: 24px; color: oklch(.66 .027 var(--accent-hue)); font: 500 12px var(--sans); letter-spacing: .06em; text-align: center; opacity: 0; animation: loader-appear 1ms linear 150ms forwards; }
+.loading-spinner { width: 22px; height: 22px; border: 2px solid oklch(.33 .027 var(--accent-hue)); border-top-color: var(--teal); border-radius: 50%; }
+html[data-motion="full"] .loading-spinner { animation: loading-spin 900ms linear infinite; }
+.subject-media > .loading-state, .document-app-viewport > .loading-state { position: absolute; inset: 0; z-index: 2; min-height: 0; pointer-events: none; }
+.subject-media > .loading-state { color: var(--ink-soft); }
+.document-app-viewport > .loading-state { background: #f6f7f6; color: var(--ink-soft); }
+@keyframes loader-appear { to { opacity: 1; } }
+@keyframes loading-spin { to { rotate: 360deg; } }
+
 /* A taskbar entry being dragged to a new place (state, not motion). */
 .taskbar-app.is-reordering { z-index: 2; background: var(--teal-soft); border-color: rgba(var(--desktop-glow), .35); box-shadow: 0 8px 20px rgba(0,0,0,.4); cursor: grabbing; }
 
