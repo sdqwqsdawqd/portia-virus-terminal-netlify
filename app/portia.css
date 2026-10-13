@@ -648,11 +648,18 @@ html[data-motion="reduce"] .boot-lines p { animation: fade-in 160ms ease-out bot
   filter: drop-shadow(0 16px 22px rgba(0,0,0,.48));
 }
 .assistant-button { position: relative; z-index: 2; width: 100%; display: block; padding: 0; border: 0; background: transparent; cursor: pointer; pointer-events: auto; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-.assistant-button img { display: block; width: 100%; height: auto; object-fit: contain; user-select: none; filter: var(--assistant-filter) brightness(.7); transition: transform 140ms ease, filter 140ms ease; }
-.assistant-button:hover img, .assistant-button:focus-visible img { transform: translateY(-2px) scale(1.025); filter: var(--assistant-filter) brightness(.7) drop-shadow(0 0 8px rgba(var(--desktop-glow), .2)); }
+.assistant-button img { display: block; width: 100%; height: auto; object-fit: contain; user-select: none; filter: var(--assistant-filter) brightness(.7); transform-origin: 50% 100%; transition: transform 220ms var(--ease-out), filter 360ms ease, opacity 360ms ease; }
+/* Hover: she perks up and leans toward the cursor (it arrives from the left: she sits in the bottom-right corner). */
+.assistant-button:hover img, .assistant-button:focus-visible img { transform: translate(-2px, -3px) rotate(-4deg) scale(1.03); filter: var(--assistant-filter) brightness(.7) drop-shadow(0 0 8px rgba(var(--desktop-glow), .2)); }
 .assistant-button:active img { transform: translateY(1px) scale(.97); }
 .desktop-assistant.is-offended .assistant-button { cursor: not-allowed; }
-.desktop-assistant.is-offended .assistant-button img { transform: translateY(3px) rotate(-3deg); filter: var(--assistant-filter) brightness(.7) grayscale(.65) saturate(.5); opacity: .78; }
+/* Sulking pose (both motion modes): turned away, crouched, grey. Individual properties so animations compose with it. */
+.desktop-assistant.is-offended .assistant-button img { transform: none; translate: 0 4px; rotate: -3deg; scale: -1 .94; filter: var(--assistant-filter) brightness(.7) grayscale(.85) saturate(.4); opacity: .78; }
+/* Annoyance within a click streak: each level squashes harder and tilts further; at 3 she darkens. */
+.desktop-assistant[data-mood="1"] { --squish-x: 1.06; --squish-y: .9; --squish-tilt: 0deg; }
+.desktop-assistant[data-mood="2"] { --squish-x: 1.09; --squish-y: .86; --squish-tilt: -5deg; }
+.desktop-assistant[data-mood="3"] { --squish-x: 1.12; --squish-y: .82; --squish-tilt: 7deg; }
+.desktop-assistant[data-mood="3"]:not(.is-offended) .assistant-button img { filter: var(--assistant-filter) brightness(.6); }
 .desktop-assistant.is-offended .assistant-bubble { border-color: #a76d34; }
 .desktop-assistant.is-offended .assistant-bubble::after { border-color: #a76d34; }
 .desktop-assistant.is-offended .assistant-bubble span { color: #efb84e; }
@@ -1228,6 +1235,50 @@ html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg > * { 
 @keyframes icon-stamp { from { scale: 1.8; opacity: 0; } 60% { scale: .9; opacity: 1; } }
 @keyframes icon-lid { 40% { translate: 0 -1.6px; rotate: -16deg; } 75% { rotate: 2deg; translate: 0 0; } }
 @keyframes icon-scribble { 20% { translate: -1px 1px; } 40% { translate: 1px -.5px; } 60% { translate: -.8px .8px; } 80% { translate: .6px -.4px; } }
+
+/* Vivian, full motion. Squash and stretch from her feet (transform-origin 50% 100%).
+   Automatic phrase: crouch, leap, land. Click: squash that grows with annoyance; at level 3 she shakes her head.
+   Sulk: sharp shudder, then she turns away and sinks. Recovery: a glance back over her shoulder, then she turns round.
+   The squash restarts on every click by alternating two identical animations (data-squish a/b), never by remounting the image. */
+html[data-motion="full"] .desktop-assistant.is-speaking[data-auto]:not(.is-offended) .assistant-button img { animation: vivian-hop 620ms; }
+html[data-motion="full"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-button img { animation: vivian-squish-a 320ms var(--ease-out); }
+html[data-motion="full"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-button img { animation: vivian-squish-b 320ms var(--ease-out); }
+html[data-motion="full"] .desktop-assistant[data-mood="3"][data-squish="a"]:not(.is-offended) .assistant-button img { animation: vivian-huff-a 500ms ease-out; }
+html[data-motion="full"] .desktop-assistant[data-mood="3"][data-squish="b"]:not(.is-offended) .assistant-button img { animation: vivian-huff-b 500ms ease-out; }
+html[data-motion="full"] .desktop-assistant.is-offended .assistant-button img { animation: vivian-offended 660ms cubic-bezier(.3, .7, .3, 1) both; }
+html[data-motion="full"] .desktop-assistant.is-recovering .assistant-button img { animation: vivian-recover 780ms var(--ease-out) both; }
+html[data-motion="full"] .assistant-bubble { transform-origin: 100% 85%; animation: vivian-bubble 360ms var(--ease-out) both; }
+html[data-motion="reduce"] .assistant-bubble { animation: fade-in 160ms ease-out both !important; }
+@keyframes vivian-hop {
+  0% { scale: 1; translate: 0 0; animation-timing-function: ease-out; }
+  16% { scale: 1.08 .88; translate: 0 2px; animation-timing-function: cubic-bezier(.2, .6, .35, 1); }
+  42% { scale: .94 1.08; translate: 0 -14px; animation-timing-function: cubic-bezier(.55, 0, .8, .4); }
+  68% { scale: 1 1; translate: 0 -4px; animation-timing-function: cubic-bezier(.55, 0, .8, .4); }
+  84% { scale: 1.07 .92; translate: 0 1px; animation-timing-function: ease-out; }
+  100% { scale: 1; translate: 0 0; }
+}
+@keyframes vivian-squish-a { 30% { scale: var(--squish-x) var(--squish-y); rotate: var(--squish-tilt); } 65% { scale: .97 1.04; } 100% { scale: 1; rotate: 0deg; } }
+@keyframes vivian-squish-b { 30% { scale: var(--squish-x) var(--squish-y); rotate: var(--squish-tilt); } 65% { scale: .97 1.04; } 100% { scale: 1; rotate: 0deg; } }
+@keyframes vivian-huff-a { 18% { scale: var(--squish-x) var(--squish-y); rotate: var(--squish-tilt); } 34% { scale: 1; rotate: -6deg; } 50% { rotate: 5deg; } 66% { rotate: -3deg; } 100% { rotate: 0deg; } }
+@keyframes vivian-huff-b { 18% { scale: var(--squish-x) var(--squish-y); rotate: var(--squish-tilt); } 34% { scale: 1; rotate: -6deg; } 50% { rotate: 5deg; } 66% { rotate: -3deg; } 100% { rotate: 0deg; } }
+@keyframes vivian-offended {
+  0% { scale: 1; rotate: 0deg; translate: 0 0; }
+  6% { translate: -5px 0; rotate: -7deg; }
+  12% { translate: 5px 0; rotate: 7deg; }
+  18% { translate: -4px 0; rotate: -5deg; }
+  24% { translate: 4px 0; rotate: 4deg; }
+  30% { translate: -2px 0; rotate: -2deg; scale: 1; }
+  58% { scale: -1.05 .9; translate: 0 2px; rotate: -2deg; }
+  100% { scale: -1 .94; rotate: -3deg; translate: 0 4px; }
+}
+@keyframes vivian-recover {
+  0% { scale: -1 .94; rotate: -3deg; translate: 0 4px; }
+  28% { scale: -1 .97; rotate: 7deg; translate: 0 2px; }
+  46% { scale: -1 .97; rotate: 7deg; translate: 0 2px; }
+  74% { scale: 1.05 .97; rotate: -2deg; translate: 0 0; }
+  100% { scale: 1; rotate: 0deg; translate: 0 0; }
+}
+@keyframes vivian-bubble { from { opacity: 0; scale: .55; translate: 10px 6px; } 60% { opacity: 1; scale: 1.05; translate: 0 0; } to { opacity: 1; scale: 1; translate: 0 0; } }
 
 /* Boot under reduced motion: the spider and thread appear in place instead of descending. */
 html[data-motion="reduce"] :is(.boot-core > .portia-mark, .boot-thread) { animation: fade-in 200ms ease-out !important; }

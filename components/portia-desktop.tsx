@@ -108,6 +108,7 @@ const employeesCacheStorageKey = "portia-employees-last-success-v1";
 const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v2";
 const taskbarOrderStorageKey = "portia-taskbar-order-v1";
 const TASKBAR_BOUNCE_MS = 520;
+const ASSISTANT_RECOVER_MS = 780;
 
 type ContentResponse = {
   content?: PortiaContent;
@@ -271,10 +272,16 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [assistantAutomaticKind, setAssistantAutomaticKind] = useState<"idle" | "activity" | null>(null);
   const [assistantTipVisible, setAssistantTipVisible] = useState(false);
   const [assistantOffended, setAssistantOffended] = useState(false);
+  // Vivian's reactions: annoyance 1-3 within a click streak, a parity flag that restarts the squash
+  // animation without remounting her image, and a short recovery stage after a sulk.
+  const [assistantMood, setAssistantMood] = useState(0);
+  const [assistantSquish, setAssistantSquish] = useState(0);
+  const [assistantRecovering, setAssistantRecovering] = useState(false);
   const [broadcastUnread, setBroadcastUnread] = useState(false);
   const assistantTipTimer = useRef<number | null>(null);
   const assistantClickResetTimer = useRef<number | null>(null);
   const assistantCooldownTimer = useRef<number | null>(null);
+  const assistantRecoverTimer = useRef<number | null>(null);
   const assistantAutomaticTimer = useRef<number | null>(null);
   const settingsSavedTimer = useRef<number | null>(null);
   const exitTimers = useRef<Partial<Record<AppId, number>>>({});
@@ -460,6 +467,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     if (assistantTipTimer.current) window.clearTimeout(assistantTipTimer.current);
     if (assistantClickResetTimer.current) window.clearTimeout(assistantClickResetTimer.current);
     if (assistantCooldownTimer.current) window.clearTimeout(assistantCooldownTimer.current);
+    if (assistantRecoverTimer.current) window.clearTimeout(assistantRecoverTimer.current);
     if (assistantAutomaticTimer.current) window.clearTimeout(assistantAutomaticTimer.current);
     if (settingsSavedTimer.current) window.clearTimeout(settingsSavedTimer.current);
     Object.values(exitTimers.current).forEach((timer) => window.clearTimeout(timer));
@@ -831,6 +839,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     if (assistantClickResetTimer.current) window.clearTimeout(assistantClickResetTimer.current);
     assistantClickResetTimer.current = window.setTimeout(() => {
       assistantClickStreak.current = null;
+      setAssistantMood(0);
     }, 1250);
 
     const patienceMilliseconds = (assistantCurrentPatience.current ?? 3) * 1000;
@@ -852,6 +861,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       assistantLastOffendedIndex.current = nextOffendedIndex;
       setAssistantOffendedPhraseIndex(nextOffendedIndex);
       assistantOffendedRef.current = true;
+      setAssistantMood(0);
+      setAssistantRecovering(false);
       setAssistantOffended(true);
       setAssistantTipVisible(true);
       if (assistantTipTimer.current) window.clearTimeout(assistantTipTimer.current);
@@ -860,9 +871,16 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         assistantOffendedRef.current = false;
         setAssistantOffended(false);
         setAssistantTipVisible(false);
+        // She glances back over her shoulder before turning round (must match assistant-recover in portia.css).
+        setAssistantRecovering(true);
+        assistantRecoverTimer.current = window.setTimeout(() => setAssistantRecovering(false), ASSISTANT_RECOVER_MS);
       }, 10000);
       return;
     }
+
+    // Annoyance grows through the streak: the closer to her patience limit, the harder she squashes.
+    setAssistantMood(Math.min(3, 1 + Math.floor((3 * (now - streak.startedAt)) / patienceMilliseconds)));
+    setAssistantSquish((count) => count + 1);
 
     const tips = content.assistantAdvice ?? [];
     const signature = tips.join("\u001f");
@@ -1112,7 +1130,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
         </main>
 
-        <div className={`desktop-assistant${assistantTipVisible ? " is-speaking" : ""}${assistantOffended ? " is-offended" : ""}`}>
+        <div className={`desktop-assistant${assistantTipVisible ? " is-speaking" : ""}${assistantOffended ? " is-offended" : ""}${assistantRecovering ? " is-recovering" : ""}`} data-mood={assistantMood || undefined} data-squish={assistantSquish ? (assistantSquish % 2 ? "a" : "b") : undefined} data-auto={assistantAutomaticKind ?? undefined}>
           {assistantTipVisible && <div className="assistant-bubble" role="status"><span>{assistantMessageHeading}</span><FormattedText className="assistant-formatted-text" text={assistantMessageText} document={assistantMessageDocument} /></div>}
           <button className="assistant-button" type="button" onClick={activateAssistant} onContextMenu={(event) => event.preventDefault()} aria-disabled={assistantOffended} aria-label="Получить совет Вивьян"><img src="/assets/portia-assistant.png" alt="" draggable={false} /></button>
           <span className="assistant-label">ВИВЬЯН // ПОМОЩНИК</span>
