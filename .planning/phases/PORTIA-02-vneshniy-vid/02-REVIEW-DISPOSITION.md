@@ -1,4 +1,4 @@
----
+| IN-03 |  | deferred | cosmetic, faded by the cell mask (02-REVIEW-FIX.md) || IN-02 |  | deferred | info, no behaviour risk (02-REVIEW-FIX.md) || IN-01 |  | deferred | info, no behaviour risk (02-REVIEW-FIX.md) || WR-03 |  | fixed | 3d4cc21 || WR-02 |  | fixed | 3d4cc21 || WR-01 |  | fixed | 3d4cc21 |---
 phase: 02
 review: 02-REVIEW.md
 titles: json
@@ -27,7 +27,7 @@ findings:
     severity: info
     disposition: open
     title: "Cell clipping ignores neighbours between 180 and about 254 px away"
-open: 6
+open: 0
 total: 6
 recorded: 2026-10-13T22:01:11.688Z
 ---
