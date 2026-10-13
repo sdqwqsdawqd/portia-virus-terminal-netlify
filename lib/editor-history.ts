@@ -15,6 +15,7 @@ export type EditorHistory<T> = {
 
 export type HistoryAction<T> =
   | { type: "change"; updater: (next: T) => void; key: string | null; now: number }
+  | { type: "discard" }
   | { type: "undo" }
   | { type: "redo" }
   | { type: "saved"; normalized: T; savedFrom: T }
@@ -38,6 +39,8 @@ export function historyReducer<T>(state: EditorHistory<T>, action: HistoryAction
       if (coalesce) return { ...state, present: next, at: now };
       return { ...state, present: next, past: [...state.past, state.present].slice(-HISTORY_LIMIT), future: [], key, at: now, since: now };
     }
+    case "discard":
+      return state; // RED stub: discarding arrives in the GREEN commit.
     case "undo": {
       const previous = state.past.at(-1);
       if (previous === undefined) return state;

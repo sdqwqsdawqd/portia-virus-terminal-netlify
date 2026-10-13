@@ -169,3 +169,24 @@ test("undoing every step returns the baseline object itself", () => {
   assert.equal(back.present, back.baseline);
   assert.equal(back.past.length, 0);
 });
+
+test("discard returns present to the baseline and keeps the discarded edits as one undoable step", () => {
+  const edited = [edit("b", null, 1000), edit("c", null, 2000)].reduce(reduce, start());
+  const discarded = reduce(edited, { type: "discard" });
+  assert.equal(discarded.present, discarded.baseline);
+  assert.equal(discarded.past.length, edited.past.length + 1);
+  assert.equal(discarded.past.at(-1), edited.present);
+  assert.deepEqual(discarded.future, []);
+  assert.equal(discarded.key, null);
+});
+
+test("discard on a clean draft returns the same state", () => {
+  const first = start();
+  assert.equal(reduce(first, { type: "discard" }), first);
+});
+
+test("undo right after a discard brings the discarded edits back", () => {
+  const edited = reduce(start(), edit("b", null, 1000));
+  const back = reduce(reduce(edited, { type: "discard" }), { type: "undo" });
+  assert.equal(back.present, edited.present);
+});
