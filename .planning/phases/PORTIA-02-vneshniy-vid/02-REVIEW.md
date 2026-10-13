@@ -1,197 +1,101 @@
 ---
 phase: PORTIA-02-vneshniy-vid
-reviewed: 2026-10-13T00:00:00Z
+reviewed: 2026-10-14T00:00:00Z
 depth: standard
-files_reviewed: 7
+files_reviewed: 6
 files_reviewed_list:
-  - app/layout.tsx
   - app/portia.css
   - components/portia-desktop.tsx
+  - components/portia-editor.tsx
   - components/portia-icons.tsx
   - components/portia-wallpaper.tsx
-  - lib/accent-boot.ts
   - lib/accent-theme.test.ts
 findings:
-  critical: 1
-  warning: 4
-  info: 6
-  total: 11
+  critical: 0
+  warning: 3
+  info: 3
+  total: 6
 status: issues_found
 ---
 
 # Phase PORTIA-02: Code Review Report
 
-**Reviewed:** 2026-10-13
+_Supersedes the 9cb6923 review for the changed range (9cb6923..HEAD: 5ac7991, 34303ca, 4f51cd7)._
+
+**Reviewed:** 2026-10-14
 **Depth:** standard
-**Files Reviewed:** 7
+**Files Reviewed:** 6
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the diff `2d2a662..HEAD` for the seven files, reading the surrounding code in `portia-desktop.tsx` and `portia.css` where needed. No CLAUDE.md or project skills exist in the repo.
+Reviewed the diff since 9cb6923 plus the surrounding code. `npm test` passes (25/25), `tsc --noEmit` is clean, and eslint reports 0 errors (only the existing `no-img-element` warnings).
 
-The inline head script in `lib/accent-boot.ts` is safe. Its only interpolation is `JSON.stringify` of a compile-time constant array, it creates no globals, and its storage and `matchMedia` access is wrapped in `try/catch`. Exit timers, the bounce timers and the restore-before-save flags (`desktopSettingsLoaded`, `taskbarOrderLoaded`) are handled correctly in the main paths. The `ASSISTANT_RECOVER_MS` and `WINDOW_*_MS` constants match their CSS durations.
-
-The main defects:
-- The taskbar drag state machine can be left armed after an ordinary mouse gesture and then hijack hover (CR-01).
-- Window focus does not take exiting windows into account (WR-01).
-- Stored settings are trusted by the component but whitelisted by the boot script (WR-02).
-- The «Animations» switch has no safe default when `data-motion` is absent (WR-03).
-
-## Critical Issues
-
-### CR-01: Taskbar drag stays armed after a press that leaves the button, then hijacks hover and leaves a button stuck
-
-**File:** `components/portia-desktop.tsx:612-646` (`beginTaskbarDrag`, `moveTaskbarDrag`, `endTaskbarDrag`)
-**Issue:** `beginTaskbarDrag` stores `taskbarDrag.current` on pointerdown, but pointer capture is only taken in `moveTaskbarDrag` once the pointer has moved 5px horizontally. Mouse pointers have no implicit capture.
-
-Repro:
-1. Press a taskbar button.
-2. Move the mouse out of the button before it has moved 5px horizontally. Moving up or down is enough, and a fast flick also does it.
-3. Release outside the button.
-
-No `pointerup` or `pointercancel` reaches the button, so `taskbarDrag.current` stays set with `moved:false`. A mouse always has `pointerId === 1`.
-
-Consequences:
-- The next time the mouse moves over any taskbar button, `moveTaskbarDrag` finds the stale record and the id check passes. If the cursor is more than 5px from `startX`, it sets `moved = true`, calls `setPointerCapture` and adds `is-reordering`.
-- That button now follows the cursor on plain hover, with no button pressed.
-- If it is a different button, `event.currentTarget` is that other button, so the translate and class go on the wrong element.
-- The next pointerdown overwrites `taskbarDrag.current`. Its `pointerup` sees `moved:false` and returns early, so `translate` and `is-reordering` are never cleaned up. The button stays displaced until reload.
-
-**Fix:** Capture at pointerdown, and ignore moves when the primary button is not held.
-```tsx
-const beginTaskbarDrag = (app: AppId) => (event: React.PointerEvent<HTMLButtonElement>) => {
-  if (event.pointerType === "touch" || event.button !== 0) return;
-  event.currentTarget.setPointerCapture(event.pointerId); // pointerup/cancel now always reach this button
-  taskbarDrag.current = { app, pointerId: event.pointerId, startX: event.clientX, moved: false };
-};
-const moveTaskbarDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
-  const drag = taskbarDrag.current;
-  if (!drag || drag.pointerId !== event.pointerId) return;
-  if (!(event.buttons & 1)) { taskbarDrag.current = null; return; } // stale record
-  /* ...unchanged... but drop the setPointerCapture call */
-};
-```
-Also clear `button.style.translate` and the class on every `endTaskbarDrag` path, not only when `moved` is true.
+The review fixes (settings whitelist, taskbar drag, `requestExit` overtake) are sound. The Voronoi cell geometry, gel masks and gradients, icon path math (the `drop` helper closes back to its start point) and the static SVG ids all check out. No blockers. The warnings are one visual correctness defect in the gel wallpaper, one stale-state leak in the editor restore, and one behaviour regression from the early pointer capture.
 
 ## Warnings
 
-### WR-01: `focusApp` ignores exiting windows, so a click or pointerdown during an exit is lost and `activeApp` can end up on a closed window
+### WR-01: Gel bands drift away from the ladder labels
 
-**File:** `components/portia-desktop.tsx:609-616` (`focusApp`), `:1143-1147` (taskbar onClick), `:714-731` (`requestExit`), `:1449` (`onPointerDown`)
-**Issue:** `requestExit` immediately moves `activeApp` to a fallback and starts a 180ms or 320ms timer. `focusApp` neither checks `exiting` nor cancels the timer.
-- A pointerdown on the still-visible closing window (the section's `onPointerDown`) sets `activeApp` back to it. When `finishExit(close)` runs, `activeApp` points at a closed window and no open window gets `is-active`.
-- Taskbar click during a minimize: `windows[app].minimized` is still false and `activeApp !== app`, so the click goes to `focusApp`. The window keeps minimizing and the click does nothing. A quick double-click on the title bar's minimize button has the same effect.
-- `requestExit` returns early while `exiting` is set, so clicking × within 320ms of a minimize is silently dropped.
-
-**Fix:**
-- In `focusApp`, return early if `windows[appId].exiting`.
-- In the taskbar onClick, treat `windows[app].exiting` as "restore": call `openApp(app, ...)`, which already cancels the exit timer and clears `exiting`.
-- Let a `close` request override a pending `minimize`: clear the existing timer, then restart with the new kind.
-
-### WR-02: Stored desktop settings are trusted by the component but whitelisted by the boot script
-
-**File:** `components/portia-desktop.tsx:435-443` and `:563-570`
-**Issue:** The settings restore does `JSON.parse(...)` and `{ ...current, ...parsed }` with no validation. The boot script only applies `accent` if it is in `accentIds`, but the effect then writes whatever string is stored into `dataset.accent`, `dataset.wallpaper` and `dataset.iconSize`, and writes it back to localStorage. Consequences:
-- A hand-edited or stale value such as `"accent":"purple"` is ignored by the boot script, then applied by React, so it matches no theme block.
-- The Settings UI shows no selected option.
-- A non-object payload is spread by index: `"abc"` adds keys `0,1,2` to the settings object, which is then persisted.
-- `DesktopWallpaper` silently falls through to the web wallpaper for any unknown `kind`.
-- No XSS is possible (these are `dataset` values), but the two code paths disagree.
-
-**Fix:** Validate on restore against the same lists the Settings UI renders. For `accent` and `motion`, reuse `accentIds` and `motionModes`, which are currently imported only by the test.
+**File:** `app/portia.css:1142-1143` (animation), `components/portia-wallpaper.tsx:175-181` (structure)
+**Issue:** `html[data-motion="full"] .wallpaper-gel-bands { animation: gel-run ... }` translates the whole bands group by up to 26px. That group includes the ladder lane (lane 0). `.wallpaper-gel-labels` is a sibling group and stays put. The ladder rows are log-spaced, so near the bottom they are only about 30px apart (the 250 and 500 rows). The drift is almost one full row, so the size labels end up beside the wrong ladder band. The wallpaper is only correct with motion off or at the start of the animation.
+**Fix:** Move the labels into the animated group so they travel with the ladder, or keep the ladder lane out of the drifting group:
 ```tsx
-const pick = <T extends string>(allowed: readonly T[], value: unknown, fallback: T) => allowed.includes(value as T) ? (value as T) : fallback;
-const raw = typeof parsed === "object" && parsed ? parsed : {};
-setDesktopSettings({
-  accent: pick(accentIds, raw.accent, "teal"),
-  motion: pick(motionModes, raw.motion, "system"),
-  wallpaper: pick(wallpaperIds, raw.wallpaper, "radar"),
-  iconSize: pick(iconSizeIds, raw.iconSize, "standard"),
-});
+<g className="wallpaper-gel-bands">
+  {/* bands ... */}
+  <g className="wallpaper-gel-labels">{/* labels */}</g>
+</g>
+```
+Alternatively, animate only the non-ladder bands.
+
+### WR-02: Editor restore leaves a stale text-format target and panel
+
+**File:** `components/portia-editor.tsx:750-759`
+**Issue:** `onRestore` calls `setTab("viruses")` directly. The tab buttons (line 564) do more on a tab change: they also run `setFormatTarget(null)` and `setFormatterOpen(false)` and reset `previewSurface`. After a restore, `formatTarget` can still point at a field of the archived-virus editor that is no longer mounted. `formatterOpen && formatTarget` (line 868) keeps rendering `FloatingTextFormatPanel` for it, and the toolbar still shows the old field title. Applying formatting then writes to a field the user cannot see.
+**Fix:** Run the same reset as the tab handler, ideally by extracting it:
+```tsx
+const switchTab = (id: EditorTab) => { setTab(id); setPreviewSurface(id === "viruses" || id === "recycle" ? "light" : "dark"); setFormatTarget(null); setFormatterOpen(false); };
+// tab button: onClick={() => switchTab(id)}
+// onRestore:  switchTab("viruses");
 ```
 
-### WR-03: The motion switch has no safe default: with `data-motion` absent, un-gated animations run for reduced-motion users
+### WR-03: Early pointer capture makes a drag-out release click the taskbar button
 
-**File:** `app/portia.css:1091, 1109-1110, 1170, 1201` (plus the base rules `.wallpaper-helix`, `.wallpaper-web path`, `.app-window`, `.content-fade`, `.boot-thread`, `.boot-core > .portia-mark`)
-**Issue:** The bare `@media (prefers-reduced-motion)` rule was removed on purpose, and `html[data-motion]` is now the only switch. The base rules are not gated on it:
-- `.app-window { animation: window-open }`
-- `.wallpaper-helix` (an infinite animation)
-- `.wallpaper-web path`
-- `.content-fade`
-- `.boot-thread` and the spider
-
-If the head script never runs (a future CSP without a nonce or hash, which the comment in `accent-boot.ts` anticipates; script blocked by an extension; script error), `data-motion` is never set. Reduced-motion users then get the infinite helix drift and the window entrance animations, and nothing reduces them.
-
-Related: when `data-motion` is absent, `.is-closing` and `.is-minimizing` match no animation rule. The window then stays fully visible for 180ms or 320ms and disappears, because the timer still runs.
-
-**Fix:** Gate the base animations on `html[data-motion="full"]`, so that "unknown" behaves as reduced. Alternatively keep a `@media (prefers-reduced-motion: reduce) { html:not([data-motion]) ... }` fallback. The test at `lib/accent-theme.test.ts:232` forbids any bare media query, so it would need to allow the `:not([data-motion])` form.
-
-### WR-04: `suppressTaskbarClick` is only cleared by the next click, so a missing post-drag click swallows the next real one
-
-**File:** `components/portia-desktop.tsx:642` and `:1143-1144`
-**Issue:** `endTaskbarDrag` sets `suppressTaskbarClick.current = true` on pointerup after a real drag. The only code that resets it is the next `onClick`. Browsers differ on whether and where a click is dispatched after pointer capture plus a DOM reorder. React reorders the taskbar DOM synchronously in the same pointerup, and a captured element that is moved releases capture. If no click reaches that button, the flag stays true. The user's next legitimate click on any taskbar button is then ignored, and that click does nothing instead of minimizing, restoring or focusing.
-
-**Fix:** Clear the flag on a timer, so it only covers the click that belongs to this gesture.
+**File:** `components/portia-desktop.tsx:642-646` (capture), `:1176` (handlers)
+**Issue:** `setPointerCapture` now runs on pointerdown for every press. With capture held, the release always targets this button, and the `click` is dispatched to it even when the pointer was released away from it. Before, a press that slid off the button without moving 5px horizontally (for example, dragged up onto the desktop) produced no click. Now it still fires the `onClick` that minimises, focuses or reopens the window. A horizontal drag beyond 5px is covered by `suppressTaskbarClick`; a vertical drag is not.
+**Fix:** In `endTaskbarDrag`, also suppress the click when `pointerup` lands outside the button, and compute this before the `!drag.moved` early return:
 ```tsx
-suppressTaskbarClick.current = event.type === "pointerup";
-window.setTimeout(() => { suppressTaskbarClick.current = false; }, 0);
+const rect = button.getBoundingClientRect();
+const inside = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+if (event.type === "pointerup" && (drag.moved || !inside)) {
+  suppressTaskbarClick.current = true;
+  window.setTimeout(() => { suppressTaskbarClick.current = false; }, 0);
+}
+if (!drag.moved || event.type !== "pointerup") return;
 ```
-Alternatively, clear it in `beginTaskbarDrag`.
 
 ## Info
 
-### IN-01: Dead fields and unused CSS class
+### IN-01: The motion-fallback test can pass without checking anything
 
-**File:** `components/portia-desktop.tsx:81` (`grabX`), `:1429` (`box.width`), `app/portia.css` (`.is-loading`)
-**Issue:**
-- `grabX` in the `taskbarDrag` ref is initialised to 0 and never read.
-- `box.width` in the `AppWindow` layout effect is computed and never used.
-- `LoadingMedia` adds `is-loading` to `subject-media`, but no CSS rule matches `.is-loading`.
+**File:** `lib/accent-theme.test.ts:231-237`
+**Issue:** The new loop over `@media (prefers-reduced-motion ...)` blocks asserts nothing if the regex matches no block. That happens if the block is removed or reformatted, or contains a nested at-rule such as `@keyframes`, which the `[^{}]*\{[^{}]*\}` pattern cannot parse. The test then stays green while the "no unscoped motion rule" guarantee is gone.
+**Fix:** Count the matches and assert the count is above 0. Fail on any media block the inner parser cannot fully consume.
 
-**Fix:** Remove the three, or add the intended `.subject-media.is-loading img { opacity: 0 }` style.
+### IN-02: The wallpaper and icon-size id lists are duplicated and unchecked
 
-### IN-02: Stale CSS keyframe name in a comment
+**File:** `components/portia-desktop.tsx:41-47` and `:1154`
+**Issue:** `settingValues.wallpaper` and `iconSize` repeat the ids already written in the `SettingGroup` values, and `DesktopWallpaper` branches on them again. `accent` and `motion` are checked against the groups by the test, but `wallpaper` and `iconSize` are not. If an id is added in one place only, a saved value is silently dropped on load, or the setting is offered but rejected.
+**Fix:** Extend the existing test to compare `settingValues.wallpaper` and `iconSize` with their `SettingGroup` ids, or derive the groups from one shared constant.
 
-**File:** `components/portia-desktop.tsx:874`
-**Issue:** The comment says "must match assistant-recover in portia.css", but the keyframes are named `vivian-recover`. The constant `ASSISTANT_RECOVER_MS = 780` does match `vivian-recover 780ms`.
-**Fix:** Update the comment, or better, add a test asserting the paired constants match the CSS durations. `WINDOW_CLOSE_MS`, `WINDOW_MINIMIZE_MS` and `WINDOW_FADE_OUT_MS` have the same drift risk and are only protected by comments.
+### IN-03: Cell clipping ignores neighbours between 180 and about 254 px away
 
-### IN-03: Settings option lists are duplicated and kept in sync by a regex over the component source
-
-**File:** `lib/accent-boot.ts:4-6`, `lib/accent-theme.test.ts:219, 235`
-**Issue:** `accentIds` and `motionModes` exist in production code only for the boot script and the test. `DesktopSettings` fields are plain `string`. The Settings JSX re-declares the same lists as literals, and the test parses `portia-desktop.tsx` with `/values=\{(\[\[.*?\]\])\}/` to check they match. That test breaks on any reformatting of those JSX lines, and it does not cover wallpaper or icon size.
-**Fix:** Derive the Settings groups and the `DesktopSettings` union types from shared constants, then drop the source-scraping assertions. This also supports the validation in WR-02.
-
-### IN-04: «Синхронизировано» and the green status dot show while the archive is still loading
-
-**File:** `components/portia-desktop.tsx:~1004` (`browser-footer`)
-**Issue:** The footer shows `СИНХРОНИЗИРОВАНО` and `РЕВИЗИЯ 00` while the list and dossier are showing loaders. The global search summary likewise shows a count taken from the default content under the loader.
-**Fix:** Show «СИНХРОНИЗАЦИЯ…» and hide the count until `contentReady`.
-
-### IN-05: Taskbar reorder has no keyboard or touch alternative
-
-**File:** `components/portia-desktop.tsx:612-646`
-**Issue:** Reordering is pointer-only (touch is explicitly excluded). It is an enhancement, not a requirement, but taskbar buttons gain a hidden interaction with no accessible equivalent. In addition, each `LoadingState` is its own `role="status" aria-live="polite"` region, so opening a window with two loaders (archive list plus dossier) announces both.
-**Fix:** Optional: add Alt+Arrow keys on the focused taskbar button. Keep a single live region per window.
-
-### IN-06: Reduced-motion boot override bypasses the "wait for the spider PNG to decode" gate, and `transformOrigin` can go stale on restore without an origin
-
-**File:** `app/portia.css:1311` and `components/portia-desktop.tsx:1431-1434`
-
-Boot gate:
-- The base rule keeps the spider and thread paused until `.boot-core.is-ready`.
-- The reduced-motion rule `animation: fade-in 200ms ... !important` is a shorthand, so it resets `animation-play-state` to `running`.
-- In reduce mode the fade therefore starts before the image is ready, and the spider can fade in empty and then pop.
-- Fix: add `animation-play-state: paused !important` to the base `.boot-core:not(.is-ready)` selector, or write the fade as longhands.
-
-Stale origin:
-- The `AppWindow` layout effect returns early without resetting `element.style.transformOrigin` when `target` is undefined.
-- A window minimized toward its taskbar button and restored via the Start menu or `focusApp` (no origin) keeps the previous taskbar-button origin. `window-open` then scales from an odd point.
-- Fix: set `element.style.transformOrigin = ""` in that branch.
+**File:** `components/portia-wallpaper.tsx:112`
+**Issue:** `cellOf` skips neighbours farther than 180. The starting square's corner is about 127px from its site, so a diagonal neighbour up to about 254px away could still clip it. Only sparse cells near the rim, which sit under the focus mask, are affected, and the effect is cosmetic. The 6000-attempt guard may also stop before the 150-site target, which only means fewer cells.
+**Fix:** Cosmetic only. If it is ever noticeable, raise the distance threshold to 254 or drop it, since there are at most about 150 sites.
 
 ---
 
-_Reviewed: 2026-10-13_
+_Reviewed: 2026-10-14_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
