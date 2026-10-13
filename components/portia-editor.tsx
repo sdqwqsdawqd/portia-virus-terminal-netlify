@@ -84,6 +84,25 @@ const clone = (content: PortiaContent) => JSON.parse(JSON.stringify(content)) as
 const editorReducer = (state: EditorHistory<PortiaContent>, action: HistoryAction<PortiaContent>) => historyReducer(state, action, clone);
 const initEditorHistory = (value: PortiaContent) => initHistory(value, clone);
 
+const editKeys = new WeakMap<Element, number>();
+let editKeyCounter = 0;
+
+// Edits made while one text field (or the format panel) has focus share a key, so the reducer folds them into word-sized undo steps.
+function editKeyFor(element: Element | null): string | null {
+  if (!element) return null;
+  const isTextEntry = (element instanceof HTMLElement && element.isContentEditable)
+    || element instanceof HTMLTextAreaElement
+    || (element instanceof HTMLInputElement && !["checkbox", "radio", "file", "button", "submit", "reset"].includes(element.type));
+  const keyed = element.closest(".floating-text-format") ?? (isTextEntry ? element : null);
+  if (!keyed) return null;
+  let id = editKeys.get(keyed);
+  if (id === undefined) {
+    id = ++editKeyCounter;
+    editKeys.set(keyed, id);
+  }
+  return `field:${id}`;
+}
+
 function moveArrayItem<T>(items: T[], from: number, to: number) {
   if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) return;
   const [item] = items.splice(from, 1);
@@ -458,7 +477,17 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
   const orderedRecycleKeys = useMemo(() => recycleKeys(draft), [draft]);
 
   const changeDraft = (updater: (next: PortiaContent) => void) => {
-    dispatch({ type: "change", updater, key: null, now: Date.now() });
+    dispatch({ type: "change", updater, key: editKeyFor(document.activeElement), now: Date.now() });
+  };
+
+  const step = (kind: "undo" | "redo") => {
+    const target = kind === "undo" ? history.past.at(-1) : history.future[0];
+    if (!target) return;
+    // The open format panel holds the pre-step document; a stale panel would write old text back.
+    setFormatTarget(null);
+    setFormatterOpen(false);
+    repairSelections(target);
+    dispatch({ type: kind });
   };
 
   const updateVirus = (updater: (virus: Virus) => void) => {
@@ -888,6 +917,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
             {dirty && <span className="editor-savebar-sections">{`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}</span>}
           </p>
           <div className="editor-savebar-actions">
+            <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
             <button type="button" className="primary-control" disabled={!dirty || saveState === "saving"} onClick={() => void save()}>СОХРАНИТЬ</button>
           </div>
         </div>

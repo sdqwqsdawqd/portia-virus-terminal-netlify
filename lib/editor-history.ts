@@ -38,9 +38,16 @@ export function historyReducer<T>(state: EditorHistory<T>, action: HistoryAction
       if (coalesce) return { ...state, present: next, at: now };
       return { ...state, present: next, past: [...state.past, state.present].slice(-HISTORY_LIMIT), future: [], key, at: now, since: now };
     }
-    case "undo":
-    case "redo":
-      return state; // RED stub: stepping arrives in the GREEN commit.
+    case "undo": {
+      const previous = state.past.at(-1);
+      if (previous === undefined) return state;
+      return { ...state, present: previous, past: state.past.slice(0, -1), future: [state.present, ...state.future], key: null };
+    }
+    case "redo": {
+      if (!state.future.length) return state;
+      const [next, ...rest] = state.future;
+      return { ...state, present: next, past: [...state.past, state.present], future: rest, key: null };
+    }
     case "saved": {
       const saved = { ...state, baseline: action.normalized, source: action.normalized };
       // Edits typed while the request ran keep their draft and history; otherwise history ends at the save.

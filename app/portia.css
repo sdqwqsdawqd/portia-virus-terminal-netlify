@@ -400,6 +400,7 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .editor-savebar > p { min-width: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font: 11px/1.35 var(--sans); letter-spacing: .04em; }
 .editor-savebar-sections { color: var(--warning); }
 .editor-savebar-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+.editor-undo-step { min-width: 40px; font-size: 16px; line-height: 1; }
 @media (min-width: 901px) {
   .content-editor:has(> .editor-savebar) .floating-text-format { bottom: 76px; }
 }
