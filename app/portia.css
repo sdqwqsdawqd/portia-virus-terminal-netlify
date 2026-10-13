@@ -624,10 +624,6 @@ html[data-motion="reduce"] .boot-lines p { animation: fade-in 160ms ease-out bot
 .trash-viewer-head strong { overflow: hidden; color: oklch(.919 .012 var(--accent-hue)); font: 600 12px var(--sans); text-overflow: ellipsis; white-space: nowrap; }
 .trash-viewer-head button { width: 32px; height: 32px; border: 1px solid oklch(.414 .029 var(--accent-hue)); background: transparent; color: oklch(.74 .024 var(--accent-hue)); cursor: pointer; }
 .trash-viewer-head button:hover { border-color: var(--teal); color: var(--teal); }
-.trash-viewer-head > div { flex: 1; }
-.trash-viewer-head .trash-restore { width: auto; padding: 0 12px; border-color: var(--teal-dim); color: var(--teal); font: 600 11px var(--sans); letter-spacing: .06em; white-space: nowrap; }
-.trash-viewer-head .trash-restore:hover { background: var(--teal-soft); }
-.trash-viewer-head .trash-restore:disabled { opacity: .6; cursor: progress; }
 .trash-viewer-body { min-height: 0; overflow: auto; padding: clamp(16px, 3vw, 30px); background: oklch(.168 .014 var(--accent-hue)); }
 .trash-text-document { width: min(760px, 100%); min-height: 100%; margin: 0 auto; padding: clamp(20px, 4vw, 38px); border: 1px solid #aaa8a1; background: #eeeee9; color: #171a19; box-shadow: 0 18px 42px rgba(0,0,0,.24); }
 .trash-document-meta { margin-bottom: 24px; padding-bottom: 10px; border-bottom: 2px solid oklch(.241 .01 var(--accent-hue)); color: oklch(.509 .011 var(--accent-hue)); font: 11px var(--mono); letter-spacing: .05em; overflow-wrap: anywhere; }

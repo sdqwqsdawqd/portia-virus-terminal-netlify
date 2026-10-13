@@ -823,20 +823,6 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
   };
 
-  // Same move as the editor's «ВОССТАНОВИТЬ В БАЗУ», saved at once; on failure the trash stays as it was.
-  const restoreTrashVirus = async (virus: Virus) => {
-    if (!window.confirm(`Вернуть «${virus.name}» в основную базу вирусов?`)) return;
-    const next = structuredClone(content);
-    next.recycledViruses = (next.recycledViruses ?? []).filter((item) => item.id !== virus.id);
-    next.viruses.push(virus);
-    next.recycleOrder = (next.recycleOrder ?? []).filter((key) => key !== `virus:${virus.id}`);
-    try {
-      await saveContent(next);
-      setActiveTrashFileId(null);
-      setActiveVirusId(virus.id);
-    } catch {}
-  };
-
   const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
   const filteredViruses = content.viruses.filter((virus) => escapeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(escapeSearch(virusQuery)));
   const selectedInfo = content.infoSections.find((section) => section.id === selectedInfoId) ?? content.infoSections[0];
@@ -1143,7 +1129,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   })}
                   {!trashFiles.length && !recycledViruses.length && <div className="editor-empty empty-state"><PortiaIllustration name="flask" /><strong>Корзина пуста</strong></div>}
                 </div>
-                {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div>{canEdit && <button className="trash-restore" type="button" disabled={saveState === "saving"} onClick={() => restoreTrashVirus(activeTrashVirus)}>{saveState === "saving" ? "СОХРАНЕНИЕ…" : saveState === "error" || saveState === "conflict" ? "НЕ УДАЛОСЬ — ПОВТОРИТЬ" : "ВОССТАНОВИТЬ В БАЗУ"}</button>}<button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} onOpenLog={() => undefined} /></div></div>}
+                {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} onOpenLog={() => undefined} /></div></div>}
                 {activeTrashFile && <div className={`trash-viewer ${activeTrashFile.kind} doc-open`} key={activeTrashFile.id}>
                   <div className="trash-viewer-head"><div><span>ТОЛЬКО ДЛЯ ЧТЕНИЯ</span><strong>{activeTrashFile.name}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div>
                   <div className="trash-viewer-body doc-print">

@@ -745,8 +745,9 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
               uploadState={uploadState}
               onUpload={uploadImage}
               onChange={(updater) => changeDraft((next) => updater(next.recycledViruses[selectedRecycledVirusIndex]))}
+              // No confirm(): embedded browsers may answer it "no" without showing it, and a restore only
+              // changes the unsaved draft and can be undone by moving the virus back.
               onRestore={() => {
-                if (!window.confirm(`Вернуть «${selectedRecycledVirus.name}» в основную базу вирусов?`)) return;
                 changeDraft((next) => {
                   next.viruses.push(next.recycledViruses[selectedRecycledVirusIndex]);
                   next.recycledViruses.splice(selectedRecycledVirusIndex, 1);
@@ -754,6 +755,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
                 });
                 setSelectedVirusId(selectedRecycledVirus.id);
                 setSelectedRecycledVirusId("");
+                setTab("viruses");
               }}
               onDelete={() => {
                 if (!window.confirm(`Удалить «${selectedRecycledVirus.name}» навсегда? Это действие нельзя отменить.`)) return;
