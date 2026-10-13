@@ -40,7 +40,9 @@ export function historyReducer<T>(state: EditorHistory<T>, action: HistoryAction
       return { ...state, present: next, past: [...state.past, state.present].slice(-HISTORY_LIMIT), future: [], key, at: now, since: now };
     }
     case "discard":
-      return state; // RED stub: discarding arrives in the GREEN commit.
+      // Returning to the saved copy is one step like any other, so undo can bring the edits back.
+      if (state.present === state.baseline) return state;
+      return { ...state, present: state.baseline, past: [...state.past, state.present].slice(-HISTORY_LIMIT), future: [], key: null };
     case "undo": {
       const previous = state.past.at(-1);
       if (previous === undefined) return state;

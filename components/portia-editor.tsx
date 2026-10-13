@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { changedSections, editorSections, sectionLabels } from "@/lib/editor-changes";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import {
@@ -439,6 +439,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
   const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycledViruses?.[0]?.id ?? "");
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">("idle");
+  const [dialog, setDialog] = useState<"discard" | null>(null);
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface>("light");
@@ -604,9 +605,14 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
           ...editorSections.map((id) => [id, sectionLabels[id]]),
           ["employees", "Сотрудники"],
           ...(canManageEditors ? [["access", "Доступ"]] : []),
-        ] as [EditorTab, string][]).map(([id, label]) => (
-          <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => switchTab(id)}>{label}</button>
-        ))}
+        ] as [EditorTab, string][]).map(([id, label]) => {
+          const unsaved = changed.some((section) => section === id);
+          return (
+            <button key={id} type="button" className={tab === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => switchTab(id)}>
+              {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}
+            </button>
+          );
+        })}
       </nav>
 
       <div className="global-format-launch">
@@ -918,9 +924,31 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
           </p>
           <div className="editor-savebar-actions">
             <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
+            <button type="button" className="secondary-control" disabled={!dirty || saveState === "saving"} onClick={() => setDialog("discard")}>ОТМЕНИТЬ</button>
             <button type="button" className="primary-control" disabled={!dirty || saveState === "saving"} onClick={() => void save()}>СОХРАНИТЬ</button>
           </div>
         </div>
+      )}
+      {dialog === "discard" && (
+        <ConfirmDialog
+          title="Отменить несохранённые правки?"
+          text={`Черновик вернётся к последнему сохранённому состоянию. Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}
+          actions={[
+            {
+              label: "ВЕРНУТЬ СОХРАНЁННОЕ",
+              tone: "danger",
+              onClick: () => {
+                setDialog(null);
+                setFormatTarget(null);
+                setFormatterOpen(false);
+                repairSelections(history.baseline);
+                dispatch({ type: "discard" });
+              },
+            },
+            { label: "НЕ ОТМЕНЯТЬ", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+          ]}
+          onCancel={() => setDialog(null)}
+        />
       )}
     </div>
     </ActiveFormatContext.Provider>
@@ -1379,6 +1407,47 @@ function EditorAccessManager() {
       {editors.map((editor) => <div key={editor.email}><div><strong>{editor.email}</strong><small>ДОСТУП К РЕДАКТОРУ</small></div><button type="button" onClick={() => void removeEditor(editor.email)}>ОТОЗВАТЬ</button></div>)}
     </div>
   </div>;
+}
+
+type ConfirmAction = { label: string; tone: "primary" | "secondary" | "danger"; onClick: () => void; autoFocus?: boolean };
+
+// A native modal dialog lives in the top layer: above the transformed editor window, the taskbar and the boot screen,
+// with focus trapped and the page inert. Never use window.confirm for new prompts: embedded browsers answer it "no" unseen.
+function ConfirmDialog({ title, text, actions, onCancel }: { title: string; text: string; actions: ConfirmAction[]; onCancel: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const textId = useId();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    // showModal focuses the first button; the safe action has to win instead.
+    dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+  }, []);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="portia-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={textId}
+      onClose={() => onCancel()}
+      onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}
+    >
+      <div>
+        <h2 id={titleId}>{title}</h2>
+        <p id={textId}>{text}</p>
+        <div className="portia-dialog-actions">
+          {actions.map((action) => (
+            <button key={action.label} type="button" className={`${action.tone}-control`} autoFocus={action.autoFocus} data-autofocus={action.autoFocus || undefined} onClick={action.onClick}>{action.label}</button>
+          ))}
+        </div>
+      </div>
+    </dialog>
+  );
 }
 
 function EditorGroup({ title, children, stack = false }: { title: string; children: React.ReactNode; stack?: boolean }) {

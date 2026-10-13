@@ -401,6 +401,14 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .editor-savebar-sections { color: var(--warning); }
 .editor-savebar-actions { display: flex; flex: 0 0 auto; gap: 8px; }
 .editor-undo-step { min-width: 40px; font-size: 16px; line-height: 1; }
+.tab-dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--warning); vertical-align: middle; }
+.portia-dialog { width: min(420px, calc(100vw - 24px)); padding: 0; border: 1px solid oklch(.5 .04 var(--accent-hue)); border-radius: 7px; background: oklch(.208 .02 var(--accent-hue)); color: oklch(.918 .013 var(--accent-hue)); box-shadow: 0 22px 60px rgba(0,0,0,.55); }
+.portia-dialog::backdrop { background: rgba(0,0,0,.55); }
+.portia-dialog > div { display: grid; gap: 12px; padding: 18px; }
+.portia-dialog h2 { margin: 0; font: 700 13px var(--sans); letter-spacing: .04em; }
+.portia-dialog p { margin: 0; color: oklch(.745 .022 var(--accent-hue)); font-size: 13px; line-height: 1.55; }
+.portia-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.portia-dialog-actions button { min-height: 40px; }
 @media (min-width: 901px) {
   .content-editor:has(> .editor-savebar) .floating-text-format { bottom: 76px; }
 }
