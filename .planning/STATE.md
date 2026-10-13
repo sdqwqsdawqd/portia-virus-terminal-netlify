@@ -4,10 +4,10 @@ current_phase: 3
 current_phase_name: Редактор
 status: planning
 stopped_at: Phase PORTIA-02 complete, ready to plan Phase 3
-last_updated: "2026-10-13T22:06:11.125Z"
+last_updated: "2026-10-13T22:07:11.549Z"
 last_activity: 2026-10-14
 last_activity_desc: Phase PORTIA-02 complete, transitioned to Phase 3
-state_head: 1a82f64f046c8c0d5bf3aff5ea6b251df9c47644
+state_head: d6b10f56b31baf6aacb87508086ebde811d28183
 progress:
   total_phases: 5
   completed_phases: 2
@@ -20,10 +20,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-13)
+See: .planning/PROJECT.md (updated 2026-10-14)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-02 — Внешний вид
+**Current focus:** Phase 3 — Редактор
 
 ## Current Position
 
@@ -53,11 +53,12 @@ None — незакоммиченная работа закоммичена в P
 
 - ⚠️ [Phase 1] `.assistant-bubble > span` перекрывает корень текста помощника (межбуквенный интервал/интерлиньяж пузыря чуть отличаются от поля редактора) — не исправлено, см. 01-04-SUMMARY.
 - ⚠️ [Phase 1] Пресеты размера панели оформления (13/17/22/30) не совпадают с базовыми размерами большинства областей — фаза 5 (TEXT-01).
+- ⚠️ [Phase 2] «ПЕРЕМЕСТИТЬ В КОРЗИНУ» и «УДАЛИТЬ НАВСЕГДА» в редакторе всё ещё спрашивают confirm(): во встроенных браузерах они молча не срабатывают.
 - ⚠️ [Project] Проект лежит только во временной папке сессии Claude — перенести в постоянную папку.
 
 ## Session Continuity
 
-Last session: 2026-10-13T21:53:43.344Z
+Last session: 2026-10-13T22:07:11.428Z
 Stopped at: Phase PORTIA-02 complete, ready to plan Phase 3
 Resume file: None
 
