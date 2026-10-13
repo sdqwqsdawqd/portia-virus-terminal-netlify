@@ -25,11 +25,11 @@ type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: n
 const WINDOW_CLOSE_MS = 160;
 const WINDOW_MINIMIZE_MS = 320;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
-type DesktopSettings = { accent: string; wallpaper: string; iconSize: string };
+type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string };
 type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
 type ShortcutPosition = { x: number; y: number };
 
-const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard" };
+const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "system" };
 
 const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName }> = {
   archive: { label: "База вирусов", path: "PORTIA://VIRUS_ARCHIVE", icon: "virus" },
@@ -239,6 +239,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings>(defaultDesktopSettings);
   const [shortcutPositions, setShortcutPositions] = useState<Partial<Record<DesktopShortcutId, ShortcutPosition>>>({});
   const [shortcutPositionsLoaded, setShortcutPositionsLoaded] = useState(false);
+  const [desktopSettingsLoaded, setDesktopSettingsLoaded] = useState(false);
   const [settingsSavedVisible, setSettingsSavedVisible] = useState(false);
   const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
@@ -400,15 +401,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   }, [content]);
 
   useEffect(() => {
-    let restoreTimer: number | undefined;
-    try {
-      const saved = window.localStorage.getItem("portia-desktop-settings-v1");
-      if (saved) {
-        const parsed = JSON.parse(saved) as Partial<typeof desktopSettings>;
-        restoreTimer = window.setTimeout(() => setDesktopSettings((current) => ({ ...current, ...parsed })), 0);
-      }
-    } catch {}
-    return () => { if (restoreTimer) window.clearTimeout(restoreTimer); };
+    let parsed: Partial<DesktopSettings> = {};
+    try { parsed = JSON.parse(window.localStorage.getItem("portia-desktop-settings-v1") ?? "{}") ?? {}; } catch {}
+    const restoreTimer = window.setTimeout(() => {
+      setDesktopSettings((current) => ({ ...current, ...parsed }));
+      setDesktopSettingsLoaded(true);
+    }, 0);
+    return () => window.clearTimeout(restoreTimer);
   }, []);
 
   useEffect(() => {
@@ -510,12 +509,28 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     };
   }, [content.assistantActivityEnabled, content.assistantAutoIntervalSeconds, content.assistantAutoMaxSeconds, content.assistantAutoMinSeconds, content.assistantAutoTimingMode, content.assistantIdleEnabled]);
 
+  // Nothing is applied or saved until the stored settings are restored: writing the defaults first
+  // would overwrite the visitor's choice and repaint the head script's accent and motion for a frame.
   useEffect(() => {
+    if (!desktopSettingsLoaded) return;
     document.documentElement.dataset.accent = desktopSettings.accent;
     document.documentElement.dataset.wallpaper = desktopSettings.wallpaper;
     document.documentElement.dataset.iconSize = desktopSettings.iconSize;
     try { window.localStorage.setItem("portia-desktop-settings-v1", JSON.stringify(desktopSettings)); } catch {}
-  }, [desktopSettings]);
+  }, [desktopSettings, desktopSettingsLoaded]);
+
+  // Same rule as the head script: an explicit choice wins, otherwise the system setting, live.
+  useEffect(() => {
+    if (!desktopSettingsLoaded) return;
+    const system = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => {
+      const { motion } = desktopSettings;
+      document.documentElement.dataset.motion = motion === "on" ? "full" : motion === "off" ? "reduce" : system.matches ? "reduce" : "full";
+    };
+    apply();
+    system.addEventListener("change", apply);
+    return () => system.removeEventListener("change", apply);
+  }, [desktopSettings, desktopSettingsLoaded]);
 
   const showSettingsSaved = () => {
     setSettingsSavedVisible(true);
@@ -600,7 +615,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         .sort((a, b) => windows[b].z - windows[a].z)[0];
       setActiveApp(fallback ?? "archive");
     }
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (document.documentElement.dataset.motion === "reduce") {
       finishExit(appId, kind);
       return;
     }
@@ -993,6 +1008,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => updateDesktopSetting("accent", value)} />
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
+              <SettingGroup title="Анимации" values={[['system','Как в системе'],['on','Включены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
               <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сообщения, поиск и советы помощника." : "Войдите в разрешённый аккаунт редактора."}</p></div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>
             </div>

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { accentBootScript, accentIds } from "./accent-boot.ts";
+import { accentBootScript, accentIds, motionModes } from "./accent-boot.ts";
 
 type Rgb = [number, number, number];
 
@@ -198,12 +198,15 @@ test("no relative colour syntax", () => {
   assert.doesNotMatch(css, /oklch\(\s*from\b/);
 });
 
+const runBoot = (getItem: () => string | null, systemReduce = false) => {
+  const dataset: { accent?: string; motion?: string } = {};
+  const matchMedia = (query: string) => ({ matches: systemReduce && query === "(prefers-reduced-motion: reduce)" });
+  new Function("localStorage", "document", "matchMedia", accentBootScript)({ getItem }, { documentElement: { dataset } }, matchMedia);
+  return dataset;
+};
+
 test("the boot script applies only a whitelisted saved accent", () => {
-  const run = (getItem: () => string | null) => {
-    const dataset: { accent?: string } = {};
-    new Function("localStorage", "document", accentBootScript)({ getItem }, { documentElement: { dataset } });
-    return dataset.accent;
-  };
+  const run = (getItem: () => string | null) => runBoot(getItem).accent;
   assert.equal(run(() => JSON.stringify({ accent: "ice" })), "ice");
   assert.equal(run(() => JSON.stringify({ accent: "\"><script>alert(1)</script>" })), undefined);
   assert.equal(run(() => "{not json"), undefined);
@@ -215,4 +218,19 @@ test("the boot script applies only a whitelisted saved accent", () => {
   assert.ok(group, "«Цвет интерфейса» SettingGroup not found");
   assert.deepEqual([...accentIds], [...group.matchAll(/\['(\w+)',/g)].map((m) => m[1]));
   for (const id of ["ice", "amber", "red"]) assert.ok(themes[id].size > 0, `no html[data-accent="${id}"] block`);
+});
+
+test("the motion setting overrides the system, and follows it by default", () => {
+  const saved = (motion?: string) => () => JSON.stringify({ accent: "teal", motion });
+  assert.equal(runBoot(saved(), true).motion, "reduce");
+  assert.equal(runBoot(saved(), false).motion, "full");
+  assert.equal(runBoot(saved("system"), true).motion, "reduce");
+  assert.equal(runBoot(saved("on"), true).motion, "full");
+  assert.equal(runBoot(saved("off"), false).motion, "reduce");
+  assert.equal(runBoot(() => { throw new Error("storage blocked"); }, true).motion, "reduce");
+  // No motion rule may hide behind the bare media query: the attribute is the only switch.
+  assert.doesNotMatch(css, /@media\s*\(prefers-reduced-motion/);
+  const group = desktopSource.match(/title="Анимации" values=\{(\[\[.*?\]\])\}/)?.[1];
+  assert.ok(group, "«Анимации» SettingGroup not found");
+  assert.deepEqual([...motionModes], [...group.matchAll(/\['(\w+)',/g)].map((m) => m[1]));
 });
