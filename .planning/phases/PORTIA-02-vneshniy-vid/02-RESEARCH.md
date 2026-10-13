@@ -356,16 +356,18 @@ Not a rename/refactor/migration phase: omitted. The only persisted state touched
 | A5 | A hue-matched but duller logo (ice logo L about 0.64 vs UI accent L 0.79) is acceptable to the user | Pattern 2 | User asks for brighter logo; fallback is the SVG `feColorMatrix` route |
 | A6 | The retuned amber `#e8953f` and red `#d94f6e` from plan 01 are accepted | Pattern 1 | Both are Claude's pick under D-03; plan 01 human-check already asks |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+Plan numbers in the RESOLVED notes refer to the current plan set (02-01..02-06, commit 73fcf9d and later); plan numbers elsewhere in this document refer to the plan set that existed before this research.
 
 1. **Should near-black panels follow the accent (chroma 6-19, 174 literals plus `--bg/--panel/--panel-2`)?**
-   - What we know: the plan leaves them (A1 of plan 01); `--desktop-base`/`--desktop-deep` already change per theme.
-   - What's unclear: whether the user reads the result as "still turquoise".
-   - Recommendation: keep the plan's threshold, run the generator with the threshold as a parameter, and make the human-check explicit about window backgrounds in the red theme. Re-run at chroma >= 6 only if the user says yes.
+   - What we knew at research time: the plan then in place left them alone; `--desktop-base`/`--desktop-deep` already change per theme.
+   - RESOLVED: yes, by user decision D-16 (2026-10-13): their faint hue follows the accent, lightness and chroma stay. Plan 02-01 Task 3 re-runs the converter at MIN_CHROMA = 6 (whole chroma 6-19 set incl. `--bg`, `--panel`, `--panel-2`) and lowers test (g) to 6; its human-check asks only whether the light green-tinted text greys should stay neutral (a one-parameter narrowing, plan 02-01 assumption A1).
 2. **Is a hue-matched but darker logo (see Pattern 2 table: mean L 0.64 / 0.66 / 0.66 vs accent L 0.79 / 0.74 / 0.62) good enough?**
    - What we know: D-02 asks only for the hue to match; grey axis is unchanged; no `brightness()` allowed.
-   - Recommendation: ship the filter; if the user wants exact colour, switch the logo (single flat teal) to an inline SVG `feColorMatrix` per theme.
-3. **Does the user's browser report reduced motion?** Cannot be known here; plan 06 Task 1's diagnose-first step and a DevTools one-liner answer it.
+   - RESOLVED: ship the `hue-rotate` + `saturate` filter, which meets D-02 (hue within 10 deg, black/white/grey unchanged; plan 02-01 tests (d) and (e)). The darker tone is recorded as plan 02-01 assumption A5 and confirmed in the plan 02-01 Task 3 human-check; the inline SVG `feColorMatrix` per theme is the named fallback only if the user asks for the exact colour there.
+3. **Does the user's browser report reduced motion?**
+   - RESOLVED: not knowable at planning time, so the plan diagnoses it instead of assuming it: plan 02-05 Task 1 starts with a diagnose-first step (`matchMedia("(prefers-reduced-motion: reduce)").matches` and the logo load time vs the 900 ms descent, read with a browser tool or, failing that, asked of the user in the Task 2 human-check), reports the cause in its SUMMARY, and ships the image-ready gate, which is harmless either way. If the cause is the OS setting, that is correct behaviour and is reported to the user, not "fixed" (D-10).
 
 ## Environment Availability
 
