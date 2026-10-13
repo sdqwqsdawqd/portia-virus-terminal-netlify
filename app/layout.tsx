@@ -18,7 +18,8 @@ export const metadata: Metadata = {
     shortcut: "/assets/portia-virus-icon.png",
   },
   // The site is already dark; this tells Dark Reader to leave it alone instead of rewriting the HTML.
-  other: { "darkreader-lock": "" },
+  // Content must be non-empty: Next drops metas with empty content, so "" never rendered.
+  other: { "darkreader-lock": "true" },
 };
 
 export default function RootLayout({
