@@ -372,9 +372,9 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .broadcast-card::before { content: none; }
 .broadcast-card.quest::before { background: #e8ae45; }
 .broadcast-card.task::before { background: #7ec8e3; }
-.broadcast-card > span { color: var(--teal); font: 700 11px var(--sans); letter-spacing: .09em; }
-.broadcast-card.quest > span { color: #e8ae45; }
-.broadcast-card.task > span { color: #7ec8e3; }
+.broadcast-card > span:first-child { color: var(--teal); font: 700 11px var(--sans); letter-spacing: .09em; }
+.broadcast-card.quest > span:first-child { color: #e8ae45; }
+.broadcast-card.task > span:first-child { color: #7ec8e3; }
 .broadcast-card h2 { margin: 9px 0 12px; color: #ecf3f1; font: 700 20px var(--sans); }
 .broadcast-card p { margin: 0 0 12px; color: #a3b6b1; font-size: 15px; line-height: 1.7; white-space: pre-line; }
 .broadcast-card-copy { display: block; color: #a3b6b1; font-size: 15px; line-height: 1.7; }
