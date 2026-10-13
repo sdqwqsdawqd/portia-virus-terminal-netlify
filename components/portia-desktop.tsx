@@ -823,6 +823,20 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
   };
 
+  // Same move as the editor's «ВОССТАНОВИТЬ В БАЗУ», saved at once; on failure the trash stays as it was.
+  const restoreTrashVirus = async (virus: Virus) => {
+    if (!window.confirm(`Вернуть «${virus.name}» в основную базу вирусов?`)) return;
+    const next = structuredClone(content);
+    next.recycledViruses = (next.recycledViruses ?? []).filter((item) => item.id !== virus.id);
+    next.viruses.push(virus);
+    next.recycleOrder = (next.recycleOrder ?? []).filter((key) => key !== `virus:${virus.id}`);
+    try {
+      await saveContent(next);
+      setActiveTrashFileId(null);
+      setActiveVirusId(virus.id);
+    } catch {}
+  };
+
   const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
   const filteredViruses = content.viruses.filter((virus) => escapeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(escapeSearch(virusQuery)));
   const selectedInfo = content.infoSections.find((section) => section.id === selectedInfoId) ?? content.infoSections[0];
@@ -1129,7 +1143,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   })}
                   {!trashFiles.length && !recycledViruses.length && <div className="editor-empty empty-state"><PortiaIllustration name="flask" /><strong>Корзина пуста</strong></div>}
                 </div>
-                {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} onOpenLog={() => undefined} /></div></div>}
+                {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div>{canEdit && <button className="trash-restore" type="button" disabled={saveState === "saving"} onClick={() => restoreTrashVirus(activeTrashVirus)}>{saveState === "saving" ? "СОХРАНЕНИЕ…" : saveState === "error" || saveState === "conflict" ? "НЕ УДАЛОСЬ — ПОВТОРИТЬ" : "ВОССТАНОВИТЬ В БАЗУ"}</button>}<button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} onOpenLog={() => undefined} /></div></div>}
                 {activeTrashFile && <div className={`trash-viewer ${activeTrashFile.kind} doc-open`} key={activeTrashFile.id}>
                   <div className="trash-viewer-head"><div><span>ТОЛЬКО ДЛЯ ЧТЕНИЯ</span><strong>{activeTrashFile.name}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div>
                   <div className="trash-viewer-body doc-print">
@@ -1151,7 +1165,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <div className="settings-app">
               <header><h1>Настройки рабочего стола</h1><p>Оформление и расположение ярлыков сохраняются на этом устройстве.</p></header>
               <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => updateDesktopSetting("accent", value)} />
-              <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Дорожки геля'],['cells','Клетки под микроскопом'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
+              <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
               <SettingGroup title="Анимации" values={[['system','Как в системе'],['on','Включены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
               <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сообщения, поиск и советы помощника." : "Войдите в разрешённый аккаунт редактора."}</p></div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
@@ -1488,9 +1502,6 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   </section>;
 }
 
-// Only the three levelled class lines get badges (D-09); the badge always sits beside the term's text.
-const badgeKeys = new Set(["danger", "spread", "escapeRisk"]);
-
 // In the archive list the badges stand alone, so each one names its term for screen readers and on hover.
 function RowBadges({ virus }: { virus: Virus }) {
   const terms = [virus.classification.danger, virus.classification.spread, virus.classification.escapeRisk];
@@ -1507,7 +1518,7 @@ function VirusRecord({ virus, formattedText, onOpenLog }: { virus: Virus; format
   return <div className="record-body content-fade" key={virus.id}>
     <header className="record-header"><div><span className="record-code">{virus.code}</span><h2>{virus.name}</h2></div><div className="record-status"><span />{virus.status}</div></header>
     <div className="record-document">
-      <section className="record-hero"><MediaBlock src={virus.infectedImage} alt={`Субъект после заражения вирусом ${virus.name}`} label="Фото после заражения" /><div className="classification-panel"><div className="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div><div className="classification-grid">{classification.map(([key, label, value, tone]) => { const level = classificationLevel(key, value); const badge = badgeKeys.has(key) ? classificationIconFor(value) : undefined; return <div className={`class-cell ${tone}${level ? ` level-${level}` : ""}`} key={label}><span>{label}</span><strong>{badge && <PortiaIcon name={badge} className="class-badge" />}{value}</strong>{level && <small>УРОВЕНЬ {level}</small>}</div>; })}</div></div></section>
+      <section className="record-hero"><MediaBlock src={virus.infectedImage} alt={`Субъект после заражения вирусом ${virus.name}`} label="Фото после заражения" /><div className="classification-panel"><div className="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div><div className="classification-grid">{classification.map(([key, label, value, tone]) => { const level = classificationLevel(key, value); const badge = classificationIconFor(value); return <div className={`class-cell ${tone}${level ? ` level-${level}` : ""}`} key={label}><span>{label}</span><strong>{badge && <PortiaIcon name={badge} className="class-badge" />}{value}</strong>{level && <small>УРОВЕНЬ {level}</small>}</div>; })}</div></div></section>
       <DossierSection index="02" title="ВНЕШНИЕ ХАРАКТЕРИСТИКИ"><FormattedText className="lead-copy" text={virus.external} document={formattedText[portiaTextKey.virus(virus.id, "external")]} /></DossierSection>
       <DossierSection index="03" title="ХАРАКТЕРИСТИКИ С PPU"><div className="metric-grid"><div><span>ЗДОРОВЬЕ</span><FormattedText text={virus.ppu.health} document={formattedText[portiaTextKey.virus(virus.id, "ppu-health")]} /></div><div><span>СКОРОСТЬ</span><FormattedText text={virus.ppu.speed} document={formattedText[portiaTextKey.virus(virus.id, "ppu-speed")]} /></div><div><span>СПОСОБНОСТИ</span><FormattedText text={virus.ppu.abilities} document={formattedText[portiaTextKey.virus(virus.id, "ppu-abilities")]} /></div></div></DossierSection>
       <DossierSection index="04" title="ФИЗИОЛОГИЯ"><FormattedText className="lead-copy" text={virus.physiology} document={formattedText[portiaTextKey.virus(virus.id, "physiology")]} /></DossierSection>

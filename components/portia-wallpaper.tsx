@@ -27,7 +27,13 @@ function webPaths() {
     });
     rings.push(`M${round(points[0][0])} ${round(points[0][1])}${segments.join("")}`);
   }
-  return { spokePaths, rings };
+  // Dew on a few crossings of spoke and spiral; it twinkles once the web is spun.
+  const rand = seeded(23);
+  const dew = Array.from({ length: 16 }, () => {
+    const ring = 3 + Math.floor(rand() * 12), angle = angles[Math.floor(rand() * spokes)], radius = 34 * ring ** 1.18;
+    return { x: round(center[0] + Math.cos(angle) * radius), y: round(center[1] + Math.sin(angle) * radius), r: round(1.4 + rand() * 1.4) };
+  });
+  return { spokePaths, rings, dew };
 }
 
 const web = webPaths();
@@ -60,79 +66,91 @@ function seeded(seed: number) {
   return () => (state = (state * 1664525 + 1013904223) % 4294967296) / 4294967296;
 }
 
-// «Дорожки геля» (sketch #gel-a): eight electrophoresis lanes with wells, a marker ladder in the first lane,
-// a side scale, and crisp bands. Bands are separate so only they drift, like a gel that is still running.
+// «Гель»: an electrophoresis gel photographed under UV, anchored top right like the other wallpapers.
+// No hard lane walls: soft lane columns, wells, a marker ladder with sizes, and "smiling" bands that glow
+// and fade at their ends. Replicate lanes repeat the same fragments, as real samples would.
 function gelLanes() {
-  const rand = seeded(7);
-  const lanes = 8, left = 720, width = 58, gap = 22, top = 92, bottom = 860;
-  let wells = "", walls = "";
+  const lanes = 9, left = 812, pitch = 66, width = 46, top = 74, bottom = 820;
+  const ladder = ["10 000", "6000", "4000", "3000", "2000", "1500", "1000", "750", "500", "250"];
+  const ladderY = ladder.map((_, step) => round(top + 34 + (bottom - top - 120) * Math.log(1 + step * 0.9) / Math.log(1 + (ladder.length - 1) * 0.9)));
+  const pickFragments = seeded(11);
+  // One fragment per slice of the gel, so bands spread over its whole length.
+  const fragments = Array.from({ length: 12 }, (_, slice) => round(top + 60 + ((slice + pickFragments() * 0.8) / 12) * (bottom - top - 160)));
+  const columns: number[] = [];
   const bands: { d: string; weight: number; opacity: number }[] = [];
+  const band = (x: number, y: number, weight: number, opacity: number) => bands.push({
+    d: `M${x + 4} ${y}Q${x + width / 2} ${round(y + 2.6)} ${x + width - 4} ${y}`, weight: round(weight), opacity: Math.round(opacity * 100) / 100,
+  });
   for (let lane = 0; lane < lanes; lane += 1) {
-    const x = left + lane * (width + gap);
-    wells += `M${x} ${top - 30}h${width}v16h${-width}Z`;
-    walls += `M${x} ${top}V${bottom}M${x + width} ${top}V${bottom}`;
-    // Lane 0 is the marker ladder: eleven bands spaced like a size standard.
-    const positions = lane === 0
-      ? Array.from({ length: 11 }, (_, step) => top + 40 + (bottom - top - 80) * (1 - 0.82 ** (step + 1)) / (1 - 0.82 ** 11))
-      : Array.from({ length: 3 + Math.floor(rand() * 4) }, () => top + 50 + rand() * (bottom - top - 100));
-    for (const y of positions) {
-      const weight = lane === 0 ? 3 : 3 + rand() * 8;
-      const opacity = lane === 0 ? 0.28 : 0.16 + rand() * 0.16;
-      bands.push({ d: `M${x + 5} ${round(y + weight / 2)}h${width - 10}`, weight: round(weight), opacity: Math.round(opacity * 100) / 100 });
-    }
+    const x = left + lane * pitch;
+    columns.push(x);
+    if (lane === 0) { ladderY.forEach((y, step) => band(x, y, step === 6 ? 5 : 3, step === 6 ? 0.9 : 0.6)); continue; }
+    // Lanes 3 and 4 are replicates of lane 2; the rest pick their own fragments.
+    const pick = seeded((lane === 3 || lane === 4 ? 2 : lane) * 31 + 3);
+    fragments.filter(() => pick() < 0.38).forEach((y) => band(x, y, 3 + pick() * 7, 0.45 + pick() * 0.55));
   }
-  const scaleX = left - 34;
-  const ticks = Array.from({ length: 16 }, (_, tick) => `M${scaleX} ${round(top + (tick * (bottom - top)) / 15)}h${tick % 5 ? -8 : -18}`).join("");
-  return { wells, walls, scale: `M${scaleX} ${top}V${bottom}${ticks}`, bands };
+  return { columns, width, top, bottom, left, ladder, ladderY, bands };
 }
 
 const gel = gelLanes();
 
-// An irregular cell outline: a circle wobbled by two sine harmonics with random phase.
-function blob(cx: number, cy: number, radius: number, rand: () => number) {
-  const phaseA = rand() * 6, phaseB = rand() * 6, points = 28;
-  return "M" + Array.from({ length: points }, (_, index) => {
-    const angle = (index / points) * Math.PI * 2;
-    const k = 1 + 0.13 * Math.sin(3 * angle + phaseA) + 0.07 * Math.sin(5 * angle + phaseB);
-    return `${round(cx + Math.cos(angle) * radius * k)} ${round(cy + Math.sin(angle) * radius * k)}`;
-  }).join("L") + "Z";
-}
-
-// «Клетки под микроскопом» (sketch #cells-b): the eyepiece with a graduated crosshair, a dense field of cells
-// with nuclei, virus particles and a scale bar. Particles are separate so only they drift and tumble.
+// «Клетки»: tissue seen through an eyepiece in the top-right corner. The cells are a Voronoi tessellation
+// with rounded walls and a gap between neighbours; a few are infected, with virions at their walls.
 function cellField() {
   const rand = seeded(5);
-  const cx = 1060, cy = 430, radius = 380;
-  const place = (count: number, margin: number) => {
-    const found: Point[] = [];
-    for (let guard = 0; found.length < count && guard < 2000; guard += 1) {
-      const x = cx - radius + rand() * 2 * radius, y = cy - radius + rand() * 2 * radius;
-      if (Math.hypot(x - cx, y - cy) < radius - margin && found.every(([a, b]) => Math.hypot(a - x, b - y) > margin * 1.6)) found.push([x, y]);
+  const cx = 1214, cy = 176, radius = 610;
+  const sites: Point[] = [];
+  for (let guard = 0; sites.length < 150 && guard < 6000; guard += 1) {
+    const x = cx - radius + rand() * 2 * radius, y = cy - radius + rand() * 2 * radius;
+    if (x > 1500 || y < -60 || y > 860 || Math.hypot(x - cx, y - cy) > radius + 20) continue;
+    if (sites.every(([a, b]) => Math.hypot(a - x, b - y) > 64)) sites.push([x, y]);
+  }
+  // Each cell is a square clipped by the bisector with every near neighbour.
+  const cellOf = ([x, y]: Point) => {
+    let poly: Point[] = [[x - 90, y - 90], [x + 90, y - 90], [x + 90, y + 90], [x - 90, y + 90]];
+    for (const [ox, oy] of sites) {
+      if ((ox === x && oy === y) || Math.hypot(ox - x, oy - y) > 180) continue;
+      const nx = ox - x, ny = oy - y, limit = (nx * (x + ox) + ny * (y + oy)) / 2;
+      const inside = ([px, py]: Point) => nx * px + ny * py <= limit;
+      const next: Point[] = [];
+      poly.forEach((point, index) => {
+        const following = poly[(index + 1) % poly.length];
+        if (inside(point)) next.push(point);
+        if (inside(point) !== inside(following)) {
+          const t = (limit - nx * point[0] - ny * point[1]) / (nx * (following[0] - point[0]) + ny * (following[1] - point[1]));
+          next.push([point[0] + t * (following[0] - point[0]), point[1] + t * (following[1] - point[1])]);
+        }
+      });
+      poly = next;
     }
-    return found;
+    // Shrink toward the centre for the gap between walls, then round every corner through the edge midpoints.
+    const shrunk = poly.map(([px, py]): Point => [x + (px - x) * 0.84, y + (py - y) * 0.84]);
+    const mid = (index: number): Point => {
+      const p = shrunk[index % shrunk.length], q = shrunk[(index + 1) % shrunk.length];
+      return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+    };
+    const start = mid(0);
+    return `M${round(start[0])} ${round(start[1])}` + shrunk.map((_, index) => {
+      const corner = shrunk[(index + 1) % shrunk.length], end = mid(index + 1);
+      return `Q${round(corner[0])} ${round(corner[1])} ${round(end[0])} ${round(end[1])}`;
+    }).join("") + "Z";
   };
-  const cells = place(12, 48).map(([x, y]) => {
-    const size = 34 + rand() * 18;
-    return { wall: blob(x, y, size, rand), nucleus: blob(x + size * 0.15, y - size * 0.1, size * 0.32, rand) };
+  let walls = "", sick = "", nuclei = "", sickNuclei = "";
+  const particles: { x: number; y: number; spikes: string }[] = [];
+  sites.forEach((site) => {
+    const nucleus = `M${round(site[0] + 9)} ${round(site[1] - 3)}a9 7 0 1 0-18 0a9 7 0 1 0 18 0Z`;
+    if (rand() >= 0.1) { walls += cellOf(site); nuclei += nucleus; return; }
+    sick += cellOf(site); sickNuclei += nucleus;
+    for (let count = 0; count < 2; count += 1) {
+      const angle = rand() * Math.PI * 2, distance = 24 + rand() * 10;
+      const x = round(site[0] + Math.cos(angle) * distance), y = round(site[1] + Math.sin(angle) * distance);
+      particles.push({ x, y, spikes: Array.from({ length: 8 }, (_, spike) => {
+        const turn = (spike / 8) * Math.PI * 2;
+        return `M${round(x + Math.cos(turn) * 5)} ${round(y + Math.sin(turn) * 5)}L${round(x + Math.cos(turn) * 9)} ${round(y + Math.sin(turn) * 9)}`;
+      }).join("") });
+    }
   });
-  const particles = place(20, 22).map(([x, y]) => ({
-    x: round(x), y: round(y),
-    spikes: Array.from({ length: 8 }, (_, index) => {
-      const angle = (index / 8) * Math.PI * 2;
-      return `M${round(x + Math.cos(angle) * 9)} ${round(y + Math.sin(angle) * 9)}L${round(x + Math.cos(angle) * 15)} ${round(y + Math.sin(angle) * 15)}`;
-    }).join(""),
-  }));
-  const ticks = Array.from({ length: 19 }, (_, index) => {
-    const offset = (index - 9) * 40, major = index % 5 === 4, half = major ? 12 : 6;
-    return `M${cx + offset} ${cy - half}v${half * 2}M${cx - half} ${cy + offset}h${half * 2}`;
-  }).join("");
-  return {
-    centre: { cx, cy, radius },
-    reticle: `M${cx - radius} ${cy}H${cx + radius}M${cx} ${cy - radius}V${cy + radius}${ticks}`,
-    scaleBar: `M${cx + 120} ${cy + 300}h140M${cx + 120} ${cy + 292}v16M${cx + 260} ${cy + 292}v16`,
-    cells,
-    particles,
-  };
+  return { cx, cy, radius, walls, sick, nuclei, sickNuclei, particles };
 }
 
 const cells = cellField();
@@ -146,32 +164,55 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
         </g>)
       : kind === "gel"
       ? <g className="wallpaper-gel">
-          <path d={gel.wells} className="wallpaper-gel-wells" />
-          <path d={gel.walls} className="wallpaper-gel-walls" />
-          <path d={gel.scale} className="wallpaper-gel-scale" />
-          <g className="wallpaper-gel-bands">
-            {gel.bands.map((band, index) => <path key={index} d={band.d} style={{ strokeWidth: band.weight, opacity: band.opacity }} />)}
+          <defs>
+            <linearGradient id="wp-gel-fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".55" stopColor="#fff" /><stop offset="1" stopColor="#fff" stopOpacity="0" /></linearGradient>
+            <mask id="wp-gel-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="1440" height="900"><rect width="1440" height="900" fill="url(#wp-gel-fade)" /></mask>
+            <linearGradient id="wp-gel-band" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="currentColor" stopOpacity="0" /><stop offset=".22" stopColor="currentColor" /><stop offset=".78" stopColor="currentColor" /><stop offset="1" stopColor="currentColor" stopOpacity="0" /></linearGradient>
+          </defs>
+          <g mask="url(#wp-gel-mask)">
+            {gel.columns.map((x) => <rect key={x} x={x} y={gel.top} width={gel.width} height={gel.bottom - gel.top} rx={3} className="wallpaper-gel-lane" />)}
+            {gel.columns.map((x) => <rect key={`w${x}`} x={x + 3} y={gel.top - 22} width={gel.width - 6} height={10} rx={2} className="wallpaper-gel-well" />)}
+            <g className="wallpaper-gel-bands">
+              {gel.bands.map((band, index) => <path key={`g${index}`} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight * 2.6, opacity: band.opacity * 0.08 }} />)}
+              {gel.bands.map((band, index) => <path key={index} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight, opacity: band.opacity * 0.42 }} />)}
+            </g>
+            <g className="wallpaper-gel-labels">
+              {gel.ladder.map((label, index) => <text key={label} x={gel.left - 12} y={gel.ladderY[index] + 4}>{label}</text>)}
+            </g>
           </g>
         </g>
       : kind === "cells"
       ? <g className="wallpaper-cells">
-          <circle cx={cells.centre.cx} cy={cells.centre.cy} r={cells.centre.radius} className="wallpaper-cells-eyepiece" />
-          <circle cx={cells.centre.cx} cy={cells.centre.cy} r={cells.centre.radius + 14} className="wallpaper-cells-rim" />
-          <path d={cells.reticle} className="wallpaper-cells-reticle" />
-          {cells.cells.map((cell, index) => <g key={index} className="wallpaper-cell"><path d={cell.wall} /><path d={cell.nucleus} className="wallpaper-cell-nucleus" /></g>)}
-          <g className="wallpaper-cells-particles">
-            {cells.particles.map((particle, index) => <g key={index} className="wallpaper-particle" style={{ animationDelay: `${-((index * 3.7) % 20)}s` }}>
-              <circle cx={particle.x} cy={particle.y} r={9} /><path d={particle.spikes} />
-            </g>)}
+          <defs>
+            <clipPath id="wp-cells-clip"><circle cx={cells.cx} cy={cells.cy} r={cells.radius} /></clipPath>
+            <radialGradient id="wp-cells-focus" cx={cells.cx} cy={cells.cy} r={cells.radius} gradientUnits="userSpaceOnUse"><stop offset=".45" stopColor="#fff" /><stop offset="1" stopColor="#fff" stopOpacity=".12" /></radialGradient>
+            <mask id="wp-cells-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="1440" height="900"><rect width="1440" height="900" fill="url(#wp-cells-focus)" /></mask>
+            <radialGradient id="wp-cells-rim" cx={cells.cx} cy={cells.cy} r={cells.radius} gradientUnits="userSpaceOnUse"><stop offset=".78" stopColor="currentColor" stopOpacity="0" /><stop offset="1" stopColor="currentColor" stopOpacity=".07" /></radialGradient>
+          </defs>
+          <circle cx={cells.cx} cy={cells.cy} r={cells.radius} fill="url(#wp-cells-rim)" stroke="none" />
+          <g clipPath="url(#wp-cells-clip)" mask="url(#wp-cells-mask)">
+            <path d={cells.walls} className="wallpaper-cells-wall" />
+            <path d={cells.nuclei} className="wallpaper-cells-nucleus" />
+            <path d={cells.sick} className="wallpaper-cells-wall is-infected" />
+            <path d={cells.sickNuclei} className="wallpaper-cells-nucleus is-infected" />
+            <g className="wallpaper-cells-particles">
+              {cells.particles.map((particle, index) => <g key={index} className="wallpaper-particle" style={{ animationDelay: `${-((index * 3.7) % 20)}s` }}>
+                <circle cx={particle.x} cy={particle.y} r={5} /><path d={particle.spikes} />
+              </g>)}
+            </g>
           </g>
-          <path d={cells.scaleBar} className="wallpaper-cells-scale" />
+          <circle cx={cells.cx} cy={cells.cy} r={cells.radius} className="wallpaper-cells-edge" />
         </g>
       : <g className="wallpaper-web">
           {web.spokePaths.map((d, index) => <path key={`s${index}`} d={d} pathLength={1} style={{ animationDelay: `${index * 40}ms` }} />)}
           {web.rings.map((d, index) => <path key={`r${index}`} d={d} pathLength={1} className="wallpaper-web-ring" style={{ animationDelay: `${600 + index * 70}ms` }} />)}
-          {/* After the web is spun, glints run out along the threads, each on its own beat. */}
+          {/* After the web is spun, glints run out along the spokes and round the spiral, each on its own beat. */}
           <g className="wallpaper-web-pulses">
-            {web.spokePaths.map((d, index) => <path key={`p${index}`} d={d} pathLength={1} style={{ animationDelay: `${round(2 + ((index * 2.3) % 9))}s` }} />)}
+            {web.spokePaths.map((d, index) => <path key={`p${index}`} d={d} pathLength={1} style={{ animationDelay: `${round(4 + ((index * 2.3) % 9))}s` }} />)}
+            {[4, 7, 10, 13].map((ring, index) => <path key={`q${ring}`} d={web.rings[ring]} pathLength={1} className="wallpaper-web-orbit" style={{ animationDelay: `${5 + index * 3.1}s` }} />)}
+          </g>
+          <g className="wallpaper-web-dew">
+            {web.dew.map((drop, index) => <circle key={index} cx={drop.x} cy={drop.y} r={drop.r} style={{ animationDelay: `${round((index * 1.7) % 7)}s` }} />)}
           </g>
         </g>}
   </svg>;

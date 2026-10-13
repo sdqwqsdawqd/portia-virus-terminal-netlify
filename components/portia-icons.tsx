@@ -6,6 +6,10 @@ export type PortiaIconName =
   | "class-hephaestus" | "class-proteus" | "class-apeiron"
   | "class-nomos" | "class-theseus" | "class-abraxas"
   | "class-warning" | "class-risk" | "class-esnov"
+  | "class-rubedo" | "class-albedo" | "class-nigredo"
+  | "class-nyktea" | "class-morfea" | "class-dedalea"
+  | "class-fobus" | "class-areus" | "class-selenus"
+  | "route-droplet" | "route-dust" | "route-contact" | "route-oral" | "route-sexual" | "route-unknown"
   | "lock-open" | "lock-closed";
 
 // Classification badges (sketch #badges-b): one shape per class line, 1-3 inner marks for the level.
@@ -14,6 +18,16 @@ const spreadShape = <circle cx="12" cy="12" r="8.5" />;
 const escapeShape = <path d="M12 3.5 21 19.5H3Z" />;
 const dot = (x: number) => <circle key={x} cx={x} cy="12" r=".9" fill="currentColor" />;
 const chevron = (y: number) => <path key={y} d={`M10.2 ${y}l1.8-1.8 1.8 1.8`} />;
+// The additional line follows the same rule: mind is a diamond with lines of thought, appearance a pentagon
+// with mutation crosses, behaviour a rounded square with tremor waves.
+const mindShape = <path d="M12 3.2 20.8 12 12 20.8 3.2 12Z" />;
+const lookShape = <path d="M12 3.4 20.4 9.5 17.2 19.4H6.8L3.6 9.5Z" />;
+const moodShape = <rect x="4.2" y="4.2" width="15.6" height="15.6" rx="3.6" />;
+const dash = (y: number) => <path key={y} d={`M9.4 ${y}h5.2`} />;
+const cross = ([x, y]: [number, number]) => <path key={`${x} ${y}`} d={`M${x - 1.5} ${y}h3M${x} ${y - 1.5}v3`} />;
+const wave = (y: number) => <path key={y} d={`M7.6 ${y}q2.2-2 4.4 0t4.4 0`} />;
+// Routes of transmission are not levelled, so each is its own small picture without a frame.
+const drop = (x: number, y: number, k: number) => <path d={`M${x} ${y}c${-k} ${1.3 * k} ${-1.5 * k} ${2.1 * k} ${-1.5 * k} ${2.8 * k}a${1.5 * k} ${1.5 * k} 0 0 0 ${3 * k} 0c0 ${-0.7 * k} ${-0.5 * k} ${-1.5 * k} ${-1.5 * k} ${-2.8 * k}Z`} />;
 // Access locks (sketch #locks-a): a padlock whose shackle swings aside when open.
 const lockBody = <><rect x="5" y="10.5" width="14" height="10" rx="2" /><circle cx="12" cy="14.6" r="1.3" /><path d="M12 15.9v2" /></>;
 
@@ -79,6 +93,21 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
   "class-warning": <>{escapeShape}{[16.4].map(chevron)}</>,
   "class-risk": <>{escapeShape}{[14.4, 17.2].map(chevron)}</>,
   "class-esnov": <>{escapeShape}{[12.6, 15.2, 17.8].map(chevron)}</>,
+  "class-rubedo": <>{mindShape}{[12].map(dash)}</>,
+  "class-albedo": <>{mindShape}{[10.6, 13.4].map(dash)}</>,
+  "class-nigredo": <>{mindShape}{[9.4, 12, 14.6].map(dash)}</>,
+  "class-nyktea": <>{lookShape}{([[12, 13]] as [number, number][]).map(cross)}</>,
+  "class-morfea": <>{lookShape}{([[9.6, 13.4], [14.4, 13.4]] as [number, number][]).map(cross)}</>,
+  "class-dedalea": <>{lookShape}{([[12, 9.8], [8.9, 14.8], [15.1, 14.8]] as [number, number][]).map(cross)}</>,
+  "class-fobus": <>{moodShape}{[12.6].map(wave)}</>,
+  "class-areus": <>{moodShape}{[10.8, 14.6].map(wave)}</>,
+  "class-selenus": <>{moodShape}{[9, 12.6, 16.2].map(wave)}</>,
+  "route-droplet": <>{drop(9, 3.5, 2.6)}{drop(16.5, 11, 1.7)}<path d="M5 20.5h14" opacity=".55" /></>,
+  "route-dust": <><path d="M3.5 9.5h9.2a2.6 2.6 0 1 0-2.6-2.6M3.5 14h12.4a2.6 2.6 0 1 1-2.6 2.6" /><circle cx="18.6" cy="7.4" r=".9" fill="currentColor" /><circle cx="20.4" cy="11.6" r=".9" fill="currentColor" /><circle cx="7" cy="19.2" r=".9" fill="currentColor" /></>,
+  "route-contact": <><rect x="3.6" y="5.2" width="10" height="10" rx="2.2" /><rect x="10.4" y="8.8" width="10" height="10" rx="2.2" /></>,
+  "route-oral": <>{drop(12, 2.6, 1.3)}<path d="M5.6 9.6h12.8l-1.5 9.6a1.8 1.8 0 0 1-1.8 1.5H8.9a1.8 1.8 0 0 1-1.8-1.5Z" /><path d="M7.6 13h8.8" opacity=".55" /></>,
+  "route-sexual": <><circle cx="9.2" cy="12" r="5.4" /><circle cx="14.8" cy="12" r="5.4" /></>,
+  "route-unknown": <><circle cx="12" cy="12" r="8.5" strokeDasharray="2.2 2.6" /><path d="M9.6 9.6a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2 1-1.2 1.9v.4" /><circle cx="12" cy="16.9" r=".9" fill="currentColor" /></>,
   "lock-open": <>{lockBody}<path d="M8 10.5V7.5a4 4 0 0 1 7.7-1.6" /></>,
   "lock-closed": <>{lockBody}<path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></>,
 };
@@ -88,6 +117,11 @@ export const classificationIcon: Record<string, PortiaIconName> = {
   "Гефест": "class-hephaestus", "Протей": "class-proteus", "Апейрон": "class-apeiron",
   "Номос": "class-nomos", "Тезей": "class-theseus", "Абраксас": "class-abraxas",
   "Предупреждение": "class-warning", "Риск": "class-risk", "Эснов": "class-esnov",
+  "Рубедо": "class-rubedo", "Альбедо": "class-albedo", "Нигредо": "class-nigredo",
+  "Нюктея": "class-nyktea", "Морфея": "class-morfea", "Дедалея": "class-dedalea",
+  "Фобус": "class-fobus", "Ареус": "class-areus", "Селенус": "class-selenus",
+  "Воздушно-капельный": "route-droplet", "Воздушно-пылевой": "route-dust", "Контактно-бытовой": "route-contact",
+  "Фекально-оральный": "route-oral", "Половой": "route-sexual", "Неизвестно": "route-unknown",
 };
 
 // Content values are editor input: own keys only, so "constructor" or "__proto__" never resolve to a prototype member.
