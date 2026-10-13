@@ -1107,6 +1107,25 @@ html[data-motion="reduce"] .wallpaper-helix { animation: none; }
 @keyframes window-open { from { opacity: 0; scale: .96; } to { opacity: 1; scale: 1; } }
 /* An exiting window takes no input; its animation runs only when motion is welcome. */
 .app-window.is-closing, .app-window.is-minimizing { pointer-events: none; }
+/* A taskbar entry being dragged to a new place (state, not motion). */
+.taskbar-app.is-reordering { z-index: 2; background: var(--teal-soft); border-color: rgba(var(--desktop-glow), .35); box-shadow: 0 8px 20px rgba(0,0,0,.4); cursor: grabbing; }
+
+/* Icons press in on click and spring back; the taskbar entry of a window that appears hops twice, Dock-style. */
+html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon, .mini-app-icon) { transition: border-color 130ms ease, color 130ms ease, transform 160ms cubic-bezier(.2,.8,.2,1), scale 260ms cubic-bezier(.3, 1.6, .5, 1); }
+html[data-motion="full"] :is(.desktop-icon:active .desktop-icon-symbol, .start-panel > button:active .start-panel-icon, .taskbar-app:active .mini-app-icon) { scale: .86; transition-duration: 130ms, 130ms, 160ms, 90ms; }
+html[data-motion="full"] .taskbar-app.is-bouncing .mini-app-icon { animation: taskbar-bounce 520ms cubic-bezier(.3, 0, .4, 1); }
+@keyframes taskbar-bounce { 0%, 50%, 100% { translate: 0 0; } 25% { translate: 0 -7px; } 72% { translate: 0 -3px; } }
+
+/* Hover, pointer devices only: strokes redraw, the virus twists and settles (it is not 4-fold symmetric), broadcasts pulse. */
+@media (hover: hover) {
+  html[data-motion="full"] :is(.desktop-icon:hover .desktop-icon-symbol, .start-panel > button:hover .start-panel-icon) svg :is(path, circle, rect, ellipse) { stroke-dasharray: 80; animation: icon-draw 240ms ease-out; }
+  html[data-motion="full"] .desktop-icon:hover .desktop-icon-symbol[data-icon="virus"] svg { animation: icon-twist 240ms cubic-bezier(.2, .7, .3, 1); }
+  html[data-motion="full"] .desktop-icon:hover .desktop-icon-symbol[data-icon="broadcasts"] svg { animation: icon-pulse 220ms ease-out; }
+}
+@keyframes icon-draw { from { stroke-dashoffset: 80; } to { stroke-dashoffset: 0; } }
+@keyframes icon-twist { 50% { rotate: 18deg; } }
+@keyframes icon-pulse { 50% { scale: 1.1; } }
+
 /* macOS-like: zoom out of the desktop icon, genie into / out of the taskbar button. Exit rules come last so they win. */
 html[data-motion="full"] .app-window.from-icon { animation: window-open-icon 260ms cubic-bezier(.16, 1, .3, 1); }
 html[data-motion="full"] .app-window.from-taskbar { animation: window-genie 300ms cubic-bezier(.2, .8, .2, 1) reverse both; }

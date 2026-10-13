@@ -105,6 +105,8 @@ const contentCacheStorageKey = "portia-content-last-success-v1";
 const employeesCacheStorageKey = "portia-employees-last-success-v1";
 // v2: the icon grid step grew with the new icon wells, so v1 positions would overlap.
 const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v2";
+const taskbarOrderStorageKey = "portia-taskbar-order-v1";
+const TASKBAR_BOUNCE_MS = 520;
 
 type ContentResponse = {
   content?: PortiaContent;
@@ -246,6 +248,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [shortcutPositions, setShortcutPositions] = useState<Partial<Record<DesktopShortcutId, ShortcutPosition>>>({});
   const [shortcutPositionsLoaded, setShortcutPositionsLoaded] = useState(false);
   const [desktopSettingsLoaded, setDesktopSettingsLoaded] = useState(false);
+  const [taskbarOrder, setTaskbarOrder] = useState<AppId[]>(() => Object.keys(appMeta) as AppId[]);
+  const [taskbarOrderLoaded, setTaskbarOrderLoaded] = useState(false);
+  const [bouncingApps, setBouncingApps] = useState<Partial<Record<AppId, boolean>>>({});
+  const bounceTimers = useRef<Partial<Record<AppId, number>>>({});
+  const taskbarDrag = useRef<null | { app: AppId; pointerId: number; startX: number; grabX: number; moved: boolean }>(null);
+  const suppressTaskbarClick = useRef(false);
   const [settingsSavedVisible, setSettingsSavedVisible] = useState(false);
   const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
@@ -444,7 +452,26 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     if (assistantAutomaticTimer.current) window.clearTimeout(assistantAutomaticTimer.current);
     if (settingsSavedTimer.current) window.clearTimeout(settingsSavedTimer.current);
     Object.values(exitTimers.current).forEach((timer) => window.clearTimeout(timer));
+    Object.values(bounceTimers.current).forEach((timer) => window.clearTimeout(timer));
   }, []);
+
+  // Taskbar order: only known apps, each once; apps missing from the saved list keep their default place at the end.
+  useEffect(() => {
+    let saved: unknown = [];
+    try { saved = JSON.parse(window.localStorage.getItem(taskbarOrderStorageKey) ?? "[]"); } catch {}
+    const known = Object.keys(appMeta) as AppId[];
+    const restored = Array.isArray(saved) ? [...new Set(saved.filter((id): id is AppId => known.includes(id as AppId)))] : [];
+    const timer = window.setTimeout(() => {
+      setTaskbarOrder([...restored, ...known.filter((id) => !restored.includes(id))]);
+      setTaskbarOrderLoaded(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!taskbarOrderLoaded) return;
+    try { window.localStorage.setItem(taskbarOrderStorageKey, JSON.stringify(taskbarOrder)); } catch {}
+  }, [taskbarOrder, taskbarOrderLoaded]);
 
   useEffect(() => {
     assistantContentRef.current = content;
@@ -572,7 +599,57 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     setActiveApp(appId);
   };
 
+  // Taskbar entries are dragged with a mouse or pen; touch keeps scrolling the phone taskbar.
+  // The entry follows the pointer and the order changes on release, so pointer capture is never lost to a DOM move.
+  const beginTaskbarDrag = (app: AppId) => (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === "touch" || event.button !== 0) return;
+    taskbarDrag.current = { app, pointerId: event.pointerId, startX: event.clientX, grabX: 0, moved: false };
+  };
+
+  const moveTaskbarDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = taskbarDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag.moved) {
+      if (Math.abs(event.clientX - drag.startX) < 5) return;
+      drag.moved = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.currentTarget.classList.add("is-reordering");
+    }
+    event.currentTarget.style.translate = `${event.clientX - drag.startX}px 0`;
+  };
+
+  const endTaskbarDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = taskbarDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    taskbarDrag.current = null;
+    if (!drag.moved) return;
+    const button = event.currentTarget;
+    button.style.translate = "";
+    button.classList.remove("is-reordering");
+    // The click that follows a drag must not minimise or focus the window.
+    suppressTaskbarClick.current = event.type === "pointerup";
+    const others = [...(button.parentElement?.querySelectorAll<HTMLElement>("[data-taskbar-app]") ?? [])].filter((element) => element !== button);
+    const before = others.find((element) => { const rect = element.getBoundingClientRect(); return event.clientX < rect.left + rect.width / 2; })?.dataset.taskbarApp as AppId | undefined;
+    setTaskbarOrder((order) => {
+      const without = order.filter((id) => id !== drag.app);
+      const index = before ? without.indexOf(before) : without.length;
+      return [...without.slice(0, index), drag.app, ...without.slice(index)];
+    });
+  };
+
+  // Dock-style: the taskbar entry hops once when its window appears.
+  const bounceTaskbarEntry = (appId: AppId) => {
+    const previous = bounceTimers.current[appId];
+    if (previous) window.clearTimeout(previous);
+    setBouncingApps((current) => ({ ...current, [appId]: true }));
+    bounceTimers.current[appId] = window.setTimeout(() => {
+      delete bounceTimers.current[appId];
+      setBouncingApps((current) => ({ ...current, [appId]: false }));
+    }, TASKBAR_BOUNCE_MS);
+  };
+
   const openApp = (appId: AppId, origin?: OpenOrigin) => {
+    if (!windows[appId].open || windows[appId].minimized || windows[appId].exiting) bounceTaskbarEntry(appId);
     // Re-opening a window while it closes or minimises cancels the exit and keeps it.
     const pendingExit = exitTimers.current[appId];
     if (pendingExit) {
@@ -1029,7 +1106,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         <footer className="taskbar">
           <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
           <div className="taskbar-apps" aria-label="Открытые программы">
-            {(Object.keys(appMeta) as AppId[]).filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}`} type="button" onClick={(event) => windows[app].minimized ? openApp(app, originOf(event.currentTarget, "taskbar")) : activeApp === app ? minimizeApp(app) : focusApp(app)}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>)}
+            {taskbarOrder.filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onClick={(event) => {
+              if (suppressTaskbarClick.current) { suppressTaskbarClick.current = false; return; }
+              if (windows[app].minimized) openApp(app, originOf(event.currentTarget, "taskbar"));
+              else if (activeApp === app) minimizeApp(app);
+              else focusApp(app);
+            }}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>)}
           </div>
           
         </footer>
@@ -1147,7 +1229,7 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
     onClick: handleClick,
     onDragStart: (event: React.DragEvent<HTMLElement>) => event.preventDefault(),
   };
-  const content = <><span className="desktop-icon-symbol"><PortiaIcon name={icon} />{badge && <i className="desktop-icon-badge" aria-label="Есть новая сводка" />}</span><span>{label}</span></>;
+  const content = <><span data-icon={icon} className="desktop-icon-symbol"><PortiaIcon name={icon} />{badge && <i className="desktop-icon-badge" aria-label="Есть новая сводка" />}</span><span>{label}</span></>;
 
   return <button {...sharedProps} type="button">{content}</button>;
 }
