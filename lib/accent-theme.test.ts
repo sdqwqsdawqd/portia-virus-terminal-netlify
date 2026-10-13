@@ -80,7 +80,7 @@ const themes = Object.fromEntries(["ice", "amber", "red"].map((id) => [id, theme
 const swatch = (id: string) => css.match(new RegExp(`\\.swatch\\.${id}\\s*\\{[^}]*background:\\s*(#[0-9a-f]+)`, "i"))?.[1];
 
 // A literal is turquoise when its RGB chroma reaches MIN_CHROMA and its HSL hue is 150-195 deg.
-const MIN_CHROMA = 20;
+const MIN_CHROMA = 6;
 const LITERAL = /#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b|rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/g;
 // Tokens, theme blocks, swatches, canon classification colours, the success message and the rainbow picker keep their literals.
 const ROOT_KEEP = new Set(["--teal", "--teal-dim", "--teal-soft", "--desktop-glow", "--desktop-grid", "--desktop-base", "--desktop-deep", "--accent-hue", "--mark-filter", "--assistant-filter"]);
@@ -92,12 +92,12 @@ function hslHue([r, g, b]: Rgb) {
   const h = 60 * (max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4);
   return h < 0 ? h + 360 : h;
 }
-function turquoiseLiterals(text: string) {
+function turquoiseLiterals(text: string, minChroma = MIN_CHROMA) {
   const found: string[] = [];
   for (const m of text.matchAll(LITERAL)) {
     const rgb = m[1] ? hex(m[1].length === 4 ? m[1].slice(0, 3) : m[1].slice(0, 6)) : ([+m[2], +m[3], +m[4]] as Rgb);
     const hue = hslHue(rgb);
-    if (Math.max(...rgb) - Math.min(...rgb) >= MIN_CHROMA && hue >= 150 && hue <= 195) found.push(m[0]);
+    if (Math.max(...rgb) - Math.min(...rgb) >= minChroma && hue >= 150 && hue <= 195) found.push(m[0]);
   }
   return found;
 }
@@ -176,7 +176,8 @@ test("no turquoise literal in the components", () => {
     readFileSync(file, "utf8").split("\n").forEach((line, i) => {
       // Text colour presets in the editor are stored content colours, not interface.
       if (file.pathname.endsWith("portia-editor.tsx") && /value: "#[0-9a-f]{6}", label:/i.test(line)) return;
-      for (const literal of turquoiseLiterals(line)) left.push(`${file.pathname.split("/").slice(-2).join("/")}:${i + 1}: ${literal}`);
+      // Components keep the saturated threshold: near-neutral greys in TSX are content colours, not tints.
+      for (const literal of turquoiseLiterals(line, 20)) left.push(`${file.pathname.split("/").slice(-2).join("/")}:${i + 1}: ${literal}`);
     });
   }
   assert.deepEqual(left, []);
