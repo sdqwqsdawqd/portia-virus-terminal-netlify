@@ -477,6 +477,13 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
 
   const activateFormatter = (target: FormatTarget) => setFormatTarget(target);
 
+  const switchTab = (id: EditorTab) => {
+    setTab(id);
+    setPreviewSurface(id === "viruses" || id === "recycle" ? "light" : "dark");
+    setFormatTarget(null);
+    setFormatterOpen(false);
+  };
+
   const uploadImage = async (file: File, onUploaded: (url: string) => void) => {
     setUploadState("uploading");
     try {
@@ -561,7 +568,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
           ["employees", "Сотрудники"],
           ...(canManageEditors ? [["access", "Доступ"]] : []),
         ] as [EditorTab, string][]).map(([id, label]) => (
-          <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => { setTab(id); setPreviewSurface(id === "viruses" || id === "recycle" ? "light" : "dark"); setFormatTarget(null); setFormatterOpen(false); }}>{label}</button>
+          <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => switchTab(id)}>{label}</button>
         ))}
       </nav>
 
@@ -755,7 +762,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
                 });
                 setSelectedVirusId(selectedRecycledVirus.id);
                 setSelectedRecycledVirusId("");
-                setTab("viruses");
+                switchTab("viruses");
               }}
               onDelete={() => {
                 if (!window.confirm(`Удалить «${selectedRecycledVirus.name}» навсегда? Это действие нельзя отменить.`)) return;

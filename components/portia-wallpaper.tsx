@@ -175,9 +175,10 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
             <g className="wallpaper-gel-bands">
               {gel.bands.map((band, index) => <path key={`g${index}`} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight * 2.6, opacity: band.opacity * 0.08 }} />)}
               {gel.bands.map((band, index) => <path key={index} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight, opacity: band.opacity * 0.42 }} />)}
-            </g>
-            <g className="wallpaper-gel-labels">
-              {gel.ladder.map((label, index) => <text key={label} x={gel.left - 12} y={gel.ladderY[index] + 4}>{label}</text>)}
+              {/* The size labels run with the bands, so each stays beside its ladder band. */}
+              <g className="wallpaper-gel-labels">
+                {gel.ladder.map((label, index) => <text key={label} x={gel.left - 12} y={gel.ladderY[index] + 4}>{label}</text>)}
+              </g>
             </g>
           </g>
         </g>

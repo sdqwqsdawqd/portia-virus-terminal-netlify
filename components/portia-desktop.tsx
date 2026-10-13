@@ -672,11 +672,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     taskbarDrag.current = null;
     const button = event.currentTarget;
     resetTaskbarButton(button);
-    if (!drag.moved || event.type !== "pointerup") return;
+    // Pointer capture sends the click here even when the press was released off the button.
+    const rect = button.getBoundingClientRect();
+    const releasedOutside = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+    if (event.type !== "pointerup" || (!drag.moved && !releasedOutside)) return;
     // The click that follows this drag must not minimise or focus the window; it fires right after
     // pointerup, so the flag only lives until the next task and can never swallow a later real click.
     suppressTaskbarClick.current = true;
     window.setTimeout(() => { suppressTaskbarClick.current = false; }, 0);
+    if (!drag.moved) return;
     const others = [...(button.parentElement?.querySelectorAll<HTMLElement>("[data-taskbar-app]") ?? [])].filter((element) => element !== button);
     const before = others.find((element) => { const rect = element.getBoundingClientRect(); return event.clientX < rect.left + rect.width / 2; })?.dataset.taskbarApp as AppId | undefined;
     setTaskbarOrder((order) => {
