@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: Редактор
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-10-13T23:10:46.817Z"
+stopped_at: Completed PORTIA-03-02-PLAN.md
+last_updated: "2026-10-13T23:17:38.870Z"
 last_activity: 2026-10-14
 last_activity_desc: Phase PORTIA-03 execution started
-state_head: ce9c7521e7da933466e3291afe487e5ae9afef18
+state_head: 73fca21f586ea7e55bc4610709480dc699352cde
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 14
-  completed_plans: 11
+  completed_plans: 12
   percent: 40
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 ## Current Position
 
 Phase: PORTIA-03 (Редактор) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Executing Phase PORTIA-03
 Last activity: 2026-10-14 — Phase PORTIA-03 execution started
 
@@ -46,6 +46,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 02]: 02-06: gel-a / cells-b rejected on the real desktop and redrawn in the web/DNA wallpaper language; badges extended to all seven classification lines; restore from the trash stays in the editor and no longer uses confirm() — User feedback at the 02-06 checkpoint; confirm() is answered 'no' without a dialog in embedded browsers
 - [Phase 03]: 03-01: ConfirmDialog is a native dialog opened with showModal() (top layer), default focus forced onto the safe button
 - [Phase 03]: 03-01: edit history ends at a successful save; edits typed during the save request keep draft and history
+- [Phase PORTIA-03]: 03-02: shortcut effect reads save/step through a ref (actionsRef); СОХРАНИТЬ in the close dialog closes only when save() resolved true
 
 ### Pending Todos
 
@@ -55,13 +56,12 @@ None — незакоммиченная работа закоммичена в P
 
 - ⚠️ [Phase 1] `.assistant-bubble > span` перекрывает корень текста помощника (межбуквенный интервал/интерлиньяж пузыря чуть отличаются от поля редактора) — не исправлено, см. 01-04-SUMMARY.
 - ⚠️ [Phase 1] Пресеты размера панели оформления (13/17/22/30) не совпадают с базовыми размерами большинства областей — фаза 5 (TEXT-01).
-- ⚠️ [Phase 2] «ПЕРЕМЕСТИТЬ В КОРЗИНУ» и «УДАЛИТЬ НАВСЕГДА» в редакторе всё ещё спрашивают confirm(): во встроенных браузерах они молча не срабатывают.
 - ⚠️ [Project] Проект лежит только во временной папке сессии Claude — перенести в постоянную папку.
 
 ## Session Continuity
 
-Last session: 2026-10-13T23:10:46.710Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-10-13T23:17:38.764Z
+Stopped at: Completed PORTIA-03-02-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -79,3 +79,4 @@ Resume file: None
 | Phase PORTIA-02 P05 | 40 min | 3 tasks | 2 files |
 | Phase 02 P06 | 90 min | 3 tasks | 5 files |
 | Phase 03 P01 | 15 min | 3 tasks | 6 files |
+| Phase PORTIA-03 P02 | 5 min | 2 tasks | 4 files |
