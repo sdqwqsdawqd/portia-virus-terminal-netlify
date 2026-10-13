@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { accentBootScript, accentIds } from "./accent-boot.ts";
 
 type Rgb = [number, number, number];
@@ -79,6 +79,29 @@ const themeBlock = (id: string) => declarations(css.match(new RegExp(`html\\[dat
 const themes = Object.fromEntries(["ice", "amber", "red"].map((id) => [id, themeBlock(id)]));
 const swatch = (id: string) => css.match(new RegExp(`\\.swatch\\.${id}\\s*\\{[^}]*background:\\s*(#[0-9a-f]+)`, "i"))?.[1];
 
+// A literal is turquoise when its RGB chroma reaches MIN_CHROMA and its HSL hue is 150-195 deg.
+const MIN_CHROMA = 20;
+const LITERAL = /#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b|rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/g;
+// Tokens, theme blocks, swatches, canon classification colours, the success message and the rainbow picker keep their literals.
+const ROOT_KEEP = new Set(["--teal", "--teal-dim", "--teal-soft", "--desktop-glow", "--desktop-grid", "--desktop-base", "--desktop-deep", "--accent-hue", "--mark-filter", "--assistant-filter"]);
+const SKIP_SELECTORS = ["html[data-accent=", ".swatch.", ".class-cell.level-", ".class-cell.transmission strong", ".classification-select-wrap > strong", ".classification-select-wrap.level-", ".owner-login-success", ".custom-hue input"];
+
+function hslHue([r, g, b]: Rgb) {
+  const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
+  if (!d) return 0;
+  const h = 60 * (max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4);
+  return h < 0 ? h + 360 : h;
+}
+function turquoiseLiterals(text: string) {
+  const found: string[] = [];
+  for (const m of text.matchAll(LITERAL)) {
+    const rgb = m[1] ? hex(m[1].length === 4 ? m[1].slice(0, 3) : m[1].slice(0, 6)) : ([+m[2], +m[3], +m[4]] as Rgb);
+    const hue = hslHue(rgb);
+    if (Math.max(...rgb) - Math.min(...rgb) >= MIN_CHROMA && hue >= 150 && hue <= 195) found.push(m[0]);
+  }
+  return found;
+}
+
 test("every theme defines the accent tokens and both PNG filters", () => {
   for (const [id, tokens] of Object.entries(themes)) {
     for (const name of ["--teal", "--teal-dim", "--teal-soft", "--desktop-glow", "--desktop-grid", "--accent-hue", "--mark-filter", "--assistant-filter"]) {
@@ -129,6 +152,49 @@ test("black, white and grey survive every filter", () => {
 test("theme swatches match their themes", () => {
   assert.equal(swatch("teal"), root.get("--teal"));
   for (const [id, tokens] of Object.entries(themes)) assert.equal(swatch(id), tokens.get("--teal"));
+});
+
+test("no turquoise literal left in the stylesheet", () => {
+  const left: string[] = [];
+  for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (SKIP_SELECTORS.some((s) => selector.includes(s))) continue;
+    const isRoot = /(^|[\s,]):root\s*$/.test(selector);
+    for (const [, name, value] of body.matchAll(/(--[\w-]+|[\w-]+)\s*:\s*([^;]*)/g)) {
+      if (isRoot && ROOT_KEEP.has(name)) continue;
+      for (const literal of turquoiseLiterals(value)) left.push(`${selector.trim()}: ${literal}`);
+    }
+  }
+  assert.deepEqual(left, []);
+});
+
+test("no turquoise literal in the components", () => {
+  const sources = (dir: URL): URL[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? sources(new URL(`${e.name}/`, dir)) : /\.tsx?$/.test(e.name) ? [new URL(e.name, dir)] : []);
+  const components = readdirSync(new URL("../components/", import.meta.url)).filter((f) => f.endsWith(".tsx")).map((f) => new URL(`../components/${f}`, import.meta.url));
+  const left: string[] = [];
+  for (const file of [...components, ...sources(new URL("../app/", import.meta.url))]) {
+    readFileSync(file, "utf8").split("\n").forEach((line, i) => {
+      // Text colour presets in the editor are stored content colours, not interface.
+      if (file.pathname.endsWith("portia-editor.tsx") && /value: "#[0-9a-f]{6}", label:/i.test(line)) return;
+      for (const literal of turquoiseLiterals(line)) left.push(`${file.pathname.split("/").slice(-2).join("/")}:${i + 1}: ${literal}`);
+    });
+  }
+  assert.deepEqual(left, []);
+});
+
+test("Portia tints stay in gamut and in the teal family", () => {
+  for (const [whole, l, c] of css.matchAll(/oklch\(([\d.]+) ([\d.]+) var\(--accent-hue\)/g)) {
+    const rgb = oklchToRgb(Number(l), Number(c), 180.4);
+    assert.ok(rgb.every((v) => v >= -1 && v <= 256), `${whole} leaves sRGB at the Portia hue`);
+    if (Number(c) >= 0.02) {
+      const hue = hslHue(rgb.map((v) => Math.min(255, Math.max(0, v))) as Rgb);
+      assert.ok(hue >= 150 && hue <= 195, `${whole} renders at HSL hue ${hue.toFixed(1)}`);
+    }
+  }
+});
+
+test("no relative colour syntax", () => {
+  assert.doesNotMatch(css, /oklch\(\s*from\b/);
 });
 
 test("the boot script applies only a whitelisted saved accent", () => {
