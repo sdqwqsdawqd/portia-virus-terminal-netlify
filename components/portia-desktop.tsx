@@ -20,16 +20,17 @@ const embeddedApps = {
   sheet: { src: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/htmlview?widget=true&headers=false", external: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" },
   charter: { src: "https://sdqwqsdawqd.github.io/S.E-Portia/", external: "https://sdqwqsdawqd.github.io/S.E-Portia/" },
 } as const;
-// Where a window appears from: a desktop icon (zoom) or its taskbar button (genie in reverse).
+// Where a window appears from: a desktop icon (zoom) or its taskbar button (scales back out of it).
 type OpenOrigin = { x: number; y: number; kind: "icon" | "taskbar" };
 type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number; geometry?: WindowGeometry; exiting?: "close" | "minimize"; openOrigin?: OpenOrigin };
 const originOf = (element: Element, kind: OpenOrigin["kind"]): OpenOrigin => {
   const rect = element.getBoundingClientRect();
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, kind };
 };
-// Must equal the window-close and window-genie durations in app/portia.css.
+// Must equal the window-close / window-minimize (full motion) and window-fade-out (reduced) durations in app/portia.css.
 const WINDOW_CLOSE_MS = 160;
-const WINDOW_MINIMIZE_MS = 320;
+const WINDOW_MINIMIZE_MS = 280;
+const WINDOW_FADE_OUT_MS = 120;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string };
 type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
@@ -711,16 +712,14 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         .sort((a, b) => windows[b].z - windows[a].z)[0];
       setActiveApp(fallback ?? "archive");
     }
-    if (document.documentElement.dataset.motion === "reduce") {
-      finishExit(appId, kind);
-      return;
-    }
+    // Reduced motion still gets a short fade, so the window visibly leaves instead of vanishing.
+    const duration = document.documentElement.dataset.motion === "reduce" ? WINDOW_FADE_OUT_MS : kind === "close" ? WINDOW_CLOSE_MS : WINDOW_MINIMIZE_MS;
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], exiting: kind } }));
     // A timer, not animationend: in a hidden tab the animation event may never fire.
     exitTimers.current[appId] = window.setTimeout(() => {
       delete exitTimers.current[appId];
       finishExit(appId, kind);
-    }, kind === "close" ? WINDOW_CLOSE_MS : WINDOW_MINIMIZE_MS);
+    }, duration);
   };
 
   const closeApp = (appId: AppId) => requestExit(appId, "close");
@@ -988,7 +987,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <div className="browser-footer"><span><i className="status-dot" />СИНХРОНИЗИРОВАНО</span><span>РЕВИЗИЯ {String(revision).padStart(2, "0")}</span></div>
               </aside>
               <article className="record-view" aria-live="polite">
-                {!contentReady ? <LoadingState label="Загрузка досье…" /> : activeVirus ? openLog ? <ScientistDocument virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} /> : <div className="record-empty empty-state"><PortiaIllustration name="dish" /><strong>В базе пока нет вирусов</strong></div>}
+                {!contentReady ? <LoadingState label="Загрузка досье…" /> : activeVirus ? openLog ? <ScientistDocument key={openLog} virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} /> : <div className="record-empty empty-state"><PortiaIllustration name="dish" /><strong>В базе пока нет вирусов</strong></div>}
               </article>
             </div>
           </AppWindow>
@@ -1007,7 +1006,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <footer>СИНХРОНИЗАЦИЯ: {employeesSyncedAt ? new Date(employeesSyncedAt).toLocaleString("ru-RU") : "ОЖИДАНИЕ"}</footer>
               </aside>
               <article className="personnel-profile">
-                {!employeesReady ? <LoadingState label="Загрузка профиля…" /> : selectedEmployee ? <div className="personnel-profile-body" key={selectedEmployee.id}>
+                {!employeesReady ? <LoadingState label="Загрузка профиля…" /> : selectedEmployee ? <div className="personnel-profile-body content-fade" key={selectedEmployee.id}>
                   <header className="personnel-profile-head">
                     <div className="personnel-avatar-stage">
                       <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
@@ -1045,7 +1044,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <AppWindow app="info" state={windows.info} active={activeApp === "info"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window info-window" meta="АРХИВ ЗНАНИЙ">
             {!contentReady ? <LoadingState label="Загрузка разделов…" /> : <div className="info-library">
               <aside className="info-index">{content.infoSections.map((section, index) => <button key={section.id} type="button" className={section.id === selectedInfo?.id ? "active" : ""} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span></button>)}</aside>
-              <article className="info-document">{selectedInfo ? <><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></> : <div className="editor-empty">Разделов пока нет.</div>}</article>
+              <article className="info-document">{selectedInfo ? <div className="content-fade" key={selectedInfo.id}><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></div> : <div className="editor-empty">Разделов пока нет.</div>}</article>
             </div>}
           </AppWindow>
 
@@ -1078,10 +1077,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   })}
                   {!trashFiles.length && !recycledViruses.length && <div className="editor-empty empty-state"><PortiaIllustration name="flask" /><strong>Корзина пуста</strong></div>}
                 </div>
-                {activeTrashVirus && <div className="trash-viewer virus"><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} onOpenLog={() => undefined} /></div></div>}
-                {activeTrashFile && <div className={`trash-viewer ${activeTrashFile.kind}`}>
+                {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} onOpenLog={() => undefined} /></div></div>}
+                {activeTrashFile && <div className={`trash-viewer ${activeTrashFile.kind} doc-open`} key={activeTrashFile.id}>
                   <div className="trash-viewer-head"><div><span>ТОЛЬКО ДЛЯ ЧТЕНИЯ</span><strong>{activeTrashFile.name}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div>
-                  <div className="trash-viewer-body">
+                  <div className="trash-viewer-body doc-print">
                     {activeTrashFile.kind === "image" ? (
                       <figure className="trash-image-document">
                         {activeTrashFile.image ? <img src={activeTrashFile.image} alt={activeTrashFile.name} decoding="async" referrerPolicy="no-referrer" /> : <div className="trash-image-missing">ИЗОБРАЖЕНИЕ НЕДОСТУПНО</div>}
@@ -1383,9 +1382,9 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     if (resizeRef.current?.pointerId === event.pointerId) resizeRef.current = null;
   };
 
-  // Points the zoom / genie at its source. Offsets, not getBoundingClientRect, for the window:
+  // Points the zoom / minimise at its source. Offsets, not getBoundingClientRect, for the window:
   // during a restore the animation has already shrunk the rect.
-  const genieFromTaskbar = state.exiting === "minimize" || (state.openOrigin?.kind === "taskbar" && !state.exiting);
+  const towardTaskbar = state.exiting === "minimize" || (state.openOrigin?.kind === "taskbar" && !state.exiting);
   useLayoutEffect(() => {
     const element = windowRef.current;
     const parent = element?.offsetParent;
@@ -1393,15 +1392,14 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     const parentRect = parent.getBoundingClientRect();
     const box = { left: parentRect.left + element.offsetLeft - parent.scrollLeft, top: parentRect.top + element.offsetTop - parent.scrollTop, width: element.offsetWidth };
     let target: { x: number; y: number } | undefined = state.openOrigin?.kind === "icon" && !state.exiting ? state.openOrigin : undefined;
-    if (genieFromTaskbar) {
+    if (towardTaskbar) {
       const button = document.querySelector(`[data-taskbar-app="${app}"]`);
       if (button) target = originOf(button, "taskbar");
     }
     if (!target) return;
     const x = target.x - box.left;
     element.style.transformOrigin = `${Math.round(x)}px ${Math.round(target.y - box.top)}px`;
-    element.style.setProperty("--genie-x", `${Math.min(100, Math.max(0, (x / Math.max(1, box.width)) * 100)).toFixed(1)}%`);
-  }, [app, genieFromTaskbar, state.exiting, state.minimized, state.open, state.openOrigin]);
+  }, [app, towardTaskbar, state.exiting, state.minimized, state.open, state.openOrigin]);
 
   if (!state.open) return null;
   const geometryStyle = state.geometry && !state.maximized ? {
@@ -1426,7 +1424,7 @@ function VirusRecord({ virus, formattedText, onOpenLog }: { virus: Virus; format
     ["danger", "Общий уровень опасности", virus.classification.danger, "danger"], ["spread", "Распространение", virus.classification.spread, "spread"], ["transmission", "Способ распространения", virus.classification.transmission, "transmission"],
     ["escapeRisk", "Угроза и риск побега", virus.classification.escapeRisk, "escape"], ["mind", "Разум", virus.classification.mind, "mind"], ["appearance", "Вид / внешность", virus.classification.appearance, "appearance"], ["behavior", "Поведение", virus.classification.behavior, "behavior"],
   ] as const;
-  return <div className="record-body" key={virus.id}>
+  return <div className="record-body content-fade" key={virus.id}>
     <header className="record-header"><div><span className="record-code">{virus.code}</span><h2>{virus.name}</h2></div><div className="record-status"><span />{virus.status}</div></header>
     <div className="record-document">
       <section className="record-hero"><MediaBlock src={virus.infectedImage} alt={`Субъект после заражения вирусом ${virus.name}`} label="Фото после заражения" /><div className="classification-panel"><div className="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div><div className="classification-grid">{classification.map(([key, label, value, tone]) => { const level = classificationLevel(key, value); return <div className={`class-cell ${tone}${level ? ` level-${level}` : ""}`} key={label}><span>{label}</span><strong>{value}</strong>{level && <small>УРОВЕНЬ {level}</small>}</div>; })}</div></div></section>
@@ -1445,7 +1443,7 @@ function ScientistDocument({ virus, logId, onBack }: { virus: Virus; logId: stri
   if (!log) return null;
   const isOpen = log.lockedLevel <= 2;
   const level = log.lockedLevel;
-  return <article className="archive-document-view"><header className="archive-document-bar"><button type="button" onClick={onBack}>ВЕРНУТЬСЯ</button><span>PORTIA / АРХИВ / УРОВЕНЬ {roman(level)}</span></header><div className="archive-document-paper"><div className="archive-document-stamp">{isOpen ? "ДОПУСК РАЗРЕШЁН" : "ДОПУСК ОТКЛОНЁН"}</div><div className="archive-document-code">PORTIA://VIRUS_ARCHIVE/{virus.code}/LOGS/{log.id}</div><h1>{log.title}</h1><dl className="archive-document-meta"><div><dt>ОБЪЕКТ</dt><dd>{virus.name} / {virus.code}</dd></div><div><dt>УЧЁНЫЙ</dt><dd>{log.scientist}</dd></div><div><dt>УРОВЕНЬ</dt><dd>{roman(level)}</dd></div></dl>{isOpen ? <section className="archive-document-section"><h2>ТЕКСТ ЗАПИСИ</h2><ScientistRichText log={log} /></section> : <section className="archive-document-section restricted-document"><div className="restriction-mark">ДОСТУП ОГРАНИЧЕН</div><h2>НЕДОСТАТОЧНЫЙ УРОВЕНЬ ДОСТУПА</h2><p>Текущий уровень: II. Для чтения этого документа требуется уровень {roman(level)}.</p><RedactedDocument log={log} /></section>}<footer><span>ВНУТРЕННИЙ АРХИВ PORTIA</span><span>ЗАПРЕЩЕНО РАСПРОСТРАНЯТЬ</span></footer></div></article>;
+  return <article className="archive-document-view doc-open"><header className="archive-document-bar"><button type="button" onClick={onBack}>ВЕРНУТЬСЯ</button><span>PORTIA / АРХИВ / УРОВЕНЬ {roman(level)}</span></header><div className="archive-document-paper doc-print"><div className="archive-document-stamp">{isOpen ? "ДОПУСК РАЗРЕШЁН" : "ДОПУСК ОТКЛОНЁН"}</div><div className="archive-document-code">PORTIA://VIRUS_ARCHIVE/{virus.code}/LOGS/{log.id}</div><h1>{log.title}</h1><dl className="archive-document-meta"><div><dt>ОБЪЕКТ</dt><dd>{virus.name} / {virus.code}</dd></div><div><dt>УЧЁНЫЙ</dt><dd>{log.scientist}</dd></div><div><dt>УРОВЕНЬ</dt><dd>{roman(level)}</dd></div></dl>{isOpen ? <section className="archive-document-section"><h2>ТЕКСТ ЗАПИСИ</h2><ScientistRichText log={log} /></section> : <section className="archive-document-section restricted-document"><div className="restriction-mark">ДОСТУП ОГРАНИЧЕН</div><h2>НЕДОСТАТОЧНЫЙ УРОВЕНЬ ДОСТУПА</h2><p>Текущий уровень: II. Для чтения этого документа требуется уровень {roman(level)}.</p><RedactedDocument log={log} /></section>}<footer><span>ВНУТРЕННИЙ АРХИВ PORTIA</span><span>ЗАПРЕЩЕНО РАСПРОСТРАНЯТЬ</span></footer></div></article>;
 }
 
 function scientistDocument(log: ScientistLog): RichTextDocument {

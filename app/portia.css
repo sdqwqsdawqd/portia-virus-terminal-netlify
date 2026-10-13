@@ -1098,8 +1098,6 @@ html[data-motion="reduce"] .wallpaper-helix { animation: none; }
 .boot-thread { position: absolute; left: 50%; bottom: calc(100% - 46px); width: 1px; height: 50vh; background: linear-gradient(transparent, var(--teal)); transform-origin: top; animation: thread-spin 900ms cubic-bezier(.16, 1, .3, 1) both; }
 @keyframes spider-descend { from { opacity: 0; transform: translateY(-46vh); } 70% { opacity: 1; } to { opacity: 1; transform: translateY(0); } }
 @keyframes thread-spin { from { transform: translateX(-50%) scaleY(0); } to { transform: translateX(-50%) scaleY(1); } }
-.app-window { animation: window-open 220ms cubic-bezier(.16, 1, .3, 1); }
-@keyframes window-open { from { opacity: 0; scale: .96; } to { opacity: 1; scale: 1; } }
 /* An exiting window takes no input; its animation runs only when motion is welcome. */
 .app-window.is-closing, .app-window.is-minimizing { pointer-events: none; }
 /* Loading indicator: appears only after 150ms, so data that is already here never flashes it.
@@ -1113,43 +1111,75 @@ html[data-motion="full"] .loading-spinner { animation: loading-spin 900ms linear
 @keyframes loader-appear { to { opacity: 1; } }
 @keyframes loading-spin { to { rotate: 360deg; } }
 
+/* ── Motion language ──────────────────────────────────────────────────────────
+   One set of timings and curves for the whole desktop. Entrances decelerate, exits accelerate and are shorter.
+   Full motion: windows scale from where they come from (icon, taskbar), documents print out top to bottom,
+   switched content cross-fades. Reduced motion keeps every state change visible as a short opacity fade and
+   drops movement; the global rule above cuts everything else. */
+:root {
+  --motion-press: 90ms;
+  --motion-fast: 160ms;
+  --motion-base: 240ms;
+  --motion-slow: 300ms;
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-in: cubic-bezier(.5, 0, .75, 0);
+}
+
 /* A taskbar entry being dragged to a new place (state, not motion). */
 .taskbar-app.is-reordering { z-index: 2; background: var(--teal-soft); border-color: rgba(var(--desktop-glow), .35); box-shadow: 0 8px 20px rgba(0,0,0,.4); cursor: grabbing; }
 
-/* Icons press in on click and spring back; the taskbar entry of a window that appears hops twice, Dock-style. */
-html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon, .mini-app-icon) { transition: border-color 130ms ease, color 130ms ease, transform 160ms cubic-bezier(.2,.8,.2,1), scale 260ms cubic-bezier(.3, 1.6, .5, 1); }
-html[data-motion="full"] :is(.desktop-icon:active .desktop-icon-symbol, .start-panel > button:active .start-panel-icon, .taskbar-app:active .mini-app-icon) { scale: .86; transition-duration: 130ms, 130ms, 160ms, 90ms; }
-html[data-motion="full"] .taskbar-app.is-bouncing .mini-app-icon { animation: taskbar-bounce 520ms cubic-bezier(.3, 0, .4, 1); }
-@keyframes taskbar-bounce { 0%, 50%, 100% { translate: 0 0; } 25% { translate: 0 -7px; } 72% { translate: 0 -3px; } }
+/* Windows. Default open (start menu, search): rise and settle. From a desktop icon: grow out of the icon.
+   Minimise: shrink into the taskbar button (macOS "Scale"); restore grows back out of it. Exit rules come last so they win. */
+.app-window { animation: window-open var(--motion-base) var(--ease-out); }
+html[data-motion="full"] .app-window.from-icon { animation: window-zoom 280ms var(--ease-out); }
+html[data-motion="full"] .app-window.from-taskbar { animation: window-restore var(--motion-slow) var(--ease-out); }
+html[data-motion="full"] .app-window.is-closing { animation: window-close var(--motion-fast) var(--ease-in) forwards; }
+html[data-motion="full"] .app-window.is-minimizing { animation: window-minimize 280ms var(--ease-in) forwards; }
+html[data-motion="reduce"] .app-window { animation: fade-in 160ms ease-out !important; }
+html[data-motion="reduce"] .app-window:is(.is-closing, .is-minimizing) { animation: fade-out 120ms ease-in forwards !important; }
+@keyframes window-open { from { opacity: 0; scale: .97; translate: 0 10px; } }
+@keyframes window-zoom { from { opacity: 0; scale: .5; } 60% { opacity: 1; } }
+@keyframes window-restore { from { opacity: 0; scale: .12; } 50% { opacity: 1; } }
+@keyframes window-close { to { opacity: 0; scale: .96; } }
+@keyframes window-minimize { 40% { opacity: 1; } to { opacity: 0; scale: .12; } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
 
-/* Hover, pointer devices only: strokes redraw, the virus twists and settles (it is not 4-fold symmetric), broadcasts pulse. */
+/* Documents (Корзина files, scientist logs): the viewer settles in while the page feeds out top to bottom, like a terminal printout. */
+html[data-motion="full"] .doc-open { animation: doc-open var(--motion-base) var(--ease-out); }
+html[data-motion="full"] .doc-print { animation: doc-print 380ms 60ms var(--ease-out) backwards; }
+html[data-motion="reduce"] .doc-open { animation: fade-in 160ms ease-out !important; }
+@keyframes doc-open { from { opacity: 0; translate: 0 12px; } }
+@keyframes doc-print { from { clip-path: inset(0 0 100% 0); opacity: .4; } }
+
+/* Switching a record, profile or section: a short cross-fade, no movement, in both modes. */
+.content-fade { animation: fade-in var(--motion-fast) ease-out; }
+html[data-motion="reduce"] .content-fade { animation-duration: var(--motion-fast) !important; }
+
+/* Feedback. Icons press in and come back without overshoot; a window that appears makes its taskbar entry hop once. */
+html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon, .mini-app-icon) { transition: border-color 130ms ease, color 130ms ease, transform var(--motion-fast) var(--ease-out), scale var(--motion-fast) var(--ease-out); }
+html[data-motion="full"] :is(.desktop-icon:active .desktop-icon-symbol, .start-panel > button:active .start-panel-icon, .taskbar-app:active .mini-app-icon) { scale: .93; transition-duration: 130ms, 130ms, var(--motion-press), var(--motion-press); }
+html[data-motion="full"] .taskbar-app.is-bouncing .mini-app-icon { animation: taskbar-hop 380ms; }
+@keyframes taskbar-hop {
+  0% { translate: 0 0; animation-timing-function: cubic-bezier(.2, .6, .35, 1); }
+  42% { translate: 0 -6px; animation-timing-function: cubic-bezier(.55, 0, .8, .4); }
+  100% { translate: 0 0; }
+}
+
+/* Hover, pointer devices only: the glyph grows a little; the virus also turns and settles (it is not 4-fold symmetric). */
+html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg { transition: scale var(--motion-fast) var(--ease-out); }
 @media (hover: hover) {
-  html[data-motion="full"] :is(.desktop-icon:hover .desktop-icon-symbol, .start-panel > button:hover .start-panel-icon) svg :is(path, circle, rect, ellipse) { stroke-dasharray: 80; animation: icon-draw 240ms ease-out; }
-  html[data-motion="full"] .desktop-icon:hover .desktop-icon-symbol[data-icon="virus"] svg { animation: icon-twist 240ms cubic-bezier(.2, .7, .3, 1); }
-  html[data-motion="full"] .desktop-icon:hover .desktop-icon-symbol[data-icon="broadcasts"] svg { animation: icon-pulse 220ms ease-out; }
+  html[data-motion="full"] :is(.desktop-icon:hover .desktop-icon-symbol, .start-panel > button:hover .start-panel-icon) svg { scale: 1.08; }
+  html[data-motion="full"] .desktop-icon:hover .desktop-icon-symbol[data-icon="virus"] svg { animation: icon-twist 420ms var(--ease-out); }
 }
-@keyframes icon-draw { from { stroke-dashoffset: 80; } to { stroke-dashoffset: 0; } }
-@keyframes icon-twist { 50% { rotate: 18deg; } }
-@keyframes icon-pulse { 50% { scale: 1.1; } }
+@keyframes icon-twist { 35% { rotate: 14deg; } }
 
-/* macOS-like: zoom out of the desktop icon, genie into / out of the taskbar button. Exit rules come last so they win. */
-html[data-motion="full"] .app-window.from-icon { animation: window-open-icon 260ms cubic-bezier(.16, 1, .3, 1); }
-html[data-motion="full"] .app-window.from-taskbar { animation: window-genie 300ms cubic-bezier(.2, .8, .2, 1) reverse both; }
-html[data-motion="full"] .app-window.is-closing { animation: window-close 160ms cubic-bezier(.4, 0, 1, 1) forwards; }
-html[data-motion="full"] .app-window.is-minimizing { animation: window-genie 320ms cubic-bezier(.55, 0, .7, .4) forwards; }
-@keyframes window-close { to { opacity: 0; scale: .92; } }
-@keyframes window-open-icon { from { opacity: 0; scale: .1; } }
-/* CSS approximation of the genie: the bottom edge narrows toward the button (--genie-x) while the window sinks into it. */
-@keyframes window-genie {
-  0% { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); scale: 1; opacity: 1; }
-  45% { clip-path: polygon(0 0, 100% 0, calc(var(--genie-x, 50%) + 9%) 100%, calc(var(--genie-x, 50%) - 9%) 100%); scale: .92 .78; opacity: 1; }
-  100% { clip-path: polygon(calc(var(--genie-x, 50%) - 3%) 0, calc(var(--genie-x, 50%) + 3%) 0, calc(var(--genie-x, 50%) + 1%) 100%, calc(var(--genie-x, 50%) - 1%) 100%); scale: .05; opacity: 0; }
-}
+/* Boot under reduced motion: the spider and thread appear in place instead of descending. */
+html[data-motion="reduce"] :is(.boot-core > .portia-mark, .boot-thread) { animation: fade-in 200ms ease-out !important; }
 .empty-state { display: grid; justify-items: center; gap: 8px; padding: 40px 20px; color: oklch(.742 .025 var(--accent-hue)); text-align: center; }
 .empty-state svg { width: 96px; height: 96px; margin-bottom: 6px; color: var(--teal); opacity: .85; }
 .empty-state strong { color: oklch(.945 .01 var(--accent-hue)); font: 600 16px var(--sans); letter-spacing: 0; }
 .empty-state span { max-width: 36ch; font: 400 13.5px/1.5 var(--sans); letter-spacing: 0; }
-html[data-motion="reduce"] :is(.boot-core > .portia-mark, .boot-thread, .app-window) { animation: none; }
 .record-empty.empty-state strong { color: var(--ink); }
 .record-empty.empty-state span { color: var(--ink-soft); }
 .record-empty.empty-state svg { color: var(--teal-dim); }
