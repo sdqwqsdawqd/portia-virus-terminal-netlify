@@ -6,6 +6,7 @@ import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleF
 import type { PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
+import { accentIds, motionModes } from "@/lib/accent-boot";
 import { fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 
 const PortiaEditor = dynamic(
@@ -37,6 +38,13 @@ type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "in
 type ShortcutPosition = { x: number; y: number };
 
 const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "system" };
+// Every value a setting may hold; the same ids the «Настройки» groups offer.
+const settingValues: Record<keyof DesktopSettings, readonly string[]> = {
+  accent: accentIds,
+  wallpaper: ["radar", "grid", "gel", "cells", "quiet"],
+  iconSize: ["compact", "standard", "large"],
+  motion: motionModes,
+};
 
 const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName }> = {
   archive: { label: "База вирусов", path: "PORTIA://VIRUS_ARCHIVE", icon: "virus" },
@@ -256,7 +264,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [taskbarOrderLoaded, setTaskbarOrderLoaded] = useState(false);
   const [bouncingApps, setBouncingApps] = useState<Partial<Record<AppId, boolean>>>({});
   const bounceTimers = useRef<Partial<Record<AppId, number>>>({});
-  const taskbarDrag = useRef<null | { app: AppId; pointerId: number; startX: number; grabX: number; moved: boolean }>(null);
+  const taskbarDrag = useRef<null | { app: AppId; pointerId: number; startX: number; moved: boolean }>(null);
   const suppressTaskbarClick = useRef(false);
   const [settingsSavedVisible, setSettingsSavedVisible] = useState(false);
   const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
@@ -433,10 +441,19 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   }, [content]);
 
   useEffect(() => {
-    let parsed: Partial<DesktopSettings> = {};
-    try { parsed = JSON.parse(window.localStorage.getItem("portia-desktop-settings-v1") ?? "{}") ?? {}; } catch {}
+    // Stored settings are visitor-editable: keep only known values, field by field.
+    const restored: Partial<DesktopSettings> = {};
+    try {
+      const saved: unknown = JSON.parse(window.localStorage.getItem("portia-desktop-settings-v1") ?? "{}");
+      if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+        for (const key of Object.keys(settingValues) as (keyof DesktopSettings)[]) {
+          const value = (saved as Record<string, unknown>)[key];
+          if (typeof value === "string" && settingValues[key].includes(value)) restored[key] = value;
+        }
+      }
+    } catch {}
     const restoreTimer = window.setTimeout(() => {
-      setDesktopSettings((current) => ({ ...current, ...parsed }));
+      setDesktopSettings((current) => ({ ...current, ...restored }));
       setDesktopSettingsLoaded(true);
     }, 0);
     return () => window.clearTimeout(restoreTimer);
@@ -622,16 +639,28 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   // The entry follows the pointer and the order changes on release, so pointer capture is never lost to a DOM move.
   const beginTaskbarDrag = (app: AppId) => (event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.pointerType === "touch" || event.button !== 0) return;
-    taskbarDrag.current = { app, pointerId: event.pointerId, startX: event.clientX, grabX: 0, moved: false };
+    // Capture at once: the release always comes back here, even if the pointer left the button.
+    event.currentTarget.setPointerCapture(event.pointerId);
+    taskbarDrag.current = { app, pointerId: event.pointerId, startX: event.clientX, moved: false };
+  };
+
+  const resetTaskbarButton = (button: HTMLButtonElement) => {
+    button.style.translate = "";
+    button.classList.remove("is-reordering");
   };
 
   const moveTaskbarDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
     const drag = taskbarDrag.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
+    // A release we never saw (window lost focus): end the drag instead of following a free pointer.
+    if (!(event.buttons & 1)) {
+      taskbarDrag.current = null;
+      resetTaskbarButton(event.currentTarget);
+      return;
+    }
     if (!drag.moved) {
       if (Math.abs(event.clientX - drag.startX) < 5) return;
       drag.moved = true;
-      event.currentTarget.setPointerCapture(event.pointerId);
       event.currentTarget.classList.add("is-reordering");
     }
     event.currentTarget.style.translate = `${event.clientX - drag.startX}px 0`;
@@ -641,12 +670,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const drag = taskbarDrag.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     taskbarDrag.current = null;
-    if (!drag.moved) return;
     const button = event.currentTarget;
-    button.style.translate = "";
-    button.classList.remove("is-reordering");
-    // The click that follows a drag must not minimise or focus the window.
-    suppressTaskbarClick.current = event.type === "pointerup";
+    resetTaskbarButton(button);
+    if (!drag.moved || event.type !== "pointerup") return;
+    // The click that follows this drag must not minimise or focus the window; it fires right after
+    // pointerup, so the flag only lives until the next task and can never swallow a later real click.
+    suppressTaskbarClick.current = true;
+    window.setTimeout(() => { suppressTaskbarClick.current = false; }, 0);
     const others = [...(button.parentElement?.querySelectorAll<HTMLElement>("[data-taskbar-app]") ?? [])].filter((element) => element !== button);
     const before = others.find((element) => { const rect = element.getBoundingClientRect(); return event.clientX < rect.left + rect.width / 2; })?.dataset.taskbarApp as AppId | undefined;
     setTaskbarOrder((order) => {
@@ -713,7 +743,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   // Phase 3: the editor's unsaved-changes guard must run before an exit starts.
   const requestExit = (appId: AppId, kind: "close" | "minimize") => {
-    if (windows[appId].exiting) return;
+    // A repeat is ignored, but a close may overtake a minimise that is still playing.
+    const exiting = windows[appId].exiting;
+    if (exiting === kind || exiting === "close") return;
+    const pending = exitTimers.current[appId];
+    if (pending) window.clearTimeout(pending);
     if (activeApp === appId) {
       const fallback = (Object.keys(windows) as AppId[])
         .filter((id) => id !== appId && windows[id].open && !windows[id].minimized && !windows[id].exiting)
@@ -871,7 +905,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         assistantOffendedRef.current = false;
         setAssistantOffended(false);
         setAssistantTipVisible(false);
-        // She glances back over her shoulder before turning round (must match assistant-recover in portia.css).
+        // She glances back over her shoulder before turning round (must match vivian-recover in portia.css).
         setAssistantRecovering(true);
         assistantRecoverTimer.current = window.setTimeout(() => setAssistantRecovering(false), ASSISTANT_RECOVER_MS);
       }, 10000);
@@ -1139,9 +1173,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         <footer className="taskbar">
           <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
           <div className="taskbar-apps" aria-label="Открытые программы">
-            {taskbarOrder.filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onClick={(event) => {
+            {taskbarOrder.filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
               if (suppressTaskbarClick.current) { suppressTaskbarClick.current = false; return; }
-              if (windows[app].minimized) openApp(app, originOf(event.currentTarget, "taskbar"));
+              // A window on its way out comes back, like a minimised one.
+              if (windows[app].minimized || windows[app].exiting) openApp(app, originOf(event.currentTarget, "taskbar"));
               else if (activeApp === app) minimizeApp(app);
               else focusApp(app);
             }}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>)}
@@ -1424,7 +1459,7 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     const parent = element?.offsetParent;
     if (!element || !parent || state.minimized) return;
     const parentRect = parent.getBoundingClientRect();
-    const box = { left: parentRect.left + element.offsetLeft - parent.scrollLeft, top: parentRect.top + element.offsetTop - parent.scrollTop, width: element.offsetWidth };
+    const box = { left: parentRect.left + element.offsetLeft - parent.scrollLeft, top: parentRect.top + element.offsetTop - parent.scrollTop };
     let target: { x: number; y: number } | undefined = state.openOrigin?.kind === "icon" && !state.exiting ? state.openOrigin : undefined;
     if (towardTaskbar) {
       const button = document.querySelector(`[data-taskbar-app="${app}"]`);

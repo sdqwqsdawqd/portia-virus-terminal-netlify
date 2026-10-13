@@ -228,8 +228,13 @@ test("the motion setting overrides the system, and follows it by default", () =>
   assert.equal(runBoot(saved("on"), true).motion, "full");
   assert.equal(runBoot(saved("off"), false).motion, "reduce");
   assert.equal(runBoot(() => { throw new Error("storage blocked"); }, true).motion, "reduce");
-  // No motion rule may hide behind the bare media query: the attribute is the only switch.
-  assert.doesNotMatch(css, /@media\s*\(prefers-reduced-motion/);
+  // The attribute is the switch. The media query may only hold the fallback for a page where the head
+  // script never ran, so every selector inside it must be scoped to html:not([data-motion]).
+  for (const [, body] of css.matchAll(/@media\s*\(prefers-reduced-motion[^)]*\)\s*\{((?:[^{}]*\{[^{}]*\})*[^{}]*)\}/g)) {
+    for (const [, selectors] of body.matchAll(/([^{}]+)\{[^{}]*\}/g)) {
+      for (const selector of selectors.split(",")) assert.match(selector.trim(), /^html:not\(\[data-motion\]\)/, `unscoped motion rule: ${selector.trim()}`);
+    }
+  }
   const group = desktopSource.match(/title="Анимации" values=\{(\[\[.*?\]\])\}/)?.[1];
   assert.ok(group, "«Анимации» SettingGroup not found");
   assert.deepEqual([...motionModes], [...group.matchAll(/\['(\w+)',/g)].map((m) => m[1]));

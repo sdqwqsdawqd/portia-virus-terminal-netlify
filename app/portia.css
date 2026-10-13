@@ -1089,6 +1089,11 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
 
 /* Motion switch: html[data-motion] is "reduce" or "full", resolved from «Анимации» and the system setting (lib/accent-boot.ts). */
 html[data-motion="reduce"], html[data-motion="reduce"] *, html[data-motion="reduce"] *::before, html[data-motion="reduce"] *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+/* Safety net if the head script never ran (blocked by an extension or a future CSP): data-motion is missing,
+   so the system preference alone decides. Only selectors scoped to html:not([data-motion]) may live here. */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion]), html:not([data-motion]) *, html:not([data-motion]) *::before, html:not([data-motion]) *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
 
 .document-window { width: min(1180px, calc(100% - 170px)); height: min(760px, calc(100% - 42px)); }
 .document-app { position: relative; height: calc(100% - 46px); background: #f6f7f6; }
