@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: PORTIA-01-ispravlenie-bagov
 source: [01-VERIFICATION.md]
 started: 2026-10-13T00:00:00Z
@@ -63,10 +63,23 @@ blocked: 0
 ## Gaps
 
 - gap_id: G-PORTIA-01-5
-  truth: "Поля редактора, записи учёных и абзацы архива отображаются шрифтом IBM Plex Serif с кириллицей, вместо прежнего шрифта"
+  truth: "Каждое текстовое поле редактора показывает текст тем же шрифтом, каким этот текст выводится в соответствующей области сайта (WYSIWYG)"
+  clarification: "Пользователь уточнил ожидание: шрифт поля = «такой как в области сайта которую я редактирую». Live-проверка на localhost:3123: IBM Plex Serif загружен (400/600/700) и применён к .archive-document-section p, .scientist-rich-text, .formatted-rich-input; Georgia нет. Т.е. фикс FIX-03 технически применён, но не совпадает с ожиданием WYSIWYG."
   status: failed
   reason: "User reported: Да шрифт до сих пор остался таким как есть"
   severity: major
   test: 5
-  artifacts: []
-  missing: []
+  root_cause: "Single hard-coded font on every editor field: .formatted-rich-input uses font: 17px/1.65 var(--serif) (app/portia.css:467) for all 15 field types, while on the public site only the scientist log (.scientist-rich-text, portia.css:521) is serif; the other 14 display areas inherit Golos/--sans (body, portia.css:55) or set sans explicitly. FIX-03 swapped Georgia for IBM Plex Serif (serif for serif, commit 2be1417), so the user sees no change. Additionally the preview-light/dark toggle picks the font family by background (portia.css:470-471: light=serif, dark=--sans) instead of by area."
+  artifacts:
+    - path: "app/portia.css"
+      issue: "line 467: one var(--serif) for all .formatted-rich-input; lines 470-471: font family tied to preview surface colour"
+    - path: "components/portia-editor.tsx"
+      issue: "FormattedTextarea (1027-1080) has no area/surface variant; only class formatted-rich-input + preview-*; default size 17px (1130)"
+    - path: "app/portia.css"
+      issue: "line 375: .broadcast-card > span (0,1,1; 700 11px teal) overrides .broadcast-card-copy (380) so broadcast bodies render 11px bold teal — must be resolved before mirroring broadcasts"
+  missing:
+    - "Per-area font on each editor field (data-surface or prop, derivable from formatKey prefix: virus/scientist/info/broadcast/recycle/search/assistant) that mirrors the display selector of that area (.lead-copy, .metric-grid .formatted-content, .mutation-copy, .scientist-rich-text, .info-document-copy, .broadcast-card-copy, .trash-formatted-text / .trash-image-document figcaption, .search-recommendations button, .assistant-formatted-text)"
+    - "Share the area font through one token/selector list so the field follows the display area after phase 2 font changes (D-05..D-07), not a copied value"
+    - "Preview БЕЛЫЙ/ЧЁРНЫЙ toggle changes only colour/background, not font-family (drop font-family: var(--sans) at portia.css:471)"
+    - "Fix .broadcast-card > span overriding .broadcast-card-copy (portia.css:375)"
+  debug_session: .planning/debug/editor-field-font-wysiwyg.md
