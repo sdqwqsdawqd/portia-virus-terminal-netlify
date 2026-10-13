@@ -1086,6 +1086,14 @@ html[data-motion="reduce"], html[data-motion="reduce"] *, html[data-motion="redu
 .desktop-wallpaper { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; color: var(--teal); fill: none; stroke: currentColor; stroke-linecap: round; pointer-events: none; }
 .wallpaper-web path { stroke-width: 1; opacity: .26; stroke-dasharray: 1; stroke-dashoffset: 1; animation: web-draw 1.8s cubic-bezier(.16, 1, .3, 1) forwards; }
 .wallpaper-web .wallpaper-web-ring { opacity: .17; }
+/* Once spun, the web lives: it sways around its hub (top right) as if in a draught, and glints run
+   out along the threads. Slow and faint, like «Спирали ДНК»; only with motion on. */
+.wallpaper-web-pulses { display: none; }
+html[data-motion="full"] .wallpaper-web { transform-box: view-box; transform-origin: 1180px 170px; animation: web-sway 19s ease-in-out 1.8s infinite alternate; }
+html[data-motion="full"] .wallpaper-web-pulses { display: inline; }
+.wallpaper-web .wallpaper-web-pulses path { stroke-width: 1.6; opacity: .5; stroke-dasharray: .05 1; stroke-dashoffset: .05; animation: web-pulse 9s linear infinite; }
+@keyframes web-sway { from { rotate: -.5deg; } to { rotate: .7deg; scale: 1.006; } }
+@keyframes web-pulse { 0% { stroke-dashoffset: .05; } 38%, 100% { stroke-dashoffset: -1; } }
 @keyframes web-draw { to { stroke-dashoffset: 0; } }
 .wallpaper-helix { animation: helix-drift 22s ease-in-out infinite alternate; }
 .wallpaper-helix path { stroke-width: 1.5; }

@@ -64,6 +64,10 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
       : <g className="wallpaper-web">
           {web.spokePaths.map((d, index) => <path key={`s${index}`} d={d} pathLength={1} style={{ animationDelay: `${index * 40}ms` }} />)}
           {web.rings.map((d, index) => <path key={`r${index}`} d={d} pathLength={1} className="wallpaper-web-ring" style={{ animationDelay: `${600 + index * 70}ms` }} />)}
+          {/* After the web is spun, glints run out along the threads, each on its own beat. */}
+          <g className="wallpaper-web-pulses">
+            {web.spokePaths.map((d, index) => <path key={`p${index}`} d={d} pathLength={1} style={{ animationDelay: `${round(2 + ((index * 2.3) % 9))}s` }} />)}
+          </g>
         </g>}
   </svg>;
 }
