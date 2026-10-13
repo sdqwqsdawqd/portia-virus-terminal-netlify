@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Golos_Text, IBM_Plex_Serif, JetBrains_Mono, Unbounded } from "next/font/google";
+import { accentBootScript } from "@/lib/accent-boot";
 import "./globals.css";
 import "./portia.css";
 
@@ -29,6 +30,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru" className={`${golos.variable} ${unbounded.variable} ${jetbrains.variable} ${plexSerif.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: accentBootScript }} />
+      </head>
       <body>{children}</body>
     </html>
   );
