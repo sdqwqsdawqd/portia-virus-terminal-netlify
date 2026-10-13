@@ -1110,6 +1110,13 @@ html[data-motion="full"] .wallpaper-web-pulses { display: inline; }
 @keyframes helix-drift { from { transform: translateY(0); } to { transform: translateY(-80px); } }
 html[data-motion="reduce"] .wallpaper-web path { animation: none; stroke-dashoffset: 0; }
 html[data-motion="reduce"] .wallpaper-helix { animation: none; }
+/* «Дорожки геля»: static lanes, wells and scale; only the bands drift down slowly, like a gel still running. */
+.wallpaper-gel-wells { stroke-width: 1.4; opacity: .3; }
+.wallpaper-gel-walls { stroke-width: 1.2; opacity: .12; }
+.wallpaper-gel-scale { stroke-width: 1.2; opacity: .24; }
+.wallpaper-gel-bands path { stroke-linecap: butt; }
+html[data-motion="full"] .wallpaper-gel-bands { animation: gel-run 24s ease-in-out infinite alternate; }
+@keyframes gel-run { to { translate: 0 40px; } }
 
 /* The spider lowers itself on a silk thread while the terminal boots. */
 .boot-thread { position: absolute; left: 50%; bottom: calc(100% - 46px); width: 1px; height: 50vh; background: linear-gradient(transparent, var(--teal)); transform-origin: top; animation: thread-spin 900ms cubic-bezier(.16, 1, .3, 1) both; animation-play-state: paused; }
