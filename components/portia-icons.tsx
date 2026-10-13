@@ -2,7 +2,20 @@ import type { SVGProps } from "react";
 
 export type PortiaIconName =
   | "search" | "virus" | "employees" | "broadcasts" | "info"
-  | "settings" | "charter" | "sheet" | "trash" | "editor";
+  | "settings" | "charter" | "sheet" | "trash" | "editor"
+  | "class-hephaestus" | "class-proteus" | "class-apeiron"
+  | "class-nomos" | "class-theseus" | "class-abraxas"
+  | "class-warning" | "class-risk" | "class-esnov"
+  | "lock-open" | "lock-closed";
+
+// Classification badges (sketch #badges-b): one shape per class line, 1-3 inner marks for the level.
+const dangerShape = <path d="m12 3.2 7.6 4.4v8.8L12 20.8l-7.6-4.4V7.6Z" />;
+const spreadShape = <circle cx="12" cy="12" r="8.5" />;
+const escapeShape = <path d="M12 3.5 21 19.5H3Z" />;
+const dot = (x: number) => <circle key={x} cx={x} cy="12" r=".9" fill="currentColor" />;
+const chevron = (y: number) => <path key={y} d={`M10.2 ${y}l1.8-1.8 1.8 1.8`} />;
+// Access locks (sketch #locks-a): a padlock whose shackle swings aside when open.
+const lockBody = <><rect x="5" y="10.5" width="14" height="10" rx="2" /><circle cx="12" cy="14.6" r="1.3" /><path d="M12 15.9v2" /></>;
 
 // One 24px grid, one stroke weight; colour comes from the theme through currentColor.
 const iconPaths: Record<PortiaIconName, React.ReactNode> = {
@@ -57,7 +70,30 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
     <path d="M5 4v16M5 7h3M5 12h5M5 17h3" />
     <path d="m19.5 6.5-7.8 7.8-.9 3.1 3.1-.9 7.8-7.8a1.6 1.6 0 0 0-2.2-2.2Z" />
   </>,
+  "class-hephaestus": <>{dangerShape}<path d="M12 9v6" /></>,
+  "class-proteus": <>{dangerShape}<path d="M10 9v6M14 9v6" /></>,
+  "class-apeiron": <>{dangerShape}<path d="M8.6 9v6M12 9v6M15.4 9v6" /></>,
+  "class-nomos": <>{spreadShape}{[12].map(dot)}</>,
+  "class-theseus": <>{spreadShape}{[10, 14].map(dot)}</>,
+  "class-abraxas": <>{spreadShape}{[8.5, 12, 15.5].map(dot)}</>,
+  "class-warning": <>{escapeShape}{[16.4].map(chevron)}</>,
+  "class-risk": <>{escapeShape}{[14.4, 17.2].map(chevron)}</>,
+  "class-esnov": <>{escapeShape}{[12.6, 15.2, 17.8].map(chevron)}</>,
+  "lock-open": <>{lockBody}<path d="M8 10.5V7.5a4 4 0 0 1 7.7-1.6" /></>,
+  "lock-closed": <>{lockBody}<path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></>,
 };
+
+// The badge for each canonical term (lib/portia-content.ts). The badge sits beside the term, never instead of it.
+export const classificationIcon: Record<string, PortiaIconName> = {
+  "Гефест": "class-hephaestus", "Протей": "class-proteus", "Апейрон": "class-apeiron",
+  "Номос": "class-nomos", "Тезей": "class-theseus", "Абраксас": "class-abraxas",
+  "Предупреждение": "class-warning", "Риск": "class-risk", "Эснов": "class-esnov",
+};
+
+// Content values are editor input: own keys only, so "constructor" or "__proto__" never resolve to a prototype member.
+export function classificationIconFor(value: string): PortiaIconName | undefined {
+  return Object.hasOwn(classificationIcon, value) ? classificationIcon[value] : undefined;
+}
 
 export function PortiaIcon({ name, ...props }: { name: PortiaIconName } & SVGProps<SVGSVGElement>) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{iconPaths[name]}</svg>;
