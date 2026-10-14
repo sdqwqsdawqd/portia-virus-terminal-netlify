@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
+import { removeBroadcast, removeInfoSection, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
   portiaTextKey,
@@ -677,6 +678,12 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   });
 
   const activateFormatter = (target: FormatTarget) => setFormatTarget(target);
+  // The panel's stored commit for a deleted item would write its formatting back.
+  const closeFormatterFor = (key: string) => {
+    if (formatTarget?.key !== key) return;
+    setFormatTarget(null);
+    setFormatterOpen(false);
+  };
 
   // The format panel keeps a target in the tab being hidden; leaving it open could write old text back (Pitfall 7).
   const selectDossierTab = (id: DossierTab) => {
@@ -961,9 +968,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация».</p>
           {draft.infoSections.map((section, index) => (
             <div className="nested-editor-card" data-sort-index={index} key={section.id}>
-              <div className="nested-editor-head"><OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} /><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => { next.infoSections.splice(index, 1); })}>Удалить</button></div></div>
-              <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => { next.infoSections[index].title = event.target.value; })} /></Field>
-              <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => { next.infoSections[index].body = text; })} />
+              <div className="nested-editor-head"><OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} /><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id)); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div></div>
+              <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
+              <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
             </div>
           ))}
           <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.infoSections.push({ id: makeId("info"), title: "НОВЫЙ РАЗДЕЛ", body: "" }))}>+ ДОБАВИТЬ РАЗДЕЛ</button>
@@ -976,11 +983,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
           {draft.broadcasts.length === 0 && <div className="editor-empty">Сообщений пока нет. Создайте первое сообщение.</div>}
           {draft.broadcasts.map((broadcast, index) => (
             <div className="nested-editor-card" key={broadcast.id}>
-              <div className="nested-editor-head"><strong>СООБЩЕНИЕ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => changeDraft((next) => { next.broadcasts.splice(index, 1); })}>Удалить</button></div>
-              <Field label="Тип"><select value={broadcast.type} onChange={(event) => changeDraft((next) => { next.broadcasts[index].type = event.target.value as Broadcast["type"]; })}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
-              <Field label="Заголовок"><input value={broadcast.title} onChange={(event) => changeDraft((next) => { next.broadcasts[index].title = event.target.value; })} /></Field>
-              <FormattedTextarea area="broadcast" label="Текст" tall value={broadcast.body} document={draft.formattedText[portiaTextKey.broadcast(broadcast.id)]} formatKey={portiaTextKey.broadcast(broadcast.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.broadcast(broadcast.id), value, document, (next, text) => { next.broadcasts[index].body = text; })} />
-              <label className="publish-toggle"><input type="checkbox" checked={broadcast.published} onChange={(event) => changeDraft((next) => { next.broadcasts[index].published = event.target.checked; })} /><span>Показывать посетителям</span></label>
+              <div className="nested-editor-head"><strong>СООБЩЕНИЕ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.broadcast(broadcast.id)); changeDraft((next) => removeBroadcast(next, broadcast.id)); }}>Удалить</button></div>
+              <Field label="Тип"><select value={broadcast.type} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.type = event.target.value as Broadcast["type"]; }))}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
+              <Field label="Заголовок"><input value={broadcast.title} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.title = event.target.value; }))} /></Field>
+              <FormattedTextarea area="broadcast" label="Текст" tall value={broadcast.body} document={draft.formattedText[portiaTextKey.broadcast(broadcast.id)]} formatKey={portiaTextKey.broadcast(broadcast.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.broadcast(broadcast.id), value, document, (next, text) => updateById(next.broadcasts, broadcast.id, (item) => { item.body = text; }))} />
+              <label className="publish-toggle"><input type="checkbox" checked={broadcast.published} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.published = event.target.checked; }))} /><span>Показывать посетителям</span></label>
             </div>
           ))}
           <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.broadcasts.unshift({ id: makeId("broadcast"), type: "news", title: "", body: "", published: false }))}>+ НОВОЕ СООБЩЕНИЕ</button>
