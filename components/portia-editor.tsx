@@ -328,6 +328,12 @@ function selectionOffsets(root: HTMLElement) {
   return { start: beforeStart.toString().length, end: beforeEnd.toString().length };
 }
 
+// On a phone the list and the record swap places; bring the new half to the top (read after the next render).
+function revealOnPhone(ref: React.RefObject<HTMLElement | null>) {
+  if (!window.matchMedia("(max-width: 900px)").matches) return;
+  window.requestAnimationFrame(() => ref.current?.scrollIntoView({ block: "start" }));
+}
+
 function restoreSelection(root: HTMLElement, offsets: { start: number; end: number }) {
   if (window.document.activeElement !== root) return;
   const walker = window.document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -452,6 +458,13 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface>("light");
+  // At 900px and below a list + form layout shows either the list or the open record (D-01, D-02).
+  const [recordOpen, setRecordOpen] = useState(false);
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const showRecord = (open: boolean) => {
+    setRecordOpen(open);
+    revealOnPhone(layoutRef);
+  };
 
   // Falls back to the first record when the selected one is gone from `next`.
   const repairSelections = (next: PortiaContent) => {
@@ -513,6 +526,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
     });
     setSelectedVirusId(nextId);
     setSelectedRecycledVirusId(selectedVirus.id);
+    showRecord(false);
   };
 
   const deleteSelectedRecycledVirus = () => {
@@ -520,6 +534,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
     const nextId = draft.recycledViruses.find((virus) => virus.id !== selectedRecycledVirus.id)?.id ?? "";
     changeDraft((next) => { next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
     setSelectedRecycledVirusId(nextId);
+    showRecord(false);
   };
 
   const updateVirus = (updater: (virus: Virus) => void) => {
@@ -546,6 +561,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
 
   const switchTab = (id: EditorTab) => {
     setTab(id);
+    setRecordOpen(false);
     setPreviewSurface(id === "viruses" || id === "recycle" ? "light" : "dark");
     setFormatTarget(null);
     setFormatterOpen(false);
@@ -710,12 +726,13 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
       </div>
 
       {tab === "viruses" && (
-        <div className="virus-editor-layout">
+        <div className="virus-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>
+          <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
           <aside className="editor-record-list">
             {draft.viruses.map((virus, index) => (
               <div className="editor-record-row" data-sort-index={index} key={virus.id}>
                 <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.viruses, from, to))} />
-                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => setSelectedVirusId(virus.id)}>
+                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => { setSelectedVirusId(virus.id); showRecord(true); }}>
                   <strong>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small>{virus.code || "БЕЗ КОДА"}</small>
                 </button>
               </div>
@@ -724,6 +741,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
               const virus = blankVirus();
               changeDraft((next) => next.viruses.push(virus));
               setSelectedVirusId(virus.id);
+              showRecord(true);
             }}>+ ДОБАВИТЬ ВИРУС</button>
           </aside>
 
