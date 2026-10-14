@@ -2,151 +2,141 @@
 phase: PORTIA-03-redaktor
 reviewed: 2026-10-14T00:00:00Z
 depth: standard
-files_reviewed: 9
+files_reviewed: 1
 files_reviewed_list:
-  - lib/editor-history.ts
-  - lib/editor-history.test.ts
-  - lib/editor-changes.ts
-  - lib/editor-changes.test.ts
-  - lib/editor-shortcuts.ts
-  - lib/editor-shortcuts.test.ts
   - components/portia-editor.tsx
-  - components/portia-desktop.tsx
-  - app/portia.css
 findings:
   critical: 0
   warning: 3
-  info: 3
-  total: 6
+  info: 5
+  total: 8
 status: issues_found
 ---
 
-# Phase 3: Code Review Report
+# Phase 3: Code Review Report (re-review after fix iteration 1)
 
 **Reviewed:** 2026-10-14
-**Depth:** standard (diff `fa134b7..HEAD`, plus callers read in context)
-**Files Reviewed:** 9
+**Depth:** standard (diff `e43fc5e..HEAD`: 27deb85 WR-01, 9e845c0 WR-02, 616e707 WR-03; callers read in context, including `components/portia-desktop.tsx` `requestExit` and `saveContent`)
+**Files Reviewed:** 1
 **Status:** issues_found
 
 ## Summary
 
-The pure reducer, change detection and shortcut mapping are sound. I traced them against the editor and desktop callers and found no logic errors in the three `lib/` modules. `npm test` passes (72 of 72), `tsc --noEmit` is clean, and eslint reports 0 errors (only the pre-existing `<img>` warnings).
+All three fixes resolve the defects they targeted. `npx tsc --noEmit` is clean, `npm test` passes 72 of 72, and eslint on the file reports 0 errors (3 existing warnings).
 
-The defects are all in the editor component's glue code:
-- Selection repair after undo, redo or discard moves the Recycle selection to the wrong record.
-- Save-then-close can discard edits typed while the request is in flight.
-- The global drag marker can get stuck and swallow later edits into one undo step.
+How each fix holds up:
+- **Old WR-01 (Recycle selection re-pointed):** resolved. Every click, add and move-to-recycle path now keeps exactly one of the two ids set, and `repairSelections` no longer fills an empty id. Side effect: an empty id now stays empty for good, so the pane can show "Корзина пуста" next to a list full of records. See WR-01.
+- **Old WR-02 (close over unsaved edits):**
+  - Point 1 is resolved. The native modal makes the page inert, and `clean` compares the latest draft to `savedFrom`.
+  - Point 2 is resolved. СОХРАНИТЬ is disabled while `saveState === "saving"`.
+  - Point 3 is resolved. The close goes through `latest.current.onCloseApproved`, so `requestExit` sees fresh `windows` and `activeApp`.
+  - Two gaps remain: НЕ СОХРАНЯТЬ during an in-flight save (WR-02), and a narrow race with asynchronous draft changes (WR-03).
+- **Old WR-03 (stuck drag marker):** resolved. A primary `pointerup` or `pointercancel` anywhere, or a window `blur`, now calls `stop()`. `onPointerDown` ignores non-primary pointers and non-left buttons, and clears a previous timer and frame loop first. One unverified tracking gap remains (IN-05).
 
-None of these corrupts saved data on the server. WR-02 can silently lose local edits.
-
-## The `::highlight(portia-format)` build warning
-
-**Verdict: cosmetic. The rule works, but the build cannot minify or optimize it.** See IN-01.
+IN-01 to IN-03 are carried over from the previous review. They were out of the fix scope and are still present.
 
 ## Warnings
 
-### WR-01: undo, redo and discard re-point the Recycle selection at the wrong record
+### WR-01: the Recycle pane can say "Корзина пуста" while the list shows records, and now it never recovers on its own
 
-**File:** `components/portia-editor.tsx:528-532` (`repairSelections`), called from `step` (~580) and the discard dialog (~1120)
+**File:** `components/portia-editor.tsx:547-551` (`repairSelections`); also `:614-620` (`deleteSelectedRecycledVirus`), `:995-1004` (`onRestore`), `:1045-1048` (delete file), `:1051` (empty state)
 
-**Issue:** The Recycle tab holds a selection as two ids, and the UI assumes exactly one is non-empty. The record click handlers set the other to `""`. `repairSelections` treats `""` as "selected record is gone" and replaces it with the first record of its kind:
+**Issue:** The pair invariant is "exactly one id set", but several paths leave both ids `""` while records of the other kind exist:
+- Deleting the last file while archived viruses exist: `nextId` is `""` and the virus id is already `""`.
+- Deleting the last archived virus while files exist (`deleteSelectedRecycledVirus`).
+- Restoring an archived virus (`onRestore`): the virus id becomes `""`, and the file id was already `""` from the row click. Returning to the tab shows the empty state.
+- Undo, redo, discard, or a remote sync that removes the selected record when no record of its kind is left. The fixer already noted this case.
 
+The render then falls through to `<div className="editor-empty">Корзина пуста…</div>` next to a non-empty list.
+
+Before the fix, the next undo or the post-save `sync` refilled `""` with the first record, which hid the problem. Now `current === "" ? current` keeps both ids empty permanently. The pane stays wrong until the owner clicks a row.
+
+**Fix:** Repair the pair as a unit. Fall back to the first record in `recycleKeys` order only when neither id resolves. With two `useState`s, do it in one place after computing both:
 ```ts
-setSelectedRecycleFileId((current) => (next.recycleFiles.some((file) => file.id === current) ? current : next.recycleFiles[0]?.id ?? ""));
-setSelectedRecycledVirusId((current) => (next.recycledViruses?.some((virus) => virus.id === current) ? current : next.recycledViruses?.[0]?.id ?? ""));
+const repairRecycle = (next: PortiaContent, fileId: string, virusId: string) => {
+  if (next.recycleFiles.some((f) => f.id === fileId)) return { fileId, virusId: "" };
+  if ((next.recycledViruses ?? []).some((v) => v.id === virusId)) return { fileId: "", virusId };
+  const [kind, id = ""] = (recycleKeys(next)[0] ?? "").split(":");
+  return kind === "file" ? { fileId: id, virusId: "" } : { fileId: "", virusId: id };
+};
+```
+The cleaner option is to replace the two ids with one `recycleSelection: { kind: "file" | "virus"; id } | null` state, which removes the invariant altogether. Call the repair from `repairSelections` and from the three delete and restore paths.
+
+### WR-02: НЕ СОХРАНЯТЬ stays enabled during the dialog's save, and the save still lands
+
+**File:** `components/portia-editor.tsx:1176-1187`
+
+**Issue:** After СОХРАНИТЬ is clicked, only that button is disabled. НЕ СОХРАНЯТЬ is still active. Clicking it calls `onCloseApproved()` and closes the window at once, but the PUT from `saveContent` keeps running and commits the draft to the shared database. The button label promises the opposite of what happens.
+
+If that PUT then fails (ОШИБКА or conflict), the editor is already unmounted. No error is shown, and the edits are gone.
+
+**Fix:** While the dialog's save is in flight, disable НЕ СОХРАНЯТЬ too, or relabel it. The request cannot be cancelled after it is sent:
+```ts
+{ label: "НЕ СОХРАНЯТЬ", tone: "danger", disabled: saveState === "saving", onClick: … },
 ```
 
-Default content has three recycle files (`createVirusRecycleFiles`), so any Ctrl+Z, Redo, the ↶ button or the discard dialog triggers this.
+### WR-03: `clean` reads a ref that is refreshed only after commit, so an asynchronous draft change can still be lost on close
 
-Consequences, traced from the render code:
-- **A file is selected.** `selectedRecycledVirusId` becomes the first archived virus. The pane then renders `ArchivedVirusEditor` (`selectedRecycledVirus ? … : selectedRecycleFile ? …`) and the file editor disappears.
-- **An archived virus is selected.** `selectedRecycleFileId` becomes the first file. The virus row loses its `active` class (`&& !selectedRecycleFileId`) and the first file row lights up while the virus editor is still shown.
+**File:** `components/portia-editor.tsx:675-676`, `:718-720`
 
-The same code ran before on post-save sync, but phase 3 makes it reachable on every undo.
+**Issue:** `latest.current.present` is updated in a passive `useEffect`. Draft changes that do not come from typing still reach `changeDraft` while the modal is up, for example an image upload that finishes (`uploadImage`, then `onUploaded`, then `updateRecycleFile` / `onChange`). React applies such a dispatch in a later render. If the PUT resolves after that dispatch but before the render commits and the effect runs, `latest.current.present === savedFrom` is still true. `save()` then returns `clean = true` and the window closes. The reducer's own `saved` action would correctly keep the new draft dirty, but the editor is unmounted and the uploaded image is dropped.
 
-**Fix:** Only repair an id that is non-empty and missing, and keep the two ids exclusive.
+The window is narrow, roughly one render. The loss is silent, and it is the same failure class the original WR-02 fixed.
+
+**Fix:** Track changes synchronously at the dispatch site instead of via a post-commit effect:
 ```ts
-const keep = (current: string, exists: boolean, first: string | undefined) => (current === "" || exists ? current : first ?? "");
-setSelectedRecycleFileId((c) => keep(c, next.recycleFiles.some((f) => f.id === c), next.recycleFiles[0]?.id));
-setSelectedRecycledVirusId((c) => keep(c, !!next.recycledViruses?.some((v) => v.id === c), next.recycledViruses?.[0]?.id));
+const editCount = useRef(0);
+const changeDraft = (updater) => { editCount.current++; dispatch({ type: "change", … }); };
+// in step(): editCount.current++;
+// in save(): const startedAt = editCount.current; … await onSave(normalized); const clean = editCount.current === startedAt;
 ```
-The initial `useState` values at lines 513-514 set both ids non-empty, so initialise one of them to `""` too.
-
-### WR-02: "СОХРАНИТЬ" in the close dialog can close the window over newer unsaved edits, or do nothing visible
-
-**File:** `components/portia-editor.tsx:1149` (close dialog action), `save` at ~656; `components/portia-desktop.tsx:753` (`requestExit`)
-
-**Issue:** The dialog action runs `setHandledCloseRequest(...)` and then `save().then((ok) => { if (ok) onCloseApproved(); })`.
-
-1. The dialog disappears at once, but the editor stays fully editable while the PUT runs (a `fetchWithTimeout`, so it may take seconds). If the owner types after clicking, `saved` correctly keeps that draft (`present !== savedFrom`) and `dirty` stays true. `ok === true` still fires `onCloseApproved()`, which calls `requestExit(..., force=true)` and unmounts the editor. Those edits are lost with no prompt, which defeats the guard.
-2. `save()` returns `false` immediately when `saveState === "saving"` (an earlier Ctrl+S still running). The dialog is already dismissed (`handledCloseRequest` set), so the click silently does nothing.
-3. `onCloseApproved` is the closure from the render when the button was clicked. After the awaited request, `requestExit` runs with that stale `windows` and `activeApp`. If the user focused another window meanwhile, `activeApp === appId` is stale and `setActiveApp(fallback)` steals focus back.
-
-**Fix:** Keep the dialog open, or disable the editor, until the save settles. Close only if nothing newer is dirty. For example, have `save` resolve to `"saved-clean"` when `state.present === savedFrom` (read it through a ref), and call `onCloseApproved()` only for that value. Otherwise re-raise the close dialog. Treat the `saveState === "saving"` early return as a pending state rather than `false`.
-
-### WR-03: the global `[data-dragging]` marker can stick, and then it swallows unrelated edits into one undo step
-
-**File:** `components/portia-editor.tsx:97-101` (`editKeyFor`), `:149-243` (`OrderDragHandle`); reducer rule at `lib/editor-history.ts:35`
-
-**Issue:** `editKeyFor` asks the DOM whether any handle has `data-dragging="true"`. If so, every `changeDraft` anywhere gets key `drag:<id>`, and the reducer coalesces `drag:` keys with no time limit. The marker is cleared only in `stop()`, which runs only on `pointerup`, `pointercancel` or unmount.
-
-If neither event reaches the handle, the marker stays on:
-- Pointer capture can be released when the dragged row's DOM node is moved or re-inserted by the keyed reorder.
-- The window can lose focus mid-drag.
-- A second `pointerdown` can arrive, for example multi-touch or a right-click, which also overwrites `holdTimer` and `frame` without clearing the previous ones. That leaks a timer or rAF loop that is never cancelled.
-
-The effects are:
-- The `autoscroll` rAF loop runs forever.
-- Every later edit (typing, add or delete) is folded into a single undo step with that stale `drag:` key. One Ctrl+Z then wipes all of it.
-
-I did not reproduce the capture-release case in a browser. The code has no defence if it happens, and the failure mode is bad enough to guard against.
-
-**Fix:**
-- Call `stop()` on `onLostPointerCapture`, on `window` `blur`, and on a window-level `pointerup` registered while dragging.
-- Clear any existing `holdTimer`/`frame` at the top of `onPointerDown`, and ignore non-primary pointers and buttons (`if (!event.isPrimary || event.button !== 0) return`).
-- Make the key come from the handle's own state (for example a module variable set and cleared by `stop`) rather than a document-wide selector.
 
 ## Info
 
-### IN-01: `Parsing CSS source code failed` near `::highlight(portia-format)` is cosmetic, not a bug
+### IN-01 (carried over, not in fix scope): `::highlight(portia-format)` build warning is cosmetic
 
-**File:** `app/portia.css:427` (the `::highlight(portia-format)` rule)
+**File:** `app/portia.css:426`
 
-**Issue:** The warning is real but harmless.
-- The installed `lightningcss` 1.31.1 does not recognize `::highlight()`. It reports `'highlight' is not recognized as a valid pseudo-element` at that line (I ran it directly on the file).
-- Next/Turbopack then passes that one rule through verbatim.
-- In the existing `.next` output (`static/chunks/2i-_yifune9o6.css`) the rule is present as `::highlight(portia-format){background-color:rgba(var(--desktop-glow), .35)}`. It is un-minified (note the space before `.35`) while the neighbouring rules are minified.
-- `--desktop-glow` is defined on `:root` and inherits into highlight pseudos, so the colour resolves.
+**Issue:** Still present. `lightningcss` does not recognize `::highlight()`. It passes the rule through un-minified, the rule works, and the build warns on every run. The comment above the rule does not mention the warning.
 
-What remains:
-- The build prints a warning on every run.
-- On browsers without the Custom Highlight API the guard `typeof Highlight !== "undefined" && "highlights" in CSS` skips painting. The selection is blurred away and nothing marks it on a phone. The code degrades safely but shows no selection.
+**Fix:** Add a one-line comment that the warning is expected, or inject the rule from the component, or upgrade once `lightningcss` supports it.
 
-**Fix:** Accept it. Add a one-line comment above the rule noting that the warning is expected, so nobody chases it. If a clean build log matters, inject the rule from the component through a `<style>` element, or upgrade `lightningcss` or Next once a version supports `::highlight`.
+### IN-02 (carried over, not in fix scope): shortcut listener edge cases
 
-### IN-02: shortcut listener edge cases
+**File:** `components/portia-editor.tsx:733-758`
 
-**File:** `components/portia-editor.tsx:~700-725`
+**Issue:** Still present.
+1. The listener is removed while any dialog is open or a close is pending, so Ctrl+S then opens the browser's "Save page" over the modal.
+2. Ctrl+S on the Сотрудники and Доступ tabs saves the content draft, not the form on screen.
+3. `event.repeat` is not filtered.
 
-**Issue:** Minor behaviours of the window-level shortcut handler:
-1. Ctrl+S is not intercepted while a dialog is open or a close is pending, because the listener is removed. The browser's "Save page" can open over the modal.
-2. Ctrl+S on the Сотрудники and Доступ tabs saves the content draft, not the employee form the user is looking at. That is confusing, since the status bar there describes different data.
-3. `event.repeat` is not filtered, so holding Ctrl+Z runs undo at key-repeat speed.
+**Fix:** As in the previous review. Keep the listener and make the dialog case a `preventDefault`-only no-op for `save`, skip or label content save on the separate-save tabs, and filter repeats for save.
 
-**Fix:**
-- Always `preventDefault` for `action === "save"` when `active`, and make the dialog branch a no-op instead of removing the listener.
-- Skip content save on the two separate-save tabs, or label it.
-- Add `if (event.repeat && action !== "undo" && action !== "redo") return;`, or drop repeats for save only.
+### IN-03 (carried over, not in fix scope): magic numbers and unguarded spread
 
-### IN-03: magic numbers and unguarded spread
+**File:** `components/portia-editor.tsx:205-211` (`autoscroll`: `56`, `44`, `48`, `8`); `lib/editor-changes.ts:76` (`...content.recycledViruses`)
 
-**File:** `components/portia-editor.tsx:~197-210` (`autoscroll`); `lib/editor-changes.ts:76`
+**Issue:** Still present.
+
+**Fix:** Name the autoscroll constants next to the CSS values they mirror, and write `...(content.recycledViruses ?? [])`.
+
+### IN-04: close-dialog rough edges after the WR-02 fix
+
+**File:** `components/portia-editor.tsx:1167-1191`
 
 **Issue:**
-- `autoscroll` hard-codes the phone chrome (`56` for the system bar, `44` for the taskbar, `48` for the edge band, `8` for the speed). If the chrome changes in `portia.css` the edges silently drift.
-- `changedDossierTabs` spreads `content.recycledViruses` directly. The editor itself writes `draft.recycledViruses ?? []` and `next.recycledViruses ??= []` in many places. Normalization always supplies the array today, so this is safe, but it is inconsistent with the defensive pattern elsewhere in the file.
+- Press Ctrl+S and then × while that save is running. The dialog waits with СОХРАНИТЬ disabled. If the save then succeeds, the dialog stays up with the text `Не сохранено: ` and an empty list, and the owner has to click again to close.
+- Clicking СОХРАНИТЬ disables the button that has focus. Focus leaves the dialog's buttons, so keyboard users must Tab back in.
 
-**Fix:** Hoist the autoscroll values into named constants next to the CSS values they mirror, and write `...(content.recycledViruses ?? [])`.
+**Fix:** When `closeAsked && !dirty && saveState !== "saving"`, approve the close automatically, or hide the "Не сохранено" text when `changed` is empty. After disabling СОХРАНИТЬ, move focus to ОТМЕНА.
+
+### IN-05: after a lost pointer capture, the drag ends correctly but stops following the pointer
+
+**File:** `components/portia-editor.tsx:171-185`, `:236-239`
+
+**Issue:** The fixer skipped `onLostPointerCapture` on the grounds that the keyed reorder may release capture when it moves the dragged row. On a downward swap, React's reconciler re-inserts the moved row's node. If capture really is lost then, `onPointerMove` stops firing on the handle and `pointer.current` freezes. The row and the autoscroll stop tracking the finger until release. The new window listeners guarantee only that the drag ends, not that it keeps tracking. Not reproduced in a browser. Either capture survives the move, in which case the deviation was unnecessary, or downward multi-swap drags are broken.
+
+**Fix:** While `active`, also listen to `pointermove` on `window` in the same effect, and update `pointer.current` and call `moveTo` from there. Tracking then no longer depends on capture.
 
 ---
 
