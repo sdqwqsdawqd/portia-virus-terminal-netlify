@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
@@ -46,7 +47,7 @@ type EditorPreviewSurface = "light" | "dark";
 type DisplayArea = "lead" | "metric" | "mutation" | "scientist" | "info" | "broadcast" | "trash" | "caption" | "search" | "assistant";
 type ImagePlacement = "dossier" | "mutation" | "recycle";
 
-const ActiveFormatContext = createContext<{ key: string | null; surface: EditorPreviewSurface }>({ key: null, surface: "light" });
+const ActiveFormatContext = createContext<{ key: string | null; surface: EditorPreviewSurface; phonePanelOpen: boolean }>({ key: null, surface: "light", phonePanelOpen: false });
 
 function mediaUrlFromText(value: string) {
   const trimmed = value.trim();
@@ -820,7 +821,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
     : "";
 
   return (
-    <ActiveFormatContext.Provider value={{ key: formatTarget?.key ?? null, surface: previewSurface }}>
+    <ActiveFormatContext.Provider value={{ key: formatTarget?.key ?? null, surface: previewSurface, phonePanelOpen: formatterOpen && window.matchMedia("(max-width: 900px)").matches }}>
     <div className="content-editor">
       <header className="editor-header">
         <div>
@@ -853,7 +854,11 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
           aria-expanded={formatterOpen}
           title={formatTarget ? `Оформление: ${formatTarget.title}` : "Сначала выберите текстовое поле"}
           onPointerDown={(event) => event.preventDefault()}
-          onClick={() => setFormatterOpen((current) => !current)}
+          onClick={() => {
+            // Phone: the field loses focus once per opening so the keyboard leaves (D-06).
+            if (!formatterOpen && formatTarget && window.matchMedia("(max-width: 900px)").matches) findFormatField(formatTarget.key)?.blur();
+            setFormatterOpen((current) => !current);
+          }}
         >
           <span aria-hidden="true">✎</span>
           <strong>{formatTarget ? "ОФОРМЛЕНИЕ" : "ВЫБЕРИТЕ ТЕКСТ"}</strong>
@@ -1457,6 +1462,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
       data-format-key={formatKey}
       className={`formatted-rich-input${tall ? " tall" : ""}${activeFormat.key === formatKey ? ` is-editor-active preview-${activeFormat.surface}` : ""}`}
       contentEditable
+      inputMode={activeFormat.phonePanelOpen ? "none" : undefined}
       suppressContentEditableWarning
       role="textbox"
       aria-multiline="true"
@@ -1508,7 +1514,6 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const defaultTextColor = previewSurface === "dark" ? "#aebfba" : "#252827";
   const documentRef = useRef(target.document);
   const panelRef = useRef<HTMLElement>(null);
-  const onCloseRef = useRef(onClose);
   const [color, setColor] = useState(initialStyle.color ?? defaultTextColor);
   const [fontSize, setFontSize] = useState(initialStyle.fontSize ?? 17);
   const [fontWeight, setFontWeight] = useState(initialStyle.fontWeight ?? 400);
@@ -1516,21 +1521,20 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const [backgroundOpacity, setBackgroundOpacity] = useState(initialStyle.backgroundOpacity ?? 0);
   const [colorPicker, setColorPicker] = useState<"text" | "background" | null>(null);
   useEffect(() => { documentRef.current = target.document; }, [target.document]);
-  useEffect(() => { onCloseRef.current = onClose; });
 
   const formatKey = target.key;
   const selectionStart = target.selection.start;
   const selectionEnd = target.selection.end;
   const formatDocument = target.document;
-  // Phone: formatting is «either the keyboard or the panel» (D-05, D-06). The field is blurred so the keyboard leaves,
-  // the stored selection is painted with the Custom Highlight API and scrolled above the panel; touching the text closes the panel.
+  // Phone: formatting is «either the keyboard or the panel» (D-05, D-06). ✎ takes focus from the field once and rich fields carry
+  // inputMode none while the panel is open, so the owner can touch and select text and the panel stays (owner, UAT 12, reversing 03-03);
+  // the stored selection is painted with the Custom Highlight API and kept above the panel.
   // formatDocument is a dependency because a style change re-renders the field's text nodes, which orphans the painted range.
   useEffect(() => {
     if (!window.matchMedia("(max-width: 900px)").matches) return;
     const field = findFormatField(formatKey);
     const panel = panelRef.current;
     if (!field || !panel) return;
-    if (window.document.activeElement === field) field.blur();
     const collapsed = selectionStart === selectionEnd;
     const range = rangeFromOffsets(field, { start: selectionStart, end: selectionEnd });
     const paints = !collapsed && typeof Highlight !== "undefined" && "highlights" in CSS;
@@ -1542,20 +1546,18 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       if (overlap > 0) window.scrollBy(0, Math.max(0, Math.min(overlap, rect.top - 64)));
     };
     const frame = window.requestAnimationFrame(keepVisible);
-    const onFocusIn = (event: FocusEvent) => { if (event.target === field) onCloseRef.current(); };
     window.visualViewport?.addEventListener("resize", keepVisible);
-    window.document.addEventListener("focusin", onFocusIn);
     return () => {
       window.cancelAnimationFrame(frame);
       window.visualViewport?.removeEventListener("resize", keepVisible);
-      window.document.removeEventListener("focusin", onFocusIn);
       if (paints) CSS.highlights.delete("portia-format");
     };
   }, [formatKey, selectionStart, selectionEnd, formatDocument]);
 
-  // On a phone, closing returns the caret to the field in the same tap so the keyboard can come back (iOS may still need one more tap).
+  // On a phone, closing returns the caret to the field in the same tap so the keyboard can come back (iOS may still need one more tap);
+  // flushSync commits the close first so the field has dropped inputMode none before it gets focus.
   const finish = () => {
-    onClose();
+    flushSync(onClose);
     if (!window.matchMedia("(max-width: 900px)").matches) return;
     const field = findFormatField(formatKey);
     if (!field) return;
