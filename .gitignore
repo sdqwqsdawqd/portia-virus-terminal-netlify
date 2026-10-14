@@ -53,3 +53,7 @@ next-env.d.ts
 
 # Impeccable per-developer settings
 .impeccable/config.local.json
+.impeccable/mocks/
+.impeccable/review/
+.impeccable/questions/
+*.tsbuildinfo

@@ -1,6 +1,11 @@
 "use client";
 
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
+import { shortcutOf } from "@/lib/editor-shortcuts";
+import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
+import { removeBroadcast, removeInfoSection, removeMutation, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
   portiaTextKey,
@@ -18,9 +23,17 @@ type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "ass
 
 type Props = {
   content: PortiaContent;
+  // The revision content was read or saved at.
+  revision: number;
   saveState: "idle" | "saving" | "saved" | "error" | "conflict";
   canManageEditors: boolean;
-  onSave: (content: PortiaContent) => Promise<void>;
+  active: boolean;
+  onDirtyChange: (dirty: boolean) => void;
+  // Bumped by the window manager each time × is pressed while the editor reports unsaved edits.
+  closeRequest: number;
+  onCloseApproved: () => void;
+  // Resolves with the saved revision.
+  onSave: (content: PortiaContent, baseRevision: number) => Promise<number>;
   onEmployeeSaved: (employee: PortiaEmployee) => void;
 };
 
@@ -34,9 +47,11 @@ type FormatTarget = {
 };
 
 type EditorPreviewSurface = "light" | "dark";
+// Site area whose font the field mirrors; paired in the shared font block in app/portia.css.
+type DisplayArea = "lead" | "metric" | "mutation" | "scientist" | "info" | "broadcast" | "trash" | "caption" | "search" | "assistant";
 type ImagePlacement = "dossier" | "mutation" | "recycle";
 
-const ActiveFormatContext = createContext<{ key: string | null; surface: EditorPreviewSurface }>({ key: null, surface: "light" });
+const ActiveFormatContext = createContext<{ key: string | null; surface: EditorPreviewSurface; phonePanelOpen: boolean }>({ key: null, surface: "light", phonePanelOpen: false });
 
 function mediaUrlFromText(value: string) {
   const trimmed = value.trim();
@@ -77,6 +92,30 @@ const backgroundColorPalette = [
 
 const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const clone = (content: PortiaContent) => JSON.parse(JSON.stringify(content)) as PortiaContent;
+const editorReducer = (state: EditorHistory<PortiaContent>, action: HistoryAction<PortiaContent>) => historyReducer(state, action, clone);
+const initEditorHistory = (value: PortiaContent) => initHistory(value, clone);
+
+const editKeys = new WeakMap<Element, number>();
+let editKeyCounter = 0;
+
+// Edits made while one text field (or the format panel) has focus share a key, so the reducer folds them into word-sized undo steps.
+function editKeyFor(element: Element | null): string | null {
+  // One drag is one undo step: the reducer folds every drag:<id> change into the first (D-11).
+  const dragging = document.querySelector<HTMLElement>('.order-drag-handle[data-dragging="true"]');
+  if (dragging) return `drag:${dragging.dataset.dragId}`;
+  if (!element) return null;
+  const isTextEntry = (element instanceof HTMLElement && element.isContentEditable)
+    || element instanceof HTMLTextAreaElement
+    || (element instanceof HTMLInputElement && !["checkbox", "radio", "file", "button", "submit", "reset"].includes(element.type));
+  const keyed = element.closest(".floating-text-format") ?? (isTextEntry ? element : null);
+  if (!keyed) return null;
+  let id = editKeys.get(keyed);
+  if (id === undefined) {
+    id = ++editKeyCounter;
+    editKeys.set(keyed, id);
+  }
+  return `field:${id}`;
+}
 
 function moveArrayItem<T>(items: T[], from: number, to: number) {
   if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) return;
@@ -113,44 +152,125 @@ function reorderRichTextLines(text: string, document: RichTextDocument | undefin
 }
 
 function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (from: number, to: number) => void; label: string }) {
+  const button = useRef<HTMLButtonElement>(null);
   const indexRef = useRef(index);
+  const onMoveRef = useRef(onMove);
   const holdTimer = useRef<number | null>(null);
+  const frame = useRef<number | null>(null);
+  const pointer = useRef({ x: 0, y: 0 });
   const active = useRef(false);
-  useEffect(() => { indexRef.current = index; }, [index]);
+  useEffect(() => { indexRef.current = index; onMoveRef.current = onMove; });
+  const placed = useRef<{ index: number; top: number } | null>(null);
+  // Per-handle FLIP: every row whose index changed slides itself, so the dragged row and its displaced neighbours all animate.
+  useLayoutEffect(() => {
+    const row = button.current?.closest<HTMLElement>("[data-sort-index]");
+    if (!row || row.offsetParent === null) { placed.current = null; return; }
+    const top = row.offsetTop;
+    const previous = placed.current;
+    placed.current = { index, top };
+    if (!previous || previous.index === index || previous.top === top) return;
+    // Mirrors the CSS motion switch, which cannot clamp Web Animations started from script.
+    const motion = document.documentElement.dataset.motion;
+    if (motion === undefined ? matchMedia("(prefers-reduced-motion: reduce)").matches : motion !== "full") return;
+    const easing = getComputedStyle(document.documentElement).getPropertyValue("--ease-out").trim() || "ease-out";
+    row.animate([{ transform: `translateY(${previous.top - top}px)` }, { transform: "none" }], { duration: 160, easing });
+  });
 
   const stop = (event?: React.PointerEvent<HTMLButtonElement>) => {
     if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
     holdTimer.current = null;
+    frame.current = null;
     active.current = false;
+    if (button.current) {
+      delete button.current.dataset.dragging;
+      delete button.current.dataset.dragId;
+    }
     if (event?.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+  // A row swaps only once the pointer crosses its vertical middle, so rows of unequal height do not flip back and forth.
+  const moveTo = (x: number, y: number) => {
+    const row = document.elementsFromPoint(x, y)
+      .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
+      .find(Boolean);
+    const target = Number(row?.dataset.sortIndex);
+    if (!row || !Number.isInteger(target) || target === indexRef.current) return;
+    const { top, height } = row.getBoundingClientRect();
+    const middle = top + height / 2;
+    if (target > indexRef.current ? y < middle : y > middle) return;
+    onMoveRef.current(indexRef.current, target);
+    indexRef.current = target;
+  };
+
+  // A stuck drag marker would fold every later edit into one undo step, so the drag also ends on unmount, on lost
+  // window focus, and on a release anywhere: once pointer capture is lost the handle may never see its pointerup.
+  // Tracking lives on window too, because a downward swap re-inserts the dragged row and drops pointer capture (03-REVIEW IN-05).
+  useEffect(() => {
+    const onBlur = () => stop();
+    const onRelease = (event: PointerEvent) => { if (event.isPrimary) stop(); };
+    const onTrack = (event: PointerEvent) => {
+      if (!event.isPrimary || holdTimer.current === null) return;
+      pointer.current = { x: event.clientX, y: event.clientY };
+      if (active.current) moveTo(event.clientX, event.clientY);
+    };
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("pointermove", onTrack);
+    window.addEventListener("pointerup", onRelease);
+    window.addEventListener("pointercancel", onRelease);
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("pointermove", onTrack);
+      window.removeEventListener("pointerup", onRelease);
+      window.removeEventListener("pointercancel", onRelease);
+      stop();
+    };
+  }, []);
+
+  // Near the edge of whatever scrolls (the editor, or the page on phones) the list keeps moving under a still finger.
+  const autoscroll = () => {
+    const editor = button.current?.closest<HTMLElement>(".content-editor") ?? null;
+    const scrolls = editor !== null && editor.scrollHeight > editor.clientHeight && /auto|scroll/.test(getComputedStyle(editor).overflowY);
+    const scroller: { scrollBy: (x: number, y: number) => void } = scrolls ? editor : window;
+    // 56px: sticky system bar; 44px: taskbar (window mode only).
+    const { top, bottom } = scrolls ? editor.getBoundingClientRect() : { top: 56, bottom: window.innerHeight - 44 };
+    const { x, y } = pointer.current;
+    const direction = y < top + 48 ? -1 : y > bottom - 48 ? 1 : 0;
+    if (direction) {
+      scroller.scrollBy(0, direction * 8);
+      moveTo(x, y);
+    }
+    frame.current = requestAnimationFrame(autoscroll);
   };
 
   return <button
+    ref={button}
     className="order-drag-handle"
     type="button"
     aria-label={`Изменить порядок: ${label}`}
-    title="Удерживайте и перетащите"
+    aria-keyshortcuts="ArrowUp ArrowDown"
     onPointerDown={(event) => {
+      // A second finger or a right-click must not start a drag or orphan the first one's timer and frame loop.
+      if (!event.isPrimary || event.button !== 0) return;
+      stop();
       const target = event.currentTarget;
+      pointer.current = { x: event.clientX, y: event.clientY };
       target.setPointerCapture(event.pointerId);
       holdTimer.current = window.setTimeout(() => {
         active.current = true;
         target.dataset.dragging = "true";
+        target.dataset.dragId = makeId("drag");
+        frame.current = requestAnimationFrame(autoscroll);
       }, 170);
     }}
-    onPointerMove={(event) => {
-      if (!active.current) return;
-      const row = document.elementsFromPoint(event.clientX, event.clientY)
-        .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
-        .find(Boolean);
-      const target = Number(row?.dataset.sortIndex);
-      if (!Number.isInteger(target) || target === indexRef.current) return;
-      onMove(indexRef.current, target);
-      indexRef.current = target;
+    onPointerUp={stop}
+    onPointerCancel={stop}
+    onKeyDown={(event) => {
+      const step = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      onMove(index, index + step);
     }}
-    onPointerUp={(event) => { delete event.currentTarget.dataset.dragging; stop(event); }}
-    onPointerCancel={(event) => { delete event.currentTarget.dataset.dragging; stop(event); }}
-  ><span aria-hidden="true">≡</span><small>ТЯНИТЕ</small></button>;
+  ><span aria-hidden="true">≡</span></button>;
 }
 
 const emptyRichTextStyle: RichTextStyle = {};
@@ -298,8 +418,14 @@ function selectionOffsets(root: HTMLElement) {
   return { start: beforeStart.toString().length, end: beforeEnd.toString().length };
 }
 
-function restoreSelection(root: HTMLElement, offsets: { start: number; end: number }) {
-  if (window.document.activeElement !== root) return;
+// On a phone the list and the record swap places; bring the new half to the top (read after the next render).
+function revealOnPhone(ref: React.RefObject<HTMLElement | null>) {
+  if (!window.matchMedia("(max-width: 900px)").matches) return;
+  window.requestAnimationFrame(() => ref.current?.scrollIntoView({ block: "start" }));
+}
+
+// Builds the Range for text offsets inside a rich-text field; used to restore the caret and to paint the phone highlight.
+function rangeFromOffsets(root: HTMLElement, offsets: { start: number; end: number }): Range {
   const walker = window.document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const range = window.document.createRange();
   // A caret right after a node's trailing "\n" belongs to the next line. Firefox and
@@ -318,10 +444,7 @@ function restoreSelection(root: HTMLElement, offsets: { start: number; end: numb
     if (fits(offsets.end, text, consumed)) {
       if (!startSet) range.setStart(node, 0);
       range.setEnd(node, Math.max(0, offsets.end - consumed));
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      return;
+      return range;
     }
     consumed += text.length;
     node = walker.nextNode();
@@ -336,9 +459,19 @@ function restoreSelection(root: HTMLElement, offsets: { start: number; end: numb
     range.selectNodeContents(root);
     range.collapse(false);
   }
+  return range;
+}
+
+function restoreSelection(root: HTMLElement, offsets: { start: number; end: number }) {
+  if (window.document.activeElement !== root) return;
+  const range = rangeFromOffsets(root, offsets);
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
+}
+
+function findFormatField(key: string) {
+  return window.document.querySelector<HTMLElement>(`[data-format-key="${CSS.escape(key)}"]`);
 }
 
 function hsvToHex(hue: number, saturation: number, value: number) {
@@ -405,63 +538,146 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, saveState, canManageEditors, onSave, onEmployeeSaved }: Props) {
-  const [draft, setDraft] = useState(() => clone(content));
+export function PortiaEditor({ content, revision, saveState, canManageEditors, active, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved }: Props) {
+  const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
+  // The revision the draft's baseline came from; a stale draft then gets the 409 instead of overwriting newer content (uat-03-owner-broadcast-vanishes).
+  const baseRevision = useRef(revision);
+  const draft = history.present;
+  const changed = useMemo(() => changedSections(history.baseline, history.present), [history.baseline, history.present]);
+  const dirty = changed.length > 0;
   const [tab, setTab] = useState<EditorTab>("viruses");
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
-  const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycledViruses?.[0]?.id ?? "");
+  // The Recycle selection is one of two ids; the other stays "" (the render and the row highlight rely on it).
+  const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycleFiles.length ? "" : content.recycledViruses?.[0]?.id ?? "");
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">("idle");
-  const [dirty, setDirty] = useState(false);
+  const [dialog, setDialog] = useState<"discard" | "recycle" | "delete" | null>(null);
+  // A request made before this mount is not replayed; the dialog shows while a newer one is unanswered.
+  const [handledCloseRequest, setHandledCloseRequest] = useState(closeRequest);
+  const closeAsked = closeRequest !== handledCloseRequest;
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
+  const [dossierTab, setDossierTab] = useState<DossierTab>("main");
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface>("light");
+  // At 900px and below a list + form layout shows either the list or the open record (D-01, D-02).
+  const [recordOpen, setRecordOpen] = useState(false);
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const tabsRef = useRef<HTMLElement>(null);
+  const showRecord = (open: boolean) => {
+    setRecordOpen(open);
+    revealOnPhone(layoutRef);
+  };
+
+  // Falls back to the first record when the selected one is gone from `next`.
+  // An empty Recycle id is the unselected half of the pair and stays empty.
+  const repairSelections = (next: PortiaContent) => {
+    setSelectedVirusId((current) => (next.viruses.some((virus) => virus.id === current) ? current : next.viruses[0]?.id ?? ""));
+    setSelectedRecycleFileId((current) => (current === "" || next.recycleFiles.some((file) => file.id === current) ? current : next.recycleFiles[0]?.id ?? ""));
+    setSelectedRecycledVirusId((current) => (current === "" || next.recycledViruses?.some((virus) => virus.id === current) ? current : next.recycledViruses?.[0]?.id ?? ""));
+  };
 
   useEffect(() => {
     if (dirty) return;
     const syncTimer = window.setTimeout(() => {
-      setDraft(clone(content));
-      setSelectedVirusId((current) => (content.viruses.some((virus) => virus.id === current) ? current : content.viruses[0]?.id ?? ""));
-      setSelectedRecycleFileId((current) => (content.recycleFiles.some((file) => file.id === current) ? current : content.recycleFiles[0]?.id ?? ""));
-      setSelectedRecycledVirusId((current) => (content.recycledViruses?.some((virus) => virus.id === current) ? current : content.recycledViruses?.[0]?.id ?? ""));
+      dispatch({ type: "sync", content });
+      baseRevision.current = revision;
+      repairSelections(content);
     }, 0);
     return () => window.clearTimeout(syncTimer);
-  }, [content, dirty]);
+  }, [content, dirty, revision]);
 
   const selectedVirusIndex = useMemo(
     () => draft.viruses.findIndex((virus) => virus.id === selectedVirusId),
     [draft.viruses, selectedVirusId],
   );
   const selectedVirus = selectedVirusIndex >= 0 ? draft.viruses[selectedVirusIndex] : null;
+  const orderedRecycleKeys = useMemo(() => recycleKeys(draft), [draft]);
+  // When neither Recycle id resolves (the last record of a kind was deleted, restored, undone or synced away),
+  // show the first record in list order instead of "Корзина пуста" beside a full list.
+  const recycleKeyShown = draft.recycleFiles.some((file) => file.id === selectedRecycleFileId)
+    ? `file:${selectedRecycleFileId}`
+    : (draft.recycledViruses ?? []).some((virus) => virus.id === selectedRecycledVirusId) ? `virus:${selectedRecycledVirusId}` : orderedRecycleKeys[0] ?? "";
+  const shownRecycleFileId = recycleKeyShown.startsWith("file:") ? recycleKeyShown.slice("file:".length) : "";
+  const shownRecycledVirusId = recycleKeyShown.startsWith("virus:") ? recycleKeyShown.slice("virus:".length) : "";
   const selectedRecycleFileIndex = useMemo(
-    () => draft.recycleFiles.findIndex((file) => file.id === selectedRecycleFileId),
-    [draft.recycleFiles, selectedRecycleFileId],
+    () => draft.recycleFiles.findIndex((file) => file.id === shownRecycleFileId),
+    [draft.recycleFiles, shownRecycleFileId],
   );
   const selectedRecycleFile = selectedRecycleFileIndex >= 0 ? draft.recycleFiles[selectedRecycleFileIndex] : null;
   const selectedRecycledVirusIndex = useMemo(
-    () => (draft.recycledViruses ?? []).findIndex((virus) => virus.id === selectedRecycledVirusId),
-    [draft.recycledViruses, selectedRecycledVirusId],
+    () => (draft.recycledViruses ?? []).findIndex((virus) => virus.id === shownRecycledVirusId),
+    [draft.recycledViruses, shownRecycledVirusId],
   );
   const selectedRecycledVirus = selectedRecycledVirusIndex >= 0 ? draft.recycledViruses[selectedRecycledVirusIndex] : null;
-  const orderedRecycleKeys = useMemo(() => recycleKeys(draft), [draft]);
+  const liveVirusId = selectedVirus?.id;
+  const liveDossierChanged = useMemo(() => liveVirusId ? changedDossierTabs(history.baseline, draft, liveVirusId) : [], [history.baseline, draft, liveVirusId]);
+  const archivedVirusId = selectedRecycledVirus?.id;
+  const archivedDossierChanged = useMemo(() => archivedVirusId ? changedDossierTabs(history.baseline, draft, archivedVirusId) : [], [history.baseline, draft, archivedVirusId]);
 
+  // Counted at dispatch, not after commit, so a save can tell synchronously whether the draft changed while it ran.
+  const editCount = useRef(0);
   const changeDraft = (updater: (next: PortiaContent) => void) => {
-    setDraft((current) => {
-      const next = clone(current);
-      updater(next);
-      return next;
-    });
-    setDirty(true);
+    editCount.current += 1;
+    dispatch({ type: "change", updater, key: editKeyFor(document.activeElement), now: Date.now() });
   };
 
+  const step = (kind: "undo" | "redo") => {
+    const target = kind === "undo" ? history.past.at(-1) : history.future[0];
+    if (!target) return;
+    // The open format panel holds the pre-step document; a stale panel would write old text back.
+    setFormatTarget(null);
+    setFormatterOpen(false);
+    repairSelections(target);
+    editCount.current += 1;
+    dispatch({ type: kind });
+  };
+
+  // Both run after the PORTIA confirm dialog (never window.confirm: embedded browsers answer it "no" unseen).
+  const moveSelectedVirusToRecycle = () => {
+    if (!selectedVirus) return;
+    const nextId = draft.viruses.find((virus) => virus.id !== selectedVirus.id)?.id ?? "";
+    // The panel's stored commit targets this virus, which is about to leave the list.
+    setFormatTarget(null);
+    setFormatterOpen(false);
+    changeDraft((next) => {
+      const recycled = next.viruses.find((virus) => virus.id === selectedVirus.id);
+      if (!recycled) return;
+      next.recycledViruses ??= [];
+      next.recycledViruses.push(recycled);
+      next.viruses = next.viruses.filter((virus) => virus.id !== selectedVirus.id);
+      next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `virus:${recycled.id}`), `virus:${recycled.id}`];
+    });
+    setSelectedVirusId(nextId);
+    setSelectedRecycledVirusId(selectedVirus.id);
+    setSelectedRecycleFileId("");
+    showRecord(false);
+  };
+
+  const deleteSelectedRecycledVirus = () => {
+    if (!selectedRecycledVirus) return;
+    const nextId = draft.recycledViruses.find((virus) => virus.id !== selectedRecycledVirus.id)?.id ?? "";
+    changeDraft((next) => { next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
+    setSelectedRecycledVirusId(nextId);
+    showRecord(false);
+  };
+
+  // By id, not index: an upload that finishes after a reorder, or the open format panel's stored commit, would otherwise write into another record.
   const updateVirus = (updater: (virus: Virus) => void) => {
-    if (selectedVirusIndex < 0) return;
-    changeDraft((next) => updater(next.viruses[selectedVirusIndex]));
+    const id = selectedVirus?.id;
+    if (!id) return;
+    changeDraft((next) => updateById(next.viruses, id, updater));
   };
 
   const updateRecycleFile = (updater: (file: RecycleFile) => void) => {
-    if (selectedRecycleFileIndex < 0) return;
-    changeDraft((next) => updater(next.recycleFiles[selectedRecycleFileIndex]));
+    const id = selectedRecycleFile?.id;
+    if (!id) return;
+    changeDraft((next) => updateById(next.recycleFiles, id, updater));
+  };
+
+  const updateRecycledVirus = (updater: (virus: Virus) => void) => {
+    const id = selectedRecycledVirus?.id;
+    if (!id) return;
+    changeDraft((next) => updateById(next.recycledViruses ?? [], id, updater));
   };
 
   const changeFormattedText = (
@@ -475,6 +691,27 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
   });
 
   const activateFormatter = (target: FormatTarget) => setFormatTarget(target);
+  // The panel's stored commit for a deleted item would write its formatting back.
+  const closeFormatterFor = (key: string) => {
+    if (formatTarget?.key !== key) return;
+    setFormatTarget(null);
+    setFormatterOpen(false);
+  };
+
+  // The format panel keeps a target in the tab being hidden; leaving it open could write old text back (Pitfall 7).
+  const selectDossierTab = (id: DossierTab) => {
+    setDossierTab(id);
+    setFormatTarget(null);
+    setFormatterOpen(false);
+  };
+
+  const switchTab = (id: EditorTab) => {
+    setTab(id);
+    setRecordOpen(false);
+    setPreviewSurface(id === "viruses" || id === "recycle" ? "light" : "dark");
+    setFormatTarget(null);
+    setFormatterOpen(false);
+  };
 
   const uploadImage = async (file: File, onUploaded: (url: string) => void) => {
     setUploadState("uploading");
@@ -491,7 +728,17 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
     }
   };
 
-  const save = async () => {
+  // Read after an awaited save, when the closure that started it is renders old.
+  const latest = useRef({ closeAsked, onCloseApproved });
+  useEffect(() => { latest.current = { closeAsked, onCloseApproved }; });
+
+  // Resolves true only when nothing is left unsaved: the draft was clean, or the save succeeded and nothing was typed meanwhile.
+  const save = async (): Promise<boolean> => {
+    if (!dirty) return true;
+    if (saveState === "saving") return false;
+    // The reducer compares this very object after the request to tell whether the owner kept typing meanwhile.
+    const savedFrom = draft;
+    const editsBefore = editCount.current;
     try {
       const normalized = clone(draft);
       normalized.searchRecommendations = normalized.searchRecommendations.map((value) => value.trim()).filter(Boolean);
@@ -525,17 +772,84 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
         [normalized.assistantAutoMinSeconds, normalized.assistantAutoMaxSeconds] = [normalized.assistantAutoMaxSeconds, normalized.assistantAutoMinSeconds];
       }
       normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, 5); });
-      await onSave(normalized);
-      setDraft(normalized);
-      setDirty(false);
+      baseRevision.current = await onSave(normalized, baseRevision.current);
+      const clean = editCount.current === editsBefore;
+      dispatch({ type: "saved", normalized, savedFrom });
+      return clean;
     } catch {
       // Keep the local draft marked as changed so a temporary network error
       // can never discard the owner's work.
+      return false;
     }
   };
 
+  // save and step are new functions every render; the listeners read the latest pair through a ref instead of re-subscribing.
+  const actionsRef = useRef({ save, step });
+  useEffect(() => { actionsRef.current = { save, step }; });
+
+  // Window-level shortcuts only while this window is the active, non-minimized one and no dialog is open (D-10, D-11).
+  useEffect(() => {
+    if (!active || dialog || closeAsked) return;
+    // Сотрудники and Доступ are saved separately; their fields keep the browser's native undo.
+    const historyTab = tab !== "employees" && tab !== "access";
+    const onKeyDown = (event: KeyboardEvent) => {
+      const action = shortcutOf(event);
+      if (!action) return;
+      if (action !== "save" && !historyTab) return;
+      // Save is always taken, even when clean, so the browser's «Сохранить страницу» never opens.
+      event.preventDefault();
+      if (action === "save") void actionsRef.current.save();
+      else actionsRef.current.step(action);
+    };
+    // Phone keyboards and the Edit menu undo through beforeinput and never fire keydown.
+    const onBeforeInput = (event: InputEvent) => {
+      if (!historyTab || (event.inputType !== "historyUndo" && event.inputType !== "historyRedo")) return;
+      event.preventDefault();
+      actionsRef.current.step(event.inputType === "historyUndo" ? "undo" : "redo");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("beforeinput", onBeforeInput);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("beforeinput", onBeforeInput);
+    };
+  }, [active, dialog, closeAsked, tab]);
+
+  useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
+
+  // The tab strip scrolls sideways on a phone; keep the active tab in view (a no-op where the strip fits).
+  useEffect(() => {
+    const strip = tabsRef.current;
+    const activeTab = strip?.querySelector<HTMLElement>("button.active");
+    if (!strip || !activeTab) return;
+    const stripBox = strip.getBoundingClientRect();
+    const tabBox = activeTab.getBoundingClientRect();
+    strip.scrollLeft += (tabBox.left + tabBox.width / 2) - (stripBox.left + stripBox.width / 2);
+  }, [tab]);
+
+  // Reload or leaving the page with unsaved edits: the browser shows its own fixed warning text (D-12).
+  // The cleanup also runs when the editor unmounts on close, so a closed editor never blocks leaving.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  // Only a save starts a new saveState, so after ОТМЕНИТЬ or undo back to clean the conflict text would sit over a current editor.
+  const conflict = saveState === "conflict" && dirty;
+  const barVisible = dirty || saveState === "saving" || saveState === "saved";
+  const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
+    : conflict ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
+    : saveState === "error" ? "ОШИБКА"
+    : saveState === "saved" && !dirty ? "СОХРАНЕНО"
+    : "";
+
   return (
-    <ActiveFormatContext.Provider value={{ key: formatTarget?.key ?? null, surface: previewSurface }}>
+    <ActiveFormatContext.Provider value={{ key: formatTarget?.key ?? null, surface: previewSurface, phonePanelOpen: formatterOpen && window.matchMedia("(max-width: 900px)").matches }}>
     <div className="content-editor">
       <header className="editor-header">
         <div>
@@ -543,25 +857,21 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
           <h1>Редактор PORTIA</h1>
           <p>Изменения сохраняются в общей базе!</p>
         </div>
-        <div className="editor-save-zone">
-          <span className={`editor-save-status ${saveState}`}>{saveState === "saving" ? "СОХРАНЕНИЕ…" : saveState === "saved" ? "СОХРАНЕНО" : saveState === "error" ? "ОШИБКА" : saveState === "conflict" ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ" : dirty ? "ЕСТЬ ИЗМЕНЕНИЯ" : "БЕЗ ИЗМЕНЕНИЙ"}</span>
-          <button className="primary-control" type="button" onClick={save} disabled={!dirty || saveState === "saving"}>СОХРАНИТЬ ВСЁ</button>
-        </div>
       </header>
 
-      <nav className="editor-tabs" aria-label="Разделы редактора">
+      <nav className="editor-tabs" aria-label="Разделы редактора" ref={tabsRef}>
         {([
-          ["viruses", "База вирусов"],
-          ["info", "Информация"],
-          ["broadcasts", "Сообщения"],
-          ["recycle", "Корзина"],
-          ["search", "Рекомендации"],
-          ["assistant", "Помощник"],
+          ...editorSections.map((id) => [id, sectionLabels[id]]),
           ["employees", "Сотрудники"],
           ...(canManageEditors ? [["access", "Доступ"]] : []),
-        ] as [EditorTab, string][]).map(([id, label]) => (
-          <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => { setTab(id); setPreviewSurface(id === "viruses" || id === "recycle" ? "light" : "dark"); setFormatTarget(null); setFormatterOpen(false); }}>{label}</button>
-        ))}
+        ] as [EditorTab, string][]).map(([id, label]) => {
+          const unsaved = changed.some((section) => section === id);
+          return (
+            <button key={id} type="button" className={tab === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => switchTab(id)}>
+              {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}
+            </button>
+          );
+        })}
       </nav>
 
       <div className="global-format-launch">
@@ -572,7 +882,11 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
           aria-expanded={formatterOpen}
           title={formatTarget ? `Оформление: ${formatTarget.title}` : "Сначала выберите текстовое поле"}
           onPointerDown={(event) => event.preventDefault()}
-          onClick={() => setFormatterOpen((current) => !current)}
+          onClick={() => {
+            // Phone: the field loses focus once per opening so the keyboard leaves (D-06).
+            if (!formatterOpen && formatTarget && window.matchMedia("(max-width: 900px)").matches) findFormatField(formatTarget.key)?.blur();
+            setFormatterOpen((current) => !current);
+          }}
         >
           <span aria-hidden="true">✎</span>
           <strong>{formatTarget ? "ОФОРМЛЕНИЕ" : "ВЫБЕРИТЕ ТЕКСТ"}</strong>
@@ -582,65 +896,69 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
       </div>
 
       {tab === "viruses" && (
-        <div className="virus-editor-layout">
+        <div className="virus-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>
+          <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
           <aside className="editor-record-list">
             {draft.viruses.map((virus, index) => (
               <div className="editor-record-row" data-sort-index={index} key={virus.id}>
-                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => setSelectedVirusId(virus.id)}>
+                <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => moveArrayItem(next.viruses, from, to)); }} />
+                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => { setSelectedVirusId(virus.id); showRecord(true); }}>
                   <strong>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small>{virus.code || "БЕЗ КОДА"}</small>
                 </button>
-                <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.viruses, from, to))} />
               </div>
             ))}
             <button className="add-record" type="button" onClick={() => {
               const virus = blankVirus();
               changeDraft((next) => next.viruses.push(virus));
               setSelectedVirusId(virus.id);
+              showRecord(true);
             }}>+ ДОБАВИТЬ ВИРУС</button>
           </aside>
 
           {selectedVirus ? (
             <div className="editor-form virus-editor-form">
-              <EditorGroup title="Основные данные">
+              <DossierTabs active={dossierTab} changed={liveDossierChanged} onSelect={selectDossierTab} />
+              {dossierTab === "main" && <EditorGroup title="Основные данные">
                 <Field label="Название"><input value={selectedVirus.name} onChange={(event) => updateVirus((virus) => { virus.name = event.target.value; })} /></Field>
                 <Field label="Код"><input value={selectedVirus.code} onChange={(event) => updateVirus((virus) => { virus.code = event.target.value; })} /></Field>
                 <Field label="Статус"><input value={selectedVirus.status} onChange={(event) => updateVirus((virus) => { virus.status = event.target.value; })} /></Field>
                 <ImageEditorField label="Фото или GIF после заражения" value={selectedVirus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} onChange={(value) => updateVirus((virus) => { virus.infectedImage = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { virus.infectedImage = url; }))} />
-              </EditorGroup>
+              </EditorGroup>}
 
-              <EditorGroup title="Описание">
-                <FormattedTextarea label="Внешние характеристики" value={selectedVirus.external} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, "external")]} formatKey={portiaTextKey.virus(selectedVirus.id, "external")} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, "external"), value, document, (next, text) => { next.viruses[selectedVirusIndex].external = text; })} />
-                <FormattedTextarea label="Физиологические характеристики" value={selectedVirus.physiology} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, "physiology")]} formatKey={portiaTextKey.virus(selectedVirus.id, "physiology")} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, "physiology"), value, document, (next, text) => { next.viruses[selectedVirusIndex].physiology = text; })} />
-              </EditorGroup>
+              {dossierTab === "text" && <EditorGroup title="Описание">
+                <FormattedTextarea area="lead" label="Внешние характеристики" value={selectedVirus.external} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, "external")]} formatKey={portiaTextKey.virus(selectedVirus.id, "external")} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, "external"), value, document, (next, text) => updateById(next.viruses, selectedVirus.id, (virus) => { virus.external = text; }))} />
+                <FormattedTextarea area="lead" label="Физиологические характеристики" value={selectedVirus.physiology} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, "physiology")]} formatKey={portiaTextKey.virus(selectedVirus.id, "physiology")} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, "physiology"), value, document, (next, text) => updateById(next.viruses, selectedVirus.id, (virus) => { virus.physiology = text; }))} />
+              </EditorGroup>}
 
-              <EditorGroup title="Характеристики PPU">
+              {dossierTab === "text" && <EditorGroup title="Характеристики PPU">
                 {(["health", "speed", "abilities"] as const).map((key) => (
-                  <FormattedTextarea key={key} label={{ health: "Здоровье", speed: "Скорость", abilities: "Способности" }[key]} value={selectedVirus.ppu[key]} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, `ppu-${key}`)]} formatKey={portiaTextKey.virus(selectedVirus.id, `ppu-${key}`)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, `ppu-${key}`), value, document, (next, text) => { next.viruses[selectedVirusIndex].ppu[key] = text; })} />
+                  <FormattedTextarea area="metric" key={key} label={{ health: "Здоровье", speed: "Скорость", abilities: "Способности" }[key]} value={selectedVirus.ppu[key]} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, `ppu-${key}`)]} formatKey={portiaTextKey.virus(selectedVirus.id, `ppu-${key}`)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, `ppu-${key}`), value, document, (next, text) => updateById(next.viruses, selectedVirus.id, (virus) => { virus.ppu[key] = text; }))} />
                 ))}
-              </EditorGroup>
+              </EditorGroup>}
 
-              <EditorGroup title="Классификация">
+              {dossierTab === "main" && <EditorGroup title="Классификация">
                 {([
                   ["danger", "Общий уровень опасности"], ["spread", "Распространение"], ["transmission", "Способ распространения"],
                   ["escapeRisk", "Угроза и риск побега"], ["mind", "Разум"], ["appearance", "Вид / внешность"], ["behavior", "Поведение"],
                 ] as [keyof Virus["classification"], string][]).map(([key, label]) => (
                   <ClassificationField key={key} label={label} classificationKey={key} value={selectedVirus.classification[key]} onChange={(value) => updateVirus((virus) => { virus.classification[key] = value; })} />
                 ))}
-              </EditorGroup>
+              </EditorGroup>}
 
-              <EditorGroup title="Мутации" stack>
+              {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
+                {/* A delete shifts the later mutations' index keys, so it closes the format panel. shortcut: mutations have no id, so delete is blocked while an upload runs; an undo mid-upload can still shift its index — give Mutation an id if that matters. */}
                 {selectedVirus.mutations.map((mutation, index) => (
                   <div className="nested-editor-card" key={index}>
-                    <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => updateVirus((virus) => { virus.mutations.splice(index, 1); })}>Удалить</button></div>
+                    <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => updateById(next.viruses, selectedVirus.id, (virus) => removeMutation(next, virus, index))); }}>Удалить</button></div>
                     <Field label="Название"><input value={mutation.name} onChange={(event) => updateVirus((virus) => { virus.mutations[index].name = event.target.value; })} /></Field>
-                    <FormattedTextarea label="Описание" value={mutation.description} document={draft.formattedText[portiaTextKey.mutation(selectedVirus.id, index)]} formatKey={portiaTextKey.mutation(selectedVirus.id, index)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.mutation(selectedVirus.id, index), value, document, (next, text) => { next.viruses[selectedVirusIndex].mutations[index].description = text; })} />
-                    <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => updateVirus((virus) => { virus.mutations[index].image = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { virus.mutations[index].image = url; }))} />
+                    <FormattedTextarea area="mutation" label="Описание" value={mutation.description} document={draft.formattedText[portiaTextKey.mutation(selectedVirus.id, index)]} formatKey={portiaTextKey.mutation(selectedVirus.id, index)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.mutation(selectedVirus.id, index), value, document, (next, text) => updateById(next.viruses, selectedVirus.id, (virus) => { const item = virus.mutations[index]; if (item) item.description = text; }))} />
+                    <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => updateVirus((virus) => { virus.mutations[index].image = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { const item = virus.mutations[index]; if (item) item.image = url; }))} />
                   </div>
                 ))}
                 <button className="secondary-control" type="button" onClick={() => updateVirus((virus) => virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }))}>+ ДОБАВИТЬ МУТАЦИЮ</button>
-              </EditorGroup>
+              </EditorGroup>}
 
-              <EditorGroup title="Записи учёных" stack>
+              {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
                 <p className="editor-guidance">Можно оставить досье без записей или добавить до пяти. Если текст не выделен, оформление применяется ко всей записи.</p>
                 {selectedVirus.scientistLogs.length === 0 && <div className="editor-empty compact-empty">Записей учёных пока нет.</div>}
                 {selectedVirus.scientistLogs.map((log, index) => (
@@ -649,25 +967,13 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
                     <Field label="Название"><input value={log.title} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].title = event.target.value; })} /></Field>
                     <Field label="Псевдоним учёного"><input value={log.scientist} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].scientist = event.target.value; })} /></Field>
                     <Field label="Уровень доступа записи"><select value={log.lockedLevel} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].lockedLevel = Number(event.target.value); })}><option value={2}>II — доступна</option><option value={3}>III — заблокирована</option><option value={4}>IV — заблокирована</option></select></Field>
-                    <FormattedTextarea label="Текст записи" value={scientistLogPlainText(log)} document={log.richContent} formatKey={`scientist:${log.id}`} onActivate={activateFormatter} onChange={(value, document) => updateVirus((virus) => { virus.scientistLogs[index].content = value.split(/\n\s*\n/); virus.scientistLogs[index].richContent = document; })} />
+                    <FormattedTextarea area="scientist" label="Текст записи" value={scientistLogPlainText(log)} document={log.richContent} formatKey={`scientist:${log.id}`} onActivate={activateFormatter} onChange={(value, document) => updateVirus((virus) => { virus.scientistLogs[index].content = value.split(/\n\s*\n/); virus.scientistLogs[index].richContent = document; })} />
                   </div>
                 ))}
                 <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= 5} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / 5</span></div>
-              </EditorGroup>
+              </EditorGroup>}
 
-              <button className="danger-control" type="button" onClick={() => {
-                if (!window.confirm(`Переместить «${selectedVirus.name}» в Корзину? В основной базе вирус исчезнет, но его можно будет редактировать и восстановить из Корзины.`)) return;
-                const nextId = draft.viruses.find((virus) => virus.id !== selectedVirus.id)?.id ?? "";
-                changeDraft((next) => {
-                  next.recycledViruses ??= [];
-                  const recycled = next.viruses[selectedVirusIndex];
-                  next.recycledViruses.push(recycled);
-                  next.viruses = next.viruses.filter((virus) => virus.id !== selectedVirus.id);
-                  next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `virus:${recycled.id}`), `virus:${recycled.id}`];
-                });
-                setSelectedVirusId(nextId);
-                setSelectedRecycledVirusId(selectedVirus.id);
-              }}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
+              <button className="danger-control" type="button" onClick={() => setDialog("recycle")}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
             </div>
           ) : <div className="editor-empty">Добавьте первую запись вируса.</div>}
         </div>
@@ -678,9 +984,9 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация».</p>
           {draft.infoSections.map((section, index) => (
             <div className="nested-editor-card" data-sort-index={index} key={section.id}>
-              <div className="nested-editor-head"><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} /><button type="button" onClick={() => changeDraft((next) => { next.infoSections.splice(index, 1); })}>Удалить</button></div></div>
-              <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => { next.infoSections[index].title = event.target.value; })} /></Field>
-              <FormattedTextarea label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => { next.infoSections[index].body = text; })} />
+              <div className="nested-editor-head"><OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} /><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id)); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div></div>
+              <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
+              <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
             </div>
           ))}
           <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.infoSections.push({ id: makeId("info"), title: "НОВЫЙ РАЗДЕЛ", body: "" }))}>+ ДОБАВИТЬ РАЗДЕЛ</button>
@@ -693,11 +999,11 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
           {draft.broadcasts.length === 0 && <div className="editor-empty">Сообщений пока нет. Создайте первое сообщение.</div>}
           {draft.broadcasts.map((broadcast, index) => (
             <div className="nested-editor-card" key={broadcast.id}>
-              <div className="nested-editor-head"><strong>СООБЩЕНИЕ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => changeDraft((next) => { next.broadcasts.splice(index, 1); })}>Удалить</button></div>
-              <Field label="Тип"><select value={broadcast.type} onChange={(event) => changeDraft((next) => { next.broadcasts[index].type = event.target.value as Broadcast["type"]; })}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
-              <Field label="Заголовок"><input value={broadcast.title} onChange={(event) => changeDraft((next) => { next.broadcasts[index].title = event.target.value; })} /></Field>
-              <FormattedTextarea label="Текст" tall value={broadcast.body} document={draft.formattedText[portiaTextKey.broadcast(broadcast.id)]} formatKey={portiaTextKey.broadcast(broadcast.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.broadcast(broadcast.id), value, document, (next, text) => { next.broadcasts[index].body = text; })} />
-              <label className="publish-toggle"><input type="checkbox" checked={broadcast.published} onChange={(event) => changeDraft((next) => { next.broadcasts[index].published = event.target.checked; })} /><span>Показывать посетителям</span></label>
+              <div className="nested-editor-head"><strong>СООБЩЕНИЕ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.broadcast(broadcast.id)); changeDraft((next) => removeBroadcast(next, broadcast.id)); }}>Удалить</button></div>
+              <Field label="Тип"><select value={broadcast.type} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.type = event.target.value as Broadcast["type"]; }))}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
+              <Field label="Заголовок"><input value={broadcast.title} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.title = event.target.value; }))} /></Field>
+              <FormattedTextarea area="broadcast" label="Текст" tall value={broadcast.body} document={draft.formattedText[portiaTextKey.broadcast(broadcast.id)]} formatKey={portiaTextKey.broadcast(broadcast.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.broadcast(broadcast.id), value, document, (next, text) => updateById(next.broadcasts, broadcast.id, (item) => { item.body = text; }))} />
+              <label className="publish-toggle"><input type="checkbox" checked={broadcast.published} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.published = event.target.checked; }))} /><span>Показывать посетителям</span></label>
             </div>
           ))}
           <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.broadcasts.unshift({ id: makeId("broadcast"), type: "news", title: "", body: "", published: false }))}>+ НОВОЕ СООБЩЕНИЕ</button>
@@ -705,7 +1011,8 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
       )}
 
       {tab === "recycle" && (
-        <div className="virus-editor-layout recycle-editor-layout">
+        <div className="virus-editor-layout recycle-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && (selectedRecycledVirus || selectedRecycleFile) ? "record" : "list"}>
+          <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
           <aside className="editor-record-list">
             {orderedRecycleKeys.map((key, index) => {
               const isVirus = key.startsWith("virus:");
@@ -715,13 +1022,14 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
               if (!virus && !file) return null;
               const title = virus?.name || file?.name || "БЕЗ ИМЕНИ";
               return <div className="editor-record-row" data-sort-index={index} key={key}>
-                <button type="button" className={virus ? virus.id === selectedRecycledVirusId && !selectedRecycleFileId ? "active" : "" : file!.id === selectedRecycleFileId ? "active" : ""} onClick={() => {
+                <OrderDragHandle index={index} label={title} onMove={(from, to) => changeDraft((next) => { const order = recycleKeys(next); moveArrayItem(order, from, to); next.recycleOrder = order; })} />
+                <button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} onClick={() => {
                   if (virus) { setSelectedRecycledVirusId(virus.id); setSelectedRecycleFileId(""); }
                   else { setSelectedRecycleFileId(file!.id); setSelectedRecycledVirusId(""); }
+                  showRecord(true);
                 }}>
                   <strong>{title}</strong><small>{virus ? "ВИРУС В КОРЗИНЕ" : file!.kind === "virus" ? "ФАЙЛ ВИРУСА" : file!.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ"}</small>
                 </button>
-                <OrderDragHandle index={index} label={title} onMove={(from, to) => changeDraft((next) => { const order = recycleKeys(next); moveArrayItem(order, from, to); next.recycleOrder = order; })} />
               </div>;
             })}
             <button className="add-record" type="button" onClick={() => {
@@ -729,37 +1037,41 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
               changeDraft((next) => { next.recycleFiles.push(file); next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `file:${file.id}`), `file:${file.id}`]; });
               setSelectedRecycleFileId(file.id);
               setSelectedRecycledVirusId("");
+              showRecord(true);
             }}>+ ДОБАВИТЬ ФАЙЛ</button>
             <button className="add-record" type="button" onClick={() => {
               const virus = blankVirus();
               changeDraft((next) => { next.recycledViruses ??= []; next.recycledViruses.push(virus); next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `virus:${virus.id}`), `virus:${virus.id}`]; });
               setSelectedRecycledVirusId(virus.id);
               setSelectedRecycleFileId("");
+              showRecord(true);
             }}>+ НАПИСАТЬ ВИРУС</button>
           </aside>
 
           {selectedRecycledVirus ? (
             <ArchivedVirusEditor
               virus={selectedRecycledVirus}
+              dossierChanged={archivedDossierChanged}
               uploadState={uploadState}
               onUpload={uploadImage}
-              onChange={(updater) => changeDraft((next) => updater(next.recycledViruses[selectedRecycledVirusIndex]))}
+              onChange={updateRecycledVirus}
+              onRemoveMutation={(index) => changeDraft((next) => updateById(next.recycledViruses ?? [], selectedRecycledVirus.id, (virus) => removeMutation(next, virus, index)))}
+              // No confirm(): embedded browsers may answer it "no" without showing it, and a restore only
+              // changes the unsaved draft and can be undone by moving the virus back.
               onRestore={() => {
-                if (!window.confirm(`Вернуть «${selectedRecycledVirus.name}» в основную базу вирусов?`)) return;
                 changeDraft((next) => {
-                  next.viruses.push(next.recycledViruses[selectedRecycledVirusIndex]);
-                  next.recycledViruses.splice(selectedRecycledVirusIndex, 1);
+                  const restored = next.recycledViruses.find((virus) => virus.id === selectedRecycledVirus.id);
+                  if (!restored) return;
+                  next.viruses.push(restored);
+                  next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== restored.id);
                   next.recycleOrder = recycleKeys(next);
                 });
                 setSelectedVirusId(selectedRecycledVirus.id);
                 setSelectedRecycledVirusId("");
+                switchTab("viruses");
+                showRecord(true);
               }}
-              onDelete={() => {
-                if (!window.confirm(`Удалить «${selectedRecycledVirus.name}» навсегда? Это действие нельзя отменить.`)) return;
-                const nextId = draft.recycledViruses.find((virus) => virus.id !== selectedRecycledVirus.id)?.id ?? "";
-                changeDraft((next) => { next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
-                setSelectedRecycledVirusId(nextId);
-              }}
+              onDelete={() => setDialog("delete")}
             />
           ) : selectedRecycleFile ? (
             <div className="editor-form">
@@ -794,13 +1106,14 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
               )}
 
               <EditorGroup title={selectedRecycleFile.kind === "image" ? "Подпись" : selectedRecycleFile.kind === "virus" ? "Дополнительный текст" : "Содержимое"} stack>
-                <FormattedTextarea label={selectedRecycleFile.kind === "image" ? "Описание фотографии" : "Текст файла"} tall value={selectedRecycleFile.content} document={draft.formattedText[portiaTextKey.recycle(selectedRecycleFile.id)]} formatKey={portiaTextKey.recycle(selectedRecycleFile.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.recycle(selectedRecycleFile.id), value, document, (next, text) => { next.recycleFiles[selectedRecycleFileIndex].content = text; })} />
+                <FormattedTextarea area={selectedRecycleFile.kind === "image" ? "caption" : "trash"} label={selectedRecycleFile.kind === "image" ? "Описание фотографии" : "Текст файла"} tall value={selectedRecycleFile.content} document={draft.formattedText[portiaTextKey.recycle(selectedRecycleFile.id)]} formatKey={portiaTextKey.recycle(selectedRecycleFile.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.recycle(selectedRecycleFile.id), value, document, (next, text) => updateById(next.recycleFiles, selectedRecycleFile.id, (file) => { file.content = text; }))} />
               </EditorGroup>
 
               <button className="danger-control" type="button" onClick={() => {
                 const nextId = draft.recycleFiles.find((file) => file.id !== selectedRecycleFile.id)?.id ?? "";
                 changeDraft((next) => { next.recycleFiles = next.recycleFiles.filter((file) => file.id !== selectedRecycleFile.id); next.recycleOrder = recycleKeys(next); });
                 setSelectedRecycleFileId(nextId);
+                showRecord(false);
               }}>УДАЛИТЬ ЭТОТ ФАЙЛ</button>
             </div>
           ) : <div className="editor-empty">Корзина пуста. Добавьте файл или создайте полную запись вируса.</div>}
@@ -810,14 +1123,14 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
       {tab === "search" && (
         <div className="editor-form flat-editor-form compact-editor">
           <p className="editor-guidance">Каждая строка станет ненавязчивой рекомендацией под строкой глобального поиска.</p>
-          <FormattedTextarea label="Рекомендации" tall value={draft.searchRecommendations.join("\n")} document={draft.formattedText[portiaTextKey.searchRecommendations]} formatKey={portiaTextKey.searchRecommendations} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.searchRecommendations, value, document, (next, text) => { next.searchRecommendations = text.split("\n"); })} />
+          <FormattedTextarea area="search" label="Рекомендации" tall value={draft.searchRecommendations.join("\n")} document={draft.formattedText[portiaTextKey.searchRecommendations]} formatKey={portiaTextKey.searchRecommendations} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.searchRecommendations, value, document, (next, text) => { next.searchRecommendations = text.split("\n"); })} />
           <div className="recommendation-order-list" aria-label="Порядок рекомендаций">
-            {draft.searchRecommendations.map((recommendation, index) => <div className="recommendation-order-row" data-sort-index={index} key={`${recommendation}:${draft.searchRecommendations.slice(0, index).filter((item) => item === recommendation).length}`}><span><small>{String(index + 1).padStart(2, "0")}</small>{recommendation || "ПУСТАЯ СТРОКА"}</span><OrderDragHandle index={index} label={recommendation || "рекомендация"} onMove={(from, to) => changeDraft((next) => {
+            {draft.searchRecommendations.map((recommendation, index) => <div className="recommendation-order-row" data-sort-index={index} key={`${recommendation}:${draft.searchRecommendations.slice(0, index).filter((item) => item === recommendation).length}`}><OrderDragHandle index={index} label={recommendation || "рекомендация"} onMove={(from, to) => changeDraft((next) => {
               const currentText = next.searchRecommendations.join("\n");
               const reordered = reorderRichTextLines(currentText, next.formattedText[portiaTextKey.searchRecommendations], from, to);
               next.searchRecommendations = reordered.text.split("\n");
               next.formattedText[portiaTextKey.searchRecommendations] = reordered.document;
-            })} /></div>)}
+            })} /><span><small>{String(index + 1).padStart(2, "0")}</small>{recommendation || "ПУСТАЯ СТРОКА"}</span></div>)}
           </div>
         </div>
       )}
@@ -829,16 +1142,16 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
             <label className="publish-toggle"><input type="checkbox" checked={draft.assistantIdleEnabled} onChange={(event) => changeDraft((next) => { next.assistantIdleEnabled = event.target.checked; })} /><span>Фразы при долгом бездействии</span></label>
             <label className="publish-toggle"><input type="checkbox" checked={draft.assistantActivityEnabled} onChange={(event) => changeDraft((next) => { next.assistantActivityEnabled = event.target.checked; })} /><span>Фразы во время активности</span></label>
           </div>
-          <FormattedTextarea label="Советы помощника" tall value={draft.assistantAdvice.join("\n")} document={draft.formattedText[portiaTextKey.assistantAdvice]} formatKey={portiaTextKey.assistantAdvice} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.assistantAdvice, value, document, (next, text) => { next.assistantAdvice = text.split("\n"); })} />
-          <FormattedTextarea label="Фразы после исчерпания терпения — по одной на строку" tall value={(draft.assistantOffendedPhrases ?? [draft.assistantOffendedPhrase]).join("\n")} document={draft.formattedText[portiaTextKey.assistantOffended]} formatKey={portiaTextKey.assistantOffended} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.assistantOffended, value, document, (next, text) => { next.assistantOffendedPhrases = text.split("\n"); next.assistantOffendedPhrase = next.assistantOffendedPhrases.find((item) => item.trim()) ?? ""; })} />
+          <FormattedTextarea area="assistant" label="Советы помощника" tall value={draft.assistantAdvice.join("\n")} document={draft.formattedText[portiaTextKey.assistantAdvice]} formatKey={portiaTextKey.assistantAdvice} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.assistantAdvice, value, document, (next, text) => { next.assistantAdvice = text.split("\n"); })} />
+          <FormattedTextarea area="assistant" label="Фразы после исчерпания терпения — по одной на строку" tall value={(draft.assistantOffendedPhrases ?? [draft.assistantOffendedPhrase]).join("\n")} document={draft.formattedText[portiaTextKey.assistantOffended]} formatKey={portiaTextKey.assistantOffended} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.assistantOffended, value, document, (next, text) => { next.assistantOffendedPhrases = text.split("\n"); next.assistantOffendedPhrase = next.assistantOffendedPhrases.find((item) => item.trim()) ?? ""; })} />
           <Field label="Варианты терпения в секундах — через запятую">
             <input value={(draft.assistantPatienceVariants ?? [draft.assistantPatienceSeconds]).join(", ")} onChange={(event) => changeDraft((next) => {
               next.assistantPatienceVariants = event.target.value.split(/[,;\s]+/).map(Number).filter((value) => Number.isFinite(value) && value > 0);
               next.assistantPatienceSeconds = next.assistantPatienceVariants[0] ?? 3;
             })} placeholder="Например: 3, 5, 8" />
           </Field>
-          <FormattedTextarea label="Фразы при долгом бездействии — по одной на строку" tall value={draft.assistantIdlePhrases.join("\n")} document={draft.formattedText[portiaTextKey.assistantIdle]} formatKey={portiaTextKey.assistantIdle} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.assistantIdle, value, document, (next, text) => { next.assistantIdlePhrases = text.split("\n"); })} />
-          <FormattedTextarea label="Фразы во время активности — по одной на строку" tall value={draft.assistantActivityPhrases.join("\n")} document={draft.formattedText[portiaTextKey.assistantActivity]} formatKey={portiaTextKey.assistantActivity} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.assistantActivity, value, document, (next, text) => { next.assistantActivityPhrases = text.split("\n"); })} />
+          <FormattedTextarea area="assistant" label="Фразы при долгом бездействии — по одной на строку" tall value={draft.assistantIdlePhrases.join("\n")} document={draft.formattedText[portiaTextKey.assistantIdle]} formatKey={portiaTextKey.assistantIdle} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.assistantIdle, value, document, (next, text) => { next.assistantIdlePhrases = text.split("\n"); })} />
+          <FormattedTextarea area="assistant" label="Фразы во время активности — по одной на строку" tall value={draft.assistantActivityPhrases.join("\n")} document={draft.formattedText[portiaTextKey.assistantActivity]} formatKey={portiaTextKey.assistantActivity} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.assistantActivity, value, document, (next, text) => { next.assistantActivityPhrases = text.split("\n"); })} />
           <Field label="Когда автоматически показывать фразы">
             <select value={draft.assistantAutoTimingMode} onChange={(event) => changeDraft((next) => { next.assistantAutoTimingMode = event.target.value as PortiaContent["assistantAutoTimingMode"]; })}>
               <option value="fixed">Через одинаковое время</option>
@@ -863,6 +1176,89 @@ export function PortiaEditor({ content, saveState, canManageEditors, onSave, onE
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && <FloatingTextFormatPanel key={`${formatTarget.key}:${formatTarget.selection.start}:${formatTarget.selection.end}:${previewSurface}`} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />}
+      {barVisible && (
+        <div className="editor-savebar" data-dirty={dirty || undefined}>
+          <p role="status" aria-live="polite">
+            {statusText && <span className={`editor-save-status ${saveState}`}>{statusText}</span>}
+            {dirty && <span className="editor-savebar-sections">{`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}</span>}
+          </p>
+          <div className="editor-savebar-actions">
+            <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
+            <button type="button" className="secondary-control" disabled={!dirty || saveState === "saving"} onClick={() => setDialog("discard")}>ОТМЕНИТЬ</button>
+            <button type="button" className="primary-control" disabled={!dirty || saveState === "saving"} onClick={() => void save()}>СОХРАНИТЬ</button>
+          </div>
+        </div>
+      )}
+      {dialog === "discard" && (
+        <ConfirmDialog
+          title="Отменить несохранённые правки?"
+          text={`Черновик вернётся к последнему сохранённому состоянию. Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}
+          actions={[
+            {
+              label: "ВЕРНУТЬ СОХРАНЁННОЕ",
+              tone: "danger",
+              onClick: () => {
+                setDialog(null);
+                setFormatTarget(null);
+                setFormatterOpen(false);
+                repairSelections(history.baseline);
+                dispatch({ type: "discard" });
+              },
+            },
+            { label: "НЕ ОТМЕНЯТЬ", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+          ]}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog === "recycle" && selectedVirus && (
+        <ConfirmDialog
+          title="ПЕРЕМЕСТИТЬ В КОРЗИНУ"
+          text={`Переместить «${selectedVirus.name}» в Корзину? В основной базе вирус исчезнет, но его можно будет редактировать и восстановить из Корзины.`}
+          actions={[
+            { label: "ПЕРЕМЕСТИТЬ", tone: "danger", onClick: () => { setDialog(null); moveSelectedVirusToRecycle(); } },
+            { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+          ]}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog === "delete" && selectedRecycledVirus && (
+        <ConfirmDialog
+          title="УДАЛИТЬ НАВСЕГДА"
+          text={`Удалить «${selectedRecycledVirus.name}» навсегда? Это действие нельзя отменить.`}
+          actions={[
+            { label: "УДАЛИТЬ НАВСЕГДА", tone: "danger", onClick: () => { setDialog(null); deleteSelectedRecycledVirus(); } },
+            { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+          ]}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {closeAsked && (
+        <ConfirmDialog
+          title="Закрыть редактор?"
+          text={`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}
+          actions={[
+            {
+              label: "СОХРАНИТЬ",
+              tone: "primary",
+              // The modal stays up during the request, so nothing can be typed that the close would lose.
+              // Closes only if the save left nothing unsaved and the close was not cancelled meanwhile;
+              // otherwise the window stays and the bar shows the unsaved edits, ОШИБКА or the conflict.
+              disabled: saveState === "saving",
+              onClick: () => {
+                void save().then((clean) => {
+                  if (!latest.current.closeAsked) return;
+                  setHandledCloseRequest(closeRequest);
+                  if (clean) latest.current.onCloseApproved();
+                });
+              },
+            },
+            // A sent PUT cannot be cancelled; closing during it would still save, and a failure would go unseen.
+            { label: "НЕ СОХРАНЯТЬ", tone: "danger", disabled: saveState === "saving", onClick:() => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },
+            { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setHandledCloseRequest(closeRequest) },
+          ]}
+          onCancel={() => setHandledCloseRequest(closeRequest)}
+        />
+      )}
     </div>
     </ActiveFormatContext.Provider>
   );
@@ -874,6 +1270,8 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
   const [draft, setDraft] = useState({ biography: "", photoUrl: "", knowledgeRating: 1 });
   const [state, setState] = useState<"loading" | "idle" | "saving" | "saved" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
+  const [recordOpen, setRecordOpen] = useState(false);
+  const layoutRef = useRef<HTMLDivElement>(null);
   const selected = employees.find((employee) => employee.id === selectedId) ?? employees[0] ?? null;
 
   useEffect(() => {
@@ -929,9 +1327,10 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
   if (!selected) return <div className="editor-empty">{state === "error" ? "Не удалось загрузить сотрудников из таблицы. Обновите страницу через минуту." : "В таблице пока нет сотрудников."}</div>;
 
   const preview = draft.photoUrl || selected.robloxAvatarUrl;
-  return <div className="virus-editor-layout employee-editor-layout">
+  return <div className="virus-editor-layout employee-editor-layout" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
+    <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
     <aside className="editor-record-list">
-      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => { setSelectedId(employee.id); setDraft({ biography: employee.biography, photoUrl: employee.photoUrl, knowledgeRating: employee.knowledgeRating }); setState("idle"); }}><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => { setSelectedId(employee.id); setDraft({ biography: employee.biography, photoUrl: employee.photoUrl, knowledgeRating: employee.knowledgeRating }); setState("idle"); setRecordOpen(true); revealOnPhone(layoutRef); }}><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
     </aside>
     <div className="editor-form employee-profile-editor">
       <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять только фотографию, оценку знаний и биографию.</p>
@@ -949,45 +1348,49 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
   </div>;
 }
 
-function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRestore, onDelete }: {
+function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRemoveMutation, onRestore, onDelete, dossierChanged }: {
   virus: Virus;
   uploadState: "idle" | "uploading" | "error";
   onUpload: (file: File, onUploaded: (url: string) => void) => void;
   onChange: (updater: (virus: Virus) => void) => void;
+  onRemoveMutation: (index: number) => void;
   onRestore: () => void;
   onDelete: () => void;
+  dossierChanged: DossierTab[];
 }) {
+  const [dossierTab, setDossierTab] = useState<DossierTab>("main");
   return <div className="editor-form virus-editor-form">
     <p className="editor-guidance">Это полная запись вируса в Корзине. Она не показывается в основной базе, но остаётся доступной посетителям в Корзине и может быть восстановлена.</p>
-    <EditorGroup title="Основные данные">
+    <DossierTabs active={dossierTab} changed={dossierChanged} onSelect={setDossierTab} />
+    {dossierTab === "main" && <EditorGroup title="Основные данные">
       <Field label="Название"><input value={virus.name} onChange={(event) => onChange((item) => { item.name = event.target.value; })} /></Field>
       <Field label="Код"><input value={virus.code} onChange={(event) => onChange((item) => { item.code = event.target.value; })} /></Field>
       <Field label="Статус"><input value={virus.status} onChange={(event) => onChange((item) => { item.status = event.target.value; })} /></Field>
       <ImageEditorField label="Фото или GIF после заражения" value={virus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.infectedImage = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.infectedImage = url; }))} />
-    </EditorGroup>
-    <EditorGroup title="Описание" stack>
+    </EditorGroup>}
+    {dossierTab === "text" && <EditorGroup title="Описание" stack>
       <Field label="Внешние характеристики" wide><textarea value={virus.external} onChange={(event) => onChange((item) => { item.external = event.target.value; })} /></Field>
       <Field label="Физиологические характеристики" wide><textarea value={virus.physiology} onChange={(event) => onChange((item) => { item.physiology = event.target.value; })} /></Field>
-    </EditorGroup>
-    <EditorGroup title="Характеристики PPU" stack>
+    </EditorGroup>}
+    {dossierTab === "text" && <EditorGroup title="Характеристики PPU" stack>
       {(["health", "speed", "abilities"] as const).map((key) => <Field key={key} label={{ health: "Здоровье", speed: "Скорость", abilities: "Способности" }[key]} wide><textarea value={virus.ppu[key]} onChange={(event) => onChange((item) => { item.ppu[key] = event.target.value; })} /></Field>)}
-    </EditorGroup>
-    <EditorGroup title="Классификация">
+    </EditorGroup>}
+    {dossierTab === "main" && <EditorGroup title="Классификация">
       {([
         ["danger", "Общий уровень опасности"], ["spread", "Распространение"], ["transmission", "Способ распространения"],
         ["escapeRisk", "Угроза и риск побега"], ["mind", "Разум"], ["appearance", "Вид / внешность"], ["behavior", "Поведение"],
       ] as [keyof Virus["classification"], string][]).map(([key, label]) => <ClassificationField key={key} label={label} classificationKey={key} value={virus.classification[key]} onChange={(value) => onChange((item) => { item.classification[key] = value; })} />)}
-    </EditorGroup>
-    <EditorGroup title="Мутации" stack>
+    </EditorGroup>}
+    {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
       {virus.mutations.map((mutation, index) => <div className="nested-editor-card" key={`${virus.id}-mutation-${index}`}>
-        <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.mutations.splice(index, 1); })}>Удалить</button></div>
+        <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => onRemoveMutation(index)}>Удалить</button></div>
         <Field label="Название"><input value={mutation.name} onChange={(event) => onChange((item) => { item.mutations[index].name = event.target.value; })} /></Field>
         <Field label="Описание" wide><textarea value={mutation.description} onChange={(event) => onChange((item) => { item.mutations[index].description = event.target.value; })} /></Field>
-        <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.mutations[index].image = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.mutations[index].image = url; }))} />
+        <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.mutations[index].image = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { const target = item.mutations[index]; if (target) target.image = url; }))} />
       </div>)}
       <button className="secondary-control" type="button" onClick={() => onChange((item) => { item.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }); })}>+ ДОБАВИТЬ МУТАЦИЮ</button>
-    </EditorGroup>
-    <EditorGroup title="Записи учёных" stack>
+    </EditorGroup>}
+    {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
       {virus.scientistLogs.map((log, index) => <div className="nested-editor-card" key={log.id}>
         <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.scientistLogs.splice(index, 1); })}>Удалить</button></div>
         <Field label="Название"><input value={log.title} onChange={(event) => onChange((item) => { item.scientistLogs[index].title = event.target.value; })} /></Field>
@@ -996,9 +1399,20 @@ function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRestore
         <Field label="Текст записи" wide><textarea value={scientistLogPlainText(log)} onChange={(event) => onChange((item) => { item.scientistLogs[index].content = event.target.value.split(/\n\s*\n/); item.scientistLogs[index].richContent = { runs: [{ text: event.target.value }] }; })} /></Field>
       </div>)}
       <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= 5} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
-    </EditorGroup>
+    </EditorGroup>}
     <div className="archive-virus-actions"><button className="secondary-control" type="button" onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
   </div>;
+}
+
+function DossierTabs({ active, changed, onSelect }: { active: DossierTab; changed: DossierTab[]; onSelect: (id: DossierTab) => void }) {
+  return <nav className="editor-tabs dossier-tabs" aria-label="Разделы досье">
+    {dossierTabs.map(([id, label]) => {
+      const unsaved = changed.includes(id);
+      return <button key={id} type="button" className={active === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => onSelect(id)}>
+        {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}
+      </button>;
+    })}
+  </nav>;
 }
 
 function ClassificationField({ label, classificationKey, value, onChange }: {
@@ -1025,8 +1439,9 @@ function ClassificationField({ label, classificationKey, value, onChange }: {
   </label>;
 }
 
-function FormattedTextarea({ label, value, document, formatKey, onChange, onActivate, tall = false }: {
+function FormattedTextarea({ label, area, value, document, formatKey, onChange, onActivate, tall = false }: {
   label: string;
+  area: DisplayArea;
   value: string;
   document?: RichTextDocument;
   formatKey: string;
@@ -1076,8 +1491,11 @@ function FormattedTextarea({ label, value, document, formatKey, onChange, onActi
     <div className="formatted-text-field-head"><span>{label}</span><small></small></div>
     <div
       ref={editorRef}
-      className={`formatted-rich-input${tall ? " tall" : ""}${activeFormat.key === formatKey ? ` is-editor-active preview-${activeFormat.surface}` : ""}`}
+      data-area={area}
+      data-format-key={formatKey}
+      className={`formatted-rich-input${tall ? " tall" : ""} preview-${activeFormat.surface}${activeFormat.key === formatKey ? " is-editor-active" : ""}`}
       contentEditable
+      inputMode={activeFormat.phonePanelOpen ? "none" : undefined}
       suppressContentEditableWarning
       role="textbox"
       aria-multiline="true"
@@ -1128,6 +1546,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const initialStyle = richTextStyleAt(target.document, target.selection.start);
   const defaultTextColor = previewSurface === "dark" ? "#aebfba" : "#252827";
   const documentRef = useRef(target.document);
+  const panelRef = useRef<HTMLElement>(null);
   const [color, setColor] = useState(initialStyle.color ?? defaultTextColor);
   const [fontSize, setFontSize] = useState(initialStyle.fontSize ?? 17);
   const [fontWeight, setFontWeight] = useState(initialStyle.fontWeight ?? 400);
@@ -1135,6 +1554,50 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const [backgroundOpacity, setBackgroundOpacity] = useState(initialStyle.backgroundOpacity ?? 0);
   const [colorPicker, setColorPicker] = useState<"text" | "background" | null>(null);
   useEffect(() => { documentRef.current = target.document; }, [target.document]);
+
+  const formatKey = target.key;
+  const selectionStart = target.selection.start;
+  const selectionEnd = target.selection.end;
+  const formatDocument = target.document;
+  // Phone: formatting is «either the keyboard or the panel» (D-05, D-06). ✎ takes focus from the field once and rich fields carry
+  // inputMode none while the panel is open, so the owner can touch and select text and the panel stays (owner, UAT 12, reversing 03-03);
+  // the stored selection is painted with the Custom Highlight API and kept above the panel.
+  // formatDocument is a dependency because a style change re-renders the field's text nodes, which orphans the painted range.
+  useEffect(() => {
+    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    const field = findFormatField(formatKey);
+    const panel = panelRef.current;
+    if (!field || !panel) return;
+    const collapsed = selectionStart === selectionEnd;
+    const range = rangeFromOffsets(field, { start: selectionStart, end: selectionEnd });
+    const paints = !collapsed && typeof Highlight !== "undefined" && "highlights" in CSS;
+    if (paints) CSS.highlights.set("portia-format", new Highlight(range));
+    const keepVisible = () => {
+      const rect = collapsed ? field.getBoundingClientRect() : range.getBoundingClientRect();
+      const overlap = rect.bottom - (panel.getBoundingClientRect().top - 16);
+      // 64 keeps the text under the 48px system bar.
+      if (overlap > 0) window.scrollBy(0, Math.max(0, Math.min(overlap, rect.top - 64)));
+    };
+    const frame = window.requestAnimationFrame(keepVisible);
+    window.visualViewport?.addEventListener("resize", keepVisible);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.visualViewport?.removeEventListener("resize", keepVisible);
+      if (paints) CSS.highlights.delete("portia-format");
+    };
+  }, [formatKey, selectionStart, selectionEnd, formatDocument]);
+
+  // On a phone, closing returns the caret to the field in the same tap so the keyboard can come back (iOS may still need one more tap);
+  // flushSync commits the close first so the field has dropped inputMode none before it gets focus.
+  const finish = () => {
+    flushSync(onClose);
+    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    const field = findFormatField(formatKey);
+    if (!field) return;
+    field.focus({ preventScroll: true });
+    restoreSelection(field, { start: selectionStart, end: selectionEnd });
+  };
+
   const selectionLabel = target.selection.start === target.selection.end
     ? "ВЕСЬ ТЕКСТ"
     : `${Math.abs(target.selection.end - target.selection.start)} ЗНАК.`;
@@ -1161,11 +1624,11 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     commit(resetRichTextStyle(documentRef.current, target.selection.start, target.selection.end));
   };
 
-  return <section className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`}>
+  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`}>
     <header>
       <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
       <small>{selectionLabel}</small>
-      <button type="button" onClick={onClose} aria-label="Закрыть редактор">×</button>
+      <button type="button" onClick={finish} aria-label="Закрыть редактор">×</button>
     </header>
     <div className="rich-text-toolbar" aria-label="Оформление текста">
       <div className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={previewSurface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={previewSurface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
@@ -1191,7 +1654,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
         onClose={() => setColorPicker(null)}
       />}
     </div>
-    <footer><p>Изменения применяются сразу. Без выделения меняется весь текст.</p><div><button type="button" className="reset-format" onClick={reset}>СБРОСИТЬ</button><button type="button" className="finish-format" onClick={onClose}>ГОТОВО</button></div></footer>
+    <footer><p>Изменения применяются сразу. Без выделения меняется весь текст.</p><div><button type="button" className="reset-format" onClick={reset}>СБРОСИТЬ</button><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
   </section>;
 }
 
@@ -1318,6 +1781,47 @@ function EditorAccessManager() {
       {editors.map((editor) => <div key={editor.email}><div><strong>{editor.email}</strong><small>ДОСТУП К РЕДАКТОРУ</small></div><button type="button" onClick={() => void removeEditor(editor.email)}>ОТОЗВАТЬ</button></div>)}
     </div>
   </div>;
+}
+
+type ConfirmAction = { label: string; tone: "primary" | "secondary" | "danger"; onClick: () => void; autoFocus?: boolean; disabled?: boolean };
+
+// A native modal dialog lives in the top layer: above the transformed editor window, the taskbar and the boot screen,
+// with focus trapped and the page inert. Never use window.confirm for new prompts: embedded browsers answer it "no" unseen.
+function ConfirmDialog({ title, text, actions, onCancel }: { title: string; text: string; actions: ConfirmAction[]; onCancel: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const textId = useId();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    // showModal focuses the first button; the safe action has to win instead.
+    dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+  }, []);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="portia-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={textId}
+      onClose={() => onCancel()}
+      onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}
+    >
+      <div>
+        <h2 id={titleId}>{title}</h2>
+        <p id={textId}>{text}</p>
+        <div className="portia-dialog-actions">
+          {actions.map((action) => (
+            <button key={action.label} type="button" className={`${action.tone}-control`} autoFocus={action.autoFocus} data-autofocus={action.autoFocus || undefined} disabled={action.disabled} onClick={action.onClick}>{action.label}</button>
+          ))}
+        </div>
+      </div>
+    </dialog>
+  );
 }
 
 function EditorGroup({ title, children, stack = false }: { title: string; children: React.ReactNode; stack?: boolean }) {
