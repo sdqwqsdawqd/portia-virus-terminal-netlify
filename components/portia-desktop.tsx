@@ -815,11 +815,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     savesStarted.current += 1;
     setSaveState("saving");
     try {
+      // Up to 2 MB plus auth, upsert and CDN purge: aborting after the server committed would turn the retry into a false conflict.
       const response = await fetchWithTimeout("/api/content", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ content: next, revision: baseRevision }),
-      });
+      }, 30_000);
       if (response.status === 409) {
         // The server is authoritative after a conflict: a cached revision ahead of it (row reset, fresh project) would otherwise drop every poll for good.
         knownRevision.current = -1;
