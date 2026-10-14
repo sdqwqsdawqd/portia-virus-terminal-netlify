@@ -1381,3 +1381,5 @@ html[data-motion="reduce"] :is(.boot-core > .portia-mark, .boot-thread) { animat
 .document-app-zoom button + button { border-left: 1px solid oklch(.383 .037 var(--accent-hue)); }
 .document-app-external { display: flex; align-items: center; height: 36px; padding: 0 14px; border: 1px solid oklch(.383 .037 var(--accent-hue)); border-radius: 10px; background: oklch(.168 .014 var(--accent-hue) / .92); color: oklch(.935 .011 var(--accent-hue)); font: 600 13px var(--sans); text-decoration: none; }
 .document-app-external:hover { border-color: var(--teal); color: #fff; }
+
+.dossier-tabs { margin: 0 0 16px; }

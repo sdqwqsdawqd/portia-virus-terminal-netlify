@@ -1,4 +1,4 @@
-import type { PortiaContent } from "./portia-content.ts";
+import type { PortiaContent, Virus } from "./portia-content.ts";
 
 export type EditorSection = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant";
 
@@ -72,6 +72,27 @@ export const dossierTabs: [DossierTab, string][] = [
   ["logs", "Записи учёных"],
 ];
 
-export function changedDossierTabs(_baseline: PortiaContent, _draft: PortiaContent, _virusId: string): DossierTab[] {
-  return [];
+export function changedDossierTabs(baseline: PortiaContent, draft: PortiaContent, virusId: string): DossierTab[] {
+  const find = (content: PortiaContent) => [...content.viruses, ...content.recycledViruses].find((virus) => virus.id === virusId);
+  const after = find(draft);
+  if (!after) return [];
+  const before = find(baseline);
+  if (!before) return dossierTabs.map(([id]) => id);
+
+  // Anything that is not text, mutations or logs falls into "main", so a future virus field still marks a tab.
+  const slices = (virus: Virus, content: PortiaContent) => {
+    const { external, physiology, ppu, mutations, scientistLogs, ...main } = virus;
+    const parts: Record<DossierTab, unknown[]> = { main: [main], text: [external, physiology, ppu], mutations: [mutations], logs: [scientistLogs] };
+    const prefix = `virus:${virusId}:`;
+    for (const key of Object.keys(content.formattedText ?? {}).sort()) {
+      if (!key.startsWith(prefix)) continue;
+      const rest = key.slice(prefix.length);
+      const tab: DossierTab = key.includes(":mutation:") ? "mutations" : rest === "external" || rest === "physiology" || rest.startsWith("ppu-") ? "text" : "main";
+      parts[tab].push([key, content.formattedText[key]]);
+    }
+    return parts;
+  };
+  const was = slices(before, baseline);
+  const now = slices(after, draft);
+  return dossierTabs.map(([id]) => id).filter((id) => JSON.stringify(was[id]) !== JSON.stringify(now[id]));
 }

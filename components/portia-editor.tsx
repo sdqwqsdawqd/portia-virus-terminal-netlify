@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
-import { changedSections, editorSections, sectionLabels } from "@/lib/editor-changes";
+import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import {
@@ -464,6 +464,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
   const closeAsked = closeRequest !== handledCloseRequest;
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
+  const [dossierTab, setDossierTab] = useState<DossierTab>("main");
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface>("light");
   // At 900px and below a list + form layout shows either the list or the open record (D-01, D-02).
   const [recordOpen, setRecordOpen] = useState(false);
@@ -505,6 +506,10 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
     [draft.recycledViruses, selectedRecycledVirusId],
   );
   const selectedRecycledVirus = selectedRecycledVirusIndex >= 0 ? draft.recycledViruses[selectedRecycledVirusIndex] : null;
+  const liveVirusId = selectedVirus?.id;
+  const liveDossierChanged = useMemo(() => liveVirusId ? changedDossierTabs(history.baseline, draft, liveVirusId) : [], [history.baseline, draft, liveVirusId]);
+  const archivedVirusId = selectedRecycledVirus?.id;
+  const archivedDossierChanged = useMemo(() => archivedVirusId ? changedDossierTabs(history.baseline, draft, archivedVirusId) : [], [history.baseline, draft, archivedVirusId]);
   const orderedRecycleKeys = useMemo(() => recycleKeys(draft), [draft]);
 
   const changeDraft = (updater: (next: PortiaContent) => void) => {
@@ -566,6 +571,13 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
   });
 
   const activateFormatter = (target: FormatTarget) => setFormatTarget(target);
+
+  // The format panel keeps a target in the tab being hidden; leaving it open could write old text back (Pitfall 7).
+  const selectDossierTab = (id: DossierTab) => {
+    setDossierTab(id);
+    setFormatTarget(null);
+    setFormatterOpen(false);
+  };
 
   const switchTab = (id: EditorTab) => {
     setTab(id);
@@ -765,34 +777,35 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
 
           {selectedVirus ? (
             <div className="editor-form virus-editor-form">
-              <EditorGroup title="Основные данные">
+              <DossierTabs active={dossierTab} changed={liveDossierChanged} onSelect={selectDossierTab} />
+              {dossierTab === "main" && <EditorGroup title="Основные данные">
                 <Field label="Название"><input value={selectedVirus.name} onChange={(event) => updateVirus((virus) => { virus.name = event.target.value; })} /></Field>
                 <Field label="Код"><input value={selectedVirus.code} onChange={(event) => updateVirus((virus) => { virus.code = event.target.value; })} /></Field>
                 <Field label="Статус"><input value={selectedVirus.status} onChange={(event) => updateVirus((virus) => { virus.status = event.target.value; })} /></Field>
                 <ImageEditorField label="Фото или GIF после заражения" value={selectedVirus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} onChange={(value) => updateVirus((virus) => { virus.infectedImage = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { virus.infectedImage = url; }))} />
-              </EditorGroup>
+              </EditorGroup>}
 
-              <EditorGroup title="Описание">
+              {dossierTab === "text" && <EditorGroup title="Описание">
                 <FormattedTextarea area="lead" label="Внешние характеристики" value={selectedVirus.external} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, "external")]} formatKey={portiaTextKey.virus(selectedVirus.id, "external")} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, "external"), value, document, (next, text) => { next.viruses[selectedVirusIndex].external = text; })} />
                 <FormattedTextarea area="lead" label="Физиологические характеристики" value={selectedVirus.physiology} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, "physiology")]} formatKey={portiaTextKey.virus(selectedVirus.id, "physiology")} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, "physiology"), value, document, (next, text) => { next.viruses[selectedVirusIndex].physiology = text; })} />
-              </EditorGroup>
+              </EditorGroup>}
 
-              <EditorGroup title="Характеристики PPU">
+              {dossierTab === "text" && <EditorGroup title="Характеристики PPU">
                 {(["health", "speed", "abilities"] as const).map((key) => (
                   <FormattedTextarea area="metric" key={key} label={{ health: "Здоровье", speed: "Скорость", abilities: "Способности" }[key]} value={selectedVirus.ppu[key]} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, `ppu-${key}`)]} formatKey={portiaTextKey.virus(selectedVirus.id, `ppu-${key}`)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, `ppu-${key}`), value, document, (next, text) => { next.viruses[selectedVirusIndex].ppu[key] = text; })} />
                 ))}
-              </EditorGroup>
+              </EditorGroup>}
 
-              <EditorGroup title="Классификация">
+              {dossierTab === "main" && <EditorGroup title="Классификация">
                 {([
                   ["danger", "Общий уровень опасности"], ["spread", "Распространение"], ["transmission", "Способ распространения"],
                   ["escapeRisk", "Угроза и риск побега"], ["mind", "Разум"], ["appearance", "Вид / внешность"], ["behavior", "Поведение"],
                 ] as [keyof Virus["classification"], string][]).map(([key, label]) => (
                   <ClassificationField key={key} label={label} classificationKey={key} value={selectedVirus.classification[key]} onChange={(value) => updateVirus((virus) => { virus.classification[key] = value; })} />
                 ))}
-              </EditorGroup>
+              </EditorGroup>}
 
-              <EditorGroup title="Мутации" stack>
+              {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
                 {selectedVirus.mutations.map((mutation, index) => (
                   <div className="nested-editor-card" key={index}>
                     <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => updateVirus((virus) => { virus.mutations.splice(index, 1); })}>Удалить</button></div>
@@ -802,9 +815,9 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
                   </div>
                 ))}
                 <button className="secondary-control" type="button" onClick={() => updateVirus((virus) => virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }))}>+ ДОБАВИТЬ МУТАЦИЮ</button>
-              </EditorGroup>
+              </EditorGroup>}
 
-              <EditorGroup title="Записи учёных" stack>
+              {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
                 <p className="editor-guidance">Можно оставить досье без записей или добавить до пяти. Если текст не выделен, оформление применяется ко всей записи.</p>
                 {selectedVirus.scientistLogs.length === 0 && <div className="editor-empty compact-empty">Записей учёных пока нет.</div>}
                 {selectedVirus.scientistLogs.map((log, index) => (
@@ -817,7 +830,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
                   </div>
                 ))}
                 <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= 5} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / 5</span></div>
-              </EditorGroup>
+              </EditorGroup>}
 
               <button className="danger-control" type="button" onClick={() => setDialog("recycle")}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
             </div>
@@ -897,6 +910,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
           {selectedRecycledVirus ? (
             <ArchivedVirusEditor
               virus={selectedRecycledVirus}
+              dossierChanged={archivedDossierChanged}
               uploadState={uploadState}
               onUpload={uploadImage}
               onChange={(updater) => changeDraft((next) => updater(next.recycledViruses[selectedRecycledVirusIndex]))}
@@ -1180,36 +1194,39 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
   </div>;
 }
 
-function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRestore, onDelete }: {
+function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRestore, onDelete, dossierChanged }: {
   virus: Virus;
   uploadState: "idle" | "uploading" | "error";
   onUpload: (file: File, onUploaded: (url: string) => void) => void;
   onChange: (updater: (virus: Virus) => void) => void;
   onRestore: () => void;
   onDelete: () => void;
+  dossierChanged: DossierTab[];
 }) {
+  const [dossierTab, setDossierTab] = useState<DossierTab>("main");
   return <div className="editor-form virus-editor-form">
     <p className="editor-guidance">Это полная запись вируса в Корзине. Она не показывается в основной базе, но остаётся доступной посетителям в Корзине и может быть восстановлена.</p>
-    <EditorGroup title="Основные данные">
+    <DossierTabs active={dossierTab} changed={dossierChanged} onSelect={setDossierTab} />
+    {dossierTab === "main" && <EditorGroup title="Основные данные">
       <Field label="Название"><input value={virus.name} onChange={(event) => onChange((item) => { item.name = event.target.value; })} /></Field>
       <Field label="Код"><input value={virus.code} onChange={(event) => onChange((item) => { item.code = event.target.value; })} /></Field>
       <Field label="Статус"><input value={virus.status} onChange={(event) => onChange((item) => { item.status = event.target.value; })} /></Field>
       <ImageEditorField label="Фото или GIF после заражения" value={virus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.infectedImage = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.infectedImage = url; }))} />
-    </EditorGroup>
-    <EditorGroup title="Описание" stack>
+    </EditorGroup>}
+    {dossierTab === "text" && <EditorGroup title="Описание" stack>
       <Field label="Внешние характеристики" wide><textarea value={virus.external} onChange={(event) => onChange((item) => { item.external = event.target.value; })} /></Field>
       <Field label="Физиологические характеристики" wide><textarea value={virus.physiology} onChange={(event) => onChange((item) => { item.physiology = event.target.value; })} /></Field>
-    </EditorGroup>
-    <EditorGroup title="Характеристики PPU" stack>
+    </EditorGroup>}
+    {dossierTab === "text" && <EditorGroup title="Характеристики PPU" stack>
       {(["health", "speed", "abilities"] as const).map((key) => <Field key={key} label={{ health: "Здоровье", speed: "Скорость", abilities: "Способности" }[key]} wide><textarea value={virus.ppu[key]} onChange={(event) => onChange((item) => { item.ppu[key] = event.target.value; })} /></Field>)}
-    </EditorGroup>
-    <EditorGroup title="Классификация">
+    </EditorGroup>}
+    {dossierTab === "main" && <EditorGroup title="Классификация">
       {([
         ["danger", "Общий уровень опасности"], ["spread", "Распространение"], ["transmission", "Способ распространения"],
         ["escapeRisk", "Угроза и риск побега"], ["mind", "Разум"], ["appearance", "Вид / внешность"], ["behavior", "Поведение"],
       ] as [keyof Virus["classification"], string][]).map(([key, label]) => <ClassificationField key={key} label={label} classificationKey={key} value={virus.classification[key]} onChange={(value) => onChange((item) => { item.classification[key] = value; })} />)}
-    </EditorGroup>
-    <EditorGroup title="Мутации" stack>
+    </EditorGroup>}
+    {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
       {virus.mutations.map((mutation, index) => <div className="nested-editor-card" key={`${virus.id}-mutation-${index}`}>
         <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.mutations.splice(index, 1); })}>Удалить</button></div>
         <Field label="Название"><input value={mutation.name} onChange={(event) => onChange((item) => { item.mutations[index].name = event.target.value; })} /></Field>
@@ -1217,8 +1234,8 @@ function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRestore
         <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.mutations[index].image = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.mutations[index].image = url; }))} />
       </div>)}
       <button className="secondary-control" type="button" onClick={() => onChange((item) => { item.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }); })}>+ ДОБАВИТЬ МУТАЦИЮ</button>
-    </EditorGroup>
-    <EditorGroup title="Записи учёных" stack>
+    </EditorGroup>}
+    {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
       {virus.scientistLogs.map((log, index) => <div className="nested-editor-card" key={log.id}>
         <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.scientistLogs.splice(index, 1); })}>Удалить</button></div>
         <Field label="Название"><input value={log.title} onChange={(event) => onChange((item) => { item.scientistLogs[index].title = event.target.value; })} /></Field>
@@ -1227,9 +1244,20 @@ function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRestore
         <Field label="Текст записи" wide><textarea value={scientistLogPlainText(log)} onChange={(event) => onChange((item) => { item.scientistLogs[index].content = event.target.value.split(/\n\s*\n/); item.scientistLogs[index].richContent = { runs: [{ text: event.target.value }] }; })} /></Field>
       </div>)}
       <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= 5} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
-    </EditorGroup>
+    </EditorGroup>}
     <div className="archive-virus-actions"><button className="secondary-control" type="button" onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
   </div>;
+}
+
+function DossierTabs({ active, changed, onSelect }: { active: DossierTab; changed: DossierTab[]; onSelect: (id: DossierTab) => void }) {
+  return <nav className="editor-tabs dossier-tabs" aria-label="Разделы досье">
+    {dossierTabs.map(([id, label]) => {
+      const unsaved = changed.includes(id);
+      return <button key={id} type="button" className={active === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => onSelect(id)}>
+        {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}
+      </button>;
+    })}
+  </nav>;
 }
 
 function ClassificationField({ label, classificationKey, value, onChange }: {
