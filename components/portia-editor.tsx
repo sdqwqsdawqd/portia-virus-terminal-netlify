@@ -505,7 +505,8 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
   const [tab, setTab] = useState<EditorTab>("viruses");
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
-  const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycledViruses?.[0]?.id ?? "");
+  // The Recycle selection is one of two ids; the other stays "" (the render and the row highlight rely on it).
+  const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycleFiles.length ? "" : content.recycledViruses?.[0]?.id ?? "");
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">("idle");
   const [dialog, setDialog] = useState<"discard" | "recycle" | "delete" | null>(null);
   // A request made before this mount is not replayed; the dialog shows while a newer one is unanswered.
@@ -525,10 +526,11 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
   };
 
   // Falls back to the first record when the selected one is gone from `next`.
+  // An empty Recycle id is the unselected half of the pair and stays empty.
   const repairSelections = (next: PortiaContent) => {
     setSelectedVirusId((current) => (next.viruses.some((virus) => virus.id === current) ? current : next.viruses[0]?.id ?? ""));
-    setSelectedRecycleFileId((current) => (next.recycleFiles.some((file) => file.id === current) ? current : next.recycleFiles[0]?.id ?? ""));
-    setSelectedRecycledVirusId((current) => (next.recycledViruses?.some((virus) => virus.id === current) ? current : next.recycledViruses?.[0]?.id ?? ""));
+    setSelectedRecycleFileId((current) => (current === "" || next.recycleFiles.some((file) => file.id === current) ? current : next.recycleFiles[0]?.id ?? ""));
+    setSelectedRecycledVirusId((current) => (current === "" || next.recycledViruses?.some((virus) => virus.id === current) ? current : next.recycledViruses?.[0]?.id ?? ""));
   };
 
   useEffect(() => {
@@ -588,6 +590,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
     });
     setSelectedVirusId(nextId);
     setSelectedRecycledVirusId(selectedVirus.id);
+    setSelectedRecycleFileId("");
     showRecord(false);
   };
 
