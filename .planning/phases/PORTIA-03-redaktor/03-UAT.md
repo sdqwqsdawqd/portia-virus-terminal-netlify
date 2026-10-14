@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: PORTIA-03-Редактор
 source: [03-VERIFICATION.md]
 started: 2026-10-14T00:00:00Z
-updated: 2026-10-14T10:23:46.625Z
+updated: 2026-10-14T16:37:58.957Z
 ---
 
 ## Current Test
@@ -74,10 +74,30 @@ severity: major
 expected: «Kotik_play1232» в одну строку в обычном и развёрнутом окне, на телефоне и на планшете; в узком окне и на телефоне аватар над ником
 result: pass
 
+### 14. Повторная проверка: выделение текста при открытой панели ✎ на телефоне (после 03-07)
+expected: Панель открыта, касание/долгое нажатие в тексте выделяет его — панель не закрывается, клавиатура не появляется, стиль применяется к выделению; ГОТОВО закрывает панель и возвращает ввод и полосу сохранения
+result: pass
+
+### 15. Повторная проверка: цвета в неактивных полях (после 03-07)
+expected: Цветной текст виден в полях, которые сейчас не редактируются (на фоне предпросмотра), и читается; выделенное цветное слово сохраняет свой цвет
+result: pass
+
+### 16. Повторная проверка: новый пост не пропадает (после 03-08)
+expected: Создать новость в «Сообщениях», сохранить, подождать больше 30 секунд и перезагрузить — пост на месте (тестовый пост потом удалить: сохранения идут в рабочую базу)
+result: pass
+
+### 17. Повторная проверка: посты не дублируются (после 03-08)
+expected: Добавить два поста подряд, затем поменять форматирование одного через ✎ — текст не копируется в другой пост; удаление поста не меняет остальные
+result: pass
+
+### 18. Мягкий режим «Анимации: Выключены»
+expected: При выключенных анимациях кнопки и окна переключаются плавно, без рывков; помощник мягко реагирует на нажатие; обои (паутина и другие) выглядят и двигаются как при включённых анимациях
+result: pass
+
 ## Summary
 
-total: 13
-passed: 8
+total: 18
+passed: 13
 issues: 5
 pending: 0
 skipped: 0
@@ -167,7 +187,9 @@ blocked: 0
 
 - truth: "On a phone, selecting text while the format panel is open keeps the panel open"
   gap_id: uat-03-t12-panel-closes-on-select
-  status: failed
+  status: resolved
+  resolved_by: "03-07-PLAN.md"
+  resolved_at: "2026-10-14"
   reason: "User reported: When i trying to select editor is closing so i need to open again"
   severity: major
   test: 12
@@ -184,7 +206,9 @@ blocked: 0
 
 - truth: "The format panel shows the current text colour of the selection without opening the colour control"
   gap_id: uat-03-t12-color-not-shown
-  status: failed
+  status: resolved
+  resolved_by: "03-07-PLAN.md"
+  resolved_at: "2026-10-14"
   reason: "User reported: if in document color is different i can only notice if i select the category"
   severity: minor
   test: 12
@@ -199,7 +223,9 @@ blocked: 0
 
 - truth: "A broadcast (news/quest/task) created and saved in the editor stays after saving, polling and reload"
   gap_id: uat-03-owner-broadcast-vanishes
-  status: failed
+  status: resolved
+  resolved_by: "03-08-PLAN.md"
+  resolved_at: "2026-10-14"
   reason: "User reported (owner note after test 13): when I create a post, like a forum thread or a news item, it gets deleted for some reason"
   severity: blocker
   test: 13
@@ -219,7 +245,9 @@ blocked: 0
 
 - truth: "Adding a new broadcast creates exactly one post and later formatting never writes into another post"
   gap_id: uat-03-owner-broadcast-duplicates
-  status: failed
+  status: resolved
+  resolved_by: "03-08-PLAN.md"
+  resolved_at: "2026-10-14"
   reason: "User reported: when I create a new post in the forum, it gets duplicated"
   severity: major
   test: 13
