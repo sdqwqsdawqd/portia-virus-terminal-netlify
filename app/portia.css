@@ -1019,7 +1019,9 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .editor-field input, .editor-field textarea, .editor-field select { font-size: 16px; }
   .employee-editor-save { flex-wrap: wrap; }
   .editor-upload-control input[type="file"] { flex-basis: 200px; min-width: 0; }
-  .floating-text-format { right: 8px; bottom: 42px; width: min(620px, calc(100% - 16px)); max-height: min(44svh, 340px); overflow-y: auto; }
+  /* Header and ГОТОВО stay pinned; only the toolbar between them scrolls. */
+  .floating-text-format { right: 8px; bottom: 44px; width: min(620px, calc(100% - 16px)); max-height: min(38svh, 300px); display: flex; flex-direction: column; overflow: hidden; }
+  .floating-text-format > header, .floating-text-format > footer { flex: none; }
   /* Sticky cannot hold here: the page scrolls and .app-window clips, so the bar is fixed above the 44px taskbar. */
   .editor-savebar { position: fixed; left: 0; right: 0; bottom: 44px; margin: 0; padding: 8px 12px; min-height: 56px; }
   .editor-savebar > p { display: block; font-size: 10px; }
@@ -1028,8 +1030,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .content-editor:has(> .editor-savebar) { padding-bottom: 110px; }
   .content-editor:has(.floating-text-format) .editor-savebar { display: none; }
   /* Lets the last field scroll above the format panel, which sits where the keyboard was. */
-  .content-editor:has(.floating-text-format) { padding-bottom: calc(min(44svh, 340px) + 90px); }
-  .rich-text-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .content-editor:has(.floating-text-format) { padding-bottom: calc(min(38svh, 300px) + 90px); }
+  .rich-text-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .access-editor-add { grid-template-columns: 1fr; }
   .content-control-entry { align-items: stretch; flex-direction: column; }
   .content-control-actions { width: 100%; }
@@ -1107,10 +1109,10 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .taskbar-app { max-width: 42px; overflow: hidden; }
   .editor-tabs { margin-inline: -4px; }
   .nested-editor-card { padding: 12px; }
-  .floating-text-format > header { position: sticky; z-index: 2; top: 0; grid-template-columns: minmax(0,1fr) auto; }
+  .floating-text-format > header { grid-template-columns: minmax(0,1fr) auto; padding: 6px 10px; }
   .floating-text-format > header > div { align-items: flex-start; flex-direction: column; gap: 2px; }
   .floating-text-format > header small { display: none; }
-  .rich-text-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 7px; }
+  .rich-text-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 7px; }
   .format-control-wide { grid-column: auto; }
   .format-control { padding: 6px; }
   .format-swatches > button, .custom-color { min-width: 27px; height: 27px; }
@@ -1118,7 +1120,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .custom-color-picker { grid-template-columns: minmax(130px, 1.15fr) minmax(110px, .85fr); gap: 6px 8px; padding: 7px; }
   .custom-color-board { min-height: 76px; }
   .floating-text-format > footer p { display: none; }
-  .floating-text-format > footer { justify-content: flex-end; }
+  .floating-text-format > footer { justify-content: flex-end; padding: 6px 8px; }
   .owner-login-actions { grid-template-columns: 1fr; }
   .desktop-icons { grid-template-columns: repeat(3, minmax(76px, 90px)); gap: 8px 2px; }
   .desktop-icon { min-height: 78px; font-size: 10px; }
