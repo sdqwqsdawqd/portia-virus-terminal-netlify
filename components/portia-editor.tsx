@@ -95,6 +95,9 @@ let editKeyCounter = 0;
 
 // Edits made while one text field (or the format panel) has focus share a key, so the reducer folds them into word-sized undo steps.
 function editKeyFor(element: Element | null): string | null {
+  // One drag is one undo step: the reducer folds every drag:<id> change into the first (D-11).
+  const dragging = document.querySelector<HTMLElement>('.order-drag-handle[data-dragging="true"]');
+  if (dragging) return `drag:${dragging.dataset.dragId}`;
   if (!element) return null;
   const isTextEntry = (element instanceof HTMLElement && element.isContentEditable)
     || element instanceof HTMLTextAreaElement
@@ -144,42 +147,88 @@ function reorderRichTextLines(text: string, document: RichTextDocument | undefin
 }
 
 function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (from: number, to: number) => void; label: string }) {
+  const button = useRef<HTMLButtonElement>(null);
   const indexRef = useRef(index);
+  const onMoveRef = useRef(onMove);
   const holdTimer = useRef<number | null>(null);
+  const frame = useRef<number | null>(null);
+  const pointer = useRef({ x: 0, y: 0 });
   const active = useRef(false);
-  useEffect(() => { indexRef.current = index; }, [index]);
+  useEffect(() => { indexRef.current = index; onMoveRef.current = onMove; });
 
   const stop = (event?: React.PointerEvent<HTMLButtonElement>) => {
     if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
     holdTimer.current = null;
+    frame.current = null;
     active.current = false;
+    if (button.current) {
+      delete button.current.dataset.dragging;
+      delete button.current.dataset.dragId;
+    }
     if (event?.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+  useEffect(() => stop, []); // a handle unmounted mid-drag must not leave the frame loop running
+
+  // A row swaps only once the pointer crosses its vertical middle, so rows of unequal height do not flip back and forth.
+  const moveTo = (x: number, y: number) => {
+    const row = document.elementsFromPoint(x, y)
+      .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
+      .find(Boolean);
+    const target = Number(row?.dataset.sortIndex);
+    if (!row || !Number.isInteger(target) || target === indexRef.current) return;
+    const { top, height } = row.getBoundingClientRect();
+    const middle = top + height / 2;
+    if (target > indexRef.current ? y < middle : y > middle) return;
+    onMoveRef.current(indexRef.current, target);
+    indexRef.current = target;
+  };
+
+  // Near the edge of whatever scrolls (the editor, or the page on phones) the list keeps moving under a still finger.
+  const autoscroll = () => {
+    const editor = button.current?.closest<HTMLElement>(".content-editor") ?? null;
+    const scrolls = editor !== null && editor.scrollHeight > editor.clientHeight && /auto|scroll/.test(getComputedStyle(editor).overflowY);
+    const scroller: { scrollBy: (x: number, y: number) => void } = scrolls ? editor : window;
+    // 56px: sticky system bar; 44px: taskbar (window mode only).
+    const { top, bottom } = scrolls ? editor.getBoundingClientRect() : { top: 56, bottom: window.innerHeight - 44 };
+    const { x, y } = pointer.current;
+    const direction = y < top + 48 ? -1 : y > bottom - 48 ? 1 : 0;
+    if (direction) {
+      scroller.scrollBy(0, direction * 8);
+      moveTo(x, y);
+    }
+    frame.current = requestAnimationFrame(autoscroll);
   };
 
   return <button
+    ref={button}
     className="order-drag-handle"
     type="button"
     aria-label={`Изменить порядок: ${label}`}
+    aria-keyshortcuts="ArrowUp ArrowDown"
     onPointerDown={(event) => {
       const target = event.currentTarget;
+      pointer.current = { x: event.clientX, y: event.clientY };
       target.setPointerCapture(event.pointerId);
       holdTimer.current = window.setTimeout(() => {
         active.current = true;
         target.dataset.dragging = "true";
+        target.dataset.dragId = makeId("drag");
+        frame.current = requestAnimationFrame(autoscroll);
       }, 170);
     }}
     onPointerMove={(event) => {
-      if (!active.current) return;
-      const row = document.elementsFromPoint(event.clientX, event.clientY)
-        .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
-        .find(Boolean);
-      const target = Number(row?.dataset.sortIndex);
-      if (!Number.isInteger(target) || target === indexRef.current) return;
-      onMove(indexRef.current, target);
-      indexRef.current = target;
+      pointer.current = { x: event.clientX, y: event.clientY };
+      if (active.current) moveTo(event.clientX, event.clientY);
     }}
-    onPointerUp={(event) => { delete event.currentTarget.dataset.dragging; stop(event); }}
-    onPointerCancel={(event) => { delete event.currentTarget.dataset.dragging; stop(event); }}
+    onPointerUp={stop}
+    onPointerCancel={stop}
+    onKeyDown={(event) => {
+      const step = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      onMove(index, index + step);
+    }}
   ><span aria-hidden="true">≡</span></button>;
 }
 

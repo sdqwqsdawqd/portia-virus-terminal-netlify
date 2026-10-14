@@ -434,6 +434,12 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .editor-record-list .editor-record-row .order-drag-handle, .order-drag-handle { width: 34px; min-width: 34px; min-height: 34px; display: grid; place-items: center; align-content: center; gap: 1px; padding: 3px; border: 1px dashed oklch(.445 .038 var(--accent-hue)); background: rgba(var(--desktop-glow), .035); color: oklch(.628 .036 var(--accent-hue)); cursor: grab; touch-action: none; user-select: none; }
 .order-drag-handle:hover, .order-drag-handle[data-dragging="true"] { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); cursor: grabbing; }
 .order-drag-handle span { font: 700 17px/1 var(--sans); }
+/* Gel lanes: while a handle is held the list shows a rail and the moving record is a lit band. */
+.editor-record-list:has(.order-drag-handle[data-dragging="true"]), .recommendation-order-list:has(.order-drag-handle[data-dragging="true"]), .flat-editor-form:has(.order-drag-handle[data-dragging="true"]) { box-shadow: inset 2px 0 0 var(--teal-dim); }
+.editor-record-row:has(.order-drag-handle[data-dragging="true"]), .recommendation-order-row:has(.order-drag-handle[data-dragging="true"]), .nested-editor-card:has(.order-drag-handle[data-dragging="true"]) { position: relative; z-index: 1; outline: 1px solid var(--teal); background: var(--teal-soft); box-shadow: 0 8px 20px rgba(0,0,0,.35); }
+.editor-record-list { counter-reset: lane; }
+.editor-record-row { counter-increment: lane; }
+.editor-record-row .order-drag-handle::after { content: counter(lane, decimal-leading-zero); color: oklch(.56 .03 var(--accent-hue)); font: 600 9px/1 var(--mono); }
 .archive-virus-actions, .assistant-switches { display: flex; flex-wrap: wrap; gap: 9px; }
 .assistant-switches { margin-bottom: 18px; }
 .editor-form { min-width: 0; }
@@ -1383,3 +1389,8 @@ html[data-motion="reduce"] :is(.boot-core > .portia-mark, .boot-thread) { animat
 .document-app-external:hover { border-color: var(--teal); color: #fff; }
 
 .dossier-tabs { margin: 0 0 16px; }
+
+@media (max-width: 900px) {
+  .editor-record-row, .recommendation-order-row { grid-template-columns: 44px minmax(0, 1fr); }
+  .editor-record-list .editor-record-row .order-drag-handle, .order-drag-handle { width: 44px; min-width: 44px; min-height: 44px; }
+}
