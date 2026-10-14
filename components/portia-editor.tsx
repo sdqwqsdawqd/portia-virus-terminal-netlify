@@ -564,21 +564,28 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
     [draft.viruses, selectedVirusId],
   );
   const selectedVirus = selectedVirusIndex >= 0 ? draft.viruses[selectedVirusIndex] : null;
+  const orderedRecycleKeys = useMemo(() => recycleKeys(draft), [draft]);
+  // When neither Recycle id resolves (the last record of a kind was deleted, restored, undone or synced away),
+  // show the first record in list order instead of "Корзина пуста" beside a full list.
+  const recycleKeyShown = draft.recycleFiles.some((file) => file.id === selectedRecycleFileId)
+    ? `file:${selectedRecycleFileId}`
+    : (draft.recycledViruses ?? []).some((virus) => virus.id === selectedRecycledVirusId) ? `virus:${selectedRecycledVirusId}` : orderedRecycleKeys[0] ?? "";
+  const shownRecycleFileId = recycleKeyShown.startsWith("file:") ? recycleKeyShown.slice("file:".length) : "";
+  const shownRecycledVirusId = recycleKeyShown.startsWith("virus:") ? recycleKeyShown.slice("virus:".length) : "";
   const selectedRecycleFileIndex = useMemo(
-    () => draft.recycleFiles.findIndex((file) => file.id === selectedRecycleFileId),
-    [draft.recycleFiles, selectedRecycleFileId],
+    () => draft.recycleFiles.findIndex((file) => file.id === shownRecycleFileId),
+    [draft.recycleFiles, shownRecycleFileId],
   );
   const selectedRecycleFile = selectedRecycleFileIndex >= 0 ? draft.recycleFiles[selectedRecycleFileIndex] : null;
   const selectedRecycledVirusIndex = useMemo(
-    () => (draft.recycledViruses ?? []).findIndex((virus) => virus.id === selectedRecycledVirusId),
-    [draft.recycledViruses, selectedRecycledVirusId],
+    () => (draft.recycledViruses ?? []).findIndex((virus) => virus.id === shownRecycledVirusId),
+    [draft.recycledViruses, shownRecycledVirusId],
   );
   const selectedRecycledVirus = selectedRecycledVirusIndex >= 0 ? draft.recycledViruses[selectedRecycledVirusIndex] : null;
   const liveVirusId = selectedVirus?.id;
   const liveDossierChanged = useMemo(() => liveVirusId ? changedDossierTabs(history.baseline, draft, liveVirusId) : [], [history.baseline, draft, liveVirusId]);
   const archivedVirusId = selectedRecycledVirus?.id;
   const archivedDossierChanged = useMemo(() => archivedVirusId ? changedDossierTabs(history.baseline, draft, archivedVirusId) : [], [history.baseline, draft, archivedVirusId]);
-  const orderedRecycleKeys = useMemo(() => recycleKeys(draft), [draft]);
 
   const changeDraft = (updater: (next: PortiaContent) => void) => {
     dispatch({ type: "change", updater, key: editKeyFor(document.activeElement), now: Date.now() });
@@ -958,7 +965,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
               const title = virus?.name || file?.name || "БЕЗ ИМЕНИ";
               return <div className="editor-record-row" data-sort-index={index} key={key}>
                 <OrderDragHandle index={index} label={title} onMove={(from, to) => changeDraft((next) => { const order = recycleKeys(next); moveArrayItem(order, from, to); next.recycleOrder = order; })} />
-                <button type="button" className={virus ? virus.id === selectedRecycledVirusId && !selectedRecycleFileId ? "active" : "" : file!.id === selectedRecycleFileId ? "active" : ""} onClick={() => {
+                <button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} onClick={() => {
                   if (virus) { setSelectedRecycledVirusId(virus.id); setSelectedRecycleFileId(""); }
                   else { setSelectedRecycleFileId(file!.id); setSelectedRecycledVirusId(""); }
                   showRecord(true);
