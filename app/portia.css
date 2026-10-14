@@ -1137,8 +1137,10 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .boot-core > .portia-mark { width: 92px; height: 92px; }
 }
 
-/* Motion switch: html[data-motion] is "reduce" or "full", resolved from «Анимации» and the system setting (lib/accent-boot.ts). */
-html[data-motion="reduce"], html[data-motion="reduce"] *, html[data-motion="reduce"] *::before, html[data-motion="reduce"] *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+/* Motion switch: html[data-motion] is "reduce" or "full", resolved from «Анимации» (lib/accent-boot.ts).
+   «Выключены» is a soft mode: keyframe motion stops, but the short authored transitions (colour, opacity, small hover
+   lifts, all under 400ms) stay so the interface does not snap, and the wallpaper keeps its slow ambient motion. */
+html[data-motion="reduce"], html[data-motion="reduce"] :not(.desktop-wallpaper, .desktop-wallpaper *), html[data-motion="reduce"] :not(.desktop-wallpaper *)::before, html[data-motion="reduce"] :not(.desktop-wallpaper *)::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 /* Safety net if the head script never ran (blocked by an extension or a future CSP): data-motion is missing,
    so the system preference alone decides. Only selectors scoped to html:not([data-motion]) may live here. */
 @media (prefers-reduced-motion: reduce) {
@@ -1162,9 +1164,9 @@ html[data-motion="reduce"], html[data-motion="reduce"] *, html[data-motion="redu
 .wallpaper-web-pulses { display: none; }
 .wallpaper-web-dew { fill: currentColor; stroke: none; opacity: 0; animation: web-dew-in 1.6s ease-out 3s forwards; }
 .wallpaper-web-dew circle { opacity: .32; }
-html[data-motion="full"] .wallpaper-web { transform-box: view-box; transform-origin: 1180px 170px; animation: web-sway 24s ease-in-out 3.4s infinite; }
-html[data-motion="full"] .wallpaper-web-pulses { display: inline; }
-html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-in-out infinite; }
+html[data-motion] .wallpaper-web { transform-box: view-box; transform-origin: 1180px 170px; animation: web-sway 24s ease-in-out 3.4s infinite; }
+html[data-motion] .wallpaper-web-pulses { display: inline; }
+html[data-motion] .wallpaper-web-dew circle { animation: web-dew 7s ease-in-out infinite; }
 .wallpaper-web .wallpaper-web-pulses path { stroke-width: 1.6; opacity: .5; stroke-dasharray: .05 1; stroke-dashoffset: .05; animation: web-pulse 9s linear infinite; }
 .wallpaper-web .wallpaper-web-pulses .wallpaper-web-orbit { stroke-width: 1.4; opacity: .4; stroke-dasharray: .03 1; stroke-dashoffset: .03; animation: web-orbit 14s linear infinite; }
 @keyframes web-sway { 0%, 100% { rotate: 0deg; scale: 1; } 30% { rotate: -.5deg; } 70% { rotate: .6deg; scale: 1.005; } }
@@ -1177,16 +1179,13 @@ html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-
 .wallpaper-helix path { stroke-width: 1.5; }
 .wallpaper-helix .wallpaper-rungs { stroke-width: 1; opacity: .7; }
 @keyframes helix-drift { from { transform: translateY(0); } to { transform: translateY(-80px); } }
-html[data-motion="reduce"] .wallpaper-web path { animation: none; stroke-dashoffset: 0; }
-html[data-motion="reduce"] .wallpaper-web-dew { animation: none; opacity: 1; }
-html[data-motion="reduce"] .wallpaper-helix { animation: none; }
 /* «Гель»: soft lane columns fading downward, wells, a labelled ladder; the bands glow, fade at their ends
    and drift down slowly, like a gel still running. */
 .wallpaper-gel-lane { fill: currentColor; fill-opacity: .035; stroke: currentColor; stroke-opacity: .07; }
 .wallpaper-gel-well { stroke-width: 1.2; opacity: .32; }
 .wallpaper-gel-bands path { stroke-linecap: butt; }
 .wallpaper-gel-labels { fill: currentColor; stroke: none; opacity: .34; font: 500 11px var(--mono); text-anchor: end; letter-spacing: .04em; }
-html[data-motion="full"] .wallpaper-gel-bands { animation: gel-run 28s ease-in-out infinite alternate; }
+html[data-motion] .wallpaper-gel-bands { animation: gel-run 28s ease-in-out infinite alternate; }
 @keyframes gel-run { to { translate: 0 26px; } }
 /* «Клетки»: tissue through an eyepiece, sharp at the centre and out of focus at the rim; infected cells are
    brighter, and their virions drift and tumble round their own centres (fill-box). */
@@ -1197,8 +1196,8 @@ html[data-motion="full"] .wallpaper-gel-bands { animation: gel-run 28s ease-in-o
 .wallpaper-cells-edge { stroke-width: 1.4; opacity: .22; }
 .wallpaper-cells-particles { stroke-width: 1.3; opacity: .55; }
 .wallpaper-particle { transform-box: fill-box; transform-origin: center; }
-html[data-motion="full"] .wallpaper-cells-particles { animation: cells-drift 36s ease-in-out infinite alternate; }
-html[data-motion="full"] .wallpaper-particle { animation: particle-tumble 20s linear infinite; }
+html[data-motion] .wallpaper-cells-particles { animation: cells-drift 36s ease-in-out infinite alternate; }
+html[data-motion] .wallpaper-particle { animation: particle-tumble 20s linear infinite; }
 @keyframes cells-drift { 50% { translate: 8px -6px; } to { translate: -5px 8px; } }
 @keyframes particle-tumble { to { rotate: 360deg; } }
 
@@ -1340,6 +1339,12 @@ html[data-motion="full"] .desktop-assistant.is-offended .assistant-button img { 
 html[data-motion="full"] .desktop-assistant.is-recovering .assistant-button img { animation: vivian-recover 780ms var(--ease-out) both; }
 html[data-motion="full"] .assistant-bubble { transform-origin: 100% 85%; animation: vivian-bubble 360ms var(--ease-out) both; }
 html[data-motion="reduce"] .assistant-bubble { animation: fade-in 160ms ease-out both !important; }
+/* Vivian, soft («Анимации: Выключены»): no hops or shakes, but she still answers a click and fades between moods. */
+html[data-motion="reduce"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-button img { animation: vivian-soft-a 260ms ease-out !important; }
+html[data-motion="reduce"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-button img { animation: vivian-soft-b 260ms ease-out !important; }
+html[data-motion="reduce"] .desktop-assistant:is(.is-offended, .is-recovering) .assistant-button img { animation: fade-in 280ms ease-out both !important; }
+@keyframes vivian-soft-a { 50% { opacity: .72; scale: .97; } }
+@keyframes vivian-soft-b { 50% { opacity: .72; scale: .97; } }
 @keyframes vivian-hop {
   0% { scale: 1; translate: 0 0; animation-timing-function: ease-out; }
   16% { scale: 1.08 .88; translate: 0 2px; animation-timing-function: cubic-bezier(.2, .6, .35, 1); }
