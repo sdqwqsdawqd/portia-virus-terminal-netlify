@@ -18,7 +18,7 @@
 
 ### Редактор (EDIT)
 
-- [ ] **EDIT-01**: Редактор текста удобен на телефоне
+- [x] **EDIT-01**: Редактор текста удобен на телефоне
 - [x] **EDIT-02**: Понятное состояние сохранения: полоса несохранённых изменений
 - [ ] **EDIT-03**: Порядок записей меняется перетаскиванием по «дорожкам»
 - [ ] **EDIT-04**: Длинные досье разбиты на вкладки
@@ -51,7 +51,7 @@
 | LOOK-01 | Phase 2 | Complete |
 | LOOK-02 | Phase 2 | Complete |
 | LOOK-03 | Phase 2 | Complete |
-| EDIT-01 | Phase 3 | Pending |
+| EDIT-01 | Phase 3 | Complete |
 | EDIT-02 | Phase 3 | Complete |
 | EDIT-03 | Phase 3 | Pending |
 | EDIT-04 | Phase 3 | Pending |
