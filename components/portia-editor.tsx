@@ -22,6 +22,8 @@ type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "ass
 
 type Props = {
   content: PortiaContent;
+  // The revision content was read or saved at.
+  revision: number;
   saveState: "idle" | "saving" | "saved" | "error" | "conflict";
   canManageEditors: boolean;
   active: boolean;
@@ -29,7 +31,8 @@ type Props = {
   // Bumped by the window manager each time × is pressed while the editor reports unsaved edits.
   closeRequest: number;
   onCloseApproved: () => void;
-  onSave: (content: PortiaContent) => Promise<void>;
+  // Resolves with the saved revision.
+  onSave: (content: PortiaContent, baseRevision: number) => Promise<number>;
   onEmployeeSaved: (employee: PortiaEmployee) => void;
 };
 
@@ -534,8 +537,10 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, saveState, canManageEditors, active, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved }: Props) {
+export function PortiaEditor({ content, revision, saveState, canManageEditors, active, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
+  // The revision the draft's baseline came from; a stale draft then gets the 409 instead of overwriting newer content (uat-03-owner-broadcast-vanishes).
+  const baseRevision = useRef(revision);
   const draft = history.present;
   const changed = useMemo(() => changedSections(history.baseline, history.present), [history.baseline, history.present]);
   const dirty = changed.length > 0;
@@ -574,10 +579,11 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
     if (dirty) return;
     const syncTimer = window.setTimeout(() => {
       dispatch({ type: "sync", content });
+      baseRevision.current = revision;
       repairSelections(content);
     }, 0);
     return () => window.clearTimeout(syncTimer);
-  }, [content, dirty]);
+  }, [content, dirty, revision]);
 
   const selectedVirusIndex = useMemo(
     () => draft.viruses.findIndex((virus) => virus.id === selectedVirusId),
@@ -746,7 +752,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
         [normalized.assistantAutoMinSeconds, normalized.assistantAutoMaxSeconds] = [normalized.assistantAutoMaxSeconds, normalized.assistantAutoMinSeconds];
       }
       normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, 5); });
-      await onSave(normalized);
+      baseRevision.current = await onSave(normalized, baseRevision.current);
       const clean = editCount.current === editsBefore;
       dispatch({ type: "saved", normalized, savedFrom });
       return clean;

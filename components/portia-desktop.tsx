@@ -8,6 +8,7 @@ import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconN
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, motionModes } from "@/lib/accent-boot";
 import { fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
+import { acceptFetchedContent } from "@/lib/content-sync";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -244,6 +245,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [canEdit, setCanEdit] = useState(false);
   const [canManageEditors, setCanManageEditors] = useState(false);
   const [revision, setRevision] = useState(0);
+  // Read by the async GET: the newest revision this tab knows (cache, GET or its own save) and how many saves it started.
+  const knownRevision = useRef(0);
+  const savesStarted = useRef(0);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [booting, setBooting] = useState(true);
   const [clock, setClock] = useState("--:--:--");
@@ -316,21 +320,25 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const assistantContentRef = useRef(content);
   const assistantOffendedRef = useRef(false);
 
-  // Served from the CDN cache, which every save purges; the browser itself always revalidates.
+  // Served from the CDN cache (s-maxage 300, purged only by deployed saves, never from next dev), so it can be older than this tab's copy; such answers are dropped (uat-03-owner-broadcast-vanishes).
   const fetchContent = useCallback(async () => {
+    const savesAtSend = savesStarted.current;
     try {
       const response = await fetchWithTimeout("/api/content");
       if (!response.ok) return;
       const payload = (await response.json()) as ContentResponse;
       if (!payload.content) return;
+      const fetchedRevision = payload.revision ?? 0;
+      if (!acceptFetchedContent(fetchedRevision, knownRevision.current, savesAtSend, savesStarted.current)) return;
+      knownRevision.current = fetchedRevision;
       setContent(payload.content);
       setActiveVirusId((current) => payload.content!.viruses.some((virus) => virus.id === current) ? current : payload.content!.viruses[0]?.id ?? "");
       setSelectedInfoId((current) => payload.content!.infoSections.some((section) => section.id === current) ? current : payload.content!.infoSections[0]?.id ?? "");
-      setRevision(payload.revision ?? 0);
+      setRevision(fetchedRevision);
       try {
         window.localStorage.setItem(contentCacheStorageKey, JSON.stringify({
           content: payload.content,
-          revision: payload.revision ?? 0,
+          revision: fetchedRevision,
           updatedAt: payload.updatedAt ?? null,
           savedAt: new Date().toISOString(),
         }));
@@ -391,7 +399,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           if (isUsableContent(parsed.content)) {
             const cachedContent = parsed.content;
             setContent(cachedContent);
-            setRevision(typeof parsed.revision === "number" ? parsed.revision : 0);
+            const cachedRevision = typeof parsed.revision === "number" ? parsed.revision : 0;
+            knownRevision.current = cachedRevision;
+            setRevision(cachedRevision);
             setActiveVirusId((current) => cachedContent.viruses.some((virus) => virus.id === current) ? current : cachedContent.viruses[0]?.id ?? "");
             setSelectedInfoId((current) => cachedContent.infoSections.some((section) => section.id === current) ? current : cachedContent.infoSections[0]?.id ?? "");
             setContentReady(true);
@@ -798,15 +808,17 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], geometry } }));
   };
 
-  const saveContent = async (next: PortiaContent) => {
+  const saveContent = async (next: PortiaContent, baseRevision: number) => {
     // An earlier «СОХРАНЕНО» timer must not flip a newer request back to idle mid-save.
     if (saveStateTimer.current !== null) window.clearTimeout(saveStateTimer.current);
+    // Polls sent before this save may answer with the copy it replaces.
+    savesStarted.current += 1;
     setSaveState("saving");
     try {
       const response = await fetchWithTimeout("/api/content", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content: next, revision }),
+        body: JSON.stringify({ content: next, revision: baseRevision }),
       });
       if (response.status === 409) {
         setSaveState("conflict");
@@ -814,18 +826,21 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       }
       if (!response.ok) throw new Error("save failed");
       const payload = (await response.json()) as { revision?: number };
+      const savedRevision = payload.revision ?? baseRevision + 1;
+      knownRevision.current = savedRevision;
       setContent(next);
-      setRevision(payload.revision ?? revision + 1);
+      setRevision(savedRevision);
       try {
         window.localStorage.setItem(contentCacheStorageKey, JSON.stringify({
           content: next,
-          revision: payload.revision ?? revision + 1,
+          revision: savedRevision,
           updatedAt: new Date().toISOString(),
           savedAt: new Date().toISOString(),
         }));
       } catch {}
       setSaveState("saved");
       saveStateTimer.current = window.setTimeout(() => setSaveState("idle"), 1800);
+      return savedRevision;
     } catch (error) {
       setSaveState((current) => current === "conflict" ? current : "error");
       throw error;
@@ -1169,7 +1184,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="editor" state={windows.editor} active={activeApp === "editor"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="editor-window" meta="ДОСТУП ВЛАДЕЛЬЦА">
-            {canEdit ? <PortiaEditor content={content} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
+            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
           </AppWindow>
         </main>
 
