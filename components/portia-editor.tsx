@@ -1460,7 +1460,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
       ref={editorRef}
       data-area={area}
       data-format-key={formatKey}
-      className={`formatted-rich-input${tall ? " tall" : ""}${activeFormat.key === formatKey ? ` is-editor-active preview-${activeFormat.surface}` : ""}`}
+      className={`formatted-rich-input${tall ? " tall" : ""} preview-${activeFormat.surface}${activeFormat.key === formatKey ? " is-editor-active" : ""}`}
       contentEditable
       inputMode={activeFormat.phonePanelOpen ? "none" : undefined}
       suppressContentEditableWarning
