@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: PORTIA-03-Редактор
 source: [03-VERIFICATION.md]
 started: 2026-10-14T00:00:00Z
-updated: 2026-10-14T10:12:54.075Z
+updated: 2026-10-14T10:23:46.625Z
 ---
 
 ## Current Test
@@ -171,10 +171,16 @@ blocked: 0
   reason: "User reported: When i trying to select editor is closing so i need to open again"
   severity: major
   test: 12
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Deliberate 03-03 behaviour (commit 6583baf): FloatingTextFormatPanel's phone effect adds a document focusin listener that closes the panel when the field gets focus, and any tap/long-press to select focuses the field. Owner rejects that reading of D-06 (D-06 only requires the keyboard to stay hidden)"
+  artifacts:
+    - path: "components/portia-editor.tsx"
+      issue: "FloatingTextFormatPanel phone effect ~1528-1554 (blur at ~1533, focusin close at ~1545-1547); FormattedTextarea ~1453-1500; ActiveFormatContext ~49/823; ✎ onClick ~856"
+  missing:
+    - "Remove the focusin close listener"
+    - "inputMode=\"none\" on the field while its panel is open, phones only (<=900px; owner decision)"
+    - "Blur once from the ✎ onClick on phones instead of on every panel re-mount"
+    - "Update the 03-03 truth / line ~1526 comment"
+  debug_session: ".planning/debug/format-panel-select-closes.md"
 
 - truth: "The format panel shows the current text colour of the selection without opening the colour control"
   gap_id: uat-03-t12-color-not-shown
@@ -182,7 +188,11 @@ blocked: 0
   reason: "User reported: if in document color is different i can only notice if i select the category"
   severity: minor
   test: 12
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Owner meant the text field. portia.css:507 forces idle rich fields (not focused, not editor-active) to neutral grey with !important, hiding run colours; ::selection (portia.css:68) turns selected text near-white. The panel itself already shows the colour in the «Цвет текста» card title"
+  artifacts:
+    - path: "app/portia.css"
+      issue: "~507 idle .formatted-rich-input > span colour override; ~68 ::selection colour"
+  missing:
+    - "Owner decision: draw idle rich fields on the preview background and show real run colours (drop the grey override)"
+    - "Selection inside .formatted-rich-input sets background only, keeps the text colour"
+  debug_session: ".planning/debug/format-panel-select-closes.md"
