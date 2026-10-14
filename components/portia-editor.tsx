@@ -654,8 +654,14 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
     }
   };
 
+  // Read after an awaited save, when the closure that started it is renders old.
+  const latest = useRef({ present: draft, closeAsked, onCloseApproved });
+  useEffect(() => { latest.current = { present: draft, closeAsked, onCloseApproved }; });
+
+  // Resolves true only when nothing is left unsaved: the draft was clean, or the save succeeded and nothing was typed meanwhile.
   const save = async (): Promise<boolean> => {
-    if (!dirty || saveState === "saving") return false;
+    if (!dirty) return true;
+    if (saveState === "saving") return false;
     // The reducer compares this very object after the request to tell whether the owner kept typing meanwhile.
     const savedFrom = draft;
     try {
@@ -692,8 +698,9 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
       }
       normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, 5); });
       await onSave(normalized);
+      const clean = latest.current.present === savedFrom;
       dispatch({ type: "saved", normalized, savedFrom });
-      return true;
+      return clean;
     } catch {
       // Keep the local draft marked as changed so a temporary network error
       // can never discard the owner's work.
@@ -1148,8 +1155,17 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
             {
               label: "СОХРАНИТЬ",
               tone: "primary",
-              // Closes only after the save succeeded; on failure the window stays and the bar shows ОШИБКА or the conflict.
-              onClick: () => { setHandledCloseRequest(closeRequest); void save().then((ok) => { if (ok) onCloseApproved(); }); },
+              // The modal stays up during the request, so nothing can be typed that the close would lose.
+              // Closes only if the save left nothing unsaved and the close was not cancelled meanwhile;
+              // otherwise the window stays and the bar shows the unsaved edits, ОШИБКА or the conflict.
+              disabled: saveState === "saving",
+              onClick: () => {
+                void save().then((clean) => {
+                  if (!latest.current.closeAsked) return;
+                  setHandledCloseRequest(closeRequest);
+                  if (clean) latest.current.onCloseApproved();
+                });
+              },
             },
             { label: "НЕ СОХРАНЯТЬ", tone: "danger", onClick: () => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },
             { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setHandledCloseRequest(closeRequest) },
@@ -1683,7 +1699,7 @@ function EditorAccessManager() {
   </div>;
 }
 
-type ConfirmAction = { label: string; tone: "primary" | "secondary" | "danger"; onClick: () => void; autoFocus?: boolean };
+type ConfirmAction = { label: string; tone: "primary" | "secondary" | "danger"; onClick: () => void; autoFocus?: boolean; disabled?: boolean };
 
 // A native modal dialog lives in the top layer: above the transformed editor window, the taskbar and the boot screen,
 // with focus trapped and the page inert. Never use window.confirm for new prompts: embedded browsers answer it "no" unseen.
@@ -1716,7 +1732,7 @@ function ConfirmDialog({ title, text, actions, onCancel }: { title: string; text
         <p id={textId}>{text}</p>
         <div className="portia-dialog-actions">
           {actions.map((action) => (
-            <button key={action.label} type="button" className={`${action.tone}-control`} autoFocus={action.autoFocus} data-autofocus={action.autoFocus || undefined} onClick={action.onClick}>{action.label}</button>
+            <button key={action.label} type="button" className={`${action.tone}-control`} autoFocus={action.autoFocus} data-autofocus={action.autoFocus || undefined} disabled={action.disabled} onClick={action.onClick}>{action.label}</button>
           ))}
         </div>
       </div>
