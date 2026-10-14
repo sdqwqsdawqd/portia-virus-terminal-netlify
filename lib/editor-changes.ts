@@ -62,3 +62,16 @@ export function changedSections(baseline: PortiaContent, draft: PortiaContent): 
 
   return editorSections.filter((section) => found.has(section));
 }
+
+export type DossierTab = "main" | "text" | "mutations" | "logs";
+
+export const dossierTabs: [DossierTab, string][] = [
+  ["main", "Основное"],
+  ["text", "Описание"],
+  ["mutations", "Мутации"],
+  ["logs", "Записи учёных"],
+];
+
+export function changedDossierTabs(_baseline: PortiaContent, _draft: PortiaContent, _virusId: string): DossierTab[] {
+  return [];
+}
