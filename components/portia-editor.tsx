@@ -587,7 +587,10 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
   const archivedVirusId = selectedRecycledVirus?.id;
   const archivedDossierChanged = useMemo(() => archivedVirusId ? changedDossierTabs(history.baseline, draft, archivedVirusId) : [], [history.baseline, draft, archivedVirusId]);
 
+  // Counted at dispatch, not after commit, so a save can tell synchronously whether the draft changed while it ran.
+  const editCount = useRef(0);
   const changeDraft = (updater: (next: PortiaContent) => void) => {
+    editCount.current += 1;
     dispatch({ type: "change", updater, key: editKeyFor(document.activeElement), now: Date.now() });
   };
 
@@ -598,6 +601,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
     setFormatTarget(null);
     setFormatterOpen(false);
     repairSelections(target);
+    editCount.current += 1;
     dispatch({ type: kind });
   };
 
@@ -679,8 +683,8 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
   };
 
   // Read after an awaited save, when the closure that started it is renders old.
-  const latest = useRef({ present: draft, closeAsked, onCloseApproved });
-  useEffect(() => { latest.current = { present: draft, closeAsked, onCloseApproved }; });
+  const latest = useRef({ closeAsked, onCloseApproved });
+  useEffect(() => { latest.current = { closeAsked, onCloseApproved }; });
 
   // Resolves true only when nothing is left unsaved: the draft was clean, or the save succeeded and nothing was typed meanwhile.
   const save = async (): Promise<boolean> => {
@@ -688,6 +692,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
     if (saveState === "saving") return false;
     // The reducer compares this very object after the request to tell whether the owner kept typing meanwhile.
     const savedFrom = draft;
+    const editsBefore = editCount.current;
     try {
       const normalized = clone(draft);
       normalized.searchRecommendations = normalized.searchRecommendations.map((value) => value.trim()).filter(Boolean);
@@ -722,7 +727,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
       }
       normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, 5); });
       await onSave(normalized);
-      const clean = latest.current.present === savedFrom;
+      const clean = editCount.current === editsBefore;
       dispatch({ type: "saved", normalized, savedFrom });
       return clean;
     } catch {
