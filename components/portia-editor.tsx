@@ -461,6 +461,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
   // At 900px and below a list + form layout shows either the list or the open record (D-01, D-02).
   const [recordOpen, setRecordOpen] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
+  const tabsRef = useRef<HTMLElement>(null);
   const showRecord = (open: boolean) => {
     setRecordOpen(open);
     revealOnPhone(layoutRef);
@@ -663,6 +664,16 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
 
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
 
+  // The tab strip scrolls sideways on a phone; keep the active tab in view (a no-op where the strip fits).
+  useEffect(() => {
+    const strip = tabsRef.current;
+    const activeTab = strip?.querySelector<HTMLElement>("button.active");
+    if (!strip || !activeTab) return;
+    const stripBox = strip.getBoundingClientRect();
+    const tabBox = activeTab.getBoundingClientRect();
+    strip.scrollLeft += (tabBox.left + tabBox.width / 2) - (stripBox.left + stripBox.width / 2);
+  }, [tab]);
+
   // Reload or leaving the page with unsaved edits: the browser shows its own fixed warning text (D-12).
   // The cleanup also runs when the editor unmounts on close, so a closed editor never blocks leaving.
   useEffect(() => {
@@ -693,7 +704,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
         </div>
       </header>
 
-      <nav className="editor-tabs" aria-label="Разделы редактора">
+      <nav className="editor-tabs" aria-label="Разделы редактора" ref={tabsRef}>
         {([
           ...editorSections.map((id) => [id, sectionLabels[id]]),
           ["employees", "Сотрудники"],
@@ -839,7 +850,8 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
       )}
 
       {tab === "recycle" && (
-        <div className="virus-editor-layout recycle-editor-layout">
+        <div className="virus-editor-layout recycle-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && (selectedRecycledVirus || selectedRecycleFile) ? "record" : "list"}>
+          <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
           <aside className="editor-record-list">
             {orderedRecycleKeys.map((key, index) => {
               const isVirus = key.startsWith("virus:");
@@ -853,6 +865,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
                 <button type="button" className={virus ? virus.id === selectedRecycledVirusId && !selectedRecycleFileId ? "active" : "" : file!.id === selectedRecycleFileId ? "active" : ""} onClick={() => {
                   if (virus) { setSelectedRecycledVirusId(virus.id); setSelectedRecycleFileId(""); }
                   else { setSelectedRecycleFileId(file!.id); setSelectedRecycledVirusId(""); }
+                  showRecord(true);
                 }}>
                   <strong>{title}</strong><small>{virus ? "ВИРУС В КОРЗИНЕ" : file!.kind === "virus" ? "ФАЙЛ ВИРУСА" : file!.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ"}</small>
                 </button>
@@ -863,12 +876,14 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
               changeDraft((next) => { next.recycleFiles.push(file); next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `file:${file.id}`), `file:${file.id}`]; });
               setSelectedRecycleFileId(file.id);
               setSelectedRecycledVirusId("");
+              showRecord(true);
             }}>+ ДОБАВИТЬ ФАЙЛ</button>
             <button className="add-record" type="button" onClick={() => {
               const virus = blankVirus();
               changeDraft((next) => { next.recycledViruses ??= []; next.recycledViruses.push(virus); next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `virus:${virus.id}`), `virus:${virus.id}`]; });
               setSelectedRecycledVirusId(virus.id);
               setSelectedRecycleFileId("");
+              showRecord(true);
             }}>+ НАПИСАТЬ ВИРУС</button>
           </aside>
 
@@ -889,6 +904,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
                 setSelectedVirusId(selectedRecycledVirus.id);
                 setSelectedRecycledVirusId("");
                 switchTab("viruses");
+                showRecord(true);
               }}
               onDelete={() => setDialog("delete")}
             />
@@ -932,6 +948,7 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
                 const nextId = draft.recycleFiles.find((file) => file.id !== selectedRecycleFile.id)?.id ?? "";
                 changeDraft((next) => { next.recycleFiles = next.recycleFiles.filter((file) => file.id !== selectedRecycleFile.id); next.recycleOrder = recycleKeys(next); });
                 setSelectedRecycleFileId(nextId);
+                showRecord(false);
               }}>УДАЛИТЬ ЭТОТ ФАЙЛ</button>
             </div>
           ) : <div className="editor-empty">Корзина пуста. Добавьте файл или создайте полную запись вируса.</div>}
@@ -1078,6 +1095,8 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
   const [draft, setDraft] = useState({ biography: "", photoUrl: "", knowledgeRating: 1 });
   const [state, setState] = useState<"loading" | "idle" | "saving" | "saved" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
+  const [recordOpen, setRecordOpen] = useState(false);
+  const layoutRef = useRef<HTMLDivElement>(null);
   const selected = employees.find((employee) => employee.id === selectedId) ?? employees[0] ?? null;
 
   useEffect(() => {
@@ -1133,9 +1152,10 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
   if (!selected) return <div className="editor-empty">{state === "error" ? "Не удалось загрузить сотрудников из таблицы. Обновите страницу через минуту." : "В таблице пока нет сотрудников."}</div>;
 
   const preview = draft.photoUrl || selected.robloxAvatarUrl;
-  return <div className="virus-editor-layout employee-editor-layout">
+  return <div className="virus-editor-layout employee-editor-layout" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
+    <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
     <aside className="editor-record-list">
-      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => { setSelectedId(employee.id); setDraft({ biography: employee.biography, photoUrl: employee.photoUrl, knowledgeRating: employee.knowledgeRating }); setState("idle"); }}><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => { setSelectedId(employee.id); setDraft({ biography: employee.biography, photoUrl: employee.photoUrl, knowledgeRating: employee.knowledgeRating }); setState("idle"); setRecordOpen(true); revealOnPhone(layoutRef); }}><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
     </aside>
     <div className="editor-form employee-profile-editor">
       <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять только фотографию, оценку знаний и биографию.</p>

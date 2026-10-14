@@ -996,14 +996,21 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .personnel-stats { grid-template-columns: 1fr; }
   .personnel-biography p { max-height: 260px; }
   .broadcast-card { padding: 18px; }
-  .editor-header { align-items: stretch; flex-direction: column; gap: 16px; }
-  .virus-editor-layout { grid-template-columns: 1fr; }
-  .editor-record-list { position: static; display: grid; }
+  /* The window title already says «Редактор» and the save state lives in the bar, so the tabs come first (D-04). */
+  .editor-header { display: none; }
+  .editor-tabs { margin-top: 0; }
+  .virus-editor-layout { grid-template-columns: minmax(0, 1fr); }
+  .editor-record-list { position: static; display: grid; grid-template-columns: minmax(0, 1fr); }
+  .editor-record-list strong, .editor-record-list small { overflow-wrap: anywhere; }
   .editor-back-to-list { display: inline-flex; justify-self: start; align-items: center; min-height: 44px; }
   .virus-editor-layout { scroll-margin-top: 56px; }
   .virus-editor-layout[data-mobile-view="list"] > .editor-form, .virus-editor-layout[data-mobile-view="list"] > .editor-back-to-list, .virus-editor-layout[data-mobile-view="record"] > .editor-record-list { display: none; }
   .editor-field-grid { grid-template-columns: 1fr; }
   .editor-field.wide { grid-column: auto; }
+  /* iOS Safari zooms the page when a text control under 16px gets focus; rich-text fields keep their area fonts. */
+  .editor-field input, .editor-field textarea, .editor-field select { font-size: 16px; }
+  .employee-editor-save { flex-wrap: wrap; }
+  .editor-upload-control input[type="file"] { flex-basis: 200px; min-width: 0; }
   .floating-text-format { right: 8px; bottom: 42px; width: min(620px, calc(100% - 16px)); max-height: min(44svh, 340px); overflow-y: auto; }
   /* Sticky cannot hold here: the page scrolls and .app-window clips, so the bar is fixed above the 44px taskbar. */
   .editor-savebar { position: fixed; left: 0; right: 0; bottom: 44px; margin: 0; padding: 8px 12px; min-height: 56px; }
