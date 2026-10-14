@@ -72,6 +72,7 @@ blocked: 0
 ## Gaps
 
 - truth: "Строки едут по «дорожкам» при перетаскивании за ≡ на ПК и на телефоне; одно перетаскивание = один шаг ↶"
+  gap_id: uat-03-t2-drag
   status: failed
   reason: "User reported: its hard for phone to drag them down and up"
   severity: minor
@@ -85,6 +86,7 @@ blocked: 0
   debug_session: ".planning/debug/reorder-drag-one-direction.md"
 
 - truth: "Панель форматирования (✎) на телефоне помещается на экран и пригодна к работе"
+  gap_id: uat-03-t3-format-panel
   status: failed
   reason: "User reported: РЕДАКТОР ОФОРМЛЕНИЯ is too big for phones, no need to remove functions but to make window smaller and allow to scroll it"
   severity: minor
@@ -98,6 +100,7 @@ blocked: 0
   debug_session: ".planning/debug/format-panel-too-big-phone.md"
 
 - truth: "Длинный ник сотрудника в заголовке профиля не разрывается посреди слова в обычном и развёрнутом окне"
+  gap_id: uat-03-t10-nickname
   status: failed
   reason: "User reported: this shows really weird when window is not fully open, and if it fully open nickname still shows weird"
   severity: cosmetic
@@ -111,6 +114,7 @@ blocked: 0
   debug_session: ".planning/debug/personnel-nickname-midword-break.md"
 
 - truth: "Во время одного перетаскивания за ≡ строку можно двигать и вверх, и вниз, пока палец/мышь не отпущены"
+  gap_id: uat-03-t9-drag
   status: failed
   reason: "User reported: still problems, after i move to up it cant move down until i stop holding"
   severity: major
@@ -124,6 +128,7 @@ blocked: 0
   debug_session: ".planning/debug/reorder-drag-one-direction.md"
 
 - truth: "Перемещение строки при перетаскивании анимировано, чтобы было видно, куда она уехала"
+  gap_id: uat-03-t9-anim
   status: failed
   reason: "User reported: i need some kind of animations for moving to make sure"
   severity: minor
