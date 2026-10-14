@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: PORTIA-03-Редактор
 source: [03-VERIFICATION.md]
 started: 2026-10-14T00:00:00Z
-updated: 2026-10-14T09:02:03.647Z
+updated: 2026-10-14T09:22:35.988Z
 ---
 
 ## Current Test
@@ -76,51 +76,62 @@ blocked: 0
   reason: "User reported: its hard for phone to drag them down and up"
   severity: minor
   test: 2
-  root_cause: ""     # possibly related to 03-REVIEW.md IN-05 (drag stops following the pointer after lost pointer capture)
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "OrderDragHandle tracks the drag only via the handle button's onPointerMove, which needs pointer capture. When a row moves down React re-inserts the dragged row's DOM node (keyed list placement), pointer capture is lost and later moves go elsewhere, so the drag stops following until release (03-REVIEW IN-05, reproduced in headless Edge)"
+  artifacts:
+    - path: "components/portia-editor.tsx"
+      issue: "OrderDragHandle: onPointerMove on the button (~237-240); window listener effect (~173-185) only ends the drag"
+  missing:
+    - "Window-level pointermove listener (isPrimary && active) that updates pointer.current and calls moveTo; remove the button's onPointerMove"
+  debug_session: ".planning/debug/reorder-drag-one-direction.md"
 
 - truth: "Панель форматирования (✎) на телефоне помещается на экран и пригодна к работе"
   status: failed
   reason: "User reported: РЕДАКТОР ОФОРМЛЕНИЯ is too big for phones, no need to remove functions but to make window smaller and allow to scroll it"
   severity: minor
   test: 3
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Phone cap max-height min(44svh,340px) covers about half the screen, content (~471px) is twice the cap, and the whole section scrolls so the header and the reset/done footer scroll away"
+  artifacts:
+    - path: "app/portia.css"
+      issue: "@media 900px .floating-text-format (~1022), padding-bottom (~1031), toolbar (~1032), <=430px rules (~1110-1121)"
+  missing:
+    - "Smaller cap min(38svh,300px), bottom 44px, flex column with pinned header/footer, scroll only .rich-text-toolbar, tighter <=430px paddings; keep all controls"
+  debug_session: ".planning/debug/format-panel-too-big-phone.md"
 
 - truth: "Длинный ник сотрудника в заголовке профиля не разрывается посреди слова в обычном и развёрнутом окне"
   status: failed
   reason: "User reported: this shows really weird when window is not fully open, and if it fully open nickname still shows weird"
   severity: cosmetic
   test: 10
-  root_cause: ""
+  root_cause: "Nick h2 font is viewport-based clamp(27px,4vw,44px) with max-width 12ch and overflow-wrap:anywhere, while the avatar track minmax(190px,238px) squeezes the name column in a non-maximized window; phone rule (~1002) is also too big. Predates phase 3 (commit 890b651)"
   artifacts:
     - path: "app/portia.css"
-      issue: ".personnel-profile-identity h2 at 44px wraps mid-word (Kotik_p / lay1232)"
-  missing: []
-  debug_session: ""
+      issue: ".personnel-profile-head grid (~341), h2 (~363), phone rules (~999-1002)"
+  missing:
+    - "container-type inline-size on .personnel-profile and identity; h2 font clamp(24px,8cqi,44px); drop 12ch; overflow-wrap break-word; @container (max-width:680px) stacks the head; delete the phone h2 font rule"
+  debug_session: ".planning/debug/personnel-nickname-midword-break.md"
 
 - truth: "Во время одного перетаскивания за ≡ строку можно двигать и вверх, и вниз, пока палец/мышь не отпущены"
   status: failed
   reason: "User reported: still problems, after i move to up it cant move down until i stop holding"
   severity: major
   test: 9
-  root_cause: ""     # likely 03-REVIEW.md IN-05 (pointer capture lost after the row moves in the DOM; drag stops following the pointer)
+  root_cause: "OrderDragHandle tracks the drag only via the handle button's onPointerMove, which needs pointer capture. When a row moves down React re-inserts the dragged row's DOM node (keyed list placement), pointer capture is lost and later moves go elsewhere, so the drag stops following until release (03-REVIEW IN-05, reproduced in headless Edge)"
   artifacts:
     - path: "components/portia-editor.tsx"
-      issue: "reorder drag handlers"
-  missing: []
-  debug_session: ""
+      issue: "OrderDragHandle: onPointerMove on the button (~237-240); window listener effect (~173-185) only ends the drag"
+  missing:
+    - "Window-level pointermove listener (isPrimary && active) that updates pointer.current and calls moveTo; remove the button's onPointerMove"
+  debug_session: ".planning/debug/reorder-drag-one-direction.md"
 
 - truth: "Перемещение строки при перетаскивании анимировано, чтобы было видно, куда она уехала"
   status: failed
   reason: "User reported: i need some kind of animations for moving to make sure"
   severity: minor
   test: 9
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "No move animation exists; rows jump instantly (portia.css only highlights the dragged row)"
+  artifacts:
+    - path: "components/portia-editor.tsx"
+      issue: "OrderDragHandle has no FLIP/transition"
+  missing:
+    - "FLIP in OrderDragHandle via useLayoutEffect + row.animate translateY, 160ms --ease-out, skipped when data-motion=reduce"
+  debug_session: ".planning/debug/reorder-drag-one-direction.md"
