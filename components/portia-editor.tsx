@@ -1191,7 +1191,8 @@ export function PortiaEditor({ content, saveState, canManageEditors, active, onD
                 });
               },
             },
-            { label: "НЕ СОХРАНЯТЬ", tone: "danger", onClick: () => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },
+            // A sent PUT cannot be cancelled; closing during it would still save, and a failure would go unseen.
+            { label: "НЕ СОХРАНЯТЬ", tone: "danger", disabled: saveState === "saving", onClick:() => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },
             { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setHandledCloseRequest(closeRequest) },
           ]}
           onCancel={() => setHandledCloseRequest(closeRequest)}
