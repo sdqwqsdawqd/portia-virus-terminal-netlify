@@ -9,79 +9,49 @@ skipped: 0
 status: all_fixed
 ---
 
-# Phase 3: Code Review Fix Report
+# Phase 3: Code Review Fix Report (re-review round)
 
 **Fixed at:** 2026-10-14
-**Source review:** .planning/phases/PORTIA-03-redaktor/03-REVIEW.md
-**Iteration:** 1
+**Source review:** .planning/phases/PORTIA-03-redaktor/03-REVIEW.md (re-review after fix iteration 1)
+**Iteration:** 1 (as passed by the orchestrator; this is the second fix round for the phase)
 
 **Summary:**
-- Findings in scope: 3 (WR-01, WR-02, WR-03; Info findings IN-01 to IN-03 were left alone, as scoped)
-- Fixed: 3. All three are UI glue fixes. Each one needs a human check in the browser (see below).
+- Findings in scope: 3 (WR-01, WR-02, WR-03; Info IN-01 to IN-05 left alone)
+- Fixed: 3
 - Skipped: 0
+
+All edits are in `components/portia-editor.tsx`. Each commit stages only that file.
 
 ## Fixed Issues
 
-### WR-01: undo, redo and discard re-point the Recycle selection at the wrong record
+### WR-01: the Recycle pane can say "Корзина пуста" while the list shows records
 
 **Files modified:** `components/portia-editor.tsx`
-**Commit:** 27deb85
+**Commit:** ba7f0eb
 **Status:** fixed: requires human verification (selection logic)
-**Applied fix:**
-- `repairSelections` now leaves an empty Recycle id empty. It only falls back to the first record when a non-empty id points at a record that is gone.
-- The initial state selects only one Recycle id: the first file, or the first archived virus if there are no files.
-- `moveSelectedVirusToRecycle` set the virus id without clearing the file id, which also broke the "only one is set" rule. It now clears the file id too.
+**Applied fix:** The fallback runs at render time, not inside each state setter. `recycleKeyShown` resolves to the selected file if it still exists, otherwise the selected archived virus, otherwise the first key in `recycleKeys` order. `shownRecycleFileId` and `shownRecycledVirusId` are derived from it. The two index memos and the row highlight read these derived ids, so at most one is ever set. This one place covers every path the review listed: deleting the last file or the last archived virus, restoring a virus, and undo, redo, discard or sync. The delete, restore and `repairSelections` code is unchanged. I chose this over the suggested `repairRecycle` helper because the delete and restore paths only have the pre-change `draft`, so a setter-based repair would have to recompute the post-change content in three places.
 
-### WR-02: "СОХРАНИТЬ" in the close dialog can close the window over newer unsaved edits, or do nothing visible
+### WR-02: НЕ СОХРАНЯТЬ stays enabled during the dialog's save
 
 **Files modified:** `components/portia-editor.tsx`
-**Commit:** 9e845c0
-**Status:** fixed: requires human verification (async state handling)
-**Applied fix:**
-- The close dialog now stays open while the save runs. It is a native modal, so the page is inert and nothing can be typed that the close would lose. Its СОХРАНИТЬ button is disabled while `saveState === "saving"`. This covers both a save started from the dialog and an earlier Ctrl+S that is still running.
-- `save()` now resolves `true` only when nothing is left unsaved. That means either the draft was already clean, or the save succeeded and the latest rendered draft is still the object that was sent (read through a `latest` ref). A save already in flight still returns `false`. The other callers (the bar button and Ctrl+S) ignore the return value.
-- After the save settles:
-  - If the owner cancelled the dialog or chose НЕ СОХРАНЯТЬ meanwhile, nothing more happens.
-  - Otherwise the dialog is dismissed. The window closes only on `true`, and it calls the latest render's `onCloseApproved`, not the closure from the click, so `requestExit` sees current `windows` and `activeApp`.
-  - On failure or leftover edits the window stays open, and the bar shows ОШИБКА, the conflict, or the unsaved state.
-- `ConfirmAction` gained an optional `disabled` field, which `ConfirmDialog` passes to the button.
+**Commit:** 2562d28
+**Applied fix:** Added `disabled: saveState === "saving"` to the НЕ СОХРАНЯТЬ action, with a one-line comment explaining why. `ConfirmDialog` already passes `action.disabled` to the button. ОТМЕНА stays enabled, and the existing `latest.current.closeAsked` check still drops the close if the owner cancels during the save.
 
-### WR-03: the global `[data-dragging]` marker can stick, and then it swallows unrelated edits into one undo step
+### WR-03: `clean` reads a ref refreshed only after commit
 
 **Files modified:** `components/portia-editor.tsx`
-**Commit:** 616e707
-**Status:** fixed: requires human verification (pointer handling, not reproduced in a browser)
-**Applied fix:**
-- `OrderDragHandle` now also calls `stop()` on window `blur` and on a primary `pointerup`/`pointercancel` anywhere in the window, not only on the handle. The listeners are added in the same effect that already ran `stop` on unmount.
-- `onPointerDown` ignores non-primary pointers and non-left buttons (`!event.isPrimary || event.button !== 0`). It also calls `stop()` first, so an earlier `holdTimer`/`frame` can no longer leak.
-- Deviation from the review: I did not use `onLostPointerCapture={stop}`. If the keyed reorder moving the dragged row releases capture (the reviewer's own hypothesis), that handler would end every downward drag after the first swap. A window-level release listener still ends the drag on release, wherever the pointer ends up.
-- Not done: the reviewer's third bullet, moving the drag key from the DOM selector in `editKeyFor` to a module variable. With the marker now cleared on every exit path, the variable would fail in the same ways the DOM attribute does. The `drag:` coalescing rule in `lib/editor-history.ts` is unchanged.
+**Commit:** b1fc81c
+**Status:** fixed: requires human verification (race-condition logic)
+**Applied fix:** Added an `editCount` ref. `changeDraft` and `step` (undo/redo) increment it synchronously before they dispatch. `save()` records the count before the PUT and returns `clean = editCount.current === editsBefore`. `present` was removed from the `latest` ref, since nothing else read it. `savedFrom` stays because the reducer's `saved` action uses it. The other dispatches cannot change the draft during a dirty save: `discard` is blocked because ОТМЕНИТЬ is disabled while saving and the close dialog is modal, and `sync` runs only when the draft is not dirty.
 
 ## Verification
 
-All gates ran in the **main checkout**, not in an isolated worktree (see the note below), after all three commits:
-- `npm test`: 72 of 72 pass, 0 fail.
-- `npx tsc --noEmit`: clean (exit 0).
-- `npm run lint`: 0 errors and 13 warnings, all of them the existing `@next/next/no-img-element` warnings.
-- After each fix I also ran `tsc --noEmit` and `eslint components/portia-editor.tsx` before committing.
+All gates ran in the **main checkout**. No worktree was used, as the orchestrator instructed (`git worktree add` fails on this machine because the path is too long). The results can be reproduced from the current tree.
 
-No regression tests were added. None of the three fixes touch logic in `lib/`; all changes are in `components/portia-editor.tsx`, and the repo has no component test harness (the tests are `node --test lib/*.test.ts`).
-
-**Worktree note:** `git worktree add` under `.claude/worktrees/` failed with `fatal: '$GIT_DIR' too big`, because the path is too long on Windows. I removed the empty temp branch `gsd-reviewfix/03-407` and the empty `.claude/worktrees` directory that the failed attempt left behind. No recovery sentinel was written. I then edited and committed in the main checkout and staged only `components/portia-editor.tsx` for each commit. The unrelated working-tree changes (`.planning/config.json`, `.planning/state.json`, `.planning/milestone.lock`, `&1`) were not touched.
-
-## Human verification needed
-
-1. **WR-01:**
-   - On the Recycle tab, select a file, make an edit, then press Ctrl+Z. The file editor should stay and the same row should stay highlighted.
-   - Repeat with an archived virus selected.
-   - Repeat with the discard dialog.
-2. **WR-02:**
-   - Make an edit, press ×, then click СОХРАНИТЬ. The dialog should stay up with the button disabled until the save finishes, and then the window should close.
-   - With a throttled network, press Esc during the save. The window should stay open.
-   - Press Ctrl+S and then × right away. СОХРАНИТЬ should stay disabled until the first save settles.
-3. **WR-03:** Reorder rows downward and upward with a mouse and on touch. The drag should keep working across several swaps. After the drag, typing in a field should produce normal word-sized undo steps.
-
-Known remaining edge (WR-01): if an undo removes the selected Recycle record and none of its kind remain, both ids end up empty and the pane shows the empty state even if records of the other kind exist. Clicking a row recovers. Before this fix, the same case auto-selected the other kind.
+- `npx tsc --noEmit`: clean. It also ran after each fix.
+- `npm test`: 72 of 72 passed, 0 failed. These tests cover `lib/*.test.ts` only. No test exercises `components/portia-editor.tsx`, so none of the three fixes is covered by an automated test.
+- `npm run lint`: 0 errors, 13 warnings. All 13 are `@next/next/no-img-element`. 3 are in `portia-editor.tsx` (the same 3 the review reported) and 10 are in another file this round did not touch.
+- Not run: a browser check of the Recycle fallback, the disabled button, or the upload-during-save race.
 
 ---
 
