@@ -168,7 +168,21 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
     }
     if (event?.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
-  useEffect(() => stop, []); // a handle unmounted mid-drag must not leave the frame loop running
+  // A stuck drag marker would fold every later edit into one undo step, so the drag also ends on unmount, on lost
+  // window focus, and on a release anywhere: once pointer capture is lost the handle may never see its pointerup.
+  useEffect(() => {
+    const onBlur = () => stop();
+    const onRelease = (event: PointerEvent) => { if (event.isPrimary) stop(); };
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("pointerup", onRelease);
+    window.addEventListener("pointercancel", onRelease);
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("pointerup", onRelease);
+      window.removeEventListener("pointercancel", onRelease);
+      stop();
+    };
+  }, []);
 
   // A row swaps only once the pointer crosses its vertical middle, so rows of unequal height do not flip back and forth.
   const moveTo = (x: number, y: number) => {
@@ -207,6 +221,9 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
     aria-label={`Изменить порядок: ${label}`}
     aria-keyshortcuts="ArrowUp ArrowDown"
     onPointerDown={(event) => {
+      // A second finger or a right-click must not start a drag or orphan the first one's timer and frame loop.
+      if (!event.isPrimary || event.button !== 0) return;
+      stop();
       const target = event.currentTarget;
       pointer.current = { x: event.clientX, y: event.clientY };
       target.setPointerCapture(event.pointerId);
