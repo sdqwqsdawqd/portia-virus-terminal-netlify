@@ -196,3 +196,39 @@ blocked: 0
     - "Owner decision: draw idle rich fields on the preview background and show real run colours (drop the grey override)"
     - "Selection inside .formatted-rich-input sets background only, keeps the text colour"
   debug_session: ".planning/debug/format-panel-select-closes.md"
+
+- truth: "A broadcast (news/quest/task) created and saved in the editor stays after saving, polling and reload"
+  gap_id: uat-03-owner-broadcast-vanishes
+  status: failed
+  reason: "User reported (owner note after test 13): when I create a post, like a forum thread or a news item, it gets deleted for some reason"
+  severity: blocker
+  test: 13
+  root_cause: "fetchContent (portia-desktop.tsx ~320-342, polled every 30 s) accepts any GET without a revision check: an older answer (in-flight poll or stale Netlify CDN copy, s-maxage=300 + SWR, never purged from next dev) reverts content and revision, and the clean editor syncs to it; a second editor's poll bumps revision so its stale draft passes the 409 check and overwrites the post. Pre-existing (25bcbb2/5001944)"
+  artifacts:
+    - path: "components/portia-desktop.tsx"
+      issue: "fetchContent ~320-342, poll ~421, saveContent ~801-833 sends the latest revision, not the draft's base revision"
+    - path: "components/portia-editor.tsx"
+      issue: "sync effect ~571-578 adopts whatever the desktop stores"
+    - path: "lib/portia-cdn.ts"
+      issue: "cached GET; purge fails silently locally"
+  missing:
+    - "Drop GET answers with a revision lower than the latest known (incl. the one from saveContent) and polls in flight when a save started"
+    - "PUT sends the revision the draft was built on (kept with the baseline), so a stale draft gets 409"
+    - "Sync decision as a pure lib/ function with a test"
+  debug_session: ".planning/debug/forum-news-posts-vanish-duplicate.md"
+
+- truth: "Adding a new broadcast creates exactly one post and later formatting never writes into another post"
+  gap_id: uat-03-owner-broadcast-duplicates
+  status: failed
+  reason: "User reported: when I create a new post in the forum, it gets duplicated"
+  severity: major
+  test: 13
+  root_cause: "Broadcast handlers address posts by array index (portia-editor.tsx ~968-972) while «+ НОВОЕ СООБЩЕНИЕ» unshifts at the top (~975); the format panel's stored onCommit (~1427/1441, called ~1572) keeps the old index and is not cleared on add/delete, so the next ✎ change writes the old post's text into the new post (or a wrong/missing index after delete). Deleting a post also leaves its formatted text behind"
+  artifacts:
+    - path: "components/portia-editor.tsx"
+      issue: "index-based broadcast/info handlers ~966-975, format target ~1423-1442/1569-1573"
+  missing:
+    - "Address broadcasts and info sections by id, including the format panel's commit callback (or clear the format target on add/delete/reorder)"
+    - "Remove a post's formatting on delete"
+    - "Id-based updates as pure lib/ functions with a test"
+  debug_session: ".planning/debug/forum-news-posts-vanish-duplicate.md"
