@@ -220,14 +220,14 @@ test("the boot script applies only a whitelisted saved accent", () => {
   for (const id of ["ice", "amber", "red"]) assert.ok(themes[id].size > 0, `no html[data-accent="${id}"] block`);
 });
 
-test("the motion setting overrides the system, and follows it by default", () => {
+test("animations are on by default and off only by the setting, whatever the system says", () => {
   const saved = (motion?: string) => () => JSON.stringify({ accent: "teal", motion });
-  assert.equal(runBoot(saved(), true).motion, "reduce");
+  assert.equal(runBoot(saved(), true).motion, "full");
   assert.equal(runBoot(saved(), false).motion, "full");
-  assert.equal(runBoot(saved("system"), true).motion, "reduce");
+  assert.equal(runBoot(saved("system"), true).motion, "full");
   assert.equal(runBoot(saved("on"), true).motion, "full");
   assert.equal(runBoot(saved("off"), false).motion, "reduce");
-  assert.equal(runBoot(() => { throw new Error("storage blocked"); }, true).motion, "reduce");
+  assert.equal(runBoot(() => { throw new Error("storage blocked"); }, true).motion, "full");
   // The attribute is the switch. The media query may only hold the fallback for a page where the head
   // script never ran, so every selector inside it must be scoped to html:not([data-motion]).
   for (const [, body] of css.matchAll(/@media\s*\(prefers-reduced-motion[^)]*\)\s*\{((?:[^{}]*\{[^{}]*\})*[^{}]*)\}/g)) {

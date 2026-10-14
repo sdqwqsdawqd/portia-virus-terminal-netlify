@@ -37,7 +37,7 @@ type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; mo
 type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
 type ShortcutPosition = { x: number; y: number };
 
-const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "system" };
+const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "on" };
 // Every value a setting may hold; the same ids the «Настройки» groups offer.
 const settingValues: Record<keyof DesktopSettings, readonly string[]> = {
   accent: accentIds,
@@ -593,17 +593,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     try { window.localStorage.setItem("portia-desktop-settings-v1", JSON.stringify(desktopSettings)); } catch {}
   }, [desktopSettings, desktopSettingsLoaded]);
 
-  // Same rule as the head script: an explicit choice wins, otherwise the system setting, live.
+  // Same rule as the head script: animations are on unless the visitor turned them off.
   useEffect(() => {
     if (!desktopSettingsLoaded) return;
-    const system = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => {
-      const { motion } = desktopSettings;
-      document.documentElement.dataset.motion = motion === "on" ? "full" : motion === "off" ? "reduce" : system.matches ? "reduce" : "full";
-    };
-    apply();
-    system.addEventListener("change", apply);
-    return () => system.removeEventListener("change", apply);
+    document.documentElement.dataset.motion = desktopSettings.motion === "off" ? "reduce" : "full";
   }, [desktopSettings, desktopSettingsLoaded]);
 
   const showSettingsSaved = () => {
@@ -1169,7 +1162,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => updateDesktopSetting("accent", value)} />
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
-              <SettingGroup title="Анимации" values={[['system','Как в системе'],['on','Включены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
+              <SettingGroup title="Анимации" values={[['on','Включены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
               <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сообщения, поиск и советы помощника." : "Войдите в разрешённый аккаунт редактора."}</p></div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>
             </div>
