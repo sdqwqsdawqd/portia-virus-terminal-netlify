@@ -334,8 +334,8 @@ function revealOnPhone(ref: React.RefObject<HTMLElement | null>) {
   window.requestAnimationFrame(() => ref.current?.scrollIntoView({ block: "start" }));
 }
 
-function restoreSelection(root: HTMLElement, offsets: { start: number; end: number }) {
-  if (window.document.activeElement !== root) return;
+// Builds the Range for text offsets inside a rich-text field; used to restore the caret and to paint the phone highlight.
+function rangeFromOffsets(root: HTMLElement, offsets: { start: number; end: number }): Range {
   const walker = window.document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const range = window.document.createRange();
   // A caret right after a node's trailing "\n" belongs to the next line. Firefox and
@@ -354,10 +354,7 @@ function restoreSelection(root: HTMLElement, offsets: { start: number; end: numb
     if (fits(offsets.end, text, consumed)) {
       if (!startSet) range.setStart(node, 0);
       range.setEnd(node, Math.max(0, offsets.end - consumed));
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      return;
+      return range;
     }
     consumed += text.length;
     node = walker.nextNode();
@@ -372,9 +369,19 @@ function restoreSelection(root: HTMLElement, offsets: { start: number; end: numb
     range.selectNodeContents(root);
     range.collapse(false);
   }
+  return range;
+}
+
+function restoreSelection(root: HTMLElement, offsets: { start: number; end: number }) {
+  if (window.document.activeElement !== root) return;
+  const range = rangeFromOffsets(root, offsets);
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
+}
+
+function findFormatField(key: string) {
+  return window.document.querySelector<HTMLElement>(`[data-format-key="${CSS.escape(key)}"]`);
 }
 
 function hsvToHex(hue: number, saturation: number, value: number) {
@@ -1302,6 +1309,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
     <div
       ref={editorRef}
       data-area={area}
+      data-format-key={formatKey}
       className={`formatted-rich-input${tall ? " tall" : ""}${activeFormat.key === formatKey ? ` is-editor-active preview-${activeFormat.surface}` : ""}`}
       contentEditable
       suppressContentEditableWarning
@@ -1354,6 +1362,8 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const initialStyle = richTextStyleAt(target.document, target.selection.start);
   const defaultTextColor = previewSurface === "dark" ? "#aebfba" : "#252827";
   const documentRef = useRef(target.document);
+  const panelRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
   const [color, setColor] = useState(initialStyle.color ?? defaultTextColor);
   const [fontSize, setFontSize] = useState(initialStyle.fontSize ?? 17);
   const [fontWeight, setFontWeight] = useState(initialStyle.fontWeight ?? 400);
@@ -1361,6 +1371,53 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const [backgroundOpacity, setBackgroundOpacity] = useState(initialStyle.backgroundOpacity ?? 0);
   const [colorPicker, setColorPicker] = useState<"text" | "background" | null>(null);
   useEffect(() => { documentRef.current = target.document; }, [target.document]);
+  useEffect(() => { onCloseRef.current = onClose; });
+
+  const formatKey = target.key;
+  const selectionStart = target.selection.start;
+  const selectionEnd = target.selection.end;
+  const formatDocument = target.document;
+  // Phone: formatting is «either the keyboard or the panel» (D-05, D-06). The field is blurred so the keyboard leaves,
+  // the stored selection is painted with the Custom Highlight API and scrolled above the panel; touching the text closes the panel.
+  // formatDocument is a dependency because a style change re-renders the field's text nodes, which orphans the painted range.
+  useEffect(() => {
+    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    const field = findFormatField(formatKey);
+    const panel = panelRef.current;
+    if (!field || !panel) return;
+    if (window.document.activeElement === field) field.blur();
+    const collapsed = selectionStart === selectionEnd;
+    const range = rangeFromOffsets(field, { start: selectionStart, end: selectionEnd });
+    const paints = !collapsed && typeof Highlight !== "undefined" && "highlights" in CSS;
+    if (paints) CSS.highlights.set("portia-format", new Highlight(range));
+    const keepVisible = () => {
+      const rect = collapsed ? field.getBoundingClientRect() : range.getBoundingClientRect();
+      const overlap = rect.bottom - (panel.getBoundingClientRect().top - 16);
+      // 64 keeps the text under the 48px system bar.
+      if (overlap > 0) window.scrollBy(0, Math.max(0, Math.min(overlap, rect.top - 64)));
+    };
+    const frame = window.requestAnimationFrame(keepVisible);
+    const onFocusIn = (event: FocusEvent) => { if (event.target === field) onCloseRef.current(); };
+    window.visualViewport?.addEventListener("resize", keepVisible);
+    window.document.addEventListener("focusin", onFocusIn);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.visualViewport?.removeEventListener("resize", keepVisible);
+      window.document.removeEventListener("focusin", onFocusIn);
+      if (paints) CSS.highlights.delete("portia-format");
+    };
+  }, [formatKey, selectionStart, selectionEnd, formatDocument]);
+
+  // On a phone, closing returns the caret to the field in the same tap so the keyboard can come back (iOS may still need one more tap).
+  const finish = () => {
+    onClose();
+    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    const field = findFormatField(formatKey);
+    if (!field) return;
+    field.focus({ preventScroll: true });
+    restoreSelection(field, { start: selectionStart, end: selectionEnd });
+  };
+
   const selectionLabel = target.selection.start === target.selection.end
     ? "ВЕСЬ ТЕКСТ"
     : `${Math.abs(target.selection.end - target.selection.start)} ЗНАК.`;
@@ -1387,11 +1444,11 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     commit(resetRichTextStyle(documentRef.current, target.selection.start, target.selection.end));
   };
 
-  return <section className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`}>
+  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`}>
     <header>
       <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
       <small>{selectionLabel}</small>
-      <button type="button" onClick={onClose} aria-label="Закрыть редактор">×</button>
+      <button type="button" onClick={finish} aria-label="Закрыть редактор">×</button>
     </header>
     <div className="rich-text-toolbar" aria-label="Оформление текста">
       <div className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={previewSurface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={previewSurface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
@@ -1417,7 +1474,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
         onClose={() => setColorPicker(null)}
       />}
     </div>
-    <footer><p>Изменения применяются сразу. Без выделения меняется весь текст.</p><div><button type="button" className="reset-format" onClick={reset}>СБРОСИТЬ</button><button type="button" className="finish-format" onClick={onClose}>ГОТОВО</button></div></footer>
+    <footer><p>Изменения применяются сразу. Без выделения меняется весь текст.</p><div><button type="button" className="reset-format" onClick={reset}>СБРОСИТЬ</button><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
   </section>;
 }
 

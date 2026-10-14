@@ -422,6 +422,8 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .virus-editor-layout { display: grid; grid-template-columns: 210px minmax(0,1fr); gap: 18px; align-items: start; }
 .editor-record-list { position: sticky; top: 0; display: grid; gap: 7px; }
 .editor-back-to-list { display: none; }
+/* Phone: the stored selection stays marked while the format panel has taken the keyboard's place. */
+::highlight(portia-format) { background-color: rgba(var(--desktop-glow), .35); }
 .editor-record-list button { width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 11px; border: 1px solid oklch(.358 .031 var(--accent-hue)); background: rgba(255,255,255,.015); color: oklch(.777 .021 var(--accent-hue)); text-align: left; cursor: pointer; }
 .editor-record-list button:hover, .editor-record-list button.active { border-color: var(--teal-dim); background: var(--teal-soft); }
 .editor-record-list strong { font: 700 12px var(--sans); }
@@ -1019,6 +1021,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .editor-savebar-actions button { min-height: 40px; }
   .content-editor:has(> .editor-savebar) { padding-bottom: 110px; }
   .content-editor:has(.floating-text-format) .editor-savebar { display: none; }
+  /* Lets the last field scroll above the format panel, which sits where the keyboard was. */
+  .content-editor:has(.floating-text-format) { padding-bottom: calc(min(44svh, 340px) + 90px); }
   .rich-text-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .access-editor-add { grid-template-columns: 1fr; }
   .content-control-entry { align-items: stretch; flex-direction: column; }
@@ -1097,7 +1101,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .taskbar-app { max-width: 42px; overflow: hidden; }
   .editor-tabs { margin-inline: -4px; }
   .nested-editor-card { padding: 12px; }
-  .content-editor:has(.floating-text-format) { padding-bottom: 155px; }
   .floating-text-format > header { position: sticky; z-index: 2; top: 0; grid-template-columns: minmax(0,1fr) auto; }
   .floating-text-format > header > div { align-items: flex-start; flex-direction: column; gap: 2px; }
   .floating-text-format > header small { display: none; }
