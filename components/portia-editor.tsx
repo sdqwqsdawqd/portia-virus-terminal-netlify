@@ -155,6 +155,21 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
   const pointer = useRef({ x: 0, y: 0 });
   const active = useRef(false);
   useEffect(() => { indexRef.current = index; onMoveRef.current = onMove; });
+  const placed = useRef<{ index: number; top: number } | null>(null);
+  // Per-handle FLIP: every row whose index changed slides itself, so the dragged row and its displaced neighbours all animate.
+  useLayoutEffect(() => {
+    const row = button.current?.closest<HTMLElement>("[data-sort-index]");
+    if (!row || row.offsetParent === null) { placed.current = null; return; }
+    const top = row.offsetTop;
+    const previous = placed.current;
+    placed.current = { index, top };
+    if (!previous || previous.index === index || previous.top === top) return;
+    // Mirrors the CSS motion switch, which cannot clamp Web Animations started from script.
+    const motion = document.documentElement.dataset.motion;
+    if (motion === undefined ? matchMedia("(prefers-reduced-motion: reduce)").matches : motion !== "full") return;
+    const easing = getComputedStyle(document.documentElement).getPropertyValue("--ease-out").trim() || "ease-out";
+    row.animate([{ transform: `translateY(${previous.top - top}px)` }, { transform: "none" }], { duration: 160, easing });
+  });
 
   const stop = (event?: React.PointerEvent<HTMLButtonElement>) => {
     if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
@@ -168,6 +183,20 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
     }
     if (event?.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
+  // A row swaps only once the pointer crosses its vertical middle, so rows of unequal height do not flip back and forth.
+  const moveTo = (x: number, y: number) => {
+    const row = document.elementsFromPoint(x, y)
+      .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
+      .find(Boolean);
+    const target = Number(row?.dataset.sortIndex);
+    if (!row || !Number.isInteger(target) || target === indexRef.current) return;
+    const { top, height } = row.getBoundingClientRect();
+    const middle = top + height / 2;
+    if (target > indexRef.current ? y < middle : y > middle) return;
+    onMoveRef.current(indexRef.current, target);
+    indexRef.current = target;
+  };
+
   // A stuck drag marker would fold every later edit into one undo step, so the drag also ends on unmount, on lost
   // window focus, and on a release anywhere: once pointer capture is lost the handle may never see its pointerup.
   // Tracking lives on window too, because a downward swap re-inserts the dragged row and drops pointer capture (03-REVIEW IN-05).
@@ -191,20 +220,6 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
       stop();
     };
   }, []);
-
-  // A row swaps only once the pointer crosses its vertical middle, so rows of unequal height do not flip back and forth.
-  const moveTo = (x: number, y: number) => {
-    const row = document.elementsFromPoint(x, y)
-      .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
-      .find(Boolean);
-    const target = Number(row?.dataset.sortIndex);
-    if (!row || !Number.isInteger(target) || target === indexRef.current) return;
-    const { top, height } = row.getBoundingClientRect();
-    const middle = top + height / 2;
-    if (target > indexRef.current ? y < middle : y > middle) return;
-    onMoveRef.current(indexRef.current, target);
-    indexRef.current = target;
-  };
 
   // Near the edge of whatever scrolls (the editor, or the page on phones) the list keeps moving under a still finger.
   const autoscroll = () => {
