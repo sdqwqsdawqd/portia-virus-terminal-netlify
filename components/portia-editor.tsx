@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
-import { removeBroadcast, removeInfoSection, updateById } from "@/lib/editor-items";
+import { removeBroadcast, removeInfoSection, removeMutation, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
   portiaTextKey,
@@ -636,9 +636,13 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const moveSelectedVirusToRecycle = () => {
     if (!selectedVirus) return;
     const nextId = draft.viruses.find((virus) => virus.id !== selectedVirus.id)?.id ?? "";
+    // The panel's stored commit targets this virus, which is about to leave the list.
+    setFormatTarget(null);
+    setFormatterOpen(false);
     changeDraft((next) => {
+      const recycled = next.viruses.find((virus) => virus.id === selectedVirus.id);
+      if (!recycled) return;
       next.recycledViruses ??= [];
-      const recycled = next.viruses[selectedVirusIndex];
       next.recycledViruses.push(recycled);
       next.viruses = next.viruses.filter((virus) => virus.id !== selectedVirus.id);
       next.recycleOrder = [...recycleKeys(next).filter((key) => key !== `virus:${recycled.id}`), `virus:${recycled.id}`];
@@ -657,14 +661,23 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     showRecord(false);
   };
 
+  // By id, not index: an upload that finishes after a reorder, or the open format panel's stored commit, would otherwise write into another record.
   const updateVirus = (updater: (virus: Virus) => void) => {
-    if (selectedVirusIndex < 0) return;
-    changeDraft((next) => updater(next.viruses[selectedVirusIndex]));
+    const id = selectedVirus?.id;
+    if (!id) return;
+    changeDraft((next) => updateById(next.viruses, id, updater));
   };
 
   const updateRecycleFile = (updater: (file: RecycleFile) => void) => {
-    if (selectedRecycleFileIndex < 0) return;
-    changeDraft((next) => updater(next.recycleFiles[selectedRecycleFileIndex]));
+    const id = selectedRecycleFile?.id;
+    if (!id) return;
+    changeDraft((next) => updateById(next.recycleFiles, id, updater));
+  };
+
+  const updateRecycledVirus = (updater: (virus: Virus) => void) => {
+    const id = selectedRecycledVirus?.id;
+    if (!id) return;
+    changeDraft((next) => updateById(next.recycledViruses ?? [], id, updater));
   };
 
   const changeFormattedText = (
@@ -886,7 +899,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
           <aside className="editor-record-list">
             {draft.viruses.map((virus, index) => (
               <div className="editor-record-row" data-sort-index={index} key={virus.id}>
-                <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.viruses, from, to))} />
+                <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => moveArrayItem(next.viruses, from, to)); }} />
                 <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => { setSelectedVirusId(virus.id); showRecord(true); }}>
                   <strong>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small>{virus.code || "БЕЗ КОДА"}</small>
                 </button>
@@ -911,13 +924,13 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               </EditorGroup>}
 
               {dossierTab === "text" && <EditorGroup title="Описание">
-                <FormattedTextarea area="lead" label="Внешние характеристики" value={selectedVirus.external} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, "external")]} formatKey={portiaTextKey.virus(selectedVirus.id, "external")} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, "external"), value, document, (next, text) => { next.viruses[selectedVirusIndex].external = text; })} />
-                <FormattedTextarea area="lead" label="Физиологические характеристики" value={selectedVirus.physiology} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, "physiology")]} formatKey={portiaTextKey.virus(selectedVirus.id, "physiology")} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, "physiology"), value, document, (next, text) => { next.viruses[selectedVirusIndex].physiology = text; })} />
+                <FormattedTextarea area="lead" label="Внешние характеристики" value={selectedVirus.external} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, "external")]} formatKey={portiaTextKey.virus(selectedVirus.id, "external")} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, "external"), value, document, (next, text) => updateById(next.viruses, selectedVirus.id, (virus) => { virus.external = text; }))} />
+                <FormattedTextarea area="lead" label="Физиологические характеристики" value={selectedVirus.physiology} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, "physiology")]} formatKey={portiaTextKey.virus(selectedVirus.id, "physiology")} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, "physiology"), value, document, (next, text) => updateById(next.viruses, selectedVirus.id, (virus) => { virus.physiology = text; }))} />
               </EditorGroup>}
 
               {dossierTab === "text" && <EditorGroup title="Характеристики PPU">
                 {(["health", "speed", "abilities"] as const).map((key) => (
-                  <FormattedTextarea area="metric" key={key} label={{ health: "Здоровье", speed: "Скорость", abilities: "Способности" }[key]} value={selectedVirus.ppu[key]} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, `ppu-${key}`)]} formatKey={portiaTextKey.virus(selectedVirus.id, `ppu-${key}`)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, `ppu-${key}`), value, document, (next, text) => { next.viruses[selectedVirusIndex].ppu[key] = text; })} />
+                  <FormattedTextarea area="metric" key={key} label={{ health: "Здоровье", speed: "Скорость", abilities: "Способности" }[key]} value={selectedVirus.ppu[key]} document={draft.formattedText[portiaTextKey.virus(selectedVirus.id, `ppu-${key}`)]} formatKey={portiaTextKey.virus(selectedVirus.id, `ppu-${key}`)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.virus(selectedVirus.id, `ppu-${key}`), value, document, (next, text) => updateById(next.viruses, selectedVirus.id, (virus) => { virus.ppu[key] = text; }))} />
                 ))}
               </EditorGroup>}
 
@@ -931,12 +944,13 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               </EditorGroup>}
 
               {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
+                {/* A delete shifts the later mutations' index keys, so it closes the format panel. shortcut: mutations have no id, so delete is blocked while an upload runs; an undo mid-upload can still shift its index — give Mutation an id if that matters. */}
                 {selectedVirus.mutations.map((mutation, index) => (
                   <div className="nested-editor-card" key={index}>
-                    <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => updateVirus((virus) => { virus.mutations.splice(index, 1); })}>Удалить</button></div>
+                    <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => updateById(next.viruses, selectedVirus.id, (virus) => removeMutation(next, virus, index))); }}>Удалить</button></div>
                     <Field label="Название"><input value={mutation.name} onChange={(event) => updateVirus((virus) => { virus.mutations[index].name = event.target.value; })} /></Field>
-                    <FormattedTextarea area="mutation" label="Описание" value={mutation.description} document={draft.formattedText[portiaTextKey.mutation(selectedVirus.id, index)]} formatKey={portiaTextKey.mutation(selectedVirus.id, index)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.mutation(selectedVirus.id, index), value, document, (next, text) => { next.viruses[selectedVirusIndex].mutations[index].description = text; })} />
-                    <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => updateVirus((virus) => { virus.mutations[index].image = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { virus.mutations[index].image = url; }))} />
+                    <FormattedTextarea area="mutation" label="Описание" value={mutation.description} document={draft.formattedText[portiaTextKey.mutation(selectedVirus.id, index)]} formatKey={portiaTextKey.mutation(selectedVirus.id, index)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.mutation(selectedVirus.id, index), value, document, (next, text) => updateById(next.viruses, selectedVirus.id, (virus) => { const item = virus.mutations[index]; if (item) item.description = text; }))} />
+                    <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => updateVirus((virus) => { virus.mutations[index].image = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { const item = virus.mutations[index]; if (item) item.image = url; }))} />
                   </div>
                 ))}
                 <button className="secondary-control" type="button" onClick={() => updateVirus((virus) => virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }))}>+ ДОБАВИТЬ МУТАЦИЮ</button>
@@ -1038,13 +1052,16 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               dossierChanged={archivedDossierChanged}
               uploadState={uploadState}
               onUpload={uploadImage}
-              onChange={(updater) => changeDraft((next) => updater(next.recycledViruses[selectedRecycledVirusIndex]))}
+              onChange={updateRecycledVirus}
+              onRemoveMutation={(index) => changeDraft((next) => updateById(next.recycledViruses ?? [], selectedRecycledVirus.id, (virus) => removeMutation(next, virus, index)))}
               // No confirm(): embedded browsers may answer it "no" without showing it, and a restore only
               // changes the unsaved draft and can be undone by moving the virus back.
               onRestore={() => {
                 changeDraft((next) => {
-                  next.viruses.push(next.recycledViruses[selectedRecycledVirusIndex]);
-                  next.recycledViruses.splice(selectedRecycledVirusIndex, 1);
+                  const restored = next.recycledViruses.find((virus) => virus.id === selectedRecycledVirus.id);
+                  if (!restored) return;
+                  next.viruses.push(restored);
+                  next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== restored.id);
                   next.recycleOrder = recycleKeys(next);
                 });
                 setSelectedVirusId(selectedRecycledVirus.id);
@@ -1087,7 +1104,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               )}
 
               <EditorGroup title={selectedRecycleFile.kind === "image" ? "Подпись" : selectedRecycleFile.kind === "virus" ? "Дополнительный текст" : "Содержимое"} stack>
-                <FormattedTextarea area={selectedRecycleFile.kind === "image" ? "caption" : "trash"} label={selectedRecycleFile.kind === "image" ? "Описание фотографии" : "Текст файла"} tall value={selectedRecycleFile.content} document={draft.formattedText[portiaTextKey.recycle(selectedRecycleFile.id)]} formatKey={portiaTextKey.recycle(selectedRecycleFile.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.recycle(selectedRecycleFile.id), value, document, (next, text) => { next.recycleFiles[selectedRecycleFileIndex].content = text; })} />
+                <FormattedTextarea area={selectedRecycleFile.kind === "image" ? "caption" : "trash"} label={selectedRecycleFile.kind === "image" ? "Описание фотографии" : "Текст файла"} tall value={selectedRecycleFile.content} document={draft.formattedText[portiaTextKey.recycle(selectedRecycleFile.id)]} formatKey={portiaTextKey.recycle(selectedRecycleFile.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.recycle(selectedRecycleFile.id), value, document, (next, text) => updateById(next.recycleFiles, selectedRecycleFile.id, (file) => { file.content = text; }))} />
               </EditorGroup>
 
               <button className="danger-control" type="button" onClick={() => {
@@ -1329,11 +1346,12 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
   </div>;
 }
 
-function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRestore, onDelete, dossierChanged }: {
+function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRemoveMutation, onRestore, onDelete, dossierChanged }: {
   virus: Virus;
   uploadState: "idle" | "uploading" | "error";
   onUpload: (file: File, onUploaded: (url: string) => void) => void;
   onChange: (updater: (virus: Virus) => void) => void;
+  onRemoveMutation: (index: number) => void;
   onRestore: () => void;
   onDelete: () => void;
   dossierChanged: DossierTab[];
@@ -1363,10 +1381,10 @@ function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRestore
     </EditorGroup>}
     {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
       {virus.mutations.map((mutation, index) => <div className="nested-editor-card" key={`${virus.id}-mutation-${index}`}>
-        <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.mutations.splice(index, 1); })}>Удалить</button></div>
+        <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => onRemoveMutation(index)}>Удалить</button></div>
         <Field label="Название"><input value={mutation.name} onChange={(event) => onChange((item) => { item.mutations[index].name = event.target.value; })} /></Field>
         <Field label="Описание" wide><textarea value={mutation.description} onChange={(event) => onChange((item) => { item.mutations[index].description = event.target.value; })} /></Field>
-        <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.mutations[index].image = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.mutations[index].image = url; }))} />
+        <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.mutations[index].image = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { const target = item.mutations[index]; if (target) target.image = url; }))} />
       </div>)}
       <button className="secondary-control" type="button" onClick={() => onChange((item) => { item.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }); })}>+ ДОБАВИТЬ МУТАЦИЮ</button>
     </EditorGroup>}

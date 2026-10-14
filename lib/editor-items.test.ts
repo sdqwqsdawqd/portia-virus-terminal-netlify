@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { removeBroadcast, removeInfoSection, updateById } from "./editor-items.ts";
+import { removeBroadcast, removeInfoSection, removeMutation, updateById } from "./editor-items.ts";
 import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
 const fixture = (): PortiaContent => {
@@ -54,4 +54,37 @@ test("deleting an info section removes only that section and its formatting", ()
   assert.deepEqual(content.infoSections.map((item) => item.id), ["s2"]);
   assert.equal(portiaTextKey.info("s1") in content.formattedText, false);
   assert.equal(portiaTextKey.info("s2") in content.formattedText, true);
+});
+
+test("deleting a mutation moves the later mutations' formatting down and leaves no formatting on a neighbour", () => {
+  const content = fixture();
+  const virus = content.viruses[0];
+  virus.mutations = [
+    { name: "M0", description: "ноль", image: "" },
+    { name: "M1", description: "один", image: "" },
+    { name: "M2", description: "два", image: "" },
+  ];
+  const doc1 = { runs: [{ text: "один" }] };
+  const doc2 = { runs: [{ text: "два" }] };
+  content.formattedText[portiaTextKey.mutation(virus.id, 1)] = doc1;
+  content.formattedText[portiaTextKey.mutation(virus.id, 2)] = doc2;
+  removeMutation(content, virus, 1);
+  assert.deepEqual(virus.mutations.map((mutation) => mutation.name), ["M0", "M2"]);
+  assert.deepEqual(content.formattedText[portiaTextKey.mutation(virus.id, 1)], doc2);
+  assert.equal(portiaTextKey.mutation(virus.id, 2) in content.formattedText, false);
+  assert.equal(portiaTextKey.mutation(virus.id, 0) in content.formattedText, false);
+  assert.equal(portiaTextKey.broadcast("a") in content.formattedText, true);
+});
+
+test("deleting an unformatted mutation drops the formatting the next one would have inherited", () => {
+  const content = fixture();
+  const virus = content.viruses[0];
+  virus.mutations = [{ name: "M0", description: "ноль", image: "" }, { name: "M1", description: "один", image: "" }];
+  content.formattedText[portiaTextKey.mutation(virus.id, 0)] = { runs: [{ text: "ноль" }] };
+  removeMutation(content, virus, 1);
+  assert.deepEqual(virus.mutations.map((mutation) => mutation.name), ["M0"]);
+  assert.equal(portiaTextKey.mutation(virus.id, 0) in content.formattedText, true);
+  removeMutation(content, virus, 0);
+  assert.equal(virus.mutations.length, 0);
+  assert.equal(portiaTextKey.mutation(virus.id, 0) in content.formattedText, false);
 });
