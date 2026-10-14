@@ -821,6 +821,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         body: JSON.stringify({ content: next, revision: baseRevision }),
       });
       if (response.status === 409) {
+        // The server is authoritative after a conflict: a cached revision ahead of it (row reset, fresh project) would otherwise drop every poll for good.
+        knownRevision.current = -1;
         setSaveState("conflict");
         throw new Error("PORTIA content changed by another editor");
       }

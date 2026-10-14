@@ -33,3 +33,8 @@ test("a late poll after a save is dropped and the next poll is taken", () => {
 test("a stale CDN copy older than the cached one is dropped", () => {
   assert.equal(acceptFetchedContent(118, 122, 0, 0), false);
 });
+
+test("after a conflict resets the gate to -1, the next poll is taken even below the cached revision", () => {
+  assert.equal(acceptFetchedContent(1, 122, 0, 0), false);
+  assert.equal(acceptFetchedContent(1, -1, 0, 0), true);
+});
