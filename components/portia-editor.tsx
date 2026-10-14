@@ -170,14 +170,22 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
   };
   // A stuck drag marker would fold every later edit into one undo step, so the drag also ends on unmount, on lost
   // window focus, and on a release anywhere: once pointer capture is lost the handle may never see its pointerup.
+  // Tracking lives on window too, because a downward swap re-inserts the dragged row and drops pointer capture (03-REVIEW IN-05).
   useEffect(() => {
     const onBlur = () => stop();
     const onRelease = (event: PointerEvent) => { if (event.isPrimary) stop(); };
+    const onTrack = (event: PointerEvent) => {
+      if (!event.isPrimary || holdTimer.current === null) return;
+      pointer.current = { x: event.clientX, y: event.clientY };
+      if (active.current) moveTo(event.clientX, event.clientY);
+    };
     window.addEventListener("blur", onBlur);
+    window.addEventListener("pointermove", onTrack);
     window.addEventListener("pointerup", onRelease);
     window.addEventListener("pointercancel", onRelease);
     return () => {
       window.removeEventListener("blur", onBlur);
+      window.removeEventListener("pointermove", onTrack);
       window.removeEventListener("pointerup", onRelease);
       window.removeEventListener("pointercancel", onRelease);
       stop();
@@ -233,10 +241,6 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
         target.dataset.dragId = makeId("drag");
         frame.current = requestAnimationFrame(autoscroll);
       }, 170);
-    }}
-    onPointerMove={(event) => {
-      pointer.current = { x: event.clientX, y: event.clientY };
-      if (active.current) moveTo(event.clientX, event.clientY);
     }}
     onPointerUp={stop}
     onPointerCancel={stop}
