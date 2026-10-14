@@ -839,9 +839,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
-  const barVisible = dirty || saveState === "saving" || saveState === "saved" || saveState === "conflict";
+  // Only a save starts a new saveState, so after ОТМЕНИТЬ or undo back to clean the conflict text would sit over a current editor.
+  const conflict = saveState === "conflict" && dirty;
+  const barVisible = dirty || saveState === "saving" || saveState === "saved";
   const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
-    : saveState === "conflict" ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
+    : conflict ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
     : saveState === "error" ? "ОШИБКА"
     : saveState === "saved" && !dirty ? "СОХРАНЕНО"
     : "";
