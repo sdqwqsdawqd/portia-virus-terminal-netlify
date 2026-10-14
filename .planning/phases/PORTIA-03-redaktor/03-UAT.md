@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: PORTIA-03-Редактор
 source: [03-VERIFICATION.md]
 started: 2026-10-14T00:00:00Z
-updated: 2026-10-14T09:22:35.988Z
+updated: 2026-10-14T10:12:54.075Z
 ---
 
 ## Current Test
@@ -60,11 +60,25 @@ result: issue
 reported: "this shows really weird when window is not fully open, and if it fully open nickname still shows weird" (screenshot: h2 «Kotik_play1232» в .personnel-profile-identity ломается на «Kotik_p / lay1232», 44px)
 severity: cosmetic
 
+### 11. Повторная проверка: перетаскивание вверх и вниз за одно удержание (после 03-05)
+expected: На ПК и на телефоне строку за ≡ можно увести вверх и вернуть вниз, не отпуская палец/мышь; соседние строки плавно съезжают (≈0,16 с); с выключенными «Анимациями» строки переставляются мгновенно; одно перетаскивание = один шаг ↶
+result: pass
+
+### 12. Повторная проверка: панель форматирования на телефоне (после 03-06)
+expected: Панель ✎ занимает чуть больше трети экрана и стоит на таскбаре; заголовок «РЕДАКТОР ОФОРМЛЕНИЯ» и кнопки СБРОСИТЬ / ГОТОВО видны всё время, прокручиваются только настройки между ними; все настройки и выбор цвета на месте; ГОТОВО возвращает полосу сохранения
+result: issue
+reported: "When i trying to select editor is closing so i need to open again, also if in document color is different i can only notice if i select the category"
+severity: major
+
+### 13. Повторная проверка: ник в карточке сотрудника (после 03-06)
+expected: «Kotik_play1232» в одну строку в обычном и развёрнутом окне, на телефоне и на планшете; в узком окне и на телефоне аватар над ником
+result: pass
+
 ## Summary
 
-total: 10
-passed: 6
-issues: 4
+total: 13
+passed: 8
+issues: 5
 pending: 0
 skipped: 0
 blocked: 0
@@ -73,7 +87,9 @@ blocked: 0
 
 - truth: "Строки едут по «дорожкам» при перетаскивании за ≡ на ПК и на телефоне; одно перетаскивание = один шаг ↶"
   gap_id: uat-03-t2-drag
-  status: failed
+  status: resolved
+  resolved_by: "03-05-PLAN.md"
+  resolved_at: "2026-10-14"
   reason: "User reported: its hard for phone to drag them down and up"
   severity: minor
   test: 2
@@ -87,7 +103,9 @@ blocked: 0
 
 - truth: "Панель форматирования (✎) на телефоне помещается на экран и пригодна к работе"
   gap_id: uat-03-t3-format-panel
-  status: failed
+  status: resolved
+  resolved_by: "03-06-PLAN.md"
+  resolved_at: "2026-10-14"
   reason: "User reported: РЕДАКТОР ОФОРМЛЕНИЯ is too big for phones, no need to remove functions but to make window smaller and allow to scroll it"
   severity: minor
   test: 3
@@ -101,7 +119,9 @@ blocked: 0
 
 - truth: "Длинный ник сотрудника в заголовке профиля не разрывается посреди слова в обычном и развёрнутом окне"
   gap_id: uat-03-t10-nickname
-  status: failed
+  status: resolved
+  resolved_by: "03-06-PLAN.md"
+  resolved_at: "2026-10-14"
   reason: "User reported: this shows really weird when window is not fully open, and if it fully open nickname still shows weird"
   severity: cosmetic
   test: 10
@@ -115,7 +135,9 @@ blocked: 0
 
 - truth: "Во время одного перетаскивания за ≡ строку можно двигать и вверх, и вниз, пока палец/мышь не отпущены"
   gap_id: uat-03-t9-drag
-  status: failed
+  status: resolved
+  resolved_by: "03-05-PLAN.md"
+  resolved_at: "2026-10-14"
   reason: "User reported: still problems, after i move to up it cant move down until i stop holding"
   severity: major
   test: 9
@@ -129,7 +151,9 @@ blocked: 0
 
 - truth: "Перемещение строки при перетаскивании анимировано, чтобы было видно, куда она уехала"
   gap_id: uat-03-t9-anim
-  status: failed
+  status: resolved
+  resolved_by: "03-05-PLAN.md"
+  resolved_at: "2026-10-14"
   reason: "User reported: i need some kind of animations for moving to make sure"
   severity: minor
   test: 9
@@ -140,3 +164,25 @@ blocked: 0
   missing:
     - "FLIP in OrderDragHandle via useLayoutEffect + row.animate translateY, 160ms --ease-out, skipped when data-motion=reduce"
   debug_session: ".planning/debug/reorder-drag-one-direction.md"
+
+- truth: "On a phone, selecting text while the format panel is open keeps the panel open"
+  gap_id: uat-03-t12-panel-closes-on-select
+  status: failed
+  reason: "User reported: When i trying to select editor is closing so i need to open again"
+  severity: major
+  test: 12
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""
+
+- truth: "The format panel shows the current text colour of the selection without opening the colour control"
+  gap_id: uat-03-t12-color-not-shown
+  status: failed
+  reason: "User reported: if in document color is different i can only notice if i select the category"
+  severity: minor
+  test: 12
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""
