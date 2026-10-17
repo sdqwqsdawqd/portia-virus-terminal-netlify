@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
-import type { PortiaEmployee } from "@/lib/portia-employees";
+import { acceptsRoster, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, motionModes } from "@/lib/accent-boot";
@@ -377,11 +377,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     try {
       const response = await fetchWithTimeout("/api/employees", {}, 15_000);
       if (!response.ok) return;
-      const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null };
-      if (!Array.isArray(payload.employees) || !payload.employees.length) return;
+      const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null; degraded?: boolean };
+      if (!acceptsRoster(payload)) return;
       setEmployees(payload.employees);
       setEmployeesSyncedAt(payload.syncedAt ?? null);
-      setSelectedEmployeeId((current) => payload.employees!.some((employee) => employee.id === current) ? current : payload.employees![0].id);
+      setSelectedEmployeeId((current) => payload.employees.some((employee) => employee.id === current) ? current : payload.employees[0]?.id ?? "");
       try { window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify(payload)); } catch {}
     } catch {
       // The last successful personnel snapshot remains visible on this device.
@@ -410,10 +410,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         const employeeCache = window.localStorage.getItem(employeesCacheStorageKey);
         if (employeeCache) {
           const parsed = JSON.parse(employeeCache) as { employees?: PortiaEmployee[]; syncedAt?: string | null };
-          if (Array.isArray(parsed.employees) && parsed.employees.length) {
+          if (Array.isArray(parsed.employees)) {
             setEmployees(parsed.employees);
             setEmployeesSyncedAt(parsed.syncedAt ?? null);
-            setSelectedEmployeeId((current) => current || parsed.employees![0].id);
+            setSelectedEmployeeId((current) => current || parsed.employees![0]?.id || "");
             setEmployeesReady(true);
           }
         }
@@ -1095,7 +1095,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   </header>
                   <dl className="personnel-stats"><div><dt>ЗВАНИЕ</dt><dd>{selectedEmployee.title || "Не указано"}</dd></div><div><dt>РАНГ</dt><dd>{selectedEmployee.rank || "Не указан"}</dd></div><div><dt>ОЦЕНКА ЗНАНИЙ</dt><dd>{selectedEmployee.knowledgeRating} / 10</dd></div></dl>
                   <section className="personnel-biography"><span>БИОГРАФИЯ</span><p>{selectedEmployee.biography || "Биография сотрудника пока не заполнена."}</p></section>
-                </div> : <div className="editor-empty">Данные сотрудников ещё не синхронизированы.</div>}
+                </div> : <div className="editor-empty">{!employees.length && employeesSyncedAt ? "В таблице пока нет сотрудников." : "Данные сотрудников ещё не синхронизированы."}</div>}
               </article>
             </div>
           </AppWindow>

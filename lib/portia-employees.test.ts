@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { employeeId, parseCsv, rosterFromRows, withProfile } from "./portia-employees.ts";
+import { acceptsRoster, employeeId, parseCsv, rosterFromRows, withProfile, type PortiaEmployee } from "./portia-employees.ts";
 
 const header = '"Номер","Никнейм сотрудника","Позывной","Звание","Ранг"';
 
@@ -39,4 +39,31 @@ test("profiles saved before the Roblox id was known are still found", () => {
   const index = (byId: Map<string, { biography: string; photoUrl: string; knowledgeRating: number }>) => ({ byId, robloxIdByNickname: new Map<string, number>() });
   assert.equal(withProfile(employee, index(new Map([[employeeId("Serias227", null), { biography: "bio", photoUrl: "", knowledgeRating: 4 }]]))).biography, "bio");
   assert.equal(withProfile(employee, index(new Map())).knowledgeRating, 1);
+});
+
+const someone: PortiaEmployee = { id: "a", nickname: "a", callsign: "", title: "", rank: "", knowledgeRating: 0, biography: "", photoUrl: "", robloxUserId: null, robloxAvatarUrl: "", robloxFullAvatarUrl: "", order: 1 };
+
+test("a complete non-empty roster is accepted", () => {
+  assert.equal(acceptsRoster({ employees: [someone], degraded: false }), true);
+});
+
+test("a degraded non-empty roster is accepted: only avatars or profiles are missing", () => {
+  assert.equal(acceptsRoster({ employees: [someone], degraded: true }), true);
+});
+
+test("a complete empty roster is accepted: the sheet has no staff rows", () => {
+  assert.equal(acceptsRoster({ employees: [], degraded: false }), true);
+});
+
+test("a degraded empty roster is ignored: the 502 shape or a partial sync", () => {
+  assert.equal(acceptsRoster({ employees: [], degraded: true }), false);
+});
+
+test("an empty roster without a degraded flag is not trusted", () => {
+  assert.equal(acceptsRoster({ employees: [] }), false);
+});
+
+test("a missing or non-array employees field is ignored", () => {
+  assert.equal(acceptsRoster({ employees: "x" }), false);
+  assert.equal(acceptsRoster({}), false);
 });
