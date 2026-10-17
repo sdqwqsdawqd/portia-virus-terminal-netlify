@@ -529,7 +529,7 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .trash-formatted-text, .formatted-rich-input[data-area="trash"] { font: 14px/1.75 var(--doc); }
 .trash-image-document figcaption, .formatted-rich-input[data-area="caption"] { font: 14px/1.65 var(--doc); }
 .search-recommendations button, .formatted-rich-input[data-area="search"] { font: 11px var(--sans); }
-.assistant-formatted-text, .formatted-rich-input[data-area="assistant"] { font: 700 10px/1.5 var(--assistant-font); }
+.formatted-rich-input[data-area="assistant"] { font: 700 10px/1.5 var(--assistant-font); }
 .formatted-text-field-hint { color: oklch(.525 .033 var(--accent-hue)); font-size: 10px; line-height: 1.4; }
 .formatted-text-field:focus-within .formatted-text-field-head > span { color: var(--teal); }
 .content-editor:has(.floating-text-format) { padding-bottom: 170px; }
@@ -715,10 +715,12 @@ html[data-motion="reduce"] .boot-lines p { animation: fade-in 160ms ease-out bot
 .assistant-label { position: relative; z-index: 2; align-self: center; white-space: nowrap; margin-top: -5px; padding: 4px 6px; border: 1px solid rgba(var(--desktop-glow), .17); border-radius: 3px; background: oklch(.163 .014 var(--accent-hue) / .86); color: oklch(.665 .035 var(--accent-hue) / .7); font: 500 11px var(--sans); letter-spacing: .04em; white-space: nowrap; }
 .assistant-bubble { position: absolute; z-index: 3; right: calc(100% + 4px); bottom: 56%; width: min(220px, calc(100vw - 124px)); padding: 10px; border: 1px solid rgba(var(--desktop-glow), .42); border-radius: 6px 6px 2px 6px; background: oklch(.179 .019 var(--accent-hue) / .98); box-shadow: 0 10px 29px rgba(0,0,0,.4); filter: brightness(.7); animation: assistant-bubble-in 160ms ease-out both; pointer-events: auto; }
 .assistant-bubble::after { content: ""; position: absolute; right: -8px; bottom: 8px; width: 14px; height: 14px; transform: rotate(45deg); border-top: 1px solid rgba(var(--desktop-glow), .42); border-right: 1px solid rgba(var(--desktop-glow), .42); background: oklch(.179 .019 var(--accent-hue)); }
-.assistant-bubble > span { display: block; margin-bottom: 6px; color: var(--teal); font: 500 11px var(--sans); letter-spacing: .09em; }
+.assistant-bubble > span:not(.assistant-formatted-text) { display: block; margin-bottom: 6px; color: var(--teal); font: 500 11px var(--sans); letter-spacing: .09em; }
 .assistant-bubble p { margin: 0; color: oklch(.895 .016 var(--accent-hue)); font-size: 9px; line-height: 1.5; }
-.assistant-formatted-text { display: block; padding: 7px 8px; border: 1px solid oklch(.756 .071 var(--accent-hue) / .24); border-radius: 4px; background: rgba(0,0,0,.34); color: oklch(.97 .012 var(--accent-hue)); letter-spacing: .012em; text-shadow: 0 1px 2px #000; }
-.assistant-formatted-text > span { color: oklch(.97 .012 var(--accent-hue)) !important; font-family: var(--assistant-font) !important; font-size: 10px !important; font-weight: 700 !important; }
+.assistant-formatted-text { display: block; padding: 7px 8px; border: 1px solid oklch(.756 .071 var(--accent-hue) / .24); border-radius: 4px; background: rgba(0,0,0,.34); color: oklch(.97 .012 var(--accent-hue)); text-shadow: 0 1px 2px #000; }
+.assistant-formatted-text > span { color: oklch(.97 .012 var(--accent-hue)) !important; }
+/* Every Vivian phrase uses the tips' type (D-05): an editor run's own size or weight never changes one phrase kind. */
+.assistant-bubble > .assistant-formatted-text, .assistant-bubble > .assistant-formatted-text * { font-family: var(--assistant-font) !important; font-size: 10px !important; font-weight: 700 !important; letter-spacing: .099em; line-height: 1.4; }
 .assistant-formatted-text .embedded-rich-media { max-width: 180px; max-height: 120px; margin: 7px auto 1px; border-color: oklch(.756 .071 var(--accent-hue) / .24); background: rgba(0,0,0,.34); }
 .desktop-assistant.is-offended .assistant-formatted-text > span { color: #ffd98c !important; }
 @keyframes assistant-bubble-in { from { opacity: 0; transform: translate(8px, 8px) scale(.96); } to { opacity: 1; transform: none; } }
@@ -1069,7 +1071,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .desktop-assistant { right: 8px; bottom: 40px; width: 58px; }
   .assistant-label { display: none; }
   .assistant-bubble { right: calc(100% + 4px); bottom: 68%; width: min(179px, calc(100vw - 78px)); padding: 8px; }
-  .assistant-bubble p, .assistant-formatted-text { font-size: 9px; }
+  .assistant-bubble p { font-size: 9px; }
   .taskbar { position: fixed; left: 0; right: 0; }
   .taskbar-apps { flex: 1; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
   .taskbar-apps::-webkit-scrollbar { display: none; }
@@ -1084,8 +1086,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .assistant-bubble { right: calc(100% + 4px); bottom: 78%; width: min(230px, calc(100vw - 92px)); box-sizing: border-box; padding: 9px; }
   .embedded-rich-media { max-width: 100%; max-height: min(320px, 42svh); }
   .assistant-formatted-text .embedded-rich-media { max-width: 170px; max-height: 110px; }
-  .assistant-formatted-text { max-height: min(36svh, 180px); overflow-y: auto; padding: 8px 9px; font-size: 10px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .assistant-formatted-text > span { font-size: 10px !important; line-height: inherit; }
+  .assistant-formatted-text { max-height: min(36svh, 180px); overflow-y: auto; padding: 8px 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .formatted-text-field-head { align-items: flex-start; flex-direction: column; }
   .global-format-launch { top: auto; right: 8px; bottom: 54px; transform: none; }
   .content-editor:has(> .editor-savebar) .global-format-launch { bottom: 112px; }
