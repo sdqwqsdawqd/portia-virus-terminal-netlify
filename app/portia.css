@@ -1170,6 +1170,11 @@ html[data-motion="reduce"] .wallpaper-web-dew { opacity: 1; }
 
 .desktop-wallpaper-frame { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 .wallpaper-layer { position: absolute; inset: 0; overflow: hidden; container-type: size; }
+/* Switching wallpapers crossfades (review #11); the wallpaper itself still stands still under «Выключены». */
+.wallpaper-layer.is-entering { animation: fade-in 500ms ease-out both; }
+.wallpaper-layer.is-leaving { animation: fade-out 500ms ease-in forwards; }
+html[data-motion="reduce"] .wallpaper-layer.is-entering { animation: fade-in 300ms ease-out both !important; }
+html[data-motion="reduce"] .wallpaper-layer.is-leaving { animation: fade-out 300ms ease-in forwards !important; }
 .desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--teal); fill: none; stroke: currentColor; stroke-linecap: round; }
 /* The web is spun at an even pace, without cap dots or an elastic ease (D-07). */
 .wallpaper-web path { stroke-width: 1; opacity: .26; stroke-linecap: butt; stroke-dasharray: 1; stroke-dashoffset: 1; animation: web-draw .9s linear forwards; }
@@ -1191,14 +1196,14 @@ html[data-motion="full"] .desktop-wallpaper-grid { animation: helix-scroll 90s l
 @keyframes helix-scroll { to { translate: 0 calc(-720 * max(100cqw / 1440, 100cqh / 900)); } }
 .wallpaper-helix path { stroke-width: 1.5; }
 .wallpaper-helix .wallpaper-rungs { stroke-width: 1; opacity: .7; }
-/* «Гель»: soft lane columns fading downward, wells, a labelled ladder; the bands glow, fade at their ends
-   and drift down slowly, like a gel still running. */
+/* «Гель»: soft lane columns fading downward, wells, a labelled ladder; still, even bands that fade at their
+   ends, and only their glow breathes slowly (motion on). */
 .wallpaper-gel-lane { fill: currentColor; fill-opacity: .035; stroke: currentColor; stroke-opacity: .07; }
 .wallpaper-gel-well { stroke-width: 1.2; opacity: .32; }
 .wallpaper-gel-bands path { stroke-linecap: butt; }
 .wallpaper-gel-labels { fill: currentColor; stroke: none; opacity: .34; font: 500 11px var(--mono); text-anchor: end; letter-spacing: .04em; }
-html[data-motion="full"] .wallpaper-gel-bands { animation: gel-run 28s ease-in-out infinite alternate; }
-@keyframes gel-run { to { translate: 0 26px; } }
+html[data-motion="full"] .wallpaper-gel-glow { animation: gel-glow 12s ease-in-out infinite alternate; }
+@keyframes gel-glow { from { opacity: .55; } to { opacity: 1; } }
 /* «Клетки»: tissue through an eyepiece, sharp at the centre and out of focus at the rim; infected cells are
    brighter, and their virions drift and tumble round their own centres (fill-box). */
 .wallpaper-cells-wall { stroke-width: 1.2; opacity: .2; }

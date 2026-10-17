@@ -1,4 +1,8 @@
+"use client";
+
 // Desktop wallpapers drawn as SVG in currentColor, so they follow the interface accent.
+
+import { useEffect, useState } from "react";
 
 type Point = [number, number];
 
@@ -70,8 +74,8 @@ function seeded(seed: number) {
 }
 
 // «Гель»: an electrophoresis gel photographed under UV, anchored top right like the other wallpapers.
-// No hard lane walls: soft lane columns, wells, a marker ladder with sizes, and "smiling" bands that glow
-// and fade at their ends. Replicate lanes repeat the same fragments, as real samples would.
+// No hard lane walls: soft lane columns, wells, a marker ladder with sizes, and still, even "smiling" bands
+// that fade at their ends under a slowly breathing glow. Replicate lanes repeat the same fragments, as real samples would.
 function gelLanes() {
   const lanes = 9, left = 812, pitch = 66, width = 46, top = 74, bottom = 820;
   const ladder = ["10 000", "6000", "4000", "3000", "2000", "1500", "1000", "750", "500", "250"];
@@ -90,7 +94,7 @@ function gelLanes() {
     if (lane === 0) { ladderY.forEach((y, step) => band(x, y, step === 6 ? 5 : 3, step === 6 ? 0.9 : 0.6)); continue; }
     // Lanes 3 and 4 are replicates of lane 2; the rest pick their own fragments.
     const pick = seeded((lane === 3 || lane === 4 ? 2 : lane) * 31 + 3);
-    fragments.filter(() => pick() < 0.38).forEach((y) => band(x, y, 3 + pick() * 7, 0.45 + pick() * 0.55));
+    fragments.filter(() => pick() < 0.38).forEach((y) => band(x, y, 3 + pick() * 3, 0.5 + pick() * 0.4));
   }
   return { columns, width, top, bottom, left, ladder, ladderY, bands };
 }
@@ -158,9 +162,24 @@ function cellField() {
 
 const cells = cellField();
 
+const WALLPAPER_FADE_MS = 500;
+
 export function DesktopWallpaper({ kind }: { kind: string }) {
+  const [layers, setLayers] = useState({ current: kind, leaving: null as string | null });
+  // Adjusted during render, so no frame is painted without the old layer.
+  if (layers.current !== kind) setLayers({ current: kind, leaving: layers.current });
+  useEffect(() => {
+    if (!layers.leaving) return;
+    // A timeout, not animationend: under «Выключены» the fade can be cut short.
+    const timer = window.setTimeout(() => setLayers((value) => ({ ...value, leaving: null })), WALLPAPER_FADE_MS);
+    return () => window.clearTimeout(timer);
+  }, [layers.leaving]);
+  // One keyed list, so the outgoing drawing keeps its DOM (and its drawn state) while it fades.
+  const shown = [layers.leaving, layers.current].filter((value): value is string => !!value && value !== "quiet");
   return <div className="desktop-wallpaper-frame" aria-hidden="true">
-    {kind !== "quiet" && <div className="wallpaper-layer"><WallpaperArt kind={kind} /></div>}
+    {shown.map((value) => <div key={value} className={`wallpaper-layer${value === layers.leaving ? " is-leaving" : layers.leaving ? " is-entering" : ""}`}>
+      <WallpaperArt kind={value} />
+    </div>)}
   </div>;
 }
 
@@ -181,9 +200,10 @@ function WallpaperArt({ kind }: { kind: string }) {
             {gel.columns.map((x) => <rect key={x} x={x} y={gel.top} width={gel.width} height={gel.bottom - gel.top} rx={3} className="wallpaper-gel-lane" />)}
             {gel.columns.map((x) => <rect key={`w${x}`} x={x + 3} y={gel.top - 22} width={gel.width - 6} height={10} rx={2} className="wallpaper-gel-well" />)}
             <g className="wallpaper-gel-bands">
-              {gel.bands.map((band, index) => <path key={`g${index}`} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight * 2.6, opacity: band.opacity * 0.08 }} />)}
+              <g className="wallpaper-gel-glow">
+                {gel.bands.map((band, index) => <path key={`g${index}`} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight * 2.2, opacity: band.opacity * 0.08 }} />)}
+              </g>
               {gel.bands.map((band, index) => <path key={index} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight, opacity: band.opacity * 0.42 }} />)}
-              {/* The size labels run with the bands, so each stays beside its ladder band. */}
               <g className="wallpaper-gel-labels">
                 {gel.ladder.map((label, index) => <text key={label} x={gel.left - 12} y={gel.ladderY[index] + 4}>{label}</text>)}
               </g>
