@@ -1088,7 +1088,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 {!employeesReady ? <LoadingState label="Загрузка профиля…" /> : selectedEmployee ? <div className="personnel-profile-body content-fade" key={selectedEmployee.id}>
                   <header className="personnel-profile-head">
                     <div className="personnel-avatar-stage">
-                      <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
+                      <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} fallbackClassName="personnel-fallback" /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
                       {selectedEmployee.robloxUserId ? <a className="personnel-portrait" href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer" aria-label={`Профиль Roblox: ${selectedEmployee.nickname}`}><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></a> : <figure className="personnel-portrait"><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></figure>}
                     </div>
                     <div className="personnel-profile-identity"><h2>{selectedEmployee.nickname}</h2><p className="personnel-callsign">{selectedEmployee.callsign || "Без позывного"}</p></div>
@@ -1246,10 +1246,12 @@ function BootScreen({ visible }: { visible: boolean }) {
 
 function EmployeeImage({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
   const [loaded, setLoaded] = useState(false);
-  const source = src || "/assets/portia-logo.png";
+  const [failed, setFailed] = useState(false);
+  // A failed URL shows the PORTIA fallback, never a broken image; if the fallback fails too, the skeleton still stops (D-09 #7).
+  const fallback = !src || failed;
   return <div className={`personnel-image-loader${loaded ? " is-loaded" : ""}`}>
     <span className="personnel-image-skeleton" aria-hidden="true" />
-    <img src={source} alt={alt} className={!src ? fallbackClassName : ""} referrerPolicy="no-referrer" onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} />
+    <img src={fallback ? "/assets/portia-logo.png" : src} alt={alt} className={fallback ? fallbackClassName : ""} referrerPolicy="no-referrer" onLoad={() => setLoaded(true)} onError={() => fallback ? setLoaded(true) : setFailed(true)} />
   </div>;
 }
 
@@ -1667,8 +1669,11 @@ function FormattedText({ text, document, className = "" }: { text: string; docum
 
 function LoadingMedia({ src, alt, label }: { src: string; alt: string; label: string }) {
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  // A failed URL shows the «ОЖИДАЕТ ЗАГРУЗКИ» placeholder, never a broken image (D-09 #7).
+  if (failed) return <MediaBlock src="" alt={alt} label={label} />;
   return <figure className={`subject-media${loading ? " is-loading" : ""}`}>
-    <img src={src} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" onLoad={() => setLoading(false)} onError={() => setLoading(false)} />
+    <img src={src} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" onLoad={() => setLoading(false)} onError={() => setFailed(true)} />
     {loading && <LoadingState label="Загрузка изображения…" />}
     <figcaption>{label}</figcaption>
   </figure>;
