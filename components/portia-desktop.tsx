@@ -6,7 +6,7 @@ import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleF
 import { acceptsRoster, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
-import { accentIds, motionModes } from "@/lib/accent-boot";
+import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
 
@@ -419,7 +419,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         }
       } catch {}
     }, 0);
-    const bootTimer = window.setTimeout(() => setBooting(false), 1650);
+    // A repeat load in this tab session skips the boot; only a boot that played to its end is recorded (D-06).
+    const bootSeen = document.documentElement.dataset.boot === "seen";
+    const bootTimer = window.setTimeout(() => {
+      setBooting(false);
+      if (!bootSeen) try { window.sessionStorage.setItem(bootSeenStorageKey, "1"); } catch {}
+    }, bootSeen ? 0 : 1650);
     const tick = () => {
       const now = new Date();
       setClock(new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(now));
