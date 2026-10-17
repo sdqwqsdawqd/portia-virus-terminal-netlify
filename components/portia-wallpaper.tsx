@@ -53,12 +53,15 @@ function helixColumn(x: number, top: number, height: number, amplitude: number, 
   return { a: strand(0), b: strand(Math.PI), rungs };
 }
 
+// Every period, the 12-unit sample step and the rung spacing divide it, so a shift by it redraws the same picture.
+const HELIX_LOOP = 720;
+
 const helices = [
-  { x: 1040, amplitude: 34, period: 260, opacity: 0.32, delay: "0s" },
-  { x: 1240, amplitude: 22, period: 190, opacity: 0.22, delay: "-6s" },
-  { x: 1380, amplitude: 46, period: 340, opacity: 0.16, delay: "-11s" },
-  { x: 880, amplitude: 18, period: 170, opacity: 0.12, delay: "-3s" },
-].map((column) => ({ ...column, ...helixColumn(column.x, -120, 1200, column.amplitude, column.period) }));
+  { x: 1040, amplitude: 34, period: 240, opacity: 0.32 },
+  { x: 1240, amplitude: 22, period: 180, opacity: 0.22 },
+  { x: 1380, amplitude: 46, period: 360, opacity: 0.16 },
+  { x: 880, amplitude: 18, period: 144, opacity: 0.12 },
+].map((column) => ({ ...column, ...helixColumn(column.x, -120, 1800, column.amplitude, column.period) }));
 
 // Same seeded generator as the approved sketch (02-SKETCHES.html), so the shipped drawing matches the choice.
 function seeded(seed: number) {
@@ -156,10 +159,15 @@ function cellField() {
 const cells = cellField();
 
 export function DesktopWallpaper({ kind }: { kind: string }) {
-  if (kind === "quiet") return null;
-  return <svg className={`desktop-wallpaper desktop-wallpaper-${kind}`} viewBox="0 0 1440 900" preserveAspectRatio="xMaxYMin slice" aria-hidden="true">
+  return <div className="desktop-wallpaper-frame" aria-hidden="true">
+    {kind !== "quiet" && <div className="wallpaper-layer"><WallpaperArt kind={kind} /></div>}
+  </div>;
+}
+
+function WallpaperArt({ kind }: { kind: string }) {
+  return <svg className={`desktop-wallpaper desktop-wallpaper-${kind}`} viewBox={`0 0 1440 ${kind === "grid" ? 900 + HELIX_LOOP : 900}`} preserveAspectRatio="xMaxYMin slice">
     {kind === "grid"
-      ? helices.map((column) => <g key={column.x} className="wallpaper-helix" style={{ opacity: column.opacity, animationDelay: column.delay }}>
+      ? helices.map((column) => <g key={column.x} className="wallpaper-helix" style={{ opacity: column.opacity }}>
           <path d={column.a} /><path d={column.b} /><path d={column.rungs} className="wallpaper-rungs" />
         </g>)
       : kind === "gel"
@@ -205,8 +213,8 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
           <circle cx={cells.cx} cy={cells.cy} r={cells.radius} className="wallpaper-cells-edge" />
         </g>
       : <g className="wallpaper-web">
-          {web.spokePaths.map((d, index) => <path key={`s${index}`} d={d} pathLength={1} style={{ animationDelay: `${index * 40}ms` }} />)}
-          {web.rings.map((d, index) => <path key={`r${index}`} d={d} pathLength={1} className="wallpaper-web-ring" style={{ animationDelay: `${600 + index * 70}ms` }} />)}
+          {web.spokePaths.map((d, index) => <path key={`s${index}`} d={d} pathLength={1} style={{ animationDelay: `${index * 30}ms` }} />)}
+          {web.rings.map((d, index) => <path key={`r${index}`} d={d} pathLength={1} className="wallpaper-web-ring" style={{ animationDelay: `${450 + index * 60}ms` }} />)}
           <g className="wallpaper-web-dew">
             {web.dew.map((drop, index) => <circle key={index} cx={drop.x} cy={drop.y} r={drop.r} style={{ animationDelay: `${round((index * 1.7) % 7)}s` }} />)}
           </g>
