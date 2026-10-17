@@ -767,8 +767,13 @@ html[data-motion="reduce"] .boot-lines p { animation: fade-in 160ms ease-out bot
 .record-header h2 { margin: 5px 0 0; color: oklch(.2 .013 var(--accent-hue)); font: 700 clamp(26px, 3vw, 40px)/1 var(--display); letter-spacing: -.02em; }
 .record-status { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #beb8aa; color: oklch(.418 .014 var(--accent-hue)); font: 11px var(--mono); letter-spacing: .06em; }
 .record-status span { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
-.record-document { width: min(1060px, 100%); margin: 0 auto; padding: clamp(22px, 4vw, 50px); }
+.record-document { width: min(1060px, 100%); margin: 0 auto; padding: clamp(22px, 4vw, 50px); container-type: inline-size; }
 .record-hero { display: grid; grid-template-columns: minmax(240px, .86fr) minmax(320px, 1.14fr); gap: clamp(22px, 4vw, 50px); align-items: start; }
+/* Stack by the dossier's width, not the viewport: below 840px the side classification column drops under 3 x 150px. */
+@container (max-width: 840px) {
+  .record-hero { grid-template-columns: 1fr; }
+  .record-hero > .subject-media { max-width: 540px; width: 100%; justify-self: center; }
+}
 
 .subject-media { position: relative; min-width: 0; margin: 0; border: 1px solid #bdb7a9; background: #ddd9ce; overflow: hidden; }
 .subject-media > img:not([aria-hidden="true"]) { display: block; width: 100%; height: auto; max-height: min(64vh, 620px); object-fit: contain; background: oklch(.218 .018 var(--accent-hue)); }
@@ -784,11 +789,12 @@ html[data-motion="reduce"] .boot-lines p { animation: fade-in 160ms ease-out bot
 .section-kicker { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; color: oklch(.36 .017 var(--accent-hue)); font: 700 11px var(--sans); letter-spacing: .1em; }
 .section-kicker::after { content: ""; flex: 1; height: 1px; background: #c9c4b7; }
 .section-kicker span { display: grid; place-items: center; width: 26px; height: 22px; background: var(--ink); color: var(--paper); }
-.classification-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #c8c2b5; border-left: 1px solid #c8c2b5; }
+.classification-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #c8c2b5; border-left: 1px solid #c8c2b5; }
 .class-cell { min-width: 0; min-height: 74px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; padding: 11px 12px; border-right: 1px solid #c8c2b5; border-bottom: 1px solid #c8c2b5; }
 .class-cell span { color: oklch(.542 .014 var(--accent-hue)); font: 11px var(--sans); line-height: 1.3; text-transform: uppercase; }
-.class-cell strong { color: oklch(.237 .015 var(--accent-hue)); font: 700 15px var(--sans); overflow-wrap: anywhere; }
-.class-badge { width: 18px; height: 18px; margin-right: 6px; vertical-align: -3px; }
+/* Badge and name share one centre line (D-08). */
+.class-cell strong { display: flex; align-items: center; gap: 6px; color: oklch(.237 .015 var(--accent-hue)); font: 700 15px var(--sans); overflow-wrap: anywhere; }
+.class-badge { flex: none; width: 18px; height: 18px; }
 .class-cell small { color: oklch(.577 .012 var(--accent-hue)); font: 11px var(--mono); letter-spacing: .06em; }
 .class-cell.level-1 strong, .class-cell.level-1 small { color: #167a4d; }
 .class-cell.level-2 strong, .class-cell.level-2 small { color: #a06f00; }
@@ -925,8 +931,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .archive-window { left: 104px; }
   .global-search-window { width: min(720px, calc(100% - 126px)); }
   .archive-grid { grid-template-columns: minmax(240px, 34%) minmax(0, 1fr); }
-  .record-hero { grid-template-columns: 1fr; }
-  .record-hero > .subject-media { max-width: 540px; width: 100%; justify-self: center; }
   .media-empty { aspect-ratio: 16 / 10; min-height: 240px; }
   .metric-grid { grid-template-columns: 1fr; }
   .metric-grid > div { border-right: 0; border-bottom: 1px solid #c4beb0; }
@@ -972,7 +976,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .record-hero > .subject-media { max-width: 100%; }
   .subject-media > img:not([aria-hidden="true"]) { max-height: 72svh; }
   .media-empty { aspect-ratio: 16 / 11; min-height: 220px; }
-  .classification-grid { grid-template-columns: 1fr 1fr; }
   .class-cell { min-height: 70px; padding: 10px; }
   .class-cell strong { font-size: 13px; }
   .lead-copy, .formatted-rich-input[data-area="lead"] { font-size: 15px; line-height: 1.7; }
