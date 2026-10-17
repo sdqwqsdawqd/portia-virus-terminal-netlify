@@ -102,8 +102,22 @@ function workspaceBounds() {
   return { width: workspace?.width ?? window.innerWidth, height: workspace?.height ?? window.innerHeight - 88 };
 }
 
+// Sized from each window's layout (personnel: 260 px list + a stacked profile), so shrinking never squashes it (D-03).
+const windowMinimums: Record<AppId, { width: number; height: number }> = {
+  archive: { width: 780, height: 480 },
+  employees: { width: 720, height: 480 },
+  editor: { width: 720, height: 480 },
+  search: { width: 520, height: 420 },
+  info: { width: 560, height: 420 },
+  settings: { width: 520, height: 420 },
+  broadcasts: { width: 520, height: 420 },
+  trash: { width: 640, height: 440 },
+  sheet: { width: 640, height: 440 },
+  charter: { width: 640, height: 440 },
+};
+
 function minimumWindowSize(appId: AppId) {
-  return { width: appId === "editor" ? 680 : 440, height: 320 };
+  return windowMinimums[appId];
 }
 
 const resizeEdges: ResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
