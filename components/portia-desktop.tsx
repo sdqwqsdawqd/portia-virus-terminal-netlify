@@ -7,7 +7,7 @@ import { acceptsRoster, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, motionModes } from "@/lib/accent-boot";
-import { fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
+import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
 
 const PortiaEditor = dynamic(
@@ -1418,6 +1418,18 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   const windowRef = useRef<HTMLElement>(null);
   const dragRef = useRef<null | (WindowGeometry & { pointerId: number; startX: number; startY: number; parentWidth: number; parentHeight: number })>(null);
   const resizeRef = useRef<null | (WindowGeometry & { edge: ResizeEdge; pointerId: number; startX: number; startY: number; parentWidth: number; parentHeight: number })>(null);
+  const liveGeometry = useRef<WindowGeometry | null>(null);
+
+  // Drag and resize move the element directly; desktop state is updated once at the end, so the whole desktop does not re-render per pointermove (D-09 #10).
+  const paint = (geometry: WindowGeometry) => {
+    const style = windowRef.current?.style;
+    if (!style) return;
+    style.left = `${geometry.x}px`;
+    style.top = `${geometry.y}px`;
+    style.width = `${geometry.width}px`;
+    style.height = `${geometry.height}px`;
+    liveGeometry.current = geometry;
+  };
 
   const readGeometry = () => {
     const element = windowRef.current;
@@ -1448,13 +1460,14 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   const moveDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const operation = dragRef.current;
     if (!operation || operation.pointerId !== event.pointerId) return;
-    const nextX = Math.min(Math.max(0, operation.x + event.clientX - operation.startX), Math.max(0, operation.parentWidth - 160));
-    const nextY = Math.min(Math.max(0, operation.y + event.clientY - operation.startY), Math.max(0, operation.parentHeight - 46));
-    onGeometry(app, { x: nextX, y: nextY, width: operation.width, height: operation.height });
+    paint(dragGeometry(operation, event.clientX - operation.startX, event.clientY - operation.startY, { width: operation.parentWidth, height: operation.parentHeight }));
   };
 
   const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    if (liveGeometry.current) onGeometry(app, liveGeometry.current);
+    liveGeometry.current = null;
   };
 
   const beginResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLSpanElement>) => {
@@ -1471,11 +1484,14 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   const moveResize = (event: React.PointerEvent<HTMLSpanElement>) => {
     const operation = resizeRef.current;
     if (!operation || operation.pointerId !== event.pointerId) return;
-    onGeometry(app, resizeGeometry(operation, operation.edge, event.clientX - operation.startX, event.clientY - operation.startY, { width: operation.parentWidth, height: operation.parentHeight }, minimumWindowSize(app)));
+    paint(resizeGeometry(operation, operation.edge, event.clientX - operation.startX, event.clientY - operation.startY, { width: operation.parentWidth, height: operation.parentHeight }, minimumWindowSize(app)));
   };
 
   const endResize = (event: React.PointerEvent<HTMLSpanElement>) => {
-    if (resizeRef.current?.pointerId === event.pointerId) resizeRef.current = null;
+    if (resizeRef.current?.pointerId !== event.pointerId) return;
+    resizeRef.current = null;
+    if (liveGeometry.current) onGeometry(app, liveGeometry.current);
+    liveGeometry.current = null;
   };
 
   // Points the zoom / minimise at its source. Offsets, not getBoundingClientRect, for the window:

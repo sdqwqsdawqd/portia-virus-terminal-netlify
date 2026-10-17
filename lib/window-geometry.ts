@@ -34,3 +34,13 @@ export function resizeGeometry(start: WindowGeometry, edge: ResizeEdge, dx: numb
   }
   return { x, y, width, height };
 }
+
+/** Moves a window by its title bar; it may leave the workspace except for 160 px of its title bar. */
+export function dragGeometry(start: WindowGeometry, dx: number, dy: number, bounds: Bounds): WindowGeometry {
+  return {
+    x: Math.min(Math.max(0, start.x + dx), Math.max(0, bounds.width - 160)),
+    y: Math.min(Math.max(0, start.y + dy), Math.max(0, bounds.height - 46)),
+    width: start.width,
+    height: start.height,
+  };
+}
