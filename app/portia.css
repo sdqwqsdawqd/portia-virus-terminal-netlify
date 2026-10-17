@@ -421,6 +421,11 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 @media (min-width: 901px) {
   /* Positioned against the editor window, not the viewport, so the save bar at the window's bottom is never covered (D-01). */
   .content-editor > .floating-text-format { position: absolute; right: 14px; bottom: 72px; max-height: min(390px, calc(100% - 46px - 72px - 14px)); }
+  /* The roster can be dozens of rows, so the list scrolls in its own column (D-04). */
+  .content-editor > .employee-editor-layout { flex: 1 1 0; min-height: 320px; }
+  .virus-editor-layout.employee-editor-layout { align-items: stretch; grid-template-rows: minmax(0, 1fr); }
+  .employee-editor-layout > .editor-record-list { position: static; align-content: start; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+  .employee-editor-layout > .employee-profile-editor { min-height: 0; overflow-y: auto; }
 }
 /* One-line status while the panel is open keeps the bar's height, and so the panel's offset, constant (D-02). */
 .content-editor:has(.floating-text-format) .editor-savebar > p { display: flex; flex-wrap: nowrap; min-width: 0; overflow: hidden; }
