@@ -841,7 +841,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
 
   // Only a save starts a new saveState, so after ОТМЕНИТЬ or undo back to clean the conflict text would sit over a current editor.
   const conflict = saveState === "conflict" && dirty;
-  const barVisible = dirty || saveState === "saving" || saveState === "saved";
+  // While the format panel is open the bar is its anchor, so it must not appear under the panel mid-session (D-01/D-02).
+  const barVisible = dirty || saveState === "saving" || saveState === "saved" || formatterOpen;
   const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
     : conflict ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
     : saveState === "error" ? "ОШИБКА"
@@ -1175,7 +1176,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} />}
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
-      {formatterOpen && formatTarget && <FloatingTextFormatPanel key={`${formatTarget.key}:${formatTarget.selection.start}:${formatTarget.selection.end}:${previewSurface}`} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />}
+      {formatterOpen && formatTarget && <FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />}
       {barVisible && (
         <div className="editor-savebar" data-dirty={dirty || undefined}>
           <p role="status" aria-live="polite">
@@ -1543,15 +1544,16 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   onUpdate: (target: FormatTarget) => void;
   onClose: () => void;
 }) {
-  const initialStyle = richTextStyleAt(target.document, target.selection.start);
   const defaultTextColor = previewSurface === "dark" ? "#aebfba" : "#252827";
   const documentRef = useRef(target.document);
   const panelRef = useRef<HTMLElement>(null);
-  const [color, setColor] = useState(initialStyle.color ?? defaultTextColor);
-  const [fontSize, setFontSize] = useState(initialStyle.fontSize ?? 17);
-  const [fontWeight, setFontWeight] = useState(initialStyle.fontWeight ?? 400);
-  const [backgroundColor, setBackgroundColor] = useState(initialStyle.backgroundColor ?? "#f0d66a");
-  const [backgroundOpacity, setBackgroundOpacity] = useState(initialStyle.backgroundOpacity ?? 0);
+  // The readout and ✓ come from the committed document, so a click shows exactly what it applied and a repeat click is a no-op (D-02).
+  const style = richTextStyleAt(target.document, target.selection.start);
+  const color = style.color ?? defaultTextColor;
+  const fontSize = style.fontSize ?? 17;
+  const fontWeight = style.fontWeight ?? 400;
+  const backgroundColor = style.backgroundColor ?? "#f0d66a";
+  const backgroundOpacity = style.backgroundOpacity ?? 0;
   const [colorPicker, setColorPicker] = useState<"text" | "background" | null>(null);
   useEffect(() => { documentRef.current = target.document; }, [target.document]);
 
@@ -1616,11 +1618,6 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   ));
 
   const reset = () => {
-    setColor(defaultTextColor);
-    setFontSize(17);
-    setFontWeight(400);
-    setBackgroundColor("#f0d66a");
-    setBackgroundOpacity(0);
     commit(resetRichTextStyle(documentRef.current, target.selection.start, target.selection.end));
   };
 
@@ -1632,22 +1629,20 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     </header>
     <div className="rich-text-toolbar" aria-label="Оформление текста">
       <div className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={previewSurface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={previewSurface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
-      <div className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: color }} />{color.toUpperCase()}</b></span><div className="format-swatches">{textColorPalette.map((item) => <button key={item.value} type="button" className={color.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); setColor(item.value); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
-      <div className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); setFontSize(value); applyStyle({ fontSize: value }); }}>{label}</button>)}</div></div>
-      <div className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); setFontWeight(value); applyStyle({ fontWeight: value }); }}>{label}</button>)}</div></div>
-      <div className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); setBackgroundOpacity(0); applyStyle({ backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); setBackgroundColor(item.value); setBackgroundOpacity(opacity); applyStyle({ backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
-      <label className="format-control opacity-control"><span>Плотность фона: {Math.round(backgroundOpacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={backgroundOpacity} onChange={(event) => { const opacity = Number(event.target.value); setBackgroundOpacity(opacity); applyStyle({ backgroundColor, backgroundOpacity: opacity }); }} /></label>
+      <div className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: color }} />{color.toUpperCase()}</b></span><div className="format-swatches">{textColorPalette.map((item) => <button key={item.value} type="button" className={color.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
+      <div className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle({ fontSize: value }); }}>{label}</button>)}</div></div>
+      <div className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); applyStyle({ fontWeight: value }); }}>{label}</button>)}</div></div>
+      <div className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle({ backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle({ backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
+      <label className="format-control opacity-control"><span>Плотность фона: {Math.round(backgroundOpacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={backgroundOpacity} onChange={(event) => { const opacity = Number(event.target.value); applyStyle({ backgroundColor, backgroundOpacity: opacity }); }} /></label>
       {colorPicker && <CustomColorPicker
+        key={`${colorPicker}:${target.selection.start}:${target.selection.end}`}
         title={colorPicker === "text" ? "Свой цвет текста" : "Свой цвет фона"}
         color={colorPicker === "text" ? color : backgroundColor}
         onChange={(nextColor) => {
           if (colorPicker === "text") {
-            setColor(nextColor);
             applyStyle({ color: nextColor });
           } else {
             const opacity = backgroundOpacity || .45;
-            setBackgroundColor(nextColor);
-            setBackgroundOpacity(opacity);
             applyStyle({ backgroundColor: nextColor, backgroundOpacity: opacity });
           }
         }}

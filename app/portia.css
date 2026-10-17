@@ -419,8 +419,12 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .portia-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .portia-dialog-actions button { min-height: 40px; }
 @media (min-width: 901px) {
-  .content-editor:has(> .editor-savebar) .floating-text-format { bottom: 76px; }
+  /* Positioned against the editor window, not the viewport, so the save bar at the window's bottom is never covered (D-01). */
+  .content-editor > .floating-text-format { position: absolute; right: 14px; bottom: 72px; max-height: min(390px, calc(100% - 46px - 72px - 14px)); }
 }
+/* One-line status while the panel is open keeps the bar's height, and so the panel's offset, constant (D-02). */
+.content-editor:has(.floating-text-format) .editor-savebar > p { display: flex; flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+.content-editor:has(.floating-text-format) .editor-savebar > p > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .primary-control, .secondary-control, .danger-control { padding: 11px 14px; border: 1px solid var(--teal-dim); background: var(--teal-soft); color: var(--teal); font: 700 11px var(--sans); letter-spacing: .04em; cursor: pointer; }
 .primary-control:disabled, .secondary-control:disabled, .danger-control:disabled { opacity: .4; cursor: not-allowed; }
 .secondary-control { background: transparent; color: oklch(.812 .02 var(--accent-hue)); }
@@ -1025,7 +1029,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .employee-editor-save { flex-wrap: wrap; }
   .editor-upload-control input[type="file"] { flex-basis: 200px; min-width: 0; }
   /* Header and ГОТОВО stay pinned; only the toolbar between them scrolls. */
-  .floating-text-format { right: 8px; bottom: 44px; width: min(620px, calc(100% - 16px)); max-height: min(38svh, 300px); display: flex; flex-direction: column; overflow: hidden; }
+  /* bottom: 44px taskbar + 56px save bar, which stays visible under the panel (D-01). */
+  .floating-text-format { right: 8px; bottom: 100px; width: min(620px, calc(100% - 16px)); max-height: min(34svh, 270px); display: flex; flex-direction: column; overflow: hidden; }
   .floating-text-format > header, .floating-text-format > footer { flex: none; }
   /* Sticky cannot hold here: the page scrolls and .app-window clips, so the bar is fixed above the 44px taskbar. */
   .editor-savebar { position: fixed; left: 0; right: 0; bottom: 44px; margin: 0; padding: 8px 12px; min-height: 56px; }
@@ -1033,9 +1038,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .editor-savebar > p > span { display: block; }
   .editor-savebar-actions button { min-height: 40px; }
   .content-editor:has(> .editor-savebar) { padding-bottom: 110px; }
-  .content-editor:has(.floating-text-format) .editor-savebar { display: none; }
   /* Lets the last field scroll above the format panel, which sits where the keyboard was. */
-  .content-editor:has(.floating-text-format) { padding-bottom: calc(min(38svh, 300px) + 90px); }
+  .content-editor:has(.floating-text-format) { padding-bottom: calc(min(34svh, 270px) + 146px); }
   .rich-text-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .access-editor-add { grid-template-columns: 1fr; }
   .content-control-entry { align-items: stretch; flex-direction: column; }
