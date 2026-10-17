@@ -207,11 +207,6 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
       : <g className="wallpaper-web">
           {web.spokePaths.map((d, index) => <path key={`s${index}`} d={d} pathLength={1} style={{ animationDelay: `${index * 40}ms` }} />)}
           {web.rings.map((d, index) => <path key={`r${index}`} d={d} pathLength={1} className="wallpaper-web-ring" style={{ animationDelay: `${600 + index * 70}ms` }} />)}
-          {/* After the web is spun, glints run out along the spokes and round the spiral, each on its own beat. */}
-          <g className="wallpaper-web-pulses">
-            {web.spokePaths.map((d, index) => <path key={`p${index}`} d={d} pathLength={1} style={{ animationDelay: `${round(4 + ((index * 2.3) % 9))}s` }} />)}
-            {[4, 7, 10, 13].map((ring, index) => <path key={`q${ring}`} d={web.rings[ring]} pathLength={1} className="wallpaper-web-orbit" style={{ animationDelay: `${5 + index * 3.1}s` }} />)}
-          </g>
           <g className="wallpaper-web-dew">
             {web.dew.map((drop, index) => <circle key={index} cx={drop.x} cy={drop.y} r={drop.r} style={{ animationDelay: `${round((index * 1.7) % 7)}s` }} />)}
           </g>
