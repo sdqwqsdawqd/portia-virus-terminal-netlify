@@ -1718,18 +1718,25 @@ function EditorAccessManager() {
   const [state, setState] = useState<"loading" | "idle" | "saving" | "error">("loading");
   const [message, setMessage] = useState("");
 
+  // Every call ends in idle or error, never stuck in loading or saving (D-09 #9).
   const loadEditors = async (keepMessage = false) => {
     setState("loading");
-    const response = await fetch("/api/editors", { cache: "no-store" });
-    const payload = await response.json() as { editors?: EditorAccount[]; error?: string };
-    if (!response.ok) {
+    try {
+      const response = await fetch("/api/editors", { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: string };
+        setState("error");
+        setMessage(payload.error ?? "Не удалось загрузить список.");
+        return;
+      }
+      const payload = await response.json() as { editors?: EditorAccount[] };
+      setEditors(payload.editors ?? []);
+      setState("idle");
+      if (!keepMessage) setMessage("");
+    } catch {
       setState("error");
-      setMessage(payload.error ?? "Не удалось загрузить список.");
-      return;
+      setMessage("Нет связи с сервером. Попробуйте ещё раз.");
     }
-    setEditors(payload.editors ?? []);
-    setState("idle");
-    if (!keepMessage) setMessage("");
   };
 
   useEffect(() => {
@@ -1739,31 +1746,41 @@ function EditorAccessManager() {
 
   const addEditor = async () => {
     setState("saving");
-    const response = await fetch("/api/editors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
-    const payload = await response.json() as { error?: string };
-    if (!response.ok) {
+    try {
+      const response = await fetch("/api/editors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }), signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: string };
+        setState("error");
+        setMessage(payload.error ?? "Не удалось выдать доступ.");
+        return;
+      }
+      setEmail("");
+      setMessage("Доступ выдан. Теперь человек может создать аккаунт на странице входа.");
+      setState("idle");
+      await loadEditors(true);
+    } catch {
       setState("error");
-      setMessage(payload.error ?? "Не удалось выдать доступ.");
-      return;
+      setMessage("Нет связи с сервером, доступ не выдан. Попробуйте ещё раз.");
     }
-    setEmail("");
-    setMessage("Доступ выдан. Теперь человек может создать аккаунт на странице входа.");
-    setState("idle");
-    await loadEditors(true);
   };
 
   const removeEditor = async (editorEmail: string) => {
     setState("saving");
-    const response = await fetch(`/api/editors?email=${encodeURIComponent(editorEmail)}`, { method: "DELETE" });
-    if (!response.ok) {
-      const payload = await response.json() as { error?: string };
+    try {
+      const response = await fetch(`/api/editors?email=${encodeURIComponent(editorEmail)}`, { method: "DELETE", signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: string };
+        setState("error");
+        setMessage(payload.error ?? "Не удалось отозвать доступ.");
+        return;
+      }
+      setEditors((current) => current.filter((item) => item.email !== editorEmail));
+      setMessage("Доступ отозван.");
+      setState("idle");
+    } catch {
       setState("error");
-      setMessage(payload.error ?? "Не удалось отозвать доступ.");
-      return;
+      setMessage("Нет связи с сервером. Попробуйте ещё раз.");
     }
-    setEditors((current) => current.filter((item) => item.email !== editorEmail));
-    setMessage("Доступ отозван.");
-    setState("idle");
   };
 
   return <div className="editor-form flat-editor-form access-editor">
