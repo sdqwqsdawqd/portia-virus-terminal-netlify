@@ -327,6 +327,9 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .embedded-rich-media { display: block; width: auto; max-width: min(480px, 100%); height: auto; max-height: 320px; margin: 10px auto; border: 1px solid oklch(.453 .026 var(--accent-hue) / .32); border-radius: 4px; object-fit: contain; background: rgba(0,0,0,.1); }
 /* The «Информация» tree and guide blocks (D-11). */
 .info-subsections { margin: 2px 0 6px 20px; padding-left: 8px; border-left: 1px solid oklch(.383 .033 var(--accent-hue)); }
+/* A category with subsections says so before it is opened. */
+.info-index button.has-subsections { grid-template-columns: 30px minmax(0,1fr) auto; }
+.info-sub-marker { align-self: center; padding: 2px 6px; border: 1px solid oklch(.443 .041 var(--accent-hue)); border-radius: 3px; color: var(--teal); font: 700 10px var(--sans); font-style: normal; letter-spacing: .04em; white-space: nowrap; }
 .info-index .info-subsections button { padding: 8px 9px; }
 .info-index .info-subsections button span { font-size: 12px; }
 .info-blocks { display: grid; gap: 26px; }

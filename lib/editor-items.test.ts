@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addBroadcast, removeBroadcast, removeInfoSection, removeMutation, updateById } from "./editor-items.ts";
+import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, updateById } from "./editor-items.ts";
 import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
 const fixture = (): PortiaContent => {
@@ -46,6 +46,35 @@ test("deleting a post removes only that post and its formatting", () => {
   assert.equal(portiaTextKey.broadcast("a") in content.formattedText, false);
   assert.equal(portiaTextKey.broadcast("b") in content.formattedText, true);
   assert.equal(portiaTextKey.info("s1") in content.formattedText, true);
+});
+
+const withGuide = () => {
+  const content = fixture();
+  content.infoSections[0].subsections = [
+    { id: "u1", title: "U1", blocks: [{ id: "b1", type: "text", text: "один" }, { id: "b2", type: "text", text: "два" }] },
+    { id: "u2", title: "U2", blocks: [{ id: "b3", type: "text", text: "три" }] },
+  ];
+  for (const id of ["b1", "b2", "b3"]) content.formattedText[portiaTextKey.infoBlock(id)] = { runs: [] };
+  return content;
+};
+
+test("deleting a guide block removes it and its formatting only", () => {
+  const content = withGuide();
+  removeInfoBlock(content, "u1", "b1");
+  assert.deepEqual(content.infoSections[0].subsections[0].blocks.map((block) => block.id), ["b2"]);
+  assert.equal(portiaTextKey.infoBlock("b1") in content.formattedText, false);
+  assert.equal(portiaTextKey.infoBlock("b2") in content.formattedText, true);
+});
+
+test("deleting a subsection, or its whole section, takes its blocks' formatting with it", () => {
+  const content = withGuide();
+  removeInfoSubsection(content, "s1", "u1");
+  assert.deepEqual(content.infoSections[0].subsections.map((sub) => sub.id), ["u2"]);
+  assert.equal(portiaTextKey.infoBlock("b2") in content.formattedText, false);
+  assert.equal(portiaTextKey.infoBlock("b3") in content.formattedText, true);
+  removeInfoSection(content, "s1");
+  assert.equal(portiaTextKey.infoBlock("b3") in content.formattedText, false);
+  assert.equal(portiaTextKey.info("s2") in content.formattedText, true);
 });
 
 test("deleting an info section removes only that section and its formatting", () => {

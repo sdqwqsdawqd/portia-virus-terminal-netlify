@@ -179,6 +179,7 @@ export const portiaTextKey = {
   virus: (virusId: string, field: "external" | "physiology" | "ppu-health" | "ppu-speed" | "ppu-abilities") => `virus:${virusId}:${field}`,
   mutation: (virusId: string, index: number) => `virus:${virusId}:mutation:${index}:description`,
   info: (sectionId: string) => `info:${sectionId}:body`,
+  infoBlock: (blockId: string) => `info-block:${blockId}:text`,
   broadcast: (broadcastId: string) => `broadcast:${broadcastId}:body`,
   recycle: (fileId: string) => `recycle:${fileId}:content`,
   searchRecommendations: "search:recommendations",

@@ -1230,14 +1230,14 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 const open = section.id === selectedInfo?.id;
                 return (
                   <div key={section.id}>
-                    <button type="button" className={open && !selectedSubsection ? "active" : ""} aria-expanded={section.subsections.length ? open : undefined} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span></button>
+                    <button type="button" className={`${open && !selectedSubsection ? "active" : ""}${section.subsections.length ? " has-subsections" : ""}`} aria-expanded={section.subsections.length ? open : undefined} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span>{section.subsections.length ? <em className="info-sub-marker" aria-label={`Подразделов: ${section.subsections.length}`}>{open ? "▾" : "▸"} {section.subsections.length}</em> : null}</button>
                     {open && section.subsections.length ? <div className="info-subsections">{section.subsections.map((sub, subIndex) => <button key={sub.id} type="button" className={sub.id === selectedSubsection?.id ? "active" : ""} onClick={() => setSelectedInfoId(sub.id)}><small>{String(index + 1).padStart(2, "0")}.{subIndex + 1}</small><span>{sub.title || "БЕЗ НАЗВАНИЯ"}</span></button>)}</div> : null}
                   </div>
                 );
               })}</aside>
               <article className="info-document">{selectedInfo ? (selectedSubsection
                 ? <div className="content-fade" key={selectedSubsection.id}><span className="eyebrow">{selectedInfo.title}</span><h1>{selectedSubsection.title || "БЕЗ НАЗВАНИЯ"}</h1><div className="info-blocks">{selectedSubsection.blocks.map((block) => block.type === "text"
-                  ? <FormattedText key={block.id} className="info-document-copy" text={block.text} />
+                  ? <FormattedText key={block.id} className="info-document-copy" text={block.text} document={content.formattedText[portiaTextKey.infoBlock(block.id)]} />
                   : block.type === "table"
                     ? <dl key={block.id} className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row, rowIndex) => <div key={rowIndex}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl>
                     : block.type === "video" && block.videoId
