@@ -487,7 +487,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     return () => window.clearTimeout(timer);
   }, [content]);
 
-  // Merges storage with this tab's ids before writing, so storage is never overwritten with fewer ids; a failed write still keeps the ref.
+  // Writes markQuestsSeen(list, storage ∪ this tab's ids, today), so storage is never overwritten with fewer ids; a failed write still keeps the ref.
   const rememberActiveQuests = useCallback(() => {
     let stored: string[] | null = null;
     try { stored = parseSeenQuestIds(window.localStorage.getItem(questSeenStorageKey)); } catch {}

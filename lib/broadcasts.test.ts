@@ -90,3 +90,11 @@ test("markQuestsSeen adds active published quests, keeps stored ids that still e
   assert.deepEqual(markQuestsSeen(list, ["a", "gone", "soon"], TODAY), ["a", "soon", "b"]);
   assert.deepEqual(markQuestsSeen(list, ["b", "b"], TODAY), ["b", "a"]);
 });
+
+test("marking seen against a list keeps every stored id that is still in it", () => {
+  const list = [item("a", "quest"), item("b", "quest"), item("soon", "quest", true, false, { startsAt: "2026-10-25" }), item("n", "news")];
+  const stored = ["soon", "n", "a"];
+  const marked = markQuestsSeen(list, stored, TODAY);
+  for (const id of stored) assert.ok(marked.includes(id), id);
+  assert.deepEqual(marked, ["soon", "n", "a", "b"]);
+});
