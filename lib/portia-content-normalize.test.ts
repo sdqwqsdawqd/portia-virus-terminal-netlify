@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { defaultPortiaContent, findInfo, type InfoSection } from "./portia-content.ts";
-import { normalizeBroadcasts, normalizeInfoSections, normalizePortiaContent } from "./portia-content-normalize.ts";
+import { normalizeBroadcasts, normalizeInfoSections, normalizePortiaContent, parseYoutubeId } from "./portia-content-normalize.ts";
 
 test("a save round-trip keeps every field", () => {
   const once = normalizePortiaContent(structuredClone(defaultPortiaContent));
@@ -166,4 +166,38 @@ test("findInfo resolves a section, a subsection or nothing", () => {
   assert.deepEqual(findInfo(sections, "b"), { section: sections[1], subsection: null });
   assert.deepEqual(findInfo(sections, "a1"), { section: sections[0], subsection: sections[0].subsections[0] });
   assert.equal(findInfo(sections, "zzz"), null);
+});
+
+test("parseYoutubeId takes the id from YouTube links only", () => {
+  const id = "dQw4w9WgXcQ";
+  for (const link of [
+    `https://www.youtube.com/watch?v=${id}`,
+    `https://youtube.com/watch?v=${id}&t=42s`,
+    `https://m.youtube.com/watch?v=${id}`,
+    `https://youtu.be/${id}?si=abc`,
+    `https://www.youtube.com/embed/${id}`,
+    `https://www.youtube.com/shorts/${id}`,
+    `https://www.youtube-nocookie.com/embed/${id}`,
+    `http://youtu.be/${id}`,
+    `  https://youtu.be/${id}  `,
+  ]) assert.equal(parseYoutubeId(link), id, link);
+  for (const bad of [
+    "https://vimeo.com/123",
+    `https://youtube.com.evil.example/watch?v=${id}`,
+    `https://evil.example/youtu.be/${id}`,
+    "javascript:alert(1)",
+    id,
+    "https://www.youtube.com/watch?v=short",
+    `https://www.youtube.com/watch?v=${id}%3Cscript%3E`,
+    "https://www.youtube.com/channel/abc",
+    "",
+    null,
+    5,
+  ]) assert.equal(parseYoutubeId(bad), "", String(bad));
+});
+
+test("every parsed YouTube id survives normalizeInfoSections as a video block", () => {
+  const videoId = parseYoutubeId("https://youtu.be/dQw4w9WgXcQ");
+  const [section] = normalizeInfoSections([{ id: "s", title: "S", body: "", subsections: [{ id: "u", title: "U", blocks: [{ id: "v", type: "video", videoId }] }] }]);
+  assert.deepEqual(section.subsections[0].blocks[0], { id: "v", type: "video", videoId });
 });
