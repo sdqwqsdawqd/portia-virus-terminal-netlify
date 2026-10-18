@@ -1,17 +1,17 @@
 ---
 gsd_state_version: "1.0"
 current_phase: "03.2"
-current_phase_name: Сотрудники и Сводка (INSERTED)
+current_phase_name: sotrudniki-i-svodka
 status: executing
 stopped_at: Phase 03.3 context gathered; 03.2 awaiting UAT
-last_updated: "2026-10-18T10:53:05.851Z"
+last_updated: "2026-10-18T12:45:09.919Z"
 last_activity: 2026-10-18
 last_activity_desc: Phase PORTIA-03.2 execution started
-state_head: f661e45f0c4d2aa06bbaf314c14b5189ef35306c
+state_head: 73e79663da27d9ac32c51f315a3c8cde170673d1
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 30
+  total_plans: 32
   completed_plans: 30
   percent: 38
 ---
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 
 ## Current Position
 
-Phase: PORTIA-03.2 (Сотрудники и Сводка (INSERTED)) — EXECUTING
+Phase: PORTIA-03.2 (sotrudniki-i-svodka) — READY TO EXECUTE
 Plan: 6 of 6
 Status: Executing Phase PORTIA-03.2
 Last activity: 2026-10-18 — Phase PORTIA-03.2 execution started
