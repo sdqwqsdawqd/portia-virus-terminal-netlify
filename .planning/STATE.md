@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: "03.2"
 current_phase_name: sotrudniki-i-svodka
 status: executing
-stopped_at: Completed 03.2-07-PLAN.md
-last_updated: "2026-10-18T12:55:20.783Z"
+stopped_at: Completed 03.2-08-PLAN.md
+last_updated: "2026-10-18T12:59:15.006Z"
 last_activity: 2026-10-18
 last_activity_desc: Phase PORTIA-03.2 execution resumed (wave continue)
-state_head: 9297bc853c601169344cc352254f1dec97508b31
+state_head: d229424965bcd539efd59f54905f5fb2879a44e4
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 32
-  completed_plans: 31
+  completed_plans: 32
   percent: 38
 ---
 
@@ -61,6 +61,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase PORTIA-03.2]: 03.2-07: the new-quest notice is a non-modal corner toast (owner UAT), replacing the 03.2-05 modal window
 - [Phase PORTIA-03.2]: 03.2-07: the toast also shows while the editor is open and is recomputed on every content change (supersedes the 03.2-05 rule about the open editor)
 - [Phase PORTIA-03.2]: 03.2-07: content sync is a 10 s visibility-aware poll of the CDN copy, not Realtime
+- [Phase 03.2]: 03.2-08: the editor «Сводка» tab shows one category at a time (Новости / Квесты, tasks under Квесты), add button on top, new items blank and first
+- [Phase 03.2]: 03.2-08: switching categories or adding an item closes the format panel
 
 ### Pending Todos
 
@@ -80,8 +82,8 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-18T12:55:20.578Z
-Stopped at: Completed 03.2-07-PLAN.md
+Last session: 2026-10-18T12:59:14.786Z
+Stopped at: Completed 03.2-08-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -108,3 +110,4 @@ Resume file: None
 | Phase PORTIA-03.2 P04 | 25min | 2 tasks | 9 files |
 | Phase PORTIA-03.2 P05 | 20min | 2 tasks | 4 files |
 | Phase PORTIA-03.2 P07 | 20min | 2 tasks | 3 files |
+| Phase 03.2 P08 | 15min | 2 tasks | 4 files |
