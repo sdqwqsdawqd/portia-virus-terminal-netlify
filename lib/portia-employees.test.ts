@@ -1,9 +1,10 @@
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  acceptsRoster, employeeId, employeeRatings, parseCsv, profileChanged, profileFromRow, readEmployeeProfiles, rosterFromRows,
-  sanitizeEmployeeUpdate, saveEmployeeProfile, withProfile, type EmployeeProfile, type PortiaEmployee,
+  acceptsRoster, addManualEmployee, employeeId, employeeRatings, mergeManualEmployees, parseCsv, profileChanged, profileFromRow,
+  readEmployeeProfiles, readManualEmployees, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualEmployee,
+  saveEmployeeProfile, withProfile, type EmployeeProfile, type PortiaEmployee, type RosterEmployee,
 } from "./portia-employees.ts";
 
 const noRatings = { pawsRating: null, bioRating: null, sRating: null, activityRating: null, testsRating: null, overallRating: null };
@@ -46,7 +47,7 @@ test("profiles saved before the Roblox id was known are still found", () => {
   assert.equal(withProfile(employee, index(new Map())).knowledgeRating, 1);
 });
 
-const someone: PortiaEmployee = { id: "a", nickname: "a", callsign: "", title: "", rank: "", knowledgeRating: 0, ...noRatings, biography: "", photoUrl: "", robloxUserId: null, robloxAvatarUrl: "", robloxFullAvatarUrl: "", order: 1 };
+const someone: PortiaEmployee = { id: "a", nickname: "a", callsign: "", title: "", rank: "", knowledgeRating: 0, ...noRatings, biography: "", photoUrl: "", robloxUserId: null, robloxAvatarUrl: "", robloxFullAvatarUrl: "", order: 1, source: "sheet" };
 
 test("a complete non-empty roster is accepted", () => {
   assert.equal(acceptsRoster({ employees: [someone], degraded: false }), true);
@@ -98,7 +99,7 @@ function fakeTable(migrated: boolean, seed: Row[] = []) {
   return { client: client as unknown as SupabaseClient, upserts, rows };
 }
 
-const target = { id: "roblox-1", nickname: "Fox", callsign: "", title: "", rank: "", robloxUserId: 1, robloxAvatarUrl: "", robloxFullAvatarUrl: "", order: 0 };
+const target: RosterEmployee = { id: "roblox-1", nickname: "Fox", callsign: "", title: "", rank: "", robloxUserId: 1, robloxAvatarUrl: "", robloxFullAvatarUrl: "", order: 0, source: "sheet" };
 const fullRatings = { knowledgeRating: 6, pawsRating: 5, bioRating: 4, sRating: 3, activityRating: 2, testsRating: 7, overallRating: 9 };
 
 async function roundTrip(migrated: boolean) {
@@ -177,4 +178,139 @@ test("profileChanged: biography, photo and each rating are changes, whitespace c
   assert.equal(profileChanged(saved, { ...saved, biography: "bio " }), true);
   assert.equal(profileChanged(saved, { ...saved, photoUrl: "x" }), true);
   for (const { key } of employeeRatings) assert.equal(profileChanged(saved, { ...saved, [key]: 7 }), true, key);
+});
+
+test("every sheet employee is marked source sheet", () => {
+  assert.deepEqual(rosterFromRows(sheet(['"1","A_one","","",""', '"2","B_two","","",""']), new Map()).map((employee) => employee.source), ["sheet", "sheet"]);
+});
+
+const manualRow = (id: number, nickname: string) => ({ employee_id: `roblox-${id}`, nickname, title: "Лаборант", rank: "2", callsign: "Лис" });
+
+test("manual employees follow the sheet staff, marked manual, with avatars by nickname", () => {
+  const roster = rosterFromRows(sheet(['"1","Alpha","","",""', '"2","Beta","","",""']), new Map());
+  const merged = mergeManualEmployees(roster, [manualRow(50, "Gamma_x"), manualRow(51, "Delta_y")], new Map([["gamma_x", { id: 50, avatarUrl: "a", fullAvatarUrl: "f" }]]));
+  assert.deepEqual(merged.map((employee) => [employee.nickname, employee.source, employee.order]), [["Alpha", "sheet", 0], ["Beta", "sheet", 1], ["Gamma_x", "manual", 2], ["Delta_y", "manual", 3]]);
+  assert.deepEqual([merged[2].id, merged[2].robloxUserId, merged[2].robloxAvatarUrl, merged[2].robloxFullAvatarUrl, merged[2].title, merged[2].rank, merged[2].callsign], ["roblox-50", 50, "a", "f", "Лаборант", "2", "Лис"]);
+  assert.deepEqual([merged[3].robloxAvatarUrl, merged[3].robloxFullAvatarUrl], ["", ""]);
+});
+
+test("a manual row for an account already in the sheet is dropped: the sheet wins on id and on nickname", () => {
+  const roster = rosterFromRows(sheet(['"1","Alpha","","",""', '"2","Beta","","",""']), new Map([["alpha", { id: 7, avatarUrl: "", fullAvatarUrl: "" }]]));
+  const merged = mergeManualEmployees(roster, [manualRow(7, "Renamed"), manualRow(99, "BETA"), manualRow(100, "Fresh")], new Map());
+  assert.deepEqual(merged.map((employee) => employee.nickname), ["Alpha", "Beta", "Fresh"]);
+  assert.equal(merged[2].order, 2);
+});
+
+// In-memory stand-in for the manual table: a read, an insert and a filtered delete, each with a configurable error.
+type ManualTableOptions = { rows?: Record<string, unknown>[]; readError?: { code: string }; insertError?: { code: string } };
+function manualTable(options: ManualTableOptions = {}) {
+  const inserts: Record<string, unknown>[] = [];
+  const rows = options.rows ?? [];
+  const client = {
+    from: (table: string) => {
+      assert.equal(table, "portia_manual_employees");
+      return {
+        select: () => ({ order: () => ({ returns: async () => (options.readError ? { data: null, error: options.readError } : { data: rows, error: null }) }) }),
+        insert: async (row: Record<string, unknown>) => {
+          if (options.insertError) return { error: options.insertError };
+          inserts.push(row);
+          return { error: null };
+        },
+      };
+    },
+  };
+  return { client: client as unknown as SupabaseClient, inserts };
+}
+
+test("the manual read keeps the stored columns; a missing table is an empty, healthy list", async () => {
+  const stored = manualRow(5, "Echo_five");
+  assert.deepEqual(await readManualEmployees(manualTable({ rows: [stored] }).client), { rows: [stored], ok: true });
+  for (const code of ["PGRST205", "42P01"]) assert.deepEqual(await readManualEmployees(manualTable({ readError: { code } }).client), { rows: [], ok: true });
+});
+
+test("any other manual read error is an empty list that marks the roster incomplete", async (t) => {
+  t.mock.method(console, "error", () => {});
+  assert.deepEqual(await readManualEmployees(manualTable({ readError: { code: "42501" } }).client), { rows: [], ok: false });
+});
+
+test("sanitizeManualEmployee trims, cuts to 64 and refuses a body without a nickname", () => {
+  assert.deepEqual(sanitizeManualEmployee({ nickname: "  Fox_1 ", title: " Ст. ", rank: 5, callsign: "x".repeat(80) }), { nickname: "Fox_1", title: "Ст.", rank: "", callsign: "x".repeat(64) });
+  for (const bad of [null, "Fox", 7, {}, { nickname: 5 }, { nickname: "   " }]) assert.equal(sanitizeManualEmployee(bad), null);
+});
+
+// Roblox stand-in: `users` is the answer to the username lookup, or "down" (HTTP 500) / "throws" for the unavailable cases.
+type RobloxUser = { id: number; name: string; requestedUsername: string };
+function stubRoblox(t: TestContext, users: "down" | "throws" | RobloxUser[]) {
+  const calls: string[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    calls.push(String(url));
+    if (String(url).includes("users.roblox.com")) {
+      if (users === "throws") throw new Error("offline");
+      if (users === "down") return new Response("", { status: 500 });
+      return Response.json({ data: users });
+    }
+    return Response.json({ data: (Array.isArray(users) ? users : []).map((user) => ({ targetId: user.id, imageUrl: `https://img/${user.id}` })) });
+  });
+  return calls;
+}
+
+const input = { nickname: "Newbie_9", title: "Лаборант", rank: "1", callsign: "Нова" };
+const existing = rosterFromRows(sheet(['"1","Alpha","","",""']), new Map([["alpha", { id: 7, avatarUrl: "", fullAvatarUrl: "" }]]));
+
+test("an invalid nickname is not found without asking Roblox", async (t) => {
+  const calls = stubRoblox(t, []);
+  for (const nickname of ["ab", "a".repeat(21), "has space", "кириллица", "x-y"]) {
+    assert.deepEqual(await addManualEmployee(manualTable().client, { ...input, nickname }, existing, "u1"), { status: "not-found" });
+  }
+  assert.equal(calls.length, 0);
+});
+
+test("a nickname Roblox does not know is not found", async (t) => {
+  const table = manualTable();
+  stubRoblox(t, []);
+  assert.deepEqual(await addManualEmployee(table.client, input, existing, "u1"), { status: "not-found" });
+  assert.equal(table.inserts.length, 0);
+});
+
+test("an unreachable Roblox is never reported as an unknown nickname", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const table = manualTable();
+  const fetchMock = stubRoblox(t, "down");
+  assert.deepEqual(await addManualEmployee(table.client, input, existing, "u1"), { status: "roblox-unavailable" });
+  assert.equal(fetchMock.length, 1);
+  t.mock.restoreAll();
+  t.mock.method(console, "error", () => {});
+  stubRoblox(t, "throws");
+  assert.deepEqual(await addManualEmployee(table.client, input, existing, "u1"), { status: "roblox-unavailable" });
+  assert.equal(table.inserts.length, 0);
+});
+
+test("a person already in the roster is a duplicate and nothing is inserted", async (t) => {
+  const table = manualTable();
+  stubRoblox(t, [{ id: 7, name: "Renamed", requestedUsername: "Renamed" }]);
+  assert.deepEqual(await addManualEmployee(table.client, { ...input, nickname: "Renamed" }, existing, "u1"), { status: "duplicate" });
+  t.mock.restoreAll();
+  stubRoblox(t, [{ id: 8, name: "ALPHA", requestedUsername: "ALPHA" }]);
+  assert.deepEqual(await addManualEmployee(table.client, { ...input, nickname: "ALPHA" }, existing, "u1"), { status: "duplicate" });
+  assert.equal(table.inserts.length, 0);
+});
+
+test("insert errors: a taken key is a duplicate, a missing table is pending, anything else is thrown", async (t) => {
+  stubRoblox(t, [{ id: 9, name: "Newbie_9", requestedUsername: "Newbie_9" }]);
+  assert.deepEqual(await addManualEmployee(manualTable({ insertError: { code: "23505" } }).client, input, existing, "u1"), { status: "duplicate" });
+  for (const code of ["PGRST205", "42P01"]) assert.deepEqual(await addManualEmployee(manualTable({ insertError: { code } }).client, input, existing, "u1"), { status: "pending-database" });
+  await assert.rejects(addManualEmployee(manualTable({ insertError: { code: "42501" } }).client, input, existing, "u1"), { code: "42501" });
+});
+
+test("a found newcomer is inserted as exactly one row and returned as a manual employee after the roster", async (t) => {
+  const table = manualTable();
+  stubRoblox(t, [{ id: 9, name: "Newbie_9", requestedUsername: "Newbie_9" }]);
+  const result = await addManualEmployee(table.client, input, existing, "user-1");
+  assert.deepEqual(table.inserts, [{ employee_id: "roblox-9", nickname: "Newbie_9", title: "Лаборант", rank: "1", callsign: "Нова", created_by: "user-1" }]);
+  assert.equal(result.status, "added");
+  if (result.status !== "added") return;
+  assert.deepEqual(
+    [result.employee.id, result.employee.source, result.employee.order, result.employee.robloxUserId, result.employee.robloxAvatarUrl, result.employee.robloxFullAvatarUrl],
+    ["roblox-9", "manual", 1, 9, "https://img/9", "https://img/9"],
+  );
 });
