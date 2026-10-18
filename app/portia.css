@@ -401,6 +401,15 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .broadcast-card h2 { margin: 9px 0 12px; color: oklch(.958 .008 var(--accent-hue)); font: 700 20px var(--sans); }
 .broadcast-card p { margin: 0 0 12px; color: oklch(.76 .022 var(--accent-hue)); font-size: 15px; line-height: 1.7; white-space: pre-line; }
 .broadcast-tabs { margin: 22px 0 0; }
+/* Quest state comes from the visitor's local date (D-03). */
+.quest-badge { display: inline-block; margin-left: 10px; padding: 1px 7px; border: 1px solid currentColor; font: 700 10px var(--mono); font-style: normal; letter-spacing: .09em; }
+.quest-badge { color: oklch(.596 .03 var(--accent-hue)); }
+.broadcast-card.state-active .quest-badge { color: var(--teal); }
+.broadcast-card.state-finished { opacity: .6; }
+.broadcast-dates { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: -4px 0 12px; color: oklch(.696 .03 var(--accent-hue)); font: 12px var(--mono); }
+.broadcast-conditions { margin: 0 0 14px; padding: 10px 14px; border: 1px solid oklch(.383 .033 var(--accent-hue)); border-left-width: 3px; }
+.broadcast-conditions b { display: block; margin-bottom: 4px; color: oklch(.696 .03 var(--accent-hue)); font: 700 11px var(--sans); letter-spacing: .09em; }
+.broadcast-conditions p { margin: 0; }
 /* Important news are pinned and enlarged (D-03). */
 .broadcast-card.important { padding: 28px 28px 30px; border: 2px solid var(--teal-dim); border-left-width: 6px; background: var(--teal-soft); }
 .broadcast-card.important > span:first-child { color: var(--teal); font-size: 12px; }

@@ -10,7 +10,7 @@ import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
 import { normalizeBroadcasts } from "@/lib/portia-content-normalize";
-import { broadcastFeed, broadcastTabOf, type BroadcastTab } from "@/lib/broadcasts";
+import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, questState, type BroadcastTab } from "@/lib/broadcasts";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -269,6 +269,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [booting, setBooting] = useState(true);
   const [clock, setClock] = useState("--:--:--");
+  // The visitor's local day; set from the clock tick so quest states roll over at midnight without a reload (D-03).
+  const [today, setToday] = useState("");
   const [startOpen, setStartOpen] = useState(false);
   const [windows, setWindows] = useState<Record<AppId, WindowState>>(initialWindows);
   const [activeApp, setActiveApp] = useState<AppId>("archive");
@@ -447,6 +449,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const tick = () => {
       const now = new Date();
       setClock(new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(now));
+      setToday(localDateKey(now));
     };
     tick();
     const clockTimer = window.setInterval(tick, 1000);
@@ -1159,11 +1162,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <header><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>
               {!contentReady ? <LoadingState label="Загрузка объявлений…" /> : <>
               <div className="editor-tabs broadcast-tabs">
-                {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([tab, label]) => <button key={tab} type="button" className={broadcastTab === tab ? "active" : ""} aria-pressed={broadcastTab === tab} onClick={() => setBroadcastTab(tab)}>{label} {broadcastFeed(content.broadcasts, tab).length}</button>)}
+                {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([tab, label]) => <button key={tab} type="button" className={broadcastTab === tab ? "active" : ""} aria-pressed={broadcastTab === tab} onClick={() => setBroadcastTab(tab)}>{label} {broadcastFeed(content.broadcasts, tab, today).length}</button>)}
               </div>
               <div className="broadcast-grid">
-                {broadcastFeed(content.broadcasts, broadcastTab).map((item) => <article className={`broadcast-card ${item.type}${item.important ? " important" : ""}`} key={item.id}><span>{broadcastType(item.type)}{item.important ? " · ВАЖНО" : ""}</span><h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {item.startsAt.split("-").reverse().join(".")}</span>}{item.endsAt && <span>Окончание: {item.endsAt.split("-").reverse().join(".")}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>)}
-                {!broadcastFeed(content.broadcasts, broadcastTab).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>{broadcastTab === "news" ? "Новостей пока нет" : "Квестов и задач пока нет"}</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
+                {broadcastFeed(content.broadcasts, broadcastTab, today).map((item) => {
+                  const state = item.type === "quest" ? questState(item, today) : null;
+                  const badge = state === "active" ? "АКТИВЕН" : state === "upcoming" ? `СКОРО · с ${formatQuestDay(item.startsAt).slice(0, 5)}` : "ЗАВЕРШЁН";
+                  return <article className={`broadcast-card ${item.type}${item.important ? " important" : ""}${state ? ` state-${state}` : ""}`} key={item.id}><span>{broadcastType(item.type)}{item.important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
+                })}
+                {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>{broadcastTab === "news" ? "Новостей пока нет" : "Квестов и задач пока нет"}</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
               </div></>}
             </div>
           </AppWindow>
