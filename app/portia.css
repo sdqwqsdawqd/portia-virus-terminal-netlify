@@ -400,6 +400,11 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .broadcast-card.task > span:first-child { color: #7ec8e3; }
 .broadcast-card h2 { margin: 9px 0 12px; color: oklch(.958 .008 var(--accent-hue)); font: 700 20px var(--sans); }
 .broadcast-card p { margin: 0 0 12px; color: oklch(.76 .022 var(--accent-hue)); font-size: 15px; line-height: 1.7; white-space: pre-line; }
+.broadcast-tabs { margin: 22px 0 0; }
+/* Important news are pinned and enlarged (D-03). */
+.broadcast-card.important { padding: 28px 28px 30px; border: 2px solid var(--teal-dim); border-left-width: 6px; background: var(--teal-soft); }
+.broadcast-card.important > span:first-child { color: var(--teal); font-size: 12px; }
+.broadcast-card.important h2 { font-size: 26px; }
 .broadcast-card-copy { display: block; color: oklch(.76 .022 var(--accent-hue)); }
 .broadcast-empty, .record-empty, .editor-empty { display: flex; min-height: 180px; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 30px; border: 1px dashed oklch(.379 .038 var(--accent-hue)); color: oklch(.596 .03 var(--accent-hue)); text-align: center; }
 .broadcast-empty strong { color: oklch(.818 .02 var(--accent-hue)); font: 700 13px var(--sans); }
@@ -1039,6 +1044,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .personnel-stats { grid-template-columns: 1fr; }
   .personnel-biography p { max-height: 260px; }
   .broadcast-card { padding: 18px; }
+  .broadcast-card.important { padding: 22px 18px 24px; }
+  .broadcast-card.important h2 { font-size: 23px; }
   /* The window title already says «Редактор» and the save state lives in the bar, so the tabs come first (D-04). */
   .editor-header { display: none; }
   .editor-tabs { margin-top: 0; }

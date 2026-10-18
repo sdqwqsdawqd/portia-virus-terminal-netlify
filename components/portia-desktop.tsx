@@ -10,6 +10,7 @@ import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
 import { normalizeBroadcasts } from "@/lib/portia-content-normalize";
+import { broadcastFeed, broadcastTabOf, type BroadcastTab } from "@/lib/broadcasts";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -257,6 +258,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [content, setContent] = useState<PortiaContent>(initialContent);
   // False until the cached copy or the first /api/content answer arrives; until then content windows show a loader, not defaults.
   const [contentReady, setContentReady] = useState(false);
+  const [broadcastTab, setBroadcastTab] = useState<BroadcastTab>("news");
   const [canEdit, setCanEdit] = useState(false);
   const [canManageEditors, setCanManageEditors] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -1004,6 +1006,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       setSelectedInfoId(result.id);
       openApp("info");
     } else if (result.type === "broadcast") {
+      const found = content.broadcasts.find((item) => item.id === result.id);
+      if (found) setBroadcastTab(broadcastTabOf(found.type));
       openApp("broadcasts");
     } else {
       setActiveTrashFileId(result.id);
@@ -1152,10 +1156,14 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <AppWindow app="broadcasts" state={windows.broadcasts} active={activeApp === "broadcasts"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window broadcasts-window" meta="КАНАЛ СТАНЦИИ">
             <div className="broadcasts-app">
               <header><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>
-              {!contentReady ? <LoadingState label="Загрузка объявлений…" /> : <div className="broadcast-grid">
-                {content.broadcasts.filter((item) => item.published).map((item) => <article className={`broadcast-card ${item.type}${item.important ? " important" : ""}`} key={item.id}><span>{broadcastType(item.type)}{item.important ? " · ВАЖНО" : ""}</span><h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2><FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>)}
-                {!content.broadcasts.some((item) => item.published) && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>Сообщений пока нет</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
-              </div>}
+              {!contentReady ? <LoadingState label="Загрузка объявлений…" /> : <>
+              <div className="editor-tabs broadcast-tabs">
+                {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([tab, label]) => <button key={tab} type="button" className={broadcastTab === tab ? "active" : ""} aria-pressed={broadcastTab === tab} onClick={() => setBroadcastTab(tab)}>{label} {broadcastFeed(content.broadcasts, tab).length}</button>)}
+              </div>
+              <div className="broadcast-grid">
+                {broadcastFeed(content.broadcasts, broadcastTab).map((item) => <article className={`broadcast-card ${item.type}${item.important ? " important" : ""}`} key={item.id}><span>{broadcastType(item.type)}{item.important ? " · ВАЖНО" : ""}</span><h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2><FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>)}
+                {!broadcastFeed(content.broadcasts, broadcastTab).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>{broadcastTab === "news" ? "Новостей пока нет" : "Квестов и задач пока нет"}</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
+              </div></>}
             </div>
           </AppWindow>
 
