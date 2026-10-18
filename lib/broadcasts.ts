@@ -35,3 +35,28 @@ export function broadcastFeed(broadcasts: Broadcast[], tab: BroadcastTab, today:
   const rank = (item: Broadcast) => (item.type === "quest" ? stateRank[questState(item, today)] : 0);
   return list.sort((a, b) => rank(a) - rank(b));
 }
+
+// Seen quest ids come from visitor-editable storage: only an array of strings counts, anything else is "nothing seen".
+export function parseSeenQuestIds(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+const activePublishedQuests = (list: Broadcast[], today: string) => list.filter((item) => item.published && item.type === "quest" && questState(item, today) === "active");
+
+// One window for all unseen active quests: the first in editor order, `more` counts the rest (D-03).
+export function questPopup(list: Broadcast[], seen: string[], today: string): { quest: Broadcast; more: number } | null {
+  const unseen = activePublishedQuests(list, today).filter((item) => !seen.includes(item.id));
+  return unseen.length ? { quest: unseen[0], more: unseen.length - 1 } : null;
+}
+
+// Stored ids that still exist in the list plus every active published quest; ids of deleted quests drop out so the list cannot grow forever.
+export function markQuestsSeen(list: Broadcast[], seen: string[], today: string): string[] {
+  const existing = new Set(list.map((item) => item.id));
+  return [...new Set([...seen.filter((id) => existing.has(id)), ...activePublishedQuests(list, today).map((item) => item.id)])];
+}
