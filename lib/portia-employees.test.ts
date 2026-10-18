@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   acceptsRoster, addManualEmployee, employeeId, employeeRatings, mergeManualEmployees, parseCsv, profileChanged, profileFromRow,
-  readEmployeeProfiles, readManualEmployees, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualEmployee,
+  readEmployeeProfiles, readManualEmployees, removeManualEmployee, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualEmployee,
   saveEmployeeProfile, withProfile, type EmployeeProfile, type PortiaEmployee, type RosterEmployee,
 } from "./portia-employees.ts";
 
@@ -202,9 +202,10 @@ test("a manual row for an account already in the sheet is dropped: the sheet win
 });
 
 // In-memory stand-in for the manual table: a read, an insert and a filtered delete, each with a configurable error.
-type ManualTableOptions = { rows?: Record<string, unknown>[]; readError?: { code: string }; insertError?: { code: string } };
+type ManualTableOptions = { rows?: Record<string, unknown>[]; readError?: { code: string }; insertError?: { code: string }; deleteError?: { code: string } };
 function manualTable(options: ManualTableOptions = {}) {
   const inserts: Record<string, unknown>[] = [];
+  const deletes: string[] = [];
   const rows = options.rows ?? [];
   const client = {
     from: (table: string) => {
@@ -216,10 +217,20 @@ function manualTable(options: ManualTableOptions = {}) {
           inserts.push(row);
           return { error: null };
         },
+        delete: () => ({
+          eq: (column: string, id: string) => ({
+            select: async () => {
+              assert.equal(column, "employee_id");
+              deletes.push(id);
+              if (options.deleteError) return { data: null, error: options.deleteError };
+              return { data: rows.filter((row) => row.employee_id === id).map((row) => ({ employee_id: row.employee_id })), error: null };
+            },
+          }),
+        }),
       };
     },
   };
-  return { client: client as unknown as SupabaseClient, inserts };
+  return { client: client as unknown as SupabaseClient, inserts, deletes };
 }
 
 test("the manual read keeps the stored columns; a missing table is an empty, healthy list", async () => {
@@ -313,4 +324,29 @@ test("a found newcomer is inserted as exactly one row and returned as a manual e
     [result.employee.id, result.employee.source, result.employee.order, result.employee.robloxUserId, result.employee.robloxAvatarUrl, result.employee.robloxFullAvatarUrl],
     ["roblox-9", "manual", 1, 9, "https://img/9", "https://img/9"],
   );
+});
+
+const mixedRoster = mergeManualEmployees(existing, [manualRow(50, "Gamma_x")], new Map());
+
+test("removing a sheet employee is refused and never issues a delete", async () => {
+  const table = manualTable({ rows: [manualRow(7, "Alpha")] });
+  assert.deepEqual(await removeManualEmployee(table.client, mixedRoster, "roblox-7"), { status: "sheet" });
+  assert.equal(table.deletes.length, 0);
+});
+
+test("removing an id that is not in the roster is not found and issues no delete", async () => {
+  const table = manualTable();
+  assert.deepEqual(await removeManualEmployee(table.client, mixedRoster, "roblox-404"), { status: "not-found" });
+  assert.equal(table.deletes.length, 0);
+});
+
+test("removing a manual employee deletes exactly its manual row; a row that was already gone is not found", async () => {
+  const table = manualTable({ rows: [manualRow(50, "Gamma_x")] });
+  assert.deepEqual(await removeManualEmployee(table.client, mixedRoster, "roblox-50"), { status: "deleted" });
+  assert.deepEqual(table.deletes, ["roblox-50"]);
+  assert.deepEqual(await removeManualEmployee(manualTable().client, mixedRoster, "roblox-50"), { status: "not-found" });
+});
+
+test("a delete error is thrown", async () => {
+  await assert.rejects(removeManualEmployee(manualTable({ rows: [manualRow(50, "Gamma_x")], deleteError: { code: "42501" } }).client, mixedRoster, "roblox-50"), { code: "42501" });
 });
