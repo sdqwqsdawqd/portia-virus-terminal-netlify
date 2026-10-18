@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 03
-current_phase_name: Редактор
+current_phase: "03.2"
+current_phase_name: Сотрудники и Сводка (INSERTED)
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-10-17T22:28:01.212Z"
-last_activity: 2026-10-14
-last_activity_desc: Phase PORTIA-03 execution started
-state_head: 0336906cc1da70e35700fe85e63e2baf0daecbf3
+stopped_at: Completed 03.2-01-PLAN.md
+last_updated: "2026-10-18T09:17:20.848Z"
+last_activity: 2026-10-18
+last_activity_desc: Phase PORTIA-03.2 execution started
+state_head: e086ef33890397de8779fcb46a0f4064d05df751
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 18
-  completed_plans: 18
+  total_plans: 30
+  completed_plans: 25
   percent: 43
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-14)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-03 — Редактор
+**Current focus:** Phase PORTIA-03.2 — Сотрудники и Сводка (INSERTED)
 
 ## Current Position
 
-Phase: PORTIA-03 (Редактор) — EXECUTING
-Plan: 4 of 4
-Status: Executing Phase PORTIA-03
-Last activity: 2026-10-14 — Phase PORTIA-03 execution started
+Phase: PORTIA-03.2 (Сотрудники и Сводка (INSERTED)) — EXECUTING
+Plan: 2 of 6
+Status: Executing Phase PORTIA-03.2
+Last activity: 2026-10-18 — Phase PORTIA-03.2 execution started
 
 Progress: [████░░░░░░] 43%
 
@@ -50,6 +50,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 03]: 03-03: phone format panel hides the keyboard by blurring the field and paints the stored selection with the CSS Custom Highlight API (no inputmode toggle); highlight rebuilt on document change
 - [Phase 03]: 03-04: dossier tab state lives per editor (live in PortiaEditor, bin in ArchivedVirusEditor); live tab switch closes the format panel
 - [Phase 03]: 03-04: one drag is one undo step via drag:<id> editKeyFor key; autoscroll runs a rAF loop only while a handle is held
+- [Phase PORTIA-03.2]: 03.2-01: new ratings are nullable 1-10 («—» until rated); reads use select * and writes retry without rating columns on PGRST204/42703 until the migration. SQL recorded in portia_setup.sql, not applied.
 
 ### Pending Todos
 
@@ -68,8 +69,8 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-14T07:50:09.508Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-10-18T09:17:20.680Z
+Stopped at: Completed 03.2-01-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -90,3 +91,4 @@ Resume file: None
 | Phase PORTIA-03 P02 | 5 min | 2 tasks | 4 files |
 | Phase 03 P03 | 21 min | 3 tasks | 2 files |
 | Phase 03 P04 | 25min | 2 tasks | 4 files |
+| Phase PORTIA-03.2 P03.2-01 | 25min | 3 tasks | 7 files |
