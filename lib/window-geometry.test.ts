@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fitGeometry, resizeGeometry } from "./window-geometry.ts";
+import { dragGeometry, fitGeometry, resizeGeometry } from "./window-geometry.ts";
 
 const minimum = { width: 680, height: 320 };
 
@@ -28,4 +28,27 @@ test("an edge never pushes the window past the workspace or below its minimum", 
   assert.equal(resizeGeometry(start, "se", 900, 900, bounds, minimum).width, 892);
   assert.equal(resizeGeometry(start, "n", 0, 900, bounds, minimum).height, 320);
   assert.equal(resizeGeometry(start, "nw", -900, -900, bounds, minimum).x, 8);
+});
+
+const desk = { width: 1600, height: 900 };
+const at = { x: 100, y: 80, width: 600, height: 400 };
+
+test("dragging the title bar moves the window and keeps its size", () => {
+  assert.deepEqual(dragGeometry(at, 50, -30, desk), { x: 150, y: 50, width: 600, height: 400 });
+});
+
+test("dragging far right or down leaves the title bar grabbable", () => {
+  const next = dragGeometry(at, 5000, 5000, desk);
+  assert.equal(next.x, desk.width - 160);
+  assert.equal(next.y, desk.height - 46);
+});
+
+test("dragging past the top or left stops at the edge", () => {
+  const next = dragGeometry(at, -5000, -5000, desk);
+  assert.equal(next.x, 0);
+  assert.equal(next.y, 0);
+});
+
+test("in a workspace narrower than 160 px the window sits at x 0", () => {
+  assert.equal(dragGeometry(at, 50, 0, { width: 120, height: 900 }).x, 0);
 });

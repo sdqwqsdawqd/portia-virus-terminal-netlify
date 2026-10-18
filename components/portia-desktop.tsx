@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
-import type { PortiaEmployee } from "@/lib/portia-employees";
+import { acceptsRoster, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
-import { accentIds, motionModes } from "@/lib/accent-boot";
-import { fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
+import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
+import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
 
 const PortiaEditor = dynamic(
@@ -102,8 +102,22 @@ function workspaceBounds() {
   return { width: workspace?.width ?? window.innerWidth, height: workspace?.height ?? window.innerHeight - 88 };
 }
 
+// Sized from each window's layout (personnel: 260 px list + a stacked profile), so shrinking never squashes it (D-03).
+const windowMinimums: Record<AppId, { width: number; height: number }> = {
+  archive: { width: 780, height: 480 },
+  employees: { width: 720, height: 480 },
+  editor: { width: 720, height: 480 },
+  search: { width: 520, height: 420 },
+  info: { width: 560, height: 420 },
+  settings: { width: 520, height: 420 },
+  broadcasts: { width: 520, height: 420 },
+  trash: { width: 640, height: 440 },
+  sheet: { width: 640, height: 440 },
+  charter: { width: 640, height: 440 },
+};
+
 function minimumWindowSize(appId: AppId) {
-  return { width: appId === "editor" ? 680 : 440, height: 320 };
+  return windowMinimums[appId];
 }
 
 const resizeEdges: ResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
@@ -377,11 +391,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     try {
       const response = await fetchWithTimeout("/api/employees", {}, 15_000);
       if (!response.ok) return;
-      const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null };
-      if (!Array.isArray(payload.employees) || !payload.employees.length) return;
+      const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null; degraded?: boolean };
+      if (!acceptsRoster(payload)) return;
       setEmployees(payload.employees);
       setEmployeesSyncedAt(payload.syncedAt ?? null);
-      setSelectedEmployeeId((current) => payload.employees!.some((employee) => employee.id === current) ? current : payload.employees![0].id);
+      setSelectedEmployeeId((current) => payload.employees.some((employee) => employee.id === current) ? current : payload.employees[0]?.id ?? "");
       try { window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify(payload)); } catch {}
     } catch {
       // The last successful personnel snapshot remains visible on this device.
@@ -410,16 +424,21 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         const employeeCache = window.localStorage.getItem(employeesCacheStorageKey);
         if (employeeCache) {
           const parsed = JSON.parse(employeeCache) as { employees?: PortiaEmployee[]; syncedAt?: string | null };
-          if (Array.isArray(parsed.employees) && parsed.employees.length) {
+          if (Array.isArray(parsed.employees)) {
             setEmployees(parsed.employees);
             setEmployeesSyncedAt(parsed.syncedAt ?? null);
-            setSelectedEmployeeId((current) => current || parsed.employees![0].id);
+            setSelectedEmployeeId((current) => current || parsed.employees![0]?.id || "");
             setEmployeesReady(true);
           }
         }
       } catch {}
     }, 0);
-    const bootTimer = window.setTimeout(() => setBooting(false), 1650);
+    // A repeat load in this tab session skips the boot; only a boot that played to its end is recorded (D-06).
+    const bootSeen = document.documentElement.dataset.boot === "seen";
+    const bootTimer = window.setTimeout(() => {
+      setBooting(false);
+      if (!bootSeen) try { window.sessionStorage.setItem(bootSeenStorageKey, "1"); } catch {}
+    }, bootSeen ? 0 : 1650);
     const tick = () => {
       const now = new Date();
       setClock(new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(now));
@@ -1025,14 +1044,14 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     <>
       <BootScreen visible={booting} />
       <div className="desktop" id="desktop">
-        <DesktopWallpaper kind={desktopSettings.wallpaper} />
+        {desktopSettingsLoaded && <DesktopWallpaper kind={desktopSettings.wallpaper} />}
         <header className="system-bar">
           <div className="system-brand"><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span><span className="system-division">PORTIA OS</span></div>
           <div className="system-status" aria-label="Состояние системы"><span className="status-item"><i className="status-dot" />В СЕТИ</span><time>{clock}</time></div>
         </header>
 
         <main className={`workspace${windows[activeApp].open && !windows[activeApp].minimized ? " mobile-app-open" : ""}`}>
-          <nav className="desktop-icons" aria-label="Рабочий стол PORTIA">
+          <nav className="desktop-icons" aria-label="Рабочий стол PORTIA" style={desktopSettingsLoaded && shortcutPositionsLoaded ? undefined : { visibility: "hidden" }}>
             <DesktopIcon app="search" onOpen={openApp} position={shortcutPositions.search} onMove={moveDesktopShortcut} />
             <DesktopIcon app="archive" onOpen={openApp} position={shortcutPositions.archive} onMove={moveDesktopShortcut} />
             <DesktopIcon app="employees" onOpen={openApp} position={shortcutPositions.employees} onMove={moveDesktopShortcut} />
@@ -1088,14 +1107,14 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 {!employeesReady ? <LoadingState label="Загрузка профиля…" /> : selectedEmployee ? <div className="personnel-profile-body content-fade" key={selectedEmployee.id}>
                   <header className="personnel-profile-head">
                     <div className="personnel-avatar-stage">
-                      <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
+                      <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} fallbackClassName="personnel-fallback" /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
                       {selectedEmployee.robloxUserId ? <a className="personnel-portrait" href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer" aria-label={`Профиль Roblox: ${selectedEmployee.nickname}`}><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></a> : <figure className="personnel-portrait"><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></figure>}
                     </div>
                     <div className="personnel-profile-identity"><h2>{selectedEmployee.nickname}</h2><p className="personnel-callsign">{selectedEmployee.callsign || "Без позывного"}</p></div>
                   </header>
                   <dl className="personnel-stats"><div><dt>ЗВАНИЕ</dt><dd>{selectedEmployee.title || "Не указано"}</dd></div><div><dt>РАНГ</dt><dd>{selectedEmployee.rank || "Не указан"}</dd></div><div><dt>ОЦЕНКА ЗНАНИЙ</dt><dd>{selectedEmployee.knowledgeRating} / 10</dd></div></dl>
                   <section className="personnel-biography"><span>БИОГРАФИЯ</span><p>{selectedEmployee.biography || "Биография сотрудника пока не заполнена."}</p></section>
-                </div> : <div className="editor-empty">Данные сотрудников ещё не синхронизированы.</div>}
+                </div> : <div className="editor-empty">{!employees.length && employeesSyncedAt ? "В таблице пока нет сотрудников." : "Данные сотрудников ещё не синхронизированы."}</div>}
               </article>
             </div>
           </AppWindow>
@@ -1246,10 +1265,12 @@ function BootScreen({ visible }: { visible: boolean }) {
 
 function EmployeeImage({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
   const [loaded, setLoaded] = useState(false);
-  const source = src || "/assets/portia-logo.png";
+  const [failed, setFailed] = useState(false);
+  // A failed URL shows the PORTIA fallback, never a broken image; if the fallback fails too, the skeleton still stops (D-09 #7).
+  const fallback = !src || failed;
   return <div className={`personnel-image-loader${loaded ? " is-loaded" : ""}`}>
     <span className="personnel-image-skeleton" aria-hidden="true" />
-    <img src={source} alt={alt} className={!src ? fallbackClassName : ""} referrerPolicy="no-referrer" onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} />
+    <img src={fallback ? "/assets/portia-logo.png" : src} alt={alt} className={fallback ? fallbackClassName : ""} referrerPolicy="no-referrer" onLoad={() => setLoaded(true)} onError={() => fallback ? setLoaded(true) : setFailed(true)} />
   </div>;
 }
 
@@ -1418,6 +1439,18 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   const windowRef = useRef<HTMLElement>(null);
   const dragRef = useRef<null | (WindowGeometry & { pointerId: number; startX: number; startY: number; parentWidth: number; parentHeight: number })>(null);
   const resizeRef = useRef<null | (WindowGeometry & { edge: ResizeEdge; pointerId: number; startX: number; startY: number; parentWidth: number; parentHeight: number })>(null);
+  const liveGeometry = useRef<WindowGeometry | null>(null);
+
+  // Drag and resize move the element directly; desktop state is updated once at the end, so the whole desktop does not re-render per pointermove (D-09 #10).
+  const paint = (geometry: WindowGeometry) => {
+    const style = windowRef.current?.style;
+    if (!style) return;
+    style.left = `${geometry.x}px`;
+    style.top = `${geometry.y}px`;
+    style.width = `${geometry.width}px`;
+    style.height = `${geometry.height}px`;
+    liveGeometry.current = geometry;
+  };
 
   const readGeometry = () => {
     const element = windowRef.current;
@@ -1448,13 +1481,14 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   const moveDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const operation = dragRef.current;
     if (!operation || operation.pointerId !== event.pointerId) return;
-    const nextX = Math.min(Math.max(0, operation.x + event.clientX - operation.startX), Math.max(0, operation.parentWidth - 160));
-    const nextY = Math.min(Math.max(0, operation.y + event.clientY - operation.startY), Math.max(0, operation.parentHeight - 46));
-    onGeometry(app, { x: nextX, y: nextY, width: operation.width, height: operation.height });
+    paint(dragGeometry(operation, event.clientX - operation.startX, event.clientY - operation.startY, { width: operation.parentWidth, height: operation.parentHeight }));
   };
 
   const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    if (liveGeometry.current) onGeometry(app, liveGeometry.current);
+    liveGeometry.current = null;
   };
 
   const beginResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLSpanElement>) => {
@@ -1471,11 +1505,14 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   const moveResize = (event: React.PointerEvent<HTMLSpanElement>) => {
     const operation = resizeRef.current;
     if (!operation || operation.pointerId !== event.pointerId) return;
-    onGeometry(app, resizeGeometry(operation, operation.edge, event.clientX - operation.startX, event.clientY - operation.startY, { width: operation.parentWidth, height: operation.parentHeight }, minimumWindowSize(app)));
+    paint(resizeGeometry(operation, operation.edge, event.clientX - operation.startX, event.clientY - operation.startY, { width: operation.parentWidth, height: operation.parentHeight }, minimumWindowSize(app)));
   };
 
   const endResize = (event: React.PointerEvent<HTMLSpanElement>) => {
-    if (resizeRef.current?.pointerId === event.pointerId) resizeRef.current = null;
+    if (resizeRef.current?.pointerId !== event.pointerId) return;
+    resizeRef.current = null;
+    if (liveGeometry.current) onGeometry(app, liveGeometry.current);
+    liveGeometry.current = null;
   };
 
   // Points the zoom / minimise at its source. Offsets, not getBoundingClientRect, for the window:
@@ -1525,8 +1562,8 @@ function RowBadges({ virus }: { virus: Virus }) {
 
 function VirusRecord({ virus, formattedText, onOpenLog }: { virus: Virus; formattedText: PortiaContent["formattedText"]; onOpenLog: (id: string) => void }) {
   const classification = [
-    ["danger", "Общий уровень опасности", virus.classification.danger, "danger"], ["spread", "Распространение", virus.classification.spread, "spread"], ["transmission", "Способ распространения", virus.classification.transmission, "transmission"],
-    ["escapeRisk", "Угроза и риск побега", virus.classification.escapeRisk, "escape"], ["mind", "Разум", virus.classification.mind, "mind"], ["appearance", "Вид / внешность", virus.classification.appearance, "appearance"], ["behavior", "Поведение", virus.classification.behavior, "behavior"],
+    ["danger", "Общий уровень опасности", virus.classification.danger, "danger"], ["spread", "Распространение", virus.classification.spread, "spread"], ["escapeRisk", "Угроза и риск побега", virus.classification.escapeRisk, "escape"],
+    ["transmission", "Способ распространения", virus.classification.transmission, "transmission"], ["mind", "Разум", virus.classification.mind, "mind"], ["appearance", "Вид / внешность", virus.classification.appearance, "appearance"], ["behavior", "Поведение", virus.classification.behavior, "behavior"],
   ] as const;
   return <div className="record-body content-fade" key={virus.id}>
     <header className="record-header"><div><span className="record-code">{virus.code}</span><h2>{virus.name}</h2></div><div className="record-status"><span />{virus.status}</div></header>
@@ -1651,8 +1688,11 @@ function FormattedText({ text, document, className = "" }: { text: string; docum
 
 function LoadingMedia({ src, alt, label }: { src: string; alt: string; label: string }) {
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  // A failed URL shows the «ОЖИДАЕТ ЗАГРУЗКИ» placeholder, never a broken image (D-09 #7).
+  if (failed) return <MediaBlock src="" alt={alt} label={label} />;
   return <figure className={`subject-media${loading ? " is-loading" : ""}`}>
-    <img src={src} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" onLoad={() => setLoading(false)} onError={() => setLoading(false)} />
+    <img src={src} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" onLoad={() => setLoading(false)} onError={() => setFailed(true)} />
     {loading && <LoadingState label="Загрузка изображения…" />}
     <figcaption>{label}</figcaption>
   </figure>;

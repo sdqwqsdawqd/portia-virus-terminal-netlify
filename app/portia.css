@@ -21,6 +21,7 @@
   --accent-hue: 180.4;
   --mark-filter: hue-rotate(0deg);
   --assistant-filter: hue-rotate(0deg);
+  --assistant-glow: 0, 188, 166;
   /* --sans is the interface face (IBM Plex Mono, D-05/D-06); --doc keeps long document text in Golos (D-07). */
   --mono: var(--font-plex-mono), "Cascadia Code", Consolas, monospace;
   --sans: var(--font-plex-mono), "Cascadia Code", Consolas, monospace;
@@ -303,7 +304,8 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .factory-reset { padding: 11px 14px; border: 1px solid #79453f; background: rgba(174,64,54,.08); color: #df8a81; font: 700 11px var(--sans); letter-spacing: .05em; cursor: pointer; }
 .factory-reset:hover { background: rgba(174,64,54,.18); }
 #settingsStatus { color: oklch(.609 .029 var(--accent-hue)); font: 11px var(--sans); }
-.content-control-entry { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 18px; border: 1px solid oklch(.383 .033 var(--accent-hue)); background: rgba(var(--desktop-glow), .035); }
+.content-control-entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; padding: 18px; border: 1px solid oklch(.383 .033 var(--accent-hue)); background: rgba(var(--desktop-glow), .035); }
+.content-control-entry > div:first-child { flex: 1 1 260px; min-width: 0; }
 .content-control-entry h2 { margin-bottom: 6px; color: oklch(.87 .017 var(--accent-hue)); font-size: 12px; }
 .content-control-entry p { margin: 0; color: oklch(.609 .029 var(--accent-hue)); font-size: 13px; line-height: 1.5; }
 .content-control-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
@@ -419,8 +421,21 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .portia-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .portia-dialog-actions button { min-height: 40px; }
 @media (min-width: 901px) {
-  .content-editor:has(> .editor-savebar) .floating-text-format { bottom: 76px; }
+  /* Positioned against the editor window, not the viewport, so the save bar at the window's bottom is never covered (D-01). */
+  .content-editor > .floating-text-format { position: absolute; right: 14px; bottom: 72px; max-height: min(390px, calc(100% - 46px - 72px - 14px)); }
+  /* The sticky save bar sits above the scroller's bottom padding, so extra padding would lift it under the panel:
+     the room to scroll the last field above the panel goes before the bar instead. */
+  .editor-window .content-editor:has(> .floating-text-format) { padding-bottom: 0; }
+  .editor-window .content-editor:has(> .floating-text-format) > .editor-savebar { margin-top: 400px; }
+  /* The roster can be dozens of rows, so the list scrolls in its own column (D-04). */
+  .content-editor > .employee-editor-layout { flex: 1 1 0; min-height: 320px; }
+  .virus-editor-layout.employee-editor-layout { align-items: stretch; grid-template-rows: minmax(0, 1fr); }
+  .employee-editor-layout > .editor-record-list { position: static; align-content: start; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+  .employee-editor-layout > .employee-profile-editor { min-height: 0; overflow-y: auto; }
 }
+/* One-line status while the panel is open keeps the bar's height, and so the panel's offset, constant (D-02). */
+.content-editor:has(.floating-text-format) .editor-savebar > p { display: flex; flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+.content-editor:has(.floating-text-format) .editor-savebar > p > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .primary-control, .secondary-control, .danger-control { padding: 11px 14px; border: 1px solid var(--teal-dim); background: var(--teal-soft); color: var(--teal); font: 700 11px var(--sans); letter-spacing: .04em; cursor: pointer; }
 .primary-control:disabled, .secondary-control:disabled, .danger-control:disabled { opacity: .4; cursor: not-allowed; }
 .secondary-control { background: transparent; color: oklch(.812 .02 var(--accent-hue)); }
@@ -520,7 +535,7 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .trash-formatted-text, .formatted-rich-input[data-area="trash"] { font: 14px/1.75 var(--doc); }
 .trash-image-document figcaption, .formatted-rich-input[data-area="caption"] { font: 14px/1.65 var(--doc); }
 .search-recommendations button, .formatted-rich-input[data-area="search"] { font: 11px var(--sans); }
-.assistant-formatted-text, .formatted-rich-input[data-area="assistant"] { font: 700 10px/1.5 var(--assistant-font); }
+.formatted-rich-input[data-area="assistant"] { font: 700 10px/1.5 var(--assistant-font); }
 .formatted-text-field-hint { color: oklch(.525 .033 var(--accent-hue)); font-size: 10px; line-height: 1.4; }
 .formatted-text-field:focus-within .formatted-text-field-head > span { color: var(--teal); }
 .content-editor:has(.floating-text-format) { padding-bottom: 170px; }
@@ -620,6 +635,8 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .boot-screen { position: fixed; z-index: 999; inset: 0; display: grid; place-items: center; background: #020706; opacity: 1; visibility: visible; transition: opacity 220ms ease, visibility 220ms ease; animation: boot-screen-failsafe 220ms ease 2.2s forwards; }
 .boot-screen::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(var(--desktop-glow), .025) 0 1px, transparent 1px 4px); pointer-events: none; }
 .boot-screen.boot-complete { opacity: 0; visibility: hidden; pointer-events: none; }
+/* A repeat load in the same tab session paints the desktop directly (D-06). */
+html[data-boot="seen"] .boot-screen { display: none; }
 .javascript-warning { position: fixed; z-index: 998; left: 12px; right: 12px; bottom: 46px; padding: 12px 14px; border: 1px solid oklch(.405 .039 var(--accent-hue)); background: oklch(.163 .015 var(--accent-hue)); color: oklch(.918 .013 var(--accent-hue)); font: 11px/1.5 var(--sans); text-align: center; }
 .boot-core { position: relative; width: min(430px, calc(100vw - 46px)); display: flex; flex-direction: column; align-items: center; text-align: center; }
 .boot-core > .portia-mark { position: relative; width: 112px; height: 112px; animation: spider-descend 900ms cubic-bezier(.16, 1, .3, 1) both; animation-play-state: paused; }
@@ -682,32 +699,34 @@ html[data-motion="reduce"] .boot-lines p { animation: fade-in 160ms ease-out bot
   pointer-events: none;
   filter: drop-shadow(0 16px 22px rgba(0,0,0,.48));
 }
-.assistant-button { position: relative; z-index: 2; width: 100%; display: block; padding: 0; border: 0; background: transparent; cursor: pointer; pointer-events: auto; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.assistant-button { filter: var(--assistant-filter); position: relative; z-index: 2; width: 100%; display: block; padding: 0; border: 0; background: transparent; cursor: pointer; pointer-events: auto; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 /* Hover is decided by the button box alone, grown a little past the image: the leaning image never moves
    the hit area, so a cursor resting on her edge cannot flip the hover on and off (shaking). */
 .assistant-button::after { content: ""; position: absolute; inset: -6px; }
-.assistant-button img { display: block; width: 100%; height: auto; object-fit: contain; user-select: none; pointer-events: none; filter: var(--assistant-filter) brightness(.7); transform-origin: 50% 100%; transition: transform 220ms var(--ease-out), filter 360ms ease, opacity 360ms ease; }
+.assistant-button img { display: block; width: 100%; height: auto; object-fit: contain; user-select: none; pointer-events: none; filter: brightness(.7); transform-origin: 50% 100%; transition: transform 220ms var(--ease-out), filter 360ms ease, opacity 360ms ease; }
 /* Hover: she perks up and leans toward the cursor (it arrives from the left: she sits in the bottom-right corner). */
-.assistant-button:hover img, .assistant-button:focus-visible img { transform: translate(-2px, -3px) rotate(-4deg) scale(1.03); filter: var(--assistant-filter) brightness(.7) drop-shadow(0 0 8px rgba(var(--desktop-glow), .2)); }
+.assistant-button:hover img, .assistant-button:focus-visible img { transform: translate(-2px, -3px) rotate(-4deg) scale(1.03); filter: brightness(.7) drop-shadow(0 0 8px rgba(var(--assistant-glow), .2)); }
 .assistant-button:active img { transform: translateY(1px) scale(.97); }
 .desktop-assistant.is-offended .assistant-button { cursor: not-allowed; }
 /* Sulking pose (both motion modes): turned away, crouched, grey. Individual properties so animations compose with it. */
-.desktop-assistant.is-offended .assistant-button img { transform: none; translate: 0 4px; rotate: -3deg; scale: -1 .94; filter: var(--assistant-filter) brightness(.7) grayscale(.85) saturate(.4); opacity: .78; }
+.desktop-assistant.is-offended .assistant-button img { transform: none; translate: 0 4px; rotate: -3deg; scale: -1 .94; filter: brightness(.7) grayscale(.85) saturate(.4); opacity: .78; }
 /* Annoyance within a click streak: each level squashes harder and tilts further; at 3 she darkens. */
 .desktop-assistant[data-mood="1"] { --squish-x: 1.06; --squish-y: .9; --squish-tilt: 0deg; }
 .desktop-assistant[data-mood="2"] { --squish-x: 1.09; --squish-y: .86; --squish-tilt: -5deg; }
 .desktop-assistant[data-mood="3"] { --squish-x: 1.12; --squish-y: .82; --squish-tilt: 7deg; }
-.desktop-assistant[data-mood="3"]:not(.is-offended) .assistant-button img { filter: var(--assistant-filter) brightness(.6); }
+.desktop-assistant[data-mood="3"]:not(.is-offended) .assistant-button img { filter: brightness(.6); }
 .desktop-assistant.is-offended .assistant-bubble { border-color: #a76d34; }
 .desktop-assistant.is-offended .assistant-bubble::after { border-color: #a76d34; }
 .desktop-assistant.is-offended .assistant-bubble span { color: #efb84e; }
 .assistant-label { position: relative; z-index: 2; align-self: center; white-space: nowrap; margin-top: -5px; padding: 4px 6px; border: 1px solid rgba(var(--desktop-glow), .17); border-radius: 3px; background: oklch(.163 .014 var(--accent-hue) / .86); color: oklch(.665 .035 var(--accent-hue) / .7); font: 500 11px var(--sans); letter-spacing: .04em; white-space: nowrap; }
 .assistant-bubble { position: absolute; z-index: 3; right: calc(100% + 4px); bottom: 56%; width: min(220px, calc(100vw - 124px)); padding: 10px; border: 1px solid rgba(var(--desktop-glow), .42); border-radius: 6px 6px 2px 6px; background: oklch(.179 .019 var(--accent-hue) / .98); box-shadow: 0 10px 29px rgba(0,0,0,.4); filter: brightness(.7); animation: assistant-bubble-in 160ms ease-out both; pointer-events: auto; }
 .assistant-bubble::after { content: ""; position: absolute; right: -8px; bottom: 8px; width: 14px; height: 14px; transform: rotate(45deg); border-top: 1px solid rgba(var(--desktop-glow), .42); border-right: 1px solid rgba(var(--desktop-glow), .42); background: oklch(.179 .019 var(--accent-hue)); }
-.assistant-bubble > span { display: block; margin-bottom: 6px; color: var(--teal); font: 500 11px var(--sans); letter-spacing: .09em; }
+.assistant-bubble > span:not(.assistant-formatted-text) { display: block; margin-bottom: 6px; color: var(--teal); font: 500 11px var(--sans); letter-spacing: .09em; }
 .assistant-bubble p { margin: 0; color: oklch(.895 .016 var(--accent-hue)); font-size: 9px; line-height: 1.5; }
-.assistant-formatted-text { display: block; padding: 7px 8px; border: 1px solid oklch(.756 .071 var(--accent-hue) / .24); border-radius: 4px; background: rgba(0,0,0,.34); color: oklch(.97 .012 var(--accent-hue)); letter-spacing: .012em; text-shadow: 0 1px 2px #000; }
-.assistant-formatted-text > span { color: oklch(.97 .012 var(--accent-hue)) !important; font-family: var(--assistant-font) !important; font-size: 10px !important; font-weight: 700 !important; }
+.assistant-formatted-text { display: block; padding: 7px 8px; border: 1px solid oklch(.756 .071 var(--accent-hue) / .24); border-radius: 4px; background: rgba(0,0,0,.34); color: oklch(.97 .012 var(--accent-hue)); text-shadow: 0 1px 2px #000; }
+.assistant-formatted-text > span { color: oklch(.97 .012 var(--accent-hue)) !important; }
+/* Every Vivian phrase uses the tips' type (D-05): an editor run's own size or weight never changes one phrase kind. */
+.assistant-bubble > .assistant-formatted-text, .assistant-bubble > .assistant-formatted-text * { font-family: var(--assistant-font) !important; font-size: 10px !important; font-weight: 700 !important; letter-spacing: .099em; line-height: 1.4; }
 .assistant-formatted-text .embedded-rich-media { max-width: 180px; max-height: 120px; margin: 7px auto 1px; border-color: oklch(.756 .071 var(--accent-hue) / .24); background: rgba(0,0,0,.34); }
 .desktop-assistant.is-offended .assistant-formatted-text > span { color: #ffd98c !important; }
 @keyframes assistant-bubble-in { from { opacity: 0; transform: translate(8px, 8px) scale(.96); } to { opacity: 1; transform: none; } }
@@ -754,8 +773,13 @@ html[data-motion="reduce"] .boot-lines p { animation: fade-in 160ms ease-out bot
 .record-header h2 { margin: 5px 0 0; color: oklch(.2 .013 var(--accent-hue)); font: 700 clamp(26px, 3vw, 40px)/1 var(--display); letter-spacing: -.02em; }
 .record-status { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #beb8aa; color: oklch(.418 .014 var(--accent-hue)); font: 11px var(--mono); letter-spacing: .06em; }
 .record-status span { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
-.record-document { width: min(1060px, 100%); margin: 0 auto; padding: clamp(22px, 4vw, 50px); }
+.record-document { width: min(1060px, 100%); margin: 0 auto; padding: clamp(22px, 4vw, 50px); container-type: inline-size; }
 .record-hero { display: grid; grid-template-columns: minmax(240px, .86fr) minmax(320px, 1.14fr); gap: clamp(22px, 4vw, 50px); align-items: start; }
+/* Stack by the dossier's width, not the viewport: below 840px the side classification column drops under 3 x 150px. */
+@container (max-width: 840px) {
+  .record-hero { grid-template-columns: 1fr; }
+  .record-hero > .subject-media { max-width: 540px; width: 100%; justify-self: center; }
+}
 
 .subject-media { position: relative; min-width: 0; margin: 0; border: 1px solid #bdb7a9; background: #ddd9ce; overflow: hidden; }
 .subject-media > img:not([aria-hidden="true"]) { display: block; width: 100%; height: auto; max-height: min(64vh, 620px); object-fit: contain; background: oklch(.218 .018 var(--accent-hue)); }
@@ -771,11 +795,13 @@ html[data-motion="reduce"] .boot-lines p { animation: fade-in 160ms ease-out bot
 .section-kicker { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; color: oklch(.36 .017 var(--accent-hue)); font: 700 11px var(--sans); letter-spacing: .1em; }
 .section-kicker::after { content: ""; flex: 1; height: 1px; background: #c9c4b7; }
 .section-kicker span { display: grid; place-items: center; width: 26px; height: 22px; background: var(--ink); color: var(--paper); }
-.classification-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #c8c2b5; border-left: 1px solid #c8c2b5; }
+.classification-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #c8c2b5; border-left: 1px solid #c8c2b5; }
 .class-cell { min-width: 0; min-height: 74px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; padding: 11px 12px; border-right: 1px solid #c8c2b5; border-bottom: 1px solid #c8c2b5; }
-.class-cell span { color: oklch(.542 .014 var(--accent-hue)); font: 11px var(--sans); line-height: 1.3; text-transform: uppercase; }
-.class-cell strong { color: oklch(.237 .015 var(--accent-hue)); font: 700 15px var(--sans); overflow-wrap: anywhere; }
-.class-badge { width: 18px; height: 18px; margin-right: 6px; vertical-align: -3px; }
+/* Every label reserves two lines and sits on their bottom, so values line up across a row even when one label wraps. */
+.class-cell span { min-height: 2.6em; display: flex; align-items: flex-end; color: oklch(.542 .014 var(--accent-hue)); font: 11px var(--sans); line-height: 1.3; text-transform: uppercase; }
+/* Badge and name share one centre line (D-08). */
+.class-cell strong { display: flex; align-items: center; gap: 6px; color: oklch(.237 .015 var(--accent-hue)); font: 700 15px var(--sans); overflow-wrap: anywhere; }
+.class-badge { flex: none; width: 18px; height: 18px; }
 .class-cell small { color: oklch(.577 .012 var(--accent-hue)); font: 11px var(--mono); letter-spacing: .06em; }
 .class-cell.level-1 strong, .class-cell.level-1 small { color: #167a4d; }
 .class-cell.level-2 strong, .class-cell.level-2 small { color: #a06f00; }
@@ -912,8 +938,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .archive-window { left: 104px; }
   .global-search-window { width: min(720px, calc(100% - 126px)); }
   .archive-grid { grid-template-columns: minmax(240px, 34%) minmax(0, 1fr); }
-  .record-hero { grid-template-columns: 1fr; }
-  .record-hero > .subject-media { max-width: 540px; width: 100%; justify-self: center; }
   .media-empty { aspect-ratio: 16 / 10; min-height: 240px; }
   .metric-grid { grid-template-columns: 1fr; }
   .metric-grid > div { border-right: 0; border-bottom: 1px solid #c4beb0; }
@@ -935,7 +959,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   html[data-icon-size="compact"] .desktop-icon-symbol { width: 42px; height: 42px; }
   html[data-icon-size="large"] .desktop-icon-symbol { width: 60px; height: 60px; }
   .mobile-app-open .desktop-icons { display: none; }
-  .app-window, .archive-window, .global-search-window { position: relative; inset: auto; top: auto; left: auto; right: auto; bottom: auto; width: 100% !important; height: auto !important; min-height: calc(100svh - 98px); transform: none !important; border-radius: 7px; }
+  .app-window, .archive-window, .global-search-window { position: relative; inset: auto !important; width: 100% !important; height: auto !important; min-height: calc(100svh - 98px); transform: none !important; border-radius: 7px; }
   .mobile-app-open .app-window:not(.is-active) { display: none !important; }
   .window-titlebar { grid-template-columns: 1fr auto; height: 42px; padding: 0 11px; }
   .window-titlebar { cursor: default; touch-action: auto; }
@@ -959,7 +983,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .record-hero > .subject-media { max-width: 100%; }
   .subject-media > img:not([aria-hidden="true"]) { max-height: 72svh; }
   .media-empty { aspect-ratio: 16 / 11; min-height: 220px; }
-  .classification-grid { grid-template-columns: 1fr 1fr; }
   .class-cell { min-height: 70px; padding: 10px; }
   .class-cell strong { font-size: 13px; }
   .lead-copy, .formatted-rich-input[data-area="lead"] { font-size: 15px; line-height: 1.7; }
@@ -1025,7 +1048,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .employee-editor-save { flex-wrap: wrap; }
   .editor-upload-control input[type="file"] { flex-basis: 200px; min-width: 0; }
   /* Header and ГОТОВО stay pinned; only the toolbar between them scrolls. */
-  .floating-text-format { right: 8px; bottom: 44px; width: min(620px, calc(100% - 16px)); max-height: min(38svh, 300px); display: flex; flex-direction: column; overflow: hidden; }
+  /* bottom: 44px taskbar + 56px save bar, which stays visible under the panel (D-01). */
+  .floating-text-format { right: 8px; bottom: 108px; width: min(620px, calc(100% - 16px)); max-height: min(34svh, 270px); display: flex; flex-direction: column; overflow: hidden; }
   .floating-text-format > header, .floating-text-format > footer { flex: none; }
   /* Sticky cannot hold here: the page scrolls and .app-window clips, so the bar is fixed above the 44px taskbar. */
   .editor-savebar { position: fixed; left: 0; right: 0; bottom: 44px; margin: 0; padding: 8px 12px; min-height: 56px; }
@@ -1033,9 +1057,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .editor-savebar > p > span { display: block; }
   .editor-savebar-actions button { min-height: 40px; }
   .content-editor:has(> .editor-savebar) { padding-bottom: 110px; }
-  .content-editor:has(.floating-text-format) .editor-savebar { display: none; }
   /* Lets the last field scroll above the format panel, which sits where the keyboard was. */
-  .content-editor:has(.floating-text-format) { padding-bottom: calc(min(38svh, 300px) + 90px); }
+  .content-editor:has(.floating-text-format) { padding-bottom: calc(min(34svh, 270px) + 146px); }
   .rich-text-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .access-editor-add { grid-template-columns: 1fr; }
   .content-control-entry { align-items: stretch; flex-direction: column; }
@@ -1058,7 +1081,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .desktop-assistant { right: 8px; bottom: 40px; width: 58px; }
   .assistant-label { display: none; }
   .assistant-bubble { right: calc(100% + 4px); bottom: 68%; width: min(179px, calc(100vw - 78px)); padding: 8px; }
-  .assistant-bubble p, .assistant-formatted-text { font-size: 9px; }
+  .assistant-bubble p { font-size: 9px; }
   .taskbar { position: fixed; left: 0; right: 0; }
   .taskbar-apps { flex: 1; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
   .taskbar-apps::-webkit-scrollbar { display: none; }
@@ -1073,8 +1096,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .assistant-bubble { right: calc(100% + 4px); bottom: 78%; width: min(230px, calc(100vw - 92px)); box-sizing: border-box; padding: 9px; }
   .embedded-rich-media { max-width: 100%; max-height: min(320px, 42svh); }
   .assistant-formatted-text .embedded-rich-media { max-width: 170px; max-height: 110px; }
-  .assistant-formatted-text { max-height: min(36svh, 180px); overflow-y: auto; padding: 8px 9px; font-size: 10px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .assistant-formatted-text > span { font-size: 10px !important; line-height: inherit; }
+  .assistant-formatted-text { max-height: min(36svh, 180px); overflow-y: auto; padding: 8px 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .formatted-text-field-head { align-items: flex-start; flex-direction: column; }
   .global-format-launch { top: auto; right: 8px; bottom: 54px; transform: none; }
   .content-editor:has(> .editor-savebar) .global-format-launch { bottom: 112px; }
@@ -1109,6 +1131,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .window-identity span { font-size: 9px; }
   .classification-grid { grid-template-columns: 1fr; }
   .class-cell.transmission { grid-column: auto; }
+  .class-cell span { min-height: 0; }
   .class-cell { min-height: 62px; }
   .media-empty { min-height: 195px; }
   .taskbar-app { max-width: 42px; overflow: hidden; }
@@ -1139,8 +1162,12 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
 
 /* Motion switch: html[data-motion] is "reduce" or "full", resolved from «Анимации» (lib/accent-boot.ts).
    «Выключены» is a soft mode: keyframe motion stops, but the short authored transitions (colour, opacity, small hover
-   lifts, all under 400ms) stay so the interface does not snap, and the wallpaper keeps its slow ambient motion. */
-html[data-motion="reduce"], html[data-motion="reduce"] :not(.desktop-wallpaper, .desktop-wallpaper *), html[data-motion="reduce"] :not(.desktop-wallpaper *)::before, html[data-motion="reduce"] :not(.desktop-wallpaper *)::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+   lifts, all under 400ms) stay so the interface does not snap. The wallpaper stands still (rule below). */
+html[data-motion="reduce"], html[data-motion="reduce"] *, html[data-motion="reduce"] *::before, html[data-motion="reduce"] *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+/* «Анимации: Выключены» shows every wallpaper still and fully drawn (D-07). */
+html[data-motion="reduce"] :is(.desktop-wallpaper, .desktop-wallpaper *) { animation: none !important; }
+html[data-motion="reduce"] .wallpaper-web path { stroke-dashoffset: 0; }
+html[data-motion="reduce"] .wallpaper-web-dew { opacity: 1; }
 /* Safety net if the head script never ran (blocked by an extension or a future CSP): data-motion is missing,
    so the system preference alone decides. Only selectors scoped to html:not([data-motion]) may live here. */
 @media (prefers-reduced-motion: reduce) {
@@ -1155,38 +1182,42 @@ html[data-motion="reduce"], html[data-motion="reduce"] :not(.desktop-wallpaper, 
 .personnel-callsign { margin: 0 0 10px; color: var(--teal); font: 600 18px var(--sans); }
 .record-code { color: oklch(.514 .019 var(--accent-hue)); font: 500 13px var(--mono); }
 
-.desktop-wallpaper { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; color: var(--teal); fill: none; stroke: currentColor; stroke-linecap: round; pointer-events: none; }
-.wallpaper-web path { stroke-width: 1; opacity: .26; stroke-dasharray: 1; stroke-dashoffset: 1; animation: web-draw 1.8s cubic-bezier(.16, 1, .3, 1) forwards; }
-.wallpaper-web .wallpaper-web-ring { opacity: .17; }
-/* Once spun (about 3.4s), the web lives without a seam: every looping animation starts from the drawn pose,
-   so nothing jumps when the spinning ends. It sways round its hub (top right) as if in a draught, glints run
-   out along the spokes and round the spiral, and dew twinkles on the crossings. Only with motion on. */
-.wallpaper-web-pulses { display: none; }
-.wallpaper-web-dew { fill: currentColor; stroke: none; opacity: 0; animation: web-dew-in 1.6s ease-out 3s forwards; }
+.desktop-wallpaper-frame { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.wallpaper-layer { position: absolute; inset: 0; overflow: hidden; container-type: size; }
+/* Switching wallpapers crossfades (review #11); the wallpaper itself still stands still under «Выключены». */
+.wallpaper-layer.is-entering { animation: fade-in 500ms ease-out both; }
+.wallpaper-layer.is-leaving { animation: fade-out 500ms ease-in forwards; }
+html[data-motion="reduce"] .wallpaper-layer.is-entering { animation: fade-in 300ms ease-out both !important; }
+html[data-motion="reduce"] .wallpaper-layer.is-leaving { animation: fade-out 300ms ease-in forwards !important; }
+.desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--teal); fill: none; stroke: currentColor; stroke-linecap: round; }
+/* The web is spun at an even pace, without cap dots or an elastic ease (D-07). */
+.wallpaper-web path { stroke-width: 1; opacity: .26; stroke-linecap: butt; stroke-dasharray: 1; stroke-dashoffset: 1; animation: web-draw .9s linear forwards; }
+.wallpaper-web .wallpaper-web-ring { opacity: .17; animation: web-draw 1.2s ease-in-out forwards; }
+/* Once spun (about 2.5s), the web lives without a seam: every looping animation starts from the drawn pose,
+   so nothing jumps when the spinning ends. It sways round its hub (top right) as if in a draught and dew
+   twinkles on the crossings; nothing travels along the threads. Only with motion on. */
+.wallpaper-web-dew { fill: currentColor; stroke: none; opacity: 0; animation: web-dew-in 1.6s ease-out 2.2s forwards; }
 .wallpaper-web-dew circle { opacity: .32; }
-html[data-motion] .wallpaper-web { transform-box: view-box; transform-origin: 1180px 170px; animation: web-sway 24s ease-in-out 3.4s infinite; }
-html[data-motion] .wallpaper-web-pulses { display: inline; }
-html[data-motion] .wallpaper-web-dew circle { animation: web-dew 7s ease-in-out infinite; }
-.wallpaper-web .wallpaper-web-pulses path { stroke-width: 1.6; opacity: .5; stroke-dasharray: .05 1; stroke-dashoffset: .05; animation: web-pulse 9s linear infinite; }
-.wallpaper-web .wallpaper-web-pulses .wallpaper-web-orbit { stroke-width: 1.4; opacity: .4; stroke-dasharray: .03 1; stroke-dashoffset: .03; animation: web-orbit 14s linear infinite; }
-@keyframes web-sway { 0%, 100% { rotate: 0deg; scale: 1; } 30% { rotate: -.5deg; } 70% { rotate: .6deg; scale: 1.005; } }
-@keyframes web-pulse { 0% { stroke-dashoffset: .05; } 38%, 100% { stroke-dashoffset: -1; } }
-@keyframes web-orbit { 0% { stroke-dashoffset: .03; } 60%, 100% { stroke-dashoffset: -1; } }
+html[data-motion="full"] .wallpaper-web { transform-box: view-box; transform-origin: 1180px 170px; animation: web-sway 24s ease-in-out 2.5s infinite; }
+html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-in-out infinite; }
+@keyframes web-sway { 0%, 100% { rotate: 0deg; } 30% { rotate: -.5deg; } 70% { rotate: .6deg; } }
 @keyframes web-dew { 0%, 100% { opacity: .32; } 50% { opacity: .75; } }
 @keyframes web-draw { to { stroke-dashoffset: 0; } }
 @keyframes web-dew-in { to { opacity: 1; } }
-.wallpaper-helix { animation: helix-drift 22s ease-in-out infinite alternate; }
+/* One HTML-level layer translated by exactly one loop, so the compositor runs it and the seam is invisible (D-07). */
+.desktop-wallpaper-grid { bottom: auto; height: calc(100% + 720 * max(100cqw / 1440, 100cqh / 900)); will-change: translate; }
+html[data-motion="full"] .desktop-wallpaper-grid { animation: helix-scroll 90s linear infinite; }
+@keyframes helix-scroll { to { translate: 0 calc(-720 * max(100cqw / 1440, 100cqh / 900)); } }
 .wallpaper-helix path { stroke-width: 1.5; }
 .wallpaper-helix .wallpaper-rungs { stroke-width: 1; opacity: .7; }
-@keyframes helix-drift { from { transform: translateY(0); } to { transform: translateY(-80px); } }
-/* «Гель»: soft lane columns fading downward, wells, a labelled ladder; the bands glow, fade at their ends
-   and drift down slowly, like a gel still running. */
+/* «Гель»: soft lane columns fading downward, wells, a labelled ladder; still, even bands that fade at their
+   ends, and only their glow breathes slowly (motion on). */
 .wallpaper-gel-lane { fill: currentColor; fill-opacity: .035; stroke: currentColor; stroke-opacity: .07; }
 .wallpaper-gel-well { stroke-width: 1.2; opacity: .32; }
 .wallpaper-gel-bands path { stroke-linecap: butt; }
 .wallpaper-gel-labels { fill: currentColor; stroke: none; opacity: .34; font: 500 11px var(--mono); text-anchor: end; letter-spacing: .04em; }
-html[data-motion] .wallpaper-gel-bands { animation: gel-run 28s ease-in-out infinite alternate; }
-@keyframes gel-run { to { translate: 0 26px; } }
+html[data-motion="full"] .wallpaper-gel-glow { animation: gel-glow 12s ease-in-out infinite alternate; }
+@keyframes gel-glow { from { opacity: .55; } to { opacity: 1; } }
 /* «Клетки»: tissue through an eyepiece, sharp at the centre and out of focus at the rim; infected cells are
    brighter, and their virions drift and tumble round their own centres (fill-box). */
 .wallpaper-cells-wall { stroke-width: 1.2; opacity: .2; }
@@ -1196,15 +1227,14 @@ html[data-motion] .wallpaper-gel-bands { animation: gel-run 28s ease-in-out infi
 .wallpaper-cells-edge { stroke-width: 1.4; opacity: .22; }
 .wallpaper-cells-particles { stroke-width: 1.3; opacity: .55; }
 .wallpaper-particle { transform-box: fill-box; transform-origin: center; }
-html[data-motion] .wallpaper-cells-particles { animation: cells-drift 36s ease-in-out infinite alternate; }
-html[data-motion] .wallpaper-particle { animation: particle-tumble 20s linear infinite; }
+html[data-motion="full"] .wallpaper-cells-particles { animation: cells-drift 36s ease-in-out infinite alternate; }
+html[data-motion="full"] .wallpaper-particle { animation: particle-tumble 20s linear infinite; }
 @keyframes cells-drift { 50% { translate: 8px -6px; } to { translate: -5px 8px; } }
 @keyframes particle-tumble { to { rotate: 360deg; } }
 
-/* The spider lowers itself on a silk thread while the terminal boots. */
-.boot-thread { position: absolute; left: 50%; bottom: calc(100% - 46px); width: 1px; height: 50vh; background: linear-gradient(transparent, var(--teal)); transform-origin: top; animation: thread-spin 900ms cubic-bezier(.16, 1, .3, 1) both; animation-play-state: paused; }
+/* The spider lowers itself on a silk thread while the terminal boots: one animation for thread and spider, so the spider can never lead its web (D-06). */
+.boot-thread { position: absolute; left: 50%; bottom: calc(100% - 46px); width: 1px; height: 50vh; margin-left: -.5px; background: linear-gradient(transparent, var(--teal)); animation: spider-descend 900ms cubic-bezier(.16, 1, .3, 1) both; animation-play-state: paused; }
 @keyframes spider-descend { from { opacity: 0; transform: translateY(-46vh); } 70% { opacity: 1; } to { opacity: 1; transform: translateY(0); } }
-@keyframes thread-spin { from { transform: translateX(-50%) scaleY(0); } to { transform: translateX(-50%) scaleY(1); } }
 /* An exiting window takes no input; its animation runs only when motion is welcome. */
 .app-window.is-closing, .app-window.is-minimizing { pointer-events: none; }
 /* Loading indicator: appears only after 150ms, so data that is already here never flashes it.

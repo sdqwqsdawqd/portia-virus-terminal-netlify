@@ -19,6 +19,12 @@ type EditableFields = "knowledgeRating" | "biography" | "photoUrl";
 export type RosterEmployee = Omit<PortiaEmployee, EditableFields>;
 export type EmployeeProfile = Pick<PortiaEmployee, EditableFields>;
 
+/** Whether an /api/employees answer may replace the roster on screen and in the cache. */
+export function acceptsRoster(payload: { employees?: unknown; degraded?: unknown }): payload is { employees: PortiaEmployee[]; syncedAt?: string | null; degraded?: boolean } {
+  // An empty roster comes only from a complete answer: a failed or partial sync must not wipe the list on every device (D-09 #8).
+  return Array.isArray(payload.employees) && (payload.employees.length > 0 || payload.degraded === false);
+}
+
 // The roster comes live from Google Sheets + Roblox (the CDN caches the API response).
 // Editor-written fields live in Supabase (portia_employee_profiles).
 type ProfileRow = { employee_id: string; nickname: string; biography: string; photo_url: string; knowledge_rating: number };

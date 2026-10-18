@@ -1,4 +1,8 @@
+"use client";
+
 // Desktop wallpapers drawn as SVG in currentColor, so they follow the interface accent.
+
+import { useEffect, useState } from "react";
 
 type Point = [number, number];
 
@@ -53,12 +57,15 @@ function helixColumn(x: number, top: number, height: number, amplitude: number, 
   return { a: strand(0), b: strand(Math.PI), rungs };
 }
 
+// Every period, the 12-unit sample step and the rung spacing divide it, so a shift by it redraws the same picture.
+const HELIX_LOOP = 720;
+
 const helices = [
-  { x: 1040, amplitude: 34, period: 260, opacity: 0.32, delay: "0s" },
-  { x: 1240, amplitude: 22, period: 190, opacity: 0.22, delay: "-6s" },
-  { x: 1380, amplitude: 46, period: 340, opacity: 0.16, delay: "-11s" },
-  { x: 880, amplitude: 18, period: 170, opacity: 0.12, delay: "-3s" },
-].map((column) => ({ ...column, ...helixColumn(column.x, -120, 1200, column.amplitude, column.period) }));
+  { x: 1040, amplitude: 34, period: 240, opacity: 0.32 },
+  { x: 1240, amplitude: 22, period: 180, opacity: 0.22 },
+  { x: 1380, amplitude: 46, period: 360, opacity: 0.16 },
+  { x: 880, amplitude: 18, period: 144, opacity: 0.12 },
+].map((column) => ({ ...column, ...helixColumn(column.x, -120, 1800, column.amplitude, column.period) }));
 
 // Same seeded generator as the approved sketch (02-SKETCHES.html), so the shipped drawing matches the choice.
 function seeded(seed: number) {
@@ -67,8 +74,8 @@ function seeded(seed: number) {
 }
 
 // «Гель»: an electrophoresis gel photographed under UV, anchored top right like the other wallpapers.
-// No hard lane walls: soft lane columns, wells, a marker ladder with sizes, and "smiling" bands that glow
-// and fade at their ends. Replicate lanes repeat the same fragments, as real samples would.
+// No hard lane walls: soft lane columns, wells, a marker ladder with sizes, and still, even "smiling" bands
+// that fade at their ends under a slowly breathing glow. Replicate lanes repeat the same fragments, as real samples would.
 function gelLanes() {
   const lanes = 9, left = 812, pitch = 66, width = 46, top = 74, bottom = 820;
   const ladder = ["10 000", "6000", "4000", "3000", "2000", "1500", "1000", "750", "500", "250"];
@@ -87,7 +94,7 @@ function gelLanes() {
     if (lane === 0) { ladderY.forEach((y, step) => band(x, y, step === 6 ? 5 : 3, step === 6 ? 0.9 : 0.6)); continue; }
     // Lanes 3 and 4 are replicates of lane 2; the rest pick their own fragments.
     const pick = seeded((lane === 3 || lane === 4 ? 2 : lane) * 31 + 3);
-    fragments.filter(() => pick() < 0.38).forEach((y) => band(x, y, 3 + pick() * 7, 0.45 + pick() * 0.55));
+    fragments.filter(() => pick() < 0.38).forEach((y) => band(x, y, 3 + pick() * 3, 0.5 + pick() * 0.4));
   }
   return { columns, width, top, bottom, left, ladder, ladderY, bands };
 }
@@ -155,11 +162,31 @@ function cellField() {
 
 const cells = cellField();
 
+const WALLPAPER_FADE_MS = 500;
+
 export function DesktopWallpaper({ kind }: { kind: string }) {
-  if (kind === "quiet") return null;
-  return <svg className={`desktop-wallpaper desktop-wallpaper-${kind}`} viewBox="0 0 1440 900" preserveAspectRatio="xMaxYMin slice" aria-hidden="true">
+  const [layers, setLayers] = useState({ current: kind, leaving: null as string | null });
+  // Adjusted during render, so no frame is painted without the old layer.
+  if (layers.current !== kind) setLayers({ current: kind, leaving: layers.current });
+  useEffect(() => {
+    if (!layers.leaving) return;
+    // A timeout, not animationend: under «Выключены» the fade can be cut short.
+    const timer = window.setTimeout(() => setLayers((value) => ({ ...value, leaving: null })), WALLPAPER_FADE_MS);
+    return () => window.clearTimeout(timer);
+  }, [layers.leaving]);
+  // One keyed list, so the outgoing drawing keeps its DOM (and its drawn state) while it fades.
+  const shown = [layers.leaving, layers.current].filter((value): value is string => !!value && value !== "quiet");
+  return <div className="desktop-wallpaper-frame" aria-hidden="true">
+    {shown.map((value) => <div key={value} className={`wallpaper-layer${value === layers.leaving ? " is-leaving" : layers.leaving ? " is-entering" : ""}`}>
+      <WallpaperArt kind={value} />
+    </div>)}
+  </div>;
+}
+
+function WallpaperArt({ kind }: { kind: string }) {
+  return <svg className={`desktop-wallpaper desktop-wallpaper-${kind}`} viewBox={`0 0 1440 ${kind === "grid" ? 900 + HELIX_LOOP : 900}`} preserveAspectRatio="xMaxYMin slice">
     {kind === "grid"
-      ? helices.map((column) => <g key={column.x} className="wallpaper-helix" style={{ opacity: column.opacity, animationDelay: column.delay }}>
+      ? helices.map((column) => <g key={column.x} className="wallpaper-helix" style={{ opacity: column.opacity }}>
           <path d={column.a} /><path d={column.b} /><path d={column.rungs} className="wallpaper-rungs" />
         </g>)
       : kind === "gel"
@@ -173,9 +200,10 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
             {gel.columns.map((x) => <rect key={x} x={x} y={gel.top} width={gel.width} height={gel.bottom - gel.top} rx={3} className="wallpaper-gel-lane" />)}
             {gel.columns.map((x) => <rect key={`w${x}`} x={x + 3} y={gel.top - 22} width={gel.width - 6} height={10} rx={2} className="wallpaper-gel-well" />)}
             <g className="wallpaper-gel-bands">
-              {gel.bands.map((band, index) => <path key={`g${index}`} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight * 2.6, opacity: band.opacity * 0.08 }} />)}
+              <g className="wallpaper-gel-glow">
+                {gel.bands.map((band, index) => <path key={`g${index}`} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight * 2.2, opacity: band.opacity * 0.08 }} />)}
+              </g>
               {gel.bands.map((band, index) => <path key={index} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight, opacity: band.opacity * 0.42 }} />)}
-              {/* The size labels run with the bands, so each stays beside its ladder band. */}
               <g className="wallpaper-gel-labels">
                 {gel.ladder.map((label, index) => <text key={label} x={gel.left - 12} y={gel.ladderY[index] + 4}>{label}</text>)}
               </g>
@@ -205,13 +233,8 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
           <circle cx={cells.cx} cy={cells.cy} r={cells.radius} className="wallpaper-cells-edge" />
         </g>
       : <g className="wallpaper-web">
-          {web.spokePaths.map((d, index) => <path key={`s${index}`} d={d} pathLength={1} style={{ animationDelay: `${index * 40}ms` }} />)}
-          {web.rings.map((d, index) => <path key={`r${index}`} d={d} pathLength={1} className="wallpaper-web-ring" style={{ animationDelay: `${600 + index * 70}ms` }} />)}
-          {/* After the web is spun, glints run out along the spokes and round the spiral, each on its own beat. */}
-          <g className="wallpaper-web-pulses">
-            {web.spokePaths.map((d, index) => <path key={`p${index}`} d={d} pathLength={1} style={{ animationDelay: `${round(4 + ((index * 2.3) % 9))}s` }} />)}
-            {[4, 7, 10, 13].map((ring, index) => <path key={`q${ring}`} d={web.rings[ring]} pathLength={1} className="wallpaper-web-orbit" style={{ animationDelay: `${5 + index * 3.1}s` }} />)}
-          </g>
+          {web.spokePaths.map((d, index) => <path key={`s${index}`} d={d} pathLength={1} style={{ animationDelay: `${index * 30}ms` }} />)}
+          {web.rings.map((d, index) => <path key={`r${index}`} d={d} pathLength={1} className="wallpaper-web-ring" style={{ animationDelay: `${450 + index * 60}ms` }} />)}
           <g className="wallpaper-web-dew">
             {web.dew.map((drop, index) => <circle key={index} cx={drop.x} cy={drop.y} r={drop.r} style={{ animationDelay: `${round((index * 1.7) % 7)}s` }} />)}
           </g>

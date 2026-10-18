@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { accentBootScript, accentIds, motionModes } from "./accent-boot.ts";
+import { accentBootScript, accentIds, bootSeenStorageKey, motionModes } from "./accent-boot.ts";
 
 type Rgb = [number, number, number];
 
@@ -198,12 +198,25 @@ test("no relative colour syntax", () => {
   assert.doesNotMatch(css, /oklch\(\s*from\b/);
 });
 
-const runBoot = (getItem: () => string | null, systemReduce = false) => {
-  const dataset: { accent?: string; motion?: string } = {};
+const runBoot = (getItem: () => string | null, systemReduce = false, sessionGetItem: (key: string) => string | null = () => null) => {
+  const dataset: { accent?: string; motion?: string; boot?: string } = {};
   const matchMedia = (query: string) => ({ matches: systemReduce && query === "(prefers-reduced-motion: reduce)" });
-  new Function("localStorage", "document", "matchMedia", accentBootScript)({ getItem }, { documentElement: { dataset } }, matchMedia);
+  new Function("localStorage", "sessionStorage", "document", "matchMedia", accentBootScript)({ getItem }, { getItem: sessionGetItem }, { documentElement: { dataset } }, matchMedia);
   return dataset;
 };
+
+test("the boot animation plays once per browser session", () => {
+  const saved = () => JSON.stringify({ accent: "ice", motion: "off" });
+  const seen = runBoot(saved, false, (key) => key === bootSeenStorageKey ? "1" : null);
+  assert.equal(seen.boot, "seen");
+  assert.equal(runBoot(saved, false, () => null).boot, undefined);
+  const blocked = runBoot(saved, false, () => { throw new Error("storage blocked"); });
+  assert.equal(blocked.boot, undefined);
+  assert.equal(blocked.motion, "reduce");
+  assert.equal(blocked.accent, "ice");
+  assert.ok(/(^|,)\s*html\[data-boot="seen"\] \.boot-screen\s*(,[^{]*)?\{[^}]*display:\s*none/m.test(css), "no html[data-boot=\"seen\"] .boot-screen { display: none }");
+  assert.match(desktopSource, /sessionStorage\.setItem\(bootSeenStorageKey,/);
+});
 
 test("the boot script applies only a whitelisted saved accent", () => {
   const run = (getItem: () => string | null) => runBoot(getItem).accent;
