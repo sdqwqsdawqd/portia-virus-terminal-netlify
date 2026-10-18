@@ -325,6 +325,18 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .info-document h1 { max-width: 780px; margin: 8px 0 30px; color: #f1f5f4; font: 700 clamp(29px, 4vw, 46px)/1.08 var(--display); letter-spacing: -.02em; }
 .formatted-content { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .embedded-rich-media { display: block; width: auto; max-width: min(480px, 100%); height: auto; max-height: 320px; margin: 10px auto; border: 1px solid oklch(.453 .026 var(--accent-hue) / .32); border-radius: 4px; object-fit: contain; background: rgba(0,0,0,.1); }
+/* The «Информация» tree and guide blocks (D-11). */
+.info-subsections { margin: 2px 0 6px 20px; padding-left: 8px; border-left: 1px solid oklch(.383 .033 var(--accent-hue)); }
+.info-index .info-subsections button { padding: 8px 9px; }
+.info-index .info-subsections button span { font-size: 12px; }
+.info-blocks { display: grid; gap: 26px; }
+.info-ledger dt { color: oklch(.603 .029 var(--accent-hue)); font: 11px var(--sans); letter-spacing: .05em; }
+.info-ledger dd { margin: 0; color: oklch(.926 .011 var(--accent-hue)); font-size: 15px; overflow-wrap: anywhere; }
+.info-classification { margin-top: 0; }
+.info-subsection-list, .info-block-list { display: grid; gap: 10px; margin-top: 12px; }
+.info-subsection-list:empty, .info-block-list:empty { display: none; }
+.info-table-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 10px; }
+.info-table-row button { border: 0; background: transparent; color: #b96a63; font: 11px var(--sans); cursor: pointer; padding: 10px 4px; }
 .info-document-copy { display: block; max-width: 82ch; color: oklch(.79 .02 var(--accent-hue)); }
 .info-document-copy p { margin: 0 0 22px; color: oklch(.79 .02 var(--accent-hue)); font-size: 16px; line-height: 1.78; white-space: pre-line; }
 .info-document-copy p:first-child { color: oklch(.897 .013 var(--accent-hue)); font-size: 17px; }
@@ -1061,6 +1073,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .info-index { display: flex; gap: 7px; padding: 13px; overflow-x: auto; border-right: 0; border-bottom: 1px solid oklch(.383 .033 var(--accent-hue)); }
   .info-index > .eyebrow { display: none; }
   .info-index button { flex: 0 0 190px; }
+  .info-index > div, .info-subsections { display: flex; gap: 7px; margin: 0; padding: 0; border: 0; }
+  .info-index > div { flex: 0 0 auto; }
   .info-document { padding: 27px 17px 45px; }
   .info-document h1 { font-size: 29px; }
   .info-document-copy, .info-document-copy p, .formatted-rich-input[data-area="info"] { font-size: 15px; }
@@ -1110,6 +1124,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .content-control-actions { width: 100%; }
   .content-control-actions button, .content-control-actions a { flex: 1 1 180px; }
   .info-ledger > div { grid-template-columns: 1fr; gap: 7px; padding: 14px; }
+  .info-table-row { grid-template-columns: 1fr; align-items: stretch; }
   .info-app footer { flex-direction: column; gap: 6px; }
   .color-options, .setting-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-footer { align-items: flex-start; flex-direction: column; }

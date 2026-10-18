@@ -1056,7 +1056,16 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const query = escapeSearch(globalQuery.trim());
     const items: Array<{ id: string; type: "virus" | "info" | "broadcast" | "file"; title: string; meta: string; body: string }> = [
       ...content.viruses.map((virus) => ({ id: virus.id, type: "virus" as const, title: virus.name, meta: virus.code, body: `${virus.status} ${virus.external} ${virus.physiology} ${Object.values(virus.classification).join(" ")} ${virus.mutations.map((mutation) => `${mutation.name} ${mutation.description}`).join(" ")}` })),
-      ...content.infoSections.map((section) => ({ id: section.id, type: "info" as const, title: section.title, meta: "ИНФОРМАЦИЯ", body: section.body })),
+      ...content.infoSections.flatMap((section) => [
+        { id: section.id, type: "info" as const, title: section.title, meta: "ИНФОРМАЦИЯ", body: section.body },
+        ...section.subsections.map((sub) => ({
+          id: sub.id,
+          type: "info" as const,
+          title: sub.title,
+          meta: `ИНФОРМАЦИЯ · ${section.title}`,
+          body: sub.blocks.map((block) => block.type === "text" ? block.text : block.type === "table" ? block.rows.map((row) => `${row.key} ${row.value}`).join(" ") : "").join(" "),
+        })),
+      ]),
       ...content.broadcasts.filter((item) => item.published).map((item) => ({ id: item.id, type: "broadcast" as const, title: item.title, meta: broadcastType(item.type), body: item.body })),
       ...content.recycleFiles.map((file) => ({ id: file.id, type: "file" as const, title: file.name, meta: recycleFileType(file.kind), body: recycleFileBody(file, [...content.viruses, ...recycledViruses]) })),
       ...recycledViruses.map((virus) => ({ id: `virus:${virus.id}`, type: "file" as const, title: virus.name, meta: "ВИРУС В КОРЗИНЕ", body: `${virus.code} ${virus.status} ${virus.external} ${virus.physiology}` })),
