@@ -1,38 +1,38 @@
 ---
 gsd_state_version: "1.0"
-current_phase: "03.2"
-current_phase_name: sotrudniki-i-svodka
-status: executing
-stopped_at: Completed 03.2-08-PLAN.md
-last_updated: "2026-10-18T12:59:15.006Z"
+current_phase: "03.1"
+current_phase_name: Стабилизация
+status: planning
+stopped_at: Phase PORTIA-03.2 complete, ready to plan Phase 03.1
+last_updated: "2026-10-18T13:23:57.315Z"
 last_activity: 2026-10-18
-last_activity_desc: Phase PORTIA-03.2 execution resumed (wave continue)
-state_head: d229424965bcd539efd59f54905f5fb2879a44e4
+last_activity_desc: Phase PORTIA-03.2 complete, transitioned to Phase 03.1
+state_head: f718ceffcf51faee5435759ce4df064f7cfe4a6a
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 32
   completed_plans: 32
-  percent: 38
+  percent: 57
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-14)
+See: .planning/PROJECT.md (updated 2026-10-18)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-03.2 — Сотрудники и Сводка (INSERTED)
+**Current focus:** Phase 03.1 — Стабилизация (INSERTED)
 
 ## Current Position
 
-Phase: PORTIA-03.2 (sotrudniki-i-svodka) — READY TO EXECUTE
-Plan: 6 of 6
-Status: Executing Phase PORTIA-03.2
-Last activity: 2026-10-18 — Phase PORTIA-03.2 execution resumed (wave continue)
+Phase: 03.1 — Стабилизация
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-18 — Phase PORTIA-03.2 complete, transitioned to Phase 03.1
 
-Progress: [████░░░░░░] 38%
+Progress: [██████░░░░] 57%
 
 ## Accumulated Context
 
@@ -73,6 +73,8 @@ None — незакоммиченная работа закоммичена в P
 - ⚠️ [Phase 1] `.assistant-bubble > span` перекрывает корень текста помощника (межбуквенный интервал/интерлиньяж пузыря чуть отличаются от поля редактора) — не исправлено, см. 01-04-SUMMARY.
 - ⚠️ [Phase 1] Пресеты размера панели оформления (13/17/22/30) не совпадают с базовыми размерами большинства областей — фаза 5 (TEXT-01).
 - ⚠️ [Project] Проект лежит только во временной папке сессии Claude — перенести в постоянную папку.
+- ⚠️ [Phase 03.2] WR-01: опрос контента раз в 10 с подменяет content одинаковой копией и сбрасывает историю отмены в чистом редакторе (`components/portia-desktop.tsx` ~358-366) — см. 03.2-REVIEW.
+- ⚠️ [Phase 03.2] WR-02/03/04 сохранения сотрудников: устаревший кэш может очистить оценки, правки во время сохранения теряются, все шесть оценок пишутся каждый раз — см. 03.2-REVIEW.
 
 ### Roadmap Evolution
 
@@ -82,8 +84,8 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-18T12:59:14.786Z
-Stopped at: Completed 03.2-08-PLAN.md
+Last session: 2026-10-18
+Stopped at: Phase 03.2 complete, ready to execute Phase 03.1 (6 plans already written)
 Resume file: None
 
 ## Performance Metrics
