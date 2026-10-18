@@ -53,7 +53,7 @@ type FormatTarget = {
 type EditorPreviewSurface = "light" | "dark";
 // Site area whose font the field mirrors; paired in the shared font block in app/portia.css.
 type DisplayArea = "lead" | "metric" | "mutation" | "scientist" | "info" | "broadcast" | "trash" | "caption" | "search" | "assistant";
-type ImagePlacement = "dossier" | "mutation" | "recycle";
+type ImagePlacement = "dossier" | "mutation" | "recycle" | "guide";
 
 const infoBlockHeads = {
   text: { label: "текст", title: "ТЕКСТ" },
@@ -1057,9 +1057,10 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                     <div className="info-block-list">
                       {subsection.blocks.map((block, blockIndex) => (
                         <div className="nested-editor-card" data-sort-index={blockIndex} key={block.id}>
-                          <div className="nested-editor-head"><OrderDragHandle index={blockIndex} label={infoBlockHeads[block.type].label} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) moveArrayItem(target.blocks, from, to); })} /><strong>{infoBlockHeads[block.type].title}</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.blocks = target.blocks.filter((entry) => entry.id !== block.id); })}>Удалить</button></div></div>
+                          <div className="nested-editor-head"><OrderDragHandle index={blockIndex} label={infoBlockHeads[block.type].label} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) moveArrayItem(target.blocks, from, to); })} /><strong>{infoBlockHeads[block.type].title}</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.blocks = target.blocks.filter((entry) => entry.id !== block.id); })} disabled={block.type === "photo" && uploadState === "uploading"}>Удалить</button></div></div>
                           {block.type === "text" && <Field label="Текст" wide><textarea maxLength={20000} value={block.text} onChange={(event) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "text") item.text = event.target.value; }); })} /></Field>}
                           {block.type === "video" && <YoutubeField videoId={block.videoId} onChange={(videoId) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "video") item.videoId = videoId; }); })} />}
+                          {block.type === "photo" && <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="На странице: до 820 px в ширину" uploadState={uploadState} onChange={(value) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = value; }); })} onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = url; }); }))} />}
                           {block.type === "table" && (
                             <>
                               {block.rows.map((row, rowIndex) => (
@@ -1078,6 +1079,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                     <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "text", text: "" }); })}>+ ТЕКСТ</button>
                     <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "table", rows: [{ key: "", value: "" }] }); })}>+ ТАБЛИЦА</button>
                     <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "video", videoId: "" }); })}>+ ВИДЕО</button>
+                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "photo", url: "" }); })}>+ ФОТО</button>
                   </div>
                 ))}
               </div>

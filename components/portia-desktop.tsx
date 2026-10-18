@@ -1243,7 +1243,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                     : block.type === "video" && block.videoId
                       // nocookie embed, id validated by normalizeInfoSections (D-09); default referrer policy, YouTube refuses embeds without a Referer.
                       ? <figure key={block.id} className="info-block-video"><iframe title={`Видео YouTube: ${selectedSubsection.title}`} loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" src={`https://www.youtube-nocookie.com/embed/${block.videoId}`} /><figcaption><a href={`https://www.youtube.com/watch?v=${block.videoId}`} target="_blank" rel="noopener noreferrer">Открыть на YouTube ↗</a></figcaption></figure>
-                      : null)}</div></div>
+                      : block.type === "photo" && block.url
+                        ? <figure key={block.id} className="info-block-photo"><img src={block.url} alt={`Иллюстрация: ${selectedSubsection.title}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" /></figure>
+                        : null)}</div></div>
                 : <div className="content-fade" key={selectedInfo.id}><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></div>
               ) : <div className="editor-empty">Разделов пока нет.</div>}</article>
             </div>}
