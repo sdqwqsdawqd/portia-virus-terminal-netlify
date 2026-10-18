@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
+import { classificationOptions, portiaTextKey, type Broadcast, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
 import { acceptsRoster, employeeRatings, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
@@ -10,7 +10,7 @@ import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
 import { normalizeBroadcasts } from "@/lib/portia-content-normalize";
-import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, questState, type BroadcastTab } from "@/lib/broadcasts";
+import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -127,6 +127,7 @@ const resizeEdges: ResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 const escapeSearch = (value: string) => value.toLocaleLowerCase("ru").replace(/ё/g, "е");
 const roman = (level: number) => ({ 1: "I", 2: "II", 3: "III", 4: "IV" })[level] ?? String(level);
 const broadcastReadStorageKey = "portia-broadcasts-read-signature-v1";
+const questSeenStorageKey = "portia-quests-seen-v1";
 const contentCacheStorageKey = "portia-content-last-success-v1";
 const employeesCacheStorageKey = "portia-employees-last-success-v1";
 // v2: the icon grid step grew with the new icon wells, so v1 positions would overlap.
@@ -310,6 +311,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [assistantSquish, setAssistantSquish] = useState(0);
   const [assistantRecovering, setAssistantRecovering] = useState(false);
   const [broadcastUnread, setBroadcastUnread] = useState(false);
+  // The quest popup shows once per quest id (D-03): ids live in localStorage and in this ref, so a failed write cannot bring it back in this tab.
+  const seenQuestIds = useRef<string[]>([]);
+  const questReadBlocked = useRef(false);
+  const [questPopupItem, setQuestPopupItem] = useState<{ quest: Broadcast; more: number } | null>(null);
   const assistantTipTimer = useRef<number | null>(null);
   const assistantClickResetTimer = useRef<number | null>(null);
   const assistantCooldownTimer = useRef<number | null>(null);
@@ -481,6 +486,35 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }, 0);
     return () => window.clearTimeout(timer);
   }, [content]);
+
+  // Merges storage with this tab's ids before writing, so storage is never overwritten with fewer ids; a failed write still keeps the ref.
+  const rememberActiveQuests = useCallback(() => {
+    let stored: string[] | null = null;
+    try { stored = parseSeenQuestIds(window.localStorage.getItem(questSeenStorageKey)); } catch {}
+    seenQuestIds.current = markQuestsSeen(content.broadcasts, [...new Set([...(stored ?? []), ...seenQuestIds.current])], today);
+    if (stored) try { window.localStorage.setItem(questSeenStorageKey, JSON.stringify(seenQuestIds.current)); } catch {}
+  }, [content.broadcasts, today]);
+
+  // Reading the active quests in «Сводка» counts as seeing them; declared before the popup effect so a live update the visitor is already reading never pops up.
+  const questsViewed = contentReady && windows.broadcasts.open && !windows.broadcasts.minimized && broadcastTab === "quests";
+  useEffect(() => {
+    if (questsViewed && today) rememberActiveQuests();
+  }, [questsViewed, today, rememberActiveQuests]);
+
+  useEffect(() => {
+    if (!contentReady || booting || windows.editor.open || !today || questPopupItem || questReadBlocked.current) return;
+    let stored: string[];
+    try { stored = parseSeenQuestIds(window.localStorage.getItem(questSeenStorageKey)); }
+    catch {
+      // shortcut: unreadable storage means no popup at all (never on every load); upgrade if visitors ask for it
+      questReadBlocked.current = true;
+      return;
+    }
+    const next = questPopup(content.broadcasts, [...new Set([...stored, ...seenQuestIds.current])], today);
+    if (!next) return;
+    const timer = window.setTimeout(() => setQuestPopupItem(next), 0);
+    return () => window.clearTimeout(timer);
+  }, [content.broadcasts, contentReady, booting, windows.editor.open, today, questPopupItem]);
 
   useEffect(() => {
     // Stored settings are visitor-editable: keep only known values, field by field.
@@ -770,6 +804,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
   };
 
+  const dismissQuestPopup = (openQuests: boolean) => {
+    rememberActiveQuests();
+    setQuestPopupItem(null);
+    if (openQuests) {
+      setBroadcastTab("quests");
+      openApp("broadcasts");
+    }
+  };
+
   // Functional update only: a late timer must never act on a stale render's windows.
   const finishExit = (appId: AppId, kind: "close" | "minimize") => {
     setWindows((state) => ({
@@ -1053,6 +1096,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   return (
     <>
       <BootScreen visible={booting} />
+      {questPopupItem && <QuestPopup quest={questPopupItem.quest} more={questPopupItem.more} document={content.formattedText[portiaTextKey.broadcast(questPopupItem.quest.id)]} onDismiss={dismissQuestPopup} />}
       <div className="desktop" id="desktop">
         {desktopSettingsLoaded && <DesktopWallpaper kind={desktopSettings.wallpaper} />}
         <header className="system-bar">
@@ -1656,6 +1700,36 @@ function documentBackground(hex: string | undefined, opacity: number | undefined
 function ScientistRichText({ log }: { log: ScientistLog }) {
   const document = scientistDocument(log);
   return <FormattedText className="scientist-rich-text" text={log.content.join("\n\n")} document={document} />;
+}
+
+// Same native-dialog pattern as the editor's ConfirmDialog (that one lives in a dynamic chunk): top layer, Esc and backdrop dismiss.
+function QuestPopup({ quest, more, document, onDismiss }: { quest: Broadcast; more: number; document?: RichTextDocument; onDismiss: (openQuests: boolean) => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+  }, []);
+
+  return (
+    <dialog ref={dialogRef} className="portia-dialog quest-popup" role="dialog" aria-modal="true" aria-labelledby={titleId} onClose={() => onDismiss(false)} onClick={(event) => { if (event.target === event.currentTarget) onDismiss(false); }}>
+      <div>
+        <span className="quest-popup-eyebrow">НОВЫЙ КВЕСТ</span>
+        <h2 id={titleId}>{quest.title || "БЕЗ НАЗВАНИЯ"}</h2>
+        {(quest.startsAt || quest.endsAt) && <div className="broadcast-dates">{quest.startsAt && <span>Начало: {formatQuestDay(quest.startsAt)}</span>}{quest.endsAt && <span>Окончание: {formatQuestDay(quest.endsAt)}</span>}</div>}
+        {quest.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{quest.conditions}</p></div>}
+        <FormattedText className="quest-popup-body" text={quest.body} document={document} />
+        {more > 0 && <p className="quest-popup-more">Ещё активных квестов: {more}</p>}
+        <div className="portia-dialog-actions">
+          <button type="button" className="primary-control" onClick={() => onDismiss(true)}>ОТКРЫТЬ КВЕСТЫ</button>
+          <button type="button" className="secondary-control" autoFocus data-autofocus onClick={() => onDismiss(false)}>ПОНЯТНО</button>
+        </div>
+      </div>
+    </dialog>
+  );
 }
 
 function FormattedText({ text, document, className = "" }: { text: string; document?: RichTextDocument; className?: string }) {

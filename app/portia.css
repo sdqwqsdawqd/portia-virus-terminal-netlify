@@ -396,7 +396,7 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .broadcast-card.quest::before { background: #e8ae45; }
 .broadcast-card.task::before { background: #7ec8e3; }
 .broadcast-card > span:first-child { color: var(--teal); font: 700 11px var(--sans); letter-spacing: .09em; }
-.broadcast-card.quest > span:first-child { color: #e8ae45; }
+.broadcast-card.quest > span:first-child, .quest-popup-eyebrow { color: #e8ae45; }
 .broadcast-card.task > span:first-child { color: #7ec8e3; }
 .broadcast-card h2 { margin: 9px 0 12px; color: oklch(.958 .008 var(--accent-hue)); font: 700 20px var(--sans); }
 .broadcast-card p { margin: 0 0 12px; color: oklch(.76 .022 var(--accent-hue)); font-size: 15px; line-height: 1.7; white-space: pre-line; }
@@ -441,6 +441,14 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .portia-dialog p { margin: 0; color: oklch(.745 .022 var(--accent-hue)); font-size: 13px; line-height: 1.55; }
 .portia-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .portia-dialog-actions button { min-height: 40px; }
+/* The quest popup shows once per quest id (D-03). Entrance motion only under data-motion="full"; reduce shows it instantly. */
+.quest-popup { width: min(520px, calc(100vw - 24px)); max-height: calc(100svh - 48px); overflow-y: auto; }
+.quest-popup-eyebrow { font: 700 11px var(--sans); letter-spacing: .09em; }
+.quest-popup .broadcast-dates, .quest-popup .broadcast-conditions { margin: 0; }
+.quest-popup .broadcast-conditions p { white-space: pre-line; }
+.quest-popup-body { display: block; max-height: 40vh; overflow-y: auto; color: oklch(.76 .022 var(--accent-hue)); font: 14px/1.6 var(--doc); }
+.quest-popup .quest-popup-more { font: 12px var(--mono); }
+html[data-motion="full"] .quest-popup[open] { animation: fade-in 220ms var(--ease-out); }
 @media (min-width: 901px) {
   /* Positioned against the editor window, not the viewport, so the save bar at the window's bottom is never covered (D-01). */
   .content-editor > .floating-text-format { position: absolute; right: 14px; bottom: 72px; max-height: min(390px, calc(100% - 46px - 72px - 14px)); }
