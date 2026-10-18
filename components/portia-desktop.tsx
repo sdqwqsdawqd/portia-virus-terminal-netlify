@@ -19,7 +19,7 @@ const PortiaEditor = dynamic(
 
 type AppId = "archive" | "employees" | "search" | "info" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor";
 
-// Squad documents that live elsewhere, shown inside PORTIA as app windows.
+// Department documents that live elsewhere, shown inside PORTIA as app windows.
 const embeddedApps = {
   sheet: { src: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/htmlview?widget=true&headers=false", external: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" },
   charter: { src: "https://sdqwqsdawqd.github.io/S.E-Portia/", external: "https://sdqwqsdawqd.github.io/S.E-Portia/" },
@@ -57,7 +57,7 @@ const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName
   settings: { label: "Настройки", path: "PORTIA://DESKTOP_SETTINGS", icon: "settings" },
   broadcasts: { label: "Сводка", path: "PORTIA://NEWS", icon: "broadcasts" },
   trash: { label: "Корзина", path: "PORTIA://RECYCLE_BIN", icon: "trash" },
-  sheet: { label: "Таблица", path: "PORTIA://SQUAD_SHEET", icon: "sheet" },
+  sheet: { label: "Таблица", path: "PORTIA://DEPARTMENT_SHEET", icon: "sheet" },
   charter: { label: "Устав", path: "PORTIA://CHARTER", icon: "charter" },
   editor: { label: "Редактор", path: "PORTIA://CONTENT_CONTROL", icon: "editor" },
 };

@@ -1434,7 +1434,7 @@ function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
         <div><span className="eyebrow">{selected.title || "БЕЗ ЗВАНИЯ"}</span><h2>{selected.nickname}</h2><p>{[selected.callsign || "без позывного", selected.rank || "ранг не указан"].join(" · ")}</p></div>
       </div>
       <EditorGroup title="Профиль сотрудника">
-        {employeeRatings.map(({ key, label }) => <Field key={key} label={`${label} — от 1 до 10`}><select value={draft[key] ?? ""} onChange={(event) => setDraft((current) => current && ({ ...current, [key]: event.target.value === "" ? null : Number(event.target.value) }))}>{key !== "knowledgeRating" && <option value="">—</option>}{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>)}
+        {employeeRatings.map(({ key, label }) => <Field key={key} label={`${label} — от 1 до 10`}><select value={draft[key] ?? ""} onChange={(event) => setDraft((current) => current && ({ ...current, [key]: event.target.value === "" ? null : Number(event.target.value) }))}><option value="">—</option>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>)}
         <Field label="Ссылка на фото"><input value={draft.photoUrl} onChange={(event) => setDraft((current) => current && ({ ...current, photoUrl: event.target.value }))} placeholder="Пусто — использовать аватар Roblox" /></Field>
         <Field label="Биография" wide><textarea className="tall-textarea" value={draft.biography} onChange={(event) => setDraft((current) => current && ({ ...current, biography: event.target.value }))} /></Field>
       </EditorGroup>

@@ -29,8 +29,8 @@ export type EmployeeProfile = Pick<PortiaEmployee, EditableFields>;
 export type EmployeeUpdate = Omit<EmployeeProfile, OptionalRatingKey> & Partial<Pick<EmployeeProfile, OptionalRatingKey>>;
 
 // Rename a rating here only: the editor fields and the profile card both render from this table (D-01).
+// knowledge_rating stays in the database (not null) but is no longer shown or edited (owner, 2026-10-18).
 export const employeeRatings = [
-  { key: "knowledgeRating", column: "knowledge_rating", label: "Знания" },
   // paws_rating / s_rating keep their first column names; only the labels changed (owner, 2026-10-18).
   { key: "pawsRating", column: "paws_rating", label: "Знания лаборатории" },
   { key: "testsRating", column: "tests_rating", label: "Знания тестов" },
@@ -39,7 +39,7 @@ export const employeeRatings = [
   { key: "activityRating", column: "activity_rating", label: "Актив" },
   { key: "overallRating", column: "overall_rating", label: "Общая" },
 ] as const;
-const optionalRatings = employeeRatings.filter((rating) => rating.key !== "knowledgeRating") as unknown as ReadonlyArray<{ key: OptionalRatingKey; column: string; label: string }>;
+const optionalRatings: ReadonlyArray<{ key: OptionalRatingKey; column: string; label: string }> = employeeRatings;
 
 /** The editable fields of an employee; a roster cached before the ratings existed has none of the new ones. */
 export function profileOf(employee: PortiaEmployee): EmployeeProfile {

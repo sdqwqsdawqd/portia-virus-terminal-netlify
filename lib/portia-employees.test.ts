@@ -161,7 +161,7 @@ test("stored rows without rating columns, or with junk, map to empty ratings", (
 });
 
 test("the rating labels live in one ordered table", () => {
-  assert.deepEqual(employeeRatings.map((rating) => rating.label), ["Знания", "Знания лаборатории", "Знания тестов", "Умение делать БИО", "Умение делать СС", "Актив", "Общая"]);
+  assert.deepEqual(employeeRatings.map((rating) => rating.label), ["Знания лаборатории", "Знания тестов", "Умение делать БИО", "Умение делать СС", "Актив", "Общая"]);
 });
 
 test("profileChanged: identical profiles are clean, a missing new rating equals null", () => {
