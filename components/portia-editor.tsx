@@ -555,6 +555,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   // A request made before this mount is not replayed; the dialog shows while a newer one is unanswered.
   const [handledCloseRequest, setHandledCloseRequest] = useState(closeRequest);
   const closeAsked = closeRequest !== handledCloseRequest;
+  const [employeeDirty, setEmployeeDirty] = useState(false);
+  const [leaveTo, setLeaveTo] = useState<EditorTab | null>(null);
+  const leaving = employeeDirty && (leaveTo !== null || closeAsked);
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
@@ -705,12 +708,29 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     setFormatterOpen(false);
   };
 
-  const switchTab = (id: EditorTab) => {
+  const showTab = (id: EditorTab) => {
     setTab(id);
     setRecordOpen(false);
     setPreviewSurface(id === "viruses" || id === "recycle" ? "light" : "dark");
     setFormatTarget(null);
     setFormatterOpen(false);
+  };
+  // An unsaved employee draft is asked about before leaving the tab (D-02).
+  const switchTab = (id: EditorTab) => {
+    if (tab === "employees" && id !== "employees" && employeeDirty) setLeaveTo(id);
+    else showTab(id);
+  };
+  // The answer of the employee question: continue the pending tab switch or window close, or drop it.
+  const onEmployeeLeave = (ok: boolean) => {
+    if (ok) setEmployeeDirty(false);
+    if (leaveTo !== null) {
+      setLeaveTo(null);
+      if (ok) showTab(leaveTo);
+    } else if (closeAsked) {
+      // With dirty content the «Закрыть редактор?» dialog follows by itself.
+      if (!ok || !dirty) setHandledCloseRequest(closeRequest);
+      if (ok && !dirty) onCloseApproved();
+    }
   };
 
   const uploadImage = async (file: File, onUploaded: (url: string) => void) => {
@@ -815,7 +835,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     };
   }, [active, dialog, closeAsked, tab]);
 
-  useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
+  // The desktop asks on × only while this is true, so a dirty employee draft counts too (D-02).
+  useEffect(() => { onDirtyChange(dirty || employeeDirty); }, [dirty, employeeDirty, onDirtyChange]);
 
   // The tab strip scrolls sideways on a phone; keep the active tab in view (a no-op where the strip fits).
   useEffect(() => {
@@ -1173,7 +1194,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
         </div>
       )}
 
-      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} />}
+      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && <FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />}
@@ -1233,7 +1254,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
           onCancel={() => setDialog(null)}
         />
       )}
-      {closeAsked && (
+      {closeAsked && !employeeDirty && (
         <ConfirmDialog
           title="Закрыть редактор?"
           text={`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}
@@ -1265,7 +1286,13 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   );
 }
 
-function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmployee) => void }) {
+function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
+  onSaved: (employee: PortiaEmployee) => void;
+  onDirtyChange: (dirty: boolean) => void;
+  /** The editor wants to leave this tab or close; the unsaved draft has to be answered first. */
+  leaving: boolean;
+  onLeave: (ok: boolean) => void;
+}) {
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [draft, setDraft] = useState<EmployeeProfile | null>(null);
@@ -1278,9 +1305,24 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
   const selected = employees.find((employee) => employee.id === selectedId) ?? employees[0] ?? null;
   const dirty = Boolean(selected && draft && profileChanged(profileOf(selected), draft));
   // Read after an awaited save: a cancelled question must not continue into the switch (D-02).
-  const asking = pendingEmployeeId !== null;
+  const asking = pendingEmployeeId !== null || leaving;
   const askingRef = useRef(asking);
   useEffect(() => { askingRef.current = asking; });
+
+  useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
+  // Unmounting (tab left after the answer) must not leave the editor believing a draft is still dirty.
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  // Reload with an unsaved employee draft: the browser's own warning, as for the content (D-12).
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   useEffect(() => {
     let active = true;
@@ -1356,10 +1398,19 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
     // A sent PATCH cannot be cancelled; its answer would overwrite the next employee's draft.
     if (state !== "saving") setPendingEmployeeId(employee.id);
   };
+  // After the answer: to the pending employee, or out of the tab / the window (the draft is dropped when not saved).
   const continueLeave = () => {
     const next = employees.find((employee) => employee.id === pendingEmployeeId);
     setPendingEmployeeId(null);
     if (next) openEmployee(next);
+    else {
+      setDraft(profileOf(selected));
+      onLeave(true);
+    }
+  };
+  const cancelLeave = () => {
+    setPendingEmployeeId(null);
+    if (leaving) onLeave(false);
   };
 
   const preview = draft.photoUrl || selected.robloxAvatarUrl;
@@ -1395,14 +1446,14 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
               void save().then((saved) => {
                 if (!askingRef.current) return;
                 if (saved) continueLeave();
-                else setPendingEmployeeId(null);
+                else cancelLeave();
               });
             },
           },
           { label: "НЕ СОХРАНЯТЬ", tone: "danger", disabled: state === "saving", onClick: continueLeave },
-          { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setPendingEmployeeId(null) },
+          { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: cancelLeave },
         ]}
-        onCancel={() => setPendingEmployeeId(null)}
+        onCancel={cancelLeave}
       />
     )}
   </div>;
