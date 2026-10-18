@@ -28,6 +28,16 @@ create table if not exists public.portia_employee_profiles (
 -- Last known nickname: finds the profile while Roblox is unreachable.
 alter table public.portia_employee_profiles add column if not exists nickname text not null default '' check (length(nickname) <= 64);
 
+-- Editor ratings beyond knowledge (phase 03.2). Empty (null) means not rated yet; the site shows «—».
+alter table public.portia_employee_profiles
+  add column if not exists paws_rating integer check (paws_rating between 1 and 10),
+  add column if not exists bio_rating integer check (bio_rating between 1 and 10),
+  add column if not exists s_rating integer check (s_rating between 1 and 10),
+  add column if not exists activity_rating integer check (activity_rating between 1 and 10),
+  add column if not exists overall_rating integer check (overall_rating between 1 and 10);
+-- PostgREST picks up the new columns without a restart.
+notify pgrst, 'reload schema';
+
 -- Not granted to anon/authenticated, so the email cannot be read through the API.
 create or replace function public.portia_owner_email()
 returns text
