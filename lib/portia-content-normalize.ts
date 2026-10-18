@@ -76,12 +76,21 @@ function normalizeMediaUrl(value: unknown, fallback = "") {
   return url.startsWith("https://") || url.startsWith("/") ? url : fallback;
 }
 
-// Broadcasts saved before 03.2 have no important flag.
+const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
+const normalizeDay = (value: unknown) => (typeof value === "string" && dayPattern.test(value) ? value : "");
+
+// Broadcasts saved before 03.2 have no important flag, dates or conditions.
 export function normalizeBroadcasts(value: unknown): Broadcast[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((item): item is Broadcast => Boolean(item) && typeof item === "object")
-    .map((item) => ({ ...item, important: item.important === true }));
+    .map((item) => ({
+      ...item,
+      important: item.important === true,
+      startsAt: normalizeDay(item.startsAt),
+      endsAt: normalizeDay(item.endsAt),
+      conditions: typeof item.conditions === "string" ? item.conditions.slice(0, 4000) : "",
+    }));
 }
 
 export function normalizePortiaContent(value: unknown): PortiaContent | null {

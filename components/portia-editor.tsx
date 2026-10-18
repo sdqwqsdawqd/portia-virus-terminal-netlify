@@ -1025,11 +1025,18 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               <Field label="Тип"><select value={broadcast.type} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.type = event.target.value as Broadcast["type"]; }))}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
               <Field label="Заголовок"><input value={broadcast.title} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.title = event.target.value; }))} /></Field>
               <FormattedTextarea area="broadcast" label="Текст" tall value={broadcast.body} document={draft.formattedText[portiaTextKey.broadcast(broadcast.id)]} formatKey={portiaTextKey.broadcast(broadcast.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.broadcast(broadcast.id), value, document, (next, text) => updateById(next.broadcasts, broadcast.id, (item) => { item.body = text; }))} />
+              {broadcast.type === "quest" && (
+                <>
+                  <Field label="Дата начала"><input type="date" value={broadcast.startsAt} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.startsAt = event.target.value; }))} /></Field>
+                  <Field label="Дата окончания"><input type="date" value={broadcast.endsAt} min={broadcast.startsAt || undefined} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.endsAt = event.target.value; }))} /></Field>
+                  <Field label="Условия" wide><textarea value={broadcast.conditions} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.conditions = event.target.value; }))} /></Field>
+                </>
+              )}
               <label className="publish-toggle"><input type="checkbox" checked={broadcast.published} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.published = event.target.checked; }))} /><span>Показывать посетителям</span></label>
               {broadcast.type === "news" && <label className="publish-toggle"><input type="checkbox" checked={broadcast.important} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.important = event.target.checked; }))} /><span>Важная новость — выделить и закрепить сверху</span></label>}
             </div>
           ))}
-          <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.broadcasts.unshift({ id: makeId("broadcast"), type: "news", title: "", body: "", published: false, important: false }))}>+ НОВОЕ СООБЩЕНИЕ</button>
+          <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.broadcasts.unshift({ id: makeId("broadcast"), type: "news", title: "", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" }))}>+ НОВОЕ СООБЩЕНИЕ</button>
         </div>
       )}
 

@@ -44,7 +44,7 @@ test("broadcasts saved before 03.2 normalize to not important and keep their fie
 test("important is a strict boolean and junk entries are dropped in order", () => {
   const base = { id: "x", type: "news", title: "", body: "", published: false };
   const out = normalizeBroadcasts([
-    { ...base, id: "1", important: true },
+    { ...base, id: "1", important: true, startsAt: "", endsAt: "", conditions: "" },
     null,
     { ...base, id: "2", important: "yes" },
     "str",
@@ -58,7 +58,7 @@ test("important is a strict boolean and junk entries are dropped in order", () =
 test("normalizePortiaContent stays idempotent with old and new broadcasts", () => {
   const content = structuredClone(defaultPortiaContent);
   content.broadcasts = [
-    { id: "a", type: "news", title: "A", body: "", published: true, important: true },
+    { id: "a", type: "news", title: "A", body: "", published: true, important: true, startsAt: "", endsAt: "", conditions: "" },
     { id: "b", type: "task", title: "B", body: "", published: true } as never,
   ];
   const once = normalizePortiaContent(content);

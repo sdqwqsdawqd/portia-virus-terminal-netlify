@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Broadcast } from "./portia-content.ts";
 import { broadcastFeed, broadcastTabOf } from "./broadcasts.ts";
 
-const item = (id: string, type: Broadcast["type"], published = true, important = false): Broadcast => ({ id, type, title: id, body: "", published, important });
+const item = (id: string, type: Broadcast["type"], published = true, important = false): Broadcast => ({ id, type, title: id, body: "", published, important, startsAt: "", endsAt: "", conditions: "" });
 
 test("quests and tasks share the quests tab", () => {
   assert.equal(broadcastTabOf("news"), "news");

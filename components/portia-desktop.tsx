@@ -164,7 +164,8 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
 function broadcastSignature(content: PortiaContent) {
   return JSON.stringify(content.broadcasts
     .filter((item) => item.published)
-    .map((item) => ({ id: item.id, type: item.type, title: item.title, body: item.body, format: content.formattedText[portiaTextKey.broadcast(item.id)] })));
+    // Quest fields join the signature only when set, so release day does not light the badge for everyone.
+    .map((item) => ({ id: item.id, type: item.type, title: item.title, body: item.body, format: content.formattedText[portiaTextKey.broadcast(item.id)], ...((item.startsAt || item.endsAt || item.conditions) && { startsAt: item.startsAt, endsAt: item.endsAt, conditions: item.conditions }) })));
 }
 
 function shuffledUniqueIndices(items: string[], previousIndex = -1) {
@@ -1161,7 +1162,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([tab, label]) => <button key={tab} type="button" className={broadcastTab === tab ? "active" : ""} aria-pressed={broadcastTab === tab} onClick={() => setBroadcastTab(tab)}>{label} {broadcastFeed(content.broadcasts, tab).length}</button>)}
               </div>
               <div className="broadcast-grid">
-                {broadcastFeed(content.broadcasts, broadcastTab).map((item) => <article className={`broadcast-card ${item.type}${item.important ? " important" : ""}`} key={item.id}><span>{broadcastType(item.type)}{item.important ? " · ВАЖНО" : ""}</span><h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2><FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>)}
+                {broadcastFeed(content.broadcasts, broadcastTab).map((item) => <article className={`broadcast-card ${item.type}${item.important ? " important" : ""}`} key={item.id}><span>{broadcastType(item.type)}{item.important ? " · ВАЖНО" : ""}</span><h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {item.startsAt.split("-").reverse().join(".")}</span>}{item.endsAt && <span>Окончание: {item.endsAt.split("-").reverse().join(".")}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>)}
                 {!broadcastFeed(content.broadcasts, broadcastTab).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>{broadcastTab === "news" ? "Новостей пока нет" : "Квестов и задач пока нет"}</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
               </div></>}
             </div>

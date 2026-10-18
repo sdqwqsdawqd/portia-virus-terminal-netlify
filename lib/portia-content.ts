@@ -111,6 +111,10 @@ export type Broadcast = {
   body: string;
   published: boolean;
   important: boolean;
+  // Quest period, YYYY-MM-DD or empty, and plain-text conditions (03.2 D-03).
+  startsAt: string;
+  endsAt: string;
+  conditions: string;
 };
 
 export type RecycleFile = {
