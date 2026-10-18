@@ -402,6 +402,18 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     });
   }, []);
 
+  // A removed manual employee leaves the Personnel window and the cached roster at once.
+  const removeEmployee = useCallback((id: string) => {
+    setEmployees((current) => {
+      const next = current.filter((employee) => employee.id !== id);
+      try {
+        const cached = JSON.parse(window.localStorage.getItem(employeesCacheStorageKey) ?? "{}") as { syncedAt?: string | null };
+        window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify({ ...cached, employees: next }));
+      } catch {}
+      return next;
+    });
+  }, []);
+
   const fetchEmployees = useCallback(async () => {
     try {
       const response = await fetchWithTimeout("/api/employees", {}, 15_000);
@@ -1275,7 +1287,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="editor" state={windows.editor} active={activeApp === "editor"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="editor-window" meta="ДОСТУП ВЛАДЕЛЬЦА">
-            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
+            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
           </AppWindow>
         </main>
 

@@ -36,6 +36,7 @@ type Props = {
   // Resolves with the saved revision.
   onSave: (content: PortiaContent, baseRevision: number) => Promise<number>;
   onEmployeeSaved: (employee: PortiaEmployee) => void;
+  onEmployeeRemoved: (id: string) => void;
 };
 
 type FormatTarget = {
@@ -539,7 +540,7 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, revision, saveState, canManageEditors, active, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved }: Props) {
+export function PortiaEditor({ content, revision, saveState, canManageEditors, active, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
   // The revision the draft's baseline came from; a stale draft then gets the 409 instead of overwriting newer content (uat-03-owner-broadcast-vanishes).
   const baseRevision = useRef(revision);
@@ -1245,7 +1246,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
         </div>
       )}
 
-      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
+      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && <FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />}
@@ -1337,8 +1338,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   );
 }
 
-function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
+function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onDirtyChange, leaving, onLeave }: {
   onSaved: (employee: PortiaEmployee) => void;
+  onRemoved: (id: string) => void;
+  uploadState: "idle" | "uploading" | "error";
+  onUpload: (file: File, onUploaded: (url: string) => void) => void;
   onDirtyChange: (dirty: boolean) => void;
   /** The editor wants to leave this tab or close; the unsaved draft has to be answered first. */
   leaving: boolean;
@@ -1358,7 +1362,12 @@ function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
   const [addDraft, setAddDraft] = useState({ nickname: "", title: "", rank: "", callsign: "" });
   const [addState, setAddState] = useState<"idle" | "adding">("idle");
   const [addError, setAddError] = useState("");
+  const [deleteAsked, setDeleteAsked] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const selected = employees.find((employee) => employee.id === selectedId) ?? employees[0] ?? null;
+  // An upload that finishes after another employee was opened must not land on that employee's draft.
+  const selectedIdRef = useRef("");
+  useEffect(() => { selectedIdRef.current = selected?.id ?? ""; });
   const dirty = Boolean(selected && draft && profileChanged(profileOf(selected), draft));
   // Read after an awaited save: a cancelled question must not continue into the switch (D-02).
   const asking = pendingEmployeeId !== null || leaving;
@@ -1501,6 +1510,40 @@ function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
     if (leaving) onLeave(false);
   };
 
+  // Only reached for a manual employee (the button renders for no one else); the server refuses a sheet employee too.
+  const removeSelected = async () => {
+    setDeleting(true);
+    setErrorMessage("");
+    try {
+      const response = await fetch("/api/employees", {
+        method: "DELETE",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: selected.id }),
+      });
+      const payload = await response.json() as { id?: string; error?: string };
+      if (!response.ok) {
+        const message = response.status === 403 && !payload.error?.includes("таблицы")
+          ? "Сессия редактора истекла. Войдите в редактор снова."
+          : payload.error || `Сервер отклонил удаление (${response.status}).`;
+        throw new Error(message);
+      }
+      const index = employees.findIndex((employee) => employee.id === selected.id);
+      const next = employees[index + 1] ?? employees[index - 1];
+      setEmployees(employees.filter((employee) => employee.id !== selected.id));
+      onRemoved(selected.id);
+      setDeleteAsked(false);
+      if (next) openEmployee(next);
+      else setDraft(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Не удалось удалить сотрудника.");
+      setState("error");
+      setDeleteAsked(false);
+    }
+    setDeleting(false);
+  };
+
   const preview = draft.photoUrl || selected.robloxAvatarUrl;
   return <div className="virus-editor-layout employee-editor-layout" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
     <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
@@ -1524,12 +1567,24 @@ function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
       </div>
       <EditorGroup title="Профиль сотрудника">
         {employeeRatings.map(({ key, label }) => <Field key={key} label={`${label} — от 1 до 10`}><select value={draft[key] ?? ""} onChange={(event) => setDraft((current) => current && ({ ...current, [key]: event.target.value === "" ? null : Number(event.target.value) }))}><option value="">—</option>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>)}
-        <Field label="Ссылка на фото"><input value={draft.photoUrl} onChange={(event) => setDraft((current) => current && ({ ...current, photoUrl: event.target.value }))} placeholder="Пусто — использовать аватар Roblox" /></Field>
+        <ImageEditorField label="Фото сотрудника" value={draft.photoUrl} placement="dossier" maxHint="Пусто — используется аватар Roblox" uploadState={uploadState} onChange={(value) => setDraft((current) => current && ({ ...current, photoUrl: value }))} onUpload={(file) => { const startedFor = selected.id; onUpload(file, (url) => { if (selectedIdRef.current === startedFor) setDraft((current) => current && ({ ...current, photoUrl: url })); }); }} />
         <Field label="Биография" wide><textarea className="tall-textarea" value={draft.biography} onChange={(event) => setDraft((current) => current && ({ ...current, biography: event.target.value }))} /></Field>
       </EditorGroup>
       {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
+      {selected.source === "manual" && <button type="button" className="danger-control employee-remove" disabled={state === "saving" || deleting} onClick={() => setDeleteAsked(true)}>УДАЛИТЬ СОТРУДНИКА</button>}
       <div className="employee-editor-save"><span className={`editor-save-status ${state}`}>{state === "saving" ? "СОХРАНЕНИЕ…" : state === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
     </div>
+    {deleteAsked && selected.source === "manual" && (
+      <ConfirmDialog
+        title="Удалить сотрудника?"
+        text={`${selected.nickname} будет убран из списка. Фото, оценки и биография останутся в базе и вернутся, если добавить этот ник снова.`}
+        actions={[
+          { label: "УДАЛИТЬ", tone: "danger", disabled: deleting, onClick: () => void removeSelected() },
+          { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDeleteAsked(false) },
+        ]}
+        onCancel={() => setDeleteAsked(false)}
+      />
+    )}
     {asking && (
       <ConfirmDialog
         title="Несохранённые правки сотрудника"

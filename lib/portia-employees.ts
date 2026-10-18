@@ -379,6 +379,17 @@ export async function addManualEmployee(supabase: SupabaseClient, input: ManualE
   };
 }
 
+/** Only a manual employee is removed, and only its manual row: the stored profile stays for a later re-add or a sheet row. */
+export async function removeManualEmployee(supabase: SupabaseClient, roster: RosterEmployee[], id: string): Promise<{ status: "deleted" | "not-found" | "sheet" }> {
+  const employee = roster.find((item) => item.id === id);
+  if (!employee) return { status: "not-found" };
+  // Sheet rows are decided here, before any database call (T-03.3-02).
+  if (employee.source !== "manual") return { status: "sheet" };
+  const { data, error } = await supabase.from(manualTableName).delete().eq("employee_id", id).select("employee_id");
+  if (error) throw error;
+  return { status: data?.length ? "deleted" : "not-found" };
+}
+
 export async function saveEmployeeProfile(supabase: SupabaseClient, employee: RosterEmployee, profile: EmployeeUpdate, userId: string) {
   const base = {
     employee_id: employee.id,

@@ -1,7 +1,7 @@
 import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
 import { employeesCacheTag, noStoreHeaders, publicCacheHeaders, purgeCacheTag } from "@/lib/portia-cdn";
-import { addManualEmployee, loadEmployees, sanitizeEmployeeUpdate, sanitizeManualEmployee, saveEmployeeProfile, withProfile } from "@/lib/portia-employees";
+import { addManualEmployee, loadEmployees, removeManualEmployee, sanitizeEmployeeUpdate, sanitizeManualEmployee, saveEmployeeProfile, withProfile } from "@/lib/portia-employees";
 
 export const dynamic = "force-dynamic";
 
@@ -83,5 +83,29 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("PORTIA employee add failed", error);
     return Response.json({ error: "Не удалось добавить сотрудника." }, { status: 500 });
+  }
+}
+
+// Removes a person added outside the sheet; a sheet employee is refused with 403 (D-02).
+export async function DELETE(request: Request) {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data } = await supabase.auth.getUser();
+    const access = await getEditorAccess(supabase, data.user);
+    if (!data.user || !access.canEdit) return Response.json({ error: "Нет доступа к редактору." }, { status: 403 });
+
+    const body = await request.json() as { id?: unknown };
+    if (typeof body?.id !== "string") return Response.json({ error: "Некорректные данные." }, { status: 400 });
+    const { employees } = await loadEmployees(supabase);
+
+    const result = await removeManualEmployee(supabase, employees, body.id);
+    if (result.status === "sheet") return Response.json({ error: "Нельзя удалить сотрудника из таблицы." }, { status: 403 });
+    if (result.status === "not-found") return Response.json({ error: "Сотрудник не найден. Обновите страницу." }, { status: 404 });
+
+    await purgeCacheTag(employeesCacheTag);
+    return Response.json({ id: body.id }, { headers: noStoreHeaders });
+  } catch (error) {
+    console.error("PORTIA employee delete failed", error);
+    return Response.json({ error: "Не удалось удалить сотрудника." }, { status: 500 });
   }
 }
