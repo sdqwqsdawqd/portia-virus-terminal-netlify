@@ -1026,9 +1026,10 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               <Field label="Заголовок"><input value={broadcast.title} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.title = event.target.value; }))} /></Field>
               <FormattedTextarea area="broadcast" label="Текст" tall value={broadcast.body} document={draft.formattedText[portiaTextKey.broadcast(broadcast.id)]} formatKey={portiaTextKey.broadcast(broadcast.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.broadcast(broadcast.id), value, document, (next, text) => updateById(next.broadcasts, broadcast.id, (item) => { item.body = text; }))} />
               <label className="publish-toggle"><input type="checkbox" checked={broadcast.published} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.published = event.target.checked; }))} /><span>Показывать посетителям</span></label>
+              {broadcast.type === "news" && <label className="publish-toggle"><input type="checkbox" checked={broadcast.important} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.important = event.target.checked; }))} /><span>Важная новость — выделить и закрепить сверху</span></label>}
             </div>
           ))}
-          <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.broadcasts.unshift({ id: makeId("broadcast"), type: "news", title: "", body: "", published: false }))}>+ НОВОЕ СООБЩЕНИЕ</button>
+          <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.broadcasts.unshift({ id: makeId("broadcast"), type: "news", title: "", body: "", published: false, important: false }))}>+ НОВОЕ СООБЩЕНИЕ</button>
         </div>
       )}
 

@@ -6,8 +6,8 @@ import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./porti
 const fixture = (): PortiaContent => {
   const content = structuredClone(defaultPortiaContent);
   content.broadcasts = [
-    { id: "a", type: "news", title: "A", body: "текст A", published: true },
-    { id: "b", type: "task", title: "B", body: "текст B", published: false },
+    { id: "a", type: "news", title: "A", body: "текст A", published: true, important: false },
+    { id: "b", type: "task", title: "B", body: "текст B", published: false, important: false },
   ];
   content.infoSections = [
     { id: "s1", title: "S1", body: "раздел 1" },
@@ -24,8 +24,8 @@ const fixture = (): PortiaContent => {
 
 test("editing a post by id after a new post is added at the top changes only that post", () => {
   const content = fixture();
-  content.broadcasts = [{ id: "a", type: "news", title: "A", body: "текст A", published: true }];
-  content.broadcasts.unshift({ id: "b", type: "news", title: "", body: "", published: false });
+  content.broadcasts = [{ id: "a", type: "news", title: "A", body: "текст A", published: true, important: false }];
+  content.broadcasts.unshift({ id: "b", type: "news", title: "", body: "", published: false, important: false });
   updateById(content.broadcasts, "a", (item) => { item.body = "текст A2"; });
   assert.equal(content.broadcasts[0].body, "");
   assert.equal(content.broadcasts[1].id, "a");

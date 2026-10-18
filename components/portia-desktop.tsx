@@ -9,6 +9,7 @@ import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
+import { normalizeBroadcasts } from "@/lib/portia-content-normalize";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -342,16 +343,17 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       if (!response.ok) return;
       const payload = (await response.json()) as ContentResponse;
       if (!payload.content) return;
+      const fetched = { ...payload.content, broadcasts: normalizeBroadcasts(payload.content.broadcasts) };
       const fetchedRevision = payload.revision ?? 0;
       if (!acceptFetchedContent(fetchedRevision, knownRevision.current, savesAtSend, savesStarted.current)) return;
       knownRevision.current = fetchedRevision;
-      setContent(payload.content);
-      setActiveVirusId((current) => payload.content!.viruses.some((virus) => virus.id === current) ? current : payload.content!.viruses[0]?.id ?? "");
-      setSelectedInfoId((current) => payload.content!.infoSections.some((section) => section.id === current) ? current : payload.content!.infoSections[0]?.id ?? "");
+      setContent(fetched);
+      setActiveVirusId((current) => fetched.viruses.some((virus) => virus.id === current) ? current : fetched.viruses[0]?.id ?? "");
+      setSelectedInfoId((current) => fetched.infoSections.some((section) => section.id === current) ? current : fetched.infoSections[0]?.id ?? "");
       setRevision(fetchedRevision);
       try {
         window.localStorage.setItem(contentCacheStorageKey, JSON.stringify({
-          content: payload.content,
+          content: fetched,
           revision: fetchedRevision,
           updatedAt: payload.updatedAt ?? null,
           savedAt: new Date().toISOString(),
@@ -411,7 +413,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         if (cached) {
           const parsed = JSON.parse(cached) as { content?: unknown; revision?: number };
           if (isUsableContent(parsed.content)) {
-            const cachedContent = parsed.content;
+            const cachedContent = { ...parsed.content, broadcasts: normalizeBroadcasts(parsed.content.broadcasts) };
             setContent(cachedContent);
             const cachedRevision = typeof parsed.revision === "number" ? parsed.revision : 0;
             knownRevision.current = cachedRevision;
@@ -1151,7 +1153,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <div className="broadcasts-app">
               <header><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>
               {!contentReady ? <LoadingState label="Загрузка объявлений…" /> : <div className="broadcast-grid">
-                {content.broadcasts.filter((item) => item.published).map((item) => <article className={`broadcast-card ${item.type}`} key={item.id}><span>{broadcastType(item.type)}</span><h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2><FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>)}
+                {content.broadcasts.filter((item) => item.published).map((item) => <article className={`broadcast-card ${item.type}${item.important ? " important" : ""}`} key={item.id}><span>{broadcastType(item.type)}{item.important ? " · ВАЖНО" : ""}</span><h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2><FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>)}
                 {!content.broadcasts.some((item) => item.published) && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>Сообщений пока нет</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
               </div>}
             </div>

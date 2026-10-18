@@ -1,4 +1,5 @@
 import {
+  type Broadcast,
   createVirusRecycleFiles,
   defaultPortiaContent,
   type PortiaContent,
@@ -73,6 +74,14 @@ function normalizeMediaUrl(value: unknown, fallback = "") {
   if (typeof value !== "string") return fallback;
   const url = value.trim().slice(0, 2048);
   return url.startsWith("https://") || url.startsWith("/") ? url : fallback;
+}
+
+// Broadcasts saved before 03.2 have no important flag.
+export function normalizeBroadcasts(value: unknown): Broadcast[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Broadcast => Boolean(item) && typeof item === "object")
+    .map((item) => ({ ...item, important: item.important === true }));
 }
 
 export function normalizePortiaContent(value: unknown): PortiaContent | null {
@@ -156,7 +165,7 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     viruses,
     recycledViruses,
     infoSections: candidate.infoSections,
-    broadcasts: candidate.broadcasts,
+    broadcasts: normalizeBroadcasts(candidate.broadcasts),
     recycleFiles,
     recycleOrder,
     searchRecommendations: candidate.searchRecommendations.filter((item): item is string => typeof item === "string"),

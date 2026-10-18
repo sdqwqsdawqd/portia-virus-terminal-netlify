@@ -110,6 +110,7 @@ export type Broadcast = {
   title: string;
   body: string;
   published: boolean;
+  important: boolean;
 };
 
 export type RecycleFile = {
