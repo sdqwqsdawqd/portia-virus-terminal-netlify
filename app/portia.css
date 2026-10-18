@@ -421,6 +421,10 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 @media (min-width: 901px) {
   /* Positioned against the editor window, not the viewport, so the save bar at the window's bottom is never covered (D-01). */
   .content-editor > .floating-text-format { position: absolute; right: 14px; bottom: 72px; max-height: min(390px, calc(100% - 46px - 72px - 14px)); }
+  /* The sticky save bar sits above the scroller's bottom padding, so extra padding would lift it under the panel:
+     the room to scroll the last field above the panel goes before the bar instead. */
+  .editor-window .content-editor:has(> .floating-text-format) { padding-bottom: 0; }
+  .editor-window .content-editor:has(> .floating-text-format) > .editor-savebar { margin-top: 400px; }
   /* The roster can be dozens of rows, so the list scrolls in its own column (D-04). */
   .content-editor > .employee-editor-layout { flex: 1 1 0; min-height: 320px; }
   .virus-editor-layout.employee-editor-layout { align-items: stretch; grid-template-rows: minmax(0, 1fr); }
@@ -791,7 +795,8 @@ html[data-motion="reduce"] .boot-lines p { animation: fade-in 160ms ease-out bot
 .section-kicker span { display: grid; place-items: center; width: 26px; height: 22px; background: var(--ink); color: var(--paper); }
 .classification-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #c8c2b5; border-left: 1px solid #c8c2b5; }
 .class-cell { min-width: 0; min-height: 74px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; padding: 11px 12px; border-right: 1px solid #c8c2b5; border-bottom: 1px solid #c8c2b5; }
-.class-cell span { color: oklch(.542 .014 var(--accent-hue)); font: 11px var(--sans); line-height: 1.3; text-transform: uppercase; }
+/* Every label reserves two lines and sits on their bottom, so values line up across a row even when one label wraps. */
+.class-cell span { min-height: 2.6em; display: flex; align-items: flex-end; color: oklch(.542 .014 var(--accent-hue)); font: 11px var(--sans); line-height: 1.3; text-transform: uppercase; }
 /* Badge and name share one centre line (D-08). */
 .class-cell strong { display: flex; align-items: center; gap: 6px; color: oklch(.237 .015 var(--accent-hue)); font: 700 15px var(--sans); overflow-wrap: anywhere; }
 .class-badge { flex: none; width: 18px; height: 18px; }
@@ -952,7 +957,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   html[data-icon-size="compact"] .desktop-icon-symbol { width: 42px; height: 42px; }
   html[data-icon-size="large"] .desktop-icon-symbol { width: 60px; height: 60px; }
   .mobile-app-open .desktop-icons { display: none; }
-  .app-window, .archive-window, .global-search-window { position: relative; inset: auto; top: auto; left: auto; right: auto; bottom: auto; width: 100% !important; height: auto !important; min-height: calc(100svh - 98px); transform: none !important; border-radius: 7px; }
+  .app-window, .archive-window, .global-search-window { position: relative; inset: auto !important; width: 100% !important; height: auto !important; min-height: calc(100svh - 98px); transform: none !important; border-radius: 7px; }
   .mobile-app-open .app-window:not(.is-active) { display: none !important; }
   .window-titlebar { grid-template-columns: 1fr auto; height: 42px; padding: 0 11px; }
   .window-titlebar { cursor: default; touch-action: auto; }
@@ -1042,7 +1047,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .editor-upload-control input[type="file"] { flex-basis: 200px; min-width: 0; }
   /* Header and ГОТОВО stay pinned; only the toolbar between them scrolls. */
   /* bottom: 44px taskbar + 56px save bar, which stays visible under the panel (D-01). */
-  .floating-text-format { right: 8px; bottom: 100px; width: min(620px, calc(100% - 16px)); max-height: min(34svh, 270px); display: flex; flex-direction: column; overflow: hidden; }
+  .floating-text-format { right: 8px; bottom: 108px; width: min(620px, calc(100% - 16px)); max-height: min(34svh, 270px); display: flex; flex-direction: column; overflow: hidden; }
   .floating-text-format > header, .floating-text-format > footer { flex: none; }
   /* Sticky cannot hold here: the page scrolls and .app-window clips, so the bar is fixed above the 44px taskbar. */
   .editor-savebar { position: fixed; left: 0; right: 0; bottom: 44px; margin: 0; padding: 8px 12px; min-height: 56px; }
@@ -1124,6 +1129,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .window-identity span { font-size: 9px; }
   .classification-grid { grid-template-columns: 1fr; }
   .class-cell.transmission { grid-column: auto; }
+  .class-cell span { min-height: 0; }
   .class-cell { min-height: 62px; }
   .media-empty { min-height: 195px; }
   .taskbar-app { max-width: 42px; overflow: hidden; }
