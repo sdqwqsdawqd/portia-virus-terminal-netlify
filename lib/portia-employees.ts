@@ -11,6 +11,7 @@ export type PortiaEmployee = {
   bioRating: number | null;
   sRating: number | null;
   activityRating: number | null;
+  testsRating: number | null;
   overallRating: number | null;
   biography: string;
   photoUrl: string;
@@ -20,7 +21,7 @@ export type PortiaEmployee = {
   order: number;
 };
 
-type OptionalRatingKey = "pawsRating" | "bioRating" | "sRating" | "activityRating" | "overallRating";
+type OptionalRatingKey = "pawsRating" | "bioRating" | "sRating" | "activityRating" | "testsRating" | "overallRating";
 type EditableFields = "knowledgeRating" | OptionalRatingKey | "biography" | "photoUrl";
 export type RosterEmployee = Omit<PortiaEmployee, EditableFields>;
 export type EmployeeProfile = Pick<PortiaEmployee, EditableFields>;
@@ -30,9 +31,11 @@ export type EmployeeUpdate = Omit<EmployeeProfile, OptionalRatingKey> & Partial<
 // Rename a rating here only: the editor fields and the profile card both render from this table (D-01).
 export const employeeRatings = [
   { key: "knowledgeRating", column: "knowledge_rating", label: "Знания" },
-  { key: "pawsRating", column: "paws_rating", label: "Знание лап" },
-  { key: "bioRating", column: "bio_rating", label: "Био" },
-  { key: "sRating", column: "s_rating", label: "S" },
+  // paws_rating / s_rating keep their first column names; only the labels changed (owner, 2026-10-18).
+  { key: "pawsRating", column: "paws_rating", label: "Знания лаборатории" },
+  { key: "testsRating", column: "tests_rating", label: "Знания тестов" },
+  { key: "bioRating", column: "bio_rating", label: "Умение делать БИО" },
+  { key: "sRating", column: "s_rating", label: "Умение делать СС" },
   { key: "activityRating", column: "activity_rating", label: "Актив" },
   { key: "overallRating", column: "overall_rating", label: "Общая" },
 ] as const;
@@ -48,6 +51,7 @@ export function profileOf(employee: PortiaEmployee): EmployeeProfile {
     bioRating: employee.bioRating ?? null,
     sRating: employee.sRating ?? null,
     activityRating: employee.activityRating ?? null,
+    testsRating: employee.testsRating ?? null,
     overallRating: employee.overallRating ?? null,
   };
 }
@@ -200,7 +204,7 @@ export function rosterFromRows(
   });
 }
 
-const emptyProfile: EmployeeProfile = { knowledgeRating: 1, pawsRating: null, bioRating: null, sRating: null, activityRating: null, overallRating: null, biography: "", photoUrl: "" };
+const emptyProfile: EmployeeProfile = { knowledgeRating: 1, pawsRating: null, bioRating: null, sRating: null, activityRating: null, testsRating: null, overallRating: null, biography: "", photoUrl: "" };
 
 // Stored junk is shown as "not rated" rather than clamped into a different number.
 const storedRating = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 10 ? value : null);
@@ -214,6 +218,7 @@ export function profileFromRow(row: ProfileColumns): EmployeeProfile {
     bioRating: storedRating(row.bio_rating),
     sRating: storedRating(row.s_rating),
     activityRating: storedRating(row.activity_rating),
+    testsRating: storedRating(row.tests_rating),
     overallRating: storedRating(row.overall_rating),
   };
 }

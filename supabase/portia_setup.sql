@@ -34,7 +34,8 @@ alter table public.portia_employee_profiles
   add column if not exists bio_rating integer check (bio_rating between 1 and 10),
   add column if not exists s_rating integer check (s_rating between 1 and 10),
   add column if not exists activity_rating integer check (activity_rating between 1 and 10),
-  add column if not exists overall_rating integer check (overall_rating between 1 and 10);
+  add column if not exists overall_rating integer check (overall_rating between 1 and 10),
+  add column if not exists tests_rating integer check (tests_rating between 1 and 10);
 -- PostgREST picks up the new columns without a restart.
 notify pgrst, 'reload schema';
 

@@ -6,7 +6,7 @@ import {
   sanitizeEmployeeUpdate, saveEmployeeProfile, withProfile, type EmployeeProfile, type PortiaEmployee,
 } from "./portia-employees.ts";
 
-const noRatings = { pawsRating: null, bioRating: null, sRating: null, activityRating: null, overallRating: null };
+const noRatings = { pawsRating: null, bioRating: null, sRating: null, activityRating: null, testsRating: null, overallRating: null };
 const header = '"Номер","Никнейм сотрудника","Позывной","Звание","Ранг"';
 
 function sheet(rows: string[]) {
@@ -99,7 +99,7 @@ function fakeTable(migrated: boolean, seed: Row[] = []) {
 }
 
 const target = { id: "roblox-1", nickname: "Fox", callsign: "", title: "", rank: "", robloxUserId: 1, robloxAvatarUrl: "", robloxFullAvatarUrl: "", order: 0 };
-const fullRatings = { knowledgeRating: 6, pawsRating: 5, bioRating: 4, sRating: 3, activityRating: 2, overallRating: 9 };
+const fullRatings = { knowledgeRating: 6, pawsRating: 5, bioRating: 4, sRating: 3, activityRating: 2, testsRating: 7, overallRating: 9 };
 
 async function roundTrip(migrated: boolean) {
   const table = fakeTable(migrated);
@@ -161,7 +161,7 @@ test("stored rows without rating columns, or with junk, map to empty ratings", (
 });
 
 test("the rating labels live in one ordered table", () => {
-  assert.deepEqual(employeeRatings.map((rating) => rating.label), ["Знания", "Знание лап", "Био", "S", "Актив", "Общая"]);
+  assert.deepEqual(employeeRatings.map((rating) => rating.label), ["Знания", "Знания лаборатории", "Знания тестов", "Умение делать БИО", "Умение делать СС", "Актив", "Общая"]);
 });
 
 test("profileChanged: identical profiles are clean, a missing new rating equals null", () => {
