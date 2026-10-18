@@ -1227,7 +1227,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 );
               })}</aside>
               <article className="info-document">{selectedInfo ? (selectedSubsection
-                ? <div className="content-fade" key={selectedSubsection.id}><span className="eyebrow">{selectedInfo.title}</span><h1>{selectedSubsection.title || "БЕЗ НАЗВАНИЯ"}</h1><div className="info-blocks">{selectedSubsection.blocks.map((block) => block.type === "text" ? <FormattedText key={block.id} className="info-document-copy" text={block.text} /> : null)}</div></div>
+                ? <div className="content-fade" key={selectedSubsection.id}><span className="eyebrow">{selectedInfo.title}</span><h1>{selectedSubsection.title || "БЕЗ НАЗВАНИЯ"}</h1><div className="info-blocks">{selectedSubsection.blocks.map((block) => block.type === "text"
+                  ? <FormattedText key={block.id} className="info-document-copy" text={block.text} />
+                  : block.type === "table"
+                    ? <dl key={block.id} className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row, rowIndex) => <div key={rowIndex}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl>
+                    : null)}</div></div>
                 : <div className="content-fade" key={selectedInfo.id}><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></div>
               ) : <div className="editor-empty">Разделов пока нет.</div>}</article>
             </div>}

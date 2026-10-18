@@ -126,6 +126,12 @@ function moveArrayItem<T>(items: T[], from: number, to: number) {
   items.splice(to, 0, item);
 }
 
+// Table rows are located by block id, then by their current index inside the same changeDraft call.
+function editTableRows(content: PortiaContent, subsectionId: string, blockId: string, edit: (rows: { key: string; value: string }[]) => void) {
+  const block = findInfo(content.infoSections, subsectionId)?.subsection?.blocks.find((item) => item.id === blockId);
+  if (block?.type === "table") edit(block.rows);
+}
+
 function recycleKeys(content: PortiaContent) {
   const valid = new Set([
     ...content.recycleFiles.map((file) => `file:${file.id}`),
@@ -193,9 +199,11 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
   };
   // A row swaps only once the pointer crosses its vertical middle, so rows of unequal height do not flip back and forth.
   const moveTo = (x: number, y: number) => {
+    // Nested «Информация» lists must not swap across levels: only rows sharing the dragged row's parent are targets.
+    const parent = button.current?.closest<HTMLElement>("[data-sort-index]")?.parentElement;
     const row = document.elementsFromPoint(x, y)
       .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
-      .find(Boolean);
+      .find((candidate) => candidate && candidate.parentElement === parent);
     const target = Number(row?.dataset.sortIndex);
     if (!row || !Number.isInteger(target) || target === indexRef.current) return;
     const { top, height } = row.getBoundingClientRect();
@@ -1035,18 +1043,31 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
               <div className="info-subsection-list">
                 {section.subsections.map((subsection, subIndex) => (
-                  <div className="nested-editor-card" key={subsection.id}>
-                    <div className="nested-editor-head"><strong>ПОДРАЗДЕЛ {String(subIndex + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.subsections = item.subsections.filter((entry) => entry.id !== subsection.id); }))}>Удалить</button></div></div>
+                  <div className="nested-editor-card" data-sort-index={subIndex} key={subsection.id}>
+                    <div className="nested-editor-head"><OrderDragHandle index={subIndex} label={subsection.title || "подраздел"} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} /><strong>ПОДРАЗДЕЛ {String(subIndex + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.subsections = item.subsections.filter((entry) => entry.id !== subsection.id); }))}>Удалить</button></div></div>
                     <Field label="Заголовок подраздела"><input maxLength={300} value={subsection.title} onChange={(event) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.title = event.target.value; })} /></Field>
                     <div className="info-block-list">
-                      {subsection.blocks.map((block) => (
-                        <div className="nested-editor-card" key={block.id}>
-                          <div className="nested-editor-head"><strong>ТЕКСТ</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.blocks = target.blocks.filter((entry) => entry.id !== block.id); })}>Удалить</button></div></div>
+                      {subsection.blocks.map((block, blockIndex) => (
+                        <div className="nested-editor-card" data-sort-index={blockIndex} key={block.id}>
+                          <div className="nested-editor-head"><OrderDragHandle index={blockIndex} label={block.type === "table" ? "таблица" : "текст"} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) moveArrayItem(target.blocks, from, to); })} /><strong>{block.type === "table" ? "ТАБЛИЦА: ПРИЗНАК — ЗНАЧЕНИЕ" : "ТЕКСТ"}</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.blocks = target.blocks.filter((entry) => entry.id !== block.id); })}>Удалить</button></div></div>
                           {block.type === "text" && <Field label="Текст" wide><textarea maxLength={20000} value={block.text} onChange={(event) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "text") item.text = event.target.value; }); })} /></Field>}
+                          {block.type === "table" && (
+                            <>
+                              {block.rows.map((row, rowIndex) => (
+                                <div className="info-table-row" key={rowIndex}>
+                                  <Field label="Признак"><input maxLength={500} value={row.key} onChange={(event) => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { if (rows[rowIndex]) rows[rowIndex].key = event.target.value; }); })} /></Field>
+                                  <Field label="Значение"><input maxLength={500} value={row.value} onChange={(event) => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { if (rows[rowIndex]) rows[rowIndex].value = event.target.value; }); })} /></Field>
+                                  <button type="button" onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.splice(rowIndex, 1); }); })}>Удалить строку</button>
+                                </div>
+                              ))}
+                              <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.push({ key: "", value: "" }); }); })}>+ СТРОКА</button>
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>
                     <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "text", text: "" }); })}>+ ТЕКСТ</button>
+                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "table", rows: [{ key: "", value: "" }] }); })}>+ ТАБЛИЦА</button>
                   </div>
                 ))}
               </div>
