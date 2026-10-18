@@ -379,6 +379,25 @@ export async function addManualEmployee(supabase: SupabaseClient, input: ManualE
   };
 }
 
+export type ManualDetails = Pick<ManualEmployeeInput, "title" | "rank" | "callsign">;
+
+export function sanitizeManualDetails(value: unknown): ManualDetails | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const text = (field: unknown) => (typeof field === "string" ? field.trim().slice(0, 64) : "");
+  return { title: text(candidate.title), rank: text(candidate.rank), callsign: text(candidate.callsign) };
+}
+
+/** Title, rank and callsign of a manual employee; sheet employees keep the values from the sheet. */
+export async function updateManualEmployee(supabase: SupabaseClient, employee: RosterEmployee, details: ManualDetails): Promise<{ status: "updated" | "sheet" | "pending-database" }> {
+  if (employee.source !== "manual") return { status: "sheet" };
+  const { data, error } = await supabase.from(manualTableName).update(details).eq("employee_id", employee.id).select("employee_id");
+  // Before the update grant and policy exist: 42501 without the grant, zero rows without the policy.
+  if (error?.code === "42501" || isMissingTableError(error)) return { status: "pending-database" };
+  if (error) throw error;
+  return { status: data?.length ? "updated" : "pending-database" };
+}
+
 /** Only a manual employee is removed, and only its manual row: the stored profile stays for a later re-add or a sheet row. */
 export async function removeManualEmployee(supabase: SupabaseClient, roster: RosterEmployee[], id: string): Promise<{ status: "deleted" | "not-found" | "sheet" }> {
   const employee = roster.find((item) => item.id === id);

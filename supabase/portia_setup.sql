@@ -212,6 +212,16 @@ on public.portia_manual_employees for delete
 to authenticated
 using ((select public.portia_can_edit()));
 
+-- Editors change title, rank and callsign of a manual employee; the id and nickname stay fixed.
+grant update (title, rank, callsign) on table public.portia_manual_employees to authenticated;
+
+drop policy if exists "Editors can edit PORTIA manual employees" on public.portia_manual_employees;
+create policy "Editors can edit PORTIA manual employees"
+on public.portia_manual_employees for update
+to authenticated
+using ((select public.portia_can_edit()))
+with check ((select public.portia_can_edit()));
+
 -- PostgREST picks up the new table without a restart.
 notify pgrst, 'reload schema';
 

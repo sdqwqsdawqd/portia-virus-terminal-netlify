@@ -53,7 +53,7 @@ type FormatTarget = {
 type EditorPreviewSurface = "light" | "dark";
 // Site area whose font the field mirrors; paired in the shared font block in app/portia.css.
 type DisplayArea = "lead" | "metric" | "mutation" | "scientist" | "info" | "broadcast" | "trash" | "caption" | "search" | "assistant";
-type ImagePlacement = "dossier" | "mutation" | "recycle" | "guide";
+type ImagePlacement = "dossier" | "mutation" | "recycle" | "guide" | "employee";
 
 const infoBlockHeads = {
   text: { label: "текст", title: "ТЕКСТ" },
@@ -1390,6 +1390,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   );
 }
 
+const detailsOf = (employee: PortiaEmployee) => ({ title: employee.title, rank: employee.rank, callsign: employee.callsign });
+
 function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onDirtyChange, leaving, onLeave }: {
   onSaved: (employee: PortiaEmployee) => void;
   onRemoved: (id: string) => void;
@@ -1416,11 +1418,15 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   const [addError, setAddError] = useState("");
   const [deleteAsked, setDeleteAsked] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Title, rank and callsign of a person outside the sheet; sheet employees take them from the sheet.
+  const [details, setDetails] = useState({ title: "", rank: "", callsign: "" });
+  const [detailsPending, setDetailsPending] = useState(false);
   const selected = employees.find((employee) => employee.id === selectedId) ?? employees[0] ?? null;
   // An upload that finishes after another employee was opened must not land on that employee's draft.
   const selectedIdRef = useRef("");
   useEffect(() => { selectedIdRef.current = selected?.id ?? ""; });
-  const dirty = Boolean(selected && draft && profileChanged(profileOf(selected), draft));
+  const detailsChanged = Boolean(selected?.source === "manual" && (details.title !== selected.title || details.rank !== selected.rank || details.callsign !== selected.callsign));
+  const dirty = Boolean(selected && draft && (profileChanged(profileOf(selected), draft) || detailsChanged));
   // Read after an awaited save: a cancelled question must not continue into the switch (D-02).
   const asking = pendingEmployeeId !== null || leaving;
   const askingRef = useRef(asking);
@@ -1456,7 +1462,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
         const first = next[0];
         setEmployees(next);
         setSelectedId(first?.id ?? "");
-        if (first) setDraft(profileOf(first));
+        if (first) { setDraft(profileOf(first)); setDetails(detailsOf(first)); }
         setState("idle");
       })
       .catch(() => { if (active) setState("error"); });
@@ -1468,6 +1474,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     if (!selected || !draft) return false;
     setState("saving");
     setRatingsPending(false);
+    setDetailsPending(false);
     setErrorMessage("");
     try {
       const response = await fetch("/api/employees", {
@@ -1475,9 +1482,9 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
         credentials: "same-origin",
         cache: "no-store",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: selected.id, changes: draft }),
+        body: JSON.stringify({ id: selected.id, changes: draft, ...(selected.source === "manual" ? { details } : {}) }),
       });
-      const payload = await response.json() as { employee?: PortiaEmployee; ratingsPending?: boolean; error?: string };
+      const payload = await response.json() as { employee?: PortiaEmployee; ratingsPending?: boolean; detailsPending?: boolean; error?: string };
       if (!response.ok || !payload.employee) {
         const message = response.status === 403
           ? "Сессия редактора истекла. Войдите в редактор снова."
@@ -1487,7 +1494,10 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
       setEmployees((current) => current.map((employee) => employee.id === payload.employee!.id ? payload.employee! : employee));
       onSaved(payload.employee);
       setDraft(profileOf(payload.employee));
+      // When the database refused the details, the typed values stay as an unsaved edit.
+      if (!payload.detailsPending) setDetails(detailsOf(payload.employee));
       setRatingsPending(Boolean(payload.ratingsPending));
+      setDetailsPending(Boolean(payload.detailsPending));
       setState("saved");
       window.setTimeout(() => setState("idle"), 1800);
       return true;
@@ -1533,7 +1543,9 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   const openEmployee = (employee: PortiaEmployee) => {
     setSelectedId(employee.id);
     setDraft(profileOf(employee));
+    setDetails(detailsOf(employee));
     setRatingsPending(false);
+    setDetailsPending(false);
     setState("idle");
     setRecordOpen(true);
     revealOnPhone(layoutRef);
@@ -1553,7 +1565,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     if (next) openEmployee(next);
     else {
       // After a save the draft already holds the saved profile; `selected` is the pre-save copy.
-      if (!saved) setDraft(profileOf(selected));
+      if (!saved) { setDraft(profileOf(selected)); setDetails(detailsOf(selected)); }
       onLeave(true);
     }
   };
@@ -1612,17 +1624,23 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
       </form>}
     </aside>
     <div className="editor-form employee-profile-editor">
-      <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять фотографию, оценки и биографию. Людей вне таблицы добавляют по нику Roblox; их звание, ранг и позывной задаются при добавлении.</p>
+      <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять фотографию, оценки и биографию. Людей вне таблицы добавляют по нику Roblox; их звание, ранг и позывной можно менять здесь.</p>
       <div className="employee-editor-summary">
         <figure>{preview ? <img src={preview} alt={`Аватар ${selected.nickname}`} referrerPolicy="no-referrer" /> : <img src="/assets/portia-logo.png" alt="" />}</figure>
         <div><span className="eyebrow">{selected.title || "БЕЗ ЗВАНИЯ"}</span><h2>{selected.nickname}</h2><p>{[selected.callsign || "без позывного", selected.rank || "ранг не указан"].join(" · ")}</p></div>
       </div>
       <EditorGroup title="Профиль сотрудника">
+        {selected.source === "manual" && <>
+          <Field label="Звание"><input value={details.title} maxLength={64} onChange={(event) => setDetails((current) => ({ ...current, title: event.target.value }))} /></Field>
+          <Field label="Ранг"><input value={details.rank} maxLength={64} onChange={(event) => setDetails((current) => ({ ...current, rank: event.target.value }))} /></Field>
+          <Field label="Позывной"><input value={details.callsign} maxLength={64} onChange={(event) => setDetails((current) => ({ ...current, callsign: event.target.value }))} /></Field>
+        </>}
         {employeeRatings.map(({ key, label }) => <Field key={key} label={`${label} — от 1 до 10`}><select value={draft[key] ?? ""} onChange={(event) => setDraft((current) => current && ({ ...current, [key]: event.target.value === "" ? null : Number(event.target.value) }))}><option value="">—</option>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>)}
-        <ImageEditorField label="Фото сотрудника" value={draft.photoUrl} placement="dossier" maxHint="Пусто — используется аватар Roblox" uploadState={uploadState} onChange={(value) => setDraft((current) => current && ({ ...current, photoUrl: value }))} onUpload={(file) => { const startedFor = selected.id; onUpload(file, (url) => { if (selectedIdRef.current === startedFor) setDraft((current) => current && ({ ...current, photoUrl: url })); }); }} />
+        <ImageEditorField label="Фото сотрудника" value={draft.photoUrl} placement="employee" maxHint="Пусто — используется аватар Roblox" uploadState={uploadState} onChange={(value) => setDraft((current) => current && ({ ...current, photoUrl: value }))} onUpload={(file) => { const startedFor = selected.id; onUpload(file, (url) => { if (selectedIdRef.current === startedFor) setDraft((current) => current && ({ ...current, photoUrl: url })); }); }} />
         <Field label="Биография" wide><textarea className="tall-textarea" value={draft.biography} onChange={(event) => setDraft((current) => current && ({ ...current, biography: event.target.value }))} /></Field>
       </EditorGroup>
       {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
+      {detailsPending && <p className="editor-guidance" role="status">Профиль сохранён, но звание, ранг и позывной — нет: база данных ещё не обновлена.</p>}
       {selected.source === "manual" && <button type="button" className="danger-control employee-remove" disabled={state === "saving" || deleting} onClick={() => setDeleteAsked(true)}>УДАЛИТЬ СОТРУДНИКА</button>}
       <div className="employee-editor-save"><span className={`editor-save-status ${state}`}>{state === "saving" ? "СОХРАНЕНИЕ…" : state === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
     </div>

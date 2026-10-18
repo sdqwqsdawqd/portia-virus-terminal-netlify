@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   acceptsRoster, addManualEmployee, employeeId, employeeRatings, mergeManualEmployees, parseCsv, profileChanged, profileFromRow,
-  readEmployeeProfiles, readManualEmployees, removeManualEmployee, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualEmployee,
+  readEmployeeProfiles, readManualEmployees, removeManualEmployee, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, updateManualEmployee,
   saveEmployeeProfile, withProfile, type EmployeeProfile, type PortiaEmployee, type RosterEmployee,
 } from "./portia-employees.ts";
 
@@ -202,10 +202,11 @@ test("a manual row for an account already in the sheet is dropped: the sheet win
 });
 
 // In-memory stand-in for the manual table: a read, an insert and a filtered delete, each with a configurable error.
-type ManualTableOptions = { rows?: Record<string, unknown>[]; readError?: { code: string }; insertError?: { code: string }; deleteError?: { code: string } };
+type ManualTableOptions = { rows?: Record<string, unknown>[]; readError?: { code: string }; insertError?: { code: string }; deleteError?: { code: string }; updateError?: { code: string } };
 function manualTable(options: ManualTableOptions = {}) {
   const inserts: Record<string, unknown>[] = [];
   const deletes: string[] = [];
+  const updates: { id: string; values: Record<string, unknown> }[] = [];
   const rows = options.rows ?? [];
   const client = {
     from: (table: string) => {
@@ -227,10 +228,20 @@ function manualTable(options: ManualTableOptions = {}) {
             },
           }),
         }),
+        update: (values: Record<string, unknown>) => ({
+          eq: (column: string, id: string) => ({
+            select: async () => {
+              assert.equal(column, "employee_id");
+              updates.push({ id, values });
+              if (options.updateError) return { data: null, error: options.updateError };
+              return { data: rows.filter((row) => row.employee_id === id).map((row) => ({ employee_id: row.employee_id })), error: null };
+            },
+          }),
+        }),
       };
     },
   };
-  return { client: client as unknown as SupabaseClient, inserts, deletes };
+  return { client: client as unknown as SupabaseClient, inserts, deletes, updates };
 }
 
 test("the manual read keeps the stored columns; a missing table is an empty, healthy list", async () => {
@@ -345,6 +356,30 @@ test("removing a manual employee deletes exactly its manual row; a row that was 
   assert.deepEqual(await removeManualEmployee(table.client, mixedRoster, "roblox-50"), { status: "deleted" });
   assert.deepEqual(table.deletes, ["roblox-50"]);
   assert.deepEqual(await removeManualEmployee(manualTable().client, mixedRoster, "roblox-50"), { status: "not-found" });
+});
+
+const gamma = mixedRoster.find((employee) => employee.id === "roblox-50")!;
+const sheetAlpha = mixedRoster.find((employee) => employee.id === "roblox-7")!;
+const newDetails = { title: "Доктор", rank: "3", callsign: "Гамма" };
+
+test("a manual employee's title, rank and callsign are updated in its row; a sheet employee issues no update", async () => {
+  const table = manualTable({ rows: [manualRow(50, "Gamma_x")] });
+  assert.deepEqual(await updateManualEmployee(table.client, gamma, newDetails), { status: "updated" });
+  assert.deepEqual(table.updates, [{ id: "roblox-50", values: newDetails }]);
+  const sheetTable = manualTable();
+  assert.deepEqual(await updateManualEmployee(sheetTable.client, sheetAlpha, newDetails), { status: "sheet" });
+  assert.equal(sheetTable.updates.length, 0);
+});
+
+test("before the update grant and policy exist the details are pending, not an error", async () => {
+  assert.deepEqual(await updateManualEmployee(manualTable({ rows: [manualRow(50, "Gamma_x")], updateError: { code: "42501" } }).client, gamma, newDetails), { status: "pending-database" });
+  // Without the update policy RLS matches no row.
+  assert.deepEqual(await updateManualEmployee(manualTable().client, gamma, newDetails), { status: "pending-database" });
+});
+
+test("details are trimmed and capped; anything that is not text becomes empty", () => {
+  assert.deepEqual(sanitizeManualDetails({ title: "  Доктор ", rank: 5, callsign: "x".repeat(80) }), { title: "Доктор", rank: "", callsign: "x".repeat(64) });
+  assert.equal(sanitizeManualDetails(null), null);
 });
 
 test("a delete error is thrown", async () => {

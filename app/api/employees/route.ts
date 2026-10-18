@@ -1,7 +1,7 @@
 import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
 import { employeesCacheTag, noStoreHeaders, publicCacheHeaders, purgeCacheTag } from "@/lib/portia-cdn";
-import { addManualEmployee, loadEmployees, removeManualEmployee, sanitizeEmployeeUpdate, sanitizeManualEmployee, saveEmployeeProfile, withProfile } from "@/lib/portia-employees";
+import { addManualEmployee, loadEmployees, removeManualEmployee, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, saveEmployeeProfile, updateManualEmployee, withProfile } from "@/lib/portia-employees";
 
 export const dynamic = "force-dynamic";
 
@@ -41,12 +41,17 @@ export async function PATCH(request: Request) {
     // «Знания» is no longer edited: keep the stored value whatever the client sent.
     changes.knowledgeRating = employee.knowledgeRating;
 
+    // Title, rank and callsign are editable only for people outside the sheet; the profile is saved first either way.
+    const details = employee.source === "manual" ? sanitizeManualDetails((body as { details?: unknown }).details) : null;
     const { ratingsSaved } = await saveEmployeeProfile(supabase, employee, changes, data.user.id);
+    const detailsResult = details ? await updateManualEmployee(supabase, employee, details) : null;
+    const saved = detailsResult?.status === "updated" ? { ...employee, ...details } : employee;
+    const detailsPending = detailsResult?.status === "pending-database" || undefined;
     await purgeCacheTag(employeesCacheTag);
-    if (ratingsSaved) return Response.json({ employee: { ...employee, ...changes } }, { headers: noStoreHeaders });
+    if (ratingsSaved) return Response.json({ employee: { ...saved, ...changes }, detailsPending }, { headers: noStoreHeaders });
     // The new rating columns do not exist yet: echo only what was stored.
     const { biography, photoUrl, knowledgeRating } = changes;
-    return Response.json({ employee: { ...employee, biography, photoUrl, knowledgeRating }, ratingsPending: true }, { headers: noStoreHeaders });
+    return Response.json({ employee: { ...saved, biography, photoUrl, knowledgeRating }, ratingsPending: true, detailsPending }, { headers: noStoreHeaders });
   } catch (error) {
     console.error("PORTIA employee update failed", error);
     return Response.json({ error: "Не удалось сохранить профиль." }, { status: 500 });

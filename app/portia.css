@@ -694,6 +694,9 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .editor-image-preview.recycle img { max-height: 720px; }
 .editor-image-preview.guide { max-width: 820px; }
 .editor-image-preview.guide img { max-height: 720px; }
+/* An employee photo is a portrait: a small square crop, as on the personnel card. */
+.editor-image-preview.employee { max-width: 220px; }
+.editor-image-preview.employee img { width: 100%; aspect-ratio: 1; object-fit: cover; }
 
 .boot-screen { position: fixed; z-index: 999; inset: 0; display: grid; place-items: center; background: #020706; opacity: 1; visibility: visible; transition: opacity 220ms ease, visibility 220ms ease; animation: boot-screen-failsafe 220ms ease 2.2s forwards; }
 .boot-screen::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(var(--desktop-glow), .025) 0 1px, transparent 1px 4px); pointer-events: none; }
