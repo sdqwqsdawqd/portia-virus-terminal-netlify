@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  acceptsRoster, employeeId, employeeRatings, parseCsv, profileFromRow, readEmployeeProfiles, rosterFromRows,
+  acceptsRoster, employeeId, employeeRatings, parseCsv, profileChanged, profileFromRow, readEmployeeProfiles, rosterFromRows,
   sanitizeEmployeeUpdate, saveEmployeeProfile, withProfile, type EmployeeProfile, type PortiaEmployee,
 } from "./portia-employees.ts";
 
@@ -162,4 +162,19 @@ test("stored rows without rating columns, or with junk, map to empty ratings", (
 
 test("the rating labels live in one ordered table", () => {
   assert.deepEqual(employeeRatings.map((rating) => rating.label), ["Знания", "Знание лап", "Био", "S", "Актив", "Общая"]);
+});
+
+test("profileChanged: identical profiles are clean, a missing new rating equals null", () => {
+  const saved: EmployeeProfile = { biography: "bio", photoUrl: "", knowledgeRating: 5, ...noRatings };
+  assert.equal(profileChanged(saved, { ...saved }), false);
+  const legacy = { ...saved } as Partial<EmployeeProfile>;
+  delete legacy.pawsRating;
+  assert.equal(profileChanged(legacy as EmployeeProfile, saved), false);
+});
+
+test("profileChanged: biography, photo and each rating are changes, whitespace counts", () => {
+  const saved: EmployeeProfile = { biography: "bio", photoUrl: "", knowledgeRating: 5, ...noRatings };
+  assert.equal(profileChanged(saved, { ...saved, biography: "bio " }), true);
+  assert.equal(profileChanged(saved, { ...saved, photoUrl: "x" }), true);
+  for (const { key } of employeeRatings) assert.equal(profileChanged(saved, { ...saved, [key]: 7 }), true, key);
 });
