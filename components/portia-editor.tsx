@@ -5,7 +5,8 @@ import { flushSync } from "react-dom";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
-import { removeBroadcast, removeInfoSection, removeMutation, updateById } from "@/lib/editor-items";
+import { broadcastTabOf, type BroadcastTab } from "@/lib/broadcasts";
+import { addBroadcast, removeBroadcast, removeInfoSection, removeMutation, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
   portiaTextKey,
@@ -561,6 +562,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
+  const [broadcastEditorTab, setBroadcastEditorTab] = useState<BroadcastTab>("news");
+  // A new or moved card is focused once it is in the DOM; focus scrolls it into view (G-03.2-2a).
+  const revealBroadcast = useRef<{ id: string; field: "title" | "type" } | null>(null);
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface>("light");
   // At 900px and below a list + form layout shows either the list or the open record (D-01, D-02).
   const [recordOpen, setRecordOpen] = useState(false);
@@ -707,6 +711,24 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     setFormatTarget(null);
     setFormatterOpen(false);
   };
+
+  const shownBroadcasts = draft.broadcasts.filter((item) => broadcastTabOf(item.type) === broadcastEditorTab);
+  // Same reason as selectDossierTab: the panel's target may sit in a card of the category being hidden (T-03.2-20).
+  const selectBroadcastTab = (id: BroadcastTab) => {
+    setBroadcastEditorTab(id);
+    setFormatTarget(null);
+    setFormatterOpen(false);
+  };
+
+  useEffect(() => {
+    const target = revealBroadcast.current;
+    if (!target || tab !== "broadcasts") return;
+    const card = document.querySelector(`[data-broadcast-id="${CSS.escape(target.id)}"]`);
+    const field = card?.querySelector<HTMLElement>(target.field === "title" ? "[data-broadcast-title]" : "[data-broadcast-type]");
+    if (!field) return;
+    field.focus();
+    revealBroadcast.current = null;
+  }, [draft.broadcasts, broadcastEditorTab, tab]);
 
   const showTab = (id: EditorTab) => {
     setTab(id);
@@ -1018,12 +1040,26 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {tab === "broadcasts" && (
         <div className="editor-form flat-editor-form">
           <p className="editor-guidance">Публикуйте еженедельные квесты, задачи и новости. Отключённые сообщения сохраняются как черновики.</p>
-          {draft.broadcasts.length === 0 && <div className="editor-empty">Сообщений пока нет. Создайте первое сообщение.</div>}
-          {draft.broadcasts.map((broadcast, index) => (
-            <div className="nested-editor-card" key={broadcast.id}>
-              <div className="nested-editor-head"><strong>СООБЩЕНИЕ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.broadcast(broadcast.id)); changeDraft((next) => removeBroadcast(next, broadcast.id)); }}>Удалить</button></div>
-              <Field label="Тип"><select value={broadcast.type} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.type = event.target.value as Broadcast["type"]; }))}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
-              <Field label="Заголовок"><input value={broadcast.title} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.title = event.target.value; }))} /></Field>
+          <nav className="editor-tabs dossier-tabs" aria-label="Разделы сводки">
+            {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([id, label]) => (
+              <button key={id} type="button" className={broadcastEditorTab === id ? "active" : ""} aria-pressed={broadcastEditorTab === id} onClick={() => selectBroadcastTab(id)}>
+                {label} {draft.broadcasts.filter((item) => broadcastTabOf(item.type) === id).length}
+              </button>
+            ))}
+          </nav>
+          <button className="secondary-control" type="button" onClick={() => {
+            const id = makeId("broadcast");
+            revealBroadcast.current = { id, field: "title" };
+            setFormatTarget(null);
+            setFormatterOpen(false);
+            changeDraft((next) => addBroadcast(next, id, broadcastEditorTab === "news" ? "news" : "quest"));
+          }}>{broadcastEditorTab === "news" ? "+ НОВАЯ НОВОСТЬ" : "+ НОВЫЙ КВЕСТ"}</button>
+          {shownBroadcasts.length === 0 && <div className="editor-empty">{broadcastEditorTab === "news" ? "Новостей пока нет." : "Квестов и задач пока нет."}</div>}
+          {shownBroadcasts.map((broadcast, index) => (
+            <div className="nested-editor-card" key={broadcast.id} data-broadcast-id={broadcast.id}>
+              <div className="nested-editor-head"><strong>{broadcast.type === "news" ? "НОВОСТЬ" : broadcast.type === "quest" ? "КВЕСТ" : "ЗАДАЧА"} {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.broadcast(broadcast.id)); changeDraft((next) => removeBroadcast(next, broadcast.id)); }}>Удалить</button></div>
+              <Field label="Тип"><select data-broadcast-type value={broadcast.type} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.type = event.target.value as Broadcast["type"]; }))}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
+              <Field label="Заголовок"><input data-broadcast-title value={broadcast.title} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.title = event.target.value; }))} /></Field>
               <FormattedTextarea area="broadcast" label="Текст" tall value={broadcast.body} document={draft.formattedText[portiaTextKey.broadcast(broadcast.id)]} formatKey={portiaTextKey.broadcast(broadcast.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.broadcast(broadcast.id), value, document, (next, text) => updateById(next.broadcasts, broadcast.id, (item) => { item.body = text; }))} />
               {broadcast.type === "quest" && (
                 <>
@@ -1036,7 +1072,6 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               {broadcast.type === "news" && <label className="publish-toggle"><input type="checkbox" checked={broadcast.important} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.important = event.target.checked; }))} /><span>Важная новость — выделить и закрепить сверху</span></label>}
             </div>
           ))}
-          <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.broadcasts.unshift({ id: makeId("broadcast"), type: "news", title: "", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" }))}>+ НОВОЕ СООБЩЕНИЕ</button>
         </div>
       )}
 

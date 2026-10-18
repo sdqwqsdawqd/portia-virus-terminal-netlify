@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { removeBroadcast, removeInfoSection, removeMutation, updateById } from "./editor-items.ts";
+import { addBroadcast, removeBroadcast, removeInfoSection, removeMutation, updateById } from "./editor-items.ts";
 import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
 const fixture = (): PortiaContent => {
@@ -87,4 +87,25 @@ test("deleting an unformatted mutation drops the formatting the next one would h
   removeMutation(content, virus, 0);
   assert.equal(virus.mutations.length, 0);
   assert.equal(portiaTextKey.mutation(virus.id, 0) in content.formattedText, false);
+});
+
+test("a new news item and a new quest are blank, unpublished and put at the top", () => {
+  const content = fixture();
+  const before = structuredClone(content);
+  addBroadcast(content, "n1", "news");
+  addBroadcast(content, "q1", "quest");
+  const blank = { title: "", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" };
+  assert.deepEqual(content.broadcasts[1], { id: "n1", type: "news", ...blank });
+  assert.deepEqual(content.broadcasts[0], { id: "q1", type: "quest", ...blank });
+  assert.deepEqual(content.broadcasts.slice(2), before.broadcasts);
+  assert.deepEqual(content.formattedText, before.formattedText);
+});
+
+test("a new item is blank, not a copy of the last edited one", () => {
+  const content = fixture();
+  updateById(content.broadcasts, "a", (item) => { item.body = "текст A2"; });
+  addBroadcast(content, "n1", "news");
+  assert.equal(content.broadcasts[0].body, "");
+  assert.equal(content.broadcasts[0].title, "");
+  assert.equal(content.broadcasts[1].body, "текст A2");
 });

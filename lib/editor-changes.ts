@@ -7,7 +7,7 @@ export const editorSections: EditorSection[] = ["viruses", "info", "broadcasts",
 export const sectionLabels: Record<EditorSection, string> = {
   viruses: "База вирусов",
   info: "Информация",
-  broadcasts: "Сообщения",
+  broadcasts: "Сводка",
   recycle: "Корзина",
   search: "Рекомендации",
   assistant: "Помощник",
