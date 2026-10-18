@@ -4,16 +4,16 @@ current_phase: "03.2"
 current_phase_name: Сотрудники и Сводка (INSERTED)
 status: executing
 stopped_at: Completed 03.2-05-PLAN.md
-last_updated: "2026-10-18T09:39:52.498Z"
+last_updated: "2026-10-18T10:42:05.213Z"
 last_activity: 2026-10-18
 last_activity_desc: Phase PORTIA-03.2 execution started
-state_head: 7f40883fa6780f4a6b28bcdfceec2fc2307295b7
+state_head: 4fc1e8295b652100d5e53c07c01d888a796361e1
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 3
   total_plans: 30
   completed_plans: 29
-  percent: 43
+  percent: 38
 ---
 
 # Project State
@@ -32,7 +32,7 @@ Plan: 6 of 6
 Status: Executing Phase PORTIA-03.2
 Last activity: 2026-10-18 — Phase PORTIA-03.2 execution started
 
-Progress: [████░░░░░░] 43%
+Progress: [████░░░░░░] 38%
 
 ## Accumulated Context
 
@@ -73,6 +73,7 @@ None — незакоммиченная работа закоммичена в P
 
 - Phase 03.1 inserted after Phase 3: owner and external review bugs after phase 3 (URGENT)
 - Phase 03.2 inserted after Phase 03.1: employee ratings and Svodka redesign
+- Phase 03.3 inserted after Phase 3: Сотрудники вне таблицы (по нику Roblox, своё фото, удаляемые) и подкатегории с фото/YouTube в «Информации» (URGENT)
 
 ## Session Continuity
 
