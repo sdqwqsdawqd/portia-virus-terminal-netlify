@@ -35,6 +35,8 @@ const originOf = (element: Element, kind: OpenOrigin["kind"]): OpenOrigin => {
 const WINDOW_CLOSE_MS = 180;
 const WINDOW_MINIMIZE_MS = 320;
 const WINDOW_FADE_OUT_MS = 120;
+// shortcut: a 10 s poll of the CDN-cached content, not a push channel; switch to Supabase Realtime if visitors need it within a second or the content grows large
+const contentSyncMs = 10_000;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string };
 type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
@@ -460,7 +462,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const clockTimer = window.setInterval(tick, 1000);
     const initialFetchTimer = window.setTimeout(() => { void fetchContent(); void fetchAccess(); }, 0);
     const initialEmployeesTimer = window.setTimeout(() => void fetchEmployees(), 0);
-    const syncTimer = window.setInterval(fetchContent, 30_000);
+    const syncTimer = window.setInterval(() => { if (document.visibilityState === "visible") void fetchContent(); }, contentSyncMs);
+    const onVisible = () => { if (document.visibilityState === "visible") void fetchContent(); };
+    document.addEventListener("visibilitychange", onVisible);
     // Cheap: answered by the CDN, so other visitors see profile edits within minutes.
     const employeeSyncTimer = window.setInterval(fetchEmployees, 5 * 60 * 1000);
     return () => {
@@ -470,6 +474,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       window.clearTimeout(initialEmployeesTimer);
       window.clearInterval(clockTimer);
       window.clearInterval(syncTimer);
+      document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(employeeSyncTimer);
     };
   }, [fetchAccess, fetchContent, fetchEmployees]);
@@ -1263,7 +1268,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
               <SettingGroup title="Анимации" values={[['on','Включены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
-              <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сообщения, поиск и советы помощника." : "Войдите в разрешённый аккаунт редактора."}</p></div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
+              <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сводку, поиск и советы помощника." : "Войдите в разрешённый аккаунт редактора."}</p></div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>
             </div>
           </AppWindow>
