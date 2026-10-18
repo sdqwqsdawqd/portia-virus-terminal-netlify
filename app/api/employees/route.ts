@@ -9,9 +9,9 @@ export const dynamic = "force-dynamic";
 // just its own query params), so freshness comes from purging on save, not URLs.
 export async function GET() {
   try {
-    const { employees, syncedAt, complete } = await loadEmployees(createPublicSupabaseClient());
+    const { employees, syncedAt, complete, profilesRead } = await loadEmployees(createPublicSupabaseClient());
     return Response.json(
-      { employees, syncedAt, degraded: !complete },
+      { employees, syncedAt, degraded: !complete, profilesRead },
       { headers: publicCacheHeaders(employeesCacheTag, complete ? 600 : 30) },
     );
   } catch (error) {
@@ -34,9 +34,12 @@ export async function PATCH(request: Request) {
     const id = typeof body.id === "string" ? body.id : "";
     const changes = sanitizeEmployeeUpdate(body.changes);
     if (!changes) return Response.json({ error: "Некорректные данные." }, { status: 400 });
-    const { employees } = await loadEmployees(supabase);
+    const { employees, profilesRead } = await loadEmployees(supabase);
+    if (!profilesRead) return Response.json({ error: "Профили сотрудников не загрузились. Обновите страницу через минуту." }, { status: 503 });
     const employee = employees.find((item) => item.id === id);
     if (!employee) return Response.json({ error: "Сотрудник не найден. Обновите страницу." }, { status: 404 });
+    // «Знания» is no longer edited: keep the stored value whatever the client sent.
+    changes.knowledgeRating = employee.knowledgeRating;
 
     const { ratingsSaved } = await saveEmployeeProfile(supabase, employee, changes, data.user.id);
     await purgeCacheTag(employeesCacheTag);

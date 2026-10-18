@@ -264,6 +264,8 @@ export async function loadEmployees(supabase: SupabaseClient) {
     syncedAt: new Date().toISOString(),
     // An incomplete answer is cached only briefly so avatars and biographies return quickly.
     complete: Boolean(profiles) && roblox.ok,
+    // Without the stored profiles every employee looks blank; a save from that would wipe them.
+    profilesRead: Boolean(profiles),
   };
 }
 

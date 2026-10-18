@@ -1337,10 +1337,12 @@ function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
     void fetch("/api/employees")
       .then(async (response) => {
         if (!response.ok) throw new Error("load failed");
-        return response.json() as Promise<{ employees?: PortiaEmployee[] }>;
+        return response.json() as Promise<{ employees?: PortiaEmployee[]; profilesRead?: boolean }>;
       })
       .then((payload) => {
         if (!active) return;
+        // Blank profiles must not become drafts: saving one would erase the stored biography and photo.
+        if (payload.profilesRead === false) throw new Error("profiles not read");
         const next = payload.employees ?? [];
         const first = next[0];
         setEmployees(next);
@@ -1407,12 +1409,13 @@ function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
     if (state !== "saving") setPendingEmployeeId(employee.id);
   };
   // After the answer: to the pending employee, or out of the tab / the window (the draft is dropped when not saved).
-  const continueLeave = () => {
+  const continueLeave = (saved = false) => {
     const next = employees.find((employee) => employee.id === pendingEmployeeId);
     setPendingEmployeeId(null);
     if (next) openEmployee(next);
     else {
-      setDraft(profileOf(selected));
+      // After a save the draft already holds the saved profile; `selected` is the pre-save copy.
+      if (!saved) setDraft(profileOf(selected));
       onLeave(true);
     }
   };
@@ -1438,7 +1441,7 @@ function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
         <Field label="Ссылка на фото"><input value={draft.photoUrl} onChange={(event) => setDraft((current) => current && ({ ...current, photoUrl: event.target.value }))} placeholder="Пусто — использовать аватар Roblox" /></Field>
         <Field label="Биография" wide><textarea className="tall-textarea" value={draft.biography} onChange={(event) => setDraft((current) => current && ({ ...current, biography: event.target.value }))} /></Field>
       </EditorGroup>
-      {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.slice(1).map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
+      {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
       <div className="employee-editor-save"><span className={`editor-save-status ${state}`}>{state === "saving" ? "СОХРАНЕНИЕ…" : state === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
     </div>
     {asking && (
@@ -1453,12 +1456,12 @@ function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
             onClick: () => {
               void save().then((saved) => {
                 if (!askingRef.current) return;
-                if (saved) continueLeave();
+                if (saved) continueLeave(true);
                 else cancelLeave();
               });
             },
           },
-          { label: "НЕ СОХРАНЯТЬ", tone: "danger", disabled: state === "saving", onClick: continueLeave },
+          { label: "НЕ СОХРАНЯТЬ", tone: "danger", disabled: state === "saving", onClick: () => continueLeave() },
           { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: cancelLeave },
         ]}
         onCancel={cancelLeave}
