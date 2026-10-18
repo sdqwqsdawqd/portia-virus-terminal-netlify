@@ -373,10 +373,17 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
   .personnel-avatar-stage { width: min(100%, 280px); height: 260px; justify-self: center; }
   .personnel-profile-head .personnel-portrait { right: 10px; bottom: -13px; width: 72px; }
 }
-.personnel-stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin: 28px 0 0; border-top: 1px solid oklch(.407 .035 var(--accent-hue)); border-left: 1px solid oklch(.407 .035 var(--accent-hue)); }
+.personnel-stats { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); margin: 28px 0 0; border-top: 1px solid oklch(.407 .035 var(--accent-hue)); border-left: 1px solid oklch(.407 .035 var(--accent-hue)); }
 .personnel-stats div { min-width: 0; padding: 15px; border-right: 1px solid oklch(.407 .035 var(--accent-hue)); border-bottom: 1px solid oklch(.407 .035 var(--accent-hue)); }
 .personnel-stats dt { margin-bottom: 8px; color: oklch(.596 .029 var(--accent-hue)); font: 11px var(--sans); letter-spacing: .08em; }
 .personnel-stats dd { margin: 0; color: oklch(.932 .01 var(--accent-hue)); font: 700 13px/1.45 var(--sans); overflow-wrap: anywhere; }
+/* Ratings: 3 per row, 2 per row in a narrow profile (D-01). The 900px rule keeps this selector from collapsing to one column. */
+.personnel-stats.personnel-ratings { grid-template-columns: repeat(3,minmax(0,1fr)); margin-top: 12px; }
+.personnel-ratings dt { text-transform: uppercase; }
+.personnel-ratings dd { font-size: 20px; }
+@container (max-width: 460px) {
+  .personnel-stats.personnel-ratings { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
 .personnel-biography { margin-top: 26px; padding: 19px; border: 1px solid oklch(.383 .033 var(--accent-hue)); background: rgba(255,255,255,.016); }
 .personnel-biography > span { color: var(--teal); font: 11px var(--sans); letter-spacing: .09em; }
 .personnel-biography p { max-height: min(300px, 34vh); margin: 13px 0 0; overflow-y: auto; color: oklch(.79 .02 var(--accent-hue)); font-size: 15px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
