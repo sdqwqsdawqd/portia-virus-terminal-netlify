@@ -337,6 +337,11 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .info-subsection-list:empty, .info-block-list:empty { display: none; }
 .info-table-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 10px; }
 .info-table-row button { border: 0; background: transparent; color: #b96a63; font: 11px var(--sans); cursor: pointer; padding: 10px 4px; }
+.info-block-video { margin: 0; max-width: 820px; }
+.info-block-video iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; }
+.info-block-video figcaption { margin-top: 8px; font: 12px var(--sans); }
+.info-block-video a { color: var(--teal); text-decoration: none; }
+.info-block-video a:hover { text-decoration: underline; }
 .info-document-copy { display: block; max-width: 82ch; color: oklch(.79 .02 var(--accent-hue)); }
 .info-document-copy p { margin: 0 0 22px; color: oklch(.79 .02 var(--accent-hue)); font-size: 16px; line-height: 1.78; white-space: pre-line; }
 .info-document-copy p:first-child { color: oklch(.897 .013 var(--accent-hue)); font-size: 17px; }

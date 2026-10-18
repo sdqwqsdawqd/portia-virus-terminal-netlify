@@ -19,6 +19,7 @@ import {
   type RichTextStyle,
   type Virus,
 } from "@/lib/portia-content";
+import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
@@ -53,6 +54,13 @@ type EditorPreviewSurface = "light" | "dark";
 // Site area whose font the field mirrors; paired in the shared font block in app/portia.css.
 type DisplayArea = "lead" | "metric" | "mutation" | "scientist" | "info" | "broadcast" | "trash" | "caption" | "search" | "assistant";
 type ImagePlacement = "dossier" | "mutation" | "recycle";
+
+const infoBlockHeads = {
+  text: { label: "текст", title: "ТЕКСТ" },
+  table: { label: "таблица", title: "ТАБЛИЦА: ПРИЗНАК — ЗНАЧЕНИЕ" },
+  photo: { label: "фото", title: "ФОТО" },
+  video: { label: "видео", title: "ВИДЕО YOUTUBE" },
+} as const;
 
 const ActiveFormatContext = createContext<{ key: string | null; surface: EditorPreviewSurface; phonePanelOpen: boolean }>({ key: null, surface: "light", phonePanelOpen: false });
 
@@ -1049,8 +1057,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                     <div className="info-block-list">
                       {subsection.blocks.map((block, blockIndex) => (
                         <div className="nested-editor-card" data-sort-index={blockIndex} key={block.id}>
-                          <div className="nested-editor-head"><OrderDragHandle index={blockIndex} label={block.type === "table" ? "таблица" : "текст"} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) moveArrayItem(target.blocks, from, to); })} /><strong>{block.type === "table" ? "ТАБЛИЦА: ПРИЗНАК — ЗНАЧЕНИЕ" : "ТЕКСТ"}</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.blocks = target.blocks.filter((entry) => entry.id !== block.id); })}>Удалить</button></div></div>
+                          <div className="nested-editor-head"><OrderDragHandle index={blockIndex} label={infoBlockHeads[block.type].label} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) moveArrayItem(target.blocks, from, to); })} /><strong>{infoBlockHeads[block.type].title}</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.blocks = target.blocks.filter((entry) => entry.id !== block.id); })}>Удалить</button></div></div>
                           {block.type === "text" && <Field label="Текст" wide><textarea maxLength={20000} value={block.text} onChange={(event) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "text") item.text = event.target.value; }); })} /></Field>}
+                          {block.type === "video" && <YoutubeField videoId={block.videoId} onChange={(videoId) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "video") item.videoId = videoId; }); })} />}
                           {block.type === "table" && (
                             <>
                               {block.rows.map((row, rowIndex) => (
@@ -1068,6 +1077,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                     </div>
                     <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "text", text: "" }); })}>+ ТЕКСТ</button>
                     <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "table", rows: [{ key: "", value: "" }] }); })}>+ ТАБЛИЦА</button>
+                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "video", videoId: "" }); })}>+ ВИДЕО</button>
                   </div>
                 ))}
               </div>
@@ -2144,6 +2154,17 @@ function EditorGroup({ title, children, stack = false }: { title: string; childr
 
 function Field({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {
   return <label className={`editor-field${wide ? " wide" : ""}`}><span>{label}</span>{children}</label>;
+}
+
+// Typed text lives here; the stored id is the source of truth, so undo/redo shows the stored video without an effect.
+function YoutubeField({ videoId, onChange }: { videoId: string; onChange: (videoId: string) => void }) {
+  const [typed, setTyped] = useState("");
+  const shown = parseYoutubeId(typed) === videoId ? typed : videoId ? `https://www.youtube.com/watch?v=${videoId}` : "";
+  return <label className="editor-field wide">
+    <span>Ссылка на YouTube</span>
+    <input value={shown} inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="https://www.youtube.com/watch?v=… или https://youtu.be/…" onChange={(event) => { setTyped(event.target.value); onChange(parseYoutubeId(event.target.value)); }} />
+    <small className="editor-media-hint">{videoId ? "Видео распознано" : shown ? "Нужна ссылка на YouTube: youtube.com/watch?v=… или youtu.be/…" : "Принимаются только ссылки YouTube."}</small>
+  </label>;
 }
 
 function ImageEditorField({ label, value, placement, maxHint, uploadState = "idle", onChange, onUpload }: {
