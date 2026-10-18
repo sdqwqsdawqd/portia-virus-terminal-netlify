@@ -38,7 +38,7 @@ test("line breaks inside text survive normalization", () => {
 
 test("broadcasts saved before 03.2 normalize to not important and keep their fields", () => {
   const old = { id: "a", type: "quest", title: "T", body: "B", published: true };
-  assert.deepEqual(normalizeBroadcasts([old]), [{ ...old, important: false }]);
+  assert.deepEqual(normalizeBroadcasts([old]), [{ ...old, important: false, startsAt: "", endsAt: "", conditions: "" }]);
 });
 
 test("important is a strict boolean and junk entries are dropped in order", () => {
@@ -64,5 +64,27 @@ test("normalizePortiaContent stays idempotent with old and new broadcasts", () =
   const once = normalizePortiaContent(content);
   assert.ok(once);
   assert.deepEqual(once.broadcasts.map((item) => item.important), [true, false]);
+  assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
+});
+
+test("quest dates keep only strict YYYY-MM-DD and conditions keep line breaks, capped at 4000", () => {
+  const base = { id: "q", type: "quest", title: "", body: "", published: true };
+  const at = (fields: object) => normalizeBroadcasts([{ ...base, ...fields }])[0];
+  assert.equal(at({ startsAt: "2026-10-20" }).startsAt, "2026-10-20");
+  for (const bad of ["20.10.2026", "2026-1-5", 20261020, "2026-10-20T00:00", null, " 2026-10-20"]) {
+    assert.equal(at({ startsAt: bad, endsAt: bad }).startsAt, "");
+    assert.equal(at({ startsAt: bad, endsAt: bad }).endsAt, "");
+  }
+  assert.equal(at({ conditions: "a\nb" }).conditions, "a\nb");
+  assert.equal(at({ conditions: 5 }).conditions, "");
+  assert.equal(at({ conditions: "x".repeat(4100) }).conditions.length, 4000);
+});
+
+test("normalizePortiaContent stays idempotent with quest fields present", () => {
+  const content = structuredClone(defaultPortiaContent);
+  content.broadcasts = [{ id: "q", type: "quest", title: "Q", body: "", published: true, important: false, startsAt: "2026-10-20", endsAt: "2026-10-25", conditions: "a\nb" }];
+  const once = normalizePortiaContent(content);
+  assert.ok(once);
+  assert.deepEqual(once.broadcasts[0], content.broadcasts[0]);
   assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
 });
