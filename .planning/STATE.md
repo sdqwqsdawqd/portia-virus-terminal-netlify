@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: "03.3"
 current_phase_name: Сотрудники вне таблицы и гайды в Информации (INSERTED)
 status: executing
-stopped_at: Completed PORTIA-03.3-01-PLAN.md
-last_updated: "2026-10-18T17:53:17.849Z"
+stopped_at: Completed PORTIA-03.3-02-PLAN.md
+last_updated: "2026-10-18T17:59:45.872Z"
 last_activity: 2026-10-18
 last_activity_desc: Phase PORTIA-03.3 execution started
-state_head: f486e7b3446fb42a2acd33b13ad8dd2fe39a9d5c
+state_head: 07097815002c0fa417403e2b16cec5415a0232df
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 36
-  completed_plans: 33
+  completed_plans: 34
   percent: 63
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-18)
 ## Current Position
 
 Phase: PORTIA-03.3 (Сотрудники вне таблицы и гайды в Информации (INSERTED)) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Executing Phase PORTIA-03.3
 Last activity: 2026-10-18 — Phase PORTIA-03.3 execution started
 
@@ -66,6 +66,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase PORTIA-03.3]: 03.3-01: manual employees live in public.portia_manual_employees keyed by roblox-<userId>; the sheet wins on the same account
 - [Phase PORTIA-03.3]: 03.3-01: removing a manual employee keeps the profile row; title/rank/callsign change by remove and re-add
 - [Phase PORTIA-03.3]: 03.3-01: SQL recorded in supabase/portia_setup.sql, not applied; production apply is 03.3-04 behind the owner gate
+- [Phase PORTIA-03.3]: 03.3-02: guides are InfoSection.subsections[].blocks[] (text | table | photo | video) in the content payload, normalized by normalizeInfoSections on save, read and the desktop's cached copies
+- [Phase PORTIA-03.3]: 03.3-02: OrderDragHandle only swaps rows that share a parent
 
 ### Pending Todos
 
@@ -88,8 +90,8 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-18T17:53:17.567Z
-Stopped at: Completed PORTIA-03.3-01-PLAN.md
+Last session: 2026-10-18T17:59:45.575Z
+Stopped at: Completed PORTIA-03.3-02-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -118,3 +120,4 @@ Resume file: None
 | Phase PORTIA-03.2 P07 | 20min | 2 tasks | 3 files |
 | Phase 03.2 P08 | 15min | 2 tasks | 4 files |
 | Phase PORTIA-03.3 P01 | 35min | 3 tasks | 7 files |
+| Phase PORTIA-03.3 P02 | 30min | 3 tasks | 7 files |
