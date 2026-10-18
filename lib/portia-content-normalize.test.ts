@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultPortiaContent } from "./portia-content.ts";
-import { normalizeBroadcasts, normalizePortiaContent } from "./portia-content-normalize.ts";
+import { defaultPortiaContent, findInfo, type InfoSection } from "./portia-content.ts";
+import { normalizeBroadcasts, normalizeInfoSections, normalizePortiaContent } from "./portia-content-normalize.ts";
 
 test("a save round-trip keeps every field", () => {
   const once = normalizePortiaContent(structuredClone(defaultPortiaContent));
@@ -87,4 +87,83 @@ test("normalizePortiaContent stays idempotent with quest fields present", () => 
   assert.ok(once);
   assert.deepEqual(once.broadcasts[0], content.broadcasts[0]);
   assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
+});
+
+test("a flat section saved before 03.3 gains empty subsections and keeps everything else", () => {
+  const out = normalizeInfoSections([{ id: "a", title: "T", body: "B" }, null, "x", { title: 5, body: 7 }]);
+  assert.deepEqual(out, [
+    { id: "a", title: "T", body: "B", subsections: [] },
+    { id: "info-3", title: "", body: "", subsections: [] },
+  ]);
+  assert.deepEqual(normalizeInfoSections("nope"), []);
+});
+
+test("subsections and blocks are capped, junk blocks dropped and ids filled", () => {
+  const [section] = normalizeInfoSections([{
+    id: "s",
+    title: "T",
+    body: "B",
+    subsections: [
+      { title: "x".repeat(400), blocks: [
+        { type: "text", text: "y".repeat(20_001) },
+        { type: "nope" },
+        { id: "t", type: "table", rows: [null, { key: "k".repeat(600), value: 5 }, { key: "a", value: "b" }] },
+        { type: "photo", url: "javascript:alert(1)" },
+        { type: "photo", url: "https://x/y.png" },
+        { type: "video", videoId: "dQw4w9WgXcQ" },
+        { type: "video", videoId: "https://youtu.be/dQw4w9WgXcQ" },
+        { type: "video", videoId: "abc" },
+      ] },
+      { id: "keep", blocks: "bad" },
+      ...Array.from({ length: 60 }, (_, index) => ({ id: `extra-${index}`, title: "", blocks: [] })),
+    ],
+  }]);
+  assert.equal(section.subsections.length, 50);
+  const first = section.subsections[0];
+  assert.equal(first.id, "s-sub-0");
+  assert.equal(first.title.length, 300);
+  assert.deepEqual(first.blocks.map((block) => block.type), ["text", "table", "photo", "photo", "video", "video", "video"]);
+  assert.equal(first.blocks[0].id, "s-sub-0-block-0");
+  assert.equal((first.blocks[0] as { text: string }).text.length, 20_000);
+  assert.deepEqual((first.blocks[1] as { rows: unknown }).rows, [{ key: "k".repeat(500), value: "" }, { key: "a", value: "b" }]);
+  assert.equal((first.blocks[2] as { url: string }).url, "");
+  assert.equal((first.blocks[3] as { url: string }).url, "https://x/y.png");
+  assert.deepEqual(first.blocks.slice(4).map((block) => (block as { videoId: string }).videoId), ["dQw4w9WgXcQ", "", ""]);
+  assert.deepEqual(section.subsections[1], { id: "keep", title: "", blocks: [] });
+});
+
+test("tables, blocks and rows beyond the caps are cut", () => {
+  const [section] = normalizeInfoSections([{ id: "s", title: "", body: "", subsections: [{ id: "u", title: "", blocks: [
+    ...Array.from({ length: 105 }, (_, index) => ({ id: `b${index}`, type: "table", rows: Array.from({ length: 120 }, () => ({ key: "k", value: "v" })) })),
+  ] }] }]);
+  assert.equal(section.subsections[0].blocks.length, 100);
+  assert.equal((section.subsections[0].blocks[0] as { rows: unknown[] }).rows.length, 100);
+});
+
+test("normalizePortiaContent normalizes guides, keeps section formatting and is idempotent", () => {
+  const content = structuredClone(defaultPortiaContent);
+  content.infoSections.push({ id: "guide", title: "G", body: "", subsections: [{ id: "g1", title: "Sub", blocks: [
+    { id: "b1", type: "text", text: "hello" },
+    { id: "b2", type: "table", rows: [{ key: "a", value: "b" }] },
+    { id: "b3", type: "photo", url: "/img/a.png" },
+    { id: "b4", type: "video", videoId: "dQw4w9WgXcQ" },
+  ] }] });
+  content.formattedText = { "info:what-is-virus:body": { runs: [{ text: "keep" }] } };
+  const once = normalizePortiaContent(content);
+  assert.ok(once);
+  assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
+  assert.deepEqual(once.infoSections.at(-1), content.infoSections.at(-1));
+  assert.equal(once.formattedText["info:what-is-virus:body"].runs[0].text, "keep");
+  const legacy = { ...structuredClone(defaultPortiaContent), infoSections: [{ id: "old", title: "Old", body: "text" }] };
+  assert.deepEqual(normalizePortiaContent(legacy)?.infoSections, [{ id: "old", title: "Old", body: "text", subsections: [] }]);
+});
+
+test("findInfo resolves a section, a subsection or nothing", () => {
+  const sections: InfoSection[] = [
+    { id: "a", title: "A", body: "", subsections: [{ id: "a1", title: "A1", blocks: [] }] },
+    { id: "b", title: "B", body: "", subsections: [] },
+  ];
+  assert.deepEqual(findInfo(sections, "b"), { section: sections[1], subsection: null });
+  assert.deepEqual(findInfo(sections, "a1"), { section: sections[0], subsection: sections[0].subsections[0] });
+  assert.equal(findInfo(sections, "zzz"), null);
 });
