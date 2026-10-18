@@ -52,6 +52,12 @@ export function profileOf(employee: PortiaEmployee): EmployeeProfile {
   };
 }
 
+/** Whether the draft differs from the saved profile; null and a missing new rating are the same, whitespace is not. */
+export function profileChanged(saved: EmployeeProfile, draft: EmployeeProfile): boolean {
+  return saved.biography !== draft.biography || saved.photoUrl !== draft.photoUrl
+    || employeeRatings.some(({ key }) => (saved[key] ?? null) !== (draft[key] ?? null));
+}
+
 export function isMissingColumnError(error: { code?: string } | null | undefined) {
   return error?.code === "PGRST204" || error?.code === "42703";
 }

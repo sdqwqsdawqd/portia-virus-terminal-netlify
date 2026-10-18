@@ -17,7 +17,7 @@ import {
   type RichTextStyle,
   type Virus,
 } from "@/lib/portia-content";
-import { employeeRatings, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
+import { employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
 
@@ -1274,7 +1274,13 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
   const [errorMessage, setErrorMessage] = useState("");
   const [recordOpen, setRecordOpen] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
+  const [pendingEmployeeId, setPendingEmployeeId] = useState<string | null>(null);
   const selected = employees.find((employee) => employee.id === selectedId) ?? employees[0] ?? null;
+  const dirty = Boolean(selected && draft && profileChanged(profileOf(selected), draft));
+  // Read after an awaited save: a cancelled question must not continue into the switch (D-02).
+  const asking = pendingEmployeeId !== null;
+  const askingRef = useRef(asking);
+  useEffect(() => { askingRef.current = asking; });
 
   useEffect(() => {
     let active = true;
@@ -1296,8 +1302,9 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
     return () => { active = false; };
   }, []);
 
-  const save = async () => {
-    if (!selected || !draft) return;
+  // Resolves true only when the profile is saved; a failure leaves the error text on the current employee.
+  const save = async (): Promise<boolean> => {
+    if (!selected || !draft) return false;
     setState("saving");
     setRatingsPending(false);
     setErrorMessage("");
@@ -1322,20 +1329,44 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
       setRatingsPending(Boolean(payload.ratingsPending));
       setState("saved");
       window.setTimeout(() => setState("idle"), 1800);
+      return true;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Не удалось сохранить профиль.");
       setState("error");
+      return false;
     }
   };
 
   if (state === "loading") return <div className="editor-empty">Загрузка сотрудников…</div>;
   if (!selected || !draft) return <div className="editor-empty">{state === "error" ? "Не удалось загрузить сотрудников из таблицы. Обновите страницу через минуту." : "В таблице пока нет сотрудников."}</div>;
 
+  const openEmployee = (employee: PortiaEmployee) => {
+    setSelectedId(employee.id);
+    setDraft(profileOf(employee));
+    setRatingsPending(false);
+    setState("idle");
+    setRecordOpen(true);
+    revealOnPhone(layoutRef);
+  };
+  // Unsaved edits are asked about before another employee replaces the draft (D-02).
+  const chooseEmployee = (employee: PortiaEmployee) => {
+    if (!dirty) return openEmployee(employee);
+    // The same employee: only show the record, the edits stay.
+    if (employee.id === selected.id) { setRecordOpen(true); revealOnPhone(layoutRef); return; }
+    // A sent PATCH cannot be cancelled; its answer would overwrite the next employee's draft.
+    if (state !== "saving") setPendingEmployeeId(employee.id);
+  };
+  const continueLeave = () => {
+    const next = employees.find((employee) => employee.id === pendingEmployeeId);
+    setPendingEmployeeId(null);
+    if (next) openEmployee(next);
+  };
+
   const preview = draft.photoUrl || selected.robloxAvatarUrl;
   return <div className="virus-editor-layout employee-editor-layout" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
     <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
     <aside className="editor-record-list">
-      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => { setSelectedId(employee.id); setDraft(profileOf(employee)); setRatingsPending(false); setState("idle"); setRecordOpen(true); revealOnPhone(layoutRef); }}><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
     </aside>
     <div className="editor-form employee-profile-editor">
       <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять фотографию, оценки и биографию.</p>
@@ -1351,6 +1382,29 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
       {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.slice(1).map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
       <div className="employee-editor-save"><span className={`editor-save-status ${state}`}>{state === "saving" ? "СОХРАНЕНИЕ…" : state === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
     </div>
+    {asking && (
+      <ConfirmDialog
+        title="Несохранённые правки сотрудника"
+        text={`${selected.nickname}: изменения не сохранены.`}
+        actions={[
+          {
+            label: "СОХРАНИТЬ",
+            tone: "primary",
+            disabled: state === "saving",
+            onClick: () => {
+              void save().then((saved) => {
+                if (!askingRef.current) return;
+                if (saved) continueLeave();
+                else setPendingEmployeeId(null);
+              });
+            },
+          },
+          { label: "НЕ СОХРАНЯТЬ", tone: "danger", disabled: state === "saving", onClick: continueLeave },
+          { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setPendingEmployeeId(null) },
+        ]}
+        onCancel={() => setPendingEmployeeId(null)}
+      />
+    )}
   </div>;
 }
 
