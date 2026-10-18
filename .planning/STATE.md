@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: "03.2"
 current_phase_name: Сотрудники и Сводка (INSERTED)
 status: executing
-stopped_at: Completed 03.2-01-PLAN.md
-last_updated: "2026-10-18T09:17:20.848Z"
+stopped_at: Completed 03.2-02-PLAN.md
+last_updated: "2026-10-18T09:21:41.008Z"
 last_activity: 2026-10-18
 last_activity_desc: Phase PORTIA-03.2 execution started
-state_head: e086ef33890397de8779fcb46a0f4064d05df751
+state_head: 31bb67cb160e3b4d3098409b3027add32cca382a
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 30
-  completed_plans: 25
+  completed_plans: 26
   percent: 43
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 ## Current Position
 
 Phase: PORTIA-03.2 (Сотрудники и Сводка (INSERTED)) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Executing Phase PORTIA-03.2
 Last activity: 2026-10-18 — Phase PORTIA-03.2 execution started
 
@@ -51,6 +51,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 03]: 03-04: dossier tab state lives per editor (live in PortiaEditor, bin in ArchivedVirusEditor); live tab switch closes the format panel
 - [Phase 03]: 03-04: one drag is one undo step via drag:<id> editKeyFor key; autoscroll runs a rAF loop only while a handle is held
 - [Phase PORTIA-03.2]: 03.2-01: new ratings are nullable 1-10 («—» until rated); reads use select * and writes retry without rating columns on PGRST204/42703 until the migration. SQL recorded in portia_setup.sql, not applied.
+- [Phase PORTIA-03.2]: 03.2-02: unsaved employee drafts are guarded with ConfirmDialog (save / discard / cancel) on employee switch, tab switch and ×; the employee question comes before the content close dialog
 
 ### Pending Todos
 
@@ -69,8 +70,8 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-18T09:17:20.680Z
-Stopped at: Completed 03.2-01-PLAN.md
+Last session: 2026-10-18T09:21:40.834Z
+Stopped at: Completed 03.2-02-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -92,3 +93,4 @@ Resume file: None
 | Phase 03 P03 | 21 min | 3 tasks | 2 files |
 | Phase 03 P04 | 25min | 2 tasks | 4 files |
 | Phase PORTIA-03.2 P03.2-01 | 25min | 3 tasks | 7 files |
+| Phase PORTIA-03.2 P02 | 20min | 2 tasks | 3 files |
