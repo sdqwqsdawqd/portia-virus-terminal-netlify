@@ -17,7 +17,7 @@ import {
   type RichTextStyle,
   type Virus,
 } from "@/lib/portia-content";
-import type { PortiaEmployee } from "@/lib/portia-employees";
+import { employeeRatings, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
 
@@ -1268,7 +1268,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
 function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmployee) => void }) {
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [draft, setDraft] = useState({ biography: "", photoUrl: "", knowledgeRating: 1 });
+  const [draft, setDraft] = useState<EmployeeProfile | null>(null);
+  const [ratingsPending, setRatingsPending] = useState(false);
   const [state, setState] = useState<"loading" | "idle" | "saving" | "saved" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
   const [recordOpen, setRecordOpen] = useState(false);
@@ -1288,7 +1289,7 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
         const first = next[0];
         setEmployees(next);
         setSelectedId(first?.id ?? "");
-        if (first) setDraft({ biography: first.biography, photoUrl: first.photoUrl, knowledgeRating: first.knowledgeRating });
+        if (first) setDraft(profileOf(first));
         setState("idle");
       })
       .catch(() => { if (active) setState("error"); });
@@ -1296,8 +1297,9 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
   }, []);
 
   const save = async () => {
-    if (!selected) return;
+    if (!selected || !draft) return;
     setState("saving");
+    setRatingsPending(false);
     setErrorMessage("");
     try {
       const response = await fetch("/api/employees", {
@@ -1307,7 +1309,7 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: selected.id, changes: draft }),
       });
-      const payload = await response.json() as { employee?: PortiaEmployee; error?: string };
+      const payload = await response.json() as { employee?: PortiaEmployee; ratingsPending?: boolean; error?: string };
       if (!response.ok || !payload.employee) {
         const message = response.status === 403
           ? "Сессия редактора истекла. Войдите в редактор снова."
@@ -1316,6 +1318,8 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
       }
       setEmployees((current) => current.map((employee) => employee.id === payload.employee!.id ? payload.employee! : employee));
       onSaved(payload.employee);
+      setDraft(profileOf(payload.employee));
+      setRatingsPending(Boolean(payload.ratingsPending));
       setState("saved");
       window.setTimeout(() => setState("idle"), 1800);
     } catch (error) {
@@ -1325,25 +1329,26 @@ function EmployeeProfilesEditor({ onSaved }: { onSaved: (employee: PortiaEmploye
   };
 
   if (state === "loading") return <div className="editor-empty">Загрузка сотрудников…</div>;
-  if (!selected) return <div className="editor-empty">{state === "error" ? "Не удалось загрузить сотрудников из таблицы. Обновите страницу через минуту." : "В таблице пока нет сотрудников."}</div>;
+  if (!selected || !draft) return <div className="editor-empty">{state === "error" ? "Не удалось загрузить сотрудников из таблицы. Обновите страницу через минуту." : "В таблице пока нет сотрудников."}</div>;
 
   const preview = draft.photoUrl || selected.robloxAvatarUrl;
   return <div className="virus-editor-layout employee-editor-layout" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
     <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
     <aside className="editor-record-list">
-      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => { setSelectedId(employee.id); setDraft({ biography: employee.biography, photoUrl: employee.photoUrl, knowledgeRating: employee.knowledgeRating }); setState("idle"); setRecordOpen(true); revealOnPhone(layoutRef); }}><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => { setSelectedId(employee.id); setDraft(profileOf(employee)); setRatingsPending(false); setState("idle"); setRecordOpen(true); revealOnPhone(layoutRef); }}><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
     </aside>
     <div className="editor-form employee-profile-editor">
-      <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять только фотографию, оценку знаний и биографию.</p>
+      <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять фотографию, оценки и биографию.</p>
       <div className="employee-editor-summary">
         <figure>{preview ? <img src={preview} alt={`Аватар ${selected.nickname}`} referrerPolicy="no-referrer" /> : <img src="/assets/portia-logo.png" alt="" />}</figure>
         <div><span className="eyebrow">{selected.title || "БЕЗ ЗВАНИЯ"}</span><h2>{selected.nickname}</h2><p>{[selected.callsign || "без позывного", selected.rank || "ранг не указан"].join(" · ")}</p></div>
       </div>
       <EditorGroup title="Профиль сотрудника">
-        <Field label="Оценка знаний — от 1 до 10"><select value={draft.knowledgeRating} onChange={(event) => setDraft((current) => ({ ...current, knowledgeRating: Number(event.target.value) }))}>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
-        <Field label="Ссылка на фото"><input value={draft.photoUrl} onChange={(event) => setDraft((current) => ({ ...current, photoUrl: event.target.value }))} placeholder="Пусто — использовать аватар Roblox" /></Field>
-        <Field label="Биография" wide><textarea className="tall-textarea" value={draft.biography} onChange={(event) => setDraft((current) => ({ ...current, biography: event.target.value }))} /></Field>
+        {employeeRatings.map(({ key, label }) => <Field key={key} label={`${label} — от 1 до 10`}><select value={draft[key] ?? ""} onChange={(event) => setDraft((current) => current && ({ ...current, [key]: event.target.value === "" ? null : Number(event.target.value) }))}>{key !== "knowledgeRating" && <option value="">—</option>}{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>)}
+        <Field label="Ссылка на фото"><input value={draft.photoUrl} onChange={(event) => setDraft((current) => current && ({ ...current, photoUrl: event.target.value }))} placeholder="Пусто — использовать аватар Roblox" /></Field>
+        <Field label="Биография" wide><textarea className="tall-textarea" value={draft.biography} onChange={(event) => setDraft((current) => current && ({ ...current, biography: event.target.value }))} /></Field>
       </EditorGroup>
+      {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.slice(1).map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
       <div className="employee-editor-save"><span className={`editor-save-status ${state}`}>{state === "saving" ? "СОХРАНЕНИЕ…" : state === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
     </div>
   </div>;

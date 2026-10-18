@@ -7,6 +7,11 @@ export type PortiaEmployee = {
   title: string;
   rank: string;
   knowledgeRating: number;
+  pawsRating: number | null;
+  bioRating: number | null;
+  sRating: number | null;
+  activityRating: number | null;
+  overallRating: number | null;
   biography: string;
   photoUrl: string;
   robloxUserId: number | null;
@@ -15,9 +20,41 @@ export type PortiaEmployee = {
   order: number;
 };
 
-type EditableFields = "knowledgeRating" | "biography" | "photoUrl";
+type OptionalRatingKey = "pawsRating" | "bioRating" | "sRating" | "activityRating" | "overallRating";
+type EditableFields = "knowledgeRating" | OptionalRatingKey | "biography" | "photoUrl";
 export type RosterEmployee = Omit<PortiaEmployee, EditableFields>;
 export type EmployeeProfile = Pick<PortiaEmployee, EditableFields>;
+/** A save: ratings missing here are not changed; null clears one. */
+export type EmployeeUpdate = Omit<EmployeeProfile, OptionalRatingKey> & Partial<Pick<EmployeeProfile, OptionalRatingKey>>;
+
+// Rename a rating here only: the editor fields and the profile card both render from this table (D-01).
+export const employeeRatings = [
+  { key: "knowledgeRating", column: "knowledge_rating", label: "Знания" },
+  { key: "pawsRating", column: "paws_rating", label: "Знание лап" },
+  { key: "bioRating", column: "bio_rating", label: "Био" },
+  { key: "sRating", column: "s_rating", label: "S" },
+  { key: "activityRating", column: "activity_rating", label: "Актив" },
+  { key: "overallRating", column: "overall_rating", label: "Общая" },
+] as const;
+const optionalRatings = employeeRatings.filter((rating) => rating.key !== "knowledgeRating") as unknown as ReadonlyArray<{ key: OptionalRatingKey; column: string; label: string }>;
+
+/** The editable fields of an employee; a roster cached before the ratings existed has none of the new ones. */
+export function profileOf(employee: PortiaEmployee): EmployeeProfile {
+  return {
+    biography: employee.biography,
+    photoUrl: employee.photoUrl,
+    knowledgeRating: employee.knowledgeRating,
+    pawsRating: employee.pawsRating ?? null,
+    bioRating: employee.bioRating ?? null,
+    sRating: employee.sRating ?? null,
+    activityRating: employee.activityRating ?? null,
+    overallRating: employee.overallRating ?? null,
+  };
+}
+
+export function isMissingColumnError(error: { code?: string } | null | undefined) {
+  return error?.code === "PGRST204" || error?.code === "42703";
+}
 
 /** Whether an /api/employees answer may replace the roster on screen and in the cache. */
 export function acceptsRoster(payload: { employees?: unknown; degraded?: unknown }): payload is { employees: PortiaEmployee[]; syncedAt?: string | null; degraded?: boolean } {
@@ -27,7 +64,8 @@ export function acceptsRoster(payload: { employees?: unknown; degraded?: unknown
 
 // The roster comes live from Google Sheets + Roblox (the CDN caches the API response).
 // Editor-written fields live in Supabase (portia_employee_profiles).
-type ProfileRow = { employee_id: string; nickname: string; biography: string; photo_url: string; knowledge_rating: number };
+type ProfileColumns = { biography: string; photo_url: string; knowledge_rating: number; [column: string]: unknown };
+type ProfileRow = ProfileColumns & { employee_id: string; nickname: string };
 type RobloxProfile = { id: number; avatarUrl: string; fullAvatarUrl: string };
 export type ProfileIndex = { byId: Map<string, EmployeeProfile>; robloxIdByNickname: Map<string, number> };
 
@@ -156,21 +194,34 @@ export function rosterFromRows(
   });
 }
 
-const emptyProfile: EmployeeProfile = { knowledgeRating: 1, biography: "", photoUrl: "" };
+const emptyProfile: EmployeeProfile = { knowledgeRating: 1, pawsRating: null, bioRating: null, sRating: null, activityRating: null, overallRating: null, biography: "", photoUrl: "" };
+
+// Stored junk is shown as "not rated" rather than clamped into a different number.
+const storedRating = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 10 ? value : null);
+
+export function profileFromRow(row: ProfileColumns): EmployeeProfile {
+  return {
+    biography: row.biography,
+    photoUrl: row.photo_url,
+    knowledgeRating: row.knowledge_rating,
+    pawsRating: storedRating(row.paws_rating),
+    bioRating: storedRating(row.bio_rating),
+    sRating: storedRating(row.s_rating),
+    activityRating: storedRating(row.activity_rating),
+    overallRating: storedRating(row.overall_rating),
+  };
+}
 
 export async function readEmployeeProfiles(supabase: SupabaseClient): Promise<ProfileIndex> {
+  // select("*") so columns the database does not have yet cannot fail the whole read.
   const { data, error } = await supabase
     .from("portia_employee_profiles")
-    .select("employee_id, nickname, biography, photo_url, knowledge_rating")
+    .select("*")
     .returns<ProfileRow[]>();
   if (error) throw error;
   const rows = data ?? [];
   return {
-    byId: new Map(rows.map((row) => [row.employee_id, {
-      biography: row.biography,
-      photoUrl: row.photo_url,
-      knowledgeRating: row.knowledge_rating,
-    } satisfies EmployeeProfile])),
+    byId: new Map(rows.map((row) => [row.employee_id, profileFromRow(row)])),
     robloxIdByNickname: new Map(rows.flatMap((row) => {
       const robloxId = Number(row.employee_id.match(/^roblox-(\d+)$/)?.[1]);
       return row.nickname && robloxId ? [[nicknameKey(row.nickname), robloxId] as const] : [];
@@ -205,8 +256,8 @@ export async function loadEmployees(supabase: SupabaseClient) {
   };
 }
 
-export async function saveEmployeeProfile(supabase: SupabaseClient, employee: RosterEmployee, profile: EmployeeProfile, userId: string) {
-  const { error } = await supabase.from("portia_employee_profiles").upsert({
+export async function saveEmployeeProfile(supabase: SupabaseClient, employee: RosterEmployee, profile: EmployeeUpdate, userId: string) {
+  const base = {
     employee_id: employee.id,
     nickname: employee.nickname,
     biography: profile.biography,
@@ -214,19 +265,37 @@ export async function saveEmployeeProfile(supabase: SupabaseClient, employee: Ro
     knowledge_rating: profile.knowledgeRating,
     updated_at: new Date().toISOString(),
     updated_by: userId,
-  });
-  if (error) throw error;
+  };
+  const ratings = Object.fromEntries(optionalRatings.flatMap((rating) => (profile[rating.key] === undefined ? [] : [[rating.column, profile[rating.key]]])));
+  const table = supabase.from("portia_employee_profiles");
+  const { error } = await table.upsert({ ...base, ...ratings });
+  if (!error) return { ratingsSaved: true };
+  // Tolerates the rating columns being absent until 03.2-06 applies the SQL.
+  if (!isMissingColumnError(error) || !Object.keys(ratings).length) throw error;
+  const retry = await table.upsert(base);
+  if (retry.error) throw retry.error;
+  return { ratingsSaved: false };
 }
 
-export function sanitizeEmployeeUpdate(value: unknown): EmployeeProfile | null {
+export function sanitizeEmployeeUpdate(value: unknown): EmployeeUpdate | null {
   if (!value || typeof value !== "object") return null;
-  const candidate = value as { biography?: unknown; photoUrl?: unknown; knowledgeRating?: unknown };
+  const candidate = value as Record<string, unknown>;
   const photoUrl = typeof candidate.photoUrl === "string" ? candidate.photoUrl.trim().slice(0, 2048) : "";
   if (photoUrl && !photoUrl.startsWith("https://") && !photoUrl.startsWith("/")) return null;
   const knowledgeRating = Number(candidate.knowledgeRating);
-  return {
+  const update: EmployeeUpdate = {
     biography: typeof candidate.biography === "string" ? candidate.biography.slice(0, 20_000) : "",
     photoUrl,
     knowledgeRating: Number.isFinite(knowledgeRating) ? Math.min(10, Math.max(1, Math.round(knowledgeRating))) : 1,
   };
+  for (const { key } of optionalRatings) {
+    const raw = candidate[key];
+    if (raw === null || (typeof raw === "string" && !raw.trim())) update[key] = null;
+    else if (typeof raw === "number" || typeof raw === "string") {
+      // A value that is not a number leaves the rating unchanged rather than wiping it.
+      const rating = Number(raw);
+      if (Number.isFinite(rating)) update[key] = Math.min(10, Math.max(1, Math.round(rating)));
+    }
+  }
+  return update;
 }

@@ -38,9 +38,12 @@ export async function PATCH(request: Request) {
     const employee = employees.find((item) => item.id === id);
     if (!employee) return Response.json({ error: "Сотрудник не найден. Обновите страницу." }, { status: 404 });
 
-    await saveEmployeeProfile(supabase, employee, changes, data.user.id);
+    const { ratingsSaved } = await saveEmployeeProfile(supabase, employee, changes, data.user.id);
     await purgeCacheTag(employeesCacheTag);
-    return Response.json({ employee: { ...employee, ...changes } }, { headers: noStoreHeaders });
+    if (ratingsSaved) return Response.json({ employee: { ...employee, ...changes } }, { headers: noStoreHeaders });
+    // The new rating columns do not exist yet: echo only what was stored.
+    const { biography, photoUrl, knowledgeRating } = changes;
+    return Response.json({ employee: { ...employee, biography, photoUrl, knowledgeRating }, ratingsPending: true }, { headers: noStoreHeaders });
   } catch (error) {
     console.error("PORTIA employee update failed", error);
     return Response.json({ error: "Не удалось сохранить профиль." }, { status: 500 });

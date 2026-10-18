@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
-import { acceptsRoster, type PortiaEmployee } from "@/lib/portia-employees";
+import { acceptsRoster, employeeRatings, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
@@ -1112,7 +1112,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                     </div>
                     <div className="personnel-profile-identity"><h2>{selectedEmployee.nickname}</h2><p className="personnel-callsign">{selectedEmployee.callsign || "Без позывного"}</p></div>
                   </header>
-                  <dl className="personnel-stats"><div><dt>ЗВАНИЕ</dt><dd>{selectedEmployee.title || "Не указано"}</dd></div><div><dt>РАНГ</dt><dd>{selectedEmployee.rank || "Не указан"}</dd></div><div><dt>ОЦЕНКА ЗНАНИЙ</dt><dd>{selectedEmployee.knowledgeRating} / 10</dd></div></dl>
+                  <dl className="personnel-stats"><div><dt>ЗВАНИЕ</dt><dd>{selectedEmployee.title || "Не указано"}</dd></div><div><dt>РАНГ</dt><dd>{selectedEmployee.rank || "Не указан"}</dd></div></dl>
+                  <dl className="personnel-stats personnel-ratings">{employeeRatings.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{selectedEmployee[key] == null ? "—" : `${selectedEmployee[key]} / 10`}</dd></div>)}</dl>
                   <section className="personnel-biography"><span>БИОГРАФИЯ</span><p>{selectedEmployee.biography || "Биография сотрудника пока не заполнена."}</p></section>
                 </div> : <div className="editor-empty">{!employees.length && employeesSyncedAt ? "В таблице пока нет сотрудников." : "Данные сотрудников ещё не синхронизированы."}</div>}
               </article>
