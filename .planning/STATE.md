@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: "03.1"
-current_phase_name: Стабилизация
+current_phase: "03.3"
+current_phase_name: Сотрудники вне таблицы и гайды в Информации
 status: planning
-stopped_at: Phase PORTIA-03.2 complete, ready to plan Phase 03.1
-last_updated: "2026-10-18T13:23:57.315Z"
+stopped_at: Phase PORTIA-03.1 complete, ready to plan Phase 03.3
+last_updated: "2026-10-18T14:00:34.593Z"
 last_activity: 2026-10-18
-last_activity_desc: Phase PORTIA-03.2 complete, transitioned to Phase 03.1
-state_head: f718ceffcf51faee5435759ce4df064f7cfe4a6a
+last_activity_desc: Phase PORTIA-03.1 complete, transitioned to Phase 03.3
+state_head: 1906a1dc8ca7f3244c27eeff597904ab4ee333cd
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 32
   completed_plans: 32
-  percent: 57
+  percent: 71
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-18)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase 03.1 — Стабилизация (INSERTED)
+**Current focus:** Phase 03.3 — Сотрудники вне таблицы и гайды в Информации
 
 ## Current Position
 
-Phase: 03.1 — Стабилизация
+Phase: 03.3 — Сотрудники вне таблицы и гайды в Информации
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-10-18 — Phase PORTIA-03.2 complete, transitioned to Phase 03.1
+Last activity: 2026-10-18 — Phase PORTIA-03.1 complete, transitioned to Phase 03.3
 
-Progress: [██████░░░░] 57%
+Progress: [███████░░░] 71%
 
 ## Accumulated Context
 
@@ -75,6 +75,7 @@ None — незакоммиченная работа закоммичена в P
 - ⚠️ [Project] Проект лежит только во временной папке сессии Claude — перенести в постоянную папку.
 - ⚠️ [Phase 03.2] WR-01: опрос контента раз в 10 с подменяет content одинаковой копией и сбрасывает историю отмены в чистом редакторе (`components/portia-desktop.tsx` ~358-366) — см. 03.2-REVIEW.
 - ⚠️ [Phase 03.2] WR-02/03/04 сохранения сотрудников: устаревший кэш может очистить оценки, правки во время сохранения теряются, все шесть оценок пишутся каждый раз — см. 03.2-REVIEW.
+- ⚠️ [Phase 03.1] Ревью 03.1-REVIEW (22 открыто): WR-01 неполный список сотрудников затирает биографии и оценки; WR-02 PATCH без biography/photoUrl стирает их; WR-07 normalizePortiaContent молча обрезает текст и пропускает нестроковые поля; WR-11 SQL доверяет неподтверждённой почте — см. 03.1-REVIEW-DISPOSITION.
 
 ### Roadmap Evolution
 
@@ -85,7 +86,7 @@ None — незакоммиченная работа закоммичена в P
 ## Session Continuity
 
 Last session: 2026-10-18
-Stopped at: Phase 03.2 complete, ready to execute Phase 03.1 (6 plans already written)
+Stopped at: Phase PORTIA-03.1 complete, ready to plan Phase 03.3
 Resume file: None
 
 ## Performance Metrics
