@@ -211,7 +211,7 @@ Quotes (verbatim):
 - Only the FONT is paired per area (css:593-602, e.g. `.lead-copy, .formatted-rich-input[data-area="lead"] { font: 16px/1.75 var(--doc); }`). Colour and background are never paired.
 - Rule order trap: `.preview-light`/area rules are specificity (0,2,0); `:focus:not(.preview-dark)`/`.is-editor-active.*` (589, 590) are (0,3,0) and force a second colour. Hence the dark field is `oklch(.845 …)` ≈ #c1d0cc unfocused but `oklch(.79 …)` ≈ #aebfbb when active — the dark text visibly changes colour on focus.
 
-### Converted colours (oklch at `--accent-hue: 180.4` [VERIFIED: css:19], computed this session with the Ottosson matrices; sanity check: `oklch(.79 .02)` -> `#aebfbb`, matching the project's own `#aebfba`)
+### Converted colours (oklch at `--accent-hue: 180.4` [VERIFIED: css:21], computed this session with the Ottosson matrices; sanity check: `oklch(.79 .02)` -> `#aebfbb`, matching the project's own `#aebfba`)
 | token | hex |
 |-------|-----|
 | `.class-cell strong` `oklch(.237 .015)` (css:872) | **#17211f** (CONTEXT says "около #1f2725": the computed value is darker; the oklch value is the source of truth) |
