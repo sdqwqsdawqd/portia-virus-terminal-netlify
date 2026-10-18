@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: "03.2"
 current_phase_name: sotrudniki-i-svodka
 status: executing
-stopped_at: Phase 03.3 context gathered; 03.2 awaiting UAT
-last_updated: "2026-10-18T12:45:09.919Z"
+stopped_at: Completed 03.2-07-PLAN.md
+last_updated: "2026-10-18T12:55:20.783Z"
 last_activity: 2026-10-18
-last_activity_desc: Phase PORTIA-03.2 execution started
-state_head: 73e79663da27d9ac32c51f315a3c8cde170673d1
+last_activity_desc: Phase PORTIA-03.2 execution resumed (wave continue)
+state_head: 9297bc853c601169344cc352254f1dec97508b31
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 32
-  completed_plans: 30
+  completed_plans: 31
   percent: 38
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 Phase: PORTIA-03.2 (sotrudniki-i-svodka) — READY TO EXECUTE
 Plan: 6 of 6
 Status: Executing Phase PORTIA-03.2
-Last activity: 2026-10-18 — Phase PORTIA-03.2 execution started
+Last activity: 2026-10-18 — Phase PORTIA-03.2 execution resumed (wave continue)
 
 Progress: [████░░░░░░] 38%
 
@@ -58,6 +58,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase PORTIA-03.2]: 03.2-04: conditions are plain text (formatting is phase 5)
 - [Phase PORTIA-03.2]: 03.2-05: one window at a time shows the first unseen active quest; closing it marks all active quests seen
 - [Phase PORTIA-03.2]: 03.2-05: no popup over the boot screen, while the editor is open, or when storage is unreadable
+- [Phase PORTIA-03.2]: 03.2-07: the new-quest notice is a non-modal corner toast (owner UAT), replacing the 03.2-05 modal window
+- [Phase PORTIA-03.2]: 03.2-07: the toast also shows while the editor is open and is recomputed on every content change (supersedes the 03.2-05 rule about the open editor)
+- [Phase PORTIA-03.2]: 03.2-07: content sync is a 10 s visibility-aware poll of the CDN copy, not Realtime
 
 ### Pending Todos
 
@@ -77,9 +80,9 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-18T10:53:05.651Z
-Stopped at: Phase 03.3 context gathered; 03.2 awaiting UAT
-Resume file: .planning/phases/PORTIA-03.3-sotrudniki-vne-tablitsy-i-gaydy-v-informatsii/03.3-CONTEXT.md
+Last session: 2026-10-18T12:55:20.578Z
+Stopped at: Completed 03.2-07-PLAN.md
+Resume file: None
 
 ## Performance Metrics
 
@@ -104,3 +107,4 @@ Resume file: .planning/phases/PORTIA-03.3-sotrudniki-vne-tablitsy-i-gaydy-v-info
 | Phase PORTIA-03.2 P03 | 15min | 2 tasks | 9 files |
 | Phase PORTIA-03.2 P04 | 25min | 2 tasks | 9 files |
 | Phase PORTIA-03.2 P05 | 20min | 2 tasks | 4 files |
+| Phase PORTIA-03.2 P07 | 20min | 2 tasks | 3 files |
