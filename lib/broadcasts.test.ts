@@ -78,6 +78,20 @@ test("questPopup returns the first unseen active published quest and counts the 
   assert.equal(questPopup([item("n", "news"), item("t", "task")], [], TODAY), null);
 });
 
+test("a quest published during the visit is offered once and then never again", () => {
+  assert.equal(questPopup([item("n", "news")], [], TODAY), null);
+  const list1 = [item("q1", "quest")];
+  assert.deepEqual(questPopup(list1, [], TODAY), { quest: list1[0], more: 0 });
+  const list2 = [item("q2", "quest"), ...list1];
+  assert.deepEqual(questPopup(list2, [], TODAY), { quest: list2[0], more: 1 });
+  const seen = markQuestsSeen(list2, [], TODAY);
+  assert.equal(questPopup(list2, seen, TODAY), null);
+  const list3 = [item("q3", "quest"), ...list2];
+  assert.deepEqual(questPopup(list3, seen, TODAY), { quest: list3[0], more: 0 });
+  const reloaded = parseSeenQuestIds(JSON.stringify(markQuestsSeen(list3, seen, TODAY)));
+  assert.equal(questPopup(list3, reloaded, TODAY), null);
+});
+
 test("an upcoming quest pops up on its start day", () => {
   const list = [item("soon", "quest", true, false, { startsAt: "2026-10-25" })];
   assert.equal(questPopup(list, [], TODAY), null);

@@ -396,7 +396,7 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .broadcast-card.quest::before { background: #e8ae45; }
 .broadcast-card.task::before { background: #7ec8e3; }
 .broadcast-card > span:first-child { color: var(--teal); font: 700 11px var(--sans); letter-spacing: .09em; }
-.broadcast-card.quest > span:first-child, .quest-popup-eyebrow { color: #e8ae45; }
+.broadcast-card.quest > span:first-child, .quest-toast-eyebrow { color: #e8ae45; }
 .broadcast-card.task > span:first-child { color: #7ec8e3; }
 .broadcast-card h2 { margin: 9px 0 12px; color: oklch(.958 .008 var(--accent-hue)); font: 700 20px var(--sans); }
 .broadcast-card p { margin: 0 0 12px; color: oklch(.76 .022 var(--accent-hue)); font-size: 15px; line-height: 1.7; white-space: pre-line; }
@@ -441,14 +441,18 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .portia-dialog p { margin: 0; color: oklch(.745 .022 var(--accent-hue)); font-size: 13px; line-height: 1.55; }
 .portia-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .portia-dialog-actions button { min-height: 40px; }
-/* The quest popup shows once per quest id (D-03). Entrance motion only under data-motion="full"; reduce shows it instantly. */
-.quest-popup { width: min(520px, calc(100vw - 24px)); max-height: calc(100svh - 48px); overflow-y: auto; }
-.quest-popup-eyebrow { font: 700 11px var(--sans); letter-spacing: .09em; }
-.quest-popup .broadcast-dates, .quest-popup .broadcast-conditions { margin: 0; }
-.quest-popup .broadcast-conditions p { white-space: pre-line; }
-.quest-popup-body { display: block; max-height: 40vh; overflow-y: auto; color: oklch(.76 .022 var(--accent-hue)); font: 14px/1.6 var(--doc); }
-.quest-popup .quest-popup-more { font: 12px var(--mono); }
-html[data-motion="full"] .quest-popup[open] { animation: fade-in 220ms var(--ease-out); }
+/* The quest toast shows once per quest id (D-03). Entrance motion only under data-motion="full"; reduce shows it instantly. */
+/* Corner notification, never covers the system bar or window buttons. */
+.quest-toast { position: fixed; z-index: 965; top: 106px; right: 12px; width: min(360px, calc(100vw - 24px)); max-height: calc(100svh - 160px); overflow-y: auto; }
+.quest-toast > div { gap: 10px; padding: 14px; }
+.quest-toast-head { display: flex; justify-content: space-between; align-items: center; }
+.quest-toast-close { min-width: 40px; min-height: 40px; border: 0; background: transparent; color: inherit; font-size: 20px; cursor: pointer; }
+.quest-toast-eyebrow { font: 700 11px var(--sans); letter-spacing: .09em; }
+.quest-toast .broadcast-dates, .quest-toast .broadcast-conditions { margin: 0; }
+.quest-toast .broadcast-conditions p { white-space: pre-line; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.quest-toast-body { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; color: oklch(.76 .022 var(--accent-hue)); font: 14px/1.6 var(--doc); }
+.quest-toast .quest-toast-more { font: 12px var(--mono); }
+html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out); }
 @media (min-width: 901px) {
   /* Positioned against the editor window, not the viewport, so the save bar at the window's bottom is never covered (D-01). */
   .content-editor > .floating-text-format { position: absolute; right: 14px; bottom: 72px; max-height: min(390px, calc(100% - 46px - 72px - 14px)); }
@@ -974,6 +978,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
 }
 
 @media (max-width: 900px) {
+  .quest-toast { left: 8px; right: 8px; width: auto; top: 106px; }
   .window-edge { display: none; }
   .system-bar { height: 48px; padding: 0 12px; }
   .system-division, .status-item, .window-meta, .taskbar-note { display: none; }

@@ -314,7 +314,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   // The quest popup shows once per quest id (D-03): ids live in localStorage and in this ref, so a failed write cannot bring it back in this tab.
   const seenQuestIds = useRef<string[]>([]);
   const questReadBlocked = useRef(false);
-  const [questPopupItem, setQuestPopupItem] = useState<{ quest: Broadcast; more: number } | null>(null);
+  const [questToastItem, setQuestToastItem] = useState<{ quest: Broadcast; more: number } | null>(null);
   const assistantTipTimer = useRef<number | null>(null);
   const assistantClickResetTimer = useRef<number | null>(null);
   const assistantCooldownTimer = useRef<number | null>(null);
@@ -495,14 +495,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     if (stored) try { window.localStorage.setItem(questSeenStorageKey, JSON.stringify(seenQuestIds.current)); } catch {}
   }, [content.broadcasts, today]);
 
-  // Reading the active quests in «Сводка» counts as seeing them; declared before the popup effect so a live update the visitor is already reading never pops up.
+  // Reading the active quests in «Сводка» counts as seeing them; declared before the toast effect so a live update the visitor is already reading never pops up.
   const questsViewed = contentReady && windows.broadcasts.open && !windows.broadcasts.minimized && broadcastTab === "quests";
   useEffect(() => {
     if (questsViewed && today) rememberActiveQuests();
   }, [questsViewed, today, rememberActiveQuests]);
 
+  // Recomputed on every content change (editor save, sync, cache) so a quest published while the toast is open is counted in it, and the dismissal that marks all active quests seen never hides one the toast did not show (review IN-03).
   useEffect(() => {
-    if (!contentReady || booting || windows.editor.open || !today || questPopupItem || questReadBlocked.current) return;
+    if (!contentReady || booting || !today || questReadBlocked.current) return;
     let stored: string[];
     try { stored = parseSeenQuestIds(window.localStorage.getItem(questSeenStorageKey)); }
     catch {
@@ -511,10 +512,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       return;
     }
     const next = questPopup(content.broadcasts, [...new Set([...stored, ...seenQuestIds.current])], today);
-    if (!next) return;
-    const timer = window.setTimeout(() => setQuestPopupItem(next), 0);
+    const timer = window.setTimeout(() => setQuestToastItem(next), 0);
     return () => window.clearTimeout(timer);
-  }, [content.broadcasts, contentReady, booting, windows.editor.open, today, questPopupItem]);
+  }, [content.broadcasts, contentReady, booting, today]);
 
   useEffect(() => {
     // Stored settings are visitor-editable: keep only known values, field by field.
@@ -804,9 +804,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
   };
 
-  const dismissQuestPopup = (openQuests: boolean) => {
+  const dismissQuestToast = (openQuests: boolean) => {
     rememberActiveQuests();
-    setQuestPopupItem(null);
+    setQuestToastItem(null);
     if (openQuests) {
       setBroadcastTab("quests");
       openApp("broadcasts");
@@ -1096,7 +1096,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   return (
     <>
       <BootScreen visible={booting} />
-      {questPopupItem && <QuestPopup quest={questPopupItem.quest} more={questPopupItem.more} document={content.formattedText[portiaTextKey.broadcast(questPopupItem.quest.id)]} onDismiss={dismissQuestPopup} />}
+      {questToastItem && <QuestToast quest={questToastItem.quest} more={questToastItem.more} document={content.formattedText[portiaTextKey.broadcast(questToastItem.quest.id)]} onDismiss={dismissQuestToast} />}
       <div className="desktop" id="desktop">
         {desktopSettingsLoaded && <DesktopWallpaper kind={desktopSettings.wallpaper} />}
         <header className="system-bar">
@@ -1702,33 +1702,27 @@ function ScientistRichText({ log }: { log: ScientistLog }) {
   return <FormattedText className="scientist-rich-text" text={log.content.join("\n\n")} document={document} />;
 }
 
-// Same native-dialog pattern as the editor's ConfirmDialog (that one lives in a dynamic chunk): top layer, Esc and backdrop dismiss.
-function QuestPopup({ quest, more, document, onDismiss }: { quest: Broadcast; more: number; document?: RichTextDocument; onDismiss: (openQuests: boolean) => void }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
+// Non-modal corner notification: the owner asked for a side toast instead of a window (G-03.2-2b).
+function QuestToast({ quest, more, document, onDismiss }: { quest: Broadcast; more: number; document?: RichTextDocument; onDismiss: (openQuests: boolean) => void }) {
   const titleId = useId();
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog || dialog.open) return;
-    dialog.showModal();
-    dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
-  }, []);
-
   return (
-    <dialog ref={dialogRef} className="portia-dialog quest-popup" role="dialog" aria-modal="true" aria-labelledby={titleId} onClose={() => onDismiss(false)} onClick={(event) => { if (event.target === event.currentTarget) onDismiss(false); }}>
+    <aside className="portia-dialog quest-toast" role="status" aria-labelledby={titleId} onKeyDown={(event) => { if (event.key === "Escape") onDismiss(false); }}>
       <div>
-        <span className="quest-popup-eyebrow">НОВЫЙ КВЕСТ</span>
+        <div className="quest-toast-head">
+          <span className="quest-toast-eyebrow">НОВЫЙ КВЕСТ</span>
+          <button type="button" className="quest-toast-close" aria-label="Закрыть уведомление" onClick={() => onDismiss(false)}>×</button>
+        </div>
         <h2 id={titleId}>{quest.title || "БЕЗ НАЗВАНИЯ"}</h2>
         {(quest.startsAt || quest.endsAt) && <div className="broadcast-dates">{quest.startsAt && <span>Начало: {formatQuestDay(quest.startsAt)}</span>}{quest.endsAt && <span>Окончание: {formatQuestDay(quest.endsAt)}</span>}</div>}
         {quest.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{quest.conditions}</p></div>}
-        <FormattedText className="quest-popup-body" text={quest.body} document={document} />
-        {more > 0 && <p className="quest-popup-more">Ещё активных квестов: {more}</p>}
+        <FormattedText className="quest-toast-body" text={quest.body} document={document} />
+        {more > 0 && <p className="quest-toast-more">Ещё активных квестов: {more}</p>}
         <div className="portia-dialog-actions">
           <button type="button" className="primary-control" onClick={() => onDismiss(true)}>ОТКРЫТЬ КВЕСТЫ</button>
-          <button type="button" className="secondary-control" autoFocus data-autofocus onClick={() => onDismiss(false)}>ПОНЯТНО</button>
         </div>
       </div>
-    </dialog>
+    </aside>
   );
 }
 
