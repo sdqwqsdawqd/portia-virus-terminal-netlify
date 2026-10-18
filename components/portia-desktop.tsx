@@ -1044,14 +1044,14 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     <>
       <BootScreen visible={booting} />
       <div className="desktop" id="desktop">
-        <DesktopWallpaper kind={desktopSettings.wallpaper} />
+        {desktopSettingsLoaded && <DesktopWallpaper kind={desktopSettings.wallpaper} />}
         <header className="system-bar">
           <div className="system-brand"><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span><span className="system-division">PORTIA OS</span></div>
           <div className="system-status" aria-label="Состояние системы"><span className="status-item"><i className="status-dot" />В СЕТИ</span><time>{clock}</time></div>
         </header>
 
         <main className={`workspace${windows[activeApp].open && !windows[activeApp].minimized ? " mobile-app-open" : ""}`}>
-          <nav className="desktop-icons" aria-label="Рабочий стол PORTIA">
+          <nav className="desktop-icons" aria-label="Рабочий стол PORTIA" style={desktopSettingsLoaded && shortcutPositionsLoaded ? undefined : { visibility: "hidden" }}>
             <DesktopIcon app="search" onOpen={openApp} position={shortcutPositions.search} onMove={moveDesktopShortcut} />
             <DesktopIcon app="archive" onOpen={openApp} position={shortcutPositions.archive} onMove={moveDesktopShortcut} />
             <DesktopIcon app="employees" onOpen={openApp} position={shortcutPositions.employees} onMove={moveDesktopShortcut} />
