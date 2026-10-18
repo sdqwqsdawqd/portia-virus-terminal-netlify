@@ -174,6 +174,47 @@ to authenticated
 using ((select public.portia_can_edit()))
 with check ((select public.portia_can_edit()));
 
+-- Manual employees
+
+-- Employees added by editors outside the Google Sheet (phase 03.3). The roster lists them after the sheet staff;
+-- the sheet wins when the same Roblox account is in both. Photo, ratings and biography stay in
+-- portia_employee_profiles under the same employee_id, so removing a manual employee keeps them.
+create table if not exists public.portia_manual_employees (
+  employee_id text primary key check (employee_id ~ '^roblox-[0-9]+$'),
+  nickname text not null check (length(nickname) between 3 and 20),
+  title text not null default '' check (length(title) <= 64),
+  rank text not null default '' check (length(rank) <= 64),
+  callsign text not null default '' check (length(callsign) <= 64),
+  created_at timestamptz not null default now(),
+  created_by uuid references auth.users(id)
+);
+
+alter table public.portia_manual_employees enable row level security;
+revoke all on table public.portia_manual_employees from anon, authenticated;
+grant select on table public.portia_manual_employees to anon, authenticated;
+grant insert, delete on table public.portia_manual_employees to authenticated;
+
+drop policy if exists "Public can read PORTIA manual employees" on public.portia_manual_employees;
+create policy "Public can read PORTIA manual employees"
+on public.portia_manual_employees for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "Editors can add PORTIA manual employees" on public.portia_manual_employees;
+create policy "Editors can add PORTIA manual employees"
+on public.portia_manual_employees for insert
+to authenticated
+with check ((select public.portia_can_edit()));
+
+drop policy if exists "Editors can remove PORTIA manual employees" on public.portia_manual_employees;
+create policy "Editors can remove PORTIA manual employees"
+on public.portia_manual_employees for delete
+to authenticated
+using ((select public.portia_can_edit()));
+
+-- PostgREST picks up the new table without a restart.
+notify pgrst, 'reload schema';
+
 -- Media
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

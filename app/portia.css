@@ -486,6 +486,15 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .editor-record-list strong { font: 700 12px var(--sans); }
 .editor-record-list small { color: oklch(.559 .029 var(--accent-hue)); font: 11px var(--sans); }
 .editor-record-list .add-record { align-items: center; margin-top: 5px; border-style: dashed; color: var(--teal); }
+/* «ВНЕ ТАБЛИЦЫ» marks manual employees (D-02). The compound selectors outrank the list/identity rules that style a bare <small>. */
+.manual-mark, small.manual-mark, .personnel-list > button > .manual-mark, .personnel-profile-identity > small.manual-mark { display: inline-block; width: fit-content; max-width: 100%; margin: 0; padding: 1px 5px; border: 1px solid var(--teal-dim); color: var(--teal); font: 700 9px/1.4 var(--sans); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.personnel-list > button > .manual-mark { grid-column: 2; justify-self: start; }
+.personnel-list > button > .manual-mark ~ small { grid-column: 2; }
+.personnel-profile-identity > small.manual-mark { margin: 6px 0 2px; }
+.employee-add-form { display: grid; gap: 10px; padding: 11px; border: 1px solid var(--teal-dim); background: var(--teal-soft); }
+.employee-add-form .editor-field input { min-width: 0; }
+.employee-remove { align-self: flex-start; justify-self: start; }
+.employee-add-error { margin: 0; color: var(--danger); font: 11px/1.45 var(--sans); overflow-wrap: anywhere; }
 .editor-record-row { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 5px; }
 .editor-record-row > button:last-child { min-width: 0; }
 .editor-record-list .editor-record-row .order-drag-handle, .order-drag-handle { width: 34px; min-width: 34px; min-height: 34px; display: grid; place-items: center; align-content: center; gap: 1px; padding: 3px; border: 1px dashed oklch(.445 .038 var(--accent-hue)); background: rgba(var(--desktop-glow), .035); color: oklch(.628 .036 var(--accent-hue)); cursor: grab; touch-action: none; user-select: none; }
