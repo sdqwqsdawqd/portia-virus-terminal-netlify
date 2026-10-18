@@ -1,7 +1,7 @@
 import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
 import { employeesCacheTag, noStoreHeaders, publicCacheHeaders, purgeCacheTag } from "@/lib/portia-cdn";
-import { loadEmployees, sanitizeEmployeeUpdate, saveEmployeeProfile } from "@/lib/portia-employees";
+import { addManualEmployee, loadEmployees, sanitizeEmployeeUpdate, sanitizeManualEmployee, saveEmployeeProfile, withProfile } from "@/lib/portia-employees";
 
 export const dynamic = "force-dynamic";
 
@@ -50,5 +50,38 @@ export async function PATCH(request: Request) {
   } catch (error) {
     console.error("PORTIA employee update failed", error);
     return Response.json({ error: "Не удалось сохранить профиль." }, { status: 500 });
+  }
+}
+
+// Adds a person outside the Google Sheet by Roblox nickname (D-01..D-03).
+export async function POST(request: Request) {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data } = await supabase.auth.getUser();
+    const access = await getEditorAccess(supabase, data.user);
+    if (!data.user || !access.canEdit) return Response.json({ error: "Нет доступа к редактору." }, { status: 403 });
+
+    const input = sanitizeManualEmployee(await request.json());
+    if (!input) return Response.json({ error: "Некорректные данные." }, { status: 400 });
+    const { employees, profilesRead, profiles } = await loadEmployees(supabase);
+    if (!profilesRead) return Response.json({ error: "Профили сотрудников не загрузились. Обновите страницу через минуту." }, { status: 503 });
+
+    const result = await addManualEmployee(supabase, input, employees, data.user.id);
+    if (result.status !== "added") {
+      const refusals = {
+        "not-found": { error: "Ник не найден", status: 404 },
+        "duplicate": { error: "Уже есть в списке", status: 409 },
+        "roblox-unavailable": { error: "Roblox не отвечает. Попробуйте через минуту.", status: 503 },
+        "pending-database": { error: "База данных ещё не обновлена: добавление заработает после обновления.", status: 503 },
+      };
+      const { error, status } = refusals[result.status];
+      return Response.json({ error }, { status });
+    }
+
+    await purgeCacheTag(employeesCacheTag);
+    return Response.json({ employee: withProfile(result.employee, profiles) }, { status: 201, headers: noStoreHeaders });
+  } catch (error) {
+    console.error("PORTIA employee add failed", error);
+    return Response.json({ error: "Не удалось добавить сотрудника." }, { status: 500 });
   }
 }

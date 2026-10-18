@@ -1353,6 +1353,11 @@ function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
   const [recordOpen, setRecordOpen] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
   const [pendingEmployeeId, setPendingEmployeeId] = useState<string | null>(null);
+  // The add form has its own state: the profile draft and its unsaved-edits guard stay untouched.
+  const [addOpen, setAddOpen] = useState(false);
+  const [addDraft, setAddDraft] = useState({ nickname: "", title: "", rank: "", callsign: "" });
+  const [addState, setAddState] = useState<"idle" | "adding">("idle");
+  const [addError, setAddError] = useState("");
   const selected = employees.find((employee) => employee.id === selectedId) ?? employees[0] ?? null;
   const dirty = Boolean(selected && draft && profileChanged(profileOf(selected), draft));
   // Read after an awaited save: a cancelled question must not continue into the switch (D-02).
@@ -1432,6 +1437,35 @@ function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
     }
   };
 
+  // A person outside the sheet, by Roblox nickname; the current selection and its draft stay as they are.
+  const addEmployee = async () => {
+    setAddState("adding");
+    setAddError("");
+    try {
+      const response = await fetch("/api/employees", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(addDraft),
+      });
+      const payload = await response.json() as { employee?: PortiaEmployee; error?: string };
+      if (!response.ok || !payload.employee) {
+        const message = response.status === 403
+          ? "Сессия редактора истекла. Войдите в редактор снова."
+          : payload.error || `Сервер отклонил добавление (${response.status}).`;
+        throw new Error(message);
+      }
+      setEmployees((current) => [...current, payload.employee!]);
+      onSaved(payload.employee);
+      setAddDraft({ nickname: "", title: "", rank: "", callsign: "" });
+      setAddOpen(false);
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : "Не удалось добавить сотрудника.");
+    }
+    setAddState("idle");
+  };
+
   if (state === "loading") return <div className="editor-empty">Загрузка сотрудников…</div>;
   if (!selected || !draft) return <div className="editor-empty">{state === "error" ? "Не удалось загрузить сотрудников из таблицы. Обновите страницу через минуту." : "В таблице пока нет сотрудников."}</div>;
 
@@ -1471,10 +1505,19 @@ function EmployeeProfilesEditor({ onSaved, onDirtyChange, leaving, onLeave }: {
   return <div className="virus-editor-layout employee-editor-layout" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
     <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
     <aside className="editor-record-list">
-      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+      <button className="add-record" type="button" aria-expanded={addOpen} onClick={() => setAddOpen((open) => !open)}>+ ВНЕ ТАБЛИЦЫ</button>
+      {addOpen && <form className="employee-add-form" onSubmit={(event) => { event.preventDefault(); void addEmployee(); }}>
+        <Field label="Ник Roblox"><input value={addDraft.nickname} required maxLength={20} autoCapitalize="none" spellCheck={false} onChange={(event) => setAddDraft((current) => ({ ...current, nickname: event.target.value }))} /></Field>
+        <Field label="Звание"><input value={addDraft.title} maxLength={64} onChange={(event) => setAddDraft((current) => ({ ...current, title: event.target.value }))} /></Field>
+        <Field label="Ранг"><input value={addDraft.rank} maxLength={64} onChange={(event) => setAddDraft((current) => ({ ...current, rank: event.target.value }))} /></Field>
+        <Field label="Позывной"><input value={addDraft.callsign} maxLength={64} onChange={(event) => setAddDraft((current) => ({ ...current, callsign: event.target.value }))} /></Field>
+        {addError && <p className="employee-add-error" role="alert">{addError}</p>}
+        <button className="primary-control" type="submit" disabled={addState === "adding" || !addDraft.nickname.trim()}>{addState === "adding" ? "ДОБАВЛЕНИЕ…" : "ДОБАВИТЬ"}</button>
+      </form>}
     </aside>
     <div className="editor-form employee-profile-editor">
-      <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять фотографию, оценки и биографию.</p>
+      <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять фотографию, оценки и биографию. Людей вне таблицы добавляют по нику Roblox; их звание, ранг и позывной задаются при добавлении.</p>
       <div className="employee-editor-summary">
         <figure>{preview ? <img src={preview} alt={`Аватар ${selected.nickname}`} referrerPolicy="no-referrer" /> : <img src="/assets/portia-logo.png" alt="" />}</figure>
         <div><span className="eyebrow">{selected.title || "БЕЗ ЗВАНИЯ"}</span><h2>{selected.nickname}</h2><p>{[selected.callsign || "без позывного", selected.rank || "ранг не указан"].join(" · ")}</p></div>

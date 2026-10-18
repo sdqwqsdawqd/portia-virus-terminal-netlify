@@ -19,6 +19,8 @@ export type PortiaEmployee = {
   robloxAvatarUrl: string;
   robloxFullAvatarUrl: string;
   order: number;
+  /** "sheet": a row of the Google Sheet; "manual": added by an editor outside the sheet (D-02). */
+  source: "sheet" | "manual";
 };
 
 type OptionalRatingKey = "pawsRating" | "bioRating" | "sRating" | "activityRating" | "testsRating" | "overallRating";
@@ -64,6 +66,11 @@ export function profileChanged(saved: EmployeeProfile, draft: EmployeeProfile): 
 
 export function isMissingColumnError(error: { code?: string } | null | undefined) {
   return error?.code === "PGRST204" || error?.code === "42703";
+}
+
+/** The table is not in the database yet (PostgREST schema cache / Postgres undefined_table). */
+export function isMissingTableError(error: { code?: string } | null | undefined) {
+  return error?.code === "PGRST205" || error?.code === "42P01";
 }
 
 /** Whether an /api/employees answer may replace the roster on screen and in the cache. */
@@ -200,6 +207,7 @@ export function rosterFromRows(
       robloxAvatarUrl: profile?.avatarUrl ?? "",
       robloxFullAvatarUrl: profile?.fullAvatarUrl ?? "",
       order: rowIndex,
+      source: "sheet" as const,
     }];
   });
 }
@@ -246,26 +254,128 @@ export function withProfile(employee: RosterEmployee, profiles: ProfileIndex): P
   return { ...employee, ...profile };
 }
 
+// People added by editors outside the Google Sheet (phase 03.3); title, rank and callsign are typed at add time.
+export type ManualEmployeeInput = { nickname: string; title: string; rank: string; callsign: string };
+export type ManualRow = { employee_id: string; nickname: string; title: string; rank: string; callsign: string };
+
+const manualTableName = "portia_manual_employees";
+const robloxNickname = /^[A-Za-z0-9_]{3,20}$/;
+
+export function sanitizeManualEmployee(value: unknown): ManualEmployeeInput | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const text = (field: unknown) => (typeof field === "string" ? field.trim().slice(0, 64) : "");
+  const nickname = typeof candidate.nickname === "string" ? candidate.nickname.trim() : "";
+  if (!nickname) return null;
+  return { nickname, title: text(candidate.title), rank: text(candidate.rank), callsign: text(candidate.callsign) };
+}
+
+/** Explicit columns, so created_by never reaches an API answer. A missing table is an empty, healthy list. */
+export async function readManualEmployees(supabase: SupabaseClient): Promise<{ rows: ManualRow[]; ok: boolean }> {
+  try {
+    const { data, error } = await supabase
+      .from(manualTableName)
+      .select("employee_id, nickname, title, rank, callsign")
+      .order("created_at")
+      .returns<ManualRow[]>();
+    if (!error) return { rows: data ?? [], ok: true };
+    if (isMissingTableError(error)) return { rows: [], ok: true };
+    console.error("PORTIA manual employees read failed", error);
+  } catch (error) {
+    console.error("PORTIA manual employees read failed", error);
+  }
+  return { rows: [], ok: false };
+}
+
+/** The sheet staff first, then the manual rows; the sheet wins when the same Roblox account is in both (D-03). */
+export function mergeManualEmployees(sheet: RosterEmployee[], rows: ManualRow[], robloxByName: Map<string, RobloxProfile>): RosterEmployee[] {
+  const ids = new Set(sheet.map((employee) => employee.id));
+  const nicknames = new Set(sheet.map((employee) => nicknameKey(employee.nickname)));
+  const manual: RosterEmployee[] = [];
+  for (const row of rows) {
+    if (ids.has(row.employee_id) || nicknames.has(nicknameKey(row.nickname))) continue;
+    const profile = robloxByName.get(nicknameKey(row.nickname));
+    manual.push({
+      id: row.employee_id,
+      nickname: row.nickname,
+      callsign: row.callsign,
+      title: row.title,
+      rank: row.rank,
+      robloxUserId: Number(row.employee_id.match(/^roblox-(\d+)$/)?.[1]) || null,
+      robloxAvatarUrl: profile?.avatarUrl ?? "",
+      robloxFullAvatarUrl: profile?.fullAvatarUrl ?? "",
+      order: sheet.length + manual.length,
+      source: "manual",
+    });
+  }
+  return [...sheet, ...manual];
+}
+
 export async function loadEmployees(supabase: SupabaseClient) {
-  const [sheetResponse, profiles] = await Promise.all([
+  const [sheetResponse, profiles, manual] = await Promise.all([
     fetch(sheetCsvUrl, { cache: "no-store", signal: AbortSignal.timeout(8_000) }),
     readEmployeeProfiles(supabase).catch((error) => {
       console.error("PORTIA employee profiles read failed", error);
       return null;
     }),
+    readManualEmployees(supabase),
   ]);
   if (!sheetResponse.ok) throw new Error(`Google Sheets returned ${sheetResponse.status}`);
   const rows = parseCsv(await sheetResponse.text());
   const index = profiles ?? { byId: new Map(), robloxIdByNickname: new Map() };
   const sheetOnly = rosterFromRows(rows, new Map(), index.robloxIdByNickname);
-  const roblox = await resolveRobloxProfiles(sheetOnly.map((employee) => employee.nickname));
+  // shortcut: manual employees are looked up by their stored nickname; after a Roblox rename the avatar is empty until they are removed and added again.
+  const roblox = await resolveRobloxProfiles([...sheetOnly, ...manual.rows].map((employee) => employee.nickname));
+  const roster = mergeManualEmployees(rosterFromRows(rows, roblox.byName, index.robloxIdByNickname), manual.rows, roblox.byName);
   return {
-    employees: rosterFromRows(rows, roblox.byName, index.robloxIdByNickname).map((employee) => withProfile(employee, index)),
+    employees: roster.map((employee) => withProfile(employee, index)),
     syncedAt: new Date().toISOString(),
     // An incomplete answer is cached only briefly so avatars and biographies return quickly.
-    complete: Boolean(profiles) && roblox.ok,
+    complete: Boolean(profiles) && roblox.ok && manual.ok,
     // Without the stored profiles every employee looks blank; a save from that would wipe them.
     profilesRead: Boolean(profiles),
+    profiles: index,
+  };
+}
+
+export type AddManualResult =
+  | { status: "added"; employee: RosterEmployee }
+  | { status: "not-found" | "duplicate" | "roblox-unavailable" | "pending-database" };
+
+/** Adds a person by Roblox nickname; `roster` is the current merged list, used to refuse a person already in it. */
+export async function addManualEmployee(supabase: SupabaseClient, input: ManualEmployeeInput, roster: RosterEmployee[], userId: string): Promise<AddManualResult> {
+  if (!robloxNickname.test(input.nickname)) return { status: "not-found" };
+  const lookup = await resolveRobloxProfiles([input.nickname]);
+  const found = lookup.byName.get(nicknameKey(input.nickname));
+  // "ok" is false for a failed thumbnail call too, so only a missing user decides between the two refusals.
+  if (!found) return { status: lookup.ok ? "not-found" : "roblox-unavailable" };
+  const id = employeeId(input.nickname, found.id);
+  if (roster.some((employee) => employee.id === id || nicknameKey(employee.nickname) === nicknameKey(input.nickname))) return { status: "duplicate" };
+  const { error } = await supabase.from(manualTableName).insert({
+    employee_id: id,
+    nickname: input.nickname,
+    title: input.title,
+    rank: input.rank,
+    callsign: input.callsign,
+    created_by: userId,
+  });
+  if (error?.code === "23505") return { status: "duplicate" };
+  if (isMissingTableError(error)) return { status: "pending-database" };
+  if (error) throw error;
+  return {
+    status: "added",
+    employee: {
+      id,
+      nickname: input.nickname,
+      callsign: input.callsign,
+      title: input.title,
+      rank: input.rank,
+      robloxUserId: found.id,
+      robloxAvatarUrl: found.avatarUrl,
+      robloxFullAvatarUrl: found.fullAvatarUrl,
+      order: roster.length,
+      source: "manual",
+    },
   };
 }
 
