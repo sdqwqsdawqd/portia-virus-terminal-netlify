@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Broadcast } from "./portia-content.ts";
-import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, questState } from "./broadcasts.ts";
+import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState } from "./broadcasts.ts";
 
 const TODAY = "2026-10-19";
 const item = (id: string, type: Broadcast["type"], published = true, important = false, dates: Partial<Broadcast> = {}): Broadcast => ({ id, type, title: id, body: "", published, important, startsAt: "", endsAt: "", conditions: "", ...dates });
@@ -59,4 +59,34 @@ test("quests feed leads with active, then upcoming, then finished, keeping edito
     item("done2", "quest", true, false, { startsAt: "2026-09-01", endsAt: "2026-09-30" }),
   ];
   assert.deepEqual(broadcastFeed(list, "quests", TODAY).map((x) => x.id), ["on1", "task", "on2", "soon1", "soon2", "done1", "done2"]);
+});
+
+test("parseSeenQuestIds accepts only an array of strings", () => {
+  for (const raw of [null, "", "{", "5", '{"a":1}']) assert.deepEqual(parseSeenQuestIds(raw), []);
+  assert.deepEqual(parseSeenQuestIds('["a",3,"b"]'), ["a", "b"]);
+});
+
+test("questPopup returns the first unseen active published quest and counts the rest", () => {
+  const list = [
+    item("n", "news"), item("t", "task"), item("hidden", "quest", false),
+    item("soon", "quest", true, false, { startsAt: "2026-10-25" }), item("old", "quest", true, false, { endsAt: "2026-10-01" }),
+    item("a", "quest"), item("b", "quest"), item("c", "quest"),
+  ];
+  assert.deepEqual(questPopup(list, [], TODAY), { quest: list[5], more: 2 });
+  assert.deepEqual(questPopup(list, ["a"], TODAY), { quest: list[6], more: 1 });
+  assert.equal(questPopup(list, ["a", "b", "c"], TODAY), null);
+  assert.equal(questPopup([item("n", "news"), item("t", "task")], [], TODAY), null);
+});
+
+test("an upcoming quest pops up on its start day", () => {
+  const list = [item("soon", "quest", true, false, { startsAt: "2026-10-25" })];
+  assert.equal(questPopup(list, [], TODAY), null);
+  assert.equal(questPopup(list, [], "2026-10-25")?.quest.id, "soon");
+});
+
+test("markQuestsSeen adds active published quests, keeps stored ids that still exist and drops gone ones", () => {
+  const list = [item("a", "quest"), item("b", "quest"), item("soon", "quest", true, false, { startsAt: "2026-10-25" }), item("h", "quest", false)];
+  assert.deepEqual(markQuestsSeen(list, [], TODAY), ["a", "b"]);
+  assert.deepEqual(markQuestsSeen(list, ["a", "gone", "soon"], TODAY), ["a", "soon", "b"]);
+  assert.deepEqual(markQuestsSeen(list, ["b", "b"], TODAY), ["b", "a"]);
 });
