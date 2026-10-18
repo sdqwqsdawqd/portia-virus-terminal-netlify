@@ -1,8 +1,8 @@
 ---
-status: diagnosed
+status: resolved
 trigger: "UAT 3 (PORTIA-03): РЕДАКТОР ОФОРМЛЕНИЯ is too big for phones, no need to remove functions but to make window smaller and allow to scroll it"
 created: 2026-10-14T00:00:00Z
-updated: 2026-10-14T14:15:00Z
+updated: 2026-10-18T13:41:02Z
 ---
 
 ## Current Focus

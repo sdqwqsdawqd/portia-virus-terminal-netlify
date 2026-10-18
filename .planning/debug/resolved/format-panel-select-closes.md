@@ -1,8 +1,8 @@
 ---
-status: diagnosed
+status: resolved
 trigger: "UAT 12 (PORTIA-03, after 03-06): When i trying to select editor is closing so i need to open again, also if in document color is different i can only notice if i select the category"
 created: 2026-10-14T15:00:00Z
-updated: 2026-10-14T15:40:00Z
+updated: 2026-10-18T13:41:02Z
 ---
 
 ## Current Focus

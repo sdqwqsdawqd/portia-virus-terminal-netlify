@@ -1,8 +1,8 @@
 ---
-status: diagnosed
+status: resolved
 trigger: "UAT test 10: long employee nickname in personnel profile header breaks mid-word (Kotik_p / lay1232) in normal and maximized window"
 created: 2026-10-14T00:00:00Z
-updated: 2026-10-14T00:00:00Z
+updated: 2026-10-18T13:41:02Z
 ---
 
 ## Current Focus

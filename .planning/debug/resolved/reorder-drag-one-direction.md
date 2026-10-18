@@ -1,8 +1,8 @@
 ---
-status: diagnosed
+status: resolved
 trigger: "During one drag on the ≡ handle (gel-lane reorder in the editor), a row can move both up and down until the pointer is released; each move is visibly animated. UAT 2: 'its hard for phone to drag them down and up'; UAT 9: 'still problems, after i move to up it cant move down until i stop holding. Also i need some kind of animations for moving to make sure'"
 created: 2026-10-14T00:00:00Z
-updated: 2026-10-14T00:00:00Z
+updated: 2026-10-18T13:41:02Z
 goal: find_root_cause_only
 ---
 

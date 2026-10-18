@@ -1,8 +1,8 @@
 ---
-status: diagnosed
+status: resolved
 trigger: "1. when I create a post, like a forum thread or a news item, it gets deleted for some reason 2. when I create a new post in the forum, it gets duplicated"
 created: 2026-10-14T12:20:00Z
-updated: 2026-10-14T13:10:00Z
+updated: 2026-10-18T13:41:02Z
 goal: find_root_cause_only
 ---
 
