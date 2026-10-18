@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { classificationOptions, portiaTextKey, type Broadcast, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
+import { classificationOptions, findInfo, portiaTextKey, type Broadcast, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
 import { acceptsRoster, employeeRatings, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
-import { normalizeBroadcasts } from "@/lib/portia-content-normalize";
+import { normalizeBroadcasts, normalizeInfoSections } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 
 const PortiaEditor = dynamic(
@@ -355,13 +355,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       if (!response.ok) return;
       const payload = (await response.json()) as ContentResponse;
       if (!payload.content) return;
-      const fetched = { ...payload.content, broadcasts: normalizeBroadcasts(payload.content.broadcasts) };
+      const fetched = { ...payload.content, broadcasts: normalizeBroadcasts(payload.content.broadcasts), infoSections: normalizeInfoSections(payload.content.infoSections) };
       const fetchedRevision = payload.revision ?? 0;
       if (!acceptFetchedContent(fetchedRevision, knownRevision.current, savesAtSend, savesStarted.current)) return;
       knownRevision.current = fetchedRevision;
       setContent(fetched);
       setActiveVirusId((current) => fetched.viruses.some((virus) => virus.id === current) ? current : fetched.viruses[0]?.id ?? "");
-      setSelectedInfoId((current) => fetched.infoSections.some((section) => section.id === current) ? current : fetched.infoSections[0]?.id ?? "");
+      setSelectedInfoId((current) => findInfo(fetched.infoSections, current) ? current : fetched.infoSections[0]?.id ?? "");
       setRevision(fetchedRevision);
       try {
         window.localStorage.setItem(contentCacheStorageKey, JSON.stringify({
@@ -438,13 +438,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         if (cached) {
           const parsed = JSON.parse(cached) as { content?: unknown; revision?: number };
           if (isUsableContent(parsed.content)) {
-            const cachedContent = { ...parsed.content, broadcasts: normalizeBroadcasts(parsed.content.broadcasts) };
+            const cachedContent = { ...parsed.content, broadcasts: normalizeBroadcasts(parsed.content.broadcasts), infoSections: normalizeInfoSections(parsed.content.infoSections) };
             setContent(cachedContent);
             const cachedRevision = typeof parsed.revision === "number" ? parsed.revision : 0;
             knownRevision.current = cachedRevision;
             setRevision(cachedRevision);
             setActiveVirusId((current) => cachedContent.viruses.some((virus) => virus.id === current) ? current : cachedContent.viruses[0]?.id ?? "");
-            setSelectedInfoId((current) => cachedContent.infoSections.some((section) => section.id === current) ? current : cachedContent.infoSections[0]?.id ?? "");
+            setSelectedInfoId((current) => findInfo(cachedContent.infoSections, current) ? current : cachedContent.infoSections[0]?.id ?? "");
             setContentReady(true);
           }
         }
@@ -940,7 +940,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
   const filteredViruses = content.viruses.filter((virus) => escapeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(escapeSearch(virusQuery)));
-  const selectedInfo = content.infoSections.find((section) => section.id === selectedInfoId) ?? content.infoSections[0];
+  const selectedInfoEntry = findInfo(content.infoSections, selectedInfoId)
+    ?? (content.infoSections[0] ? { section: content.infoSections[0], subsection: null } : null);
+  const selectedInfo = selectedInfoEntry?.section;
+  const selectedSubsection = selectedInfoEntry?.subsection ?? null;
   const trashFiles = content.recycleFiles;
   const activeTrashFile = trashFiles.find((file) => file.id === activeTrashFileId) ?? null;
   const recycledViruses = useMemo(() => content.recycledViruses ?? [], [content.recycledViruses]);
@@ -1214,8 +1217,19 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
           <AppWindow app="info" state={windows.info} active={activeApp === "info"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window info-window" meta="АРХИВ ЗНАНИЙ">
             {!contentReady ? <LoadingState label="Загрузка разделов…" /> : <div className="info-library">
-              <aside className="info-index">{content.infoSections.map((section, index) => <button key={section.id} type="button" className={section.id === selectedInfo?.id ? "active" : ""} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span></button>)}</aside>
-              <article className="info-document">{selectedInfo ? <div className="content-fade" key={selectedInfo.id}><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></div> : <div className="editor-empty">Разделов пока нет.</div>}</article>
+              <aside className="info-index">{content.infoSections.map((section, index) => {
+                const open = section.id === selectedInfo?.id;
+                return (
+                  <div key={section.id}>
+                    <button type="button" className={open && !selectedSubsection ? "active" : ""} aria-expanded={section.subsections.length ? open : undefined} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span></button>
+                    {open && section.subsections.length ? <div className="info-subsections">{section.subsections.map((sub, subIndex) => <button key={sub.id} type="button" className={sub.id === selectedSubsection?.id ? "active" : ""} onClick={() => setSelectedInfoId(sub.id)}><small>{String(index + 1).padStart(2, "0")}.{subIndex + 1}</small><span>{sub.title || "БЕЗ НАЗВАНИЯ"}</span></button>)}</div> : null}
+                  </div>
+                );
+              })}</aside>
+              <article className="info-document">{selectedInfo ? (selectedSubsection
+                ? <div className="content-fade" key={selectedSubsection.id}><span className="eyebrow">{selectedInfo.title}</span><h1>{selectedSubsection.title || "БЕЗ НАЗВАНИЯ"}</h1><div className="info-blocks">{selectedSubsection.blocks.map((block) => block.type === "text" ? <FormattedText key={block.id} className="info-document-copy" text={block.text} /> : null)}</div></div>
+                : <div className="content-fade" key={selectedInfo.id}><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></div>
+              ) : <div className="editor-empty">Разделов пока нет.</div>}</article>
             </div>}
           </AppWindow>
 

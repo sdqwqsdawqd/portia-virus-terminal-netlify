@@ -1,5 +1,8 @@
 import {
   type Broadcast,
+  type InfoBlock,
+  type InfoSection,
+  type InfoSubsection,
   createVirusRecycleFiles,
   defaultPortiaContent,
   type PortiaContent,
@@ -93,6 +96,55 @@ export function normalizeBroadcasts(value: unknown): Broadcast[] {
     }));
 }
 
+const asText = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : "");
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object";
+
+function normalizeInfoBlock(value: unknown, subsectionId: string, index: number): InfoBlock[] {
+  if (!isRecord(value)) return [];
+  const id = typeof value.id === "string" && value.id ? value.id : `${subsectionId}-block-${index}`;
+  switch (value.type) {
+    case "text":
+      return [{ id, type: "text", text: asText(value.text, 20_000) }];
+    case "table":
+      return [{
+        id,
+        type: "table",
+        rows: (Array.isArray(value.rows) ? value.rows : []).filter(isRecord).slice(0, 100)
+          .map((row) => ({ key: asText(row.key, 500), value: asText(row.value, 500) })),
+      }];
+    case "photo":
+      return [{ id, type: "photo", url: normalizeMediaUrl(value.url) }];
+    case "video":
+      return [{ id, type: "video", videoId: typeof value.videoId === "string" && /^[\w-]{11}$/.test(value.videoId) ? value.videoId : "" }];
+    default:
+      return [];
+  }
+}
+
+function normalizeInfoSubsection(value: unknown, sectionId: string, index: number): InfoSubsection[] {
+  if (!isRecord(value)) return [];
+  const id = typeof value.id === "string" && value.id ? value.id : `${sectionId}-sub-${index}`;
+  const blocks = (Array.isArray(value.blocks) ? value.blocks : []).slice(0, 100)
+    .flatMap((block, blockIndex) => normalizeInfoBlock(block, id, blockIndex));
+  return [{ id, title: asText(value.title, 300), blocks }];
+}
+
+// Sections saved before 03.3 have no subsections (D-12); title and body keep today's behaviour, never cut.
+export function normalizeInfoSections(value: unknown): InfoSection[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, index) => {
+    if (!isRecord(item)) return [];
+    const id = typeof item.id === "string" && item.id ? item.id : `info-${index}`;
+    return [{
+      id,
+      title: typeof item.title === "string" ? item.title : "",
+      body: typeof item.body === "string" ? item.body : "",
+      subsections: (Array.isArray(item.subsections) ? item.subsections : []).slice(0, 50)
+        .flatMap((sub, subIndex) => normalizeInfoSubsection(sub, id, subIndex)),
+    }];
+  });
+}
+
 export function normalizePortiaContent(value: unknown): PortiaContent | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<PortiaContent>;
@@ -173,7 +225,7 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
   return {
     viruses,
     recycledViruses,
-    infoSections: candidate.infoSections,
+    infoSections: normalizeInfoSections(candidate.infoSections),
     broadcasts: normalizeBroadcasts(candidate.broadcasts),
     recycleFiles,
     recycleOrder,

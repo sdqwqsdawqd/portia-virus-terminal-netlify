@@ -10,8 +10,8 @@ const fixture = (): PortiaContent => {
     { id: "b", type: "task", title: "B", body: "текст B", published: false, important: false, startsAt: "", endsAt: "", conditions: "" },
   ];
   content.infoSections = [
-    { id: "s1", title: "S1", body: "раздел 1" },
-    { id: "s2", title: "S2", body: "раздел 2" },
+    { id: "s1", title: "S1", body: "раздел 1", subsections: [] },
+    { id: "s2", title: "S2", body: "раздел 2", subsections: [] },
   ];
   content.formattedText = {
     [portiaTextKey.broadcast("a")]: { runs: [] },

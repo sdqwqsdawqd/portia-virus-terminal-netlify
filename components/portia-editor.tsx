@@ -9,6 +9,7 @@ import { broadcastTabOf, type BroadcastTab } from "@/lib/broadcasts";
 import { addBroadcast, removeBroadcast, removeInfoSection, removeMutation, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
+  findInfo,
   portiaTextKey,
   scientistLogPlainText,
   type Broadcast,
@@ -1026,15 +1027,33 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
 
       {tab === "info" && (
         <div className="editor-form flat-editor-form">
-          <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация».</p>
+          <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация». Раздел может содержать подразделы, собранные из блоков в любом порядке.</p>
           {draft.infoSections.map((section, index) => (
             <div className="nested-editor-card" data-sort-index={index} key={section.id}>
               <div className="nested-editor-head"><OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} /><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id)); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div></div>
               <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
               <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
+              <div className="info-subsection-list">
+                {section.subsections.map((subsection, subIndex) => (
+                  <div className="nested-editor-card" key={subsection.id}>
+                    <div className="nested-editor-head"><strong>ПОДРАЗДЕЛ {String(subIndex + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.subsections = item.subsections.filter((entry) => entry.id !== subsection.id); }))}>Удалить</button></div></div>
+                    <Field label="Заголовок подраздела"><input maxLength={300} value={subsection.title} onChange={(event) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.title = event.target.value; })} /></Field>
+                    <div className="info-block-list">
+                      {subsection.blocks.map((block) => (
+                        <div className="nested-editor-card" key={block.id}>
+                          <div className="nested-editor-head"><strong>ТЕКСТ</strong><div className="nested-editor-actions"><button type="button" onClick={() => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.blocks = target.blocks.filter((entry) => entry.id !== block.id); })}>Удалить</button></div></div>
+                          {block.type === "text" && <Field label="Текст" wide><textarea maxLength={20000} value={block.text} onChange={(event) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "text") item.text = event.target.value; }); })} /></Field>}
+                        </div>
+                      ))}
+                    </div>
+                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "text", text: "" }); })}>+ ТЕКСТ</button>
+                  </div>
+                ))}
+              </div>
+              <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id: makeId("info"), title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); })}>+ ПОДРАЗДЕЛ</button>
             </div>
           ))}
-          <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.infoSections.push({ id: makeId("info"), title: "НОВЫЙ РАЗДЕЛ", body: "" }))}>+ ДОБАВИТЬ РАЗДЕЛ</button>
+          <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.infoSections.push({ id: makeId("info"), title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] }))}>+ ДОБАВИТЬ РАЗДЕЛ</button>
         </div>
       )}
 
