@@ -125,6 +125,9 @@ export function rangeIsPlain(document: RichTextDocument, from: number, to: numbe
   return range.from !== range.to && expandStyles(document).slice(range.from, range.to).every((current) => Object.keys(current).length === 0);
 }
 
+// A lost or collapsed selection that no touch in the field caused is the phone dropping it after a panel tap (owner bug, D-05).
 export function nextFieldSelection(stored: { start: number; end: number } | null, incoming: { start: number; end: number } | null, touchedField: boolean) {
-  return incoming ?? stored ?? { start: 0, end: 0 };
+  if (!incoming) return stored ?? { start: 0, end: 0 };
+  if (!touchedField && incoming.start === incoming.end && stored && stored.start !== stored.end) return stored;
+  return incoming;
 }

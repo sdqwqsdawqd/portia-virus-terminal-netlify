@@ -20,7 +20,7 @@ import {
   type Virus,
 } from "@/lib/portia-content";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
-import { applyRichTextStyle, compactRuns, expandStyles, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
+import { applyRichTextStyle, compactRuns, expandStyles, nextFieldSelection, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
 import { employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
@@ -376,11 +376,12 @@ function editorPlainText(root: HTMLElement) {
   return root.querySelector("[data-editor-sentinel]") && text.endsWith("\n") ? text.slice(0, -1) : text;
 }
 
+// null when the document has no range in this field: a lost selection must not look like a caret at 0 (D-05).
 function selectionOffsets(root: HTMLElement) {
   const selection = window.getSelection();
-  if (!selection?.rangeCount) return { start: 0, end: 0 };
+  if (!selection?.rangeCount) return null;
   const range = selection.getRangeAt(0);
-  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return { start: 0, end: 0 };
+  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
   const beforeStart = range.cloneRange();
   beforeStart.selectNodeContents(root);
   beforeStart.setEnd(range.startContainer, range.startOffset);
@@ -1738,6 +1739,8 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
   const activeFormat = useContext(ActiveFormatContext);
   const editorRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<{ start: number; end: number } | null>(null);
+  // Set by a pointer down in this field; tells activate that a collapsed selection is the user's own touch (D-05).
+  const touchedRef = useRef(false);
   const localDocumentSignatureRef = useRef<string | null>(null);
   const sourceDocument = document?.runs?.length ? document : { runs: [{ text: value }] };
   const currentDocument = sourceDocument.runs.map((run) => run.text).join("") === value
@@ -1746,10 +1749,14 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
   const documentSignature = JSON.stringify(currentDocument);
 
   const activate = (editor: HTMLDivElement, nextValue = value, nextDocument = currentDocument) => {
-    const selection = selectionOffsets(editor);
+    const selection = nextFieldSelection(selectionRef.current, selectionOffsets(editor), !activeFormat.phonePanelOpen || touchedRef.current);
+    touchedRef.current = false;
     selectionRef.current = selection;
     onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection, onCommit: onChange });
   };
+
+  const editorSelection = (editor: HTMLElement, text: string) =>
+    selectionOffsets(editor) ?? selectionRef.current ?? { start: text.length, end: text.length };
 
   const commitEditorValue = (
     editor: HTMLDivElement,
@@ -1786,6 +1793,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
       role="textbox"
       aria-multiline="true"
       spellCheck
+      onPointerDown={() => { touchedRef.current = true; }}
       onFocus={(event) => activate(event.currentTarget)}
       onSelect={(event) => activate(event.currentTarget)}
       onMouseUp={(event) => activate(event.currentTarget)}
@@ -1793,8 +1801,8 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
         if (event.key !== "Enter") return;
         event.preventDefault();
         const editor = event.currentTarget;
-        const selection = selectionOffsets(editor);
         const text = currentDocument.runs.map((run) => run.text).join("");
+        const selection = editorSelection(editor, text);
         const nextValue = `${text.slice(0, selection.start)}\n${text.slice(selection.end)}`;
         const caret = { start: selection.start + 1, end: selection.start + 1 };
         commitEditorValue(editor, nextValue, caret);
@@ -1805,8 +1813,8 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
       onPaste={(event) => {
         event.preventDefault();
         const editor = event.currentTarget;
-        const selection = selectionOffsets(editor);
         const text = currentDocument.runs.map((run) => run.text).join("");
+        const selection = editorSelection(editor, text);
         const pastedText = event.clipboardData.getData("text/plain").replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ");
         const nextValue = `${text.slice(0, selection.start)}${pastedText}${text.slice(selection.end)}`;
         const caretPosition = selection.start + pastedText.length;
@@ -1814,7 +1822,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
       }}
       onInput={(event) => {
         const nextValue = editorPlainText(event.currentTarget);
-        const selection = selectionOffsets(event.currentTarget);
+        const selection = editorSelection(event.currentTarget, nextValue);
         commitEditorValue(event.currentTarget, nextValue, selection);
       }}
     />
@@ -1862,12 +1870,13 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     const field = findFormatField(formatKey);
     const panel = panelRef.current;
     if (!field || !panel) return;
-    const collapsed = selectionStart === selectionEnd;
-    const range = rangeFromOffsets(field, { start: selectionStart, end: selectionEnd });
-    const paints = !collapsed && typeof Highlight !== "undefined" && "highlights" in CSS;
-    if (paints) CSS.highlights.set("portia-format", new Highlight(range));
+    // Paint what the next style will change: the selection, else the word under the caret (D-04, D-05).
+    const effective = resolveRange(formatDocument.runs.map((run) => run.text).join(""), { start: selectionStart, end: selectionEnd });
+    const painted = effective ? rangeFromOffsets(field, { start: effective.from, end: effective.to }) : null;
+    const paints = painted !== null && typeof Highlight !== "undefined" && "highlights" in CSS;
+    if (paints) CSS.highlights.set("portia-format", new Highlight(painted));
     const keepVisible = () => {
-      const rect = collapsed ? field.getBoundingClientRect() : range.getBoundingClientRect();
+      const rect = painted ? painted.getBoundingClientRect() : field.getBoundingClientRect();
       const overlap = rect.bottom - (panel.getBoundingClientRect().top - 16);
       // 64 keeps the text under the 48px system bar.
       if (overlap > 0) window.scrollBy(0, Math.max(0, Math.min(overlap, rect.top - 64)));
@@ -1913,7 +1922,8 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     if (range) commit(togglePreset(documentRef.current, range.from, range.to, preset));
   };
 
-  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`}>
+  // A tap on a panel button must not move focus or let the phone clear the field's selection (like the ✎ launcher); inputs keep focus.
+  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={(event) => { if (!(event.target as HTMLElement).closest("input")) event.preventDefault(); }}>
     <header>
       <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
       <small>{selectionLabel}</small>
