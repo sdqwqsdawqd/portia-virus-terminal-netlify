@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Оформление текста
 status: executing
-stopped_at: Completed PORTIA-05-01-PLAN.md
-last_updated: "2026-10-19T03:13:44.455Z"
+stopped_at: Completed PORTIA-05-02-PLAN.md
+last_updated: "2026-10-19T03:18:50.982Z"
 last_activity: 2026-10-19
 last_activity_desc: Phase PORTIA-05 execution started
-state_head: a1766d7d6c9d116047febb8a33dc0b83a4f45659
+state_head: a8694ece39bc295100eae1ae5b4afb0f43ad2a00
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 41
-  completed_plans: 37
+  completed_plans: 38
   percent: 71
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-18)
 ## Current Position
 
 Phase: PORTIA-05 (Оформление текста) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Executing Phase PORTIA-05
 Last activity: 2026-10-19 — Phase PORTIA-05 execution started
 
@@ -73,6 +73,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase PORTIA-05]: 05-01: row styles toggle by removing only their own keys (D-02)
 - [Phase PORTIA-05]: 05-01: Основной removes the colour property (D-18)
 - [Phase PORTIA-05]: 05-01: Жирный is not in the style row (owner amendment to D-01); weight is changed only by the manual weight buttons, which act on the resolved range
+- [Phase PORTIA-05]: 05-02: a missing or untouched collapsed selection never replaces the stored one (nextFieldSelection, D-05)
+- [Phase PORTIA-05]: 05-02: phone panel tabs Цвет / Размер (size + weight) / Фон (background, opacity, preview surface) (D-12)
 
 ### Pending Todos
 
@@ -95,8 +97,8 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-19T03:13:44.318Z
-Stopped at: Completed PORTIA-05-01-PLAN.md
+Last session: 2026-10-19T03:18:50.836Z
+Stopped at: Completed PORTIA-05-02-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -128,3 +130,4 @@ Resume file: None
 | Phase PORTIA-03.3 P02 | 30min | 3 tasks | 7 files |
 | Phase PORTIA-03.3 P03 | n/a | 2 tasks | 5 files |
 | Phase PORTIA-05 P01 | n/a | 3 tasks | 4 files |
+| Phase PORTIA-05 P02 | 30min | 2 tasks | 4 files |
