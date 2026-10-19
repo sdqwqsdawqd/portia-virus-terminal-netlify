@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clampPanelOffset } from "./panel-position.ts";
+import { clampPanelOffset, parsePanelOffset } from "./panel-position.ts";
 
 const panel = { width: 680, height: 300 };
 const bounds = { width: 1100, height: 760 };
@@ -25,4 +25,16 @@ test("a window smaller than the panel gives the default corner", () => {
 
 test("fractional places come back in whole pixels", () => {
   assert.deepEqual(clampPanelOffset({ right: 100.4, bottom: 120.6 }, panel, bounds), { right: 100, bottom: 121 });
+});
+
+test("a saved place is read back", () => {
+  assert.deepEqual(parsePanelOffset('{"right":120,"bottom":200}'), { right: 120, bottom: 200 });
+});
+
+test("junk in storage gives no place", () => {
+  for (const raw of [null, "", "{bad", "null", "[]", '{"right":"5","bottom":1}', '{"right":1e999,"bottom":1}']) assert.equal(parsePanelOffset(raw), null, String(raw));
+});
+
+test("extra keys are dropped", () => {
+  assert.deepEqual(parsePanelOffset('{"right":5,"bottom":1,"x":9}'), { right: 5, bottom: 1 });
 });
