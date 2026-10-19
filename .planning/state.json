@@ -6,17 +6,27 @@
     {
       "number": "1",
       "name": "Исправление багов",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "2",
       "name": "Внешний вид",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "3",
       "name": "Редактор",
-      "status": "pending"
+      "status": "complete"
+    },
+    {
+      "number": "03.1",
+      "name": "Стабилизация",
+      "status": "complete"
+    },
+    {
+      "number": "03.2",
+      "name": "Сотрудники и Сводка",
+      "status": "complete"
     },
     {
       "number": "4",
@@ -26,13 +36,13 @@
     {
       "number": "5",
       "name": "Оформление текста",
-      "status": "pending"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 1 of 5 · 0% · executing"
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-10-12T19:17:24.823Z"
+  "updated_at": "2026-10-19T08:51:55.694Z"
 }

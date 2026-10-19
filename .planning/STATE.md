@@ -1,37 +1,35 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 05
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase PORTIA-05 complete — all phases complete
-last_updated: "2026-10-19T08:49:06.302Z"
+last_updated: "2026-10-19T08:51:55.640Z"
 last_activity: 2026-10-19
-last_activity_desc: Phase PORTIA-05 complete
-state_head: bd6a62c88a42c27fee24952f00619e25961fe553
+last_activity_desc: Milestone v1.0 completed and archived
+state_head: 96c582fd6871903e737277c39e8d4ad637b4e732
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 43
   completed_plans: 43
   percent: 86
+current_phase: 05
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-18)
+See: .planning/PROJECT.md (updated 2026-10-19)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-05 — Оформление текста
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: PORTIA-05
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-10-19 — Phase PORTIA-05 complete
-
-Progress: [█████████░] 86%
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-10-19 — Milestone v1.0 completed and archived
 
 ## Accumulated Context
 
@@ -95,6 +93,13 @@ None — незакоммиченная работа закоммичена в P
 - ⚠️ [Phase 03.2] WR-02/03/04 сохранения сотрудников: устаревший кэш может очистить оценки, правки во время сохранения теряются, все шесть оценок пишутся каждый раз — см. 03.2-REVIEW.
 - ⚠️ [Phase 03.1] Ревью 03.1-REVIEW (22 открыто): WR-01 неполный список сотрудников затирает биографии и оценки; WR-02 PATCH без biography/photoUrl стирает их; WR-07 normalizePortiaContent молча обрезает текст и пропускает нестроковые поля; WR-11 SQL доверяет неподтверждённой почте — см. 03.1-REVIEW-DISPOSITION.
 
+## Deferred Items
+
+| Category | Item | Status | Acknowledged at |
+|----------|------|--------|-----------------|
+| debug_sessions | editor-field-font-wysiwyg | diagnosed | v1.0 close (2026-10-19) |
+| uat_gaps | PORTIA-05-oformlenie-teksta / 05-UAT.md | diagnosed, 0 pending | v1.0 close (2026-10-19) |
+
 ### Roadmap Evolution
 
 - Phase 03.1 inserted after Phase 3: owner and external review bugs after phase 3 (URGENT)
@@ -141,3 +146,7 @@ Resume file: None
 | Phase PORTIA-05 P04 | 20min | 2 tasks | 4 files |
 | Phase PORTIA-05 P05 | 15min | 2 tasks | 2 files |
 | Phase PORTIA-05 P06 | n/a | 3 tasks | 4 files |
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
