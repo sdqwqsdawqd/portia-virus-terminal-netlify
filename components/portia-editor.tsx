@@ -21,7 +21,7 @@ import {
 } from "@/lib/portia-content";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { applyRichTextStyle, compactRuns, expandStyles, nextFieldSelection, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
-import { clampPanelOffset } from "@/lib/panel-position";
+import { clampPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
 import { employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
@@ -1847,7 +1847,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const defaultTextColor = surface === "dark" ? "#aebfba" : "#17211f";
   const documentRef = useRef(target.document);
   const panelRef = useRef<HTMLElement>(null);
-  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; right: number; bottom: number } | null>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; right: number; bottom: number; last: PanelOffset | null } | null>(null);
   // Every control acts on one range: the selection, else the word under the caret, else nothing (D-04).
   const text = target.document.runs.map((run) => run.text).join("");
   const range = resolveRange(text, target.selection);
@@ -1931,6 +1931,27 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     if (range) commit(togglePreset(documentRef.current, range.from, range.to, preset));
   };
 
+  // Restore the remembered place on mount and press it to the edge whenever the editor window changes size (D-11). The phone panel is docked by CSS.
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    const parent = panel?.offsetParent;
+    if (!panel || !parent) return;
+    const place = () => {
+      if (window.matchMedia("(max-width: 900px)").matches) {
+        panel.style.right = "";
+        panel.style.bottom = "";
+        return;
+      }
+      let saved: PanelOffset | null = null;
+      try { saved = parsePanelOffset(localStorage.getItem(formatPanelStorageKey)); } catch { saved = null; }
+      if (saved) paintPanelOffset(panel, parent, saved);
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, []);
+
   // PC: the panel moves by its header like a desktop window and never leaves the editor window (D-10). The phone panel is docked.
   const beginDrag = (event: React.PointerEvent<HTMLElement>) => {
     const panel = panelRef.current;
@@ -1940,7 +1961,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
-      right: parent.clientWidth - panel.offsetLeft - panel.offsetWidth, bottom: parent.clientHeight - panel.offsetTop - panel.offsetHeight,
+      right: parent.clientWidth - panel.offsetLeft - panel.offsetWidth, bottom: parent.clientHeight - panel.offsetTop - panel.offsetHeight, last: null,
     };
   };
 
@@ -1949,12 +1970,15 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     const panel = panelRef.current;
     const parent = panel?.offsetParent;
     if (!drag || !panel || !parent || drag.pointerId !== event.pointerId) return;
-    paintPanelOffset(panel, parent, { right: drag.right - (event.clientX - drag.startX), bottom: drag.bottom - (event.clientY - drag.startY) });
+    drag.last = paintPanelOffset(panel, parent, { right: drag.right - (event.clientX - drag.startX), bottom: drag.bottom - (event.clientY - drag.startY) });
   };
 
   const endDrag = (event: React.PointerEvent<HTMLElement>) => {
-    if (dragRef.current?.pointerId !== event.pointerId) return;
+    const drag = dragRef.current;
+    if (drag?.pointerId !== event.pointerId) return;
     dragRef.current = null;
+    // A blocked storage only means the place is not remembered.
+    if (drag.last) try { localStorage.setItem(formatPanelStorageKey, JSON.stringify(drag.last)); } catch { /* ignore */ }
   };
 
   // A tap on a panel button must not move focus or let the phone clear the field's selection (like the ✎ launcher); inputs keep focus.
@@ -1999,6 +2023,9 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     <footer><p>Изменения применяются сразу. Без выделения меняется слово под курсором.</p><div><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
   </section>;
 }
+
+// Where the PC format panel was left, px from the editor window's bottom-right; read back on mount (D-11).
+const formatPanelStorageKey = "portia-format-panel-v1";
 
 // Writes the clamped right/bottom straight on the panel (no React render per move) and returns what was painted.
 function paintPanelOffset(panel: HTMLElement, parent: Element, offset: { right: number; bottom: number }) {

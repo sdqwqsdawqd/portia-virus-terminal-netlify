@@ -18,3 +18,15 @@ export function clampPanelOffset(offset: PanelOffset, panel: Bounds, bounds: Bou
     bottom: Math.round(Math.min(Math.max(minimumBottom, offset.bottom), maxBottom)),
   };
 }
+
+/** Reads a saved place; anything that is not an object with two finite numbers gives null (storage can hold junk). */
+export function parsePanelOffset(raw: string | null): PanelOffset | null {
+  try {
+    const value: unknown = JSON.parse(raw ?? "");
+    if (typeof value !== "object" || value === null) return null;
+    const { right, bottom } = value as Record<string, unknown>;
+    return typeof right === "number" && typeof bottom === "number" && Number.isFinite(right) && Number.isFinite(bottom) ? { right, bottom } : null;
+  } catch {
+    return null;
+  }
+}
