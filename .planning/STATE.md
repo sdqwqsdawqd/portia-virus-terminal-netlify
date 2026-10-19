@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Оформление текста
 status: executing
-stopped_at: Completed PORTIA-05-02-PLAN.md
-last_updated: "2026-10-19T03:18:50.982Z"
+stopped_at: Completed PORTIA-05-03-PLAN.md
+last_updated: "2026-10-19T03:23:20.679Z"
 last_activity: 2026-10-19
 last_activity_desc: Phase PORTIA-05 execution started
-state_head: a8694ece39bc295100eae1ae5b4afb0f43ad2a00
+state_head: 24ba17ed570188c41674397b2aca647778cb031a
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 41
-  completed_plans: 38
+  completed_plans: 39
   percent: 71
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-18)
 ## Current Position
 
 Phase: PORTIA-05 (Оформление текста) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Executing Phase PORTIA-05
 Last activity: 2026-10-19 — Phase PORTIA-05 execution started
 
@@ -75,6 +75,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase PORTIA-05]: 05-01: Жирный is not in the style row (owner amendment to D-01); weight is changed only by the manual weight buttons, which act on the resolved range
 - [Phase PORTIA-05]: 05-02: a missing or untouched collapsed selection never replaces the stored one (nextFieldSelection, D-05)
 - [Phase PORTIA-05]: 05-02: phone panel tabs Цвет / Размер (size + weight) / Фон (background, opacity, preview surface) (D-12)
+- [Phase PORTIA-05]: 05-03: field ink and surface are per area on the area's native surface via --field-ink/--field-bg; lib/editor-field-look.test.ts keeps them equal to the site (D-09, D-17)
+- [Phase PORTIA-05]: 05-03: preview surface defaults to each field's own area (nativeSurface), not the editor tab
 
 ### Pending Todos
 
@@ -82,7 +84,7 @@ None — незакоммиченная работа закоммичена в P
 
 ### Blockers/Concerns
 
-- ⚠️ [Phase 1] `.assistant-bubble > span` перекрывает корень текста помощника (межбуквенный интервал/интерлиньяж пузыря чуть отличаются от поля редактора) — не исправлено, см. 01-04-SUMMARY.
+- ✅ [Phase 1] (закрыто в 05-03) `.assistant-bubble > span` перекрывает корень текста помощника (межбуквенный интервал/интерлиньяж пузыря чуть отличаются от поля редактора) — поле помощника теперь берёт интервал и интерлиньяж пузыря (lib/editor-field-look.test.ts).
 - ⚠️ [Phase 1] Пресеты размера панели оформления (13/17/22/30) не совпадают с базовыми размерами большинства областей — фаза 5 (TEXT-01).
 - ⚠️ [Project] Проект лежит только во временной папке сессии Claude — перенести в постоянную папку.
 - ⚠️ [Phase 03.2] WR-01: опрос контента раз в 10 с подменяет content одинаковой копией и сбрасывает историю отмены в чистом редакторе (`components/portia-desktop.tsx` ~358-366) — см. 03.2-REVIEW.
@@ -97,8 +99,8 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-19T03:18:50.836Z
-Stopped at: Completed PORTIA-05-02-PLAN.md
+Last session: 2026-10-19T03:23:20.533Z
+Stopped at: Completed PORTIA-05-03-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -131,3 +133,4 @@ Resume file: None
 | Phase PORTIA-03.3 P03 | n/a | 2 tasks | 5 files |
 | Phase PORTIA-05 P01 | n/a | 3 tasks | 4 files |
 | Phase PORTIA-05 P02 | 30min | 2 tasks | 4 files |
+| Phase PORTIA-05 P03 | 30min | 2 tasks | 3 files |
