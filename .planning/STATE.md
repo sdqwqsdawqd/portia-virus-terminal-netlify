@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Оформление текста
 status: executing
-stopped_at: Completed PORTIA-05-03-PLAN.md
-last_updated: "2026-10-19T03:23:20.679Z"
+stopped_at: Completed PORTIA-05-04-PLAN.md
+last_updated: "2026-10-19T03:28:25.223Z"
 last_activity: 2026-10-19
 last_activity_desc: Phase PORTIA-05 execution started
-state_head: 24ba17ed570188c41674397b2aca647778cb031a
+state_head: fb0122e9ef0454a558fe685552d7b578d9a261f2
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 41
-  completed_plans: 39
+  completed_plans: 40
   percent: 71
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-18)
 ## Current Position
 
 Phase: PORTIA-05 (Оформление текста) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Executing Phase PORTIA-05
 Last activity: 2026-10-19 — Phase PORTIA-05 execution started
 
@@ -77,6 +77,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase PORTIA-05]: 05-02: phone panel tabs Цвет / Размер (size + weight) / Фон (background, opacity, preview surface) (D-12)
 - [Phase PORTIA-05]: 05-03: field ink and surface are per area on the area's native surface via --field-ink/--field-bg; lib/editor-field-look.test.ts keeps them equal to the site (D-09, D-17)
 - [Phase PORTIA-05]: 05-03: preview surface defaults to each field's own area (nativeSurface), not the editor tab
+- [Phase PORTIA-05]: 05-04: the PC format panel position is { right, bottom } from the editor window's bottom-right in localStorage portia-format-panel-v1, clamped below the title bar and above the save bar (D-10, D-11)
 
 ### Pending Todos
 
@@ -99,8 +100,8 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-19T03:23:20.533Z
-Stopped at: Completed PORTIA-05-03-PLAN.md
+Last session: 2026-10-19T03:28:25.077Z
+Stopped at: Completed PORTIA-05-04-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -134,3 +135,4 @@ Resume file: None
 | Phase PORTIA-05 P01 | n/a | 3 tasks | 4 files |
 | Phase PORTIA-05 P02 | 30min | 2 tasks | 4 files |
 | Phase PORTIA-05 P03 | 30min | 2 tasks | 3 files |
+| Phase PORTIA-05 P04 | 20min | 2 tasks | 4 files |
