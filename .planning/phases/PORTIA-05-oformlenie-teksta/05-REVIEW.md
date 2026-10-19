@@ -87,7 +87,7 @@ Or, if the keyboard must come back, mark the focus as not own for this one `read
 
 **What I checked:** the diff is 2 lines; no background declaration remains; the only property is `text-decoration`, which is allowed in `::highlight`; the selector and registry name match `CSS.highlights.set("portia-format", ...)`; `::selection` (line 69) and `.formatted-rich-input::selection` (line 71) are unchanged; the file has LF endings before and after (no mixed endings; line count 1549 both sides); no site code or editor style produces an underline (grep of `lib/rich-text-style.ts` and the editor), so the marker cannot be confused with an applied style, and no author underline collides with it. No correctness or security defect in the change.
 
-### WR-05: The only target cue has low contrast on the light preview field
+### WR-06: The only target cue has low contrast on the light preview field
 
 **File:** `app/portia.css:516` (field background `--field-bg: #f3f1e9` at `app/portia.css:599`)
 **Issue:** `rgba(0,188,166,.9)` over `#f3f1e9` is about 2.1:1 (relative luminance of the teal about 0.39, of the field about 0.88), below the 3:1 that WCAG 1.4.11 asks of a non-text cue. The underline is now the marker's only visual (the fill, which was the stronger signal on a light field, is gone), and the field has a `preview-light` mode that the format panel can target. A thin 3px line in this pale teal can be easy to miss on a light field, which brings back the "what will the next style change" uncertainty the gap was meant to close. On the dark field (`oklch(.168 ...)`) the contrast is fine. The plan's device check does not say which preview mode the owner used.

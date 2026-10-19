@@ -43,9 +43,21 @@ findings:
     severity: warning
     disposition: deferred
     title: "`matchMedia(\"(max-width: 900px)\")` duplicated and the dragged place is not re-clamped when storage is blocked"
-open: 5
-total: 10
-recorded: 2026-10-19T08:15:19.347Z
+  - id: WR-06
+    severity: warning
+    disposition: open
+    title: "The only target cue has low contrast on the light preview field"
+  - id: IN-05
+    severity: info
+    disposition: open
+    title: "Thickness and no-fallback behaviour of the shorthand is unverified in the browsers that matter"
+  - id: IN-06
+    severity: info
+    disposition: open
+    title: "The \"no fill in the marker\" guarantee lives only in the plan's one-off check"
+open: 8
+total: 13
+recorded: 2026-10-19T12:00:00.000Z
 ---
 
 # Phase 05: Code Review Disposition
@@ -62,6 +74,9 @@ recorded: 2026-10-19T08:15:19.347Z
 | WR-03 | warning | fixed | 05-06 (not in the current review) |
 | WR-04 | warning | fixed | 05-06 (not in the current review) |
 | WR-05 | warning | deferred | cleanup, no user-visible defect in the phase goal (not in the current review) |
+| WR-06 | warning | open | - |
+| IN-05 | info | open | - |
+| IN-06 | info | open | - |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
