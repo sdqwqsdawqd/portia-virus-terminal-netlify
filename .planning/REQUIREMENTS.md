@@ -40,7 +40,7 @@
 
 ### Оформление текста (TEXT)
 
-- [ ] **TEXT-01**: Упрощённое оформление текста в редакторе
+- [x] **TEXT-01**: Упрощённое оформление текста в редакторе
 
 ## Out of Scope
 
@@ -73,7 +73,7 @@
 | SVOD-02 | Phase 03.2 | Complete |
 | SVOD-03 | Phase 03.2 | Complete |
 | DESK-01 | — (Phase 4 пропущена) | Out of Scope |
-| TEXT-01 | Phase 5 | Pending |
+| TEXT-01 | Phase 5 | Complete |
 
 ---
 *Last updated: 2026-10-12 after initialization*

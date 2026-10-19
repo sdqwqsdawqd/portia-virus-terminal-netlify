@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Оформление текста
 status: executing
-stopped_at: Completed PORTIA-05-04-PLAN.md
-last_updated: "2026-10-19T03:28:25.223Z"
+stopped_at: Completed PORTIA-05-05-PLAN.md
+last_updated: "2026-10-19T03:32:13.392Z"
 last_activity: 2026-10-19
 last_activity_desc: Phase PORTIA-05 execution started
-state_head: fb0122e9ef0454a558fe685552d7b578d9a261f2
+state_head: 819b10bf17253f6fd40c8109514f9197711b264e
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 41
-  completed_plans: 40
+  completed_plans: 41
   percent: 71
 ---
 
@@ -78,6 +78,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase PORTIA-05]: 05-03: field ink and surface are per area on the area's native surface via --field-ink/--field-bg; lib/editor-field-look.test.ts keeps them equal to the site (D-09, D-17)
 - [Phase PORTIA-05]: 05-03: preview surface defaults to each field's own area (nativeSurface), not the editor tab
 - [Phase PORTIA-05]: 05-04: the PC format panel position is { right, bottom } from the editor window's bottom-right in localStorage portia-format-panel-v1, clamped below the title bar and above the save bar (D-10, D-11)
+- [Phase PORTIA-05]: 05-05: windows open and close with opacity + scale .97 around their centre; the icon zoom is removed (D-14)
 
 ### Pending Todos
 
@@ -100,8 +101,8 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-19T03:28:25.077Z
-Stopped at: Completed PORTIA-05-04-PLAN.md
+Last session: 2026-10-19T03:32:13.247Z
+Stopped at: Completed PORTIA-05-05-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -136,3 +137,4 @@ Resume file: None
 | Phase PORTIA-05 P02 | 30min | 2 tasks | 4 files |
 | Phase PORTIA-05 P03 | 30min | 2 tasks | 3 files |
 | Phase PORTIA-05 P04 | 20min | 2 tasks | 4 files |
+| Phase PORTIA-05 P05 | 15min | 2 tasks | 2 files |
