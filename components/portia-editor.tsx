@@ -441,6 +441,7 @@ function rangeFromOffsets(root: HTMLElement, offsets: { start: number; end: numb
   return range;
 }
 
+// Never writes into an unfocused field: a phone would raise native selection handles, and an unfocused field has no stored selection anyway (cleared on blur).
 function restoreSelection(root: HTMLElement, offsets: { start: number; end: number }) {
   if (window.document.activeElement !== root) return;
   const range = rangeFromOffsets(root, offsets);
@@ -1856,14 +1857,13 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   // Every control acts on one range: the selection, else the word under the caret, else nothing (D-04).
   const text = target.document.runs.map((run) => run.text).join("");
   const range = resolveRange(text, target.selection);
-  // The readout comes from the committed document, so a click shows exactly what it applied. A repeat click is a no-op for the manual
-  // controls only; the row styles toggle (D-02).
+  // The readout comes from the committed document, so a click shows exactly what it applied. A repeat click on a manual control
+  // re-applies the same value; the row styles toggle (D-02). Unstyled text marks no size or weight, because every area renders its own.
   const style = richTextStyleAt(target.document, range?.from ?? target.selection?.start ?? 0);
   const marked = (preset: RichTextStyle) => range !== null && rangeHasStyle(target.document, range.from, range.to, preset);
   const plainMarked = range !== null && rangeIsPlain(target.document, range.from, range.to);
   const color = style.color ?? defaultTextColor;
-  const fontSize = style.fontSize ?? 17;
-  const fontWeight = style.fontWeight ?? 400;
+  const { fontSize, fontWeight } = style;
   const backgroundColor = style.backgroundColor ?? "#f0d66a";
   const backgroundOpacity = style.backgroundOpacity ?? 0;
   const [colorPicker, setColorPicker] = useState<"text" | "background" | null>(null);
@@ -1875,12 +1875,11 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const paintFrom = range?.from;
   const paintTo = range?.to;
   const formatDocument = target.document;
-  // Phone: formatting is «either the keyboard or the panel» (D-05, D-06). ✎ takes focus from the field once and rich fields carry
-  // inputMode none while the panel is open, so the owner can touch and select text and the panel stays (owner, UAT 12, reversing 03-03);
-  // the stored selection is painted with the Custom Highlight API and kept above the panel.
+  // The text the next style changes is painted with the Custom Highlight API at every width: on a phone it takes the keyboard's place
+  // (D-05, D-06; ✎ takes focus from the field once and rich fields carry inputMode none, owner UAT 12), on a PC it keeps the target
+  // visible when focus has gone to a panel input or the ✎ button. Only keeping it above the panel is phone-only.
   // formatDocument is a dependency because a style change re-renders the field's text nodes, which orphans the painted range.
   useEffect(() => {
-    if (!window.matchMedia("(max-width: 900px)").matches) return;
     const field = findFormatField(formatKey);
     const panel = panelRef.current;
     if (!field || !panel) return;
@@ -1894,8 +1893,9 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       // 64 keeps the text under the 48px system bar.
       if (overlap > 0) window.scrollBy(0, Math.max(0, Math.min(overlap, rect.top - 64)));
     };
-    const frame = window.requestAnimationFrame(keepVisible);
-    window.visualViewport?.addEventListener("resize", keepVisible);
+    const phone = window.matchMedia("(max-width: 900px)").matches;
+    const frame = phone ? window.requestAnimationFrame(keepVisible) : 0;
+    if (phone) window.visualViewport?.addEventListener("resize", keepVisible);
     return () => {
       window.cancelAnimationFrame(frame);
       window.visualViewport?.removeEventListener("resize", keepVisible);
@@ -1985,8 +1985,9 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     if (drag.last) try { localStorage.setItem(formatPanelStorageKey, JSON.stringify(drag.last)); } catch { /* ignore */ }
   };
 
-  // A tap on a panel button must not move focus or let the phone clear the field's selection (like the ✎ launcher); inputs keep focus.
-  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={(event) => { if (!(event.target as HTMLElement).closest("input")) event.preventDefault(); }}>
+  // mousedown is the event whose default moves focus and clears the field's selection; pointerdown alone does not stop it in Chromium or WebKit (WR-04); inputs keep focus.
+  const keepFieldFocus = (event: React.SyntheticEvent) => { if (!(event.target as HTMLElement).closest("input")) event.preventDefault(); };
+  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus}>
     <header onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
       <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
       <small>{selectionLabel}</small>
