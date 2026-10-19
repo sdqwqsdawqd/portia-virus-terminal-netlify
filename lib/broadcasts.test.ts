@@ -98,10 +98,10 @@ test("an upcoming quest pops up on its start day", () => {
   assert.equal(questPopup(list, [], "2026-10-25")?.quest.id, "soon");
 });
 
-test("markQuestsSeen adds active published quests, keeps stored ids that still exist and drops gone ones", () => {
+test("markQuestsSeen adds active published quests, keeps every stored id and dedupes", () => {
   const list = [item("a", "quest"), item("b", "quest"), item("soon", "quest", true, false, { startsAt: "2026-10-25" }), item("h", "quest", false)];
   assert.deepEqual(markQuestsSeen(list, [], TODAY), ["a", "b"]);
-  assert.deepEqual(markQuestsSeen(list, ["a", "gone", "soon"], TODAY), ["a", "soon", "b"]);
+  assert.deepEqual(markQuestsSeen(list, ["a", "gone", "soon"], TODAY), ["a", "gone", "soon", "b"]);
   assert.deepEqual(markQuestsSeen(list, ["b", "b"], TODAY), ["b", "a"]);
 });
 
@@ -111,4 +111,18 @@ test("marking seen against a list keeps every stored id that is still in it", ()
   const marked = markQuestsSeen(list, stored, TODAY);
   for (const id of stored) assert.ok(marked.includes(id), id);
   assert.deepEqual(marked, ["soon", "n", "a", "b"]);
+});
+
+test("markQuestsSeen from a stale tab keeps a seen id this tab's content does not list", () => {
+  const marked = markQuestsSeen([item("a", "quest")], ["q-elsewhere"], TODAY);
+  assert.deepEqual(marked, ["q-elsewhere", "a"]);
+});
+
+test("markQuestsSeen caps the list at 200 ids, keeps every active quest and drops the oldest stored ids", () => {
+  const stored = Array.from({ length: 250 }, (_, i) => `old${i}`);
+  const marked = markQuestsSeen([item("a", "quest"), item("b", "quest")], stored, TODAY);
+  assert.equal(marked.length, 200);
+  assert.ok(marked.includes("a") && marked.includes("b"));
+  assert.ok(!marked.includes("old0") && marked.includes("old249"));
+  assert.equal(markQuestsSeen([item("a", "quest")], ["a", ...stored.slice(0, 198)], TODAY).length, 199);
 });
