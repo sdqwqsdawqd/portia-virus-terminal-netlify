@@ -1,25 +1,26 @@
 ---
 phase: PORTIA-05-oformlenie-teksta
-reviewed: 2026-10-19T12:00:00Z
+reviewed: 2026-10-19T18:00:00Z
 depth: standard
-files_reviewed: 3
+files_reviewed: 4
 files_reviewed_list:
   - components/portia-editor.tsx
   - lib/rich-text-style.ts
   - lib/rich-text-style.test.ts
+  - app/portia.css
 findings:
   critical: 0
-  warning: 1
-  info: 4
-  total: 5
+  warning: 2
+  info: 6
+  total: 8
 status: issues_found
 ---
 
 # Phase PORTIA-05: Code Review Report (re-review after gap closure 05-06)
 
-**Reviewed:** 2026-10-19
+**Reviewed:** 2026-10-19 (pass 1: diff `435f010..HEAD`; pass 2, incremental: diff `a5c0b3f..HEAD`, see the last section)
 **Depth:** standard (diff `435f010..HEAD`: commits d2d6a0c, f33d323, 76436b8, plus surrounding context)
-**Files Reviewed:** 3
+**Files Reviewed:** 4
 **Status:** issues_found
 
 ## Summary
@@ -69,6 +70,7 @@ Or, if the keyboard must come back, mark the focus as not own for this one `read
 
 **File:** `app/portia.css:515`; `components/portia-editor.tsx:23-24`
 **Issue:** The CSS comment still says "Phone: the stored selection stays marked ...", but the highlight is now painted at every width. The editor also imports from `@/lib/rich-text-style` twice (`import type {...}` on one line, a value import on the next), while the same file already uses inline `type` specifiers (lines 11-21).
+**Update (pass 2, 05-07):** the comment half is RESOLVED by commit 7191038. The comment above `::highlight(portia-format)` now reads "Marks the text the next style changes ... shown at every width (phone: in place of the keyboard; PC: while focus is in the panel)" and matches the effect at `components/portia-editor.tsx:1878-1880`. The import-merge half is still open.
 **Fix:** Change the comment to "Marks the text the next style changes (phone: in place of the keyboard; PC: when focus is in the panel)". Merge the imports: `import { applyRichTextStyle, ..., type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";`.
 
 ### IN-04: The disposition record says WR-02 is plainly "fixed" while part of it is deferred
@@ -79,6 +81,32 @@ Or, if the keyboard must come back, mark the focus as not own for this one `read
 
 ---
 
-_Reviewed: 2026-10-19_
+## Incremental pass 2: plan 05-07 (diff `a5c0b3f..HEAD`, `app/portia.css`)
+
+**Scope:** commit 7191038 only. `::highlight(portia-format)` changed from `background-color: rgba(var(--desktop-glow), .35)` to `text-decoration: underline solid rgba(var(--desktop-glow), .9) 3px;`, and its comment was rewritten. `components/portia-editor.tsx` is untouched (wiring at 1878-1905 still sets the same `portia-format` name).
+
+**What I checked:** the diff is 2 lines; no background declaration remains; the only property is `text-decoration`, which is allowed in `::highlight`; the selector and registry name match `CSS.highlights.set("portia-format", ...)`; `::selection` (line 69) and `.formatted-rich-input::selection` (line 71) are unchanged; the file has LF endings before and after (no mixed endings; line count 1549 both sides); no site code or editor style produces an underline (grep of `lib/rich-text-style.ts` and the editor), so the marker cannot be confused with an applied style, and no author underline collides with it. No correctness or security defect in the change.
+
+### WR-05: The only target cue has low contrast on the light preview field
+
+**File:** `app/portia.css:516` (field background `--field-bg: #f3f1e9` at `app/portia.css:599`)
+**Issue:** `rgba(0,188,166,.9)` over `#f3f1e9` is about 2.1:1 (relative luminance of the teal about 0.39, of the field about 0.88), below the 3:1 that WCAG 1.4.11 asks of a non-text cue. The underline is now the marker's only visual (the fill, which was the stronger signal on a light field, is gone), and the field has a `preview-light` mode that the format panel can target. A thin 3px line in this pale teal can be easy to miss on a light field, which brings back the "what will the next style change" uncertainty the gap was meant to close. On the dark field (`oklch(.168 ...)`) the contrast is fine. The plan's device check does not say which preview mode the owner used.
+**Fix:** Confirm in the device check with `preview-light` on. If the line is faint, use one darker teal that works on both fields, still with no fill, for example `::highlight(portia-format) { text-decoration: underline solid rgba(0, 150, 132, .95) 3px; }`. `::highlight` cannot read a custom property from the field, so a per-mode colour would need a second highlight name.
+
+### IN-05: Thickness and no-fallback behaviour of the shorthand is unverified in the browsers that matter
+
+**File:** `app/portia.css:516`
+**Issue:** The plan flags it as an assumption: `text-decoration` with a `3px` thickness inside `::highlight` is painted in current Chromium, WebKit and Firefox. I could not run a browser here. Support for the thickness part of the shorthand in highlight pseudo-elements has been uneven, and if a browser ignores the thickness it falls back to the default (about 1px) hairline, which is much weaker than the old fill. The editor code at line 1888 also sets no marker at all where the Custom Highlight API is missing (older Firefox, Android WebView), so those users get no cue, as before this change. The owner's step 1-3 device check is the only proof of the shape.
+**Fix:** None required if the owner's approval of 05-07 steps 1-5 covers PC Chrome, a real phone and ideally Safari / Firefox. Otherwise record which browsers were seen in the SUMMARY.
+
+### IN-06: The "no fill in the marker" guarantee lives only in the plan's one-off check
+
+**File:** `app/portia.css:516`; `.planning/phases/PORTIA-05-oformlenie-teksta/05-07-PLAN.md` (Task 1 verify)
+**Issue:** The node check that rejects a `background*` declaration on `::highlight(portia-format)` runs once as a plan step. It is not in `npm test`, so a later edit that puts a fill back (the exact G-05-2 regression) would stay green.
+**Fix:** Optional, cheap: add a small test in `lib/` that reads `app/portia.css` and asserts the single `::highlight(portia-format)` rule has no `background` property and contains `underline`.
+
+---
+
+_Reviewed: 2026-10-19 (pass 2 appended)_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
