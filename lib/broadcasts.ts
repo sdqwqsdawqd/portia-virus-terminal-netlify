@@ -55,8 +55,13 @@ export function questPopup(list: Broadcast[], seen: string[], today: string): { 
   return unseen.length ? { quest: unseen[0], more: unseen.length - 1 } : null;
 }
 
-// Stored ids that still exist in the list plus every active published quest; ids of deleted quests drop out so the list cannot grow forever.
+const SEEN_QUEST_LIMIT = 200;
+
+// Nothing is pruned by this tab's list (a stale tab would drop a quest seen elsewhere and it would pop up again); the oldest stored ids go once SEEN_QUEST_LIMIT is passed.
+// shortcut: more than SEEN_QUEST_LIMIT active quests at once would exceed the cap, upgrade if that ever happens.
 export function markQuestsSeen(list: Broadcast[], seen: string[], today: string): string[] {
-  const existing = new Set(list.map((item) => item.id));
-  return [...new Set([...seen.filter((id) => existing.has(id)), ...activePublishedQuests(list, today).map((item) => item.id)])];
+  const active = new Set(activePublishedQuests(list, today).map((item) => item.id));
+  const all = [...new Set([...seen, ...active])];
+  let drop = all.length - SEEN_QUEST_LIMIT;
+  return all.filter((id) => active.has(id) || drop-- <= 0);
 }
