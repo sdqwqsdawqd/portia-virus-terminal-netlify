@@ -2,43 +2,43 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Закрытие замечаний
-current_phase: 06
-current_phase_name: Учёт замечаний и страховка данных
-status: executing
-stopped_at: Completed PORTIA-06-04-PLAN.md
-last_updated: "2026-10-19T18:52:49.660Z"
-last_activity: 2026-10-19
-last_activity_desc: Phase PORTIA-06 execution started
-state_head: 4764ec474506cc568ed9d9e0e65ce56c06d58017
+current_phase: 7
+current_phase_name: "Сервер: сохранение сотрудников и безопасный JSON"
+status: planning
+stopped_at: Phase PORTIA-06 complete, ready to plan Phase 7
+last_updated: "2026-10-19T19:03:46.992Z"
+last_activity: 2026-10-20
+last_activity_desc: Phase PORTIA-06 complete, transitioned to Phase 7
+state_head: fcdb714d0fb20701ca825f8c53677aa970944b71
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
   completed_plans: 4
-  percent: 0
+  percent: 14
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-19)
+See: .planning/PROJECT.md (updated 2026-10-20)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-06 — Учёт замечаний и страховка данных
+**Current focus:** Phase 7 — Сервер: сохранение сотрудников и безопасный JSON
 
 ## Current Position
 
-Phase: PORTIA-06 (Учёт замечаний и страховка данных) — EXECUTING
-Plan: 4 of 4
-Status: Executing Phase PORTIA-06
-Last activity: 2026-10-19 — Phase PORTIA-06 execution started
+Phase: 7 — Сервер: сохранение сотрудников и безопасный JSON
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-20 — Phase PORTIA-06 complete, transitioned to Phase 7
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 14%
 
 ## Performance Metrics
 
-v1.1: ни один план ещё не выполнен. Метрики v1.0 (43 плана) — в истории git и `.planning/milestones/v1.0-ROADMAP.md`.
+v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в истории git и `.planning/milestones/v1.0-ROADMAP.md`.
 **Per-Plan Metrics:**
 
 | Plan | Duration | Tasks | Files |
@@ -61,7 +61,7 @@ v1.1: ни один план ещё не выполнен. Метрики v1.0 (
 - [v1.1 roadmap]: PERM + SQL подтверждённой почты — один последний блок владельца (Phase 12); код работает до и после SQL, без нового столбца у всех редакторов все вкладки
 - [v1.1 roadmap]: CONT-09 (`//host`) целиком в Phase 12 вместе с SQL-половиной; SEC-03 (`sandbox`) в Phase 10 с проверкой в браузере
 - [v1.0 → v1.1]: одновременные правки одного сотрудника — последняя запись побеждает (AR-03.2-01); опрос контента — раз в 10 с при видимой вкладке (03.2-07)
-- [Phase PORTIA-06]: 05-IN-04 fixed by its own commit (D-07) before closing; 01-WR-01 Source omits nonexistent PROJECT.md Known Limitations
+- [Phase PORTIA-06]: 05-IN-04 fixed by its own commit (D-07) before closing; 01-WR-01 Source now points at PROJECT.md Known Limitations (added in 06-02)
 - [Phase PORTIA-06]: 03.1-IN-10 storage listing stays open as IN-10-storage (owner decision needed)
 - [Phase PORTIA-06]: D-07 used in 06-03: previous-pass 03.2 WR-03 was not fixed; markQuestsSeen now keeps unknown ids, capped at 200
 
@@ -92,10 +92,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-19T18:52:49.629Z
-Stopped at: Completed PORTIA-06-04-PLAN.md
+Last session: 2026-10-20
+Stopped at: Phase PORTIA-06 complete, ready to plan Phase 7
 Resume file: None
 
 ## Operator Next Steps
 
-- `/gsd-discuss-phase 6` или `/gsd-plan-phase 6`
+- `/gsd-discuss-phase 7` или `/gsd-plan-phase 7`

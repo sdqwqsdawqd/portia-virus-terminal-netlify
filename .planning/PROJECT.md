@@ -56,6 +56,8 @@ v1.1 «Закрытие замечаний» — все открытые зам�
 
 v1.0 «Доработка» выпущена 2026-10-19: 7 фаз (Phase 4 пропущена), 43 плана, все 18 требований v1 закрыты. Архив: `.planning/milestones/v1.0-ROADMAP.md`, `v1.0-REQUIREMENTS.md`.
 
+v1.1, Phase 6 закрыта 2026-10-20: замечания 01/03.1/03.2/05 разобраны с доказательствами, принятые риски — в Known Limitations, у владельца есть JSON-выгрузка `portia_employee_profiles` (18) и `portia_content` (1) вне git.
+
 ## Current Milestone: v1.1 Закрытие замечаний
 
 **Goal:** Закрыть все открытые замечания ревью v1.0 и исправить найденные в них баги, в первую очередь потерю данных.
@@ -131,4 +133,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-19 after starting v1.1 milestone*
+*Last updated: 2026-10-20 after Phase 6*

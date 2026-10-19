@@ -1,7 +1,7 @@
 ---
 phase: PORTIA-06-uchet-zamechaniy-i-strahovka-dannyh
 verified: 2026-10-19T19:30:00Z
-status: human_needed
+status: passed
 score: 7/9 must-haves verified
 covered_files:
   - ".planning/phases/PORTIA-06-uchet-zamechaniy-i-strahovka-dannyh/06-01-PLAN.md"
