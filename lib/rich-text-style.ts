@@ -1,24 +1,26 @@
 import type { RichTextDocument, RichTextStyle } from "./portia-content.ts";
 
-// RED scaffold: moved helpers keep their old behaviour, new helpers are inert until GREEN.
 const emptyRichTextStyle: RichTextStyle = {};
 
-function sameStyle(left: RichTextStyle = {}, right: RichTextStyle = {}) {
-  return JSON.stringify(left) === JSON.stringify(right);
+// Key order must not matter: a toggle that re-adds keys would otherwise split one run in two.
+function styleKey(style: RichTextStyle = {}) {
+  return JSON.stringify(Object.entries(style).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
+/** Merges characters with equal styles back into runs; empty text becomes one empty run. */
 export function compactRuns(text: string, styles: RichTextStyle[]): RichTextDocument {
   if (!text) return { runs: [{ text: "" }] };
   const runs: RichTextDocument["runs"] = [];
   for (let index = 0; index < text.length; index += 1) {
     const style = styles[index] ?? emptyRichTextStyle;
     const previous = runs[runs.length - 1];
-    if (previous && sameStyle(previous.style, style)) previous.text += text[index];
+    if (previous && styleKey(previous.style) === styleKey(style)) previous.text += text[index];
     else runs.push({ text: text[index], ...(Object.keys(style).length ? { style: { ...style } } : {}) });
   }
   return { runs };
 }
 
+/** One style object per character of the document text. */
 export function expandStyles(document: RichTextDocument) {
   const styles: RichTextStyle[] = [];
   document.runs.forEach((run) => {
@@ -27,43 +29,72 @@ export function expandStyles(document: RichTextDocument) {
   return styles;
 }
 
+/** Style of the character at `position` (clamped to the text); {} for empty text. */
 export function richTextStyleAt(document: RichTextDocument, position: number) {
   const styles = expandStyles(document);
   return styles[Math.max(0, Math.min(styles.length - 1, position))] ?? {};
 }
 
+// Ordered, clamped [from, to) of two offsets in any order.
+function orderedRange(text: string, start: number, end: number) {
+  const clamp = (value: number) => Math.max(0, Math.min(text.length, value));
+  return { from: Math.min(clamp(start), clamp(end)), to: Math.max(clamp(start), clamp(end)) };
+}
+
+const documentText = (document: RichTextDocument) => document.runs.map((run) => run.text).join("");
+
+function mapRange(document: RichTextDocument, start: number, end: number, change: (style: RichTextStyle) => RichTextStyle) {
+  const text = documentText(document);
+  const { from, to } = orderedRange(text, start, end);
+  if (from === to) return document;
+  const styles = expandStyles(document);
+  for (let index = from; index < to; index += 1) styles[index] = change(styles[index]);
+  return compactRuns(text, styles);
+}
+
+/** Merges `style` into every character of [start, end). An empty range is a no-op (D-04). */
 export function applyRichTextStyle(document: RichTextDocument, start: number, end: number, style: RichTextStyle) {
-  const text = document.runs.map((run) => run.text).join("");
-  const from = start === end ? 0 : Math.min(start, end);
-  const to = start === end ? text.length : Math.max(start, end);
-  const styles = expandStyles(document);
-  for (let index = from; index < to; index += 1) styles[index] = { ...styles[index], ...style };
-  return compactRuns(text, styles);
+  return mapRange(document, start, end, (current) => ({ ...current, ...style }));
 }
 
+/** Clears all formatting of [start, end). An empty range is a no-op (D-04). */
 export function resetRichTextStyle(document: RichTextDocument, start: number, end: number) {
-  const text = document.runs.map((run) => run.text).join("");
-  const from = start === end ? 0 : Math.min(start, end);
-  const to = start === end ? text.length : Math.max(start, end);
-  const styles = expandStyles(document);
-  for (let index = from; index < to; index += 1) styles[index] = {};
-  return compactRuns(text, styles);
+  return mapRange(document, start, end, () => ({}));
 }
 
+// D-01: the four ready-made styles; «Обычный» is resetRichTextStyle, not a preset.
 export const stylePresets = {
-  heading: {},
-  bold: {},
-  important: {},
+  heading: { fontSize: 22, fontWeight: 800 },
+  bold: { fontWeight: 800 },
+  important: { color: "#b43632", fontWeight: 600 },
 } satisfies Record<string, RichTextStyle>;
 
-export function rangeHasStyle(_document: RichTextDocument, _from: number, _to: number, _style: RichTextStyle) {
-  return false;
+const sameValue = (left: unknown, right: unknown) =>
+  typeof left === "string" && typeof right === "string" ? left.toLowerCase() === right.toLowerCase() : left === right;
+
+/** True when every character of [from, to) carries every property of `style`; false for an empty range. */
+export function rangeHasStyle(document: RichTextDocument, from: number, to: number, style: RichTextStyle) {
+  const text = documentText(document);
+  const range = orderedRange(text, from, to);
+  if (range.from === range.to) return false;
+  const entries = Object.entries(style);
+  return expandStyles(document)
+    .slice(range.from, range.to)
+    .every((current) => entries.every(([key, value]) => sameValue(current[key as keyof RichTextStyle], value)));
 }
 
-export function removeRichTextStyleKeys(document: RichTextDocument, _from: number, _to: number, _keys: (keyof RichTextStyle)[]) {
-  return document;
+/** Deletes the given keys from every character of the range (deletes, never assigns undefined). */
+export function removeRichTextStyleKeys(document: RichTextDocument, from: number, to: number, keys: (keyof RichTextStyle)[]) {
+  return mapRange(document, from, to, (current) => {
+    const next = { ...current };
+    keys.forEach((key) => delete next[key]);
+    return next;
+  });
 }
 
-export function togglePreset(document: RichTextDocument, _from: number, _to: number, _preset: RichTextStyle) {
-  return document;
+/** Word-like toggle (D-02): removes only the preset's own keys when the whole range carries it, else applies it. */
+export function togglePreset(document: RichTextDocument, from: number, to: number, preset: RichTextStyle) {
+  return rangeHasStyle(document, from, to, preset)
+    ? removeRichTextStyleKeys(document, from, to, Object.keys(preset) as (keyof RichTextStyle)[])
+    : applyRichTextStyle(document, from, to, preset);
 }

@@ -20,6 +20,7 @@ import {
   type Virus,
 } from "@/lib/portia-content";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
+import { applyRichTextStyle, compactRuns, expandStyles, rangeHasStyle, resetRichTextStyle, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
 import { employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
@@ -292,32 +293,6 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
   ><span aria-hidden="true">≡</span></button>;
 }
 
-const emptyRichTextStyle: RichTextStyle = {};
-
-function sameStyle(left: RichTextStyle = {}, right: RichTextStyle = {}) {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function compactRuns(text: string, styles: RichTextStyle[]): RichTextDocument {
-  if (!text) return { runs: [{ text: "" }] };
-  const runs: RichTextDocument["runs"] = [];
-  for (let index = 0; index < text.length; index += 1) {
-    const style = styles[index] ?? emptyRichTextStyle;
-    const previous = runs[runs.length - 1];
-    if (previous && sameStyle(previous.style, style)) previous.text += text[index];
-    else runs.push({ text: text[index], ...(Object.keys(style).length ? { style: { ...style } } : {}) });
-  }
-  return { runs };
-}
-
-function expandStyles(document: RichTextDocument) {
-  const styles: RichTextStyle[] = [];
-  document.runs.forEach((run) => {
-    for (let index = 0; index < run.text.length; index += 1) styles.push({ ...(run.style ?? {}) });
-  });
-  return styles;
-}
-
 function replaceRichText(document: RichTextDocument, nextText: string) {
   const previousText = document.runs.map((run) => run.text).join("");
   const previousStyles = expandStyles(document);
@@ -365,24 +340,6 @@ function normalizePhraseLines(lines: string[], document: RichTextDocument | unde
   return { lines: normalizedLines, document: compactRuns(normalizedText, normalizedStyles) };
 }
 
-function applyRichTextStyle(document: RichTextDocument, start: number, end: number, style: RichTextStyle) {
-  const text = document.runs.map((run) => run.text).join("");
-  const from = start === end ? 0 : Math.min(start, end);
-  const to = start === end ? text.length : Math.max(start, end);
-  const styles = expandStyles(document);
-  for (let index = from; index < to; index += 1) styles[index] = { ...styles[index], ...style };
-  return compactRuns(text, styles);
-}
-
-function resetRichTextStyle(document: RichTextDocument, start: number, end: number) {
-  const text = document.runs.map((run) => run.text).join("");
-  const from = start === end ? 0 : Math.min(start, end);
-  const to = start === end ? text.length : Math.max(start, end);
-  const styles = expandStyles(document);
-  for (let index = from; index < to; index += 1) styles[index] = {};
-  return compactRuns(text, styles);
-}
-
 function rgba(hex: string | undefined, opacity: number | undefined) {
   if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return undefined;
   const value = Number.parseInt(hex.slice(1), 16);
@@ -416,11 +373,6 @@ function editorPlainText(root: HTMLElement) {
   if (!root.textContent) return "";
   const text = root.innerText.replace(/\r/g, "").replace(/\u00a0/g, " ");
   return root.querySelector("[data-editor-sentinel]") && text.endsWith("\n") ? text.slice(0, -1) : text;
-}
-
-function richTextStyleAt(document: RichTextDocument, position: number) {
-  const styles = expandStyles(document);
-  return styles[Math.max(0, Math.min(styles.length - 1, position))] ?? {};
 }
 
 function selectionOffsets(root: HTMLElement) {
@@ -1879,8 +1831,14 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const defaultTextColor = previewSurface === "dark" ? "#aebfba" : "#252827";
   const documentRef = useRef(target.document);
   const panelRef = useRef<HTMLElement>(null);
-  // The readout and ✓ come from the committed document, so a click shows exactly what it applied and a repeat click is a no-op (D-02).
+  // The readout comes from the committed document, so a click shows exactly what it applied. A repeat click is a no-op for the manual
+  // controls only; the row styles toggle (D-02).
   const style = richTextStyleAt(target.document, target.selection.start);
+  const selected = target.selection.start === target.selection.end ? null : {
+    from: Math.min(target.selection.start, target.selection.end),
+    to: Math.max(target.selection.start, target.selection.end),
+  };
+  const boldMarked = selected !== null && rangeHasStyle(target.document, selected.from, selected.to, stylePresets.bold);
   const color = style.color ?? defaultTextColor;
   const fontSize = style.fontSize ?? 17;
   const fontWeight = style.fontWeight ?? 400;
@@ -1959,6 +1917,9 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       <small>{selectionLabel}</small>
       <button type="button" onClick={finish} aria-label="Закрыть редактор">×</button>
     </header>
+    <div className="format-presets format-choice-row" role="group" aria-label="Готовые стили">
+      <button type="button" className={boldMarked ? "selected" : ""} aria-pressed={boldMarked} disabled={!selected} onClick={() => selected && commit(togglePreset(documentRef.current, selected.from, selected.to, stylePresets.bold))}>Жирный</button>
+    </div>
     <div className="rich-text-toolbar" aria-label="Оформление текста">
       <div className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={previewSurface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={previewSurface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
       <div className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: color }} />{color.toUpperCase()}</b></span><div className="format-swatches">{textColorPalette.map((item) => <button key={item.value} type="button" className={color.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
