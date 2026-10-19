@@ -41,7 +41,7 @@ recorded: 2026-10-19T10:53:48.000Z
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
 | CR-01 | critical | fixed | fixed in a4df852; grep -n darkreader-lock app/layout.tsx → 22: other: { "darkreader-lock": "true" } (non-empty content, so Next emits the meta) |
-| WR-01 | warning | deferred | accepted risk: while focus is inside the cross-origin «Устав»/«Таблица» frame, Ctrl and wheel events go to the frame and never reach the page, which is a browser limit. The +/− buttons zoom instead. The workaround is listed in REQUIREMENTS.md Future Requirements (PROJECT.md has no Known Limitations section to cite). |
+| WR-01 | warning | deferred | accepted risk: while focus is inside the cross-origin «Устав»/«Таблица» frame, Ctrl and wheel events go to the frame and never reach the page, which is a browser limit. The +/− buttons zoom instead. The workaround is listed in REQUIREMENTS.md Future Requirements (also recorded in PROJECT.md Known Limitations). |
 | WR-02 | warning | open | - |
 | WR-03 | warning | open | - |
 | IN-01 | info | open | - |
