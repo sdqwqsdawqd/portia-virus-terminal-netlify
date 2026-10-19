@@ -98,3 +98,25 @@ export function togglePreset(document: RichTextDocument, from: number, to: numbe
     ? removeRichTextStyleKeys(document, from, to, Object.keys(preset) as (keyof RichTextStyle)[])
     : applyRichTextStyle(document, from, to, preset);
 }
+
+/** Ordered selection when it is non-empty, else the word under the caret; null when nothing can be styled. */
+export function resolveRange(text: string, selection: { start: number; end: number }) {
+  void text;
+  void selection;
+  return null as { from: number; to: number } | null;
+}
+
+/** Word touching `position`; inert scaffold, filled in by the GREEN commit. */
+export function wordRangeAt(text: string, position: number) {
+  void text;
+  void position;
+  return null as { from: number; to: number } | null;
+}
+
+/** True when no character of the range carries a style key; inert scaffold. */
+export function rangeIsPlain(document: RichTextDocument, from: number, to: number) {
+  void document;
+  void from;
+  void to;
+  return false;
+}
