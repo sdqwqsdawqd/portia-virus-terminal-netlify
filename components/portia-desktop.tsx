@@ -1628,7 +1628,7 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     liveGeometry.current = null;
   };
 
-  // Points the zoom / minimise at its source. Offsets, not getBoundingClientRect, for the window:
+  // Open and close settle in place around the window centre (D-14), so the origin is cleared; only minimise / restore aim at the taskbar button. Offsets, not getBoundingClientRect, for the window:
   // during a restore the animation has already shrunk the rect.
   const towardTaskbar = state.exiting === "minimize" || (state.openOrigin?.kind === "taskbar" && !state.exiting);
   useLayoutEffect(() => {
@@ -1637,12 +1637,15 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     if (!element || !parent || state.minimized) return;
     const parentRect = parent.getBoundingClientRect();
     const box = { left: parentRect.left + element.offsetLeft - parent.scrollLeft, top: parentRect.top + element.offsetTop - parent.scrollTop };
-    let target: { x: number; y: number } | undefined = state.openOrigin?.kind === "icon" && !state.exiting ? state.openOrigin : undefined;
+    let target: { x: number; y: number } | undefined;
     if (towardTaskbar) {
       const button = document.querySelector(`[data-taskbar-app="${app}"]`);
       if (button) target = originOf(button, "taskbar");
     }
-    if (!target) return;
+    if (!target) {
+      element.style.transformOrigin = "";
+      return;
+    }
     const x = target.x - box.left;
     element.style.transformOrigin = `${Math.round(x)}px ${Math.round(target.y - box.top)}px`;
   }, [app, towardTaskbar, state.exiting, state.minimized, state.open, state.openOrigin]);

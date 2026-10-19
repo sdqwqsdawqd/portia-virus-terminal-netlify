@@ -1367,19 +1367,17 @@ html[data-motion="full"] .loading-spinner { animation: loading-spin 900ms linear
 /* A taskbar entry being dragged to a new place (state, not motion). */
 .taskbar-app.is-reordering { z-index: 2; background: var(--teal-soft); border-color: rgba(var(--desktop-glow), .35); box-shadow: 0 8px 20px rgba(0,0,0,.4); cursor: grabbing; }
 
-/* Windows. Default open (start menu, search): rise and settle. From a desktop icon: grow out of the icon.
-   Minimise: shrink into the taskbar button (macOS "Scale"); restore grows back out of it. Exit rules come last so they win. */
+/* Windows. Open and close fade with a slight settle around the window centre (D-14); no icon zoom, no rise.
+   Minimise: shrink into the taskbar button (macOS "Scale"); restore grows back out of it (the origin effect aims them). Exit rules come last so they win. */
 .app-window { animation: window-open 280ms var(--ease-out); }
-html[data-motion="full"] .app-window.from-icon { animation: window-zoom 340ms var(--ease-out); }
 html[data-motion="full"] .app-window.from-taskbar { animation: window-restore 340ms var(--ease-out); }
 html[data-motion="full"] .app-window.is-closing { animation: window-close 180ms var(--ease-in) forwards; }
 html[data-motion="full"] .app-window.is-minimizing { animation: window-minimize 320ms var(--ease-in) forwards; }
 html[data-motion="reduce"] .app-window { animation: fade-in 160ms ease-out !important; }
 html[data-motion="reduce"] .app-window:is(.is-closing, .is-minimizing) { animation: fade-out 120ms ease-in forwards !important; }
-@keyframes window-open { from { opacity: 0; scale: .93; translate: 0 18px; } }
-@keyframes window-zoom { from { opacity: 0; scale: .3; } 55% { opacity: 1; } }
+@keyframes window-open { from { opacity: 0; scale: .97; } }
 @keyframes window-restore { from { opacity: 0; scale: .08; } 45% { opacity: 1; } }
-@keyframes window-close { to { opacity: 0; scale: .92; } }
+@keyframes window-close { to { opacity: 0; scale: .97; } }
 @keyframes window-minimize { 45% { opacity: 1; } to { opacity: 0; scale: .08; } }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes fade-out { to { opacity: 0; } }
