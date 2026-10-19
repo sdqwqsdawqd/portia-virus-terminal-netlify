@@ -21,6 +21,7 @@ import {
 } from "@/lib/portia-content";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { applyRichTextStyle, compactRuns, expandStyles, nextFieldSelection, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
+import { clampPanelOffset } from "@/lib/panel-position";
 import { employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
@@ -1846,6 +1847,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const defaultTextColor = surface === "dark" ? "#aebfba" : "#17211f";
   const documentRef = useRef(target.document);
   const panelRef = useRef<HTMLElement>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; right: number; bottom: number } | null>(null);
   // Every control acts on one range: the selection, else the word under the caret, else nothing (D-04).
   const text = target.document.runs.map((run) => run.text).join("");
   const range = resolveRange(text, target.selection);
@@ -1929,9 +1931,35 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     if (range) commit(togglePreset(documentRef.current, range.from, range.to, preset));
   };
 
+  // PC: the panel moves by its header like a desktop window and never leaves the editor window (D-10). The phone panel is docked.
+  const beginDrag = (event: React.PointerEvent<HTMLElement>) => {
+    const panel = panelRef.current;
+    const parent = panel?.offsetParent;
+    if (!panel || !parent || window.matchMedia("(max-width: 900px)").matches) return;
+    if ((event.target as HTMLElement).closest("button")) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
+      right: parent.clientWidth - panel.offsetLeft - panel.offsetWidth, bottom: parent.clientHeight - panel.offsetTop - panel.offsetHeight,
+    };
+  };
+
+  const moveDrag = (event: React.PointerEvent<HTMLElement>) => {
+    const drag = dragRef.current;
+    const panel = panelRef.current;
+    const parent = panel?.offsetParent;
+    if (!drag || !panel || !parent || drag.pointerId !== event.pointerId) return;
+    paintPanelOffset(panel, parent, { right: drag.right - (event.clientX - drag.startX), bottom: drag.bottom - (event.clientY - drag.startY) });
+  };
+
+  const endDrag = (event: React.PointerEvent<HTMLElement>) => {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+  };
+
   // A tap on a panel button must not move focus or let the phone clear the field's selection (like the ✎ launcher); inputs keep focus.
   return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={(event) => { if (!(event.target as HTMLElement).closest("input")) event.preventDefault(); }}>
-    <header>
+    <header onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
       <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
       <small>{selectionLabel}</small>
       <button type="button" onClick={finish} aria-label="Закрыть редактор">×</button>
@@ -1970,6 +1998,14 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     </div>
     <footer><p>Изменения применяются сразу. Без выделения меняется слово под курсором.</p><div><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
   </section>;
+}
+
+// Writes the clamped right/bottom straight on the panel (no React render per move) and returns what was painted.
+function paintPanelOffset(panel: HTMLElement, parent: Element, offset: { right: number; bottom: number }) {
+  const next = clampPanelOffset(offset, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: parent.clientWidth, height: parent.clientHeight });
+  panel.style.right = `${next.right}px`;
+  panel.style.bottom = `${next.bottom}px`;
+  return next;
 }
 
 function CustomColorPicker({ group, title, color, onChange, onClose }: {

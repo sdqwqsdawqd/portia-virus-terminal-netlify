@@ -478,6 +478,9 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 @media (min-width: 901px) {
   /* Positioned against the editor window, not the viewport, so the save bar at the window's bottom is never covered (D-01). */
   .content-editor > .floating-text-format { position: absolute; right: 14px; bottom: 72px; max-height: min(390px, calc(100% - 46px - 72px - 14px)); }
+  /* The panel is dragged by its header like a window (D-10). */
+  .content-editor > .floating-text-format > header { cursor: grab; touch-action: none; user-select: none; }
+  .content-editor > .floating-text-format > header:active { cursor: grabbing; }
   /* The sticky save bar sits above the scroller's bottom padding, so extra padding would lift it under the panel:
      the room to scroll the last field above the panel goes before the bar instead. */
   .editor-window .content-editor:has(> .floating-text-format) { padding-bottom: 0; }
