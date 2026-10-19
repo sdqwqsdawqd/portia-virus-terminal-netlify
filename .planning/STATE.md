@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 05
-current_phase_name: oformlenie-teksta
+current_phase_name: Оформление текста
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-10-19T02:49:38.492Z"
-last_activity: 2026-10-18
-last_activity_desc: Phase PORTIA-03.3 complete, Phase 4 skipped by owner, next Phase 5
-state_head: a23d8a9ea47c6dbae8619b9adb049342e69dae1a
+stopped_at: Completed PORTIA-05-01-PLAN.md
+last_updated: "2026-10-19T03:13:44.455Z"
+last_activity: 2026-10-19
+last_activity_desc: Phase PORTIA-05 execution started
+state_head: a1766d7d6c9d116047febb8a33dc0b83a4f45659
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 41
-  completed_plans: 36
+  completed_plans: 37
   percent: 71
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-18)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-03.3 — Сотрудники вне таблицы и гайды в Информации (INSERTED)
+**Current focus:** Phase PORTIA-05 — Оформление текста
 
 ## Current Position
 
-Phase: PORTIA-05 (oformlenie-teksta) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-18 — Phase PORTIA-03.3 complete, Phase 4 skipped by owner, next Phase 5
+Phase: PORTIA-05 (Оформление текста) — EXECUTING
+Plan: 2 of 5
+Status: Executing Phase PORTIA-05
+Last activity: 2026-10-19 — Phase PORTIA-05 execution started
 
 Progress: [███████░░░] 71%
 
@@ -69,6 +69,10 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase PORTIA-03.3]: 03.3-02: guides are InfoSection.subsections[].blocks[] (text | table | photo | video) in the content payload, normalized by normalizeInfoSections on save, read and the desktop's cached copies
 - [Phase PORTIA-03.3]: 03.3-02: OrderDragHandle only swaps rows that share a parent
 - [Phase PORTIA-03.3]: 03.3-03: YouTube blocks store only the 11-character id and render through youtube-nocookie.com with the default referrer policy; photo blocks reuse uploadImage with placement guide
+- [Phase PORTIA-05]: 05-01: style helpers live in lib/rich-text-style.ts with explicit ranges; an empty range is a no-op (D-04)
+- [Phase PORTIA-05]: 05-01: row styles toggle by removing only their own keys (D-02)
+- [Phase PORTIA-05]: 05-01: Основной removes the colour property (D-18)
+- [Phase PORTIA-05]: 05-01: Жирный is not in the style row (owner amendment to D-01); weight is changed only by the manual weight buttons, which act on the resolved range
 
 ### Pending Todos
 
@@ -91,9 +95,9 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-18T19:13:05.401Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/PORTIA-05-oformlenie-teksta/05-CONTEXT.md
+Last session: 2026-10-19T03:13:44.318Z
+Stopped at: Completed PORTIA-05-01-PLAN.md
+Resume file: None
 
 ## Performance Metrics
 
@@ -123,3 +127,4 @@ Resume file: .planning/phases/PORTIA-05-oformlenie-teksta/05-CONTEXT.md
 | Phase PORTIA-03.3 P01 | 35min | 3 tasks | 7 files |
 | Phase PORTIA-03.3 P02 | 30min | 3 tasks | 7 files |
 | Phase PORTIA-03.3 P03 | n/a | 2 tasks | 5 files |
+| Phase PORTIA-05 P01 | n/a | 3 tasks | 4 files |
