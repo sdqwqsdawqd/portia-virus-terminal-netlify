@@ -70,7 +70,7 @@ recorded: 2026-10-19T12:00:00.000Z
 | IN-03 | info | open | - |
 | IN-04 | info | open | - |
 | CR-01 | critical | fixed | 05-06 (not in the current review) |
-| WR-02 | warning | fixed | 05-06 (not in the current review) |
+| WR-02 | warning | fixed | 05-06, readout only: the 17 px «M» preset jump and the explicit runs written on a repeat click (which unmark «Обычный») are not fixed and are PROJECT.md Out of Scope (panel size presets) (not in the current review) |
 | WR-03 | warning | fixed | 05-06 (not in the current review) |
 | WR-04 | warning | fixed | 05-06 (not in the current review) |
 | WR-05 | warning | deferred | cleanup, no user-visible defect in the phase goal (not in the current review) |
