@@ -9,11 +9,11 @@ findings:
     title: "ГОТОВО with an unknown selection lets the browser's default caret become the target (first word)"
   - id: IN-01
     severity: info
-    disposition: open
+    disposition: skipped
     title: "The `event order:` tests drive a hand-written event list, not the component wiring"
   - id: IN-02
     severity: info
-    disposition: open
+    disposition: skipped
     title: "The own-input window can stay open or close early in uncommon sequences"
   - id: IN-03
     severity: info
@@ -21,7 +21,7 @@ findings:
     title: "Stale and inconsistent text around the new highlight"
   - id: IN-04
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The disposition record says WR-02 is plainly \"fixed\" while part of it is deferred"
   - id: CR-01
     severity: critical
@@ -49,15 +49,15 @@ findings:
     title: "The only target cue has low contrast on the light preview field"
   - id: IN-05
     severity: info
-    disposition: open
+    disposition: skipped
     title: "Thickness and no-fallback behaviour of the shorthand is unverified in the browsers that matter"
   - id: IN-06
     severity: info
     disposition: open
     title: "The \"no fill in the marker\" guarantee lives only in the plan's one-off check"
-open: 8
+open: 4
 total: 13
-recorded: 2026-10-19T12:00:00.000Z
+recorded: 2026-10-19T10:54:44.000Z
 ---
 
 # Phase 05: Code Review Disposition
@@ -65,17 +65,17 @@ recorded: 2026-10-19T12:00:00.000Z
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
 | WR-01 | warning | open | - |
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
+| IN-01 | info | skipped | reviewer fix: keep as is until a DOM test runner exists; grep -c jsdom package.json → 0; the boundary test is TEST-02 (Phase 11) |
+| IN-02 | info | skipped | reviewer: no fix required, it follows the 05 D-05 own-input design; grep -n "ownUntil: Infinity" lib/rich-text-style.ts → 147 |
 | IN-03 | info | open | - |
-| IN-04 | info | open | - |
+| IN-04 | info | fixed | fixed in 3be593b; git show --stat 3be593b → 05-REVIEW-DISPOSITION.md, 1 file changed (the WR-02 row now names the deferred half) |
 | CR-01 | critical | fixed | 05-06 (not in the current review) |
 | WR-02 | warning | fixed | 05-06, readout only: the 17 px «M» preset jump and the explicit runs written on a repeat click (which unmark «Обычный») are not fixed and are PROJECT.md Out of Scope (panel size presets) (not in the current review) |
 | WR-03 | warning | fixed | 05-06 (not in the current review) |
 | WR-04 | warning | fixed | 05-06 (not in the current review) |
-| WR-05 | warning | deferred | cleanup, no user-visible defect in the phase goal (not in the current review) |
+| WR-05 | warning | deferred | accepted risk: the 900 px query is repeated in components/portia-editor.tsx, the dragged panel is not re-clamped when storage is blocked, any mouse button starts a drag; no user-visible defect is reported and a refactor risks the phone panel; owner decision for v1.1, not re-checked (REQUIREMENTS.md Out of Scope) (not in the current review) |
 | WR-06 | warning | open | - |
-| IN-05 | info | open | - |
+| IN-05 | info | skipped | owner approved 05-07 steps 1-5 on PC and phone, so the review requires no fix; grep -n "on PC and phone" .planning/milestones/v1.0-phases/PORTIA-05-oformlenie-teksta/05-07-SUMMARY.md → 57; browser names were not recorded and Safari and Firefox were not checked |
 | IN-06 | info | open | - |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
