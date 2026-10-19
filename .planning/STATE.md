@@ -2,9 +2,14 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Закрытие замечаний
+current_phase: 6
+current_phase_name: первая из 7 фаз v1.1
 status: planning
-last_updated: "2026-10-19T09:54:00.000Z"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-10-19T10:09:44.244Z"
 last_activity: 2026-10-19
+last_activity_desc: "Roadmap v1.1 создан: 7 фаз, 42 из 42 требований сопоставлены"
+state_head: b8ba5cf89117e32842f0eed317a894135cf93702
 progress:
   total_phases: 7
   completed_phases: 0
@@ -76,9 +81,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-19T09:54:00.000Z
-Stopped at: Roadmap v1.1 создан и записан; следующий шаг — обсудить или спланировать Phase 6
-Resume file: None
+Last session: 2026-10-19T10:09:44.226Z
+Stopped at: Phase 6 context gathered
+Resume file: .planning/phases/PORTIA-06-uchet-zamechaniy-i-strahovka-dannyh/06-CONTEXT.md
 
 ## Operator Next Steps
 
