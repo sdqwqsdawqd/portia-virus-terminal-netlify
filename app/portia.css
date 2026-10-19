@@ -599,9 +599,20 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .trash-formatted-text, .formatted-rich-input[data-area="trash"] { font: 14px/1.75 var(--doc); }
 .trash-image-document figcaption, .formatted-rich-input[data-area="caption"] { font: 14px/1.65 var(--doc); }
 .search-recommendations button, .formatted-rich-input[data-area="search"] { font: 11px var(--sans); }
-.formatted-rich-input[data-area="assistant"] { font: 700 10px/1.5 var(--assistant-font); }
+.formatted-rich-input[data-area="assistant"] { font: 700 10px/1.4 var(--assistant-font); letter-spacing: .099em; }
 /* Each field shows its site place's ink and surface on that place's own surface (D-09, D-17); lib/editor-field-look.test.ts keeps the pairs equal. */
 .formatted-rich-input[data-area="lead"].preview-light { --field-ink: oklch(.363 .017 var(--accent-hue)); --field-bg: var(--paper); }
+.formatted-rich-input[data-area="metric"].preview-light { --field-ink: oklch(.364 .015 var(--accent-hue)); --field-bg: var(--paper); } /* .metric-grid > div > .formatted-content on .record-view */
+.formatted-rich-input[data-area="mutation"].preview-light { --field-ink: oklch(.452 .016 var(--accent-hue)); --field-bg: #f5f3eb; } /* bg: .mutation-card 20% white over the paper */
+.formatted-rich-input[data-area="scientist"].preview-light { --field-ink: #252827; --field-bg: #f5f5f1; } /* .scientist-rich-text on .archive-document-paper */
+.formatted-rich-input[data-area="trash"].preview-light { --field-ink: #1c211f; --field-bg: #eeeee9; } /* .trash-formatted-text on .trash-text-document */
+.formatted-rich-input[data-area="info"].preview-dark { --field-ink: oklch(.79 .02 var(--accent-hue)); --field-bg: oklch(.206 .019 var(--accent-hue)); } /* bg: middle of the .info-library gradient */
+.formatted-rich-input[data-area="broadcast"].preview-dark { --field-ink: oklch(.76 .022 var(--accent-hue)); --field-bg: oklch(.212 .019 var(--accent-hue)); } /* bg: a card over the .broadcasts-app gradient; an "important" card's teal is not mirrored */
+.formatted-rich-input[data-area="caption"].preview-dark { --field-ink: oklch(.793 .021 var(--accent-hue)); --field-bg: oklch(.196 .018 var(--accent-hue)); } /* .trash-image-document figcaption on .trash-image-document */
+.formatted-rich-input[data-area="search"].preview-dark { --field-ink: oklch(.612 .03 var(--accent-hue)); --field-bg: oklch(.206 .019 var(--accent-hue)); } /* bg: middle of the .global-search-app gradient; the per-line pill border is not drawn (one field) */
+.formatted-rich-input[data-area="assistant"].preview-dark { --field-ink: oklch(.743 .009 var(--accent-hue)); --field-bg: oklch(.133 .013 var(--accent-hue)); text-shadow: 0 1px 2px #000; } /* the bubble's visible colours after its brightness(.7) filter; its 30% dim of run backgrounds is not mirrored */
+/* The site ignores run colour, size and weight for Vivian's phrases (D-19); run background still shows. */
+.formatted-rich-input[data-area="assistant"] span { color: inherit !important; font-size: inherit !important; font-weight: inherit !important; }
 .formatted-text-field-hint { color: oklch(.525 .033 var(--accent-hue)); font-size: 10px; line-height: 1.4; }
 .formatted-text-field:focus-within .formatted-text-field-head > span { color: var(--teal); }
 .content-editor:has(.floating-text-format) { padding-bottom: 170px; }
@@ -613,6 +624,7 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .floating-text-format > header small { color: oklch(.63 .032 var(--accent-hue)); font: 11px var(--sans); white-space: nowrap; }
 .floating-text-format > header button { width: 28px; height: 28px; border: 1px solid oklch(.414 .029 var(--accent-hue)); border-radius: 4px; background: oklch(.261 .023 var(--accent-hue)); color: oklch(.806 .02 var(--accent-hue)); font-size: 17px; cursor: pointer; }
 .rich-text-toolbar { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 9px; background: oklch(.196 .018 var(--accent-hue)); }
+.format-area-note { grid-column: 1 / -1; margin: 0; color: oklch(.66 .027 var(--accent-hue)); font-size: 11px; line-height: 1.4; }
 .format-control { min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid oklch(.366 .036 var(--accent-hue)); border-radius: 5px; background: rgba(255,255,255,.018); color: oklch(.66 .027 var(--accent-hue)); }
 .format-control > span { font: 700 11px var(--sans); letter-spacing: .07em; text-transform: uppercase; }
 .format-control-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
