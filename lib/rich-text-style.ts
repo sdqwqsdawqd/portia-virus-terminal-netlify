@@ -124,3 +124,7 @@ export function rangeIsPlain(document: RichTextDocument, from: number, to: numbe
   const range = orderedRange(documentText(document), from, to);
   return range.from !== range.to && expandStyles(document).slice(range.from, range.to).every((current) => Object.keys(current).length === 0);
 }
+
+export function nextFieldSelection(stored: { start: number; end: number } | null, incoming: { start: number; end: number } | null, touchedField: boolean) {
+  return incoming ?? stored ?? { start: 0, end: 0 };
+}

@@ -4,6 +4,7 @@ import type { RichTextDocument } from "./portia-content.ts";
 import {
   applyRichTextStyle,
   compactRuns,
+  nextFieldSelection,
   rangeHasStyle,
   removeRichTextStyleKeys,
   rangeIsPlain,
@@ -123,4 +124,30 @@ test("weights 400/600/800 apply through the resolved range for a selection and f
     assert.deepEqual(viaRange({ start: 0, end: 6 }), expected, `selection, weight ${fontWeight}`);
     assert.deepEqual(viaRange({ start: 3, end: 3 }), expected, `caret in a word, weight ${fontWeight}`);
   }
+});
+
+test("nextFieldSelection keeps a lost or untouched collapsed selection, takes real ones", () => {
+  assert.deepEqual(nextFieldSelection({ start: 2, end: 5 }, null, false), { start: 2, end: 5 });
+  assert.deepEqual(nextFieldSelection(null, null, false), { start: 0, end: 0 });
+  assert.deepEqual(nextFieldSelection({ start: 2, end: 5 }, { start: 3, end: 3 }, false), { start: 2, end: 5 });
+  assert.deepEqual(nextFieldSelection({ start: 2, end: 5 }, { start: 3, end: 3 }, true), { start: 3, end: 3 });
+  assert.deepEqual(nextFieldSelection({ start: 2, end: 5 }, { start: 1, end: 4 }, false), { start: 1, end: 4 });
+  assert.deepEqual(nextFieldSelection({ start: 1, end: 1 }, { start: 3, end: 3 }, false), { start: 3, end: 3 });
+});
+
+// Owner bug (D-05): a style tap on a phone collapsed the selection, so the next tap (weight in particular) landed on nothing or the wrong word.
+test("repeated taps on one selection keep acting on that text although every tap collapses the selection", () => {
+  const text = "привет мир сегодня";
+  let doc = plain(text);
+  let stored: { start: number; end: number } | null = { start: 7, end: 10 };
+  for (const style of [{ fontWeight: 800 }, stylePresets.heading, { fontWeight: 400 }, stylePresets.important]) {
+    const range = resolveRange(text, stored!)!;
+    doc = applyRichTextStyle(doc, range.from, range.to, style);
+    // the phone then reports a caret outside the field, then one inside the next word, none of it caused by a touch in the field
+    stored = nextFieldSelection(stored, null, false);
+    stored = nextFieldSelection(stored, { start: 12, end: 12 }, false);
+  }
+  assert.deepEqual(stored, { start: 7, end: 10 });
+  assert.equal(doc.runs.map((run) => run.text).join(""), text);
+  assert.deepEqual(doc.runs.map((run) => run.text), ["привет ", "мир", " сегодня"]);
 });
