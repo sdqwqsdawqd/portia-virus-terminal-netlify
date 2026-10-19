@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: oformlenie-teksta
 status: executing
-stopped_at: Completed PORTIA-05-05-PLAN.md
-last_updated: "2026-10-19T04:02:10.171Z"
+stopped_at: Completed PORTIA-05-06-PLAN.md
+last_updated: "2026-10-19T08:10:08.459Z"
 last_activity: 2026-10-19
 last_activity_desc: Phase PORTIA-05 execution started
-state_head: f96577785c0bf8a2af5643bcaa40758c74fcdaac
+state_head: 76436b84599e120fb33f35b4b12d8c7b157b4a4a
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 42
-  completed_plans: 41
+  completed_plans: 42
   percent: 71
 ---
 
@@ -79,6 +79,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase PORTIA-05]: 05-03: preview surface defaults to each field's own area (nativeSurface), not the editor tab
 - [Phase PORTIA-05]: 05-04: the PC format panel position is { right, bottom } from the editor window's bottom-right in localStorage portia-format-panel-v1, clamped below the title bar and above the save bar (D-10, D-11)
 - [Phase PORTIA-05]: 05-05: windows open and close with opacity + scale .97 around their centre; the icon zoom is removed (D-14)
+- [Phase PORTIA-05]: 05-06: a field's selection follows own input (pointerdown or keydown until 400 ms after release, closed on blur); a reading never ends it (fieldSelectionStep, CR-01)
+- [Phase PORTIA-05]: 05-06: an unknown selection is null and disables the panel controls (WR-03)
+- [Phase PORTIA-05]: 05-06: panel taps prevent the mousedown default too; the portia-format highlight paints at every width (WR-04)
 
 ### Pending Todos
 
@@ -101,8 +104,8 @@ None — незакоммиченная работа закоммичена в P
 
 ## Session Continuity
 
-Last session: 2026-10-19T03:32:13.247Z
-Stopped at: Completed PORTIA-05-05-PLAN.md
+Last session: 2026-10-19T08:10:08.321Z
+Stopped at: Completed PORTIA-05-06-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -138,3 +141,4 @@ Resume file: None
 | Phase PORTIA-05 P03 | 30min | 2 tasks | 3 files |
 | Phase PORTIA-05 P04 | 20min | 2 tasks | 4 files |
 | Phase PORTIA-05 P05 | 15min | 2 tasks | 2 files |
+| Phase PORTIA-05 P06 | n/a | 3 tasks | 4 files |
