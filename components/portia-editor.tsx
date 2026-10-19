@@ -48,6 +48,7 @@ type FormatTarget = {
   value: string;
   document: RichTextDocument;
   selection: { start: number; end: number };
+  area: DisplayArea;
   onCommit: (value: string, document: RichTextDocument) => void;
 };
 
@@ -63,7 +64,10 @@ const infoBlockHeads = {
   video: { label: "видео", title: "ВИДЕО YOUTUBE" },
 } as const;
 
-const ActiveFormatContext = createContext<{ key: string | null; surface: EditorPreviewSurface; phonePanelOpen: boolean }>({ key: null, surface: "light", phonePanelOpen: false });
+// The surface each field opens on is its site place's own (D-09, D-17); an explicit БЕЛЫЙ/ЧЁРНЫЙ choice overrides it until the next tab switch.
+const nativeSurface: Record<DisplayArea, EditorPreviewSurface> = { lead: "light", metric: "light", mutation: "light", scientist: "light", trash: "light", info: "dark", broadcast: "dark", caption: "dark", search: "dark", assistant: "dark" };
+
+const ActiveFormatContext = createContext<{ key: string | null; surface: EditorPreviewSurface | null; phonePanelOpen: boolean }>({ key: null, surface: null, phonePanelOpen: false });
 
 function mediaUrlFromText(value: string) {
   const trimmed = value.trim();
@@ -537,7 +541,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const [broadcastEditorTab, setBroadcastEditorTab] = useState<BroadcastTab>("news");
   // A new or moved card is focused once it is in the DOM; focus scrolls it into view (G-03.2-2a).
   const revealBroadcast = useRef<{ id: string; field: "title" | "type" } | null>(null);
-  const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface>("light");
+  const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface | null>(null);
   // At 900px and below a list + form layout shows either the list or the open record (D-01, D-02).
   const [recordOpen, setRecordOpen] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
@@ -705,7 +709,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const showTab = (id: EditorTab) => {
     setTab(id);
     setRecordOpen(false);
-    setPreviewSurface(id === "viruses" || id === "recycle" ? "light" : "dark");
+    setPreviewSurface(null);
     setFormatTarget(null);
     setFormatterOpen(false);
   };
@@ -1752,7 +1756,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
     const selection = nextFieldSelection(selectionRef.current, selectionOffsets(editor), !activeFormat.phonePanelOpen || touchedRef.current);
     touchedRef.current = false;
     selectionRef.current = selection;
-    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection, onCommit: onChange });
+    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection, area, onCommit: onChange });
   };
 
   const editorSelection = (editor: HTMLElement, text: string) =>
@@ -1769,7 +1773,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
     localDocumentSignatureRef.current = JSON.stringify(nextDocument);
     restoreSelection(editor, selection);
     onChange(nextValue, nextDocument);
-    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection, onCommit: onChange });
+    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection, area, onCommit: onChange });
   };
 
   useLayoutEffect(() => {
@@ -1786,7 +1790,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
       ref={editorRef}
       data-area={area}
       data-format-key={formatKey}
-      className={`formatted-rich-input${tall ? " tall" : ""} preview-${activeFormat.surface}${activeFormat.key === formatKey ? " is-editor-active" : ""}`}
+      className={`formatted-rich-input${tall ? " tall" : ""} preview-${activeFormat.surface ?? nativeSurface[area]}${activeFormat.key === formatKey ? " is-editor-active" : ""}`}
       contentEditable
       inputMode={activeFormat.phonePanelOpen ? "none" : undefined}
       suppressContentEditableWarning
@@ -1832,13 +1836,14 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
 
 function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onUpdate, onClose }: {
   target: FormatTarget;
-  previewSurface: EditorPreviewSurface;
+  previewSurface: EditorPreviewSurface | null;
   onPreviewSurface: (surface: EditorPreviewSurface) => void;
   onUpdate: (target: FormatTarget) => void;
   onClose: () => void;
 }) {
   // Seeds the custom colour picker for text without a colour: baseInk at the default accent.
-  const defaultTextColor = previewSurface === "dark" ? "#aebfba" : "#17211f";
+  const surface = previewSurface ?? nativeSurface[target.area];
+  const defaultTextColor = surface === "dark" ? "#aebfba" : "#17211f";
   const documentRef = useRef(target.document);
   const panelRef = useRef<HTMLElement>(null);
   // Every control acts on one range: the selection, else the word under the caret, else nothing (D-04).
@@ -1940,8 +1945,8 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       {([["color", "Цвет"], ["size", "Размер"], ["background", "Фон"]] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "selected" : ""} onClick={() => setTab(id)}>{label}</button>)}
     </div>
     <div className="rich-text-toolbar" aria-label="Оформление текста" data-tab={tab}>
-      <div data-tab-group="background" className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={previewSurface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={previewSurface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
-      <div data-tab-group="color" className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: style.color ?? baseInk[previewSurface] }} />{style.color ? style.color.toUpperCase() : "ОСНОВНОЙ"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={style.color ? "" : "selected"} title="Основной" aria-label="Основной" onClick={() => { setColorPicker(null); if (range) commit(removeRichTextStyleKeys(documentRef.current, range.from, range.to, ["color"])); }}><i style={{ backgroundColor: baseInk[previewSurface] }} /></button>{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={style.color?.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
+      <div data-tab-group="background" className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={surface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={surface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
+      <div data-tab-group="color" className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: style.color ?? baseInk[surface] }} />{style.color ? style.color.toUpperCase() : "ОСНОВНОЙ"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={style.color ? "" : "selected"} title="Основной" aria-label="Основной" onClick={() => { setColorPicker(null); if (range) commit(removeRichTextStyleKeys(documentRef.current, range.from, range.to, ["color"])); }}><i style={{ backgroundColor: baseInk[surface] }} /></button>{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={style.color?.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
       <div data-tab-group="size" className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" disabled={!range} className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle({ fontSize: value }); }}>{label}</button>)}</div></div>
       <div data-tab-group="size" className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" disabled={!range} className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); applyStyle({ fontWeight: value }); }}>{label}</button>)}</div></div>
       <div data-tab-group="background" className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle({ backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle({ backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
