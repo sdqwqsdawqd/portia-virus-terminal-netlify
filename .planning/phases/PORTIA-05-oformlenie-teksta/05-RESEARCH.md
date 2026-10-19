@@ -459,16 +459,21 @@ if (!target) { element.style.transformOrigin = ""; return; }
 | A6 | Custom Highlight API support ranges (Chrome 105 / Safari 17.2 / Firefox 140) | State of the Art | Only affects the `"highlights" in CSS` fallback, which already exists |
 | A7 | Mouse-down `preventDefault` keeps focus and selection on iOS/Android Chrome taps | §4 fix 3 | If a platform ignores it, fixes 1+2 still hold |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **D-06/D-07 vs D-09 conflict on the dark/light "основной" colour.**
    - Known: site ink differs per area (#34413e lead, #36413e metric, #4d5956 mutation, #252827 scientist, #1c211f trash on light; #aebfbb info, #a3b6b2 broadcast, #aec0bc caption, #718a84 search, #edf8f5 assistant on dark). D-07 says white = classification colour (#17211f computed).
    - Unclear: whether the owner wants the generic D-06/D-07 colours in every field, or the area's own colour on the area's own surface.
    - Recommendation: area colour on native surface, D-06/D-07 generic otherwise; state this in the plan and confirm at UAT.
+   - RESOLVED: owner decision D-17 — area colour and background on the area's native surface; D-06/D-07 for the generic look and the opposite surface (plan 05-03).
 2. **Is «Основной» a stored hex or "no colour"?** Recommendation: no colour (A2).
+   - RESOLVED: owner decision D-18 — «Основной» removes the colour property.
 3. **Assistant controls that the site ignores (colour, size, weight).** Recommendation: mirror the override in the field (WYSIWYG) and add a one-line hint; do not remove controls (D-03 says nothing is removed).
+   - RESOLVED: owner decision D-19 — mirror the site, show the hint, keep the buttons (plan 05-03 Task 2).
 4. **Mobile weight / surface placement** (discretion): recommended «Размер» = size + weight, «Фон» = background + opacity + preview surface.
+   - RESOLVED: CONTEXT "Claude's Discretion" (D-12 tab split); plan 05-02 Task 2 adopts the recommendation.
 5. **Does the owner want a pill look for «Рекомендации поиска» in the field?** Recommendation: no (one contenteditable, cannot render per-line pills); match ink and background only.
+   - RESOLVED: plan 05-03 discretion — match ink and background only; the missing pills are listed for owner sign-off in 05-03 Task 2's UAT check.
 
 ## Environment Availability
 

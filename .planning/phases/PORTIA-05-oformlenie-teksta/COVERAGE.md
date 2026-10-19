@@ -1,0 +1,1 @@
+No external API integration: the phase changes the in-site text editor, its CSS and the desktop window animation; the only "API" mentioned is the browser's built-in CSS Custom Highlight API, already used by the editor, and no external service, SDK or endpoint is added.
