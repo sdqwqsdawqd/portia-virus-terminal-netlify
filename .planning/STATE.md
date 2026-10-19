@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Закрытие замечаний
 current_phase: 06
-current_phase_name: uchet-zamechaniy-i-strahovka-dannyh
+current_phase_name: Учёт замечаний и страховка данных
 status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-10-19T10:41:03.684Z"
+stopped_at: Completed PORTIA-06-01-PLAN.md
+last_updated: "2026-10-19T10:55:25.968Z"
 last_activity: 2026-10-19
-last_activity_desc: "Roadmap v1.1 создан: 7 фаз, 42 из 42 требований сопоставлены"
-state_head: f28c94cfab4015721bf92138436dbd41866dca5b
+last_activity_desc: Phase PORTIA-06 execution started
+state_head: fa753ea61c490dcd8f89d95cde6eabce4e678f8e
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -25,20 +25,25 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-19)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase 6 — Учёт замечаний и страховка данных
+**Current focus:** Phase PORTIA-06 — Учёт замечаний и страховка данных
 
 ## Current Position
 
-Phase: PORTIA-06 (uchet-zamechaniy-i-strahovka-dannyh) — READY TO EXECUTE
-Plan: — (планов пока нет)
-Status: Ready to execute
-Last activity: 2026-10-19 — Roadmap v1.1 создан: 7 фаз, 42 из 42 требований сопоставлены
+Phase: PORTIA-06 (Учёт замечаний и страховка данных) — EXECUTING
+Plan: 2 of 4
+Status: Executing Phase PORTIA-06
+Last activity: 2026-10-19 — Phase PORTIA-06 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 v1.1: ни один план ещё не выполнен. Метрики v1.0 (43 плана) — в истории git и `.planning/milestones/v1.0-ROADMAP.md`.
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase PORTIA-06 P01 | 10min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -53,6 +58,7 @@ v1.1: ни один план ещё не выполнен. Метрики v1.0 (
 - [v1.1 roadmap]: PERM + SQL подтверждённой почты — один последний блок владельца (Phase 12); код работает до и после SQL, без нового столбца у всех редакторов все вкладки
 - [v1.1 roadmap]: CONT-09 (`//host`) целиком в Phase 12 вместе с SQL-половиной; SEC-03 (`sandbox`) в Phase 10 с проверкой в браузере
 - [v1.0 → v1.1]: одновременные правки одного сотрудника — последняя запись побеждает (AR-03.2-01); опрос контента — раз в 10 с при видимой вкладке (03.2-07)
+- [Phase PORTIA-06]: 05-IN-04 fixed by its own commit (D-07) before closing; 01-WR-01 Source omits nonexistent PROJECT.md Known Limitations
 
 ### Pending Todos
 
@@ -81,9 +87,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-19T10:09:44.226Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/PORTIA-06-uchet-zamechaniy-i-strahovka-dannyh/06-CONTEXT.md
+Last session: 2026-10-19T10:55:25.943Z
+Stopped at: Completed PORTIA-06-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
