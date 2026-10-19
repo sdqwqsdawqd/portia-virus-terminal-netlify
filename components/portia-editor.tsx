@@ -20,7 +20,7 @@ import {
   type Virus,
 } from "@/lib/portia-content";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
-import { applyRichTextStyle, compactRuns, expandStyles, rangeHasStyle, rangeIsPlain, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
+import { applyRichTextStyle, compactRuns, expandStyles, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
 import { employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
@@ -84,14 +84,15 @@ function mediaUrlFromText(value: string) {
 }
 
 const textColorPalette = [
-  { value: "#252827", label: "Графит" },
-  { value: "#d4e0dd", label: "Светлый" },
   { value: "#0b7568", label: "Portia" },
   { value: "#167a4d", label: "Зелёный" },
   { value: "#a06f00", label: "Янтарный" },
   { value: "#b43632", label: "Красный" },
   { value: "#316e9b", label: "Синий" },
 ];
+
+// D-06 / D-07 base text colours; oklch is the source of truth (D-17). «Основной» shows this and stores no colour.
+const baseInk = { dark: "oklch(.79 .02 var(--accent-hue))", light: "oklch(.237 .015 var(--accent-hue))" };
 
 const backgroundColorPalette = [
   { value: "#f0d66a", label: "Жёлтый" },
@@ -1828,7 +1829,8 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   onUpdate: (target: FormatTarget) => void;
   onClose: () => void;
 }) {
-  const defaultTextColor = previewSurface === "dark" ? "#aebfba" : "#252827";
+  // Seeds the custom colour picker for text without a colour: baseInk at the default accent.
+  const defaultTextColor = previewSurface === "dark" ? "#aebfba" : "#17211f";
   const documentRef = useRef(target.document);
   const panelRef = useRef<HTMLElement>(null);
   // Every control acts on one range: the selection, else the word under the caret, else nothing (D-04).
@@ -1924,7 +1926,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     </div>
     <div className="rich-text-toolbar" aria-label="Оформление текста">
       <div className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={previewSurface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={previewSurface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
-      <div className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: color }} />{color.toUpperCase()}</b></span><div className="format-swatches">{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={color.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
+      <div className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: style.color ?? baseInk[previewSurface] }} />{style.color ? style.color.toUpperCase() : "ОСНОВНОЙ"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={style.color ? "" : "selected"} title="Основной" aria-label="Основной" onClick={() => { setColorPicker(null); if (range) commit(removeRichTextStyleKeys(documentRef.current, range.from, range.to, ["color"])); }}><i style={{ backgroundColor: baseInk[previewSurface] }} /></button>{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={style.color?.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
       <div className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" disabled={!range} className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle({ fontSize: value }); }}>{label}</button>)}</div></div>
       <div className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" disabled={!range} className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); applyStyle({ fontWeight: value }); }}>{label}</button>)}</div></div>
       <div className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle({ backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle({ backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
