@@ -326,18 +326,26 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .formatted-content { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .embedded-rich-media { display: block; width: auto; max-width: min(480px, 100%); height: auto; max-height: 320px; margin: 10px auto; border: 1px solid oklch(.453 .026 var(--accent-hue) / .32); border-radius: 4px; object-fit: contain; background: rgba(0,0,0,.1); }
 /* The «Информация» tree and guide blocks (D-11). */
-.info-subsections { margin: 2px 0 6px 20px; padding-left: 8px; border-left: 1px solid oklch(.383 .033 var(--accent-hue)); }
+.info-subsections { margin: 2px 0 6px 10px; padding-left: 6px; border-left: 1px solid oklch(.383 .033 var(--accent-hue)); }
 /* A category with subsections says so before it is opened. */
 .info-index button.has-subsections { grid-template-columns: 30px minmax(0,1fr) auto; }
 .info-sub-marker { align-self: center; padding: 2px 6px; border: 1px solid oklch(.443 .041 var(--accent-hue)); border-radius: 3px; color: var(--teal); font: 700 10px var(--sans); font-style: normal; letter-spacing: .04em; white-space: nowrap; }
-.info-index .info-subsections button { padding: 8px 9px; }
-.info-index .info-subsections button span { font-size: 12px; }
+/* D-15: a subsection entry is one line about a button high; a long title is cut by an ellipsis (full title on hover). */
+.info-index .info-subsections button { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; padding: 5px 8px; }
+.info-index .info-subsections button span { font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.info-index .info-subsections button small { white-space: nowrap; }
 .info-blocks { display: grid; gap: 26px; }
 .info-ledger dt { color: oklch(.603 .029 var(--accent-hue)); font: 11px var(--sans); letter-spacing: .05em; }
 .info-ledger dd { margin: 0; color: oklch(.926 .011 var(--accent-hue)); font-size: 15px; overflow-wrap: anywhere; }
 .info-classification { margin-top: 0; }
 .info-subsection-list, .info-block-list { display: grid; gap: 10px; margin-top: 12px; }
 .info-subsection-list:empty, .info-block-list:empty { display: none; }
+/* D-15, D-20: the editor's nested subsection and block cards are denser; text fields keep their height. */
+.info-subsection-list, .info-block-list { gap: 6px; margin-top: 8px; }
+.info-subsection-list > .nested-editor-card, .info-block-list > .nested-editor-card { padding: 8px 10px; }
+.info-subsection-list > .nested-editor-card + .nested-editor-card, .info-block-list > .nested-editor-card + .nested-editor-card { margin-top: 0; }
+.info-subsection-list .editor-field { margin-top: 6px; }
+.info-subsection-list .secondary-control { padding: 6px 10px; margin: 6px 6px 0 0; }
 .info-table-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 10px; }
 .info-table-row button { border: 0; background: transparent; color: #b96a63; font: 11px var(--sans); cursor: pointer; padding: 10px 4px; }
 .info-block-video { margin: 0; max-width: 820px; }
@@ -1109,6 +1117,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .info-index { display: flex; gap: 7px; padding: 13px; overflow-x: auto; border-right: 0; border-bottom: 1px solid oklch(.383 .033 var(--accent-hue)); }
   .info-index > .eyebrow { display: none; }
   .info-index button { flex: 0 0 190px; }
+  .info-index .info-subsections button { flex: 0 0 auto; max-width: 190px; }
   .info-index > div, .info-subsections { display: flex; gap: 7px; margin: 0; padding: 0; border: 0; }
   .info-index > div { flex: 0 0 auto; }
   .info-document { padding: 27px 17px 45px; }
@@ -1163,6 +1172,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .rich-text-toolbar { grid-template-columns: 1fr; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .access-editor-add { grid-template-columns: 1fr; }
   .content-control-entry { align-items: stretch; flex-direction: column; }
+  /* D-16: in a column the 260px flex-basis became a 260px height, an empty band above the buttons. */
+  .content-control-entry > div:first-child { flex: 0 0 auto; }
   .content-control-actions { width: 100%; }
   .content-control-actions button, .content-control-actions a { flex: 1 1 180px; }
   .info-ledger > div { grid-template-columns: 1fr; gap: 7px; padding: 14px; }
