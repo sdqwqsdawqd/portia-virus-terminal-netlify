@@ -628,6 +628,7 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .format-choice-row > button { min-height: 30px; flex: 1 1 auto; padding: 5px 7px; border: 1px solid oklch(.426 .034 var(--accent-hue)); border-radius: 4px; background: oklch(.179 .017 var(--accent-hue)); color: oklch(.698 .024 var(--accent-hue)); font: 700 11px var(--sans); cursor: pointer; }
 .format-choice-row > button:not(:disabled):hover, .format-choice-row > button.selected { border-color: var(--teal); background: var(--teal-soft); color: oklch(.957 .013 var(--accent-hue)); }
 /* Ready-made styles row (D-01), above the manual controls. */
+.format-tabs { display: none; }
 .format-presets { flex: none; padding: 9px 9px 0; background: oklch(.196 .018 var(--accent-hue)); }
 .format-choice-row > button:disabled, .format-swatches > button:disabled, .custom-color:disabled, .opacity-control input:disabled { opacity: .4; cursor: not-allowed; }
 .opacity-control input[type="range"] { width: 100%; min-height: 24px; accent-color: var(--teal); cursor: pointer; }
@@ -1128,6 +1129,12 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   /* bottom: 44px taskbar + 56px save bar, which stays visible under the panel (D-01). */
   .floating-text-format { right: 8px; bottom: 108px; width: min(620px, calc(100% - 16px)); max-height: min(34svh, 270px); display: flex; flex-direction: column; overflow: hidden; }
   .floating-text-format > header, .floating-text-format > footer { flex: none; }
+  /* Phone tabs, one group at a time (D-12). */
+  .format-tabs { display: flex; flex: none; padding: 6px 9px 0; background: oklch(.196 .018 var(--accent-hue)); }
+  .floating-text-format > .format-presets { flex: none; }
+  .rich-text-toolbar[data-tab="color"] > [data-tab-group]:not([data-tab-group="color"]) { display: none; }
+  .rich-text-toolbar[data-tab="size"] > [data-tab-group]:not([data-tab-group="size"]) { display: none; }
+  .rich-text-toolbar[data-tab="background"] > [data-tab-group]:not([data-tab-group="background"]) { display: none; }
   /* Sticky cannot hold here: the page scrolls and .app-window clips, so the bar is fixed above the 44px taskbar. */
   .editor-savebar { position: fixed; left: 0; right: 0; bottom: 44px; margin: 0; padding: 8px 12px; min-height: 56px; }
   .editor-savebar > p { display: block; font-size: 10px; }
@@ -1136,7 +1143,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .content-editor:has(> .editor-savebar) { padding-bottom: 110px; }
   /* Lets the last field scroll above the format panel, which sits where the keyboard was. */
   .content-editor:has(.floating-text-format) { padding-bottom: calc(min(34svh, 270px) + 146px); }
-  .rich-text-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .rich-text-toolbar { grid-template-columns: 1fr; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .access-editor-add { grid-template-columns: 1fr; }
   .content-control-entry { align-items: stretch; flex-direction: column; }
   .content-control-actions { width: 100%; }
@@ -1218,7 +1225,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .floating-text-format > header { grid-template-columns: minmax(0,1fr) auto; padding: 6px 10px; }
   .floating-text-format > header > div { align-items: flex-start; flex-direction: column; gap: 2px; }
   .floating-text-format > header small { display: none; }
-  .rich-text-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 7px; }
+  .rich-text-toolbar { grid-template-columns: 1fr; gap: 6px; padding: 7px; }
   .format-control-wide { grid-column: auto; }
   .format-control { padding: 6px; }
   .format-swatches > button, .custom-color { min-width: 27px; height: 27px; }
