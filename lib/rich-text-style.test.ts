@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { RichTextDocument } from "./portia-content.ts";
+import type { FieldSelectionEvent, FieldSelectionState } from "./rich-text-style.ts";
 import {
   applyRichTextStyle,
   compactRuns,
+  fieldSelectionStep,
   nextFieldSelection,
   rangeHasStyle,
   removeRichTextStyleKeys,
@@ -126,13 +128,18 @@ test("weights 400/600/800 apply through the resolved range for a selection and f
   }
 });
 
-test("nextFieldSelection keeps a lost or untouched collapsed selection, takes real ones", () => {
+test("nextFieldSelection: a missing reading with own input means nothing known, otherwise the stored range is kept", () => {
   assert.deepEqual(nextFieldSelection({ start: 2, end: 5 }, null, false), { start: 2, end: 5 });
-  assert.deepEqual(nextFieldSelection(null, null, false), { start: 0, end: 0 });
+  assert.equal(nextFieldSelection(null, null, false), null);
+  assert.equal(nextFieldSelection({ start: 2, end: 5 }, null, true), null);
   assert.deepEqual(nextFieldSelection({ start: 2, end: 5 }, { start: 3, end: 3 }, false), { start: 2, end: 5 });
   assert.deepEqual(nextFieldSelection({ start: 2, end: 5 }, { start: 3, end: 3 }, true), { start: 3, end: 3 });
   assert.deepEqual(nextFieldSelection({ start: 2, end: 5 }, { start: 1, end: 4 }, false), { start: 1, end: 4 });
-  assert.deepEqual(nextFieldSelection({ start: 1, end: 1 }, { start: 3, end: 3 }, false), { start: 3, end: 3 });
+  assert.deepEqual(nextFieldSelection({ start: 1, end: 1 }, { start: 3, end: 3 }, false), { start: 1, end: 1 });
+});
+
+test("resolveRange returns null for no selection", () => {
+  assert.equal(resolveRange("привет мир", null), null);
 });
 
 // Owner bug (D-05): a style tap on a phone collapsed the selection, so the next tap (weight in particular) landed on nothing or the wrong word.
@@ -150,4 +157,64 @@ test("repeated taps on one selection keep acting on that text although every tap
   assert.deepEqual(stored, { start: 7, end: 10 });
   assert.equal(doc.runs.map((run) => run.text).join(""), text);
   assert.deepEqual(doc.runs.map((run) => run.text), ["привет ", "мир", " сегодня"]);
+});
+
+// Event order of a real touch: pointerdown, pointerup, then the compatibility focus / mouseup / selectionchange (CR-01).
+const down: FieldSelectionEvent = { type: "down" };
+const blur: FieldSelectionEvent = { type: "blur" };
+const up = (at: number): FieldSelectionEvent => ({ type: "up", at });
+const read = (at: number, incoming: { start: number; end: number } | null, guarded = true): FieldSelectionEvent => ({ type: "read", at, incoming, guarded });
+const run = (stored: FieldSelectionState["stored"], events: FieldSelectionEvent[]) => events.reduce(fieldSelectionStep, { stored, ownUntil: 0 } as FieldSelectionState);
+
+test("event order: tap on another word, the focus reading of the old range does not spend the touch", () => {
+  const state = run({ start: 7, end: 10 }, [down, read(100, { start: 7, end: 10 }), up(120), read(160, { start: 2, end: 2 })]);
+  assert.deepEqual(state.stored, { start: 2, end: 2 });
+});
+
+test("event order: a caret reported before pointerup is taken", () => {
+  assert.deepEqual(run({ start: 7, end: 10 }, [down, read(90, { start: 2, end: 2 }), up(100)]).stored, { start: 2, end: 2 });
+});
+
+test("event order: scroll (pointercancel, no reading) leaves the stored range alone", () => {
+  const state = run({ start: 7, end: 10 }, [down, up(100), read(900, { start: 0, end: 0 }), read(900, null)]);
+  assert.deepEqual(state.stored, { start: 7, end: 10 });
+});
+
+test("event order: re-entry after blur starts from nothing known", () => {
+  const events: FieldSelectionEvent[] = [blur];
+  assert.equal(run({ start: 7, end: 10 }, events).stored, null);
+  assert.equal(run({ start: 7, end: 10 }, [...events, down, read(100, null)]).stored, null);
+  assert.deepEqual(run({ start: 7, end: 10 }, [...events, down, read(100, null), up(110), read(150, { start: 3, end: 3 })]).stored, { start: 3, end: 3 });
+});
+
+test("event order: panel taps keep a stored caret and a stored selection", () => {
+  assert.deepEqual(run({ start: 2, end: 2 }, [read(5000, { start: 0, end: 0 }), read(5000, null)]).stored, { start: 2, end: 2 });
+  assert.deepEqual(run({ start: 7, end: 10 }, [read(5000, { start: 12, end: 12 })]).stored, { start: 7, end: 10 });
+});
+
+test("event order: long press, a non-empty selection always wins", () => {
+  assert.deepEqual(run({ start: 2, end: 2 }, [down, up(100), read(2000, { start: 4, end: 9 })]).stored, { start: 4, end: 9 });
+});
+
+test("event order: no phone panel, readings are taken as they are and nothing known is never a caret at 0", () => {
+  const afterCaret = run({ start: 7, end: 10 }, [read(0, { start: 3, end: 3 }, false)]);
+  assert.deepEqual(afterCaret.stored, { start: 3, end: 3 });
+  assert.equal(fieldSelectionStep(afterCaret, read(0, null, false)).stored, null);
+  assert.equal(run(null, [read(0, null, false)]).stored, null);
+});
+
+test("event order: a release without a press in the field opens nothing", () => {
+  assert.deepEqual(run({ start: 7, end: 10 }, [up(100), read(150, { start: 0, end: 0 })]).stored, { start: 7, end: 10 });
+});
+
+test("event order: owner scenario, weight buttons keep acting on the touched word", () => {
+  const text = "привет мир сегодня";
+  let state = run({ start: 0, end: 6 }, [down, read(100, { start: 0, end: 6 }), up(110), read(150, { start: 14, end: 14 })]);
+  const range = () => resolveRange(text, state.stored)!;
+  assert.deepEqual(range(), { from: 11, to: 18 });
+  let doc = applyRichTextStyle(plain(text), range().from, range().to, { fontWeight: 800 });
+  state = fieldSelectionStep(state, read(1000, { start: 0, end: 0 }));
+  assert.deepEqual(state.stored, { start: 14, end: 14 });
+  doc = applyRichTextStyle(doc, range().from, range().to, { fontWeight: 600 });
+  assert.deepEqual(doc.runs, [{ text: "привет мир " }, { text: "сегодня", style: { fontWeight: 600 } }]);
 });
