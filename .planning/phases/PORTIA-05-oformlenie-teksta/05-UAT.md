@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: PORTIA-05-oformlenie-teksta
 source: [05-VERIFICATION.md]
 started: 2026-10-19T08:17:54Z
@@ -59,5 +59,10 @@ blocked: 0
   reason: "User reported: the background of text is green but i didnt activate it (screenshot: whole field text shows teal background while panel says БЕЗ ФОНА)"
   severity: minor
   test: 2
-  artifacts: []
-  missing: []
+  root_cause: "Not an applied background. The teal is the format-panel target marker ::highlight(portia-format) (app/portia.css:516, rgba(--desktop-glow,.35)), set by components/portia-editor.tsx:1889 while the panel is open and painted at every width since 05-06 (WR-04). It uses the same teal as the site ::selection (app/portia.css:69), so it reads as a teal text background, which is also a background swatch. The panel correctly shows БЕЗ ФОНА; the target (one long word) is correct."
+  artifacts:
+    - path: "app/portia.css"
+      issue: "::highlight(portia-format) styled as a teal background, indistinguishable from an applied teal Фон"
+  missing:
+    - "Give the target marker a look that cannot be mistaken for a text background"
+  debug_session: ""
