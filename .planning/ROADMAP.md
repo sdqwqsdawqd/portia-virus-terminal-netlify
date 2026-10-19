@@ -46,12 +46,12 @@
   3. Владелец выгрузил `portia_employee_profiles` и `portia_content`; в записи указаны дата и имена файлов, сами выгрузки лежат вне git
   4. Пункт STATE о переносе проекта закрыт: проект лежит в `C:\Users\User\code\portia-site`
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 - [x] 06-01-PLAN.md — записи ревью 01 и 05: 01-CR-01, 05-IN-01/02/04/05 закрыты с доказательством, 01-WR-01 и 05-WR-05 приняты как риск (05-IN-04 исправлен своим коммитом по D-07)
 - [x] 06-02-PLAN.md — 03.1-IN-10 принят как риск (хранилище — отдельной открытой строкой), раздел Known Limitations в PROJECT.md
-- [ ] 06-03-PLAN.md — старый 03.2 WR-03 `markQuestsSeen` исправлен по D-07, новая запись 03.2-REVIEW-DISPOSITION.md (IN-02 закрыт, IN-03 частично)
+- [x] 06-03-PLAN.md — старый 03.2 WR-03 `markQuestsSeen` исправлен по D-07, новая запись 03.2-REVIEW-DISPOSITION.md (IN-02 закрыт, IN-03 частично)
 - [ ] 06-04-PLAN.md — пункт STATE о переносе проекта закрыт; владелец выгружает обе таблицы в JSON (checkpoint), запись в STATE.md
 
 ### Phase 7: Сервер: сохранение сотрудников и безопасный JSON
@@ -147,7 +147,7 @@ Phases execute in numeric order: 6 → 7 → 8 → 9 → 10 → 11 → 12. Phase
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Учёт замечаний и страховка данных | 2/4 | In Progress | - |
+| 6. Учёт замечаний и страховка данных | 3/4 | In Progress | - |
 | 7. Сервер: сохранение сотрудников и безопасный JSON | 0/0 | Not started | - |
 | 8. Сотрудники без потерь на экране | 0/0 | Not started | - |
 | 9. Целостность контента | 0/0 | Not started | - |
