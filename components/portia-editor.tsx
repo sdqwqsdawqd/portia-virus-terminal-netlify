@@ -20,7 +20,7 @@ import {
   type Virus,
 } from "@/lib/portia-content";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
-import { applyRichTextStyle, compactRuns, expandStyles, rangeHasStyle, resetRichTextStyle, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
+import { applyRichTextStyle, compactRuns, expandStyles, rangeHasStyle, rangeIsPlain, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
 import { employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
@@ -906,7 +906,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
           <strong>{formatTarget ? "ОФОРМЛЕНИЕ" : "ВЫБЕРИТЕ ТЕКСТ"}</strong>
           {formatTarget && <em>{formatTarget.title}</em>}
         </button>
-        <small>{formatTarget ? "Выделите текст в активном поле или оставьте курсор без выделения, чтобы изменить весь текст." : "Одна кнопка форматирования работает со всеми большими текстовыми полями."}</small>
+        <small>{formatTarget ? "Выделите текст в активном поле или поставьте курсор в слово, чтобы оформить его." : "Одна кнопка форматирования работает со всеми большими текстовыми полями."}</small>
       </div>
 
       {tab === "viruses" && (
@@ -1831,14 +1831,14 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const defaultTextColor = previewSurface === "dark" ? "#aebfba" : "#252827";
   const documentRef = useRef(target.document);
   const panelRef = useRef<HTMLElement>(null);
+  // Every control acts on one range: the selection, else the word under the caret, else nothing (D-04).
+  const text = target.document.runs.map((run) => run.text).join("");
+  const range = resolveRange(text, target.selection);
   // The readout comes from the committed document, so a click shows exactly what it applied. A repeat click is a no-op for the manual
   // controls only; the row styles toggle (D-02).
-  const style = richTextStyleAt(target.document, target.selection.start);
-  const selected = target.selection.start === target.selection.end ? null : {
-    from: Math.min(target.selection.start, target.selection.end),
-    to: Math.max(target.selection.start, target.selection.end),
-  };
-  const boldMarked = selected !== null && rangeHasStyle(target.document, selected.from, selected.to, stylePresets.bold);
+  const style = richTextStyleAt(target.document, range ? range.from : target.selection.start);
+  const marked = (preset: RichTextStyle) => range !== null && rangeHasStyle(target.document, range.from, range.to, preset);
+  const plainMarked = range !== null && rangeIsPlain(target.document, range.from, range.to);
   const color = style.color ?? defaultTextColor;
   const fontSize = style.fontSize ?? 17;
   const fontWeight = style.fontWeight ?? 400;
@@ -1890,9 +1890,12 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     restoreSelection(field, { start: selectionStart, end: selectionEnd });
   };
 
-  const selectionLabel = target.selection.start === target.selection.end
-    ? "ВЕСЬ ТЕКСТ"
-    : `${Math.abs(target.selection.end - target.selection.start)} ЗНАК.`;
+  const word = range ? text.slice(range.from, range.to) : "";
+  const selectionLabel = !range
+    ? "ВЫДЕЛИТЕ ТЕКСТ"
+    : target.selection.start !== target.selection.end
+      ? `${range.to - range.from} ЗНАК.`
+      : `СЛОВО: «${word.length > 12 ? `${word.slice(0, 12)}…` : word}»`;
 
   const commit = (document: RichTextDocument) => {
     documentRef.current = document;
@@ -1900,15 +1903,12 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     onUpdate({ ...target, document });
   };
 
-  const applyStyle = (style: RichTextStyle) => commit(applyRichTextStyle(
-    documentRef.current,
-    target.selection.start,
-    target.selection.end,
-    style,
-  ));
+  const applyStyle = (style: RichTextStyle) => {
+    if (range) commit(applyRichTextStyle(documentRef.current, range.from, range.to, style));
+  };
 
-  const reset = () => {
-    commit(resetRichTextStyle(documentRef.current, target.selection.start, target.selection.end));
+  const togglePresetStyle = (preset: RichTextStyle) => {
+    if (range) commit(togglePreset(documentRef.current, range.from, range.to, preset));
   };
 
   return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`}>
@@ -1918,15 +1918,17 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       <button type="button" onClick={finish} aria-label="Закрыть редактор">×</button>
     </header>
     <div className="format-presets format-choice-row" role="group" aria-label="Готовые стили">
-      <button type="button" className={boldMarked ? "selected" : ""} aria-pressed={boldMarked} disabled={!selected} onClick={() => selected && commit(togglePreset(documentRef.current, selected.from, selected.to, stylePresets.bold))}>Жирный</button>
+      <button type="button" className={plainMarked ? "selected" : ""} aria-pressed={plainMarked} disabled={!range} onClick={() => range && commit(resetRichTextStyle(documentRef.current, range.from, range.to))}>Обычный</button>
+      <button type="button" className={marked(stylePresets.heading) ? "selected" : ""} aria-pressed={marked(stylePresets.heading)} disabled={!range} onClick={() => togglePresetStyle(stylePresets.heading)}>Заголовок</button>
+      <button type="button" className={marked(stylePresets.important) ? "selected" : ""} aria-pressed={marked(stylePresets.important)} disabled={!range} onClick={() => togglePresetStyle(stylePresets.important)}>Важно</button>
     </div>
     <div className="rich-text-toolbar" aria-label="Оформление текста">
       <div className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={previewSurface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={previewSurface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
-      <div className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: color }} />{color.toUpperCase()}</b></span><div className="format-swatches">{textColorPalette.map((item) => <button key={item.value} type="button" className={color.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
-      <div className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle({ fontSize: value }); }}>{label}</button>)}</div></div>
-      <div className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); applyStyle({ fontWeight: value }); }}>{label}</button>)}</div></div>
-      <div className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle({ backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle({ backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
-      <label className="format-control opacity-control"><span>Плотность фона: {Math.round(backgroundOpacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={backgroundOpacity} onChange={(event) => { const opacity = Number(event.target.value); applyStyle({ backgroundColor, backgroundOpacity: opacity }); }} /></label>
+      <div className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: color }} />{color.toUpperCase()}</b></span><div className="format-swatches">{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={color.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
+      <div className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" disabled={!range} className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle({ fontSize: value }); }}>{label}</button>)}</div></div>
+      <div className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" disabled={!range} className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); applyStyle({ fontWeight: value }); }}>{label}</button>)}</div></div>
+      <div className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle({ backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle({ backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
+      <label className="format-control opacity-control"><span>Плотность фона: {Math.round(backgroundOpacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={backgroundOpacity} disabled={!range} onChange={(event) => { const opacity = Number(event.target.value); applyStyle({ backgroundColor, backgroundOpacity: opacity }); }} /></label>
       {colorPicker && <CustomColorPicker
         key={`${colorPicker}:${target.selection.start}:${target.selection.end}`}
         title={colorPicker === "text" ? "Свой цвет текста" : "Свой цвет фона"}
@@ -1942,7 +1944,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
         onClose={() => setColorPicker(null)}
       />}
     </div>
-    <footer><p>Изменения применяются сразу. Без выделения меняется весь текст.</p><div><button type="button" className="reset-format" onClick={reset}>СБРОСИТЬ</button><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
+    <footer><p>Изменения применяются сразу. Без выделения меняется слово под курсором.</p><div><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
   </section>;
 }
 

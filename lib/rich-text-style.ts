@@ -62,10 +62,9 @@ export function resetRichTextStyle(document: RichTextDocument, start: number, en
   return mapRange(document, start, end, () => ({}));
 }
 
-// D-01: the four ready-made styles; «Обычный» is resetRichTextStyle, not a preset.
+// D-01 (owner amendment: no «Жирный», the manual weight covers it): «Обычный» is resetRichTextStyle, not a preset.
 export const stylePresets = {
   heading: { fontSize: 22, fontWeight: 800 },
-  bold: { fontWeight: 800 },
   important: { color: "#b43632", fontWeight: 600 },
 } satisfies Record<string, RichTextStyle>;
 
@@ -99,24 +98,29 @@ export function togglePreset(document: RichTextDocument, from: number, to: numbe
     : applyRichTextStyle(document, from, to, preset);
 }
 
-/** Ordered selection when it is non-empty, else the word under the caret; null when nothing can be styled. */
-export function resolveRange(text: string, selection: { start: number; end: number }) {
-  void text;
-  void selection;
-  return null as { from: number; to: number } | null;
-}
+// A regex, not Intl.Segmenter: the segmenter splits hyphenated words and differs between engines.
+const wordPattern = /[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/gu;
 
-/** Word touching `position`; inert scaffold, filled in by the GREEN commit. */
+/** The word touching `position` (either edge counts as inside), or null between words. */
 export function wordRangeAt(text: string, position: number) {
-  void text;
-  void position;
-  return null as { from: number; to: number } | null;
+  const caret = Math.max(0, Math.min(text.length, position));
+  for (const match of text.matchAll(wordPattern)) {
+    const from = match.index;
+    const to = from + match[0].length;
+    if (from > caret) return null;
+    if (caret <= to) return { from, to };
+  }
+  return null;
 }
 
-/** True when no character of the range carries a style key; inert scaffold. */
+/** The range every panel control acts on (D-04): the ordered selection when non-empty, else the word under the caret, else null. */
+export function resolveRange(text: string, selection: { start: number; end: number }) {
+  const { from, to } = orderedRange(text, selection.start, selection.end);
+  return from === to ? wordRangeAt(text, selection.start) : { from, to };
+}
+
+/** True when no character of [from, to) carries a style key; false for an empty range. */
 export function rangeIsPlain(document: RichTextDocument, from: number, to: number) {
-  void document;
-  void from;
-  void to;
-  return false;
+  const range = orderedRange(documentText(document), from, to);
+  return range.from !== range.to && expandStyles(document).slice(range.from, range.to).every((current) => Object.keys(current).length === 0);
 }

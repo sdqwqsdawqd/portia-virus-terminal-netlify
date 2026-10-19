@@ -626,7 +626,10 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .format-swatches > button.no-background::before { content: ""; width: 18px; height: 1px; margin-right: 6px; background: #c3655c; transform: rotate(-35deg); }
 .custom-color > span { color: var(--teal); font: 700 16px var(--sans); pointer-events: none; }
 .format-choice-row > button { min-height: 30px; flex: 1 1 auto; padding: 5px 7px; border: 1px solid oklch(.426 .034 var(--accent-hue)); border-radius: 4px; background: oklch(.179 .017 var(--accent-hue)); color: oklch(.698 .024 var(--accent-hue)); font: 700 11px var(--sans); cursor: pointer; }
-.format-choice-row > button:hover, .format-choice-row > button.selected { border-color: var(--teal); background: var(--teal-soft); color: oklch(.957 .013 var(--accent-hue)); }
+.format-choice-row > button:not(:disabled):hover, .format-choice-row > button.selected { border-color: var(--teal); background: var(--teal-soft); color: oklch(.957 .013 var(--accent-hue)); }
+/* Ready-made styles row (D-01), above the manual controls. */
+.format-presets { flex: none; padding: 9px 9px 0; background: oklch(.196 .018 var(--accent-hue)); }
+.format-choice-row > button:disabled, .format-swatches > button:disabled, .custom-color:disabled, .opacity-control input:disabled { opacity: .4; cursor: not-allowed; }
 .opacity-control input[type="range"] { width: 100%; min-height: 24px; accent-color: var(--teal); cursor: pointer; }
 .custom-color-picker { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(145px, .8fr); gap: 8px 11px; padding: 9px; border: 1px solid oklch(.478 .047 var(--accent-hue)); border-radius: 5px; background: oklch(.227 .024 var(--accent-hue)); box-shadow: 0 10px 24px rgba(0,0,0,.3); }
 .custom-color-picker-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
