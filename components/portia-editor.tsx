@@ -20,7 +20,8 @@ import {
   type Virus,
 } from "@/lib/portia-content";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
-import { applyRichTextStyle, compactRuns, expandStyles, nextFieldSelection, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
+import type { FieldSelectionEvent, FieldSelectionState } from "@/lib/rich-text-style";
+import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
 import { clampPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
 import { employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
@@ -48,7 +49,7 @@ type FormatTarget = {
   title: string;
   value: string;
   document: RichTextDocument;
-  selection: { start: number; end: number };
+  selection: { start: number; end: number } | null;
   area: DisplayArea;
   onCommit: (value: string, document: RichTextDocument) => void;
 };
@@ -1743,9 +1744,8 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
 }) {
   const activeFormat = useContext(ActiveFormatContext);
   const editorRef = useRef<HTMLDivElement>(null);
-  const selectionRef = useRef<{ start: number; end: number } | null>(null);
-  // Set by a pointer down in this field; tells activate that a collapsed selection is the user's own touch (D-05).
-  const touchedRef = useRef(false);
+  // Selection policy of this field: own input opens on pointer / key down and closes after release or blur (CR-01, D-05).
+  const selectionRef = useRef<FieldSelectionState>({ stored: null, ownUntil: 0 });
   const localDocumentSignatureRef = useRef<string | null>(null);
   const sourceDocument = document?.runs?.length ? document : { runs: [{ text: value }] };
   const currentDocument = sourceDocument.runs.map((run) => run.text).join("") === value
@@ -1753,15 +1753,15 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
     : replaceRichText(sourceDocument, value);
   const documentSignature = JSON.stringify(currentDocument);
 
+  const track = (event: FieldSelectionEvent) => { selectionRef.current = fieldSelectionStep(selectionRef.current, event); };
+
   const activate = (editor: HTMLDivElement, nextValue = value, nextDocument = currentDocument) => {
-    const selection = nextFieldSelection(selectionRef.current, selectionOffsets(editor), !activeFormat.phonePanelOpen || touchedRef.current);
-    touchedRef.current = false;
-    selectionRef.current = selection;
-    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection, area, onCommit: onChange });
+    track({ type: "read", at: Date.now(), incoming: selectionOffsets(editor), guarded: activeFormat.phonePanelOpen });
+    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection: selectionRef.current.stored, area, onCommit: onChange });
   };
 
   const editorSelection = (editor: HTMLElement, text: string) =>
-    selectionOffsets(editor) ?? selectionRef.current ?? { start: text.length, end: text.length };
+    selectionOffsets(editor) ?? selectionRef.current.stored ?? { start: text.length, end: text.length };
 
   const commitEditorValue = (
     editor: HTMLDivElement,
@@ -1769,7 +1769,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
     selection: { start: number; end: number },
   ) => {
     const nextDocument = replaceRichText(currentDocument, nextValue);
-    selectionRef.current = selection;
+    selectionRef.current = { ...selectionRef.current, stored: selection };
     renderRichTextEditor(editor, nextDocument);
     localDocumentSignatureRef.current = JSON.stringify(nextDocument);
     restoreSelection(editor, selection);
@@ -1782,7 +1782,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
     if (!editor || localDocumentSignatureRef.current === documentSignature) return;
     renderRichTextEditor(editor, currentDocument);
     localDocumentSignatureRef.current = documentSignature;
-    if (selectionRef.current) restoreSelection(editor, selectionRef.current);
+    if (selectionRef.current.stored) restoreSelection(editor, selectionRef.current.stored);
   }, [currentDocument, documentSignature]);
 
   return <div className="editor-field wide formatted-text-field">
@@ -1798,11 +1798,15 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
       role="textbox"
       aria-multiline="true"
       spellCheck
-      onPointerDown={() => { touchedRef.current = true; }}
+      onPointerDown={() => track({ type: "down" })}
+      onPointerUp={() => track({ type: "up", at: Date.now() })}
+      onPointerCancel={() => track({ type: "up", at: Date.now() })}
+      onBlur={() => track({ type: "blur" })}
       onFocus={(event) => activate(event.currentTarget)}
       onSelect={(event) => activate(event.currentTarget)}
       onMouseUp={(event) => activate(event.currentTarget)}
       onKeyDown={(event) => {
+        track({ type: "down" });
         if (event.key !== "Enter") return;
         event.preventDefault();
         const editor = event.currentTarget;
@@ -1813,6 +1817,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
         commitEditorValue(editor, nextValue, caret);
       }}
       onKeyUp={(event) => {
+        track({ type: "up", at: Date.now() });
         if (event.key !== "Enter") activate(event.currentTarget);
       }}
       onPaste={(event) => {
@@ -1853,7 +1858,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const range = resolveRange(text, target.selection);
   // The readout comes from the committed document, so a click shows exactly what it applied. A repeat click is a no-op for the manual
   // controls only; the row styles toggle (D-02).
-  const style = richTextStyleAt(target.document, range ? range.from : target.selection.start);
+  const style = richTextStyleAt(target.document, range?.from ?? target.selection?.start ?? 0);
   const marked = (preset: RichTextStyle) => range !== null && rangeHasStyle(target.document, range.from, range.to, preset);
   const plainMarked = range !== null && rangeIsPlain(target.document, range.from, range.to);
   const color = style.color ?? defaultTextColor;
@@ -1867,8 +1872,8 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   useEffect(() => { documentRef.current = target.document; }, [target.document]);
 
   const formatKey = target.key;
-  const selectionStart = target.selection.start;
-  const selectionEnd = target.selection.end;
+  const paintFrom = range?.from;
+  const paintTo = range?.to;
   const formatDocument = target.document;
   // Phone: formatting is «either the keyboard or the panel» (D-05, D-06). ✎ takes focus from the field once and rich fields carry
   // inputMode none while the panel is open, so the owner can touch and select text and the panel stays (owner, UAT 12, reversing 03-03);
@@ -1880,8 +1885,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     const panel = panelRef.current;
     if (!field || !panel) return;
     // Paint what the next style will change: the selection, else the word under the caret (D-04, D-05).
-    const effective = resolveRange(formatDocument.runs.map((run) => run.text).join(""), { start: selectionStart, end: selectionEnd });
-    const painted = effective ? rangeFromOffsets(field, { start: effective.from, end: effective.to }) : null;
+    const painted = paintFrom !== undefined && paintTo !== undefined ? rangeFromOffsets(field, { start: paintFrom, end: paintTo }) : null;
     const paints = painted !== null && typeof Highlight !== "undefined" && "highlights" in CSS;
     if (paints) CSS.highlights.set("portia-format", new Highlight(painted));
     const keepVisible = () => {
@@ -1897,7 +1901,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       window.visualViewport?.removeEventListener("resize", keepVisible);
       if (paints) CSS.highlights.delete("portia-format");
     };
-  }, [formatKey, selectionStart, selectionEnd, formatDocument]);
+  }, [formatKey, paintFrom, paintTo, formatDocument]);
 
   // On a phone, closing returns the caret to the field in the same tap so the keyboard can come back (iOS may still need one more tap);
   // flushSync commits the close first so the field has dropped inputMode none before it gets focus.
@@ -1907,13 +1911,13 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     const field = findFormatField(formatKey);
     if (!field) return;
     field.focus({ preventScroll: true });
-    restoreSelection(field, { start: selectionStart, end: selectionEnd });
+    if (target.selection) restoreSelection(field, target.selection);
   };
 
   const word = range ? text.slice(range.from, range.to) : "";
   const selectionLabel = !range
     ? "ВЫДЕЛИТЕ ТЕКСТ"
-    : target.selection.start !== target.selection.end
+    : target.selection?.start !== target.selection?.end
       ? `${range.to - range.from} ЗНАК.`
       : `СЛОВО: «${word.length > 12 ? `${word.slice(0, 12)}…` : word}»`;
 
@@ -2005,7 +2009,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       <div data-tab-group="background" className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle({ backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle({ backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
       <label data-tab-group="background" className="format-control opacity-control"><span>Плотность фона: {Math.round(backgroundOpacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={backgroundOpacity} disabled={!range} onChange={(event) => { const opacity = Number(event.target.value); applyStyle({ backgroundColor, backgroundOpacity: opacity }); }} /></label>
       {colorPicker && <CustomColorPicker
-        key={`${colorPicker}:${target.selection.start}:${target.selection.end}`}
+        key={`${colorPicker}:${target.selection?.start}:${target.selection?.end}`}
         group={colorPicker === "text" ? "color" : "background"}
         title={colorPicker === "text" ? "Свой цвет текста" : "Свой цвет фона"}
         color={colorPicker === "text" ? color : backgroundColor}

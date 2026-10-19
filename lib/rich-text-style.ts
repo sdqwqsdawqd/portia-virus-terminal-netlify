@@ -114,7 +114,8 @@ export function wordRangeAt(text: string, position: number) {
 }
 
 /** The range every panel control acts on (D-04): the ordered selection when non-empty, else the word under the caret, else null. */
-export function resolveRange(text: string, selection: { start: number; end: number }) {
+export function resolveRange(text: string, selection: { start: number; end: number } | null) {
+  if (!selection) return null;
   const { from, to } = orderedRange(text, selection.start, selection.end);
   return from === to ? wordRangeAt(text, selection.start) : { from, to };
 }
@@ -125,9 +126,26 @@ export function rangeIsPlain(document: RichTextDocument, from: number, to: numbe
   return range.from !== range.to && expandStyles(document).slice(range.from, range.to).every((current) => Object.keys(current).length === 0);
 }
 
-// A lost or collapsed selection that no touch in the field caused is the phone dropping it after a panel tap (owner bug, D-05).
-export function nextFieldSelection(stored: { start: number; end: number } | null, incoming: { start: number; end: number } | null, touchedField: boolean) {
-  if (!incoming) return stored ?? { start: 0, end: 0 };
-  if (!touchedField && incoming.start === incoming.end && stored && stored.start !== stored.end) return stored;
+// Without own input (the user's touch or key in the field, or no phone panel) a missing or collapsed reading is the phone dropping the selection after a panel tap: keep the stored one (D-05). Null means nothing known.
+export function nextFieldSelection(stored: { start: number; end: number } | null, incoming: { start: number; end: number } | null, own: boolean) {
+  if (!own && (!incoming || incoming.start === incoming.end)) return stored;
   return incoming;
+}
+
+export type FieldSelectionState = { stored: { start: number; end: number } | null; ownUntil: number };
+export type FieldSelectionEvent =
+  | { type: "down" }
+  | { type: "up"; at: number }
+  | { type: "blur" }
+  | { type: "read"; at: number; incoming: { start: number; end: number } | null; guarded: boolean };
+
+// A tap's focus, mouseup and caret arrive well inside 400 ms of pointerup; a scroll's pointercancel closes the window.
+const ownInputGraceMs = 400;
+
+/** Selection policy of one field: input is the user's own from down until 400 ms after up, ends on blur, and a reading never ends it (CR-01). */
+export function fieldSelectionStep(state: FieldSelectionState, event: FieldSelectionEvent): FieldSelectionState {
+  if (event.type === "down") return { ...state, ownUntil: Infinity };
+  if (event.type === "up") return { ...state, ownUntil: Math.min(state.ownUntil, event.at + ownInputGraceMs) };
+  if (event.type === "blur") return { stored: null, ownUntil: 0 };
+  return { ...state, stored: nextFieldSelection(state.stored, event.incoming, !event.guarded || event.at < state.ownUntil) };
 }
