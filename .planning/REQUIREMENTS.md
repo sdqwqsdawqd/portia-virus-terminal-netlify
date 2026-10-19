@@ -99,12 +99,54 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| TRIAGE-01 | Phase 6 | Pending |
+| TRIAGE-02 | Phase 6 | Pending |
+| TRIAGE-03 | Phase 6 | Pending |
+| EMP-01 | Phase 7 | Pending |
+| EMP-02 | Phase 8 | Pending |
+| EMP-03 | Phase 7 | Pending |
+| EMP-04 | Phase 7 | Pending |
+| EMP-05 | Phase 8 | Pending |
+| EMP-06 | Phase 8 | Pending |
+| EMP-07 | Phase 8 | Pending |
+| EMP-08 | Phase 8 | Pending |
+| EMP-09 | Phase 7 | Pending |
+| EMP-10 | Phase 7 | Pending |
+| SYNC-01 | Phase 9 | Pending |
+| CONT-01 | Phase 9 | Pending |
+| CONT-02 | Phase 9 | Pending |
+| CONT-03 | Phase 9 | Pending |
+| CONT-04 | Phase 9 | Pending |
+| CONT-05 | Phase 9 | Pending |
+| CONT-06 | Phase 9 | Pending |
+| CONT-07 | Phase 9 | Pending |
+| CONT-08 | Phase 9 | Pending |
+| CONT-09 | Phase 12 | Pending |
+| ROB-01 | Phase 10 | Pending |
+| ROB-02 | Phase 7 | Pending |
+| ROB-03 | Phase 10 | Pending |
+| SEC-01 | Phase 12 | Pending |
+| SEC-02 | Phase 12 | Pending |
+| SEC-03 | Phase 10 | Pending |
+| PERM-01 | Phase 12 | Pending |
+| PERM-02 | Phase 12 | Pending |
+| PERM-03 | Phase 12 | Pending |
+| PERM-04 | Phase 12 | Pending |
+| ZOOM-01 | Phase 10 | Pending |
+| ZOOM-02 | Phase 10 | Pending |
+| EDIT-01 | Phase 11 | Pending |
+| EDIT-02 | Phase 11 | Pending |
+| A11Y-01 | Phase 10 | Pending |
+| A11Y-02 | Phase 10 | Pending |
+| A11Y-03 | Phase 11 | Pending |
+| TEST-01 | Phase 10 | Pending |
+| TEST-02 | Phase 11 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 42 total
-- Mapped to phases: 0
-- Unmapped: 42 ⚠️
+- Mapped to phases: 42 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-10-19*
-*Last updated: 2026-10-19 after initial definition*
+*Last updated: 2026-10-19 after roadmap creation (traceability filled)*
