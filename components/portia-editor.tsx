@@ -23,7 +23,7 @@ import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import type { FieldSelectionEvent, FieldSelectionState } from "@/lib/rich-text-style";
 import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
 import { clampPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
-import { employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
+import { acceptsEditorList, employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
 
@@ -1367,8 +1367,12 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   const [selectedId, setSelectedId] = useState("");
   const [draft, setDraft] = useState<EmployeeProfile | null>(null);
   const [ratingsPending, setRatingsPending] = useState(false);
-  const [state, setState] = useState<"loading" | "idle" | "saving" | "saved" | "error">("loading");
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  // Loading the list and saving a card are separate: a load error replaces the tab, a save error stays on the save line.
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [loadError, setLoadError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [recordOpen, setRecordOpen] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
   const [pendingEmployeeId, setPendingEmployeeId] = useState<string | null>(null);
@@ -1410,25 +1414,34 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/employees")
+    // The editor-only path is never CDN-cached; the public one can serve an old copy even to a no-store request (D-10).
+    void fetch("/api/employees/editor", { credentials: "same-origin", cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) throw new Error("load failed");
-        return response.json() as Promise<{ employees?: PortiaEmployee[]; profilesRead?: boolean }>;
+        const payload = await response.json().catch(() => ({})) as { employees?: PortiaEmployee[]; profilesRead?: boolean; error?: string };
+        if (!response.ok) throw new Error(response.status === 403 ? "Сессия редактора истекла. Войдите в редактор снова." : payload.error || `Сервер не отдал список сотрудников (${response.status}).`);
+        return payload;
       })
       .then((payload) => {
         if (!active) return;
-        // Blank profiles must not become drafts: saving one would erase the stored biography and photo.
-        if (payload.profilesRead === false) throw new Error("profiles not read");
-        const next = payload.employees ?? [];
+        // Blank profiles must not become drafts: saving one would erase the stored biography and photo (D-09).
+        if (!acceptsEditorList(payload)) throw new Error("Профили сотрудников не загрузились, сохранять сейчас нельзя. Повторите через минуту.");
+        const next = payload.employees;
         const first = next[0];
         setEmployees(next);
         setSelectedId(first?.id ?? "");
-        if (first) { setDraft(profileOf(first)); setDetails(detailsOf(first)); }
-        setState("idle");
+        setDraft(first ? profileOf(first) : null);
+        setDetails(first ? detailsOf(first) : { title: "", rank: "", callsign: "" });
+        setLoadState("ready");
       })
-      .catch(() => { if (active) setState("error"); });
+      .catch((error) => {
+        if (!active) return;
+        setLoadError(error instanceof Error ? error.message : "Не удалось загрузить сотрудников.");
+        setLoadState("error");
+      });
     return () => { active = false; };
-  }, []);
+  }, [loadAttempt]);
+  // In place, without a page reload: other tabs' unsaved edits live in the parent and stay.
+  const retryLoad = () => { setLoadState("loading"); setLoadAttempt((attempt) => attempt + 1); };
 
   // Resolves true only when the profile is saved; a failure leaves the error text on the current employee.
   const save = async (): Promise<boolean> => {
@@ -1500,8 +1513,9 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     setAddState("idle");
   };
 
-  if (state === "loading") return <div className="editor-empty">Загрузка сотрудников…</div>;
-  if (!selected || !draft) return <div className="editor-empty">{state === "error" ? "Не удалось загрузить сотрудников из таблицы. Обновите страницу через минуту." : "В таблице пока нет сотрудников."}</div>;
+  if (loadState === "loading") return <div className="editor-empty">Загрузка сотрудников…</div>;
+  if (loadState === "error") return <div className="editor-empty" role="alert"><p>{loadError}</p>{loadError.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button type="button" className="secondary-control" onClick={retryLoad}>ПОВТОРИТЬ</button></div>;
+  if (!selected || !draft) return <div className="editor-empty">"В таблице пока нет сотрудников."</div>;
 
   const openEmployee = (employee: PortiaEmployee) => {
     setSelectedId(employee.id);

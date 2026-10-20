@@ -2,7 +2,7 @@ import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  acceptsRoster, addManualEmployee, employeeId, employeeRatings, mergeEmployeesAnswer, mergeManualEmployees, parseCsv, profileChanged, profileFromRow, profileOf,
+  acceptsEditorList, acceptsRoster, addManualEmployee, employeeId, employeeRatings, mergeEmployeesAnswer, mergeManualEmployees, parseCsv, profileChanged, profileFromRow, profileOf,
   readEmployeeProfiles, readManualEmployees, removeManualEmployee, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, updateManualEmployee,
   saveEmployeeProfile, saveEmployeePatch, loadEmployees, withProfile, type EmployeeProfile, type EmployeeUpdate, type PortiaEmployee, type RosterEmployee,
 } from "./portia-employees.ts";
@@ -786,4 +786,13 @@ test("mergeEmployeesAnswer: an empty avatar yields to the previous one, a new on
 test("mergeEmployeesAnswer: a complete answer applies none of the carry rules", () => {
   const merged = mergeEmployeesAnswer([sheetFox, person({ robloxUserId: 1, robloxAvatarUrl: "a" }), manualOwl], { employees: [person({ robloxUserId: 1 })], degraded: false, profilesRead: true, manualRead: true }, true);
   assert.deepEqual(merged.employees.map((employee) => [employee.id, employee.robloxAvatarUrl]), [["roblox-1", ""]]);
+});
+
+test("acceptsEditorList: only a list with profilesRead true is accepted", () => {
+  assert.equal(acceptsEditorList({ employees: [sheetFox], profilesRead: true }), true);
+  assert.equal(acceptsEditorList({ employees: [], profilesRead: true }), true);
+  assert.equal(acceptsEditorList({ employees: [sheetFox], profilesRead: false }), false);
+  assert.equal(acceptsEditorList({ employees: [sheetFox] }), false);
+  assert.equal(acceptsEditorList({ employees: "x", profilesRead: true }), false);
+  assert.equal(acceptsEditorList({ profilesRead: true }), false);
 });

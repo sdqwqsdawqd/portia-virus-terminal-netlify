@@ -79,6 +79,11 @@ export function acceptsRoster(payload: { employees?: unknown; degraded?: unknown
   return Array.isArray(payload.employees) && (payload.employees.length > 0 || payload.degraded === false);
 }
 
+/** Whether the editor may seed drafts from an answer: a missing flag rejects (an old cached copy, 03.2-WR-02), an empty list is fine. */
+export function acceptsEditorList(payload: { employees?: unknown; profilesRead?: unknown }): payload is { employees: PortiaEmployee[]; profilesRead: true } {
+  return Array.isArray(payload.employees) && payload.profilesRead === true;
+}
+
 /** A partial answer refreshes only what it read; only a complete one may be cached. */
 export function mergeEmployeesAnswer(
   previous: PortiaEmployee[],
