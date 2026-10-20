@@ -1547,9 +1547,9 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: selected.id }),
       });
-      const payload = await response.json() as { id?: string; error?: string };
+      const payload = await response.json() as { id?: string; error?: string; code?: string };
       if (!response.ok) {
-        const message = response.status === 403 && !payload.error?.includes("таблицы")
+        const message = response.status === 403 && payload.code !== "sheet-employee"
           ? "Сессия редактора истекла. Войдите в редактор снова."
           : payload.error || `Сервер отклонил удаление (${response.status}).`;
         throw new Error(message);
