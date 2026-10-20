@@ -25,7 +25,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-20)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-08 — Сотрудники без потерь на экране
+**Current focus:** Phase PORTIA-09 — Целостность контента
 
 ## Current Position
 
@@ -117,4 +117,4 @@ Resume file: None
 
 ## Operator Next Steps
 
-- `/gsd-discuss-phase 8` или `/gsd-plan-phase 8`
+- `/gsd-discuss-phase 9` или `/gsd-plan-phase 9`
