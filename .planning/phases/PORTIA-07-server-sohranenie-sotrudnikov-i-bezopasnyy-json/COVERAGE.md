@@ -1,0 +1,1 @@
+No external API integration: phase 7 adds no new external endpoint or service; it reuses the existing Google Sheet CSV read (moved into fetchSheetRows, now also used for newcomer saves) and the existing Roblox lookup (now also returns the user's name), both already called by the site.
