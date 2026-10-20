@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 07
 current_phase_name: "Сервер: сохранение сотрудников и безопасный JSON"
 status: executing
-stopped_at: Completed PORTIA-07-02-PLAN.md
-last_updated: "2026-10-20T04:43:10.703Z"
+stopped_at: Completed PORTIA-07-03-PLAN.md
+last_updated: "2026-10-20T04:51:08.677Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase PORTIA-07 execution started
-state_head: 1ea20402ddfabe3beb7963b75cb137d490ff16cf
+state_head: 9c9e13bf5d58fd4c5f4ac2d8ee25580ba236a843
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 14
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 ## Current Position
 
 Phase: PORTIA-07 (Сервер: сохранение сотрудников и безопасный JSON) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Executing Phase PORTIA-07
 Last activity: 2026-10-20 — Phase PORTIA-07 execution started
 
@@ -49,6 +49,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-06 P04 | n/a | 3 tasks | 1 files |
 | Phase PORTIA-07 P01 | 15min | 2 tasks | 6 files |
 | Phase PORTIA-07 P07-02 | 10min | 3 tasks | 3 files |
+| Phase PORTIA-07 P07-03 | 20min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-06]: D-07 used in 06-03: previous-pass 03.2 WR-03 was not fixed; markQuestsSeen now keeps unknown ids, capped at 200
 - [Phase PORTIA-07]: 07-01: one string-level parseJsonObject helper; editor branches on payload.code sheet-employee, not Russian text
 - [Phase PORTIA-07]: 07-02: manual employees stored/shown in Roblox spelling; old rows corrected at read time only; EMP-10 closed by owner's 34-slot rule (D-13)
+- [Phase PORTIA-07]: 07-03: PATCH saves only sent fields; newcomer ids checked against the sheet by nickname, Roblox never called; manual details written first and restored on profile failure
 
 ### Pending Todos
 
@@ -96,8 +98,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-20T04:43:10.653Z
-Stopped at: Completed PORTIA-07-02-PLAN.md
+Last session: 2026-10-20T04:51:08.628Z
+Stopped at: Completed PORTIA-07-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
