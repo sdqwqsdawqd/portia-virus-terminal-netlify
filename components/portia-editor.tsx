@@ -23,7 +23,7 @@ import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import type { FieldSelectionEvent, FieldSelectionState } from "@/lib/rich-text-style";
 import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
 import { clampPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
-import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
+import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
 
@@ -1389,7 +1389,10 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   const selected = employees.find((employee) => employee.id === selectedId) ?? employees[0] ?? null;
   // An upload that finishes after another employee was opened must not land on that employee's draft.
   const selectedIdRef = useRef("");
-  useEffect(() => { selectedIdRef.current = selected?.id ?? ""; });
+  // The latest draft, read right after a save answer to see whether anything was typed meanwhile (D-04).
+  const draftRef = useRef(draft);
+  const detailsRef = useRef(details);
+  useEffect(() => { selectedIdRef.current = selected?.id ?? ""; draftRef.current = draft; detailsRef.current = details; });
   const detailsChanged = Boolean(selected?.source === "manual" && (details.title !== selected.title || details.rank !== selected.rank || details.callsign !== selected.callsign));
   const dirty = Boolean(selected && draft && (profileChanged(profileOf(selected), draft) || detailsChanged));
   // Read after an awaited save: a cancelled question must not continue into the switch (D-02).
@@ -1450,6 +1453,9 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     const changes = changedFields(profileOf(selected), draft);
     const detailChanges = selected.source === "manual" ? changedDetails(detailsOf(selected), details) : {};
     if (!Object.keys(changes).length && !Object.keys(detailChanges).length) return true;
+    const sentId = selected.id;
+    const sentProfile = draft;
+    const sentDetails = details;
     setState("saving");
     setRatingsPending(false);
     setDetailsPending(false);
@@ -1473,14 +1479,20 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
       const merged: PortiaEmployee = { ...selected, ...payload.employee };
       setEmployees((current) => current.map((employee) => employee.id === merged.id ? merged : employee));
       onSaved(merged);
-      setDraft(profileOf(merged));
-      // When the database refused the details, the typed values stay as an unsaved edit.
-      if (!payload.detailsPending) setDetails(detailsOf(merged));
-      setRatingsPending(Boolean(payload.ratingsPending));
-      setDetailsPending(Boolean(payload.detailsPending));
+      // The answer settles only the fields not typed since sending, and only on the employee it was sent for (D-04, D-05).
+      const stillOpen = selectedIdRef.current === sentId;
+      if (stillOpen) {
+        setDraft((draftNow) => draftNow && settleDraft(sentProfile, draftNow, profileOf(merged)));
+        // When the database refused the details, the typed values stay as an unsaved edit.
+        if (!payload.detailsPending) setDetails((detailsNow) => settleDraft(sentDetails, detailsNow, detailsOf(merged)));
+        setRatingsPending(Boolean(payload.ratingsPending));
+        setDetailsPending(Boolean(payload.detailsPending));
+      }
       setState("saved");
       window.setTimeout(() => setState("idle"), 1800);
-      return true;
+      // A draft typed during the save stays dirty and unsaved; no automatic second save (D-04). No await from here to the return (A4).
+      const typedMeanwhile = stillOpen && (Object.keys(changedFields(sentProfile, draftRef.current ?? sentProfile)).length > 0 || Object.keys(changedDetails(sentDetails, detailsRef.current)).length > 0);
+      return !typedMeanwhile;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Не удалось сохранить профиль.");
       setState("error");
@@ -1591,6 +1603,8 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     setDeleting(false);
   };
 
+  // «СОХРАНЕНО» never shows over a draft that is dirty again.
+  const saveStatus = state === "saved" && dirty ? "idle" : state;
   const preview = selected && draft ? draft.photoUrl || selected.robloxAvatarUrl : "";
   return <div className="virus-editor-layout employee-editor-layout" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
     <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
@@ -1626,7 +1640,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
       {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
       {detailsPending && <p className="editor-guidance" role="status">Профиль сохранён, но звание, ранг и позывной — нет: база данных ещё не обновлена.</p>}
       {selected.source === "manual" && <button type="button" className="danger-control employee-remove" disabled={state === "saving" || deleting} onClick={() => setDeleteAsked(true)}>УДАЛИТЬ СОТРУДНИКА</button>}
-      <div className="employee-editor-save"><span className={`editor-save-status ${state}`}>{state === "saving" ? "СОХРАНЕНИЕ…" : state === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
+      <div className="employee-editor-save"><span className={`editor-save-status ${saveStatus}`}>{saveStatus === "saving" ? "СОХРАНЕНИЕ…" : saveStatus === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
       </> : <div className="editor-empty">Сотрудников пока нет. Добавьте человека вне таблицы кнопкой «+ ВНЕ ТАБЛИЦЫ».</div>}
     </div>
     {deleteAsked && selected?.source === "manual" && (

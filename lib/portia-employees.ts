@@ -80,6 +80,16 @@ export function changedDetails(saved: ManualDetails, draft: ManualDetails): Part
   return changes;
 }
 
+/** A save answer may only replace what the editor has not changed since sending (D-04); null and missing are the same, as in profileChanged. */
+export function settleDraft<T extends object>(sent: T, current: T, stored: T): T {
+  const [sentFields, currentFields, storedFields] = [sent, current, stored].map((value) => value as Record<string, unknown>);
+  const settled: Record<string, unknown> = {};
+  for (const key of Object.keys(storedFields)) {
+    settled[key] = (currentFields[key] ?? null) === (sentFields[key] ?? null) ? storedFields[key] : currentFields[key];
+  }
+  return settled as T;
+}
+
 export function isMissingColumnError(error: { code?: string } | null | undefined) {
   return error?.code === "PGRST204" || error?.code === "42703";
 }

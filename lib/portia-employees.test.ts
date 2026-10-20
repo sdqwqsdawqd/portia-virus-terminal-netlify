@@ -2,7 +2,7 @@ import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  acceptsEditorList, acceptsRoster, addManualEmployee, changedDetails, changedFields, employeeId, employeeRatings, mergeEmployeesAnswer, mergeManualEmployees, parseCsv, profileChanged, profileFromRow, profileOf,
+  acceptsEditorList, acceptsRoster, addManualEmployee, changedDetails, changedFields, employeeId, employeeRatings, mergeEmployeesAnswer, mergeManualEmployees, parseCsv, profileChanged, profileFromRow, profileOf, settleDraft,
   readEmployeeProfiles, readManualEmployees, removeManualEmployee, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, updateManualEmployee,
   saveEmployeeProfile, saveEmployeePatch, loadEmployees, withProfile, type EmployeeProfile, type EmployeeUpdate, type PortiaEmployee, type RosterEmployee,
 } from "./portia-employees.ts";
@@ -824,4 +824,29 @@ test("profileOf keeps a missing rating missing (D-11)", () => {
   const profile = profileOf(legacy as PortiaEmployee);
   assert.equal(profile.pawsRating, undefined);
   assert.equal(profileChanged(profile, { ...profile, pawsRating: null }), false);
+});
+
+test("settleDraft: text typed during a save stays, untouched fields take the stored copy", () => {
+  const base: EmployeeProfile = { biography: "a", photoUrl: " /p.png", knowledgeRating: 1, ...noRatings, pawsRating: 5 };
+  const sent = base;
+  const stored: EmployeeProfile = { ...base, photoUrl: "/p.png" };
+  const settled = settleDraft(sent, { ...sent, biography: "ab" }, stored);
+  assert.deepEqual([settled.biography, settled.pawsRating, settled.photoUrl], ["ab", 5, "/p.png"]);
+  assert.equal(profileChanged(stored, settled), true);
+  const untouched = settleDraft(sent, { ...sent }, stored);
+  assert.deepEqual(untouched, stored);
+  assert.equal(profileChanged(stored, untouched), false);
+  assert.equal(settleDraft(sent, { ...sent, pawsRating: 7 }, stored).pawsRating, 7);
+});
+
+test("settleDraft: a missing rating equals null", () => {
+  const sent = { biography: "", photoUrl: "", knowledgeRating: 1, ...noRatings } as Partial<EmployeeProfile>;
+  delete sent.sRating;
+  const stored: EmployeeProfile = { biography: "", photoUrl: "", knowledgeRating: 1, ...noRatings };
+  assert.equal(settleDraft(sent as EmployeeProfile, { ...sent, sRating: null } as EmployeeProfile, stored).sRating, null);
+});
+
+test("settleDraft: details typed during a save stay, the rest take the stored copy", () => {
+  const sent = { title: "A", rank: "1", callsign: "" };
+  assert.deepEqual(settleDraft(sent, { ...sent, title: "AB" }, { title: "A", rank: "2", callsign: "" }), { title: "AB", rank: "2", callsign: "" });
 });
