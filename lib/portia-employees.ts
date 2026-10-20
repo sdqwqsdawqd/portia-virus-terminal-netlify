@@ -87,7 +87,9 @@ type RobloxProfile = { id: number; name: string; avatarUrl: string; fullAvatarUr
 export type ProfileIndex = { byId: Map<string, EmployeeProfile>; robloxIdByNickname: Map<string, number> };
 
 const sheetCsvUrl = "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/gviz/tq?tqx=out:csv&sheet=Portia";
-// The sheet has 34 numbered staff slots (rows 2-35); row 36 onwards holds totals and notes.
+// The sheet has exactly 34 numbered staff places (rows 2-35); row 36 onwards holds totals and notes.
+// The owner confirmed (2026-10-20) rows after the 34th are never filled, so the limit is not raised and nothing warns.
+// If the sheet ever grows, change this constant and this comment together.
 const staffRowsEnd = 35;
 
 export function parseCsv(source: string) {
