@@ -5,15 +5,15 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "Newcomer check accepts any `roblox-<digits>` id for any sheet nickname"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "A thrown sheet-header error in the newcomer check becomes a generic 500"
   - id: WR-03
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "A manual-table read failure makes DELETE report \"not found\""
   - id: IN-01
     severity: info
@@ -27,18 +27,18 @@ findings:
     severity: info
     disposition: open
     title: "Client merges the PATCH answer into the stale `selected` closure"
-open: 6
+open: 3
 total: 6
-recorded: 2026-10-20T05:27:36Z
+recorded: 2026-10-20T05:43:25Z
 ---
 
 # Phase 07: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| WR-03 | warning | open | - |
+| WR-01 | warning | fixed | fixed in 364404d; a nickname already stored under a Roblox id cannot be re-pointed; residual: a never-saved nickname still accepts any roblox-digits id once (Roblox not asked, D-06; AR-07-03); node --experimental-strip-types --test lib/portia-employees.test.ts → a newcomer id cannot be re-pointed ok |
+| WR-02 | warning | fixed | fixed in a63990d; node --experimental-strip-types --test lib/portia-employees.test.ts → a sheet with changed headers is sheet-unavailable for a newcomer ok |
+| WR-03 | warning | fixed | fixed in 4a21aa2; DELETE answers 503 when manual rows were not read; node --experimental-strip-types --test lib/portia-employees.test.ts → loadEmployees says whether the manual rows were read ok |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
