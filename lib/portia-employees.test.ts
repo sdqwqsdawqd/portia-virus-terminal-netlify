@@ -354,6 +354,15 @@ test("loadEmployees still reads the sheet, profiles and manual rows, and throws 
   await assert.rejects(loadEmployees(db.client), /Google Sheets returned 500/);
 });
 
+test("loadEmployees says whether the manual rows were read, so a delete can refuse instead of reporting not-found", async (t) => {
+  t.mock.method(console, "error", () => {});
+  stubSheet(t, ['"1","Fox","","",""']);
+  const failed = fakeDb(fakeTable(true), manualTable({ readError: { code: "42501" } }));
+  assert.equal((await loadEmployees(failed.client)).manualRead, false);
+  const healthy = fakeDb(fakeTable(true), manualTable({ rows: [manualRow(50, "Gamma_x")] }));
+  assert.equal((await loadEmployees(healthy.client)).manualRead, true);
+});
+
 test("stored rows without rating columns, or with junk, map to empty ratings", () => {
   const base = { biography: "b", photo_url: "", knowledge_rating: 3 };
   assert.equal(profileFromRow(base).pawsRating, null);

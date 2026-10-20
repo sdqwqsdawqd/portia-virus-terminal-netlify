@@ -105,7 +105,8 @@ export async function DELETE(request: Request) {
     const body = parseJsonObject(await request.text());
     const id = typeof body?.id === "string" ? body.id : "";
     if (!id) return Response.json({ error: "Некорректные данные." }, { status: 400 });
-    const { employees } = await loadEmployees(supabase);
+    const { employees, manualRead } = await loadEmployees(supabase);
+    if (!manualRead) return Response.json({ error: "Список сотрудников не загрузился. Попробуйте через минуту." }, { status: 503 });
 
     const result = await removeManualEmployee(supabase, employees, id);
     // The editor tells this refusal from an expired session by `code`, never by the text.

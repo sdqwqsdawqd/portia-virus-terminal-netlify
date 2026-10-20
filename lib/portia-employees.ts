@@ -340,6 +340,8 @@ export async function loadEmployees(supabase: SupabaseClient) {
     complete: Boolean(profiles) && roblox.ok && manual.ok,
     // Without the stored profiles every employee looks blank; a save from that would wipe them.
     profilesRead: Boolean(profiles),
+    // Without the manual rows a manual employee is missing from the roster, so a delete would wrongly say not-found.
+    manualRead: manual.ok,
     profiles: index,
   };
 }
