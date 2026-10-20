@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { classificationOptions, findInfo, portiaTextKey, type Broadcast, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
-import { acceptsRoster, employeeRatings, type PortiaEmployee } from "@/lib/portia-employees";
+import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
@@ -298,6 +298,14 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
   const [employeesReady, setEmployeesReady] = useState(false);
   const [employeesSyncedAt, setEmployeesSyncedAt] = useState<string | null>(null);
+  const [employeesProfilesRead, setEmployeesProfilesRead] = useState(true);
+  const employeesRef = useRef<PortiaEmployee[]>([]);
+  const profilesReadRef = useRef(true);
+  // fetchEmployees has no deps and reads the last good list through these.
+  useEffect(() => {
+    employeesRef.current = employees;
+    profilesReadRef.current = employeesProfilesRead;
+  });
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [employeeQuery, setEmployeeQuery] = useState("");
   const [assistantTipIndex, setAssistantTipIndex] = useState(-1);
@@ -418,12 +426,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     try {
       const response = await fetchWithTimeout("/api/employees", {}, 15_000);
       if (!response.ok) return;
-      const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null; degraded?: boolean };
+      const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null; degraded?: boolean; profilesRead?: boolean; manualRead?: boolean };
       if (!acceptsRoster(payload)) return;
-      setEmployees(payload.employees);
+      const merged = mergeEmployeesAnswer(employeesRef.current, payload, profilesReadRef.current);
+      setEmployees(merged.employees);
+      setEmployeesProfilesRead(merged.profilesRead);
       setEmployeesSyncedAt(payload.syncedAt ?? null);
-      setSelectedEmployeeId((current) => payload.employees.some((employee) => employee.id === current) ? current : payload.employees[0]?.id ?? "");
-      try { window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify(payload)); } catch {}
+      setSelectedEmployeeId((current) => merged.employees.some((employee) => employee.id === current) ? current : merged.employees[0]?.id ?? "");
+      // A degraded answer never replaces the device cache (D-07).
+      if (merged.cacheable) try { window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify(payload)); } catch {}
     } catch {
       // The last successful personnel snapshot remains visible on this device.
     } finally {
@@ -450,9 +461,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         }
         const employeeCache = window.localStorage.getItem(employeesCacheStorageKey);
         if (employeeCache) {
-          const parsed = JSON.parse(employeeCache) as { employees?: PortiaEmployee[]; syncedAt?: string | null };
+          const parsed = JSON.parse(employeeCache) as { employees?: PortiaEmployee[]; syncedAt?: string | null; profilesRead?: boolean };
           if (Array.isArray(parsed.employees)) {
             setEmployees(parsed.employees);
+            // An old cache without the flag counts as read; only an explicit false means nothing was read.
+            setEmployeesProfilesRead(parsed.profilesRead !== false);
             setEmployeesSyncedAt(parsed.syncedAt ?? null);
             setSelectedEmployeeId((current) => current || parsed.employees![0]?.id || "");
             setEmployeesReady(true);
@@ -1197,8 +1210,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                     <div className="personnel-profile-identity"><h2>{selectedEmployee.nickname}</h2>{selectedEmployee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<p className="personnel-callsign">{selectedEmployee.callsign || "Без позывного"}</p></div>
                   </header>
                   <dl className="personnel-stats"><div><dt>ЗВАНИЕ</dt><dd>{selectedEmployee.title || "Не указано"}</dd></div><div><dt>РАНГ</dt><dd>{selectedEmployee.rank || "Не указан"}</dd></div></dl>
-                  <dl className="personnel-stats personnel-ratings">{employeeRatings.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{selectedEmployee[key] == null ? "—" : `${selectedEmployee[key]} / 10`}</dd></div>)}</dl>
-                  <section className="personnel-biography"><span>БИОГРАФИЯ</span><p>{selectedEmployee.biography || "Биография сотрудника пока не заполнена."}</p></section>
+                  {employeesProfilesRead && <dl className="personnel-stats personnel-ratings">{employeeRatings.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{selectedEmployee[key] == null ? "—" : `${selectedEmployee[key]} / 10`}</dd></div>)}</dl>}
+                  <section className="personnel-biography"><span>БИОГРАФИЯ</span><p>{employeesProfilesRead ? selectedEmployee.biography || "Биография сотрудника пока не заполнена." : "Профиль временно не загрузился."}</p></section>
                 </div> : <div className="editor-empty">{!employees.length && employeesSyncedAt ? "В таблице пока нет сотрудников." : "Данные сотрудников ещё не синхронизированы."}</div>}
               </article>
             </div>

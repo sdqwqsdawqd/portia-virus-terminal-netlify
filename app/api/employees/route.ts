@@ -10,9 +10,9 @@ export const dynamic = "force-dynamic";
 // just its own query params), so freshness comes from purging on save, not URLs.
 export async function GET() {
   try {
-    const { employees, syncedAt, complete, profilesRead } = await loadEmployees(createPublicSupabaseClient());
+    const { employees, syncedAt, complete, profilesRead, manualRead } = await loadEmployees(createPublicSupabaseClient());
     return Response.json(
-      { employees, syncedAt, degraded: !complete, profilesRead },
+      { employees, syncedAt, degraded: !complete, profilesRead, manualRead },
       { headers: publicCacheHeaders(employeesCacheTag, complete ? 600 : 30) },
     );
   } catch (error) {

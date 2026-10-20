@@ -79,6 +79,25 @@ export function acceptsRoster(payload: { employees?: unknown; degraded?: unknown
   return Array.isArray(payload.employees) && (payload.employees.length > 0 || payload.degraded === false);
 }
 
+/** A partial answer refreshes only what it read; only a complete one may be cached. */
+export function mergeEmployeesAnswer(
+  previous: PortiaEmployee[],
+  answer: { employees: PortiaEmployee[]; degraded?: boolean; profilesRead?: boolean; manualRead?: boolean },
+  previousProfilesRead: boolean,
+): { employees: PortiaEmployee[]; cacheable: boolean; profilesRead: boolean } {
+  if (answer.degraded === false) return { employees: answer.employees, cacheable: true, profilesRead: true };
+  const known = new Map(previous.map((employee) => [employee.id, employee]));
+  const profileKeys = ["biography", "photoUrl", "knowledgeRating", ...employeeRatings.map(({ key }) => key)] as const;
+  const employees = answer.employees.map((employee) => {
+    const old = known.get(employee.id);
+    if (answer.profilesRead === true || !old) return employee;
+    const kept = { ...employee };
+    for (const key of profileKeys) Object.assign(kept, { [key]: old[key] });
+    return kept;
+  });
+  return { employees, cacheable: false, profilesRead: answer.profilesRead === true || (previousProfilesRead && previous.length > 0) };
+}
+
 // The roster comes live from Google Sheets + Roblox (the CDN caches the API response).
 // Editor-written fields live in Supabase (portia_employee_profiles).
 type ProfileColumns = { biography: string; photo_url: string; knowledge_rating: number; [column: string]: unknown };
