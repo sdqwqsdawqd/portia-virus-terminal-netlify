@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 08
 current_phase_name: Сотрудники без потерь на экране
 status: executing
-stopped_at: Completed PORTIA-08-02-PLAN.md
-last_updated: "2026-10-20T07:10:51.885Z"
+stopped_at: Completed PORTIA-08-03-PLAN.md
+last_updated: "2026-10-20T07:14:38.102Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase PORTIA-08 execution started
-state_head: 084e30a4ff1b0b4f946a9ef1dada6ce43114080b
+state_head: b11f59079138d08cdae9514890d85baebfc01b4c
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 11
   percent: 29
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 ## Current Position
 
 Phase: PORTIA-08 (Сотрудники без потерь на экране) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Executing Phase PORTIA-08
 Last activity: 2026-10-20 — Phase PORTIA-08 execution started
 
@@ -53,6 +53,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-07 P07-04 | 15min | 3 tasks | 3 files |
 | Phase PORTIA-08 P01 | 3 min | 3 tasks | 4 files |
 | Phase PORTIA-08 P02 | 10 min | 3 tasks | 4 files |
+| Phase PORTIA-08 P03 | 15min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,8 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-08]: The editor accepts a list only when profilesRead === true and reads it from the never-cached /api/employees/editor route
 - [Phase PORTIA-08]: A save sends only changed fields; a clean save sends nothing and a missing rating is never sent as null
 - [Phase PORTIA-08]: Load error and save error are separate states; the empty list keeps the list column and add form
+- [Phase PORTIA-08]: 08-03: text typed during a save stays (settleDraft) and keeps the draft dirty; no automatic second save
+- [Phase PORTIA-08]: 08-03: a switch clicked during a save is queued by id and resolved after the answer (open when clean, dialog otherwise)
 
 ### Pending Todos
 
@@ -106,8 +109,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-20T07:10:51.825Z
-Stopped at: Completed PORTIA-08-02-PLAN.md
+Last session: 2026-10-20T07:14:38.040Z
+Stopped at: Completed PORTIA-08-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
