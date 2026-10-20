@@ -262,14 +262,14 @@ export type ManualRow = { employee_id: string; nickname: string; title: string; 
 
 const manualTableName = "portia_manual_employees";
 const robloxNickname = /^[A-Za-z0-9_]{3,20}$/;
+const clip64 = (field: unknown) => (typeof field === "string" ? field.trim().slice(0, 64) : "");
 
 export function sanitizeManualEmployee(value: unknown): ManualEmployeeInput | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
-  const text = (field: unknown) => (typeof field === "string" ? field.trim().slice(0, 64) : "");
   const nickname = typeof candidate.nickname === "string" ? candidate.nickname.trim() : "";
   if (!nickname) return null;
-  return { nickname, title: text(candidate.title), rank: text(candidate.rank), callsign: text(candidate.callsign) };
+  return { nickname, title: clip64(candidate.title), rank: clip64(candidate.rank), callsign: clip64(candidate.callsign) };
 }
 
 /** Explicit columns, so created_by never reaches an API answer. A missing table is an empty, healthy list. */
@@ -387,21 +387,29 @@ export async function addManualEmployee(supabase: SupabaseClient, input: ManualE
 
 export type ManualDetails = Pick<ManualEmployeeInput, "title" | "rank" | "callsign">;
 
-export function sanitizeManualDetails(value: unknown): ManualDetails | null {
-  if (!value || typeof value !== "object") return null;
+/** Only the keys that were sent: absent = unchanged, "" clears, a non-string is null (a 400). */
+export function sanitizeManualDetails(value: unknown): Partial<ManualDetails> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const candidate = value as Record<string, unknown>;
-  const text = (field: unknown) => (typeof field === "string" ? field.trim().slice(0, 64) : "");
-  return { title: text(candidate.title), rank: text(candidate.rank), callsign: text(candidate.callsign) };
+  const details: Partial<ManualDetails> = {};
+  for (const key of ["title", "rank", "callsign"] as const) {
+    if (candidate[key] === undefined) continue;
+    if (typeof candidate[key] !== "string") return null;
+    details[key] = clip64(candidate[key]);
+  }
+  return details;
 }
 
 /** Title, rank and callsign of a manual employee; sheet employees keep the values from the sheet. */
-export async function updateManualEmployee(supabase: SupabaseClient, employee: RosterEmployee, details: ManualDetails): Promise<{ status: "updated" | "sheet" | "pending-database" }> {
-  if (employee.source !== "manual") return { status: "sheet" };
-  const { data, error } = await supabase.from(manualTableName).update(details).eq("employee_id", employee.id).select("employee_id");
+export async function updateManualEmployee(supabase: SupabaseClient, id: string, details: Partial<ManualDetails>): Promise<{ status: "updated" | "not-found" | "pending-database" }> {
+  const { data, error } = await supabase.from(manualTableName).update(details).eq("employee_id", id).select("employee_id");
   // Before the update grant and policy exist: 42501 without the grant, zero rows without the policy.
   if (error?.code === "42501" || isMissingTableError(error)) return { status: "pending-database" };
   if (error) throw error;
-  return { status: data?.length ? "updated" : "pending-database" };
+  if (data?.length) return { status: "updated" };
+  const { data: row, error: readError } = await supabase.from(manualTableName).select("employee_id").eq("employee_id", id).maybeSingle();
+  if (readError) throw readError;
+  return { status: row ? "pending-database" : "not-found" };
 }
 
 /** Only a manual employee is removed, and only its manual row: the stored profile stays for a later re-add or a sheet row. */
@@ -485,6 +493,21 @@ async function findKnownEmployee(supabase: SupabaseClient, id: string): Promise<
 export async function saveEmployeePatch(supabase: SupabaseClient, userId: string, patch: EmployeePatch): Promise<SavePatchResult> {
   const { id, changes } = patch;
   const { hasProfile, manual } = await findKnownEmployee(supabase, id);
+  // Manual details go first: a failure then writes nothing, and a failed profile write can undo them (D-09).
+  let applied: Partial<ManualDetails> = {};
+  let detailsPending: boolean | undefined;
+  if (manual && Object.keys(patch.details).length) {
+    let outcome: Awaited<ReturnType<typeof updateManualEmployee>>;
+    try {
+      outcome = await updateManualEmployee(supabase, id, patch.details);
+    } catch (error) {
+      console.error("PORTIA manual details save failed", error);
+      return { status: "details-failed" };
+    }
+    if (outcome.status === "not-found") return { status: "not-found" };
+    if (outcome.status === "pending-database") detailsPending = true;
+    else applied = patch.details;
+  }
   let nickname = manual?.nickname;
   let write = changes;
   if (!hasProfile && !manual) {
@@ -512,10 +535,25 @@ export async function saveEmployeePatch(supabase: SupabaseClient, userId: string
     nickname = person.nickname;
   }
   // shortcut: the known path does not refresh portia_employee_profiles.nickname (not known without the sheet); only the Roblox-outage id fallback can miss a renamed person until a newcomer-style write.
-  const { profile, ratingsSaved } = await saveEmployeeProfile(supabase, { id, nickname }, write, userId);
+  let saved: Awaited<ReturnType<typeof saveEmployeeProfile>>;
+  try {
+    saved = await saveEmployeeProfile(supabase, { id, nickname }, write, userId);
+  } catch (error) {
+    if (manual && Object.keys(applied).length) {
+      // shortcut: no transaction without new SQL (D-08); a failed restore leaves the details changed and only this log shows it; move both writes into one RPC if that ever happens.
+      const previous = Object.fromEntries(Object.keys(applied).map((key) => [key, manual[key as keyof ManualDetails]]));
+      try {
+        await updateManualEmployee(supabase, id, previous);
+      } catch (restoreError) {
+        console.error("PORTIA manual details restore failed", restoreError);
+      }
+    }
+    throw error;
+  }
   return {
     status: "saved",
-    employee: { id, ...profile, ...(manual ? { title: manual.title, rank: manual.rank, callsign: manual.callsign } : {}) },
-    ratingsPending: ratingsSaved ? undefined : true,
+    employee: { id, ...saved.profile, ...(manual ? { title: manual.title, rank: manual.rank, callsign: manual.callsign, ...applied } : {}) },
+    ratingsPending: saved.ratingsSaved ? undefined : true,
+    detailsPending,
   };
 }

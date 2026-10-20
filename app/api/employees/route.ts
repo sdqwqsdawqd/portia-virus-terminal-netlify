@@ -2,7 +2,7 @@ import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/su
 import { getEditorAccess } from "@/lib/editor-access";
 import { employeesCacheTag, noStoreHeaders, publicCacheHeaders, purgeCacheTag } from "@/lib/portia-cdn";
 import { parseJsonObject } from "@/lib/request-json";
-import { addManualEmployee, loadEmployees, removeManualEmployee, sanitizeEmployeeUpdate, sanitizeManualEmployee, saveEmployeePatch, withProfile } from "@/lib/portia-employees";
+import { addManualEmployee, loadEmployees, removeManualEmployee, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, saveEmployeePatch, withProfile } from "@/lib/portia-employees";
 
 export const dynamic = "force-dynamic";
 
@@ -35,11 +35,13 @@ export async function PATCH(request: Request) {
     if (!body) return Response.json({ error: "Некорректные данные." }, { status: 400 });
     const id = typeof body.id === "string" && body.id.length <= 128 ? body.id : "";
     const changes = sanitizeEmployeeUpdate(body.changes);
-    if (!id || !changes) return Response.json({ error: "Некорректные данные." }, { status: 400 });
+    // Title, rank and callsign follow the same partial rule; they only take effect for a manual employee.
+    const details = body.details === undefined ? {} : sanitizeManualDetails(body.details);
+    if (!id || !changes || !details) return Response.json({ error: "Некорректные данные." }, { status: 400 });
     // The nickname only lets the server check a never-saved sheet employee against the sheet (no Roblox call).
     const nickname = typeof body.nickname === "string" ? body.nickname.trim().slice(0, 64) : "";
 
-    const result = await saveEmployeePatch(supabase, data.user.id, { id, nickname, changes, details: {} });
+    const result = await saveEmployeePatch(supabase, data.user.id, { id, nickname, changes, details });
     if (result.status !== "saved") {
       const refusals = {
         "not-found": { error: "Сотрудник не найден. Обновите страницу.", status: 404 },

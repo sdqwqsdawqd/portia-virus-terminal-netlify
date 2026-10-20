@@ -391,19 +391,21 @@ test("an old manual row shows the Roblox spelling when Roblox answered and the s
 });
 
 // In-memory stand-in for the manual table: a read, an insert and a filtered delete, each with a configurable error.
-type ManualTableOptions = { rows?: Record<string, unknown>[]; readError?: { code: string }; insertError?: { code: string }; deleteError?: { code: string }; updateError?: { code: string } };
+type ManualTableOptions = { rows?: Record<string, unknown>[]; readError?: { code: string }; insertError?: { code: string }; deleteError?: { code: string }; updateError?: { code: string }; failUpdatesFrom?: number; updateMatchesNoRow?: boolean; updateRemovesRow?: boolean };
+// A real database answers a copy, so a later update must not rewrite what an earlier read returned.
+const copyOf = (row: Record<string, unknown> | undefined) => (row ? { ...row } : null);
 function manualTable(options: ManualTableOptions = {}) {
   const inserts: Record<string, unknown>[] = [];
   const deletes: string[] = [];
   const updates: { id: string; values: Record<string, unknown> }[] = [];
-  const rows = options.rows ?? [];
+  const rows = (options.rows ?? []).map((row) => ({ ...row }));
   const client = {
     from: (table: string) => {
       assert.equal(table, "portia_manual_employees");
       return {
         select: () => ({
           order: () => ({ returns: async () => (options.readError ? { data: null, error: options.readError } : { data: rows, error: null }) }),
-          eq: (_column: string, id: string) => ({ maybeSingle: async () => (options.readError ? { data: null, error: options.readError } : { data: rows.find((row) => row.employee_id === id) ?? null, error: null }) }),
+          eq: (_column: string, id: string) => ({ maybeSingle: async () => (options.readError ? { data: null, error: options.readError } : { data: copyOf(rows.find((row) => row.employee_id === id)), error: null }) }),
         }),
         insert: async (row: Record<string, unknown>) => {
           if (options.insertError) return { error: options.insertError };
@@ -426,7 +428,13 @@ function manualTable(options: ManualTableOptions = {}) {
               assert.equal(column, "employee_id");
               updates.push({ id, values });
               if (options.updateError) return { data: null, error: options.updateError };
-              return { data: rows.filter((row) => row.employee_id === id).map((row) => ({ employee_id: row.employee_id })), error: null };
+              if (options.failUpdatesFrom && updates.length >= options.failUpdatesFrom) return { data: null, error: { code: "XX000" } };
+              // The row stays readable (RLS hides it from the update) or vanishes (deleted by someone else in between).
+              if (options.updateRemovesRow) rows.splice(0, rows.length);
+              if (options.updateMatchesNoRow || options.updateRemovesRow) return { data: [], error: null };
+              const matched = rows.filter((row) => row.employee_id === id);
+              matched.forEach((row) => Object.assign(row, values));
+              return { data: matched.map((row) => ({ employee_id: row.employee_id })), error: null };
             },
           }),
         }),
@@ -561,28 +569,109 @@ test("removing a manual employee deletes exactly its manual row; a row that was 
   assert.deepEqual(await removeManualEmployee(manualTable().client, mixedRoster, "roblox-50"), { status: "not-found" });
 });
 
-const gamma = mixedRoster.find((employee) => employee.id === "roblox-50")!;
-const sheetAlpha = mixedRoster.find((employee) => employee.id === "roblox-7")!;
 const newDetails = { title: "Доктор", rank: "3", callsign: "Гамма" };
 
-test("a manual employee's title, rank and callsign are updated in its row; a sheet employee issues no update", async () => {
+test("updateManualEmployee writes exactly the given columns of its row", async () => {
   const table = manualTable({ rows: [manualRow(50, "Gamma_x")] });
-  assert.deepEqual(await updateManualEmployee(table.client, gamma, newDetails), { status: "updated" });
-  assert.deepEqual(table.updates, [{ id: "roblox-50", values: newDetails }]);
-  const sheetTable = manualTable();
-  assert.deepEqual(await updateManualEmployee(sheetTable.client, sheetAlpha, newDetails), { status: "sheet" });
-  assert.equal(sheetTable.updates.length, 0);
+  assert.deepEqual(await updateManualEmployee(table.client, "roblox-50", newDetails), { status: "updated" });
+  assert.deepEqual(await updateManualEmployee(table.client, "roblox-50", { rank: "4" }), { status: "updated" });
+  assert.deepEqual(table.updates, [{ id: "roblox-50", values: newDetails }, { id: "roblox-50", values: { rank: "4" } }]);
 });
 
 test("before the update grant and policy exist the details are pending, not an error", async () => {
-  assert.deepEqual(await updateManualEmployee(manualTable({ rows: [manualRow(50, "Gamma_x")], updateError: { code: "42501" } }).client, gamma, newDetails), { status: "pending-database" });
-  // Without the update policy RLS matches no row.
-  assert.deepEqual(await updateManualEmployee(manualTable().client, gamma, newDetails), { status: "pending-database" });
+  for (const code of ["42501", "PGRST205", "42P01"]) {
+    assert.deepEqual(await updateManualEmployee(manualTable({ rows: [manualRow(50, "Gamma_x")], updateError: { code } }).client, "roblox-50", newDetails), { status: "pending-database" });
+  }
+  // Without the update policy RLS matches no row, but the row is still there.
+  assert.deepEqual(await updateManualEmployee(manualTable({ rows: [manualRow(50, "Gamma_x")], updateMatchesNoRow: true }).client, "roblox-50", newDetails), { status: "pending-database" });
 });
 
-test("details are trimmed and capped; anything that is not text becomes empty", () => {
-  assert.deepEqual(sanitizeManualDetails({ title: "  Доктор ", rank: 5, callsign: "x".repeat(80) }), { title: "Доктор", rank: "", callsign: "x".repeat(64) });
-  assert.equal(sanitizeManualDetails(null), null);
+test("a manual row that is gone is not found, any other update error is thrown", async () => {
+  assert.deepEqual(await updateManualEmployee(manualTable().client, "roblox-50", newDetails), { status: "not-found" });
+  await assert.rejects(updateManualEmployee(manualTable({ rows: [manualRow(50, "Gamma_x")], updateError: { code: "XX000" } }).client, "roblox-50", newDetails), { code: "XX000" });
+});
+
+test("details keep absent fields: only the sent keys are trimmed, cut to 64 and kept", () => {
+  assert.deepEqual(sanitizeManualDetails({ rank: " 9 " }), { rank: "9" });
+  assert.deepEqual(sanitizeManualDetails({}), {});
+  assert.deepEqual(sanitizeManualDetails({ title: "" }), { title: "" });
+  assert.deepEqual(sanitizeManualDetails({ callsign: "x".repeat(80), evil: 1 }), { callsign: "x".repeat(64) });
+  for (const bad of [null, [], "x", { title: 5 }, { rank: null }]) assert.equal(sanitizeManualDetails(bad), null, JSON.stringify(bad));
+});
+
+// A manual employee Gamma_x (title Лаборант, rank 2, callsign Лис) saved through the real save path.
+function manualPatch(options: ManualTableOptions, profileError?: { code: string }) {
+  const log: string[] = [];
+  const profiles = fakeTable(true, [], profileError);
+  const manual = manualTable({ rows: [manualRow(50, "Gamma_x")], ...options });
+  const from = (name: string) => {
+    log.push(name);
+    return name === "portia_manual_employees" ? manual.client.from(name) : profiles.client.from(name);
+  };
+  const client = { from } as unknown as SupabaseClient;
+  const save = (details: Partial<typeof newDetails>, changes: EmployeeUpdate = { bioRating: 5 }) => saveEmployeePatch(client, "user-1", { id: "roblox-50", nickname: "", changes, details });
+  return { save, profiles, manual, log };
+}
+
+test("manual details are written before the profile, one update with only the sent keys", async () => {
+  const run = manualPatch({});
+  const result = await run.save({ rank: "9" });
+  assert.deepEqual(run.manual.updates, [{ id: "roblox-50", values: { rank: "9" } }]);
+  assert.ok(result.status === "saved" && result.detailsPending === undefined);
+  if (result.status !== "saved") return;
+  assert.deepEqual([result.employee.title, result.employee.rank, result.employee.callsign, result.employee.bioRating], ["Лаборант", "9", "Лис", 5]);
+  // findKnownEmployee reads both tables first, then the details update, then the profile upsert.
+  assert.deepEqual(run.log.slice(2), ["portia_manual_employees", "portia_employee_profiles"]);
+});
+
+test("a failed profile write restores the previous details of only the changed keys", async () => {
+  const run = manualPatch({}, { code: "42501" });
+  await assert.rejects(run.save({ rank: "9", title: "Доктор" }), { code: "42501" });
+  assert.deepEqual(run.manual.updates.map((update) => update.values), [{ rank: "9", title: "Доктор" }, { rank: "2", title: "Лаборант" }]);
+});
+
+test("a failed restore is logged and the profile error is still the one thrown", async (t) => {
+  const log = t.mock.method(console, "error", () => {});
+  const run = manualPatch({ failUpdatesFrom: 2 }, { code: "42501" });
+  await assert.rejects(run.save({ rank: "9" }), { code: "42501" });
+  assert.equal(run.manual.updates.length, 2);
+  assert.equal(log.mock.calls[0].arguments[0], "PORTIA manual details restore failed");
+});
+
+test("details-failed: a details write that throws writes nothing else", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const run = manualPatch({ updateError: { code: "XX000" } });
+  assert.deepEqual(await run.save({ rank: "9" }), { status: "details-failed" });
+  assert.equal(run.profiles.upserts.length, 0);
+});
+
+test("a manual row that is gone is not found and the profile is not written", async () => {
+  const run = manualPatch({ updateRemovesRow: true });
+  assert.deepEqual(await run.save({ rank: "9" }), { status: "not-found" });
+  assert.equal(run.profiles.upserts.length, 0);
+});
+
+test("details the database cannot take yet are pending while the profile is saved", async () => {
+  for (const options of [{ updateMatchesNoRow: true }, { updateError: { code: "42501" } }]) {
+    const run = manualPatch(options);
+    const result = await run.save({ rank: "9" });
+    assert.ok(result.status === "saved" && result.detailsPending === true && result.employee.rank === "2" && result.employee.bioRating === 5);
+    assert.equal(run.profiles.upserts.length, 1);
+  }
+  // Nothing was changed, so a later profile failure has nothing to restore.
+  const failing = manualPatch({ updateError: { code: "42501" } }, { code: "42501" });
+  await assert.rejects(failing.save({ rank: "9" }), { code: "42501" });
+  assert.equal(failing.manual.updates.length, 1);
+});
+
+test("empty details, and details for a sheet employee, issue no manual update", async () => {
+  const run = manualPatch({});
+  assert.equal((await run.save({})).status, "saved");
+  assert.equal(run.manual.updates.length, 0);
+  const sheetEmployee = fakeDb(fakeTable(true, [storedFox]), manualTable());
+  const result = await saveEmployeePatch(sheetEmployee.client, "user-1", { id: "roblox-1", nickname: "", changes: {}, details: newDetails });
+  assert.ok(result.status === "saved" && !("title" in result.employee));
+  assert.equal(sheetEmployee.manual.updates.length, 0);
 });
 
 test("a delete error is thrown", async () => {
