@@ -1399,6 +1399,11 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   const asking = pendingEmployeeId !== null || leaving;
   const askingRef = useRef(asking);
   useEffect(() => { askingRef.current = asking; });
+  // The «СОХРАНЕНО» timer lives in a ref so a later save and an unmount can cancel it (D-06).
+  const savedTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (savedTimer.current !== null) window.clearTimeout(savedTimer.current); }, []);
+  // An employee clicked during a save, acted on once the answer is in (D-05).
+  const queuedEmployeeIdRef = useRef<string | null>(null);
 
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
   // Unmounting (tab left after the answer) must not leave the editor believing a draft is still dirty.
@@ -1446,6 +1451,17 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   // In place, without a page reload: other tabs' unsaved edits live in the parent and stay.
   const retryLoad = () => { setLoadState("loading"); setLoadAttempt((attempt) => attempt + 1); };
 
+  // Synchronous, no await: the dialog's save().then reads askingRef right after the answer (A4). An open dialog decides itself.
+  const resolveQueued = (clean: boolean) => {
+    const queued = queuedEmployeeIdRef.current;
+    queuedEmployeeIdRef.current = null;
+    if (queued === null || askingRef.current) return;
+    const next = employees.find((employee) => employee.id === queued);
+    if (!next) return;
+    if (clean) openEmployee(next);
+    else setPendingEmployeeId(queued);
+  };
+
   // Resolves true only when the profile is saved; a failure leaves the error text on the current employee.
   const save = async (): Promise<boolean> => {
     if (!selected || !draft) return false;
@@ -1456,6 +1472,9 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     const sentId = selected.id;
     const sentProfile = draft;
     const sentDetails = details;
+    // An earlier «СОХРАНЕНО» timer must not flip this save back to idle (03.1-WR-06).
+    if (savedTimer.current !== null) window.clearTimeout(savedTimer.current);
+    savedTimer.current = null;
     setState("saving");
     setRatingsPending(false);
     setDetailsPending(false);
@@ -1489,13 +1508,15 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
         setDetailsPending(Boolean(payload.detailsPending));
       }
       setState("saved");
-      window.setTimeout(() => setState("idle"), 1800);
+      savedTimer.current = window.setTimeout(() => setState("idle"), 1800);
       // A draft typed during the save stays dirty and unsaved; no automatic second save (D-04). No await from here to the return (A4).
       const typedMeanwhile = stillOpen && (Object.keys(changedFields(sentProfile, draftRef.current ?? sentProfile)).length > 0 || Object.keys(changedDetails(sentDetails, detailsRef.current)).length > 0);
+      resolveQueued(!typedMeanwhile);
       return !typedMeanwhile;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Не удалось сохранить профиль.");
       setState("error");
+      resolveQueued(false);
       return false;
     }
   };
@@ -1546,11 +1567,16 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   };
   // Unsaved edits are asked about before another employee replaces the draft (D-02).
   const chooseEmployee = (employee: PortiaEmployee) => {
+    // A sent PATCH cannot be cancelled: remember the click and act after the answer, which is matched by id (D-05). Clicking the open employee forgets it.
+    if (state === "saving" && selected) {
+      if (employee.id === selected.id) { queuedEmployeeIdRef.current = null; setRecordOpen(true); revealOnPhone(layoutRef); }
+      else queuedEmployeeIdRef.current = employee.id;
+      return;
+    }
     if (!dirty) return openEmployee(employee);
     // The same employee: only show the record, the edits stay.
     if (employee.id === selected?.id) { setRecordOpen(true); revealOnPhone(layoutRef); return; }
-    // A sent PATCH cannot be cancelled; its answer would overwrite the next employee's draft.
-    if (state !== "saving") setPendingEmployeeId(employee.id);
+    setPendingEmployeeId(employee.id);
   };
   // After the answer: to the pending employee, or out of the tab / the window (the draft is dropped when not saved).
   const continueLeave = (saved = false) => {
