@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Закрытие замечаний
-current_phase: 8
+current_phase: 08
 current_phase_name: Сотрудники без потерь на экране
 status: executing
-stopped_at: Phase 8 context gathered
-last_updated: "2026-10-20T06:47:19.042Z"
+stopped_at: Completed PORTIA-08-01-PLAN.md
+last_updated: "2026-10-20T07:06:24.015Z"
 last_activity: 2026-10-20
-last_activity_desc: Phase PORTIA-07 complete, transitioned to Phase 8
-state_head: 0aed84a37bd5932e69b87c34085782844ed59820
+last_activity_desc: Phase PORTIA-08 execution started
+state_head: d527570b0a6ecaaf91e7bede4877d2cee89bdbc5
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 12
-  completed_plans: 8
+  completed_plans: 9
   percent: 29
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-20)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase 8 — Сотрудники без потерь на экране
+**Current focus:** Phase PORTIA-08 — Сотрудники без потерь на экране
 
 ## Current Position
 
-Phase: 8 (Сотрудники без потерь на экране) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-20 — Phase PORTIA-07 complete, transitioned to Phase 8
+Phase: PORTIA-08 (Сотрудники без потерь на экране) — EXECUTING
+Plan: 2 of 4
+Status: Executing Phase PORTIA-08
+Last activity: 2026-10-20 — Phase PORTIA-08 execution started
 
 Progress: [███░░░░░░░] 29%
 
@@ -51,6 +51,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-07 P07-02 | 10min | 3 tasks | 3 files |
 | Phase PORTIA-07 P07-03 | 20min | 3 tasks | 4 files |
 | Phase PORTIA-07 P07-04 | 15min | 3 tasks | 3 files |
+| Phase PORTIA-08 P01 | 3 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-07]: 07-03: PATCH saves only sent fields; newcomer ids checked against the sheet by nickname, Roblox never called; manual details written first and restored on profile failure
 - [Phase PORTIA-07]: 07-04: 03.1 IN-03 closed by owner rule D-13 (sheet has exactly 34 places); 03.2 WR-04 and 03.3 IN-04 stay open with progress notes
 - [Phase PORTIA-07]: review fixes WR-01..03 (364404d, a63990d, 4a21aa2); residual WR-01 first-write gap accepted as AR-07-03; upsert partial row confirmed on live DB (07-04)
+- [Phase PORTIA-08]: 08-01: employee merge decides per flag (profilesRead, manualRead, Roblox fields), trusted only when === true; only degraded === false answers reach the device cache; editor callbacks patch the cache and never create one
 
 ### Pending Todos
 
@@ -100,9 +102,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-20T06:10:05.083Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/PORTIA-08-sotrudniki-bez-poter-na-ekrane/08-CONTEXT.md
+Last session: 2026-10-20T07:06:23.954Z
+Stopped at: Completed PORTIA-08-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
