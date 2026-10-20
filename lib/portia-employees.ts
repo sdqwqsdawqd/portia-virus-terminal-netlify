@@ -513,14 +513,14 @@ export async function saveEmployeePatch(supabase: SupabaseClient, userId: string
   if (!hasProfile && !manual) {
     // A never-saved sheet employee: only the sheet can vouch for the nickname, Roblox is never asked (D-05, D-06).
     if (!patch.nickname) return { status: "not-found" };
-    let rows: string[][];
+    let person: RosterEmployee | undefined;
     try {
-      rows = await fetchSheetRows();
+      // A changed sheet header throws in rosterFromRows: same answer as a sheet that does not respond.
+      person = rosterFromRows(await fetchSheetRows(), new Map()).find((employee) => nicknameKey(employee.nickname) === nicknameKey(patch.nickname));
     } catch (error) {
       console.error("PORTIA sheet check for a save failed", error);
       return { status: "sheet-unavailable" };
     }
-    const person = rosterFromRows(rows, new Map()).find((employee) => nicknameKey(employee.nickname) === nicknameKey(patch.nickname));
     if (!person || !(/^roblox-\d+$/.test(id) || id === employeeId(person.nickname, null))) return { status: "not-found" };
     let profiles: ProfileIndex;
     try {

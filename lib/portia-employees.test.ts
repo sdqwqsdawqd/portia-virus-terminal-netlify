@@ -292,6 +292,14 @@ test("sheet-unavailable, never not-found: a sheet that does not answer writes no
   }
 });
 
+test("a sheet with changed headers is sheet-unavailable for a newcomer, not a thrown error", async (t) => {
+  t.mock.method(console, "error", () => {});
+  t.mock.method(globalThis, "fetch", async () => new Response('"A","B","C"\r\n"1","Fox","x"'));
+  const db = fakeDb(fakeTable(true), manualTable());
+  assert.deepEqual(await saveEmployeePatch(db.client, "user-1", newcomer("roblox-5", "Fox")), { status: "sheet-unavailable" });
+  assert.equal(db.profiles.upserts.length, 0);
+});
+
 test("not found and nothing is written: no nickname, a stranger, or an id of the wrong form", async (t) => {
   const calls = stubSheet(t, ['"1","Fox","","",""']);
   const db = fakeDb(fakeTable(true), manualTable());
