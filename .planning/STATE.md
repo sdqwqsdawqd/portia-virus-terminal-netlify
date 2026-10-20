@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 08
 current_phase_name: Сотрудники без потерь на экране
 status: executing
-stopped_at: Completed PORTIA-08-01-PLAN.md
-last_updated: "2026-10-20T07:06:24.015Z"
+stopped_at: Completed PORTIA-08-02-PLAN.md
+last_updated: "2026-10-20T07:10:51.885Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase PORTIA-08 execution started
-state_head: d527570b0a6ecaaf91e7bede4877d2cee89bdbc5
+state_head: 084e30a4ff1b0b4f946a9ef1dada6ce43114080b
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
   percent: 29
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 ## Current Position
 
 Phase: PORTIA-08 (Сотрудники без потерь на экране) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Executing Phase PORTIA-08
 Last activity: 2026-10-20 — Phase PORTIA-08 execution started
 
@@ -52,6 +52,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-07 P07-03 | 20min | 3 tasks | 4 files |
 | Phase PORTIA-07 P07-04 | 15min | 3 tasks | 3 files |
 | Phase PORTIA-08 P01 | 3 min | 3 tasks | 4 files |
+| Phase PORTIA-08 P02 | 10 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,9 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-07]: 07-04: 03.1 IN-03 closed by owner rule D-13 (sheet has exactly 34 places); 03.2 WR-04 and 03.3 IN-04 stay open with progress notes
 - [Phase PORTIA-07]: review fixes WR-01..03 (364404d, a63990d, 4a21aa2); residual WR-01 first-write gap accepted as AR-07-03; upsert partial row confirmed on live DB (07-04)
 - [Phase PORTIA-08]: 08-01: employee merge decides per flag (profilesRead, manualRead, Roblox fields), trusted only when === true; only degraded === false answers reach the device cache; editor callbacks patch the cache and never create one
+- [Phase PORTIA-08]: The editor accepts a list only when profilesRead === true and reads it from the never-cached /api/employees/editor route
+- [Phase PORTIA-08]: A save sends only changed fields; a clean save sends nothing and a missing rating is never sent as null
+- [Phase PORTIA-08]: Load error and save error are separate states; the empty list keeps the list column and add form
 
 ### Pending Todos
 
@@ -102,8 +106,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-20T07:06:23.954Z
-Stopped at: Completed PORTIA-08-01-PLAN.md
+Last session: 2026-10-20T07:10:51.825Z
+Stopped at: Completed PORTIA-08-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
