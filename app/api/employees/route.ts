@@ -31,7 +31,8 @@ export async function PATCH(request: Request) {
     const access = await getEditorAccess(supabase, data.user);
     if (!data.user || !access.canEdit) return Response.json({ error: "Нет доступа к редактору." }, { status: 403 });
 
-    const body = await request.json() as { id?: unknown; changes?: unknown };
+    const body = parseJsonObject(await request.text());
+    if (!body) return Response.json({ error: "Некорректные данные." }, { status: 400 });
     const id = typeof body.id === "string" ? body.id : "";
     const changes = sanitizeEmployeeUpdate(body.changes);
     if (!changes) return Response.json({ error: "Некорректные данные." }, { status: 400 });
@@ -43,7 +44,7 @@ export async function PATCH(request: Request) {
     changes.knowledgeRating = employee.knowledgeRating;
 
     // Title, rank and callsign are editable only for people outside the sheet; the profile is saved first either way.
-    const details = employee.source === "manual" ? sanitizeManualDetails((body as { details?: unknown }).details) : null;
+    const details = employee.source === "manual" ? sanitizeManualDetails(body.details) : null;
     const { ratingsSaved } = await saveEmployeeProfile(supabase, employee, changes, data.user.id);
     const detailsResult = details ? await updateManualEmployee(supabase, employee, details) : null;
     const saved = detailsResult?.status === "updated" ? { ...employee, ...details } : employee;
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
     const access = await getEditorAccess(supabase, data.user);
     if (!data.user || !access.canEdit) return Response.json({ error: "Нет доступа к редактору." }, { status: 403 });
 
-    const input = sanitizeManualEmployee(await request.json());
+    const input = sanitizeManualEmployee(parseJsonObject(await request.text()));
     if (!input) return Response.json({ error: "Некорректные данные." }, { status: 400 });
     const { employees, profilesRead, profiles } = await loadEmployees(supabase);
     if (!profilesRead) return Response.json({ error: "Профили сотрудников не загрузились. Обновите страницу через минуту." }, { status: 503 });

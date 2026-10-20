@@ -3,6 +3,7 @@ import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
 import { contentCacheTag, noStoreHeaders, publicCacheHeaders, purgeCacheTag } from "@/lib/portia-cdn";
+import { parseJsonObject } from "@/lib/request-json";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,8 @@ export async function PUT(request: Request) {
 
     const raw = await request.text();
     if (raw.length > 2_000_000) return Response.json({ error: "Данные слишком большие." }, { status: 413 });
-    const body = JSON.parse(raw) as { content?: unknown; revision?: unknown };
+    const body = parseJsonObject(raw);
+    if (!body) return Response.json({ error: "Некорректные данные." }, { status: 400 });
     const normalized = normalizePortiaContent(body.content);
     const baseRevision = typeof body.revision === "number" && Number.isInteger(body.revision) && body.revision >= 0 ? body.revision : null;
     if (!normalized || baseRevision === null) {
