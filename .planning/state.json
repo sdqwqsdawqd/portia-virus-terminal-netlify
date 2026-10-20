@@ -16,7 +16,7 @@
     {
       "number": "8",
       "name": "Сотрудники без потерь на экране",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "9",
@@ -41,8 +41,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 08 of 7 · 29% · executing"
+    "label": "Advance to the next step (plan phase 9)",
+    "reason": "Phase 9 of 7 — needs a plan"
   },
-  "updated_at": "2026-10-20T07:14:34.922Z"
+  "updated_at": "2026-10-20T16:04:49.240Z"
 }
