@@ -748,3 +748,42 @@ test("mergeEmployeesAnswer: nothing known before and profiles not read stays unr
 test("mergeEmployeesAnswer: an answer without degraded false is never cacheable", () => {
   assert.equal(mergeEmployeesAnswer([goodFox], { employees: [goodFox], profilesRead: true, manualRead: true }, true).cacheable, false);
 });
+
+const sheetFox = person({ biography: "bio" });
+const manualOwl = person({ id: "roblox-9", nickname: "Owl", source: "manual", biography: "m" });
+
+test("mergeEmployeesAnswer: manual employees not read stay from the last good list", () => {
+  const merged = mergeEmployeesAnswer([sheetFox, manualOwl], { employees: [sheetFox], degraded: true, profilesRead: true, manualRead: false }, true);
+  assert.deepEqual(merged.employees.map((employee) => employee.id), ["roblox-1", "roblox-9"]);
+  assert.equal(merged.employees[1].biography, "m");
+  assert.equal(merged.cacheable, false);
+});
+
+test("mergeEmployeesAnswer: a missing manualRead key counts as not read", () => {
+  const merged = mergeEmployeesAnswer([sheetFox, manualOwl], { employees: [sheetFox], degraded: true, profilesRead: true }, true);
+  assert.deepEqual(merged.employees.map((employee) => employee.id), ["roblox-1", "roblox-9"]);
+});
+
+test("mergeEmployeesAnswer: manual employees read and missing are gone", () => {
+  const merged = mergeEmployeesAnswer([sheetFox, manualOwl], { employees: [sheetFox], degraded: true, profilesRead: true, manualRead: true }, true);
+  assert.deepEqual(merged.employees.map((employee) => employee.id), ["roblox-1"]);
+});
+
+test("mergeEmployeesAnswer: without Roblox data the previous avatars and Roblox id stay", () => {
+  const before = person({ id: "roblox-5", nickname: "Fox", robloxUserId: 5, robloxAvatarUrl: "a", robloxFullAvatarUrl: "f", biography: "bio" });
+  const noRoblox = person({ id: "nick-fox", nickname: "fox", robloxUserId: null });
+  const [fox] = mergeEmployeesAnswer([before], { employees: [noRoblox], degraded: true, profilesRead: false }, true).employees;
+  assert.deepEqual([fox.id, fox.robloxUserId, fox.robloxAvatarUrl, fox.robloxFullAvatarUrl, fox.biography], ["roblox-5", 5, "a", "f", "bio"]);
+});
+
+test("mergeEmployeesAnswer: an empty avatar yields to the previous one, a new one wins", () => {
+  const before = person({ robloxUserId: 1, robloxAvatarUrl: "a" });
+  const empty = mergeEmployeesAnswer([before], { employees: [person({ robloxUserId: 1 })], degraded: true, profilesRead: true, manualRead: true }, true);
+  const fresh = mergeEmployeesAnswer([before], { employees: [person({ robloxUserId: 1, robloxAvatarUrl: "b" })], degraded: true, profilesRead: true, manualRead: true }, true);
+  assert.deepEqual([empty.employees[0].robloxAvatarUrl, fresh.employees[0].robloxAvatarUrl], ["a", "b"]);
+});
+
+test("mergeEmployeesAnswer: a complete answer applies none of the carry rules", () => {
+  const merged = mergeEmployeesAnswer([sheetFox, person({ robloxUserId: 1, robloxAvatarUrl: "a" }), manualOwl], { employees: [person({ robloxUserId: 1 })], degraded: false, profilesRead: true, manualRead: true }, true);
+  assert.deepEqual(merged.employees.map((employee) => [employee.id, employee.robloxAvatarUrl]), [["roblox-1", ""]]);
+});
