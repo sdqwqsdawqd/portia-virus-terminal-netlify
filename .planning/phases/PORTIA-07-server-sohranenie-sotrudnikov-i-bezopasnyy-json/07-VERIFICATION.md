@@ -1,7 +1,7 @@
 ---
 phase: PORTIA-07-server-sohranenie-sotrudnikov-i-bezopasnyy-json
 verified: 2026-10-20T06:00:00Z
-status: human_needed
+status: passed
 score: 10/11 must-haves verified
 covered_files:
   - ".planning/phases/PORTIA-07-server-sohranenie-sotrudnikov-i-bezopasnyy-json/07-01-PLAN.md"
