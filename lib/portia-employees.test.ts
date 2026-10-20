@@ -2,7 +2,7 @@ import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  acceptsRoster, addManualEmployee, employeeId, employeeRatings, mergeManualEmployees, parseCsv, profileChanged, profileFromRow, profileOf,
+  acceptsRoster, addManualEmployee, employeeId, employeeRatings, mergeEmployeesAnswer, mergeManualEmployees, parseCsv, profileChanged, profileFromRow, profileOf,
   readEmployeeProfiles, readManualEmployees, removeManualEmployee, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, updateManualEmployee,
   saveEmployeeProfile, saveEmployeePatch, loadEmployees, withProfile, type EmployeeProfile, type EmployeeUpdate, type PortiaEmployee, type RosterEmployee,
 } from "./portia-employees.ts";
@@ -704,4 +704,47 @@ test("empty details, and details for a sheet employee, issue no manual update", 
 
 test("a delete error is thrown", async () => {
   await assert.rejects(removeManualEmployee(manualTable({ rows: [manualRow(50, "Gamma_x")], deleteError: { code: "42501" } }).client, mixedRoster, "roblox-50"), { code: "42501" });
+});
+
+const person = (overrides: Partial<PortiaEmployee>): PortiaEmployee => ({ ...someone, id: "roblox-1", nickname: "Fox", ...overrides });
+const goodFox = person({ title: "Old", biography: "old bio", photoUrl: "https://x/p.png", pawsRating: 8 });
+const blankFox = person({ title: "New" });
+
+test("mergeEmployeesAnswer: a complete answer replaces the list and may be cached", () => {
+  const answer = [person({ id: "roblox-2", nickname: "Owl" }), person({ id: "roblox-3", nickname: "Elk" })];
+  const merged = mergeEmployeesAnswer([goodFox], { employees: answer, degraded: false, profilesRead: true, manualRead: true }, true);
+  assert.deepEqual(merged.employees, answer);
+  assert.equal(merged.cacheable, true);
+  assert.equal(merged.profilesRead, true);
+});
+
+test("mergeEmployeesAnswer: profiles not read keep the last good biography, photo and ratings", () => {
+  const merged = mergeEmployeesAnswer([goodFox], { employees: [blankFox], degraded: true, profilesRead: false }, true);
+  const [fox] = merged.employees;
+  assert.deepEqual([fox.biography, fox.photoUrl, fox.pawsRating, fox.title], ["old bio", "https://x/p.png", 8, "New"]);
+  assert.equal(merged.cacheable, false);
+  assert.equal(merged.profilesRead, true);
+});
+
+test("mergeEmployeesAnswer: a missing profilesRead key is not trusted", () => {
+  const merged = mergeEmployeesAnswer([goodFox], { employees: [blankFox], degraded: true }, true);
+  assert.deepEqual([merged.employees[0].biography, merged.employees[0].pawsRating], ["old bio", 8]);
+});
+
+test("mergeEmployeesAnswer: a Roblox-only failure still takes profiles from the answer", () => {
+  const fresh = person({ biography: "new bio", pawsRating: 3 });
+  const merged = mergeEmployeesAnswer([goodFox], { employees: [fresh], degraded: true, profilesRead: true }, true);
+  assert.deepEqual([merged.employees[0].biography, merged.employees[0].pawsRating], ["new bio", 3]);
+  assert.equal(merged.cacheable, false);
+});
+
+test("mergeEmployeesAnswer: nothing known before and profiles not read stays unread", () => {
+  const merged = mergeEmployeesAnswer([], { employees: [blankFox], degraded: true, profilesRead: false }, true);
+  assert.deepEqual(merged.employees, [blankFox]);
+  assert.equal(merged.cacheable, false);
+  assert.equal(merged.profilesRead, false);
+});
+
+test("mergeEmployeesAnswer: an answer without degraded false is never cacheable", () => {
+  assert.equal(mergeEmployeesAnswer([goodFox], { employees: [goodFox], profilesRead: true, manualRead: true }, true).cacheable, false);
 });
