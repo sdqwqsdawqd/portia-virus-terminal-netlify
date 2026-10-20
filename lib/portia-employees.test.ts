@@ -303,6 +303,17 @@ test("not found and nothing is written: no nickname, a stranger, or an id of the
   assert.equal(db.profiles.upserts.length, 0);
 });
 
+test("a newcomer id cannot be re-pointed: a nickname stored under another Roblox id is not found", async (t) => {
+  stubSheet(t, ['"1","Fox","","",""', '"2","Wolf","","",""']);
+  const stored = { employee_id: "roblox-1", nickname: "Fox", biography: "", photo_url: "", knowledge_rating: 1 };
+  const db = fakeDb(fakeTable(true, [stored]), manualTable());
+  assert.deepEqual(await saveEmployeePatch(db.client, "user-1", newcomer("roblox-9", "Fox")), { status: "not-found" });
+  assert.equal(db.profiles.upserts.length, 0);
+  // The same id for the same nickname, and any id for a nickname with no stored id yet, are allowed.
+  assert.equal((await saveEmployeePatch(db.client, "user-1", newcomer("roblox-1", "Fox"))).status, "saved");
+  assert.equal((await saveEmployeePatch(db.client, "user-1", newcomer("roblox-9", "Wolf"))).status, "saved");
+});
+
 test("a legacy nick- profile seeds the first row of a newcomer", async (t) => {
   stubSheet(t, ['"1","Fox","","",""']);
   const legacy = { employee_id: "nick-fox", nickname: "Fox", biography: "old", photo_url: "https://x/p.png", knowledge_rating: 3, paws_rating: 8 };

@@ -529,6 +529,10 @@ export async function saveEmployeePatch(supabase: SupabaseClient, userId: string
       console.error("PORTIA employee profiles read for a save failed", error);
       return { status: "profiles-unavailable" };
     }
+    // Bind the id to the nickname: a nickname already stored under another Roblox id cannot be re-pointed. A nickname with no stored id yet is unverifiable (Roblox is not asked, D-06).
+    const knownRobloxId = profiles.robloxIdByNickname.get(nicknameKey(person.nickname));
+    const claimedRobloxId = id.match(/^roblox-(\d+)$/)?.[1];
+    if (knownRobloxId && claimedRobloxId && Number(claimedRobloxId) !== knownRobloxId) return { status: "not-found" };
     // The profile saved under the nickname before the Roblox id was known stays visible (see withProfile).
     const legacy = profiles.byId.get(employeeId(person.nickname, null));
     if (legacy) write = { biography: legacy.biography, photoUrl: legacy.photoUrl, ...Object.fromEntries(optionalRatings.map(({ key }) => [key, legacy[key]])), ...changes };
