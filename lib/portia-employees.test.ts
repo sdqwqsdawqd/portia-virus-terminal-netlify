@@ -2,9 +2,9 @@ import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  acceptsRoster, addManualEmployee, employeeId, employeeRatings, mergeManualEmployees, parseCsv, profileChanged, profileFromRow,
+  acceptsRoster, addManualEmployee, employeeId, employeeRatings, mergeManualEmployees, parseCsv, profileChanged, profileFromRow, profileOf,
   readEmployeeProfiles, readManualEmployees, removeManualEmployee, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, updateManualEmployee,
-  saveEmployeeProfile, withProfile, type EmployeeProfile, type PortiaEmployee, type RosterEmployee,
+  saveEmployeeProfile, saveEmployeePatch, withProfile, type EmployeeProfile, type PortiaEmployee, type RosterEmployee,
 } from "./portia-employees.ts";
 
 const noRatings = { pawsRating: null, bioRating: null, sRating: null, activityRating: null, testsRating: null, overallRating: null };
@@ -74,9 +74,10 @@ test("a missing or non-array employees field is ignored", () => {
   assert.equal(acceptsRoster({}), false);
 });
 
-// In-memory stand-in for the one table call shape the module uses; `migrated` toggles the rating columns.
+// In-memory stand-in for the profile table; `migrated` toggles the rating columns, `upsertError` fails every write.
 type Row = Record<string, unknown>;
-function fakeTable(migrated: boolean, seed: Row[] = []) {
+const tableDefaults: Row = { biography: "", photo_url: "", knowledge_rating: 1, nickname: "" };
+function fakeTable(migrated: boolean, seed: Row[] = [], upsertError?: { code: string }) {
   const rows = new Map<string, Row>(seed.map((row) => [String(row.employee_id), row]));
   const upserts: Row[] = [];
   const ratingColumn = (name: string) => /^(paws|bio|s|activity|overall)_rating$/.test(name);
@@ -87,13 +88,21 @@ function fakeTable(migrated: boolean, seed: Row[] = []) {
           if (!migrated && columns.split(",").some((column) => ratingColumn(column.trim()))) return { data: null, error: { code: "42703" } };
           return { data: [...rows.values()].map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => migrated || !ratingColumn(key)))), error: null };
         },
+        eq: (_column: string, id: string) => ({ maybeSingle: async () => ({ data: rows.get(id) ?? null, error: null }) }),
       }),
-      upsert: async (row: Row) => {
-        if (!migrated && Object.keys(row).some(ratingColumn)) return { error: { code: "PGRST204" } };
-        upserts.push(row);
-        rows.set(String(row.employee_id), { ...rows.get(String(row.employee_id)), ...row });
-        return { error: null };
-      },
+      // Like PostgREST: the stored row is answered after the write, and a first insert takes the column defaults.
+      upsert: (row: Row) => ({
+        select: () => ({
+          single: async () => {
+            if (upsertError) return { data: null, error: upsertError };
+            if (!migrated && Object.keys(row).some(ratingColumn)) return { data: null, error: { code: "PGRST204" } };
+            upserts.push(row);
+            const stored = { ...(rows.get(String(row.employee_id)) ?? tableDefaults), ...row };
+            rows.set(String(row.employee_id), stored);
+            return { data: stored, error: null };
+          },
+        }),
+      }),
     }),
   };
   return { client: client as unknown as SupabaseClient, upserts, rows };
@@ -101,21 +110,23 @@ function fakeTable(migrated: boolean, seed: Row[] = []) {
 
 const target: RosterEmployee = { id: "roblox-1", nickname: "Fox", callsign: "", title: "", rank: "", robloxUserId: 1, robloxAvatarUrl: "", robloxFullAvatarUrl: "", order: 0, source: "sheet" };
 const fullRatings = { knowledgeRating: 6, pawsRating: 5, bioRating: 4, sRating: 3, activityRating: 2, testsRating: 7, overallRating: 9 };
+const foxTarget = { id: target.id, nickname: target.nickname };
 
 async function roundTrip(migrated: boolean) {
   const table = fakeTable(migrated);
   const changes = sanitizeEmployeeUpdate({ biography: "bio", photoUrl: "https://x/y.png", ...fullRatings });
   assert.ok(changes);
-  const saved = await saveEmployeeProfile(table.client, target, changes, "user-1");
+  const saved = await saveEmployeeProfile(table.client, foxTarget, changes, "user-1");
   const profile = withProfile(target, await readEmployeeProfiles(table.client));
   return { table, saved, profile };
 }
 
-test("before the migration a save keeps biography, photo and knowledge, and new ratings stay empty", async () => {
+test("before the migration a save keeps biography and photo, and new ratings stay empty", async () => {
   const { table, saved, profile } = await roundTrip(false);
   assert.equal(saved.ratingsSaved, false);
   assert.equal(table.upserts.length, 1);
-  assert.deepEqual([profile.biography, profile.photoUrl, profile.knowledgeRating], ["bio", "https://x/y.png", 6]);
+  // knowledge_rating is never written from a request: the column default stays.
+  assert.deepEqual([profile.biography, profile.photoUrl, profile.knowledgeRating], ["bio", "https://x/y.png", 1]);
   assert.deepEqual([profile.pawsRating, profile.bioRating, profile.sRating, profile.activityRating, profile.overallRating], [null, null, null, null, null]);
 });
 
@@ -123,26 +134,26 @@ test("after the migration one upsert stores all six ratings and they read back",
   const { table, saved, profile } = await roundTrip(true);
   assert.equal(saved.ratingsSaved, true);
   assert.equal(table.upserts.length, 1);
-  assert.deepEqual({ k: profile.knowledgeRating, p: profile.pawsRating, b: profile.bioRating, s: profile.sRating, a: profile.activityRating, o: profile.overallRating }, { k: 6, p: 5, b: 4, s: 3, a: 2, o: 9 });
+  assert.deepEqual({ p: profile.pawsRating, t: profile.testsRating, b: profile.bioRating, s: profile.sRating, a: profile.activityRating, o: profile.overallRating }, { p: 5, t: 7, b: 4, s: 3, a: 2, o: 9 });
+  assert.deepEqual(saved.profile, profileOf(profile));
 });
 
 test("an upsert error that is not a missing column is thrown", async () => {
-  const client = { from: () => ({ upsert: async () => ({ error: { code: "42501" } }) }) } as unknown as SupabaseClient;
-  const changes = sanitizeEmployeeUpdate({ ...fullRatings });
-  await assert.rejects(saveEmployeeProfile(client, target, changes!, "user-1"), { code: "42501" });
+  const client = fakeTable(true, [], { code: "42501" }).client;
+  await assert.rejects(saveEmployeeProfile(client, foxTarget, sanitizeEmployeeUpdate({ ...fullRatings })!, "user-1"), { code: "42501" });
 });
 
 test("a rating key missing from the update is left out of the row; null and empty clear it", async () => {
   const table = fakeTable(true, [{ employee_id: "roblox-1", nickname: "Fox", biography: "", photo_url: "", knowledge_rating: 1, paws_rating: 8, bio_rating: 8 }]);
-  const changes = sanitizeEmployeeUpdate({ biography: "x", knowledgeRating: 2, bioRating: null, sRating: "" });
+  const changes = sanitizeEmployeeUpdate({ biography: "x", bioRating: null, sRating: "" });
   assert.ok(changes && !("pawsRating" in changes) && changes.bioRating === null && changes.sRating === null);
-  await saveEmployeeProfile(table.client, target, changes, "user-1");
+  await saveEmployeeProfile(table.client, foxTarget, changes, "user-1");
   assert.ok(!("paws_rating" in table.upserts[0]));
   const stored = withProfile(target, await readEmployeeProfiles(table.client));
   assert.deepEqual([stored.pawsRating, stored.bioRating], [8, null]);
 });
 
-test("new ratings are clamped to 1-10 or empty, knowledge defaults to 1", () => {
+test("new ratings are clamped to 1-10 or empty, and nothing is defaulted", () => {
   const read = (value: unknown) => sanitizeEmployeeUpdate({ pawsRating: value })?.pawsRating;
   assert.equal(read(11), 10);
   assert.equal(read(0), 1);
@@ -150,7 +161,90 @@ test("new ratings are clamped to 1-10 or empty, knowledge defaults to 1", () => 
   assert.equal(read(6.6), 7);
   assert.equal(read(null), null);
   assert.equal(read(""), null);
-  assert.equal(sanitizeEmployeeUpdate({})?.knowledgeRating, 1);
+  assert.deepEqual(sanitizeEmployeeUpdate({}), {});
+});
+
+test("sanitizeEmployeeUpdate keeps only the keys that were sent and never reads knowledgeRating", () => {
+  assert.deepEqual(sanitizeEmployeeUpdate({ pawsRating: 3 }), { pawsRating: 3 });
+  assert.deepEqual(sanitizeEmployeeUpdate({ knowledgeRating: 9, evil: 1 }), {});
+  assert.deepEqual(sanitizeEmployeeUpdate({ biography: "", photoUrl: "" }), { biography: "", photoUrl: "" });
+});
+
+test("wrong types in changes are refused", () => {
+  const bad = [null, [], "x", 5, { biography: 5 }, { photoUrl: 7 }, { photoUrl: "ftp://x" }, { pawsRating: true }, { pawsRating: "abc" }, { pawsRating: {} }, { pawsRating: [] }];
+  for (const value of bad) assert.equal(sanitizeEmployeeUpdate(value), null, JSON.stringify(value));
+});
+
+const storedFox = { employee_id: "roblox-1", nickname: "Fox", biography: "bio", photo_url: "https://x/p.png", knowledge_rating: 1, paws_rating: 8, bio_rating: 6 };
+
+test("one-field save writes only that column", async () => {
+  const table = fakeTable(true, [storedFox]);
+  const saved = await saveEmployeeProfile(table.client, { id: "roblox-1" }, sanitizeEmployeeUpdate({ pawsRating: 3 })!, "user-1");
+  assert.deepEqual(Object.keys(table.upserts[0]).sort(), ["employee_id", "paws_rating", "updated_at", "updated_by"]);
+  assert.equal(table.upserts[0].updated_by, "user-1");
+  assert.deepEqual([saved.ratingsSaved, saved.profile.pawsRating, saved.profile.bioRating, saved.profile.biography, saved.profile.photoUrl], [true, 3, 6, "bio", "https://x/p.png"]);
+});
+
+test("the old whole-profile request is still accepted and never writes knowledge_rating", async () => {
+  const table = fakeTable(true);
+  const changes = sanitizeEmployeeUpdate({ biography: "b", photoUrl: "/p.png", ...fullRatings });
+  await saveEmployeeProfile(table.client, foxTarget, changes!, "user-1");
+  assert.ok(!("knowledge_rating" in table.upserts[0]));
+  assert.deepEqual(Object.keys(table.upserts[0]).sort(), ["activity_rating", "bio_rating", "biography", "employee_id", "nickname", "overall_rating", "paws_rating", "photo_url", "s_rating", "tests_rating", "updated_at", "updated_by"]);
+});
+
+// Both tables behind one client, as the route sees them.
+function fakeDb(profiles: ReturnType<typeof fakeTable>, manual: ReturnType<typeof manualTable>) {
+  const from = (name: string) => (name === "portia_manual_employees" ? manual.client.from(name) : profiles.client.from(name));
+  return { client: { from } as unknown as SupabaseClient, profiles, manual };
+}
+const noNetwork = (t: TestContext) => {
+  const calls: string[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    calls.push(String(url));
+    throw new Error("no network on a known save");
+  });
+  return calls;
+};
+
+test("a known employee is saved with zero network calls", async (t) => {
+  const calls = noNetwork(t);
+  const profileOnly = fakeDb(fakeTable(true, [storedFox]), manualTable());
+  const first = await saveEmployeePatch(profileOnly.client, "user-1", { id: "roblox-1", nickname: "", changes: { bioRating: 5 }, details: {} });
+  assert.equal(first.status, "saved");
+  const manualOnly = fakeDb(fakeTable(true), manualTable({ rows: [manualRow(50, "Gamma_x")] }));
+  const second = await saveEmployeePatch(manualOnly.client, "user-1", { id: "roblox-50", nickname: "", changes: { bioRating: 5 }, details: {} });
+  assert.equal(second.status, "saved");
+  assert.equal(manualOnly.profiles.upserts[0].nickname, "Gamma_x");
+  assert.deepEqual(calls, []);
+});
+
+test("the saved answer is the stored profile with its id, and no Roblox fields", async (t) => {
+  noNetwork(t);
+  const db = fakeDb(fakeTable(true, [storedFox]), manualTable());
+  const result = await saveEmployeePatch(db.client, "user-1", { id: "roblox-1", nickname: "Fox", changes: { pawsRating: 3 }, details: {} });
+  assert.equal(result.status, "saved");
+  if (result.status !== "saved") return;
+  assert.deepEqual(result.employee, { id: "roblox-1", biography: "bio", photoUrl: "https://x/p.png", knowledgeRating: 1, pawsRating: 3, bioRating: 6, sRating: null, activityRating: null, testsRating: null, overallRating: null });
+  assert.ok(!("robloxAvatarUrl" in result.employee));
+  assert.equal(result.ratingsPending, undefined);
+  const manual = fakeDb(fakeTable(true), manualTable({ rows: [manualRow(50, "Gamma_x")] }));
+  const answer = await saveEmployeePatch(manual.client, "user-1", { id: "roblox-50", nickname: "", changes: {}, details: {} });
+  assert.ok(answer.status === "saved" && answer.employee.title === "Лаборант" && answer.employee.rank === "2" && answer.employee.callsign === "Лис");
+});
+
+test("before the rating migration the patch answer says the ratings are pending", async (t) => {
+  noNetwork(t);
+  const db = fakeDb(fakeTable(false, [storedFox]), manualTable());
+  const result = await saveEmployeePatch(db.client, "user-1", { id: "roblox-1", nickname: "", changes: { pawsRating: 3, biography: "new" }, details: {} });
+  assert.ok(result.status === "saved" && result.ratingsPending === true && result.employee.biography === "new");
+});
+
+test("an unknown id is not found in this build of the save path", async (t) => {
+  noNetwork(t);
+  const db = fakeDb(fakeTable(true), manualTable());
+  assert.deepEqual(await saveEmployeePatch(db.client, "user-1", { id: "roblox-404", nickname: "", changes: { pawsRating: 3 }, details: {} }), { status: "not-found" });
+  assert.equal(db.profiles.upserts.length, 0);
 });
 
 test("stored rows without rating columns, or with junk, map to empty ratings", () => {
@@ -219,7 +313,10 @@ function manualTable(options: ManualTableOptions = {}) {
     from: (table: string) => {
       assert.equal(table, "portia_manual_employees");
       return {
-        select: () => ({ order: () => ({ returns: async () => (options.readError ? { data: null, error: options.readError } : { data: rows, error: null }) }) }),
+        select: () => ({
+          order: () => ({ returns: async () => (options.readError ? { data: null, error: options.readError } : { data: rows, error: null }) }),
+          eq: (_column: string, id: string) => ({ maybeSingle: async () => (options.readError ? { data: null, error: options.readError } : { data: rows.find((row) => row.employee_id === id) ?? null, error: null }) }),
+        }),
         insert: async (row: Record<string, unknown>) => {
           if (options.insertError) return { error: options.insertError };
           inserts.push(row);

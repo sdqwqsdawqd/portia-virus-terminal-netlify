@@ -27,8 +27,8 @@ type OptionalRatingKey = "pawsRating" | "bioRating" | "sRating" | "activityRatin
 type EditableFields = "knowledgeRating" | OptionalRatingKey | "biography" | "photoUrl";
 export type RosterEmployee = Omit<PortiaEmployee, EditableFields>;
 export type EmployeeProfile = Pick<PortiaEmployee, EditableFields>;
-/** A save: ratings missing here are not changed; null clears one. */
-export type EmployeeUpdate = Omit<EmployeeProfile, OptionalRatingKey> & Partial<Pick<EmployeeProfile, OptionalRatingKey>>;
+/** A save: only the keys present are written; null clears a rating. */
+export type EmployeeUpdate = Partial<Pick<EmployeeProfile, "biography" | "photoUrl" | OptionalRatingKey>>;
 
 // Rename a rating here only: the editor fields and the profile card both render from this table (D-01).
 // knowledge_rating stays in the database (not null) but is no longer shown or edited (owner, 2026-10-18).
@@ -411,46 +411,82 @@ export async function removeManualEmployee(supabase: SupabaseClient, roster: Ros
   return { status: data?.length ? "deleted" : "not-found" };
 }
 
-export async function saveEmployeeProfile(supabase: SupabaseClient, employee: RosterEmployee, profile: EmployeeUpdate, userId: string) {
+export async function saveEmployeeProfile(supabase: SupabaseClient, target: { id: string; nickname?: string }, profile: EmployeeUpdate, userId: string): Promise<{ profile: EmployeeProfile; ratingsSaved: boolean }> {
+  // Only the sent keys reach the row, so the upsert's conflict branch cannot blank a stored column (D-01).
   const base = {
-    employee_id: employee.id,
-    nickname: employee.nickname,
-    biography: profile.biography,
-    photo_url: profile.photoUrl,
-    knowledge_rating: profile.knowledgeRating,
+    employee_id: target.id,
+    ...(target.nickname ? { nickname: target.nickname } : {}),
+    ...(profile.biography === undefined ? {} : { biography: profile.biography }),
+    ...(profile.photoUrl === undefined ? {} : { photo_url: profile.photoUrl }),
     updated_at: new Date().toISOString(),
     updated_by: userId,
   };
   const ratings = Object.fromEntries(optionalRatings.flatMap((rating) => (profile[rating.key] === undefined ? [] : [[rating.column, profile[rating.key]]])));
   const table = supabase.from("portia_employee_profiles");
-  const { error } = await table.upsert({ ...base, ...ratings });
-  if (!error) return { ratingsSaved: true };
+  const first = await table.upsert({ ...base, ...ratings }).select("*").single<ProfileRow>();
+  if (!first.error) return { profile: profileFromRow(first.data), ratingsSaved: true };
   // Tolerates the rating columns being absent until 03.2-06 applies the SQL.
-  if (!isMissingColumnError(error) || !Object.keys(ratings).length) throw error;
-  const retry = await table.upsert(base);
+  if (!isMissingColumnError(first.error) || !Object.keys(ratings).length) throw first.error;
+  const retry = await table.upsert(base).select("*").single<ProfileRow>();
   if (retry.error) throw retry.error;
-  return { ratingsSaved: false };
+  return { profile: profileFromRow(retry.data), ratingsSaved: false };
 }
 
+/** Keeps only the keys that were sent; a wrong type is null (a 400), never a silent default. */
 export function sanitizeEmployeeUpdate(value: unknown): EmployeeUpdate | null {
-  if (!value || typeof value !== "object") return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const candidate = value as Record<string, unknown>;
-  const photoUrl = typeof candidate.photoUrl === "string" ? candidate.photoUrl.trim().slice(0, 2048) : "";
-  if (photoUrl && !photoUrl.startsWith("https://") && !photoUrl.startsWith("/")) return null;
-  const knowledgeRating = Number(candidate.knowledgeRating);
-  const update: EmployeeUpdate = {
-    biography: typeof candidate.biography === "string" ? candidate.biography.slice(0, 20_000) : "",
-    photoUrl,
-    knowledgeRating: Number.isFinite(knowledgeRating) ? Math.min(10, Math.max(1, Math.round(knowledgeRating))) : 1,
-  };
+  const update: EmployeeUpdate = {};
+  if (candidate.biography !== undefined) {
+    if (typeof candidate.biography !== "string") return null;
+    update.biography = candidate.biography.slice(0, 20_000);
+  }
+  if (candidate.photoUrl !== undefined) {
+    if (typeof candidate.photoUrl !== "string") return null;
+    const photoUrl = candidate.photoUrl.trim().slice(0, 2048);
+    if (photoUrl && !photoUrl.startsWith("https://") && !photoUrl.startsWith("/")) return null;
+    update.photoUrl = photoUrl;
+  }
   for (const { key } of optionalRatings) {
     const raw = candidate[key];
+    if (raw === undefined) continue;
     if (raw === null || (typeof raw === "string" && !raw.trim())) update[key] = null;
     else if (typeof raw === "number" || typeof raw === "string") {
-      // A value that is not a number leaves the rating unchanged rather than wiping it.
       const rating = Number(raw);
-      if (Number.isFinite(rating)) update[key] = Math.min(10, Math.max(1, Math.round(rating)));
-    }
+      if (!Number.isFinite(rating)) return null;
+      update[key] = Math.min(10, Math.max(1, Math.round(rating)));
+    } else return null;
   }
   return update;
+}
+
+export type EmployeePatch = { id: string; nickname: string; changes: EmployeeUpdate; details: Partial<ManualDetails> };
+export type SavedEmployeeProfile = EmployeeProfile & { id: string } & Partial<ManualDetails>;
+export type SavePatchResult =
+  | { status: "saved"; employee: SavedEmployeeProfile; ratingsPending?: boolean; detailsPending?: boolean }
+  | { status: "not-found" | "sheet-unavailable" | "profiles-unavailable" | "details-failed" };
+
+/** Which tables already know this id; a missing manual table just means no manual row. */
+async function findKnownEmployee(supabase: SupabaseClient, id: string): Promise<{ hasProfile: boolean; manual: ManualRow | null }> {
+  const [profile, manual] = await Promise.all([
+    supabase.from("portia_employee_profiles").select("employee_id").eq("employee_id", id).maybeSingle(),
+    supabase.from(manualTableName).select("employee_id, nickname, title, rank, callsign").eq("employee_id", id).maybeSingle<ManualRow>(),
+  ]);
+  if (profile.error) throw profile.error;
+  if (manual.error && !isMissingTableError(manual.error)) throw manual.error;
+  return { hasProfile: Boolean(profile.data), manual: manual.error ? null : manual.data };
+}
+
+/** Saves only the sent fields. Last write wins: no lock and no version check (D-02). */
+export async function saveEmployeePatch(supabase: SupabaseClient, userId: string, patch: EmployeePatch): Promise<SavePatchResult> {
+  const { id, changes } = patch;
+  const { hasProfile, manual } = await findKnownEmployee(supabase, id);
+  if (!hasProfile && !manual) return { status: "not-found" };
+  // shortcut: the known path does not refresh portia_employee_profiles.nickname (not known without the sheet); only the Roblox-outage id fallback can miss a renamed person until a newcomer-style write.
+  const { profile, ratingsSaved } = await saveEmployeeProfile(supabase, { id, nickname: manual?.nickname }, changes, userId);
+  return {
+    status: "saved",
+    employee: { id, ...profile, ...(manual ? { title: manual.title, rank: manual.rank, callsign: manual.callsign } : {}) },
+    ratingsPending: ratingsSaved ? undefined : true,
+  };
 }

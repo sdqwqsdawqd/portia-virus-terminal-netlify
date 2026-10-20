@@ -2,7 +2,7 @@ import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/su
 import { getEditorAccess } from "@/lib/editor-access";
 import { employeesCacheTag, noStoreHeaders, publicCacheHeaders, purgeCacheTag } from "@/lib/portia-cdn";
 import { parseJsonObject } from "@/lib/request-json";
-import { addManualEmployee, loadEmployees, removeManualEmployee, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, saveEmployeeProfile, updateManualEmployee, withProfile } from "@/lib/portia-employees";
+import { addManualEmployee, loadEmployees, removeManualEmployee, sanitizeEmployeeUpdate, sanitizeManualEmployee, saveEmployeePatch, withProfile } from "@/lib/portia-employees";
 
 export const dynamic = "force-dynamic";
 
@@ -33,27 +33,26 @@ export async function PATCH(request: Request) {
 
     const body = parseJsonObject(await request.text());
     if (!body) return Response.json({ error: "Некорректные данные." }, { status: 400 });
-    const id = typeof body.id === "string" ? body.id : "";
+    const id = typeof body.id === "string" && body.id.length <= 128 ? body.id : "";
     const changes = sanitizeEmployeeUpdate(body.changes);
-    if (!changes) return Response.json({ error: "Некорректные данные." }, { status: 400 });
-    const { employees, profilesRead } = await loadEmployees(supabase);
-    if (!profilesRead) return Response.json({ error: "Профили сотрудников не загрузились. Обновите страницу через минуту." }, { status: 503 });
-    const employee = employees.find((item) => item.id === id);
-    if (!employee) return Response.json({ error: "Сотрудник не найден. Обновите страницу." }, { status: 404 });
-    // «Знания» is no longer edited: keep the stored value whatever the client sent.
-    changes.knowledgeRating = employee.knowledgeRating;
+    if (!id || !changes) return Response.json({ error: "Некорректные данные." }, { status: 400 });
+    // The nickname only lets the server check a never-saved sheet employee against the sheet (no Roblox call).
+    const nickname = typeof body.nickname === "string" ? body.nickname.trim().slice(0, 64) : "";
 
-    // Title, rank and callsign are editable only for people outside the sheet; the profile is saved first either way.
-    const details = employee.source === "manual" ? sanitizeManualDetails(body.details) : null;
-    const { ratingsSaved } = await saveEmployeeProfile(supabase, employee, changes, data.user.id);
-    const detailsResult = details ? await updateManualEmployee(supabase, employee, details) : null;
-    const saved = detailsResult?.status === "updated" ? { ...employee, ...details } : employee;
-    const detailsPending = detailsResult?.status === "pending-database" || undefined;
+    const result = await saveEmployeePatch(supabase, data.user.id, { id, nickname, changes, details: {} });
+    if (result.status !== "saved") {
+      const refusals = {
+        "not-found": { error: "Сотрудник не найден. Обновите страницу.", status: 404 },
+        "sheet-unavailable": { error: "Таблица не отвечает, попробуйте через минуту.", status: 503 },
+        "profiles-unavailable": { error: "Профили сотрудников не загрузились. Обновите страницу через минуту.", status: 503 },
+        "details-failed": { error: "Не удалось сохранить звание, ранг и позывной. Профиль не изменён.", status: 500 },
+      };
+      const { error, status } = refusals[result.status];
+      return Response.json({ error }, { status });
+    }
     await purgeCacheTag(employeesCacheTag);
-    if (ratingsSaved) return Response.json({ employee: { ...saved, ...changes }, detailsPending }, { headers: noStoreHeaders });
-    // The new rating columns do not exist yet: echo only what was stored.
-    const { biography, photoUrl, knowledgeRating } = changes;
-    return Response.json({ employee: { ...saved, biography, photoUrl, knowledgeRating }, ratingsPending: true, detailsPending }, { headers: noStoreHeaders });
+    const { employee, ratingsPending, detailsPending } = result;
+    return Response.json({ employee, ratingsPending, detailsPending }, { headers: noStoreHeaders });
   } catch (error) {
     console.error("PORTIA employee update failed", error);
     return Response.json({ error: "Не удалось сохранить профиль." }, { status: 500 });

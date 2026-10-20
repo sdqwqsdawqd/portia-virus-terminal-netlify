@@ -1443,20 +1443,22 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
         credentials: "same-origin",
         cache: "no-store",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: selected.id, changes: draft, ...(selected.source === "manual" ? { details } : {}) }),
+        body: JSON.stringify({ id: selected.id, nickname: selected.nickname, changes: draft, ...(selected.source === "manual" ? { details } : {}) }),
       });
-      const payload = await response.json() as { employee?: PortiaEmployee; ratingsPending?: boolean; detailsPending?: boolean; error?: string };
+      const payload = await response.json() as { employee?: Partial<PortiaEmployee> & { id: string }; ratingsPending?: boolean; detailsPending?: boolean; error?: string };
       if (!response.ok || !payload.employee) {
         const message = response.status === 403
           ? "Сессия редактора истекла. Войдите в редактор снова."
           : payload.error || `Сервер отклонил сохранение (${response.status}).`;
         throw new Error(message);
       }
-      setEmployees((current) => current.map((employee) => employee.id === payload.employee!.id ? payload.employee! : employee));
-      onSaved(payload.employee);
-      setDraft(profileOf(payload.employee));
+      // The answer is the stored profile only; the card keeps its avatar, nickname, source and sheet title (D-07).
+      const merged: PortiaEmployee = { ...selected, ...payload.employee };
+      setEmployees((current) => current.map((employee) => employee.id === merged.id ? merged : employee));
+      onSaved(merged);
+      setDraft(profileOf(merged));
       // When the database refused the details, the typed values stay as an unsaved edit.
-      if (!payload.detailsPending) setDetails(detailsOf(payload.employee));
+      if (!payload.detailsPending) setDetails(detailsOf(merged));
       setRatingsPending(Boolean(payload.ratingsPending));
       setDetailsPending(Boolean(payload.detailsPending));
       setState("saved");
