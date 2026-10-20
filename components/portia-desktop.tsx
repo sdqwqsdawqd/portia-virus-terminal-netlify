@@ -1394,7 +1394,12 @@ function BootScreen({ visible }: { visible: boolean }) {
   </div></div>;
 }
 
-function EmployeeImage({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
+// A new src (a corrected photo) starts a fresh load instead of keeping the old failed state.
+function EmployeeImage(props: { src: string; alt: string; fallbackClassName?: string }) {
+  return <EmployeeImageInner key={props.src} {...props} />;
+}
+
+function EmployeeImageInner({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   // A failed URL shows the PORTIA fallback, never a broken image; if the fallback fails too, the skeleton still stops (D-09 #7).
