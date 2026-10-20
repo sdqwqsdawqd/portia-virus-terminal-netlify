@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Закрытие замечаний
-current_phase: 07
-current_phase_name: "Сервер: сохранение сотрудников и безопасный JSON"
-status: executing
-stopped_at: Completed PORTIA-07-04-PLAN.md
-last_updated: "2026-10-20T05:24:46.488Z"
+current_phase: 8
+current_phase_name: Сотрудники без потерь на экране
+status: planning
+stopped_at: Phase PORTIA-07 complete, ready to plan Phase 8
+last_updated: "2026-10-20T05:45:26.972Z"
 last_activity: 2026-10-20
-last_activity_desc: Phase PORTIA-07 execution started
-state_head: 98e08f6a108cb72e8a320d5350499adc2cc99dbd
+last_activity_desc: Phase PORTIA-07 complete, transitioned to Phase 8
+state_head: 8aa3106829ec7b44e917a9da563b86848ff71662
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
   completed_plans: 8
-  percent: 14
+  percent: 29
 ---
 
 # Project State
@@ -25,16 +25,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-20)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-07 — Сервер: сохранение сотрудников и безопасный JSON
+**Current focus:** Phase 8 — Сотрудники без потерь на экране
 
 ## Current Position
 
-Phase: PORTIA-07 (Сервер: сохранение сотрудников и безопасный JSON) — EXECUTING
-Plan: 4 of 4
-Status: Executing Phase PORTIA-07
-Last activity: 2026-10-20 — Phase PORTIA-07 execution started
+Phase: 8 — Сотрудники без потерь на экране
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-20 — Phase PORTIA-07 complete, transitioned to Phase 8
 
-Progress: [█░░░░░░░░░] 14%
+Progress: [████░░░░░░] 2/7 фаз v1.1 (6, 7)
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-07]: 07-02: manual employees stored/shown in Roblox spelling; old rows corrected at read time only; EMP-10 closed by owner's 34-slot rule (D-13)
 - [Phase PORTIA-07]: 07-03: PATCH saves only sent fields; newcomer ids checked against the sheet by nickname, Roblox never called; manual details written first and restored on profile failure
 - [Phase PORTIA-07]: 07-04: 03.1 IN-03 closed by owner rule D-13 (sheet has exactly 34 places); 03.2 WR-04 and 03.3 IN-04 stay open with progress notes
+- [Phase PORTIA-07]: review fixes WR-01..03 (364404d, a63990d, 4a21aa2); residual WR-01 first-write gap accepted as AR-07-03; upsert partial row confirmed on live DB (07-04)
 
 ### Pending Todos
 
@@ -81,7 +82,6 @@ None.
 
 - ⚠️ [Данные] Сохранения проверять только на временном сотруднике вне таблицы; `PUT /api/content` скриптами не вызывать.
 - [Данные] Выгрузка владельца 2026-10-19: `portia_employee_profiles_2026-10-19.json` (18 строк) и `portia_content_2026-10-19.json` (1 строка) в `C:\Users\User\backups\portia\`, вне git.
-- ⚠️ [Phase 7] Проверить вставку частичной строки профиля (upsert) у сотрудника без сохранённой строки.
 - ⚠️ [Phase 9] Перед подъёмом лимитов сверить размер рабочего `portia_content` и прогнать нормализатор по выгрузке: нормализатор чинит, не удаляет.
 - ⚠️ [Phase 10–11] `sandbox` и панель оформления проверяет владелец в браузере и на телефоне; тестами не закрыть.
 - ⚠️ [Phase 12] `email_confirmed_at` в SQL может заблокировать владельца: предпроверка `auth.users`, откат, «Confirm email» включено; SQL применяет владелец сам.
@@ -101,9 +101,9 @@ None.
 ## Session Continuity
 
 Last session: 2026-10-20T05:24:46.440Z
-Stopped at: Completed PORTIA-07-04-PLAN.md
+Stopped at: Phase PORTIA-07 complete, ready to plan Phase 8
 Resume file: None
 
 ## Operator Next Steps
 
-- `/gsd-discuss-phase 7` или `/gsd-plan-phase 7`
+- `/gsd-discuss-phase 8` или `/gsd-plan-phase 8`
