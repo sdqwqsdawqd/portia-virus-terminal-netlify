@@ -43,18 +43,18 @@ export const employeeRatings = [
 ] as const;
 const optionalRatings: ReadonlyArray<{ key: OptionalRatingKey; column: string; label: string }> = employeeRatings;
 
-/** The editable fields of an employee; a roster cached before the ratings existed has none of the new ones. */
+/** The editable fields of an employee. A missing rating stays missing so no save can turn it into an explicit null (D-11); comparisons treat missing and null alike. */
 export function profileOf(employee: PortiaEmployee): EmployeeProfile {
   return {
     biography: employee.biography,
     photoUrl: employee.photoUrl,
     knowledgeRating: employee.knowledgeRating,
-    pawsRating: employee.pawsRating ?? null,
-    bioRating: employee.bioRating ?? null,
-    sRating: employee.sRating ?? null,
-    activityRating: employee.activityRating ?? null,
-    testsRating: employee.testsRating ?? null,
-    overallRating: employee.overallRating ?? null,
+    pawsRating: employee.pawsRating,
+    bioRating: employee.bioRating,
+    sRating: employee.sRating,
+    activityRating: employee.activityRating,
+    testsRating: employee.testsRating,
+    overallRating: employee.overallRating,
   };
 }
 
@@ -62,6 +62,22 @@ export function profileOf(employee: PortiaEmployee): EmployeeProfile {
 export function profileChanged(saved: EmployeeProfile, draft: EmployeeProfile): boolean {
   return saved.biography !== draft.biography || saved.photoUrl !== draft.photoUrl
     || employeeRatings.some(({ key }) => (saved[key] ?? null) !== (draft[key] ?? null));
+}
+
+/** The PATCH body: only what differs from the saved profile; absent keys stay as stored (Phase 7 contract). */
+export function changedFields(saved: EmployeeProfile, draft: EmployeeProfile): EmployeeUpdate {
+  const changes: EmployeeUpdate = {};
+  if (saved.biography !== draft.biography) changes.biography = draft.biography;
+  if (saved.photoUrl !== draft.photoUrl) changes.photoUrl = draft.photoUrl;
+  for (const { key } of employeeRatings) if ((saved[key] ?? null) !== (draft[key] ?? null)) changes[key] = draft[key] ?? null;
+  return changes;
+}
+
+/** Title, rank and callsign of a manual employee that differ from the saved ones. */
+export function changedDetails(saved: ManualDetails, draft: ManualDetails): Partial<ManualDetails> {
+  const changes: Partial<ManualDetails> = {};
+  for (const key of ["title", "rank", "callsign"] as const) if (saved[key] !== draft[key]) changes[key] = draft[key];
+  return changes;
 }
 
 export function isMissingColumnError(error: { code?: string } | null | undefined) {

@@ -2,7 +2,7 @@ import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  acceptsEditorList, acceptsRoster, addManualEmployee, employeeId, employeeRatings, mergeEmployeesAnswer, mergeManualEmployees, parseCsv, profileChanged, profileFromRow, profileOf,
+  acceptsEditorList, acceptsRoster, addManualEmployee, changedDetails, changedFields, employeeId, employeeRatings, mergeEmployeesAnswer, mergeManualEmployees, parseCsv, profileChanged, profileFromRow, profileOf,
   readEmployeeProfiles, readManualEmployees, removeManualEmployee, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, updateManualEmployee,
   saveEmployeeProfile, saveEmployeePatch, loadEmployees, withProfile, type EmployeeProfile, type EmployeeUpdate, type PortiaEmployee, type RosterEmployee,
 } from "./portia-employees.ts";
@@ -795,4 +795,33 @@ test("acceptsEditorList: only a list with profilesRead true is accepted", () => 
   assert.equal(acceptsEditorList({ employees: [sheetFox] }), false);
   assert.equal(acceptsEditorList({ employees: "x", profilesRead: true }), false);
   assert.equal(acceptsEditorList({ profilesRead: true }), false);
+});
+
+test("changedFields: only changed keys are sent, a missing rating is never sent as null", () => {
+  const saved: EmployeeProfile = { biography: "bio", photoUrl: "", knowledgeRating: 5, ...noRatings, pawsRating: 5, bioRating: 7 };
+  assert.deepEqual(changedFields(saved, { ...saved }), {});
+  assert.deepEqual(changedFields(saved, { ...saved, pawsRating: 7 }), { pawsRating: 7 });
+  assert.deepEqual(changedFields(saved, { ...saved, bioRating: null }), { bioRating: null });
+  assert.deepEqual(changedFields(saved, { ...saved, biography: "new" }), { biography: "new" });
+  assert.deepEqual(changedFields(saved, { ...saved, photoUrl: "x" }), { photoUrl: "x" });
+  assert.deepEqual(changedFields(saved, { ...saved, knowledgeRating: 9 }), {});
+  const legacy = { ...saved } as Partial<EmployeeProfile>;
+  delete legacy.sRating;
+  assert.deepEqual(changedFields(legacy as EmployeeProfile, { ...saved, sRating: null }), {});
+  assert.deepEqual(changedFields(legacy as EmployeeProfile, { ...saved, sRating: 5 }), { sRating: 5 });
+});
+
+test("changedDetails: only the changed title, rank or callsign", () => {
+  const saved = { title: "T", rank: "R", callsign: "C" };
+  assert.deepEqual(changedDetails(saved, { ...saved }), {});
+  assert.deepEqual(changedDetails(saved, { ...saved, rank: "R2" }), { rank: "R2" });
+  assert.deepEqual(changedDetails(saved, { ...saved, callsign: "" }), { callsign: "" });
+});
+
+test("profileOf keeps a missing rating missing (D-11)", () => {
+  const legacy = { ...someone } as Partial<PortiaEmployee>;
+  delete legacy.pawsRating;
+  const profile = profileOf(legacy as PortiaEmployee);
+  assert.equal(profile.pawsRating, undefined);
+  assert.equal(profileChanged(profile, { ...profile, pawsRating: null }), false);
 });

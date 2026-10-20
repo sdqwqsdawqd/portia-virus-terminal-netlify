@@ -23,7 +23,7 @@ import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import type { FieldSelectionEvent, FieldSelectionState } from "@/lib/rich-text-style";
 import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
 import { clampPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
-import { acceptsEditorList, employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
+import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
 
@@ -1446,6 +1446,10 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   // Resolves true only when the profile is saved; a failure leaves the error text on the current employee.
   const save = async (): Promise<boolean> => {
     if (!selected || !draft) return false;
+    // Only what the editor changed goes out; an empty body would still create a bare row for a never-saved sheet employee (D-11).
+    const changes = changedFields(profileOf(selected), draft);
+    const detailChanges = selected.source === "manual" ? changedDetails(detailsOf(selected), details) : {};
+    if (!Object.keys(changes).length && !Object.keys(detailChanges).length) return true;
     setState("saving");
     setRatingsPending(false);
     setDetailsPending(false);
@@ -1456,7 +1460,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
         credentials: "same-origin",
         cache: "no-store",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: selected.id, nickname: selected.nickname, changes: draft, ...(selected.source === "manual" ? { details } : {}) }),
+        body: JSON.stringify({ id: selected.id, nickname: selected.nickname, changes, ...(Object.keys(detailChanges).length ? { details: detailChanges } : {}) }),
       });
       const payload = await response.json() as { employee?: Partial<PortiaEmployee> & { id: string }; ratingsPending?: boolean; detailsPending?: boolean; error?: string };
       if (!response.ok || !payload.employee) {
