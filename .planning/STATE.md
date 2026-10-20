@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 08
 current_phase_name: Сотрудники без потерь на экране
 status: executing
-stopped_at: Completed PORTIA-08-03-PLAN.md
-last_updated: "2026-10-20T07:14:38.102Z"
+stopped_at: Completed PORTIA-08-04-PLAN.md
+last_updated: "2026-10-20T11:59:21.761Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase PORTIA-08 execution started
-state_head: b11f59079138d08cdae9514890d85baebfc01b4c
+state_head: 331c6b2bc2378dcd9b235588d6f70e776592513c
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
   percent: 29
 ---
 
@@ -54,6 +54,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-08 P01 | 3 min | 3 tasks | 4 files |
 | Phase PORTIA-08 P02 | 10 min | 3 tasks | 4 files |
 | Phase PORTIA-08 P03 | 15min | 2 tasks | 3 files |
+| Phase PORTIA-08 P04 | 30min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-08]: Load error and save error are separate states; the empty list keeps the list column and add form
 - [Phase PORTIA-08]: 08-03: text typed during a save stays (settleDraft) and keeps the draft dirty; no automatic second save
 - [Phase PORTIA-08]: 08-03: a switch clicked during a save is queued by id and resolved after the answer (open when clean, dialog otherwise)
+- [Phase PORTIA-08]: 08-04: visitor-step ledger rows (03.1-WR-01, 03.3-WR-02) record owner browser verification; 03.2-WR-04 names both halves d3bfdd9 and 8bce191
 
 ### Pending Todos
 
@@ -109,8 +111,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-20T07:14:38.040Z
-Stopped at: Completed PORTIA-08-03-PLAN.md
+Last session: 2026-10-20T11:59:21.697Z
+Stopped at: Completed PORTIA-08-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
