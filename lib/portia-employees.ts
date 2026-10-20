@@ -83,7 +83,7 @@ export function acceptsRoster(payload: { employees?: unknown; degraded?: unknown
 // Editor-written fields live in Supabase (portia_employee_profiles).
 type ProfileColumns = { biography: string; photo_url: string; knowledge_rating: number; [column: string]: unknown };
 type ProfileRow = ProfileColumns & { employee_id: string; nickname: string };
-type RobloxProfile = { id: number; avatarUrl: string; fullAvatarUrl: string };
+type RobloxProfile = { id: number; name: string; avatarUrl: string; fullAvatarUrl: string };
 export type ProfileIndex = { byId: Map<string, EmployeeProfile>; robloxIdByNickname: Map<string, number> };
 
 const sheetCsvUrl = "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/gviz/tq?tqx=out:csv&sheet=Portia";
@@ -163,7 +163,7 @@ async function resolveRobloxProfiles(usernames: string[]) {
     const headshots = new Map((headshotsPayload.data ?? []).map((item) => [item.targetId, item.imageUrl ?? ""]));
     const fullAvatars = new Map((fullAvatarsPayload.data ?? []).map((item) => [item.targetId, item.imageUrl ?? ""]));
     users.forEach((user) => {
-      byName.set(nicknameKey(user.requestedUsername || user.name), { id: user.id, avatarUrl: headshots.get(user.id) ?? "", fullAvatarUrl: fullAvatars.get(user.id) ?? "" });
+      byName.set(nicknameKey(user.requestedUsername || user.name), { id: user.id, name: user.name, avatarUrl: headshots.get(user.id) ?? "", fullAvatarUrl: fullAvatars.get(user.id) ?? "" });
     });
     return { byName, ok: headshotsResponse.ok && fullAvatarsResponse.ok };
   } catch (error) {
@@ -353,7 +353,7 @@ export async function addManualEmployee(supabase: SupabaseClient, input: ManualE
   if (roster.some((employee) => employee.id === id || nicknameKey(employee.nickname) === nicknameKey(input.nickname))) return { status: "duplicate" };
   const { error } = await supabase.from(manualTableName).insert({
     employee_id: id,
-    nickname: input.nickname,
+    nickname: found.name,
     title: input.title,
     rank: input.rank,
     callsign: input.callsign,
@@ -366,7 +366,7 @@ export async function addManualEmployee(supabase: SupabaseClient, input: ManualE
     status: "added",
     employee: {
       id,
-      nickname: input.nickname,
+      nickname: found.name,
       callsign: input.callsign,
       title: input.title,
       rank: input.rank,

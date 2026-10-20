@@ -29,8 +29,8 @@ test("only the 34 staff slots are read, empty slots are skipped", () => {
 });
 
 test("the Roblox id keeps an employee's id stable across nickname changes", () => {
-  const before = rosterFromRows(sheet(['"1","OldName","Fox","",""']), new Map([["oldname", { id: 42, avatarUrl: "", fullAvatarUrl: "" }]]));
-  const after = rosterFromRows(sheet(['"1","NewName","Fox","",""']), new Map([["newname", { id: 42, avatarUrl: "", fullAvatarUrl: "" }]]));
+  const before = rosterFromRows(sheet(['"1","OldName","Fox","",""']), new Map([["oldname", { id: 42, name: "OldName", avatarUrl: "", fullAvatarUrl: "" }]]));
+  const after = rosterFromRows(sheet(['"1","NewName","Fox","",""']), new Map([["newname", { id: 42, name: "NewName", avatarUrl: "", fullAvatarUrl: "" }]]));
   assert.equal(before[0].id, "roblox-42");
   assert.equal(after[0].id, before[0].id);
 });
@@ -41,7 +41,7 @@ test("a temporary Roblox outage keeps the id saved with the profile", () => {
 });
 
 test("profiles saved before the Roblox id was known are still found", () => {
-  const [employee] = rosterFromRows(sheet(['"1","Serias227","","",""']), new Map([["serias227", { id: 9, avatarUrl: "", fullAvatarUrl: "" }]]));
+  const [employee] = rosterFromRows(sheet(['"1","Serias227","","",""']), new Map([["serias227", { id: 9, name: "Serias227", avatarUrl: "", fullAvatarUrl: "" }]]));
   const index = (byId: Map<string, EmployeeProfile>) => ({ byId, robloxIdByNickname: new Map<string, number>() });
   assert.equal(withProfile(employee, index(new Map([[employeeId("Serias227", null), { ...noRatings, biography: "bio", photoUrl: "", knowledgeRating: 4 }]]))).biography, "bio");
   assert.equal(withProfile(employee, index(new Map())).knowledgeRating, 1);
@@ -188,14 +188,14 @@ const manualRow = (id: number, nickname: string) => ({ employee_id: `roblox-${id
 
 test("manual employees follow the sheet staff, marked manual, with avatars by nickname", () => {
   const roster = rosterFromRows(sheet(['"1","Alpha","","",""', '"2","Beta","","",""']), new Map());
-  const merged = mergeManualEmployees(roster, [manualRow(50, "Gamma_x"), manualRow(51, "Delta_y")], new Map([["gamma_x", { id: 50, avatarUrl: "a", fullAvatarUrl: "f" }]]));
+  const merged = mergeManualEmployees(roster, [manualRow(50, "Gamma_x"), manualRow(51, "Delta_y")], new Map([["gamma_x", { id: 50, name: "Gamma_x", avatarUrl: "a", fullAvatarUrl: "f" }]]));
   assert.deepEqual(merged.map((employee) => [employee.nickname, employee.source, employee.order]), [["Alpha", "sheet", 0], ["Beta", "sheet", 1], ["Gamma_x", "manual", 2], ["Delta_y", "manual", 3]]);
   assert.deepEqual([merged[2].id, merged[2].robloxUserId, merged[2].robloxAvatarUrl, merged[2].robloxFullAvatarUrl, merged[2].title, merged[2].rank, merged[2].callsign], ["roblox-50", 50, "a", "f", "Лаборант", "2", "Лис"]);
   assert.deepEqual([merged[3].robloxAvatarUrl, merged[3].robloxFullAvatarUrl], ["", ""]);
 });
 
 test("a manual row for an account already in the sheet is dropped: the sheet wins on id and on nickname", () => {
-  const roster = rosterFromRows(sheet(['"1","Alpha","","",""', '"2","Beta","","",""']), new Map([["alpha", { id: 7, avatarUrl: "", fullAvatarUrl: "" }]]));
+  const roster = rosterFromRows(sheet(['"1","Alpha","","",""', '"2","Beta","","",""']), new Map([["alpha", { id: 7, name: "Alpha", avatarUrl: "", fullAvatarUrl: "" }]]));
   const merged = mergeManualEmployees(roster, [manualRow(7, "Renamed"), manualRow(99, "BETA"), manualRow(100, "Fresh")], new Map());
   assert.deepEqual(merged.map((employee) => employee.nickname), ["Alpha", "Beta", "Fresh"]);
   assert.equal(merged[2].order, 2);
@@ -277,7 +277,7 @@ function stubRoblox(t: TestContext, users: "down" | "throws" | RobloxUser[]) {
 }
 
 const input = { nickname: "Newbie_9", title: "Лаборант", rank: "1", callsign: "Нова" };
-const existing = rosterFromRows(sheet(['"1","Alpha","","",""']), new Map([["alpha", { id: 7, avatarUrl: "", fullAvatarUrl: "" }]]));
+const existing = rosterFromRows(sheet(['"1","Alpha","","",""']), new Map([["alpha", { id: 7, name: "Alpha", avatarUrl: "", fullAvatarUrl: "" }]]));
 
 test("an invalid nickname is not found without asking Roblox", async (t) => {
   const calls = stubRoblox(t, []);
@@ -335,6 +335,17 @@ test("a found newcomer is inserted as exactly one row and returned as a manual e
     [result.employee.id, result.employee.source, result.employee.order, result.employee.robloxUserId, result.employee.robloxAvatarUrl, result.employee.robloxFullAvatarUrl],
     ["roblox-9", "manual", 1, 9, "https://img/9", "https://img/9"],
   );
+});
+
+test("a manual employee is stored and returned in Roblox spelling, whatever case was typed", async (t) => {
+  const table = manualTable();
+  stubRoblox(t, [{ id: 9, name: "Newbie_9", requestedUsername: "newbie_9" }]);
+  const result = await addManualEmployee(table.client, { ...input, nickname: "newbie_9" }, existing, "user-1");
+  assert.equal(table.inserts.length, 1);
+  assert.equal(table.inserts[0].nickname, "Newbie_9");
+  assert.equal(result.status, "added");
+  if (result.status !== "added") return;
+  assert.deepEqual([result.employee.nickname, result.employee.id], ["Newbie_9", "roblox-9"]);
 });
 
 const mixedRoster = mergeManualEmployees(existing, [manualRow(50, "Gamma_x")], new Map());
