@@ -313,17 +313,21 @@ export function mergeManualEmployees(sheet: RosterEmployee[], rows: ManualRow[],
   return [...sheet, ...manual];
 }
 
+async function fetchSheetRows() {
+  const response = await fetch(sheetCsvUrl, { cache: "no-store", signal: AbortSignal.timeout(8_000) });
+  if (!response.ok) throw new Error(`Google Sheets returned ${response.status}`);
+  return parseCsv(await response.text());
+}
+
 export async function loadEmployees(supabase: SupabaseClient) {
-  const [sheetResponse, profiles, manual] = await Promise.all([
-    fetch(sheetCsvUrl, { cache: "no-store", signal: AbortSignal.timeout(8_000) }),
+  const [rows, profiles, manual] = await Promise.all([
+    fetchSheetRows(),
     readEmployeeProfiles(supabase).catch((error) => {
       console.error("PORTIA employee profiles read failed", error);
       return null;
     }),
     readManualEmployees(supabase),
   ]);
-  if (!sheetResponse.ok) throw new Error(`Google Sheets returned ${sheetResponse.status}`);
-  const rows = parseCsv(await sheetResponse.text());
   const index = profiles ?? { byId: new Map(), robloxIdByNickname: new Map() };
   const sheetOnly = rosterFromRows(rows, new Map(), index.robloxIdByNickname);
   // shortcut: manual employees are looked up by their stored nickname; after a Roblox rename the avatar is empty until they are removed and added again.
@@ -481,9 +485,34 @@ async function findKnownEmployee(supabase: SupabaseClient, id: string): Promise<
 export async function saveEmployeePatch(supabase: SupabaseClient, userId: string, patch: EmployeePatch): Promise<SavePatchResult> {
   const { id, changes } = patch;
   const { hasProfile, manual } = await findKnownEmployee(supabase, id);
-  if (!hasProfile && !manual) return { status: "not-found" };
+  let nickname = manual?.nickname;
+  let write = changes;
+  if (!hasProfile && !manual) {
+    // A never-saved sheet employee: only the sheet can vouch for the nickname, Roblox is never asked (D-05, D-06).
+    if (!patch.nickname) return { status: "not-found" };
+    let rows: string[][];
+    try {
+      rows = await fetchSheetRows();
+    } catch (error) {
+      console.error("PORTIA sheet check for a save failed", error);
+      return { status: "sheet-unavailable" };
+    }
+    const person = rosterFromRows(rows, new Map()).find((employee) => nicknameKey(employee.nickname) === nicknameKey(patch.nickname));
+    if (!person || !(/^roblox-\d+$/.test(id) || id === employeeId(person.nickname, null))) return { status: "not-found" };
+    let profiles: ProfileIndex;
+    try {
+      profiles = await readEmployeeProfiles(supabase);
+    } catch (error) {
+      console.error("PORTIA employee profiles read for a save failed", error);
+      return { status: "profiles-unavailable" };
+    }
+    // The profile saved under the nickname before the Roblox id was known stays visible (see withProfile).
+    const legacy = profiles.byId.get(employeeId(person.nickname, null));
+    if (legacy) write = { biography: legacy.biography, photoUrl: legacy.photoUrl, ...Object.fromEntries(optionalRatings.map(({ key }) => [key, legacy[key]])), ...changes };
+    nickname = person.nickname;
+  }
   // shortcut: the known path does not refresh portia_employee_profiles.nickname (not known without the sheet); only the Roblox-outage id fallback can miss a renamed person until a newcomer-style write.
-  const { profile, ratingsSaved } = await saveEmployeeProfile(supabase, { id, nickname: manual?.nickname }, changes, userId);
+  const { profile, ratingsSaved } = await saveEmployeeProfile(supabase, { id, nickname }, write, userId);
   return {
     status: "saved",
     employee: { id, ...profile, ...(manual ? { title: manual.title, rank: manual.rank, callsign: manual.callsign } : {}) },

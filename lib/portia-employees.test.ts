@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   acceptsRoster, addManualEmployee, employeeId, employeeRatings, mergeManualEmployees, parseCsv, profileChanged, profileFromRow, profileOf,
   readEmployeeProfiles, readManualEmployees, removeManualEmployee, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, updateManualEmployee,
-  saveEmployeeProfile, saveEmployeePatch, withProfile, type EmployeeProfile, type PortiaEmployee, type RosterEmployee,
+  saveEmployeeProfile, saveEmployeePatch, loadEmployees, withProfile, type EmployeeProfile, type EmployeeUpdate, type PortiaEmployee, type RosterEmployee,
 } from "./portia-employees.ts";
 
 const noRatings = { pawsRating: null, bioRating: null, sRating: null, activityRating: null, testsRating: null, overallRating: null };
@@ -77,7 +77,7 @@ test("a missing or non-array employees field is ignored", () => {
 // In-memory stand-in for the profile table; `migrated` toggles the rating columns, `upsertError` fails every write.
 type Row = Record<string, unknown>;
 const tableDefaults: Row = { biography: "", photo_url: "", knowledge_rating: 1, nickname: "" };
-function fakeTable(migrated: boolean, seed: Row[] = [], upsertError?: { code: string }) {
+function fakeTable(migrated: boolean, seed: Row[] = [], upsertError?: { code: string }, readError?: { code: string }) {
   const rows = new Map<string, Row>(seed.map((row) => [String(row.employee_id), row]));
   const upserts: Row[] = [];
   const ratingColumn = (name: string) => /^(paws|bio|s|activity|overall)_rating$/.test(name);
@@ -85,6 +85,7 @@ function fakeTable(migrated: boolean, seed: Row[] = [], upsertError?: { code: st
     from: () => ({
       select: (columns: string) => ({
         returns: async () => {
+          if (readError) return { data: null, error: readError };
           if (!migrated && columns.split(",").some((column) => ratingColumn(column.trim()))) return { data: null, error: { code: "42703" } };
           return { data: [...rows.values()].map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => migrated || !ratingColumn(key)))), error: null };
         },
@@ -245,6 +246,93 @@ test("an unknown id is not found in this build of the save path", async (t) => {
   const db = fakeDb(fakeTable(true), manualTable());
   assert.deepEqual(await saveEmployeePatch(db.client, "user-1", { id: "roblox-404", nickname: "", changes: { pawsRating: 3 }, details: {} }), { status: "not-found" });
   assert.equal(db.profiles.upserts.length, 0);
+});
+
+// Google Sheet stand-in: every URL is recorded; Roblox answers an empty list so a stray call shows up in `calls`, not as a crash.
+function stubSheet(t: TestContext, answer: string[] | "down" | "throws") {
+  const calls: string[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    calls.push(String(url));
+    if (String(url).includes("roblox.com")) return Response.json({ data: [] });
+    if (answer === "throws") throw new Error("offline");
+    if (answer === "down") return new Response("", { status: 500 });
+    return new Response([header, ...answer].join("\r\n"));
+  });
+  return calls;
+}
+const newcomer = (id: string, nickname: string, changes: EmployeeUpdate = { bioRating: 4 }) => ({ id, nickname, changes, details: {} });
+
+test("sheet-only check: a never-saved newcomer is saved after one sheet call and no Roblox call", async (t) => {
+  const calls = stubSheet(t, ['"1","Fox","","",""']);
+  const db = fakeDb(fakeTable(true), manualTable());
+  const result = await saveEmployeePatch(db.client, "user-1", newcomer("roblox-5", "fox"));
+  assert.equal(result.status, "saved");
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].includes("docs.google.com"));
+  assert.ok(!calls.some((url) => url.includes("roblox.com")));
+  assert.deepEqual([db.profiles.upserts[0].employee_id, db.profiles.upserts[0].nickname], ["roblox-5", "Fox"]);
+});
+
+test("an id of the nickname form is accepted for a newcomer", async (t) => {
+  stubSheet(t, ['"1","Fox","","",""']);
+  const db = fakeDb(fakeTable(true), manualTable());
+  assert.equal((await saveEmployeePatch(db.client, "user-1", newcomer(employeeId("Fox", null), "Fox"))).status, "saved");
+});
+
+test("sheet-unavailable, never not-found: a sheet that does not answer writes nothing", async (t) => {
+  t.mock.method(console, "error", () => {});
+  for (const answer of ["down", "throws"] as const) {
+    const calls = stubSheet(t, answer);
+    const db = fakeDb(fakeTable(true), manualTable());
+    assert.deepEqual(await saveEmployeePatch(db.client, "user-1", newcomer("roblox-5", "Fox")), { status: "sheet-unavailable" });
+    assert.equal(db.profiles.upserts.length, 0);
+    assert.ok(!calls.some((url) => url.includes("roblox.com")));
+    t.mock.restoreAll();
+    t.mock.method(console, "error", () => {});
+  }
+});
+
+test("not found and nothing is written: no nickname, a stranger, or an id of the wrong form", async (t) => {
+  const calls = stubSheet(t, ['"1","Fox","","",""']);
+  const db = fakeDb(fakeTable(true), manualTable());
+  assert.deepEqual(await saveEmployeePatch(db.client, "user-1", newcomer("roblox-5", "")), { status: "not-found" });
+  assert.equal(calls.length, 0);
+  assert.deepEqual(await saveEmployeePatch(db.client, "user-1", newcomer("roblox-5", "Nobody")), { status: "not-found" });
+  assert.deepEqual(await saveEmployeePatch(db.client, "user-1", newcomer("evil-1", "Fox")), { status: "not-found" });
+  assert.deepEqual(await saveEmployeePatch(db.client, "user-1", newcomer("nick-someone-else", "Fox")), { status: "not-found" });
+  assert.equal(db.profiles.upserts.length, 0);
+});
+
+test("a legacy nick- profile seeds the first row of a newcomer", async (t) => {
+  stubSheet(t, ['"1","Fox","","",""']);
+  const legacy = { employee_id: "nick-fox", nickname: "Fox", biography: "old", photo_url: "https://x/p.png", knowledge_rating: 3, paws_rating: 8 };
+  const db = fakeDb(fakeTable(true, [legacy]), manualTable());
+  const result = await saveEmployeePatch(db.client, "user-1", newcomer("roblox-5", "Fox"));
+  assert.ok(result.status === "saved");
+  assert.deepEqual(
+    [result.employee.biography, result.employee.photoUrl, result.employee.pawsRating, result.employee.bioRating],
+    ["old", "https://x/p.png", 8, 4],
+  );
+  assert.ok(!("knowledge_rating" in db.profiles.upserts[0]));
+});
+
+test("profiles-unavailable: a newcomer is not written when the stored profiles cannot be read", async (t) => {
+  t.mock.method(console, "error", () => {});
+  stubSheet(t, ['"1","Fox","","",""']);
+  const db = fakeDb(fakeTable(true, [], undefined, { code: "42501" }), manualTable());
+  assert.deepEqual(await saveEmployeePatch(db.client, "user-1", newcomer("roblox-5", "Fox")), { status: "profiles-unavailable" });
+  assert.equal(db.profiles.upserts.length, 0);
+});
+
+test("loadEmployees still reads the sheet, profiles and manual rows, and throws on a non-OK sheet", async (t) => {
+  stubSheet(t, ['"1","Fox","Лис","Доктор","2"']);
+  const db = fakeDb(fakeTable(true, [{ employee_id: "nick-fox", nickname: "Fox", biography: "old", photo_url: "", knowledge_rating: 1 }]), manualTable({ rows: [manualRow(50, "Gamma_x")] }));
+  const loaded = await loadEmployees(db.client);
+  assert.deepEqual(loaded.employees.map((employee) => [employee.nickname, employee.source]), [["Fox", "sheet"], ["Gamma_x", "manual"]]);
+  assert.equal(loaded.employees[0].biography, "old");
+  t.mock.restoreAll();
+  stubSheet(t, "down");
+  await assert.rejects(loadEmployees(db.client), /Google Sheets returned 500/);
 });
 
 test("stored rows without rating columns, or with junk, map to empty ratings", () => {
