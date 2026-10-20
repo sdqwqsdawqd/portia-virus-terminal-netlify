@@ -1488,7 +1488,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     }
   };
 
-  // A person outside the sheet, by Roblox nickname; the current selection and its draft stay as they are.
+  // A person outside the sheet, by Roblox nickname; an open selection and its draft stay as they are.
   const addEmployee = async () => {
     setAddState("adding");
     setAddError("");
@@ -1511,6 +1511,8 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
       onSaved(payload.employee);
       setAddDraft({ nickname: "", title: "", rank: "", callsign: "" });
       setAddOpen(false);
+      // The list was empty (or the last person was removed): nothing is open yet, so open the new person.
+      if (!draft) openEmployee(payload.employee);
     } catch (error) {
       setAddError(error instanceof Error ? error.message : "Не удалось добавить сотрудника.");
     }
@@ -1519,7 +1521,6 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
 
   if (loadState === "loading") return <div className="editor-empty">Загрузка сотрудников…</div>;
   if (loadState === "error") return <div className="editor-empty" role="alert"><p>{loadError}</p>{loadError.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button type="button" className="secondary-control" onClick={retryLoad}>ПОВТОРИТЬ</button></div>;
-  if (!selected || !draft) return <div className="editor-empty">"В таблице пока нет сотрудников."</div>;
 
   const openEmployee = (employee: PortiaEmployee) => {
     setSelectedId(employee.id);
@@ -1535,7 +1536,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   const chooseEmployee = (employee: PortiaEmployee) => {
     if (!dirty) return openEmployee(employee);
     // The same employee: only show the record, the edits stay.
-    if (employee.id === selected.id) { setRecordOpen(true); revealOnPhone(layoutRef); return; }
+    if (employee.id === selected?.id) { setRecordOpen(true); revealOnPhone(layoutRef); return; }
     // A sent PATCH cannot be cancelled; its answer would overwrite the next employee's draft.
     if (state !== "saving") setPendingEmployeeId(employee.id);
   };
@@ -1546,7 +1547,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     if (next) openEmployee(next);
     else {
       // After a save the draft already holds the saved profile; `selected` is the pre-save copy.
-      if (!saved) { setDraft(profileOf(selected)); setDetails(detailsOf(selected)); }
+      if (!saved && selected) { setDraft(profileOf(selected)); setDetails(detailsOf(selected)); }
       onLeave(true);
     }
   };
@@ -1557,6 +1558,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
 
   // Only reached for a manual employee (the button renders for no one else); the server refuses a sheet employee too.
   const removeSelected = async () => {
+    if (!selected) return;
     setDeleting(true);
     setErrorMessage("");
     try {
@@ -1580,7 +1582,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
       onRemoved(selected.id);
       setDeleteAsked(false);
       if (next) openEmployee(next);
-      else setDraft(null);
+      else { setDraft(null); setRecordOpen(false); }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Не удалось удалить сотрудника.");
       setState("error");
@@ -1589,11 +1591,11 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     setDeleting(false);
   };
 
-  const preview = draft.photoUrl || selected.robloxAvatarUrl;
+  const preview = selected && draft ? draft.photoUrl || selected.robloxAvatarUrl : "";
   return <div className="virus-editor-layout employee-editor-layout" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
     <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
     <aside className="editor-record-list">
-      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected.id ? "active" : ""} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected?.id ? "active" : ""} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
       <button className="add-record" type="button" aria-expanded={addOpen} onClick={() => setAddOpen((open) => !open)}>+ ВНЕ ТАБЛИЦЫ</button>
       {addOpen && <form className="employee-add-form" onSubmit={(event) => { event.preventDefault(); void addEmployee(); }}>
         <Field label="Ник Roblox"><input value={addDraft.nickname} required maxLength={20} autoCapitalize="none" spellCheck={false} onChange={(event) => setAddDraft((current) => ({ ...current, nickname: event.target.value }))} /></Field>
@@ -1605,6 +1607,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
       </form>}
     </aside>
     <div className="editor-form employee-profile-editor">
+      {selected && draft ? <>
       <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять фотографию, оценки и биографию. Людей вне таблицы добавляют по нику Roblox; их звание, ранг и позывной можно менять здесь.</p>
       <div className="employee-editor-summary">
         <figure>{preview ? <img src={preview} alt={`Аватар ${selected.nickname}`} referrerPolicy="no-referrer" /> : <img src="/assets/portia-logo.png" alt="" />}</figure>
@@ -1624,8 +1627,9 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
       {detailsPending && <p className="editor-guidance" role="status">Профиль сохранён, но звание, ранг и позывной — нет: база данных ещё не обновлена.</p>}
       {selected.source === "manual" && <button type="button" className="danger-control employee-remove" disabled={state === "saving" || deleting} onClick={() => setDeleteAsked(true)}>УДАЛИТЬ СОТРУДНИКА</button>}
       <div className="employee-editor-save"><span className={`editor-save-status ${state}`}>{state === "saving" ? "СОХРАНЕНИЕ…" : state === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
+      </> : <div className="editor-empty">Сотрудников пока нет. Добавьте человека вне таблицы кнопкой «+ ВНЕ ТАБЛИЦЫ».</div>}
     </div>
-    {deleteAsked && selected.source === "manual" && (
+    {deleteAsked && selected?.source === "manual" && (
       <ConfirmDialog
         title="Удалить сотрудника?"
         text={`${selected.nickname} будет убран из списка. Фото, оценки и биография останутся в базе и вернутся, если добавить этот ник снова.`}
@@ -1636,7 +1640,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
         onCancel={() => setDeleteAsked(false)}
       />
     )}
-    {asking && (
+    {asking && selected && (
       <ConfirmDialog
         title="Несохранённые правки сотрудника"
         text={`${selected.nickname}: изменения не сохранены.`}
