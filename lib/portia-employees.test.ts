@@ -201,6 +201,13 @@ test("a manual row for an account already in the sheet is dropped: the sheet win
   assert.equal(merged[2].order, 2);
 });
 
+test("an old manual row shows the Roblox spelling when Roblox answered and the stored one otherwise", () => {
+  const roster = rosterFromRows(sheet(['"1","Alpha","","",""']), new Map());
+  const answered = new Map([["gamma_x", { id: 50, name: "Gamma_X", avatarUrl: "a", fullAvatarUrl: "f" }]]);
+  assert.equal(mergeManualEmployees(roster, [manualRow(50, "gamma_x")], answered)[1].nickname, "Gamma_X");
+  assert.equal(mergeManualEmployees(roster, [manualRow(50, "gamma_x")], new Map())[1].nickname, "gamma_x");
+});
+
 // In-memory stand-in for the manual table: a read, an insert and a filtered delete, each with a configurable error.
 type ManualTableOptions = { rows?: Record<string, unknown>[]; readError?: { code: string }; insertError?: { code: string }; deleteError?: { code: string }; updateError?: { code: string } };
 function manualTable(options: ManualTableOptions = {}) {

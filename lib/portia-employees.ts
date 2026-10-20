@@ -297,7 +297,7 @@ export function mergeManualEmployees(sheet: RosterEmployee[], rows: ManualRow[],
     const profile = robloxByName.get(nicknameKey(row.nickname));
     manual.push({
       id: row.employee_id,
-      nickname: row.nickname,
+      nickname: profile?.name ?? row.nickname,
       callsign: row.callsign,
       title: row.title,
       rank: row.rank,
