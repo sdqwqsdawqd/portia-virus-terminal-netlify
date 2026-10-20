@@ -1,17 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { removeBroadcast, removeInfoSection, removeMutation, updateById } from "./editor-items.ts";
+import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, updateById } from "./editor-items.ts";
 import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
 const fixture = (): PortiaContent => {
   const content = structuredClone(defaultPortiaContent);
   content.broadcasts = [
-    { id: "a", type: "news", title: "A", body: "текст A", published: true },
-    { id: "b", type: "task", title: "B", body: "текст B", published: false },
+    { id: "a", type: "news", title: "A", body: "текст A", published: true, important: false, startsAt: "", endsAt: "", conditions: "" },
+    { id: "b", type: "task", title: "B", body: "текст B", published: false, important: false, startsAt: "", endsAt: "", conditions: "" },
   ];
   content.infoSections = [
-    { id: "s1", title: "S1", body: "раздел 1" },
-    { id: "s2", title: "S2", body: "раздел 2" },
+    { id: "s1", title: "S1", body: "раздел 1", subsections: [] },
+    { id: "s2", title: "S2", body: "раздел 2", subsections: [] },
   ];
   content.formattedText = {
     [portiaTextKey.broadcast("a")]: { runs: [] },
@@ -24,8 +24,8 @@ const fixture = (): PortiaContent => {
 
 test("editing a post by id after a new post is added at the top changes only that post", () => {
   const content = fixture();
-  content.broadcasts = [{ id: "a", type: "news", title: "A", body: "текст A", published: true }];
-  content.broadcasts.unshift({ id: "b", type: "news", title: "", body: "", published: false });
+  content.broadcasts = [{ id: "a", type: "news", title: "A", body: "текст A", published: true, important: false, startsAt: "", endsAt: "", conditions: "" }];
+  content.broadcasts.unshift({ id: "b", type: "news", title: "", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" });
   updateById(content.broadcasts, "a", (item) => { item.body = "текст A2"; });
   assert.equal(content.broadcasts[0].body, "");
   assert.equal(content.broadcasts[1].id, "a");
@@ -46,6 +46,35 @@ test("deleting a post removes only that post and its formatting", () => {
   assert.equal(portiaTextKey.broadcast("a") in content.formattedText, false);
   assert.equal(portiaTextKey.broadcast("b") in content.formattedText, true);
   assert.equal(portiaTextKey.info("s1") in content.formattedText, true);
+});
+
+const withGuide = () => {
+  const content = fixture();
+  content.infoSections[0].subsections = [
+    { id: "u1", title: "U1", blocks: [{ id: "b1", type: "text", text: "один" }, { id: "b2", type: "text", text: "два" }] },
+    { id: "u2", title: "U2", blocks: [{ id: "b3", type: "text", text: "три" }] },
+  ];
+  for (const id of ["b1", "b2", "b3"]) content.formattedText[portiaTextKey.infoBlock(id)] = { runs: [] };
+  return content;
+};
+
+test("deleting a guide block removes it and its formatting only", () => {
+  const content = withGuide();
+  removeInfoBlock(content, "u1", "b1");
+  assert.deepEqual(content.infoSections[0].subsections[0].blocks.map((block) => block.id), ["b2"]);
+  assert.equal(portiaTextKey.infoBlock("b1") in content.formattedText, false);
+  assert.equal(portiaTextKey.infoBlock("b2") in content.formattedText, true);
+});
+
+test("deleting a subsection, or its whole section, takes its blocks' formatting with it", () => {
+  const content = withGuide();
+  removeInfoSubsection(content, "s1", "u1");
+  assert.deepEqual(content.infoSections[0].subsections.map((sub) => sub.id), ["u2"]);
+  assert.equal(portiaTextKey.infoBlock("b2") in content.formattedText, false);
+  assert.equal(portiaTextKey.infoBlock("b3") in content.formattedText, true);
+  removeInfoSection(content, "s1");
+  assert.equal(portiaTextKey.infoBlock("b3") in content.formattedText, false);
+  assert.equal(portiaTextKey.info("s2") in content.formattedText, true);
 });
 
 test("deleting an info section removes only that section and its formatting", () => {
@@ -87,4 +116,25 @@ test("deleting an unformatted mutation drops the formatting the next one would h
   removeMutation(content, virus, 0);
   assert.equal(virus.mutations.length, 0);
   assert.equal(portiaTextKey.mutation(virus.id, 0) in content.formattedText, false);
+});
+
+test("a new news item and a new quest are blank, unpublished and put at the top", () => {
+  const content = fixture();
+  const before = structuredClone(content);
+  addBroadcast(content, "n1", "news");
+  addBroadcast(content, "q1", "quest");
+  const blank = { title: "", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" };
+  assert.deepEqual(content.broadcasts[1], { id: "n1", type: "news", ...blank });
+  assert.deepEqual(content.broadcasts[0], { id: "q1", type: "quest", ...blank });
+  assert.deepEqual(content.broadcasts.slice(2), before.broadcasts);
+  assert.deepEqual(content.formattedText, before.formattedText);
+});
+
+test("a new item is blank, not a copy of the last edited one", () => {
+  const content = fixture();
+  updateById(content.broadcasts, "a", (item) => { item.body = "текст A2"; });
+  addBroadcast(content, "n1", "news");
+  assert.equal(content.broadcasts[0].body, "");
+  assert.equal(content.broadcasts[0].title, "");
+  assert.equal(content.broadcasts[1].body, "текст A2");
 });

@@ -28,6 +28,17 @@ create table if not exists public.portia_employee_profiles (
 -- Last known nickname: finds the profile while Roblox is unreachable.
 alter table public.portia_employee_profiles add column if not exists nickname text not null default '' check (length(nickname) <= 64);
 
+-- Editor ratings beyond knowledge (phase 03.2). Empty (null) means not rated yet; the site shows «—».
+alter table public.portia_employee_profiles
+  add column if not exists paws_rating integer check (paws_rating between 1 and 10),
+  add column if not exists bio_rating integer check (bio_rating between 1 and 10),
+  add column if not exists s_rating integer check (s_rating between 1 and 10),
+  add column if not exists activity_rating integer check (activity_rating between 1 and 10),
+  add column if not exists overall_rating integer check (overall_rating between 1 and 10),
+  add column if not exists tests_rating integer check (tests_rating between 1 and 10);
+-- PostgREST picks up the new columns without a restart.
+notify pgrst, 'reload schema';
+
 -- Not granted to anon/authenticated, so the email cannot be read through the API.
 create or replace function public.portia_owner_email()
 returns text
@@ -162,6 +173,57 @@ on public.portia_employee_profiles for update
 to authenticated
 using ((select public.portia_can_edit()))
 with check ((select public.portia_can_edit()));
+
+-- Manual employees
+
+-- Employees added by editors outside the Google Sheet (phase 03.3). The roster lists them after the sheet staff;
+-- the sheet wins when the same Roblox account is in both. Photo, ratings and biography stay in
+-- portia_employee_profiles under the same employee_id, so removing a manual employee keeps them.
+create table if not exists public.portia_manual_employees (
+  employee_id text primary key check (employee_id ~ '^roblox-[0-9]+$'),
+  nickname text not null check (length(nickname) between 3 and 20),
+  title text not null default '' check (length(title) <= 64),
+  rank text not null default '' check (length(rank) <= 64),
+  callsign text not null default '' check (length(callsign) <= 64),
+  created_at timestamptz not null default now(),
+  created_by uuid references auth.users(id)
+);
+
+alter table public.portia_manual_employees enable row level security;
+revoke all on table public.portia_manual_employees from anon, authenticated;
+grant select on table public.portia_manual_employees to anon, authenticated;
+grant insert, delete on table public.portia_manual_employees to authenticated;
+
+drop policy if exists "Public can read PORTIA manual employees" on public.portia_manual_employees;
+create policy "Public can read PORTIA manual employees"
+on public.portia_manual_employees for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "Editors can add PORTIA manual employees" on public.portia_manual_employees;
+create policy "Editors can add PORTIA manual employees"
+on public.portia_manual_employees for insert
+to authenticated
+with check ((select public.portia_can_edit()));
+
+drop policy if exists "Editors can remove PORTIA manual employees" on public.portia_manual_employees;
+create policy "Editors can remove PORTIA manual employees"
+on public.portia_manual_employees for delete
+to authenticated
+using ((select public.portia_can_edit()));
+
+-- Editors change title, rank and callsign of a manual employee; the id and nickname stay fixed.
+grant update (title, rank, callsign) on table public.portia_manual_employees to authenticated;
+
+drop policy if exists "Editors can edit PORTIA manual employees" on public.portia_manual_employees;
+create policy "Editors can edit PORTIA manual employees"
+on public.portia_manual_employees for update
+to authenticated
+using ((select public.portia_can_edit()))
+with check ((select public.portia_can_edit()));
+
+-- PostgREST picks up the new table without a restart.
+notify pgrst, 'reload schema';
 
 -- Media
 

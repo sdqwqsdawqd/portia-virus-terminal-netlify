@@ -1,38 +1,48 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": null,
+  "milestone": "v1.1 — Закрытие замечаний",
   "phases": [
     {
-      "number": "1",
-      "name": "Исправление багов",
+      "number": "6",
+      "name": "Учёт замечаний и страховка данных",
+      "status": "complete"
+    },
+    {
+      "number": "7",
+      "name": "Сервер: сохранение сотрудников и безопасный JSON",
+      "status": "complete"
+    },
+    {
+      "number": "8",
+      "name": "Сотрудники без потерь на экране",
+      "status": "in_progress"
+    },
+    {
+      "number": "9",
+      "name": "Целостность контента",
       "status": "pending"
     },
     {
-      "number": "2",
-      "name": "Внешний вид",
+      "number": "10",
+      "name": "Рабочий стол: устойчивость, встроенные документы, доступность",
       "status": "pending"
     },
     {
-      "number": "3",
-      "name": "Редактор",
+      "number": "11",
+      "name": "Редактор: панель оформления и тексты",
       "status": "pending"
     },
     {
-      "number": "4",
-      "name": "Общая расстановка ярлыков",
-      "status": "pending"
-    },
-    {
-      "number": "5",
-      "name": "Оформление текста",
+      "number": "12",
+      "name": "Права редакторов и безопасность доступа",
       "status": "pending"
     }
   ],
   "next": {
     "command": "/gsd:progress --next",
     "label": "Advance to the next step",
-    "reason": "Phase 1 of 5 · 0% · executing"
+    "reason": "Phase 08 of 7 · 29% · executing"
   },
-  "updated_at": "2026-10-12T19:17:24.823Z"
+  "updated_at": "2026-10-20T07:14:34.922Z"
 }

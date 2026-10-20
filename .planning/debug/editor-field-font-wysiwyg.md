@@ -3,6 +3,10 @@ status: diagnosed
 trigger: "Да шрифт до сих пор остался таким как есть (UAT Test 5, PORTIA-01, gap G-PORTIA-01-5; ожидание: шрифт поля = «такой как в области сайта которую я редактирую»)"
 created: 2026-10-13T06:30:03Z
 updated: 2026-10-13T06:45:00Z
+audit_acknowledged:
+  milestone: v1.0
+  at: 2026-10-19
+  status: diagnosed
 ---
 
 ## Current Focus

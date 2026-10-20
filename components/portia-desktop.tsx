@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { classificationOptions, portiaTextKey, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
-import { acceptsRoster, type PortiaEmployee } from "@/lib/portia-employees";
+import { classificationOptions, findInfo, portiaTextKey, type Broadcast, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
+import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
+import { normalizeBroadcasts, normalizeInfoSections } from "@/lib/portia-content-normalize";
+import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -17,7 +19,7 @@ const PortiaEditor = dynamic(
 
 type AppId = "archive" | "employees" | "search" | "info" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor";
 
-// Squad documents that live elsewhere, shown inside PORTIA as app windows.
+// Department documents that live elsewhere, shown inside PORTIA as app windows.
 const embeddedApps = {
   sheet: { src: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/htmlview?widget=true&headers=false", external: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" },
   charter: { src: "https://sdqwqsdawqd.github.io/S.E-Portia/", external: "https://sdqwqsdawqd.github.io/S.E-Portia/" },
@@ -33,6 +35,8 @@ const originOf = (element: Element, kind: OpenOrigin["kind"]): OpenOrigin => {
 const WINDOW_CLOSE_MS = 180;
 const WINDOW_MINIMIZE_MS = 320;
 const WINDOW_FADE_OUT_MS = 120;
+// shortcut: a 10 s poll of the CDN-cached content, not a push channel; switch to Supabase Realtime if visitors need it within a second or the content grows large
+const contentSyncMs = 10_000;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string };
 type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
@@ -55,7 +59,7 @@ const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName
   settings: { label: "Настройки", path: "PORTIA://DESKTOP_SETTINGS", icon: "settings" },
   broadcasts: { label: "Сводка", path: "PORTIA://NEWS", icon: "broadcasts" },
   trash: { label: "Корзина", path: "PORTIA://RECYCLE_BIN", icon: "trash" },
-  sheet: { label: "Таблица", path: "PORTIA://SQUAD_SHEET", icon: "sheet" },
+  sheet: { label: "Таблица", path: "PORTIA://DEPARTMENT_SHEET", icon: "sheet" },
   charter: { label: "Устав", path: "PORTIA://CHARTER", icon: "charter" },
   editor: { label: "Редактор", path: "PORTIA://CONTENT_CONTROL", icon: "editor" },
 };
@@ -125,6 +129,7 @@ const resizeEdges: ResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 const escapeSearch = (value: string) => value.toLocaleLowerCase("ru").replace(/ё/g, "е");
 const roman = (level: number) => ({ 1: "I", 2: "II", 3: "III", 4: "IV" })[level] ?? String(level);
 const broadcastReadStorageKey = "portia-broadcasts-read-signature-v1";
+const questSeenStorageKey = "portia-quests-seen-v1";
 const contentCacheStorageKey = "portia-content-last-success-v1";
 const employeesCacheStorageKey = "portia-employees-last-success-v1";
 // v2: the icon grid step grew with the new icon wells, so v1 positions would overlap.
@@ -132,6 +137,18 @@ const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v2";
 const taskbarOrderStorageKey = "portia-taskbar-order-v1";
 const TASKBAR_BOUNCE_MS = 520;
 const ASSISTANT_RECOVER_MS = 780;
+
+// A saved profile replaces its entry; an id not in the list yet is a newly added manual employee (appended).
+const withEmployee = (list: PortiaEmployee[], employee: PortiaEmployee) => list.some((item) => item.id === employee.id) ? list.map((item) => item.id === employee.id ? employee : item) : [...list, employee];
+
+// Patches only the cached list; no cache, no write, so an editor save never creates a cache from possibly partial state (D-07).
+function patchEmployeesCache(patch: (employees: PortiaEmployee[]) => PortiaEmployee[]) {
+  try {
+    const cached = JSON.parse(window.localStorage.getItem(employeesCacheStorageKey) ?? "null") as { employees?: unknown } | null;
+    if (!cached || !Array.isArray(cached.employees)) return;
+    window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify({ ...cached, employees: patch(cached.employees as PortiaEmployee[]) }));
+  } catch {}
+}
 
 type ContentResponse = {
   content?: PortiaContent;
@@ -162,7 +179,8 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
 function broadcastSignature(content: PortiaContent) {
   return JSON.stringify(content.broadcasts
     .filter((item) => item.published)
-    .map((item) => ({ id: item.id, type: item.type, title: item.title, body: item.body, format: content.formattedText[portiaTextKey.broadcast(item.id)] })));
+    // Quest fields join the signature only when set, so release day does not light the badge for everyone.
+    .map((item) => ({ id: item.id, type: item.type, title: item.title, body: item.body, format: content.formattedText[portiaTextKey.broadcast(item.id)], ...((item.startsAt || item.endsAt || item.conditions) && { startsAt: item.startsAt, endsAt: item.endsAt, conditions: item.conditions }) })));
 }
 
 function shuffledUniqueIndices(items: string[], previousIndex = -1) {
@@ -256,6 +274,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [content, setContent] = useState<PortiaContent>(initialContent);
   // False until the cached copy or the first /api/content answer arrives; until then content windows show a loader, not defaults.
   const [contentReady, setContentReady] = useState(false);
+  const [broadcastTab, setBroadcastTab] = useState<BroadcastTab>("news");
   const [canEdit, setCanEdit] = useState(false);
   const [canManageEditors, setCanManageEditors] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -265,6 +284,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [booting, setBooting] = useState(true);
   const [clock, setClock] = useState("--:--:--");
+  // The visitor's local day; set from the clock tick so quest states roll over at midnight without a reload (D-03).
+  const [today, setToday] = useState("");
   const [startOpen, setStartOpen] = useState(false);
   const [windows, setWindows] = useState<Record<AppId, WindowState>>(initialWindows);
   const [activeApp, setActiveApp] = useState<AppId>("archive");
@@ -289,6 +310,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
   const [employeesReady, setEmployeesReady] = useState(false);
   const [employeesSyncedAt, setEmployeesSyncedAt] = useState<string | null>(null);
+  const [employeesProfilesRead, setEmployeesProfilesRead] = useState(true);
+  const employeesRef = useRef<PortiaEmployee[]>([]);
+  const profilesReadRef = useRef(true);
+  const employeeEdits = useRef(0);
+  // fetchEmployees has no deps and reads the last good list through these.
+  useEffect(() => {
+    employeesRef.current = employees;
+    profilesReadRef.current = employeesProfilesRead;
+  });
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [employeeQuery, setEmployeeQuery] = useState("");
   const [assistantTipIndex, setAssistantTipIndex] = useState(-1);
@@ -304,6 +334,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [assistantSquish, setAssistantSquish] = useState(0);
   const [assistantRecovering, setAssistantRecovering] = useState(false);
   const [broadcastUnread, setBroadcastUnread] = useState(false);
+  // The quest popup shows once per quest id (D-03): ids live in localStorage and in this ref, so a failed write cannot bring it back in this tab.
+  const seenQuestIds = useRef<string[]>([]);
+  const questReadBlocked = useRef(false);
+  const [questToastItem, setQuestToastItem] = useState<{ quest: Broadcast; more: number } | null>(null);
   const assistantTipTimer = useRef<number | null>(null);
   const assistantClickResetTimer = useRef<number | null>(null);
   const assistantCooldownTimer = useRef<number | null>(null);
@@ -342,16 +376,17 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       if (!response.ok) return;
       const payload = (await response.json()) as ContentResponse;
       if (!payload.content) return;
+      const fetched = { ...payload.content, broadcasts: normalizeBroadcasts(payload.content.broadcasts), infoSections: normalizeInfoSections(payload.content.infoSections) };
       const fetchedRevision = payload.revision ?? 0;
       if (!acceptFetchedContent(fetchedRevision, knownRevision.current, savesAtSend, savesStarted.current)) return;
       knownRevision.current = fetchedRevision;
-      setContent(payload.content);
-      setActiveVirusId((current) => payload.content!.viruses.some((virus) => virus.id === current) ? current : payload.content!.viruses[0]?.id ?? "");
-      setSelectedInfoId((current) => payload.content!.infoSections.some((section) => section.id === current) ? current : payload.content!.infoSections[0]?.id ?? "");
+      setContent(fetched);
+      setActiveVirusId((current) => fetched.viruses.some((virus) => virus.id === current) ? current : fetched.viruses[0]?.id ?? "");
+      setSelectedInfoId((current) => findInfo(fetched.infoSections, current) ? current : fetched.infoSections[0]?.id ?? "");
       setRevision(fetchedRevision);
       try {
         window.localStorage.setItem(contentCacheStorageKey, JSON.stringify({
-          content: payload.content,
+          content: fetched,
           revision: fetchedRevision,
           updatedAt: payload.updatedAt ?? null,
           savedAt: new Date().toISOString(),
@@ -377,26 +412,34 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   // Keeps the Personnel window in step with the editor without waiting for the next sync.
   const updateEmployee = useCallback((saved: PortiaEmployee) => {
-    setEmployees((current) => {
-      const next = current.map((employee) => employee.id === saved.id ? saved : employee);
-      try {
-        const cached = JSON.parse(window.localStorage.getItem(employeesCacheStorageKey) ?? "{}") as { syncedAt?: string | null };
-        window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify({ ...cached, employees: next }));
-      } catch {}
-      return next;
-    });
+    employeeEdits.current += 1;
+    setEmployees((current) => withEmployee(current, saved));
+    patchEmployeesCache((cached) => withEmployee(cached, saved));
+  }, []);
+
+  // A removed manual employee leaves the Personnel window and the cached roster at once.
+  const removeEmployee = useCallback((id: string) => {
+    employeeEdits.current += 1;
+    setEmployees((current) => current.filter((employee) => employee.id !== id));
+    patchEmployeesCache((cached) => cached.filter((employee) => employee.id !== id));
   }, []);
 
   const fetchEmployees = useCallback(async () => {
+    const editsAtStart = employeeEdits.current;
     try {
       const response = await fetchWithTimeout("/api/employees", {}, 15_000);
       if (!response.ok) return;
-      const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null; degraded?: boolean };
+      const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null; degraded?: boolean; profilesRead?: boolean; manualRead?: boolean };
       if (!acceptsRoster(payload)) return;
-      setEmployees(payload.employees);
+      // An editor save or delete on this device is newer than this answer; the next poll brings the server copy.
+      if (employeeEdits.current !== editsAtStart) return;
+      const merged = mergeEmployeesAnswer(employeesRef.current, payload, profilesReadRef.current);
+      setEmployees(merged.employees);
+      setEmployeesProfilesRead(merged.profilesRead);
       setEmployeesSyncedAt(payload.syncedAt ?? null);
-      setSelectedEmployeeId((current) => payload.employees.some((employee) => employee.id === current) ? current : payload.employees[0]?.id ?? "");
-      try { window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify(payload)); } catch {}
+      setSelectedEmployeeId((current) => merged.employees.some((employee) => employee.id === current) ? current : merged.employees[0]?.id ?? "");
+      // A degraded answer never replaces the device cache (D-07).
+      if (merged.cacheable) try { window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify(payload)); } catch {}
     } catch {
       // The last successful personnel snapshot remains visible on this device.
     } finally {
@@ -411,21 +454,23 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         if (cached) {
           const parsed = JSON.parse(cached) as { content?: unknown; revision?: number };
           if (isUsableContent(parsed.content)) {
-            const cachedContent = parsed.content;
+            const cachedContent = { ...parsed.content, broadcasts: normalizeBroadcasts(parsed.content.broadcasts), infoSections: normalizeInfoSections(parsed.content.infoSections) };
             setContent(cachedContent);
             const cachedRevision = typeof parsed.revision === "number" ? parsed.revision : 0;
             knownRevision.current = cachedRevision;
             setRevision(cachedRevision);
             setActiveVirusId((current) => cachedContent.viruses.some((virus) => virus.id === current) ? current : cachedContent.viruses[0]?.id ?? "");
-            setSelectedInfoId((current) => cachedContent.infoSections.some((section) => section.id === current) ? current : cachedContent.infoSections[0]?.id ?? "");
+            setSelectedInfoId((current) => findInfo(cachedContent.infoSections, current) ? current : cachedContent.infoSections[0]?.id ?? "");
             setContentReady(true);
           }
         }
         const employeeCache = window.localStorage.getItem(employeesCacheStorageKey);
         if (employeeCache) {
-          const parsed = JSON.parse(employeeCache) as { employees?: PortiaEmployee[]; syncedAt?: string | null };
+          const parsed = JSON.parse(employeeCache) as { employees?: PortiaEmployee[]; syncedAt?: string | null; profilesRead?: boolean };
           if (Array.isArray(parsed.employees)) {
             setEmployees(parsed.employees);
+            // An old cache without the flag counts as read; only an explicit false means nothing was read.
+            setEmployeesProfilesRead(parsed.profilesRead !== false);
             setEmployeesSyncedAt(parsed.syncedAt ?? null);
             setSelectedEmployeeId((current) => current || parsed.employees![0]?.id || "");
             setEmployeesReady(true);
@@ -442,12 +487,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const tick = () => {
       const now = new Date();
       setClock(new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(now));
+      setToday(localDateKey(now));
     };
     tick();
     const clockTimer = window.setInterval(tick, 1000);
     const initialFetchTimer = window.setTimeout(() => { void fetchContent(); void fetchAccess(); }, 0);
     const initialEmployeesTimer = window.setTimeout(() => void fetchEmployees(), 0);
-    const syncTimer = window.setInterval(fetchContent, 30_000);
+    const syncTimer = window.setInterval(() => { if (document.visibilityState === "visible") void fetchContent(); }, contentSyncMs);
+    const onVisible = () => { if (document.visibilityState === "visible") void fetchContent(); };
+    document.addEventListener("visibilitychange", onVisible);
     // Cheap: answered by the CDN, so other visitors see profile edits within minutes.
     const employeeSyncTimer = window.setInterval(fetchEmployees, 5 * 60 * 1000);
     return () => {
@@ -457,6 +505,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       window.clearTimeout(initialEmployeesTimer);
       window.clearInterval(clockTimer);
       window.clearInterval(syncTimer);
+      document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(employeeSyncTimer);
     };
   }, [fetchAccess, fetchContent, fetchEmployees]);
@@ -473,6 +522,35 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }, 0);
     return () => window.clearTimeout(timer);
   }, [content]);
+
+  // Writes markQuestsSeen(list, storage ∪ this tab's ids, today), so storage is never overwritten with fewer ids; a failed write still keeps the ref.
+  const rememberActiveQuests = useCallback(() => {
+    let stored: string[] | null = null;
+    try { stored = parseSeenQuestIds(window.localStorage.getItem(questSeenStorageKey)); } catch {}
+    seenQuestIds.current = markQuestsSeen(content.broadcasts, [...new Set([...(stored ?? []), ...seenQuestIds.current])], today);
+    if (stored) try { window.localStorage.setItem(questSeenStorageKey, JSON.stringify(seenQuestIds.current)); } catch {}
+  }, [content.broadcasts, today]);
+
+  // Reading the active quests in «Сводка» counts as seeing them; declared before the toast effect so a live update the visitor is already reading never pops up.
+  const questsViewed = contentReady && windows.broadcasts.open && !windows.broadcasts.minimized && broadcastTab === "quests";
+  useEffect(() => {
+    if (questsViewed && today) rememberActiveQuests();
+  }, [questsViewed, today, rememberActiveQuests]);
+
+  // Recomputed on every content change (editor save, sync, cache) so a quest published while the toast is open is counted in it, and the dismissal that marks all active quests seen never hides one the toast did not show (review IN-03).
+  useEffect(() => {
+    if (!contentReady || booting || !today || questReadBlocked.current) return;
+    let stored: string[];
+    try { stored = parseSeenQuestIds(window.localStorage.getItem(questSeenStorageKey)); }
+    catch {
+      // shortcut: unreadable storage means no popup at all (never on every load); upgrade if visitors ask for it
+      questReadBlocked.current = true;
+      return;
+    }
+    const next = questPopup(content.broadcasts, [...new Set([...stored, ...seenQuestIds.current])], today);
+    const timer = window.setTimeout(() => setQuestToastItem(next), 0);
+    return () => window.clearTimeout(timer);
+  }, [content.broadcasts, contentReady, booting, today]);
 
   useEffect(() => {
     // Stored settings are visitor-editable: keep only known values, field by field.
@@ -762,6 +840,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
   };
 
+  const dismissQuestToast = (openQuests: boolean) => {
+    rememberActiveQuests();
+    setQuestToastItem(null);
+    if (openQuests) {
+      setBroadcastTab("quests");
+      openApp("broadcasts");
+    }
+  };
+
   // Functional update only: a late timer must never act on a stale render's windows.
   const finishExit = (appId: AppId, kind: "close" | "minimize") => {
     setWindows((state) => ({
@@ -871,7 +958,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
   const filteredViruses = content.viruses.filter((virus) => escapeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(escapeSearch(virusQuery)));
-  const selectedInfo = content.infoSections.find((section) => section.id === selectedInfoId) ?? content.infoSections[0];
+  const selectedInfoEntry = findInfo(content.infoSections, selectedInfoId)
+    ?? (content.infoSections[0] ? { section: content.infoSections[0], subsection: null } : null);
+  const selectedInfo = selectedInfoEntry?.section;
+  const selectedSubsection = selectedInfoEntry?.subsection ?? null;
   const trashFiles = content.recycleFiles;
   const activeTrashFile = trashFiles.find((file) => file.id === activeTrashFileId) ?? null;
   const recycledViruses = useMemo(() => content.recycledViruses ?? [], [content.recycledViruses]);
@@ -984,7 +1074,16 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const query = escapeSearch(globalQuery.trim());
     const items: Array<{ id: string; type: "virus" | "info" | "broadcast" | "file"; title: string; meta: string; body: string }> = [
       ...content.viruses.map((virus) => ({ id: virus.id, type: "virus" as const, title: virus.name, meta: virus.code, body: `${virus.status} ${virus.external} ${virus.physiology} ${Object.values(virus.classification).join(" ")} ${virus.mutations.map((mutation) => `${mutation.name} ${mutation.description}`).join(" ")}` })),
-      ...content.infoSections.map((section) => ({ id: section.id, type: "info" as const, title: section.title, meta: "ИНФОРМАЦИЯ", body: section.body })),
+      ...content.infoSections.flatMap((section) => [
+        { id: section.id, type: "info" as const, title: section.title, meta: "ИНФОРМАЦИЯ", body: section.body },
+        ...section.subsections.map((sub) => ({
+          id: sub.id,
+          type: "info" as const,
+          title: sub.title,
+          meta: `ИНФОРМАЦИЯ · ${section.title}`,
+          body: sub.blocks.map((block) => block.type === "text" ? block.text : block.type === "table" ? block.rows.map((row) => `${row.key} ${row.value}`).join(" ") : "").join(" "),
+        })),
+      ]),
       ...content.broadcasts.filter((item) => item.published).map((item) => ({ id: item.id, type: "broadcast" as const, title: item.title, meta: broadcastType(item.type), body: item.body })),
       ...content.recycleFiles.map((file) => ({ id: file.id, type: "file" as const, title: file.name, meta: recycleFileType(file.kind), body: recycleFileBody(file, [...content.viruses, ...recycledViruses]) })),
       ...recycledViruses.map((virus) => ({ id: `virus:${virus.id}`, type: "file" as const, title: virus.name, meta: "ВИРУС В КОРЗИНЕ", body: `${virus.code} ${virus.status} ${virus.external} ${virus.physiology}` })),
@@ -1002,6 +1101,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       setSelectedInfoId(result.id);
       openApp("info");
     } else if (result.type === "broadcast") {
+      const found = content.broadcasts.find((item) => item.id === result.id);
+      if (found) setBroadcastTab(broadcastTabOf(found.type));
       openApp("broadcasts");
     } else {
       setActiveTrashFileId(result.id);
@@ -1043,6 +1144,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   return (
     <>
       <BootScreen visible={booting} />
+      {questToastItem && <QuestToast quest={questToastItem.quest} more={questToastItem.more} document={content.formattedText[portiaTextKey.broadcast(questToastItem.quest.id)]} onDismiss={dismissQuestToast} />}
       <div className="desktop" id="desktop">
         {desktopSettingsLoaded && <DesktopWallpaper kind={desktopSettings.wallpaper} />}
         <header className="system-bar">
@@ -1097,7 +1199,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск сотрудника</span><input type="search" value={employeeQuery} onChange={(event) => setEmployeeQuery(event.target.value)} placeholder="Ник, позывной, звание" /></label>
                 <div className="personnel-list">
                   {!employeesReady ? <LoadingState label="Загрузка сотрудников…" /> : <>
-                  {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={employee.id === selectedEmployee?.id ? "active" : ""} onClick={() => setSelectedEmployeeId(employee.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.nickname}</strong><small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+                  {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={employee.id === selectedEmployee?.id ? "active" : ""} onClick={() => setSelectedEmployeeId(employee.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
                   {!filteredEmployees.length && <div className="list-empty">Сотрудники не найдены</div>}
                   </>}
                 </div>
@@ -1110,10 +1212,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                       <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} fallbackClassName="personnel-fallback" /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
                       {selectedEmployee.robloxUserId ? <a className="personnel-portrait" href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer" aria-label={`Профиль Roblox: ${selectedEmployee.nickname}`}><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></a> : <figure className="personnel-portrait"><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></figure>}
                     </div>
-                    <div className="personnel-profile-identity"><h2>{selectedEmployee.nickname}</h2><p className="personnel-callsign">{selectedEmployee.callsign || "Без позывного"}</p></div>
+                    <div className="personnel-profile-identity"><h2>{selectedEmployee.nickname}</h2>{selectedEmployee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<p className="personnel-callsign">{selectedEmployee.callsign || "Без позывного"}</p></div>
                   </header>
-                  <dl className="personnel-stats"><div><dt>ЗВАНИЕ</dt><dd>{selectedEmployee.title || "Не указано"}</dd></div><div><dt>РАНГ</dt><dd>{selectedEmployee.rank || "Не указан"}</dd></div><div><dt>ОЦЕНКА ЗНАНИЙ</dt><dd>{selectedEmployee.knowledgeRating} / 10</dd></div></dl>
-                  <section className="personnel-biography"><span>БИОГРАФИЯ</span><p>{selectedEmployee.biography || "Биография сотрудника пока не заполнена."}</p></section>
+                  <dl className="personnel-stats"><div><dt>ЗВАНИЕ</dt><dd>{selectedEmployee.title || "Не указано"}</dd></div><div><dt>РАНГ</dt><dd>{selectedEmployee.rank || "Не указан"}</dd></div></dl>
+                  {employeesProfilesRead && <dl className="personnel-stats personnel-ratings">{employeeRatings.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{selectedEmployee[key] == null ? "—" : `${selectedEmployee[key]} / 10`}</dd></div>)}</dl>}
+                  <section className="personnel-biography"><span>БИОГРАФИЯ</span><p>{employeesProfilesRead ? selectedEmployee.biography || "Биография сотрудника пока не заполнена." : "Профиль временно не загрузился."}</p></section>
                 </div> : <div className="editor-empty">{!employees.length && employeesSyncedAt ? "В таблице пока нет сотрудников." : "Данные сотрудников ещё не синхронизированы."}</div>}
               </article>
             </div>
@@ -1141,22 +1244,50 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
           <AppWindow app="info" state={windows.info} active={activeApp === "info"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window info-window" meta="АРХИВ ЗНАНИЙ">
             {!contentReady ? <LoadingState label="Загрузка разделов…" /> : <div className="info-library">
-              <aside className="info-index">{content.infoSections.map((section, index) => <button key={section.id} type="button" className={section.id === selectedInfo?.id ? "active" : ""} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span></button>)}</aside>
-              <article className="info-document">{selectedInfo ? <div className="content-fade" key={selectedInfo.id}><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></div> : <div className="editor-empty">Разделов пока нет.</div>}</article>
+              <aside className="info-index">{content.infoSections.map((section, index) => {
+                const open = section.id === selectedInfo?.id;
+                return (
+                  <div key={section.id}>
+                    <button type="button" className={`${open && !selectedSubsection ? "active" : ""}${section.subsections.length ? " has-subsections" : ""}`} aria-expanded={section.subsections.length ? open : undefined} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span>{section.subsections.length ? <em className="info-sub-marker" aria-label={`Подразделов: ${section.subsections.length}`}>{open ? "▾" : "▸"} {section.subsections.length}</em> : null}</button>
+                    {open && section.subsections.length ? <div className="info-subsections">{section.subsections.map((sub, subIndex) => <button key={sub.id} type="button" className={sub.id === selectedSubsection?.id ? "active" : ""} title={sub.title || "БЕЗ НАЗВАНИЯ"} onClick={() => setSelectedInfoId(sub.id)}><small>{String(index + 1).padStart(2, "0")}.{subIndex + 1}</small><span>{sub.title || "БЕЗ НАЗВАНИЯ"}</span></button>)}</div> : null}
+                  </div>
+                );
+              })}</aside>
+              <article className="info-document">{selectedInfo ? (selectedSubsection
+                ? <div className="content-fade" key={selectedSubsection.id}><span className="eyebrow">{selectedInfo.title}</span><h1>{selectedSubsection.title || "БЕЗ НАЗВАНИЯ"}</h1><div className="info-blocks">{selectedSubsection.blocks.map((block) => block.type === "text"
+                  ? <FormattedText key={block.id} className="info-document-copy" text={block.text} document={content.formattedText[portiaTextKey.infoBlock(block.id)]} />
+                  : block.type === "table"
+                    ? <dl key={block.id} className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row, rowIndex) => <div key={rowIndex}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl>
+                    : block.type === "video" && block.videoId
+                      // nocookie embed, id validated by normalizeInfoSections (D-09); default referrer policy, YouTube refuses embeds without a Referer.
+                      ? <figure key={block.id} className="info-block-video"><iframe title={`Видео YouTube: ${selectedSubsection.title}`} loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" src={`https://www.youtube-nocookie.com/embed/${block.videoId}`} /><figcaption><a href={`https://www.youtube.com/watch?v=${block.videoId}`} target="_blank" rel="noopener noreferrer">Открыть на YouTube ↗</a></figcaption></figure>
+                      : block.type === "photo" && block.url
+                        ? <figure key={block.id} className="info-block-photo"><img src={block.url} alt={`Иллюстрация: ${selectedSubsection.title}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" /></figure>
+                        : null)}</div></div>
+                : <div className="content-fade" key={selectedInfo.id}><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></div>
+              ) : <div className="editor-empty">Разделов пока нет.</div>}</article>
             </div>}
           </AppWindow>
 
           <AppWindow app="broadcasts" state={windows.broadcasts} active={activeApp === "broadcasts"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window broadcasts-window" meta="КАНАЛ СТАНЦИИ">
             <div className="broadcasts-app">
               <header><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>
-              {!contentReady ? <LoadingState label="Загрузка объявлений…" /> : <div className="broadcast-grid">
-                {content.broadcasts.filter((item) => item.published).map((item) => <article className={`broadcast-card ${item.type}`} key={item.id}><span>{broadcastType(item.type)}</span><h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2><FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>)}
-                {!content.broadcasts.some((item) => item.published) && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>Сообщений пока нет</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
-              </div>}
+              {!contentReady ? <LoadingState label="Загрузка объявлений…" /> : <>
+              <div className="editor-tabs broadcast-tabs">
+                {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([tab, label]) => <button key={tab} type="button" className={broadcastTab === tab ? "active" : ""} aria-pressed={broadcastTab === tab} onClick={() => setBroadcastTab(tab)}>{label} {broadcastFeed(content.broadcasts, tab, today).length}</button>)}
+              </div>
+              <div className="broadcast-grid">
+                {broadcastFeed(content.broadcasts, broadcastTab, today).map((item) => {
+                  const state = item.type === "quest" ? questState(item, today) : null;
+                  const badge = state === "active" ? "АКТИВЕН" : state === "upcoming" ? `СКОРО · с ${formatQuestDay(item.startsAt).slice(0, 5)}` : "ЗАВЕРШЁН";
+                  return <article className={`broadcast-card ${item.type}${item.important ? " important" : ""}${state ? ` state-${state}` : ""}`} key={item.id}><span>{broadcastType(item.type)}{item.important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
+                })}
+                {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>{broadcastTab === "news" ? "Новостей пока нет" : "Квестов и задач пока нет"}</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
+              </div></>}
             </div>
           </AppWindow>
 
-          {(["sheet", "charter"] as const).map((app) => <AppWindow key={app} app={app} state={windows[app]} active={activeApp === app} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window document-window" meta="ДОКУМЕНТ ОТРЯДА">
+          {(["sheet", "charter"] as const).map((app) => <AppWindow key={app} app={app} state={windows[app]} active={activeApp === app} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window document-window" meta="ДОКУМЕНТ ОТДЕЛА">
             <EmbeddedDocument src={embeddedApps[app].src} external={embeddedApps[app].external} title={appMeta[app].label} />
           </AppWindow>)}
           <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashFiles.length + recycledViruses.length).padStart(2, "0")}`}>
@@ -1200,13 +1331,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
               <SettingGroup title="Анимации" values={[['on','Включены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
-              <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сообщения, поиск и советы помощника." : "Войдите в разрешённый аккаунт редактора."}</p></div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
+              <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сводку, поиск и советы помощника." : "Войдите в разрешённый аккаунт редактора."}</p></div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>
             </div>
           </AppWindow>
 
           <AppWindow app="editor" state={windows.editor} active={activeApp === "editor"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="editor-window" meta="ДОСТУП ВЛАДЕЛЬЦА">
-            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
+            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
           </AppWindow>
         </main>
 
@@ -1263,7 +1394,12 @@ function BootScreen({ visible }: { visible: boolean }) {
   </div></div>;
 }
 
-function EmployeeImage({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
+// A new src (a corrected photo) starts a fresh load instead of keeping the old failed state.
+function EmployeeImage(props: { src: string; alt: string; fallbackClassName?: string }) {
+  return <EmployeeImageInner key={props.src} {...props} />;
+}
+
+function EmployeeImageInner({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   // A failed URL shows the PORTIA fallback, never a broken image; if the fallback fails too, the skeleton still stops (D-09 #7).
@@ -1515,7 +1651,7 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     liveGeometry.current = null;
   };
 
-  // Points the zoom / minimise at its source. Offsets, not getBoundingClientRect, for the window:
+  // Open and close settle in place around the window centre (D-14), so the origin is cleared; only minimise / restore aim at the taskbar button. Offsets, not getBoundingClientRect, for the window:
   // during a restore the animation has already shrunk the rect.
   const towardTaskbar = state.exiting === "minimize" || (state.openOrigin?.kind === "taskbar" && !state.exiting);
   useLayoutEffect(() => {
@@ -1524,12 +1660,15 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     if (!element || !parent || state.minimized) return;
     const parentRect = parent.getBoundingClientRect();
     const box = { left: parentRect.left + element.offsetLeft - parent.scrollLeft, top: parentRect.top + element.offsetTop - parent.scrollTop };
-    let target: { x: number; y: number } | undefined = state.openOrigin?.kind === "icon" && !state.exiting ? state.openOrigin : undefined;
+    let target: { x: number; y: number } | undefined;
     if (towardTaskbar) {
       const button = document.querySelector(`[data-taskbar-app="${app}"]`);
       if (button) target = originOf(button, "taskbar");
     }
-    if (!target) return;
+    if (!target) {
+      element.style.transformOrigin = "";
+      return;
+    }
     const x = target.x - box.left;
     element.style.transformOrigin = `${Math.round(x)}px ${Math.round(target.y - box.top)}px`;
   }, [app, towardTaskbar, state.exiting, state.minimized, state.open, state.openOrigin]);
@@ -1637,6 +1776,30 @@ function documentBackground(hex: string | undefined, opacity: number | undefined
 function ScientistRichText({ log }: { log: ScientistLog }) {
   const document = scientistDocument(log);
   return <FormattedText className="scientist-rich-text" text={log.content.join("\n\n")} document={document} />;
+}
+
+// Non-modal corner notification: the owner asked for a side toast instead of a window (G-03.2-2b).
+function QuestToast({ quest, more, document, onDismiss }: { quest: Broadcast; more: number; document?: RichTextDocument; onDismiss: (openQuests: boolean) => void }) {
+  const titleId = useId();
+
+  return (
+    <aside className="portia-dialog quest-toast" role="status" aria-labelledby={titleId} onKeyDown={(event) => { if (event.key === "Escape") onDismiss(false); }}>
+      <div>
+        <div className="quest-toast-head">
+          <span className="quest-toast-eyebrow">НОВЫЙ КВЕСТ</span>
+          <button type="button" className="quest-toast-close" aria-label="Закрыть уведомление" onClick={() => onDismiss(false)}>×</button>
+        </div>
+        <h2 id={titleId}>{quest.title || "БЕЗ НАЗВАНИЯ"}</h2>
+        {(quest.startsAt || quest.endsAt) && <div className="broadcast-dates">{quest.startsAt && <span>Начало: {formatQuestDay(quest.startsAt)}</span>}{quest.endsAt && <span>Окончание: {formatQuestDay(quest.endsAt)}</span>}</div>}
+        {quest.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{quest.conditions}</p></div>}
+        <FormattedText className="quest-toast-body" text={quest.body} document={document} />
+        {more > 0 && <p className="quest-toast-more">Ещё активных квестов: {more}</p>}
+        <div className="portia-dialog-actions">
+          <button type="button" className="primary-control" onClick={() => onDismiss(true)}>ОТКРЫТЬ КВЕСТЫ</button>
+        </div>
+      </div>
+    </aside>
+  );
 }
 
 function FormattedText({ text, document, className = "" }: { text: string; document?: RichTextDocument; className?: string }) {

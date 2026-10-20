@@ -1,4 +1,8 @@
 import {
+  type Broadcast,
+  type InfoBlock,
+  type InfoSection,
+  type InfoSubsection,
   createVirusRecycleFiles,
   defaultPortiaContent,
   type PortiaContent,
@@ -73,6 +77,89 @@ function normalizeMediaUrl(value: unknown, fallback = "") {
   if (typeof value !== "string") return fallback;
   const url = value.trim().slice(0, 2048);
   return url.startsWith("https://") || url.startsWith("/") ? url : fallback;
+}
+
+const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
+const normalizeDay = (value: unknown) => (typeof value === "string" && dayPattern.test(value) ? value : "");
+
+// Broadcasts saved before 03.2 have no important flag, dates or conditions.
+export function normalizeBroadcasts(value: unknown): Broadcast[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Broadcast => Boolean(item) && typeof item === "object")
+    .map((item) => ({
+      ...item,
+      important: item.important === true,
+      startsAt: normalizeDay(item.startsAt),
+      endsAt: normalizeDay(item.endsAt),
+      conditions: typeof item.conditions === "string" ? item.conditions.slice(0, 4000) : "",
+    }));
+}
+
+const asText = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : "");
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object";
+
+const youtubeIdPattern = /^[\w-]{11}$/;
+const youtubeHosts = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtube-nocookie.com"]);
+
+// Only a YouTube link yields an id; anything else is "" so no typed URL can reach the player iframe (D-09).
+export function parseYoutubeId(value: unknown): string {
+  if (typeof value !== "string") return "";
+  let url: URL;
+  try { url = new URL(value.trim()); } catch { return ""; }
+  if ((url.protocol !== "https:" && url.protocol !== "http:") || !youtubeHosts.has(url.hostname)) return "";
+  const [first = "", second = ""] = url.pathname.split("/").filter(Boolean);
+  const id = url.hostname === "youtu.be" ? first
+    : first === "watch" ? url.searchParams.get("v") ?? ""
+    : first === "embed" || first === "shorts" ? second
+    : "";
+  return youtubeIdPattern.test(id) ? id : "";
+}
+
+function normalizeInfoBlock(value: unknown, subsectionId: string, index: number): InfoBlock[] {
+  if (!isRecord(value)) return [];
+  const id = typeof value.id === "string" && value.id ? value.id : `${subsectionId}-block-${index}`;
+  switch (value.type) {
+    case "text":
+      return [{ id, type: "text", text: asText(value.text, 20_000) }];
+    case "table":
+      return [{
+        id,
+        type: "table",
+        rows: (Array.isArray(value.rows) ? value.rows : []).filter(isRecord).slice(0, 100)
+          .map((row) => ({ key: asText(row.key, 500), value: asText(row.value, 500) })),
+      }];
+    case "photo":
+      return [{ id, type: "photo", url: normalizeMediaUrl(value.url) }];
+    case "video":
+      return [{ id, type: "video", videoId: typeof value.videoId === "string" && youtubeIdPattern.test(value.videoId) ? value.videoId : "" }];
+    default:
+      return [];
+  }
+}
+
+function normalizeInfoSubsection(value: unknown, sectionId: string, index: number): InfoSubsection[] {
+  if (!isRecord(value)) return [];
+  const id = typeof value.id === "string" && value.id ? value.id : `${sectionId}-sub-${index}`;
+  const blocks = (Array.isArray(value.blocks) ? value.blocks : []).slice(0, 100)
+    .flatMap((block, blockIndex) => normalizeInfoBlock(block, id, blockIndex));
+  return [{ id, title: asText(value.title, 300), blocks }];
+}
+
+// Sections saved before 03.3 have no subsections (D-12); title and body keep today's behaviour, never cut.
+export function normalizeInfoSections(value: unknown): InfoSection[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, index) => {
+    if (!isRecord(item)) return [];
+    const id = typeof item.id === "string" && item.id ? item.id : `info-${index}`;
+    return [{
+      id,
+      title: typeof item.title === "string" ? item.title : "",
+      body: typeof item.body === "string" ? item.body : "",
+      subsections: (Array.isArray(item.subsections) ? item.subsections : []).slice(0, 50)
+        .flatMap((sub, subIndex) => normalizeInfoSubsection(sub, id, subIndex)),
+    }];
+  });
 }
 
 export function normalizePortiaContent(value: unknown): PortiaContent | null {
@@ -155,8 +242,8 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
   return {
     viruses,
     recycledViruses,
-    infoSections: candidate.infoSections,
-    broadcasts: candidate.broadcasts,
+    infoSections: normalizeInfoSections(candidate.infoSections),
+    broadcasts: normalizeBroadcasts(candidate.broadcasts),
     recycleFiles,
     recycleOrder,
     searchRecommendations: candidate.searchRecommendations.filter((item): item is string => typeof item === "string"),

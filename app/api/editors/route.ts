@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess, normalizeEditorEmail } from "@/lib/editor-access";
+import { parseJsonObject } from "@/lib/request-json";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,8 @@ export async function POST(request: Request) {
   const access = await requireOwner();
   if (!access) return Response.json({ error: "Управление доступом разрешено только владельцу." }, { status: 403 });
 
-  const body = await request.json() as { email?: unknown };
+  const body = parseJsonObject(await request.text());
+  if (!body) return Response.json({ error: "Некорректные данные." }, { status: 400 });
   const email = normalizeEditorEmail(typeof body.email === "string" ? body.email : "");
   if (!emailPattern.test(email)) return Response.json({ error: "Введите корректный email." }, { status: 400 });
   if (email === normalizeEditorEmail(access.user.email ?? "")) return Response.json({ error: "Владелец уже имеет полный доступ." }, { status: 400 });
