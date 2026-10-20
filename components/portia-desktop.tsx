@@ -138,6 +138,18 @@ const taskbarOrderStorageKey = "portia-taskbar-order-v1";
 const TASKBAR_BOUNCE_MS = 520;
 const ASSISTANT_RECOVER_MS = 780;
 
+// A saved profile replaces its entry; an id not in the list yet is a newly added manual employee (appended).
+const withEmployee = (list: PortiaEmployee[], employee: PortiaEmployee) => list.some((item) => item.id === employee.id) ? list.map((item) => item.id === employee.id ? employee : item) : [...list, employee];
+
+// Patches only the cached list; no cache, no write, so an editor save never creates a cache from possibly partial state (D-07).
+function patchEmployeesCache(patch: (employees: PortiaEmployee[]) => PortiaEmployee[]) {
+  try {
+    const cached = JSON.parse(window.localStorage.getItem(employeesCacheStorageKey) ?? "null") as { employees?: unknown } | null;
+    if (!cached || !Array.isArray(cached.employees)) return;
+    window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify({ ...cached, employees: patch(cached.employees as PortiaEmployee[]) }));
+  } catch {}
+}
+
 type ContentResponse = {
   content?: PortiaContent;
   revision?: number;
@@ -301,6 +313,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [employeesProfilesRead, setEmployeesProfilesRead] = useState(true);
   const employeesRef = useRef<PortiaEmployee[]>([]);
   const profilesReadRef = useRef(true);
+  const employeeEdits = useRef(0);
   // fetchEmployees has no deps and reads the last good list through these.
   useEffect(() => {
     employeesRef.current = employees;
@@ -399,35 +412,27 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   // Keeps the Personnel window in step with the editor without waiting for the next sync.
   const updateEmployee = useCallback((saved: PortiaEmployee) => {
-    setEmployees((current) => {
-      // A saved profile replaces its entry; an id not in the list yet is a newly added manual employee (appended).
-      const next = current.some((employee) => employee.id === saved.id) ? current.map((employee) => employee.id === saved.id ? saved : employee) : [...current, saved];
-      try {
-        const cached = JSON.parse(window.localStorage.getItem(employeesCacheStorageKey) ?? "{}") as { syncedAt?: string | null };
-        window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify({ ...cached, employees: next }));
-      } catch {}
-      return next;
-    });
+    employeeEdits.current += 1;
+    setEmployees((current) => withEmployee(current, saved));
+    patchEmployeesCache((cached) => withEmployee(cached, saved));
   }, []);
 
   // A removed manual employee leaves the Personnel window and the cached roster at once.
   const removeEmployee = useCallback((id: string) => {
-    setEmployees((current) => {
-      const next = current.filter((employee) => employee.id !== id);
-      try {
-        const cached = JSON.parse(window.localStorage.getItem(employeesCacheStorageKey) ?? "{}") as { syncedAt?: string | null };
-        window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify({ ...cached, employees: next }));
-      } catch {}
-      return next;
-    });
+    employeeEdits.current += 1;
+    setEmployees((current) => current.filter((employee) => employee.id !== id));
+    patchEmployeesCache((cached) => cached.filter((employee) => employee.id !== id));
   }, []);
 
   const fetchEmployees = useCallback(async () => {
+    const editsAtStart = employeeEdits.current;
     try {
       const response = await fetchWithTimeout("/api/employees", {}, 15_000);
       if (!response.ok) return;
       const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null; degraded?: boolean; profilesRead?: boolean; manualRead?: boolean };
       if (!acceptsRoster(payload)) return;
+      // An editor save or delete on this device is newer than this answer; the next poll brings the server copy.
+      if (employeeEdits.current !== editsAtStart) return;
       const merged = mergeEmployeesAnswer(employeesRef.current, payload, profilesReadRef.current);
       setEmployees(merged.employees);
       setEmployeesProfilesRead(merged.profilesRead);

@@ -86,15 +86,27 @@ export function mergeEmployeesAnswer(
   previousProfilesRead: boolean,
 ): { employees: PortiaEmployee[]; cacheable: boolean; profilesRead: boolean } {
   if (answer.degraded === false) return { employees: answer.employees, cacheable: true, profilesRead: true };
-  const known = new Map(previous.map((employee) => [employee.id, employee]));
+  const byId = new Map(previous.map((employee) => [employee.id, employee]));
+  const byNickname = new Map(previous.map((employee) => [nicknameKey(employee.nickname), employee]));
   const profileKeys = ["biography", "photoUrl", "knowledgeRating", ...employeeRatings.map(({ key }) => key)] as const;
   const employees = answer.employees.map((employee) => {
-    const old = known.get(employee.id);
-    if (answer.profilesRead === true || !old) return employee;
+    // Without Roblox and profiles the id falls back to nick-…, so the nickname is the second match.
+    const old = byId.get(employee.id) ?? byNickname.get(nicknameKey(employee.nickname));
+    if (!old) return employee;
     const kept = { ...employee };
-    for (const key of profileKeys) Object.assign(kept, { [key]: old[key] });
+    if (answer.profilesRead !== true) for (const key of profileKeys) Object.assign(kept, { [key]: old[key] });
+    if (employee.robloxUserId === null && old.robloxUserId !== null) {
+      kept.id = old.id;
+      kept.robloxUserId = old.robloxUserId;
+    }
+    kept.robloxAvatarUrl = employee.robloxAvatarUrl || old.robloxAvatarUrl;
+    kept.robloxFullAvatarUrl = employee.robloxFullAvatarUrl || old.robloxFullAvatarUrl;
     return kept;
   });
+  if (answer.manualRead !== true) {
+    const shown = new Set(employees.map((employee) => employee.id));
+    employees.push(...previous.filter((employee) => employee.source === "manual" && !shown.has(employee.id)));
+  }
   return { employees, cacheable: false, profilesRead: answer.profilesRead === true || (previousProfilesRead && previous.length > 0) };
 }
 
