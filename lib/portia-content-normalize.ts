@@ -1,5 +1,6 @@
 import {
   type Broadcast,
+  classificationOptions,
   type InfoBlock,
   type InfoSection,
   type InfoSubsection,
@@ -9,6 +10,7 @@ import {
   type RecycleFile,
   type RichTextDocument,
   type RichTextStyle,
+  type Virus,
 } from "./portia-content.ts";
 import { MAX_SCIENTIST_LOGS } from "./content-limits.ts";
 
@@ -84,22 +86,57 @@ function normalizeMediaUrl(value: unknown, fallback = "") {
 const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
 const normalizeDay = (value: unknown) => (typeof value === "string" && dayPattern.test(value) ? value : "");
 
+// Text slots only ever hold text: a number or boolean becomes its text, anything else "" (D-20, never an object in a text slot).
+const textOf = (value: unknown) => (typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : "");
+const asText = (value: unknown) => (typeof value === "string" ? value : "");
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object";
+
+const realId = (value: unknown) => {
+  const id = textOf(value);
+  return id.trim() ? id : "";
+};
+const claimIds = (items: Record<string, unknown>[], taken: Set<string>) => {
+  for (const item of items) {
+    const id = realId(item.id);
+    if (id) taken.add(id);
+  }
+};
+// D-21: a blank id becomes `${prefix}-${position}`, stable across polls because it depends on position only; never ':' because formatted keys split on it.
+function deriveIds(items: Record<string, unknown>[], prefix: string, taken: Set<string>): string[] {
+  return items.map((item, index) => {
+    const id = realId(item.id);
+    if (id) return id;
+    let derived = `${prefix}-${index}`;
+    for (let n = 2; taken.has(derived); n += 1) derived = `${prefix}-${index}-${n}`;
+    taken.add(derived);
+    return derived;
+  });
+}
+
 // Broadcasts saved before 03.2 have no important flag, dates or conditions.
 export function normalizeBroadcasts(value: unknown): Broadcast[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is Broadcast => Boolean(item) && typeof item === "object")
-    .map((item) => ({
+  const items = value.filter(isRecord);
+  const taken = new Set<string>();
+  claimIds(items, taken);
+  const ids = deriveIds(items, "broadcast", taken);
+  return items.map((item, index) => {
+    const type = item.type === "quest" || item.type === "task" ? item.type : "news";
+    return {
       ...item,
-      important: item.important === true,
+      id: ids[index],
+      type,
+      title: textOf(item.title),
+      body: textOf(item.body),
+      published: item.published === true,
+      // D-19: only news can be important.
+      important: type === "news" && item.important === true,
       startsAt: normalizeDay(item.startsAt),
       endsAt: normalizeDay(item.endsAt),
       conditions: typeof item.conditions === "string" ? item.conditions : "",
-    }));
+    };
+  });
 }
-
-const asText = (value: unknown) => (typeof value === "string" ? value : "");
-const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object";
 
 const youtubeIdPattern = /^[\w-]{11}$/;
 const youtubeHosts = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtube-nocookie.com"]);
@@ -174,24 +211,54 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     !Array.isArray(candidate.searchRecommendations)
   ) return null;
 
-  const normalizeVirus = (virus: PortiaContent["viruses"][number]) => ({
-    ...virus,
-    infectedImage: normalizeMediaUrl(virus.infectedImage),
-    mutations: Array.isArray(virus.mutations)
-      ? virus.mutations.map((mutation) => ({ ...mutation, image: normalizeMediaUrl(mutation.image) }))
-      : [],
-    scientistLogs: Array.isArray(virus.scientistLogs)
-      ? virus.scientistLogs.slice(0, MAX_SCIENTIST_LOGS).map((log) => ({
-          ...log,
-          content: Array.isArray(log.content) ? log.content.filter((paragraph): paragraph is string => typeof paragraph === "string") : [],
-          richContent: normalizeRichText(log.richContent),
-        }))
-      : [],
-  });
-  const viruses = candidate.viruses.map(normalizeVirus);
-  const recycledViruses = Array.isArray(candidate.recycledViruses)
-    ? candidate.recycledViruses.map(normalizeVirus)
-    : [];
+  const normalizeVirus = (virus: Record<string, unknown>, id: string): Virus => {
+    const ppu = isRecord(virus.ppu) ? virus.ppu : {};
+    const classification = isRecord(virus.classification) ? virus.classification : {};
+    return {
+      ...virus,
+      id,
+      code: textOf(virus.code),
+      name: textOf(virus.name),
+      status: textOf(virus.status),
+      external: textOf(virus.external),
+      physiology: textOf(virus.physiology),
+      ppu: { health: textOf(ppu.health), speed: textOf(ppu.speed), abilities: textOf(ppu.abilities) },
+      classification: Object.fromEntries(
+        Object.keys(classificationOptions).map((key) => [key, textOf(classification[key])]),
+      ) as Virus["classification"],
+      infectedImage: normalizeMediaUrl(virus.infectedImage),
+      mutations: Array.isArray(virus.mutations)
+        ? virus.mutations.map((item) => {
+            const mutation = isRecord(item) ? item : {};
+            return { ...mutation, name: textOf(mutation.name), description: textOf(mutation.description), image: normalizeMediaUrl(mutation.image) };
+          })
+        : [],
+      scientistLogs: Array.isArray(virus.scientistLogs)
+        ? virus.scientistLogs.slice(0, MAX_SCIENTIST_LOGS).map((item) => {
+            const log = isRecord(item) ? item : {};
+            return {
+              ...log,
+              id: textOf(log.id),
+              title: textOf(log.title),
+              scientist: textOf(log.scientist),
+              lockedLevel: typeof log.lockedLevel === "number" && Number.isFinite(log.lockedLevel) ? log.lockedLevel : 3,
+              content: Array.isArray(log.content) ? log.content.filter((paragraph): paragraph is string => typeof paragraph === "string") : [],
+              richContent: normalizeRichText(log.richContent),
+            };
+          })
+        : [],
+    };
+  };
+  // One id set spans both lists: they share the `virus:<id>:` formatting namespace and recycleOrder.
+  const rawViruses = candidate.viruses.filter(isRecord);
+  const rawRecycled = (Array.isArray(candidate.recycledViruses) ? candidate.recycledViruses : []).filter(isRecord);
+  const takenIds = new Set<string>();
+  claimIds(rawViruses, takenIds);
+  claimIds(rawRecycled, takenIds);
+  const virusIds = deriveIds(rawViruses, "virus", takenIds);
+  const recycledIds = deriveIds(rawRecycled, "recycled", takenIds);
+  const viruses = rawViruses.map((virus, index) => normalizeVirus(virus, virusIds[index]));
+  const recycledViruses = rawRecycled.map((virus, index) => normalizeVirus(virus, recycledIds[index]));
   const recycleFiles = normalizeRecycleFiles(candidate.recycleFiles, viruses);
   const validRecycleKeys = new Set([
     ...recycleFiles.map((file) => `file:${file.id}`),

@@ -73,7 +73,8 @@ export const dossierTabs: [DossierTab, string][] = [
 ];
 
 export function changedDossierTabs(baseline: PortiaContent, draft: PortiaContent, virusId: string): DossierTab[] {
-  const find = (content: PortiaContent) => [...content.viruses, ...content.recycledViruses].find((virus) => virus.id === virusId);
+  // D-22: an old cached copy has no recycle list.
+  const find = (content: PortiaContent) => [...content.viruses, ...(content.recycledViruses ?? [])].find((virus) => virus.id === virusId);
   const after = find(draft);
   if (!after) return [];
   const before = find(baseline);
