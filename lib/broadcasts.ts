@@ -28,6 +28,10 @@ export function questDateError(item: Pick<Broadcast, "type" | "startsAt" | "ends
 
 // CONT-05: the first card of `to` that moved between news and quests; ids are stable since 09-03, so matching by id is safe.
 export function categoryChange(from: Broadcast[], to: Broadcast[]): { id: string; tab: BroadcastTab } | null {
+  for (const card of to) {
+    const before = from.find((item) => item.id === card.id);
+    if (before && broadcastTabOf(before.type) !== broadcastTabOf(card.type)) return { id: card.id, tab: broadcastTabOf(card.type) };
+  }
   return null;
 }
 

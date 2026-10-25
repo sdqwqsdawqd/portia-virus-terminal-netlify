@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
-import { broadcastTabOf, questDateError, type BroadcastTab } from "@/lib/broadcasts";
+import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
 import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
@@ -624,6 +624,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     setFormatTarget(null);
     setFormatterOpen(false);
     repairSelections(target);
+    // CONT-05: an undo/redo that moves a card between news and quests takes the editor to that card.
+    const change = categoryChange(draft.broadcasts, target.broadcasts);
+    if (change) revealCard(change.id, "type", change.tab);
     editCount.current += 1;
     dispatch({ type: kind });
   };
@@ -1121,7 +1124,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               <div className="nested-editor-head"><strong>{broadcast.type === "news" ? "НОВОСТЬ" : broadcast.type === "quest" ? "КВЕСТ" : "ЗАДАЧА"} {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.broadcast(broadcast.id)); changeDraft((next) => removeBroadcast(next, broadcast.id)); }}>Удалить</button></div>
               <Field label="Тип"><select data-broadcast-type value={broadcast.type} onChange={(event) => {
                 const type = event.target.value as Broadcast["type"];
-                changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.type = type; }));
+                changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => {
+                  item.type = type;
+                  // D-19: switching back does not restore it; undo restores the whole previous card.
+                  if (type !== "news") item.important = false;
+                }));
                 // A card that changes category would vanish from this list, so the view follows it.
                 if (broadcastTabOf(type) !== broadcastEditorTab) {
                   revealBroadcast.current = { id: broadcast.id, field: "type" };
