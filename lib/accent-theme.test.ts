@@ -44,6 +44,8 @@ function oklchToRgb(L: number, C: number, hue: number): Rgb {
 }
 const hueDistance = (a: number, b: number) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
 const hueOf = (value: string) => oklch(hex(value))[2];
+const luminance = (rgb: Rgb) => 0.2126 * toLinear(rgb[0]) + 0.7152 * toLinear(rgb[1]) + 0.0722 * toLinear(rgb[2]);
+const contrast = (a: Rgb, b: Rgb) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const applyMatrix = (m: number[][], rgb: Rgb) => m.map((row) => clamp01((row[0] * rgb[0] + row[1] * rgb[1] + row[2] * rgb[2]) / 255) * 255) as Rgb;
@@ -269,4 +271,82 @@ test("animations are on by default and off only by the setting, whatever the sys
   const group = desktopSource.match(/title="Анимации" values=\{(\[\[.*?\]\])\}/)?.[1];
   assert.ok(group, "«Анимации» SettingGroup not found");
   assert.deepEqual([...motionModes], [...group.matchAll(/\['(\w+)',/g)].map((m) => m[1]));
+});
+
+const rgbToHex = (rgb: Rgb) => "#" + rgb.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("");
+
+test("custom accents derive every preset token in the preset formats", () => {
+  for (const pick of ["#ff3366", "#3366ff", "#808080"]) {
+    const t = deriveAccentTokens(pick)!;
+    assert.deepEqual(Object.keys(t).sort(), [...accentTokenNames].sort());
+    for (const name of ["--teal", "--teal-dim", "--desktop-base", "--desktop-deep"]) assert.match(t[name], /^#[0-9a-f]{6}$/, `${pick} ${name}`);
+    assert.match(t["--teal-soft"], /^rgba\(\d{1,3},\d{1,3},\d{1,3},\.13\)$/);
+    for (const name of ["--desktop-glow", "--desktop-grid"]) assert.match(t[name], /^\d{1,3}, \d{1,3}, \d{1,3}$/, `${pick} ${name}`);
+    assert.match(t["--accent-hue"], /^\d{1,3}(\.\d)?$/);
+    parseFilter(t["--mark-filter"]);
+    parseFilter(t["--assistant-filter"]);
+  }
+});
+
+test("every custom hue stays readable and keeps the spider and Vivian on the accent", () => {
+  const picks = [
+    ...Array.from({ length: 36 }, (_, i) => rgbToHex(oklchToRgb(0.7, 0.15, i * 10))),
+    "#000000", "#ffffff", "#808080", "#0a0a0a", "#fafafa", "#ff0000", "#00ff00", "#0000ff", "#ffff00",
+  ];
+  for (const pick of picks) {
+    const t = deriveAccentTokens(pick)!;
+    const teal = hex(t["--teal"]);
+    const bg = oklchToRgb(0.163, 0.014, Number(t["--accent-hue"])).map((v) => Math.min(255, Math.max(0, v))) as Rgb;
+    assert.ok(contrast(teal, bg) >= 4.5, `${pick}: contrast ${contrast(teal, bg).toFixed(2)}`);
+    assert.ok(hueDistance(Number(t["--accent-hue"]), hueOf(t["--teal"])) <= 0.5, `${pick}: --accent-hue off its --teal`);
+    const mark = parseFilter(t["--mark-filter"]);
+    const assistant = parseFilter(t["--assistant-filter"]);
+    for (const [label, rgb] of [["logo", mark(hex(LOGO_TEAL))], ["assistant light", assistant(hex(ASSISTANT_TEAL_LIGHT))], ["assistant dark", assistant(hex(ASSISTANT_TEAL_DARK))]] as const) {
+      const distance = hueDistance(oklch(rgb)[2], hueOf(t["--teal"]));
+      assert.ok(distance <= 10, `${pick} ${label} ends ${distance.toFixed(1)} deg from the accent`);
+    }
+    const tealL = oklch(teal)[0];
+    assert.ok(tealL >= 0.6 && tealL <= 0.82, `${pick}: --teal L ${tealL.toFixed(3)}`);
+    assert.ok(oklch(hex(t["--teal-dim"]))[0] < tealL, `${pick}: --teal-dim is not darker`);
+    assert.ok(oklch(hex(t["--desktop-base"]))[0] <= 0.17, `${pick}: --desktop-base too light`);
+    for (const name of ["--mark-filter", "--assistant-filter"]) {
+      for (const grey of ["#000000", "#ffffff", "#808080"]) {
+        const out = parseFilter(t[name])(hex(grey));
+        hex(grey).forEach((channel, i) => assert.ok(Math.abs(out[i] - channel) <= 1, `${pick} ${name} moves ${grey}`));
+      }
+    }
+  }
+});
+
+test("a grey pick still gets the Portia hue", () => {
+  for (const pick of ["#808080", "#000000", "#ffffff"]) {
+    const t = deriveAccentTokens(pick)!;
+    assert.ok(hueDistance(Number(t["--accent-hue"]), 180.4) <= 1, `${pick}: hue ${t["--accent-hue"]}`);
+    assert.ok(oklch(hex(t["--teal"]))[1] >= 0.07, `${pick}: chroma too low`);
+  }
+});
+
+test("tampered custom colours never reach the page", () => {
+  const hostile: unknown[] = ["\"><script>alert(1)</script>", "#12345", "#1234567", "#gggggg", "ff3366", 123, null, ["#ff3366"], {}];
+  for (const customAccent of hostile) {
+    assert.equal(deriveAccentTokens(customAccent), null);
+    const out = runBoot(() => JSON.stringify({ accent: "custom", customAccent }));
+    assert.deepEqual(out.props, {});
+    assert.equal(out.accent, undefined);
+  }
+  const bare = runBoot(() => JSON.stringify({ accent: "custom" }));
+  assert.deepEqual(bare.props, {});
+  assert.equal(bare.accent, undefined);
+});
+
+test("the boot script passes the stored colour only as an argument", () => {
+  assert.match(accentBootScript, /\)\(s\.customAccent\)/);
+  assert.doesNotMatch(accentBootScript, /eval\(|new Function|innerHTML|document\.write/);
+});
+
+test("the boot script reads the one settings key", () => {
+  const asked: string[] = [];
+  runBoot((key) => { asked.push(key); return null; });
+  assert.deepEqual(asked, [desktopSettingsStorageKey]);
+  assert.equal(desktopSettingsStorageKey, "portia-desktop-settings-v1");
 });
