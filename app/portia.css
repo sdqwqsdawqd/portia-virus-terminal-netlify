@@ -1322,6 +1322,8 @@ html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-
 .wallpaper-spider-dark { fill: var(--desktop-base); }
 .wallpaper-spider-pale { fill: color-mix(in oklab, var(--teal) 30%, white); }
 .wallpaper-spider-leg { transform-box: view-box; }
+/* Waves along the threads: no filter, no blur (cost). The svg carries .desktop-wallpaper, so the accent and the reduce gate apply. */
+.wallpaper-web-pulses path { stroke-linecap: round; }
 html[data-motion="full"] .wallpaper-spider { animation: fade-in 600ms ease-out 1.8s both; }
 @keyframes web-dew { 0%, 100% { opacity: .32; } 50% { opacity: .75; } }
 @keyframes web-draw { to { stroke-dashoffset: 0; } }
