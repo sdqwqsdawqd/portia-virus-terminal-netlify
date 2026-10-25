@@ -25,7 +25,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-20)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-09 — Целостность контента
+**Current focus:** Phase 10 — Рабочий стол: устойчивость, встроенные документы, доступность
 
 ## Current Position
 
