@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 09
 current_phase_name: Целостность контента
 status: executing
-stopped_at: Completed PORTIA-09-03-PLAN.md
-last_updated: "2026-10-25T13:41:47.979Z"
+stopped_at: Completed PORTIA-09-04-PLAN.md
+last_updated: "2026-10-25T13:45:06.041Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase PORTIA-09 execution started
-state_head: 1e092933727d63b3f0a169a765357ef7882caa05
+state_head: a23590ad1bce8f92fc288ce40dffbbd0d8c86c29
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 19
-  completed_plans: 15
+  completed_plans: 16
   percent: 43
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 ## Current Position
 
 Phase: PORTIA-09 (Целостность контента) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Executing Phase PORTIA-09
 Last activity: 2026-10-25 — Phase PORTIA-09 execution started
 
@@ -57,6 +57,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-08 P04 | 30min | 3 tasks | 3 files |
 | Phase PORTIA-09 P01 | 100 min | 3 tasks | 3 files |
 | Phase PORTIA-09 P03 | 25 min | 3 tasks | 9 files |
+| Phase PORTIA-09 P04 | 2 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase 09]: 09-01: helix-scroll moves with transform (translate3d), not translate: Edge keeps translate on an outer svg off the compositor (traced)
 - [Phase 09]: 09-01: cell sharp-zone factor stays 0.8; gel and cells repaint on the main thread (SVG children), phone check in 09-07
 - [Phase PORTIA-09]: 09-03: derived ids index the list after non-object entries are dropped; broadcast conditions stay string-only; backup check caps scientist logs at 5 per virus (D-25)
+- [Phase PORTIA-09]: 09-04: desktop cache and poll share normalizePortiaContent (revision gate first); ВАЖНО on news only; today is a lazy useState init (passes React Compiler lint)
 
 ### Pending Todos
 
@@ -116,8 +118,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-25T11:31:40.576Z
-Stopped at: Completed PORTIA-09-03-PLAN.md
+Last session: 2026-10-25T13:45:05.930Z
+Stopped at: Completed PORTIA-09-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
