@@ -100,7 +100,7 @@ const textColorPalette = [
 ];
 
 // D-06 / D-07 base text colours; oklch is the source of truth (D-17). «Основной» shows this and stores no colour.
-const baseInk = { dark: "oklch(.79 .02 var(--accent-hue))", light: "oklch(.237 .015 var(--accent-hue))" };
+const baseInk = { dark: "oklch(.79 calc(.02 * var(--accent-chroma)) var(--accent-hue))", light: "oklch(.237 calc(.015 * var(--accent-chroma)) var(--accent-hue))" };
 
 const backgroundColorPalette = [
   { value: "#f0d66a", label: "Жёлтый" },

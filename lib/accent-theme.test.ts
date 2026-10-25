@@ -188,13 +188,26 @@ test("no turquoise literal in the components", () => {
 });
 
 test("Portia tints stay in gamut and in the teal family", () => {
-  for (const [whole, l, c] of css.matchAll(/oklch\(([\d.]+) ([\d.]+) var\(--accent-hue\)/g)) {
+  for (const [whole, l, c] of css.matchAll(/oklch\(([\d.]+) calc\(([\d.]+) \* var\(--accent-chroma\)\) var\(--accent-hue\)/g)) {
     const rgb = oklchToRgb(Number(l), Number(c), 180.4);
     assert.ok(rgb.every((v) => v >= -1 && v <= 256), `${whole} leaves sRGB at the Portia hue`);
     if (Number(c) >= 0.02) {
       const hue = hslHue(rgb.map((v) => Math.min(255, Math.max(0, v))) as Rgb);
       assert.ok(hue >= 150 && hue <= 195, `${whole} renders at HSL hue ${hue.toFixed(1)}`);
     }
+  }
+});
+
+test("every accent tint follows --accent-chroma", () => {
+  const sources = (dir: URL): URL[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? sources(new URL(`${e.name}/`, dir)) : /\.tsx?$/.test(e.name) ? [new URL(e.name, dir)] : []);
+  const components = readdirSync(new URL("../components/", import.meta.url)).filter((f) => f.endsWith(".tsx")).map((f) => new URL(`../components/${f}`, import.meta.url));
+  const files: [string, string][] = [["app/portia.css", css]];
+  for (const file of [...components, ...sources(new URL("../app/", import.meta.url))]) files.push([file.pathname.split("/").slice(-2).join("/"), readFileSync(file, "utf8")]);
+  for (const [name, text] of files) {
+    const all = (text.match(/var\(--accent-hue\)/g) ?? []).length;
+    const scaled = (text.match(/calc\([\d.]+ \* var\(--accent-chroma\)\) var\(--accent-hue\)/g) ?? []).length;
+    assert.equal(scaled, all, `${name}: ${all - scaled} var(--accent-hue) tint(s) are not scaled by --accent-chroma`);
   }
 });
 

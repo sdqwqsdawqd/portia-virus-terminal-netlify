@@ -224,12 +224,16 @@ const checks = {
         const e = document.createElement("div"); e.style.color = "var(" + name + ")"; document.body.appendChild(e);
         out[name] = getComputedStyle(e).color; e.remove();
       }
+      const option = document.querySelector(".color-options > button");
+      out["settings option border"] = option ? getComputedStyle(option).borderTopColor : "missing";
       return out;
     })()`);
     const seedAccent = async (customAccent) => {
       await sleep(600);
       await cdp.eval(`localStorage.setItem(${JSON.stringify(KEY)}, ${JSON.stringify(stored({ customAccent }))}); true`);
       await load(cdp);
+      await click(cdp, '[data-shortcut="settings"]');
+      await waitFor(cdp, `!!document.querySelector(".color-options > button")`, 3000);
     };
     await seedAccent("#0d0d0d");
     if ((await cdp.eval(inline("--accent-chroma"))) !== "0") reasons.push("(m) inline --accent-chroma is not 0 for #0d0d0d");
