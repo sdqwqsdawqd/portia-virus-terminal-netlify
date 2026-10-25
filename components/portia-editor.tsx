@@ -20,7 +20,7 @@ import {
   type Virus,
 } from "@/lib/portia-content";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
-import { MAX_TABLE_ROWS, limitStatus, limitText } from "@/lib/content-limits";
+import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS, MAX_TABLE_ROWS, bodyTooLargeMessage, contentBodyBytes, limitStatus, limitText, oversizeFields, oversizeMessage } from "@/lib/content-limits";
 import type { FieldSelectionEvent, FieldSelectionState } from "@/lib/rich-text-style";
 import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
 import { clampPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
@@ -525,6 +525,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const baseRevision = useRef(revision);
   const draft = history.present;
   const changed = useMemo(() => changedSections(history.baseline, history.present), [history.baseline, history.present]);
+  // Invisible limits only warn (D-16); a body the server would refuse blocks the save with its reason (D-23).
+  const oversize = useMemo(() => oversizeFields(draft), [draft]);
+  const bodyBytes = useMemo(() => contentBodyBytes(draft), [draft]);
+  const bodyMessage = bodyTooLargeMessage(bodyBytes);
+  const saveBlocked = bodyMessage !== "";
   const dirty = changed.length > 0;
   const [tab, setTab] = useState<EditorTab>("viruses");
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
@@ -757,6 +762,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   // Resolves true only when nothing is left unsaved: the draft was clean, or the save succeeded and nothing was typed meanwhile.
   const save = async (): Promise<boolean> => {
     if (!dirty) return true;
+    // D-23: the server would answer 413; the savebar already shows why.
+    if (saveBlocked) return false;
     if (saveState === "saving") return false;
     // The reducer compares this very object after the request to tell whether the owner kept typing meanwhile.
     const savedFrom = draft;
@@ -793,7 +800,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       if (normalized.assistantAutoMinSeconds > normalized.assistantAutoMaxSeconds) {
         [normalized.assistantAutoMinSeconds, normalized.assistantAutoMaxSeconds] = [normalized.assistantAutoMaxSeconds, normalized.assistantAutoMinSeconds];
       }
-      normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, 5); });
+      normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, MAX_SCIENTIST_LOGS); });
       baseRevision.current = await onSave(normalized, baseRevision.current);
       const clean = editCount.current === editsBefore;
       dispatch({ type: "saved", normalized, savedFrom });
@@ -994,7 +1001,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                     <FormattedTextarea area="scientist" label="Текст записи" value={scientistLogPlainText(log)} document={log.richContent} formatKey={`scientist:${log.id}`} onActivate={activateFormatter} onChange={(value, document) => updateVirus((virus) => { virus.scientistLogs[index].content = value.split(/\n\s*\n/); virus.scientistLogs[index].richContent = document; })} />
                   </div>
                 ))}
-                <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= 5} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / 5</span></div>
+                <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / {MAX_SCIENTIST_LOGS}</span></div>
               </EditorGroup>}
 
               <button className="danger-control" type="button" onClick={() => setDialog("recycle")}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
@@ -1041,14 +1048,22 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                         </div>
                       ))}
                     </div>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "text", text: "" }); })}>+ ТЕКСТ</button>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "table", rows: [{ key: "", value: "" }] }); })}>+ ТАБЛИЦА</button>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "video", videoId: "" }); })}>+ ВИДЕО</button>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "photo", url: "" }); })}>+ ФОТО</button>
+                    <div className="scientist-log-actions">
+                      <div className="limit-buttons">
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "text", text: "" }); })}>+ ТЕКСТ</button>
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "table", rows: [{ key: "", value: "" }] }); })}>+ ТАБЛИЦА</button>
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "video", videoId: "" }); })}>+ ВИДЕО</button>
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "photo", url: "" }); })}>+ ФОТО</button>
+                      </div>
+                      <LimitNote id={`limit-blocks-${subsection.id}`} count={subsection.blocks.length} max={MAX_BLOCKS} />
+                    </div>
                   </div>
                 ))}
               </div>
-              <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id: makeId("info"), title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); })}>+ ПОДРАЗДЕЛ</button>
+              <div className="scientist-log-actions">
+                <button className="secondary-control limit-add" type="button" disabled={section.subsections.length >= MAX_SUBSECTIONS} aria-describedby={`limit-subsections-${section.id}`} onClick={() => changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id: makeId("info"), title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); })}>+ ПОДРАЗДЕЛ</button>
+                <LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} />
+              </div>
             </div>
           ))}
           <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.infoSections.push({ id: makeId("info"), title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] }))}>+ ДОБАВИТЬ РАЗДЕЛ</button>
@@ -1272,11 +1287,13 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
           <p role="status" aria-live="polite">
             {statusText && <span className={`editor-save-status ${saveState}`}>{statusText}</span>}
             {dirty && <span className="editor-savebar-sections">{`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}</span>}
+            {dirty && oversize.length > 0 && <span className="editor-savebar-sections">{oversizeMessage(oversize)}</span>}
+            {dirty && bodyMessage && <span className="editor-save-status error">{bodyMessage}</span>}
           </p>
           <div className="editor-savebar-actions">
             <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
             <button type="button" className="secondary-control" disabled={!dirty || saveState === "saving"} onClick={() => setDialog("discard")}>ОТМЕНИТЬ</button>
-            <button type="button" className="primary-control" disabled={!dirty || saveState === "saving"} onClick={() => void save()}>СОХРАНИТЬ</button>
+            <button type="button" className="primary-control" disabled={!dirty || saveState === "saving" || saveBlocked} onClick={() => void save()}>СОХРАНИТЬ</button>
           </div>
         </div>
       )}
@@ -1326,7 +1343,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {closeAsked && !employeeDirty && (
         <ConfirmDialog
           title="Закрыть редактор?"
-          text={`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}
+          text={`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}${saveBlocked ? ` ${bodyMessage}` : ""}`}
           actions={[
             {
               label: "СОХРАНИТЬ",
@@ -1334,7 +1351,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               // The modal stays up during the request, so nothing can be typed that the close would lose.
               // Closes only if the save left nothing unsaved and the close was not cancelled meanwhile;
               // otherwise the window stays and the bar shows the unsaved edits, ОШИБКА or the conflict.
-              disabled: saveState === "saving",
+              disabled: saveState === "saving" || saveBlocked,
               onClick: () => {
                 void save().then((clean) => {
                   if (!latest.current.closeAsked) return;
@@ -1760,7 +1777,7 @@ function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRemoveM
         <Field label="Уровень доступа"><select value={log.lockedLevel} onChange={(event) => onChange((item) => { item.scientistLogs[index].lockedLevel = Number(event.target.value); })}><option value={2}>II — доступна</option><option value={3}>III — заблокирована</option><option value={4}>IV — заблокирована</option></select></Field>
         <Field label="Текст записи" wide><textarea value={scientistLogPlainText(log)} onChange={(event) => onChange((item) => { item.scientistLogs[index].content = event.target.value.split(/\n\s*\n/); item.scientistLogs[index].richContent = { runs: [{ text: event.target.value }] }; })} /></Field>
       </div>)}
-      <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= 5} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
+      <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
     </EditorGroup>}
     <div className="archive-virus-actions"><button className="secondary-control" type="button" onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
   </div>;

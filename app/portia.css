@@ -577,6 +577,7 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .scientist-log-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .scientist-log-actions > span { color: oklch(.596 .029 var(--accent-hue)); font: 11px var(--sans); }
 .limit-note.is-full { color: var(--warning); font-weight: 700; letter-spacing: .04em; }
+.limit-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 @media (max-width: 900px) {
   .scientist-log-actions { flex-wrap: wrap; row-gap: 4px; }
   .limit-add { min-height: 40px; }
