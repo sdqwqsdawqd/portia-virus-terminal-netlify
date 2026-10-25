@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Broadcast } from "./portia-content.ts";
-import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState } from "./broadcasts.ts";
+import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questDateError, questPopup, questState } from "./broadcasts.ts";
 
 const TODAY = "2026-10-19";
 const item = (id: string, type: Broadcast["type"], published = true, important = false, dates: Partial<Broadcast> = {}): Broadcast => ({ id, type, title: id, body: "", published, important, startsAt: "", endsAt: "", conditions: "", ...dates });
@@ -125,4 +125,15 @@ test("markQuestsSeen caps the list at 200 ids, keeps every active quest and drop
   assert.ok(marked.includes("a") && marked.includes("b"));
   assert.ok(!marked.includes("old0") && marked.includes("old249"));
   assert.equal(markQuestsSeen([item("a", "quest")], ["a", ...stored.slice(0, 198)], TODAY).length, 199);
+});
+
+test("questDateError flags only a quest whose end is before its start", () => {
+  const d = (type: Broadcast["type"], startsAt: string, endsAt: string) => ({ type, startsAt, endsAt });
+  assert.equal(questDateError(d("quest", "2026-10-20", "2026-10-19")), true);
+  assert.equal(questDateError(d("quest", "2026-10-20", "2026-10-20")), false);
+  assert.equal(questDateError(d("quest", "2026-10-20", "")), false);
+  assert.equal(questDateError(d("quest", "", "2026-10-19")), false);
+  assert.equal(questDateError(d("quest", "", "")), false);
+  assert.equal(questDateError(d("task", "2026-10-20", "2026-10-19")), false);
+  assert.equal(questDateError(d("news", "2026-10-20", "2026-10-19")), false);
 });
