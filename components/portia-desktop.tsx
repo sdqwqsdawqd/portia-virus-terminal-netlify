@@ -274,8 +274,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [booting, setBooting] = useState(true);
   const [clock, setClock] = useState("--:--:--");
-  // The visitor's local day; set from the clock tick so quest states roll over at midnight without a reload (D-03).
-  const [today, setToday] = useState("");
+  // The visitor's local day, known from the first render so dated quests never flash a wrong status; the tick keeps rolling it over at midnight (D-03, CONT-07).
+  const [today, setToday] = useState(() => localDateKey(new Date()));
   const [startOpen, setStartOpen] = useState(false);
   const [windows, setWindows] = useState<Record<AppId, WindowState>>(initialWindows);
   const [activeApp, setActiveApp] = useState<AppId>("archive");
@@ -914,7 +914,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     savesStarted.current += 1;
     setSaveState("saving");
     try {
-      // Up to 2 MB plus auth, upsert and CDN purge: aborting after the server committed would turn the retry into a false conflict.
+      // Up to MAX_CONTENT_BODY_BYTES (5 MB, lib/content-limits.ts) plus auth, upsert and CDN purge: aborting after the server committed would turn the retry into a false conflict.
       const response = await fetchWithTimeout("/api/content", {
         method: "PUT",
         headers: { "content-type": "application/json" },
