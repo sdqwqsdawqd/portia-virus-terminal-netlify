@@ -200,6 +200,7 @@ const PULSE_SPEED = 260;
 const PULSE_LENGTH = 120;
 const PULSE_LIFE = 1.2;
 const PULSE_POINTS = 8;
+const PULSE_MIN_PEAK = 0.04;
 
 // at = distance from the edge's a end; dir 1 runs toward b, -1 toward a; times are in seconds.
 export type Pulse = { alive: boolean; edge: number; at: number; dir: 1 | -1; peak: number; born: number; spawned: boolean };
@@ -235,7 +236,8 @@ export function stepPulses(pool: PulsePool, now: number): void {
     const thread = webEdges[pulse.edge];
     if (pulse.dir === 1 ? head < thread.length : head > 0) continue;
     pulse.spawned = true;
-    emitAtCrossing(pool, pulse.dir === 1 ? thread.b : thread.a, pulse.peak / 2, now, pulse.edge);
+    // Each crossing halves the wave; below the floor it stops spreading, so invisible echoes never hold the pool.
+    if (pulse.peak / 2 >= PULSE_MIN_PEAK) emitAtCrossing(pool, pulse.dir === 1 ? thread.b : thread.a, pulse.peak / 2, now, pulse.edge);
   }
 }
 

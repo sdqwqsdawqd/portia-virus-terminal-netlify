@@ -203,3 +203,13 @@ test("a leg sweeps back on the ground, then springs forward past neutral and lan
   assert.ok(Math.min(...swing) < -1.05, "the swing overshoots forward");
   assert.ok(Math.abs(legPose(0.99999).swing - legPose(0).swing) < 1e-3, "the cycle closes without a jump");
 });
+
+test("waves die out: with no new footfalls every slot is free again within 10 s, from any thread", () => {
+  for (let edge = 0; edge < webEdges.length; edge += 1) {
+    const pool = createPulsePool(8);
+    emitPulse(pool, edge, 0, 1, 0.6, 0);
+    emitPulse(pool, edge, webEdges[edge].length, -1, 0.6, 0);
+    for (let now = 0; now <= 10; now += 1 / 60) stepPulses(pool, now);
+    assert.equal(pool.slots.filter((slot) => slot.alive).length, 0, `edge ${edge} still has live pulses`);
+  }
+});
