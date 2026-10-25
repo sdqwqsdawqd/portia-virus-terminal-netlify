@@ -176,7 +176,7 @@ function broadcastSignature(content: PortiaContent) {
 function shuffledUniqueIndices(items: string[], previousIndex = -1) {
   const seen = new Set<string>();
   const shuffled = items
-    .map((item, index) => ({ item: item.trim(), index }))
+    .map((item, index) => ({ item: typeof item === "string" ? item.trim() : "", index }))
     .filter(({ item }) => item && !seen.has(item) && Boolean(seen.add(item)))
     .map(({ index }) => index);
   for (let index = shuffled.length - 1; index > 0; index -= 1) {
@@ -1057,6 +1057,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
     const nextTipIndex = assistantAdviceBag.current.shift() ?? -1;
     assistantLastTipIndex.current = nextTipIndex;
+    if (nextTipIndex < 0) {
+      // No usable tip: no bubble, no placeholder text (D-12).
+      setAssistantTipIndex(-1);
+      setAssistantTipVisible(false);
+      return;
+    }
     setAssistantTipIndex(nextTipIndex);
     setAssistantTipVisible(true);
     if (assistantTipTimer.current) window.clearTimeout(assistantTipTimer.current);
@@ -1124,7 +1130,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         ? (activityPhrases[assistantActivityPhraseIndex] ?? activityPhrases[0])
         : assistantTipIndex >= 0
           ? content.assistantAdvice[assistantTipIndex]
-          : "Добавьте советы в редакторе PORTIA.";
+          : undefined;
+  // Derived, not stored: a tip removed by the 10 s content poll closes the bubble on the next render (D-13).
+  const assistantSpeaking = assistantTipVisible && typeof assistantMessageText === "string" && assistantMessageText.trim() !== "";
   const assistantMessageDocument = assistantOffended
     ? richTextLine(content.formattedText[portiaTextKey.assistantOffended], content.assistantOffendedPhrases ?? [content.assistantOffendedPhrase], Math.max(0, assistantOffendedPhraseIndex))
     : assistantAutomaticKind === "idle"
@@ -1336,8 +1344,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
         </main>
 
-        <div className={`desktop-assistant${assistantTipVisible ? " is-speaking" : ""}${assistantOffended ? " is-offended" : ""}${assistantRecovering ? " is-recovering" : ""}`} data-mood={assistantMood || undefined} data-squish={assistantSquish ? (assistantSquish % 2 ? "a" : "b") : undefined} data-auto={assistantAutomaticKind ?? undefined}>
-          {assistantTipVisible && <div className="assistant-bubble" role="status"><span>{assistantMessageHeading}</span><FormattedText className="assistant-formatted-text" text={assistantMessageText} document={assistantMessageDocument} /></div>}
+        <div className={`desktop-assistant${assistantSpeaking ? " is-speaking" : ""}${assistantOffended ? " is-offended" : ""}${assistantRecovering ? " is-recovering" : ""}`} data-mood={assistantMood || undefined} data-squish={assistantSquish ? (assistantSquish % 2 ? "a" : "b") : undefined} data-auto={assistantAutomaticKind ?? undefined}>
+          {assistantSpeaking && <div className="assistant-bubble" role="status"><span>{assistantMessageHeading}</span><FormattedText className="assistant-formatted-text" text={assistantMessageText} document={assistantMessageDocument} /></div>}
           <button className="assistant-button" type="button" onClick={activateAssistant} onContextMenu={(event) => event.preventDefault()} aria-disabled={assistantOffended} aria-label="Получить совет Вивьян"><img src="/assets/portia-assistant.png" alt="" draggable={false} /></button>
           <span className="assistant-label">ВИВЬЯН // ПОМОЩНИК</span>
         </div>
@@ -1797,8 +1805,8 @@ function QuestToast({ quest, more, document, onDismiss }: { quest: Broadcast; mo
   );
 }
 
-function FormattedText({ text, document, className = "" }: { text: string; document?: RichTextDocument; className?: string }) {
-  const runs = document?.runs?.length ? document.runs : [{ text }];
+function FormattedText({ text, document, className = "" }: { text?: string; document?: RichTextDocument; className?: string }) {
+  const runs = document?.runs?.length ? document.runs : [{ text: text ?? "" }];
   const fullText = runs.map((run) => run.text).join("");
   const runRanges = runs.map((run, index) => {
     const start = runs.slice(0, index).reduce((total, item) => total + item.text.length, 0);
