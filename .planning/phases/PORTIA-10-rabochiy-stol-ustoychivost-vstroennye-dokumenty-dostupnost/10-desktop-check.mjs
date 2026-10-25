@@ -248,6 +248,25 @@ const checks = {
       const c = chromaOf(color);
       if (!(c >= 0.01)) reasons.push(`(m) ${name} has chroma ${c} (${color}) under #ff3366`);
     }
+    // (n) the picker's own × is a clean 24x24 square with its glyph inside, on PC and phone (G-10-2, WR-01)
+    const closeButton = ".accent-picker .custom-color-picker-head button";
+    const closeBox = () => cdp.eval(`(() => { const b = document.querySelector("${closeButton}"); if (!b) return null; const r = b.getBoundingClientRect(); return { w: r.width, h: r.height, clipped: b.scrollWidth > b.clientWidth || b.scrollHeight > b.clientHeight, sw: b.scrollWidth, cw: b.clientWidth, sh: b.scrollHeight, ch: b.clientHeight, fs: getComputedStyle(b).fontSize, pad: getComputedStyle(b).padding }; })()`);
+    const closeCheck = async (where) => {
+      await seedAccent("#ff3366");
+      await click(cdp, colorButton);
+      if (!(await waitFor(cdp, pickerOpen, 2000))) { reasons.push(`(n) ${where}: picker did not open`); return; }
+      await sleep(600); // let the window-open animation settle before measuring
+      const box = await closeBox();
+      if (!box) { reasons.push(`(n) ${where}: × button missing`); return; }
+      if (Math.abs(box.w - 24) > 0.5 || Math.abs(box.h - 24) > 0.5) reasons.push(`(n) ${where}: × is ${box.w}x${box.h}, not 24x24`);
+      if (box.clipped) reasons.push(`(n) ${where}: × glyph is clipped ${JSON.stringify(box)}`);
+      await click(cdp, closeButton);
+      if (!(await waitFor(cdp, `!${pickerOpen}`, 2000))) reasons.push(`(n) ${where}: clicking × did not close the picker`);
+    };
+    await closeCheck("PC");
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await closeCheck("phone");
+    await cdp.send("Emulation.clearDeviceMetricsOverride");
   },
   async embeds(cdp) {
     const expected = /const embedSandbox = "([^"]+)"/.exec(fs.readFileSync(new URL("../../../components/portia-desktop.tsx", import.meta.url), "utf8"))?.[1];

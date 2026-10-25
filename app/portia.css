@@ -291,11 +291,11 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .setting-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .color-options { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .accent-picker { grid-column: 1 / -1; }
-.setting-options button { min-height: 54px; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 10px; border: 1px solid oklch(.378 calc(.035 * var(--accent-chroma)) var(--accent-hue)); border-radius: 5px; background: rgba(255,255,255,.018); color: oklch(.776 calc(.022 * var(--accent-chroma)) var(--accent-hue)); cursor: pointer; }
+.setting-options > button { min-height: 54px; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 10px; border: 1px solid oklch(.378 calc(.035 * var(--accent-chroma)) var(--accent-hue)); border-radius: 5px; background: rgba(255,255,255,.018); color: oklch(.776 calc(.022 * var(--accent-chroma)) var(--accent-hue)); cursor: pointer; }
 /* after the shared button rule so it wins: swatch above a 13px label (the 16px mono label is 77px wide), so five labels fit the 520 px window */
 .color-options > button { flex-direction: column; gap: 4px; padding-inline: 4px; font-size: 13px; }
-.setting-options button:hover, .setting-options button.selected { border-color: var(--teal); background: var(--teal-soft); color: #fff; }
-.setting-options button.selected { box-shadow: inset 0 -2px 0 var(--teal); }
+.setting-options > button:hover, .setting-options > button.selected { border-color: var(--teal); background: var(--teal-soft); color: #fff; }
+.setting-options > button.selected { box-shadow: inset 0 -2px 0 var(--teal); }
 .swatch { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); }
 .swatch.teal { background: #00bca6; }
 .swatch.ice { background: #7ec8e3; }
@@ -675,7 +675,7 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .custom-color-picker { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(145px, .8fr); gap: 8px 11px; padding: 9px; border: 1px solid oklch(.478 calc(.047 * var(--accent-chroma)) var(--accent-hue)); border-radius: 5px; background: oklch(.227 calc(.024 * var(--accent-chroma)) var(--accent-hue)); box-shadow: 0 10px 24px rgba(0,0,0,.3); }
 .custom-color-picker-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .custom-color-picker-head strong { color: oklch(.829 calc(.023 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); letter-spacing: .07em; text-transform: uppercase; }
-.custom-color-picker-head button { width: 24px; height: 24px; border: 1px solid oklch(.414 calc(.029 * var(--accent-chroma)) var(--accent-hue)); border-radius: 3px; background: transparent; color: oklch(.741 calc(.022 * var(--accent-chroma)) var(--accent-hue)); cursor: pointer; }
+.custom-color-picker-head button { width: 24px; height: 24px; line-height: 1; border: 1px solid oklch(.414 calc(.029 * var(--accent-chroma)) var(--accent-hue)); border-radius: 3px; background: transparent; color: oklch(.741 calc(.022 * var(--accent-chroma)) var(--accent-hue)); cursor: pointer; }
 .custom-color-board { position: relative; grid-row: span 2; min-height: 88px; border: 1px solid oklch(.533 calc(.032 * var(--accent-chroma)) var(--accent-hue)); border-radius: 4px; cursor: crosshair; touch-action: none; }
 .custom-color-board > i { position: absolute; width: 12px; height: 12px; transform: translate(-50%, -50%); border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px oklch(.169 calc(.013 * var(--accent-chroma)) var(--accent-hue)), 0 2px 5px rgba(0,0,0,.55); pointer-events: none; }
 .custom-hue { display: grid; gap: 4px; }
