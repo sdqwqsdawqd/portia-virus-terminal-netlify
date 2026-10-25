@@ -279,7 +279,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [startOpen, setStartOpen] = useState(false);
   const [windows, setWindows] = useState<Record<AppId, WindowState>>(initialWindows);
   const [activeApp, setActiveApp] = useState<AppId>("archive");
-  const [, setTopZ] = useState(20);
+  // A ref, not state: computing z inside a state updater made setWindows a side effect of it, and Strict Mode replays updaters (ROB-03).
+  const topZ = useRef(20);
   const [activeVirusId, setActiveVirusId] = useState(initialContent.viruses[0]?.id ?? "");
   const [virusQuery, setVirusQuery] = useState("");
   const [globalQuery, setGlobalQuery] = useState("");
@@ -725,11 +726,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   };
 
   const focusApp = (appId: AppId) => {
-    setTopZ((current) => {
-      const next = current + 1;
-      setWindows((state) => ({ ...state, [appId]: { ...state[appId], z: next } }));
-      return next;
-    });
+    topZ.current += 1;
+    const next = topZ.current;
+    setWindows((state) => ({ ...state, [appId]: { ...state[appId], z: next } }));
     setActiveApp(appId);
   };
 
