@@ -143,6 +143,15 @@ const checks = {
     const tealPicked = await cdp.eval(inline("--teal"));
     await load(cdp);
     if ((await cdp.eval(inline("--teal"))) !== tealPicked) reasons.push("(d) --teal after reload differs from the picked colour");
+    // (e) a tampered stored colour is ignored: nothing applied, nothing thrown (D-11)
+    await cdp.eval(`localStorage.setItem(${JSON.stringify(KEY)}, ${JSON.stringify(stored({ customAccent: '"><img src=x onerror=alert(1)>' }))}); true`);
+    await load(cdp);
+    await sleep(2000);
+    if (await cdp.eval(inline("--teal"))) reasons.push("(e) tampered colour left an inline --teal");
+    if ((await cdp.eval(`document.documentElement.dataset.accent`)) === "custom") reasons.push("(e) tampered colour kept accent custom");
+    await click(cdp, '[data-shortcut="settings"]');
+    await waitFor(cdp, `!!document.querySelector("${colorButton}")`, 3000);
+    if ((await cdp.eval(`document.querySelector("${colorButton}")?.getAttribute("aria-pressed")`)) !== "false") reasons.push("(e) «Свой» is pressed for a tampered colour");
   },
 };
 

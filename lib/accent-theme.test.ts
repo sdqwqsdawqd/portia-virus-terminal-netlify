@@ -350,3 +350,9 @@ test("the boot script reads the one settings key", () => {
   assert.deepEqual(asked, [desktopSettingsStorageKey]);
   assert.equal(desktopSettingsStorageKey, "portia-desktop-settings-v1");
 });
+
+test("the desktop reads and writes settings through the one key constant", () => {
+  assert.doesNotMatch(desktopSource, /portia-desktop-settings-v1/);
+  assert.match(desktopSource, /localStorage\.getItem\(desktopSettingsStorageKey\)/);
+  assert.match(desktopSource, /localStorage\.setItem\(desktopSettingsStorageKey,/);
+});
