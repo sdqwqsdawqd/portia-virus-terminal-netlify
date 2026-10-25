@@ -1337,17 +1337,23 @@ html[data-motion="full"] .wallpaper-gel-glow { animation: gel-glow 8s ease-in-ou
 html[data-motion="full"] .wallpaper-gel-drift { animation: gel-creep linear infinite; }
 @keyframes gel-creep { from { translate: 0 var(--gel-from); opacity: 0; } 3% { opacity: 1; } 96% { opacity: 1; } to { translate: 0 var(--gel-to); opacity: 0; } }
 /* «Клетки»: tissue through an eyepiece, sharp at the centre and out of focus at the rim; infected cells are
-   brighter, and their virions drift and tumble round their own centres (fill-box). */
+   brighter. With motion on, the cells of the sharp zone drift, swell and narrow, and turn a little, neighbours in
+   anti-phase so they read as pushing; the nucleus wanders inside its cell; virions float and tumble round their own
+   centres (fill-box). The peak swell (5%) stays inside the 16% gap between walls, so walls never overlap. */
 .wallpaper-cells-wall { stroke-width: 1.2; opacity: .2; }
 .wallpaper-cells-nucleus { fill: currentColor; fill-opacity: .05; stroke-width: 1; opacity: .26; }
 .wallpaper-cells-wall.is-infected { stroke-width: 1.4; opacity: .42; }
 .wallpaper-cells-nucleus.is-infected { fill-opacity: .2; opacity: .5; }
 .wallpaper-cells-edge { stroke-width: 1.4; opacity: .22; }
 .wallpaper-cells-particles { stroke-width: 1.3; opacity: .55; }
-.wallpaper-particle { transform-box: fill-box; transform-origin: center; }
-html[data-motion="full"] .wallpaper-cells-particles { animation: cells-drift 36s ease-in-out infinite alternate; }
-html[data-motion="full"] .wallpaper-particle { animation: particle-tumble 20s linear infinite; }
-@keyframes cells-drift { 50% { translate: 8px -6px; } to { translate: -5px 8px; } }
+.wallpaper-cell, .wallpaper-particle { transform-box: fill-box; transform-origin: center; }
+html[data-motion="full"] .wallpaper-cell.is-alive { animation: cell-drift 14s ease-in-out infinite alternate, cell-shape 8s ease-in-out infinite alternate; }
+html[data-motion="full"] .wallpaper-cell.is-alive .wallpaper-cell-nucleus { animation: nucleus-wander 6s ease-in-out infinite alternate; }
+html[data-motion="full"] .wallpaper-particle { animation: particle-tumble 20s linear infinite, particle-drift 18s ease-in-out infinite alternate; }
+@keyframes cell-drift { from { translate: calc(var(--cell-dx) * -1) calc(var(--cell-dy) * -1); } to { translate: var(--cell-dx) var(--cell-dy); } }
+@keyframes cell-shape { from { scale: 1.05 .95; rotate: -2deg; } to { scale: .95 1.05; rotate: 2deg; } }
+@keyframes nucleus-wander { from { translate: -2px 1px; } to { translate: 2px -1px; } }
+@keyframes particle-drift { from { translate: calc(var(--particle-dx) * -1) calc(var(--particle-dy) * -1); } to { translate: var(--particle-dx) var(--particle-dy); } }
 @keyframes particle-tumble { to { rotate: 360deg; } }
 
 /* The spider lowers itself on a silk thread while the terminal boots: one animation for thread and spider, so the spider can never lead its web (D-06). */

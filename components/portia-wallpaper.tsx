@@ -118,10 +118,16 @@ function GelDrift({ drift, children }: { drift?: (typeof gel.bands)[number]["dri
   return <g className="wallpaper-gel-drift" style={style}>{children}</g>;
 }
 
+// Only the sharp zone moves, the rim is masked to .12. If a device cannot hold 60 fps, lower this first, never the amplitude.
+const CELL_SHARP_ZONE = 0.8;
+
 // «Клетки»: tissue seen through an eyepiece in the top-right corner. The cells are a Voronoi tessellation
 // with rounded walls and a gap between neighbours; a few are infected, with virions at their walls.
+// Each cell is its own record so it can drift, change shape and push against its neighbours (D-11).
 function cellField() {
   const rand = seeded(5);
+  // A separate stream for motion, so the drawn picture keeps the sequence of `rand` and stays as approved.
+  const motion = seeded(17);
   const cx = 1214, cy = 176, radius = 610;
   const sites: Point[] = [];
   for (let guard = 0; sites.length < 150 && guard < 6000; guard += 1) {
@@ -159,22 +165,29 @@ function cellField() {
       return `Q${round(corner[0])} ${round(corner[1])} ${round(end[0])} ${round(end[1])}`;
     }).join("") + "Z";
   };
-  let walls = "", sick = "", nuclei = "", sickNuclei = "";
-  const particles: { x: number; y: number; spikes: string }[] = [];
+  const list: { wall: string; nucleus: string; infected: boolean; animated: boolean; dx: number; dy: number; delay: string }[] = [];
+  const particles: { x: number; y: number; spikes: string; vx: number; vy: number }[] = [];
   sites.forEach((site) => {
     const nucleus = `M${round(site[0] + 9)} ${round(site[1] - 3)}a9 7 0 1 0-18 0a9 7 0 1 0 18 0Z`;
-    if (rand() >= 0.1) { walls += cellOf(site); nuclei += nucleus; return; }
-    sick += cellOf(site); sickNuclei += nucleus;
+    const infected = rand() < 0.1;
+    const angle = motion() * Math.PI * 2;
+    // Neighbours sit on a polar checkerboard; one parity starts half a period later, so they move in anti-phase and read as pushing.
+    const parity = (((Math.floor(Math.atan2(site[1] - cy, site[0] - cx) / (Math.PI / 8)) + Math.floor(Math.hypot(site[0] - cx, site[1] - cy) / 90)) % 2) + 2) % 2;
+    list.push({
+      wall: cellOf(site), nucleus, infected, animated: Math.hypot(site[0] - cx, site[1] - cy) < CELL_SHARP_ZONE * radius,
+      dx: round(Math.cos(angle) * 12), dy: round(Math.sin(angle) * 12), delay: parity ? "-14s, -8s" : "0s, 0s",
+    });
+    if (!infected) return;
     for (let count = 0; count < 2; count += 1) {
-      const angle = rand() * Math.PI * 2, distance = 24 + rand() * 10;
-      const x = round(site[0] + Math.cos(angle) * distance), y = round(site[1] + Math.sin(angle) * distance);
-      particles.push({ x, y, spikes: Array.from({ length: 8 }, (_, spike) => {
+      const turnAway = rand() * Math.PI * 2, distance = 24 + rand() * 10, float = motion() * Math.PI * 2;
+      const x = round(site[0] + Math.cos(turnAway) * distance), y = round(site[1] + Math.sin(turnAway) * distance);
+      particles.push({ x, y, vx: round(Math.cos(float) * 18), vy: round(Math.sin(float) * 18), spikes: Array.from({ length: 8 }, (_, spike) => {
         const turn = (spike / 8) * Math.PI * 2;
         return `M${round(x + Math.cos(turn) * 5)} ${round(y + Math.sin(turn) * 5)}L${round(x + Math.cos(turn) * 9)} ${round(y + Math.sin(turn) * 9)}`;
       }).join("") });
     }
   });
-  return { cx, cy, radius, walls, sick, nuclei, sickNuclei, particles };
+  return { cx, cy, radius, cells: list, particles };
 }
 
 const cells = cellField();
@@ -237,12 +250,14 @@ function WallpaperArt({ kind }: { kind: string }) {
           </defs>
           <circle cx={cells.cx} cy={cells.cy} r={cells.radius} fill="url(#wp-cells-rim)" stroke="none" />
           <g clipPath="url(#wp-cells-clip)" mask="url(#wp-cells-mask)">
-            <path d={cells.walls} className="wallpaper-cells-wall" />
-            <path d={cells.nuclei} className="wallpaper-cells-nucleus" />
-            <path d={cells.sick} className="wallpaper-cells-wall is-infected" />
-            <path d={cells.sickNuclei} className="wallpaper-cells-nucleus is-infected" />
+            {cells.cells.map((cell, index) => <g key={index} className={`wallpaper-cell${cell.animated ? " is-alive" : ""}`}
+              style={cell.animated ? { "--cell-dx": `${cell.dx}px`, "--cell-dy": `${cell.dy}px`, animationDelay: cell.delay } as CSSProperties : undefined}>
+              <path d={cell.wall} className={`wallpaper-cells-wall${cell.infected ? " is-infected" : ""}`} />
+              <path d={cell.nucleus} className={`wallpaper-cells-nucleus wallpaper-cell-nucleus${cell.infected ? " is-infected" : ""}`} />
+            </g>)}
             <g className="wallpaper-cells-particles">
-              {cells.particles.map((particle, index) => <g key={index} className="wallpaper-particle" style={{ animationDelay: `${-((index * 3.7) % 20)}s` }}>
+              {cells.particles.map((particle, index) => <g key={index} className="wallpaper-particle"
+                style={{ "--particle-dx": `${particle.vx}px`, "--particle-dy": `${particle.vy}px`, animationDelay: `${-((index * 3.7) % 20)}s` } as CSSProperties}>
                 <circle cx={particle.x} cy={particle.y} r={5} /><path d={particle.spikes} />
               </g>)}
             </g>
