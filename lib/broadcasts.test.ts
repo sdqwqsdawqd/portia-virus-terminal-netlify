@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Broadcast } from "./portia-content.ts";
-import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questDateError, questPopup, questState } from "./broadcasts.ts";
+import { broadcastFeed, broadcastTabOf, categoryChange, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questDateError, questPopup, questState } from "./broadcasts.ts";
 
 const TODAY = "2026-10-19";
 const item = (id: string, type: Broadcast["type"], published = true, important = false, dates: Partial<Broadcast> = {}): Broadcast => ({ id, type, title: id, body: "", published, important, startsAt: "", endsAt: "", conditions: "", ...dates });
@@ -136,4 +136,13 @@ test("questDateError flags only a quest whose end is before its start", () => {
   assert.equal(questDateError(d("quest", "", "")), false);
   assert.equal(questDateError(d("task", "2026-10-20", "2026-10-19")), false);
   assert.equal(questDateError(d("news", "2026-10-20", "2026-10-19")), false);
+});
+
+test("categoryChange finds the first card that moved between news and quests", () => {
+  const from = [item("a", "news"), item("b", "quest")];
+  assert.deepEqual(categoryChange(from, [item("a", "quest"), item("b", "quest")]), { id: "a", tab: "quests" });
+  assert.equal(categoryChange(from, [item("a", "news"), item("b", "task")]), null);
+  assert.equal(categoryChange([item("b", "quest")], [item("a", "quest"), item("b", "quest")]), null);
+  assert.equal(categoryChange(from, from), null);
+  assert.deepEqual(categoryChange(from, [item("a", "news"), item("b", "news")]), { id: "b", tab: "news" });
 });
