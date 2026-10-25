@@ -302,6 +302,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [accentPickerOpen, setAccentPickerOpen] = useState(false);
   const [accentDraft, setAccentDraft] = useState<string | null>(null);
   const accentDraftRef = useRef<string | null>(null);
+  const customAccentButton = useRef<HTMLButtonElement>(null);
   const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
   const [employeesReady, setEmployeesReady] = useState(false);
@@ -777,6 +778,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const alreadyDefault = Object.entries(defaultDesktopSettings).every(([key, value]) => desktopSettings[key as keyof DesktopSettings] === value);
     const shortcutsAlreadyDefault = Object.keys(shortcutPositions).length === 0;
     if (alreadyDefault && shortcutsAlreadyDefault) return;
+    accentDraftRef.current = null;
+    setAccentDraft(null);
+    setAccentPickerOpen(false);
     setDesktopSettings(defaultDesktopSettings);
     setShortcutPositions({});
     showSettingsSaved();
@@ -1390,9 +1394,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <AppWindow app="settings" state={windows.settings} active={activeApp === "settings"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window settings-window" meta="НАСТРОЙКИ">
             <div className="settings-app">
               <header><h1>Настройки рабочего стола</h1><p>Оформление и расположение ярлыков сохраняются на этом устройстве.</p></header>
-              <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => updateDesktopSetting("accent", value)}>
-                <button type="button" className={desktopSettings.accent === "custom" ? "selected" : ""} aria-pressed={desktopSettings.accent === "custom"} onClick={chooseCustomAccent}><i className="swatch custom" style={customTokens ? { background: customTokens["--teal"] } : undefined} /><span>Свой</span></button>
-                {accentPickerOpen && <div className="accent-picker" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) commitAccentDraft(); }}>
+              <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => { closeAccentPicker(); updateDesktopSetting("accent", value); }}>
+                <button type="button" ref={customAccentButton} className={desktopSettings.accent === "custom" ? "selected" : ""} aria-pressed={desktopSettings.accent === "custom"} onClick={chooseCustomAccent}><i className="swatch custom" style={customTokens ? { background: customTokens["--teal"] } : undefined} /><span>Свой</span></button>
+                {accentPickerOpen && <div className="accent-picker" onKeyDown={(event) => {
+                  if (event.key !== "Escape") return;
+                  // preventDefault marks Escape as handled so the document-level quest-notice listener skips it; focus returns to «Свой» because the picker unmounts.
+                  event.preventDefault(); closeAccentPicker(); customAccentButton.current?.focus();
+                }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) commitAccentDraft(); }}>
                   <CustomColorPicker key="accent" group="accent" title="Свой цвет интерфейса" color={desktopSettings.customAccent} onChange={previewAccent} onClose={closeAccentPicker} />
                 </div>}
               </SettingGroup>

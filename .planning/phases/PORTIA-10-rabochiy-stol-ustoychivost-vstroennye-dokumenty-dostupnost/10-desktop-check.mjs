@@ -156,6 +156,49 @@ const checks = {
     await click(cdp, '[data-shortcut="settings"]');
     await waitFor(cdp, `!!document.querySelector("${colorButton}")`, 3000);
     if ((await cdp.eval(`document.querySelector("${colorButton}")?.getAttribute("aria-pressed")`)) !== "false") reasons.push("(e) «Свой» is pressed for a tampered colour");
+    // (f)-(i) start again from a valid saved colour with the picker closed
+    await sleep(600);
+    await cdp.eval(`localStorage.setItem(${JSON.stringify(KEY)}, ${JSON.stringify(stored())}); true`);
+    await load(cdp);
+    await click(cdp, '[data-shortcut="settings"]');
+    await waitFor(cdp, `!!document.querySelector("${colorButton}")`, 3000);
+    const html = `document.documentElement.dataset.accent`;
+    const pressed = () => cdp.eval(`document.querySelector("${colorButton}")?.getAttribute("aria-pressed")`);
+    const pickerOpen = `!!document.querySelector(".accent-picker .custom-color-picker")`;
+    const savedSettings = () => cdp.eval(`JSON.parse(localStorage.getItem(${JSON.stringify(KEY)}))`);
+    const tealCustom = await cdp.eval(inline("--teal"));
+    // (f) a preset replaces the colour but keeps the saved one
+    await click(cdp, ".color-options > button:first-of-type");
+    await waitFor(cdp, `${html} === "teal"`, 2000);
+    if ((await cdp.eval(html)) !== "teal") reasons.push("(f) preset did not set data-accent");
+    if (await cdp.eval(inline("--teal"))) reasons.push("(f) inline --teal stayed after a preset");
+    if ((await savedSettings()).customAccent !== "#ff3366") reasons.push("(f) saved custom colour lost after a preset");
+    if (await cdp.eval(pickerOpen)) reasons.push("(f) picker open after a preset");
+    // (g) «Свой» brings the colour back and toggles the picker
+    await click(cdp, colorButton);
+    if (!(await waitFor(cdp, pickerOpen, 2000))) reasons.push("(g) picker did not open");
+    if ((await cdp.eval(inline("--teal"))) !== tealCustom) reasons.push("(g) colour after switching back differs");
+    await click(cdp, colorButton);
+    if (!(await waitFor(cdp, `!${pickerOpen}`, 2000))) reasons.push("(g) second click did not close the picker");
+    if ((await pressed()) !== "true") reasons.push("(g) «Свой» not pressed after closing the picker");
+    // (h) Escape inside the picker closes only the picker and returns focus
+    await click(cdp, colorButton);
+    await waitFor(cdp, pickerOpen, 2000);
+    await cdp.eval(`document.querySelector(".accent-picker .custom-color-value input").focus(); true`);
+    const escape = (type) => cdp.send("Input.dispatchKeyEvent", { type, key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await escape("rawKeyDown"); await escape("keyUp");
+    if (!(await waitFor(cdp, `!${pickerOpen}`, 2000))) reasons.push("(h) Escape did not close the picker");
+    if (!(await cdp.eval(`!!document.querySelector(".settings-window")`))) reasons.push("(h) Escape closed the Settings window");
+    if (!(await cdp.eval(`document.activeElement === document.querySelector("${colorButton}")`))) reasons.push("(h) focus did not return to «Свой»");
+    // (i) factory reset clears the custom colour
+    await click(cdp, ".factory-reset");
+    await waitFor(cdp, `${html} === "teal"`, 2000);
+    await sleep(300);
+    const reset = await savedSettings();
+    if (reset.accent !== "teal" || reset.customAccent !== "") reasons.push(`(i) reset left accent ${reset.accent} custom "${reset.customAccent}"`);
+    if (await cdp.eval(inline("--teal"))) reasons.push("(i) inline --teal after reset");
+    if (await cdp.eval(`!!document.querySelector("${colorButton} .swatch.custom")?.style.background`)) reasons.push("(i) «Свой» swatch kept a colour after reset");
+    if (await cdp.eval(pickerOpen)) reasons.push("(i) picker open after reset");
   },
 };
 
