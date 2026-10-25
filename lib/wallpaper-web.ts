@@ -152,3 +152,29 @@ export function walkPose(path: number[], elapsed: number): WalkPose {
   const [dx, dy] = tangentAt(thread, t);
   return { x, y, heading: Math.atan2(forward ? dy : -dy, forward ? dx : -dx), done: elapsed >= plan.duration, edge, at, forward, distance };
 }
+
+// RED stubs for the walk planner and the pulse pool.
+export type Pulse = { alive: boolean; edge: number; at: number; dir: 1 | -1; peak: number; born: number; spawned: boolean };
+export type PulsePool = { slots: Pulse[] };
+
+export function visibleNodes(_width: number, _height: number, _margin = 40): number[] {
+  return [];
+}
+
+export function planWalk(_from: number, _previous: number, _visible: number[], _rand: () => number): number[] {
+  return [];
+}
+
+export function createPulsePool(_size = 8): PulsePool {
+  return { slots: [] };
+}
+
+export function emitPulse(_pool: PulsePool, _edge: number, _at: number, _dir: 1 | -1, _peak: number, _now: number): boolean {
+  return false;
+}
+
+export function stepPulses(_pool: PulsePool, _now: number): void {}
+
+export function pulseShape(_pulse: Pulse, _now: number): { points: Point[]; opacity: number; width: number } {
+  return { points: [], opacity: 0, width: 0 };
+}

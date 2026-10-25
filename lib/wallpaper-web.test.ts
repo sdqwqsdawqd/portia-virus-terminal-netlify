@@ -1,8 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { REST_NODE, edgesAt, pointOnEdge, seeded, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
+import { REST_NODE, createPulsePool, edgesAt, emitPulse, planWalk, pointOnEdge, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
 
 const near = (a: Point, b: Point, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
+// Distance from a point to the thread drawn as a 400-piece polyline.
+const distanceToEdge = (point: Point, index: number) => {
+  const edge = webEdges[index];
+  let best = Infinity;
+  let from = pointOnEdge(edge, 0);
+  for (let sample = 1; sample <= 400; sample += 1) {
+    const to = pointOnEdge(edge, sample / 400);
+    const dx = to[0] - from[0], dy = to[1] - from[1];
+    const along = Math.max(0, Math.min(1, ((point[0] - from[0]) * dx + (point[1] - from[1]) * dy) / (dx * dx + dy * dy)));
+    best = Math.min(best, Math.hypot(point[0] - (from[0] + dx * along), point[1] - (from[1] + dy * along)));
+    from = to;
+  }
+  return best;
+};
 const edgeBetween = (u: number, v: number) => webEdges.findIndex((edge) => (edge.a === u && edge.b === v) || (edge.a === v && edge.b === u));
 
 test("web geometry has 270 crossings and 522 threads between them", () => {
@@ -62,16 +76,7 @@ test("walkPose stays on the threads and eases in and out", () => {
     assert.ok(pose.distance >= last, "distance never goes back");
     last = pose.distance;
     // The pose lies on the polyline of the edge it names.
-    const edge = webEdges[pose.edge];
-    let best = Infinity;
-    let from = pointOnEdge(edge, 0);
-    for (let sample = 1; sample <= 400; sample += 1) {
-      const to = pointOnEdge(edge, sample / 400);
-      const dx = to[0] - from[0], dy = to[1] - from[1];
-      const along = Math.max(0, Math.min(1, ((pose.x - from[0]) * dx + (pose.y - from[1]) * dy) / (dx * dx + dy * dy)));
-      best = Math.min(best, Math.hypot(pose.x - (from[0] + dx * along), pose.y - (from[1] + dy * along)));
-      from = to;
-    }
+    const best = distanceToEdge([pose.x, pose.y], pose.edge);
     assert.ok(best < 0.05, `step ${step} is ${best} off its thread`);
   }
   assert.ok(Math.abs(last - total) < 1e-6);
@@ -85,4 +90,106 @@ test("walkPose stays on the threads and eases in and out", () => {
 test("seeded gives the same sequence for the same seed", () => {
   const one = seeded(23), two = seeded(23);
   for (let step = 0; step < 10; step += 1) assert.equal(one(), two());
+});
+
+test("visibleNodes maps the viewBox through xMaxYMin slice with a 40-unit margin", () => {
+  const phone = visibleNodes(390, 844);
+  assert.ok(phone.includes(REST_NODE));
+  assert.ok(phone.length >= 6);
+  const scale = Math.max(390 / 1440, 844 / 900);
+  for (const node of phone) {
+    const [x, y] = webGeometry.nodes[node];
+    assert.ok(x >= 1440 - 390 / scale + 40 - 1e-9 && x <= 1400 + 1e-9, `node ${node} x ${x}`);
+    assert.ok(y >= 40 - 1e-9 && y <= 844 / scale - 40 + 1e-9, `node ${node} y ${y}`);
+  }
+  assert.ok(visibleNodes(1920, 1080).length > phone.length);
+});
+
+test("planWalk goes 2-4 crossings over visible nodes and never back to the one just left", () => {
+  const visible = visibleNodes(1920, 1080);
+  const inside = new Set(visible);
+  const rand = seeded(7);
+  let from = REST_NODE, previous = -1;
+  for (let call = 0; call < 200; call += 1) {
+    const path = planWalk(from, previous, visible, rand);
+    assert.equal(path[0], from);
+    assert.ok(path.length >= 3 && path.length <= 5, `${path.length - 1} edges`);
+    assert.ok(path.every((node) => inside.has(node)));
+    for (let hop = 0; hop + 1 < path.length; hop += 1) assert.ok(edgeBetween(path[hop], path[hop + 1]) >= 0, "consecutive nodes share a thread");
+    assert.notEqual(path[path.length - 1], previous);
+    previous = path[path.length - 2];
+    from = path[path.length - 1];
+  }
+});
+
+test("planWalk with fewer than 6 visible crossings uses any of them", () => {
+  const few = [REST_NODE, REST_NODE + 1, REST_NODE + 19];
+  const rand = seeded(5);
+  const targets = new Set<number>();
+  for (let call = 0; call < 60; call += 1) {
+    const path = planWalk(REST_NODE, -1, few, rand);
+    assert.ok(few.includes(path[path.length - 1]) && path[path.length - 1] !== REST_NODE);
+    targets.add(path[path.length - 1]);
+  }
+  assert.deepEqual([...targets].sort(), [REST_NODE + 1, REST_NODE + 19]);
+  for (let call = 0; call < 20; call += 1) assert.equal(planWalk(REST_NODE, REST_NODE + 1, few, rand).at(-1), REST_NODE + 19);
+  assert.deepEqual(planWalk(REST_NODE, -1, [], rand), []);
+});
+
+test("the pulse pool never holds more than 8 and a pulse dies by 1.2 s", () => {
+  const pool = createPulsePool();
+  assert.equal(pool.slots.length, 8);
+  const rand = seeded(3);
+  let now = 0;
+  for (let step = 0; step < 1000; step += 1) {
+    now += rand() * 0.05;
+    emitPulse(pool, Math.floor(rand() * webEdges.length), rand() * 50, rand() < 0.5 ? 1 : -1, 0.6, now);
+    stepPulses(pool, now);
+    assert.ok(pool.slots.filter((slot) => slot.alive).length <= 8);
+  }
+  const full = createPulsePool();
+  for (let count = 0; count < 8; count += 1) assert.equal(emitPulse(full, 0, 1, 1, 0.6, 0), true);
+  assert.equal(emitPulse(full, 0, 1, 1, 0.6, 0), false);
+  const single = createPulsePool();
+  emitPulse(single, 0, 1, 1, 0.6, 0);
+  // The first pulse reaches a crossing and spawns half-strength children in other slots; it is slot 0 that must die on time.
+  stepPulses(single, 1.19);
+  assert.equal(single.slots[0].alive, true);
+  stepPulses(single, 1.21);
+  assert.equal(single.slots[0].alive, false);
+});
+
+test("a pulse that reaches a crossing continues into the other threads at half strength", () => {
+  const edge = webEdges.findIndex((candidate) => candidate.kind === "spoke");
+  const end = webEdges[edge].b;
+  const pool = createPulsePool();
+  emitPulse(pool, edge, webEdges[edge].length - 1, 1, 0.6, 0);
+  stepPulses(pool, 0.1);
+  const alive = pool.slots.filter((slot) => slot.alive);
+  assert.equal(alive.length, 1 + edgesAt(end).length - 1);
+  const children = alive.filter((slot) => slot.edge !== edge);
+  assert.equal(children.length, edgesAt(end).length - 1);
+  for (const child of children) {
+    assert.ok(Math.abs(child.peak - 0.3) < 1e-9);
+    assert.ok(edgesAt(end).includes(child.edge));
+  }
+});
+
+test("pulseShape draws a 120-unit window on the thread with fading opacity and width", () => {
+  const edge = webEdges.findIndex((candidate) => candidate.length > 200);
+  assert.ok(edge >= 0);
+  const pool = createPulsePool();
+  emitPulse(pool, edge, 150, 1, 0.6, 0);
+  const pulse = pool.slots[0];
+  const start = pulseShape(pulse, 0);
+  assert.equal(start.points.length, 8);
+  assert.ok(start.points.every((point) => distanceToEdge(point, edge) < 0.05));
+  let length = 0;
+  for (let index = 1; index < start.points.length; index += 1) length += Math.hypot(start.points[index][0] - start.points[index - 1][0], start.points[index][1] - start.points[index - 1][1]);
+  assert.ok(length > 118 && length <= 120.01, `window is ${length} long`);
+  assert.ok(Math.abs(start.opacity - 0.6) < 1e-9);
+  assert.ok(Math.abs(start.width - 1.8) < 1e-9);
+  const end = pulseShape(pulse, 1.2);
+  assert.ok(Math.abs(end.opacity) < 1e-9);
+  assert.ok(Math.abs(end.width - 1) < 1e-9);
 });
