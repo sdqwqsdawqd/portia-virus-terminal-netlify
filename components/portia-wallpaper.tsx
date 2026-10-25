@@ -57,7 +57,9 @@ function helixColumn(x: number, top: number, height: number, amplitude: number, 
   return { a: strand(0), b: strand(Math.PI), rungs };
 }
 
-// Every period, the 12-unit sample step and the rung spacing divide it, so a shift by it redraws the same picture.
+// Every period, the 12-unit sample step and the rung spacing divide 720, so a shift by it redraws the same picture.
+// The layer holds three loops; moving it by one loop (a third of its own height) shows the same picture again,
+// and two loops always cover the screen because one loop is at least 0.8 of the screen height (D-09).
 const HELIX_LOOP = 720;
 
 const helices = [
@@ -65,7 +67,7 @@ const helices = [
   { x: 1240, amplitude: 22, period: 180, opacity: 0.22 },
   { x: 1380, amplitude: 46, period: 360, opacity: 0.16 },
   { x: 880, amplitude: 18, period: 144, opacity: 0.12 },
-].map((column) => ({ ...column, ...helixColumn(column.x, -120, 1800, column.amplitude, column.period) }));
+].map((column) => ({ ...column, ...helixColumn(column.x, 0, HELIX_LOOP * 3, column.amplitude, column.period) }));
 
 // Same seeded generator as the approved sketch (02-SKETCHES.html), so the shipped drawing matches the choice.
 function seeded(seed: number) {
@@ -184,7 +186,7 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
 }
 
 function WallpaperArt({ kind }: { kind: string }) {
-  return <svg className={`desktop-wallpaper desktop-wallpaper-${kind}`} viewBox={`0 0 1440 ${kind === "grid" ? 900 + HELIX_LOOP : 900}`} preserveAspectRatio="xMaxYMin slice">
+  return <svg className={`desktop-wallpaper desktop-wallpaper-${kind}`} viewBox={`0 0 1440 ${kind === "grid" ? HELIX_LOOP * 3 : 900}`} preserveAspectRatio="xMaxYMin slice">
     {kind === "grid"
       ? helices.map((column) => <g key={column.x} className="wallpaper-helix" style={{ opacity: column.opacity }}>
           <path d={column.a} /><path d={column.b} /><path d={column.rungs} className="wallpaper-rungs" />

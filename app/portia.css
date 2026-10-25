@@ -1317,10 +1317,12 @@ html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-
 @keyframes web-dew { 0%, 100% { opacity: .32; } 50% { opacity: .75; } }
 @keyframes web-draw { to { stroke-dashoffset: 0; } }
 @keyframes web-dew-in { to { opacity: 1; } }
-/* One HTML-level layer translated by exactly one loop, so the compositor runs it and the seam is invisible (D-07). */
-.desktop-wallpaper-grid { bottom: auto; height: calc(100% + 720 * max(100cqw / 1440, 100cqh / 900)); will-change: translate; }
-html[data-motion="full"] .desktop-wallpaper-grid { animation: helix-scroll 90s linear infinite; }
-@keyframes helix-scroll { to { translate: 0 calc(-720 * max(100cqw / 1440, 100cqh / 900)); } }
+/* One composited layer three loops tall, moved by a third of its own height: the picture repeats exactly, the seam is
+   invisible, and no container-query unit is evaluated inside the keyframe (D-09). It moves with transform, not translate:
+   Edge keeps a `translate` animation on an outer <svg> on the main thread (traced), a `transform` one on the compositor. */
+.desktop-wallpaper-grid { bottom: auto; height: calc(2160 * max(100cqw / 1440, 100cqh / 900)); will-change: transform; }
+html[data-motion="full"] .desktop-wallpaper-grid { animation: helix-scroll 60s linear infinite; }
+@keyframes helix-scroll { to { transform: translate3d(0, calc(100% / -3), 0); } }
 .wallpaper-helix path { stroke-width: 1.5; }
 .wallpaper-helix .wallpaper-rungs { stroke-width: 1; opacity: .7; }
 /* «Гель»: soft lane columns fading downward, wells, a labelled ladder; still, even bands that fade at their
