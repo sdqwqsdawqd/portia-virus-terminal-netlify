@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 10
 current_phase_name: "Рабочий стол: устойчивость, встроенные документы, доступность"
 status: executing
-stopped_at: Completed PORTIA-10-05-PLAN.md
-last_updated: "2026-10-25T19:13:16.178Z"
+stopped_at: Completed PORTIA-10-06-PLAN.md
+last_updated: "2026-10-25T19:18:17.659Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase PORTIA-10 execution started
-state_head: 7bef37dbd896d5add85b2fdff27810c2653c37e4
+state_head: 56ad1d1103406af2d391d4cf301e83ed058f82a8
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 26
-  completed_plans: 24
+  completed_plans: 25
   percent: 57
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 ## Current Position
 
 Phase: PORTIA-10 (Рабочий стол: устойчивость, встроенные документы, доступность) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Executing Phase PORTIA-10
 Last activity: 2026-10-25 — Phase PORTIA-10 execution started
 
@@ -66,6 +66,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-10 P03 | 35 min | 2 tasks | 6 files |
 | Phase PORTIA-10 P04 | 30min | 2 tasks | 3 files |
 | Phase PORTIA-10 P05 | 25min | 2 tasks | 5 files |
+| Phase PORTIA-10 P06 | 30min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-10]: 10-03: restore keeps customAccent only via deriveAccentTokens; accent custom without a valid colour is dropped
 - [Phase PORTIA-10]: 10-04: colour row buttons stack swatch over a 13px label so five fit a 520px window
 - [Phase PORTIA-10]: D-21 recorded: zoom reacts to Ctrl everywhere and Cmd on a Mac, never the Windows key
+- [Phase PORTIA-10]: D-18: the ≡ handle gets no tooltip; recorded in A11Y-02 and ROADMAP criterion 4
 
 ### Pending Todos
 
@@ -134,8 +136,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-25T19:13:16.029Z
-Stopped at: Completed PORTIA-10-05-PLAN.md
+Last session: 2026-10-25T19:18:17.503Z
+Stopped at: Completed PORTIA-10-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
