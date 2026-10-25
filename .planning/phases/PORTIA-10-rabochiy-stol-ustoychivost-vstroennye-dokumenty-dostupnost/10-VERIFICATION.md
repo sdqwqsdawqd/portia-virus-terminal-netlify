@@ -1,8 +1,8 @@
 ---
 phase: PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost
-verified: 2026-10-26T12:00:00Z
-status: human_needed
-score: 5/6 must-haves verified
+verified: 2026-10-26T18:00:00Z
+status: passed
+score: 6/6 must-haves verified
 covered_files:
   - ".planning/phases/PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost/10-01-PLAN.md"
   - ".planning/phases/PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost/10-01-SUMMARY.md"
@@ -18,6 +18,12 @@ covered_files:
   - ".planning/phases/PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost/10-06-SUMMARY.md"
   - ".planning/phases/PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost/10-07-PLAN.md"
   - ".planning/phases/PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost/10-07-SUMMARY.md"
+  - ".planning/phases/PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost/10-08-PLAN.md"
+  - ".planning/phases/PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost/10-08-SUMMARY.md"
+  - ".planning/phases/PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost/10-09-PLAN.md"
+  - ".planning/phases/PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost/10-09-SUMMARY.md"
+  - ".planning/phases/PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost/10-boot-check.mjs"
+  - ".planning/phases/PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost/10-desktop-check.mjs"
   - "app/portia.css"
   - "components/custom-color-picker.tsx"
   - "components/portia-desktop.tsx"
@@ -25,17 +31,21 @@ covered_files:
   - "lib/accent-boot.ts"
   - "lib/accent-custom.ts"
   - "lib/accent-theme.test.ts"
+  - "lib/editor-field-look.test.ts"
   - "lib/portia-desktop.test.ts"
-covered_digest: "v3:sha256:7b48f2a1d9997d6b63ea75217a04d8e85aafee64483ccef23d03fe4e03882474"
+covered_digest: "v3:sha256:325557348261524fb503f31d39d469973940fcd27385c754fc8b0d96740cbb0b"
 behavior_unverified: 0
 overrides_applied: 0
-human_verification:
-  - test: "Open an Info page that has a YouTube video block (live content currently has none) on PC and on a phone and press play"
-    expected: "The video plays inside the shared sandbox (allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox); if it does not, add only the one allow-* flag it needs"
-    why_human: "ROADMAP criterion 2 says 'видео играет' was checked by the owner. 10-07-SUMMARY records step 3 (YouTube) as headless only, because live content has no video block. Headless proves the frame renders with the shared sandbox and allowfullscreen, not that playback works"
-  - test: "Settings -> Цвет интерфейса -> Свой: look at the × button in the picker header on PC and phone"
-    expected: "A clean 24x24 close button with a visible ×"
-    why_human: "Code review WR-01 (open): .setting-options button (min-height 54px, padding 10px) also matches the picker's close button, so it is probably drawn about 24x54 with a clipped glyph. This is a visual check; Escape and a second click on «Свой» still close the picker"
+re_verification:
+  previous_status: human_needed
+  previous_score: 5/6
+  gaps_closed:
+    - "G-10-2b: custom «Свой» accent turned teal for neutral picks (plan 10-08, D-23)"
+    - "G-10-2 / review WR-01: picker × close button stretched by .setting-options button (plan 10-09)"
+    - "Human item 1 (YouTube playback): owner UAT test 1 = pass on PC and phone"
+    - "Human item 2 (× button look): owner approved 'verified' on PC and phone in 10-09 Task 3"
+  gaps_remaining: []
+  regressions: []
 gaps: []
 ---
 
@@ -43,8 +53,8 @@ gaps: []
 
 **Phase Goal:** Рабочий стол не падает на пустых данных, встроенные страницы изолированы и удобны в масштабе, а подсказки, роли и константы настроек приведены в порядок; в настройках можно выбрать свой цвет акцента
 **Verified:** 2026-10-26
-**Status:** human_needed
-**Re-verification:** No, initial verification
+**Status:** passed
+**Re-verification:** Yes, after gap-closure plans 10-08 and 10-09 (previous status human_needed, 5/6)
 
 ## Goal Achievement
 
@@ -52,85 +62,95 @@ gaps: []
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Assistant with an empty or vanished tip does not crash the desktop; a window with missing text opens | VERIFIED | `portia-desktop.tsx:1112-1137` takes `content.assistantAdvice ?? []`, `shuffledUniqueIndices` (:181) skips non-string and blank entries, no usable tip sets index -1 and hides the bubble. `assistantSpeaking` (:1203) is derived from `typeof text === "string" && text.trim() !== ""`, so a tip removed by the 10 s poll closes the bubble on the next render. `FormattedText` (:1906) takes `text?: string` and uses `text ?? ""`. Independent run: `10-desktop-check.mjs --check assistant` -> ok:true (fixtures with a tip, an empty list and whitespace-only tips; desktop stays mounted; no non-GET to /api/content) |
-| 2 | Таблица, Устав and YouTube run in a shared `sandbox`; pages load, tabs switch, links open in a new tab, video plays; owner checked on PC and phone | UNCERTAIN (partly verified) | `embedSandbox` (:31) is used by both `<iframe>` tags (:1333, :1633); no `allow-top-navigation`; YouTube keeps `allowFullScreen`. Test "every embedded frame is sandboxed" passes. `--check embeds` -> ok:true (both document frames finish loading, video frame renders with the shared sandbox). Owner device check "verified" for sheet and charter. YouTube playback was headless only (no video block in live content), see Human Verification 1 |
-| 3 | Zoom follows Ctrl (and Cmd on a Mac), not the Windows key; overlay does not stick or block clicks and scrolling; reset button speaks the percent | VERIFIED | `zoomModifier` (:1588) is the only `metaKey` use and requires a Mac platform. The layer exists only while `ctrlHeld`; it clears on keyup, blur, visibilitychange and the first unmodified pointer move or press (:1603-1636). Reset button has no aria-label/title, so its name is the percent. Tests (ZOOM-01, ZOOM-02) pass. `--check zoom` -> ok:true, covering: frame centre is the IFRAME without modifier, layer on top with Ctrl, Ctrl+wheel -> 110%, Meta on non-Mac ignored, Cmd on a Mac raises the layer |
-| 4 | Quest notice closes with Escape without focus; roles correct in the notice and virus list; Roblox portrait has a tooltip; ≡ handle has none | VERIFIED | `QuestToast` (:1870-1887): document-level keydown listener that skips defaultPrevented, input/textarea/select/contenteditable and open dialogs; the `aside` has no role; hidden `role="status"` line "Новый квест: …". Virus list is a listbox only when rows exist, rows are `role="option"` with `aria-selected`. Roblox link has `title` equal to its `aria-label` (:1283); the plain portrait has none; the ≡ handle has no `title` (test D-18). `--check toast` -> ok:true (no-focus Escape closes; Escape in the search field does not; listbox/option counts; empty list has no role) |
-| 5 | Settings key is one constant, a launch test catches drift; localStorage writes and `setWindows` are not inside state updaters | VERIFIED | `desktopSettingsStorageKey` exported from `lib/accent-boot.ts:7`; the desktop has no `portia-desktop-settings-v1` literal (grep: only the constant definition); tests at `accent-theme.test.ts:347-358` pin both the boot script and the desktop. My own scan of all 27 `set*(…=>…)` updaters (block and expression bodies) found none touching storage, another setter, `setTimeout` or `requestAnimationFrame`; `focusApp` (:796) takes z from `topZ` ref and calls `setWindows` outside any updater. The updater-purity test is a source scan for block bodies only, and my wider scan agrees |
-| 6 | Settings has «Свой» with the editor's colour picker; it recolours everything that takes the accent (spider, icons, frames) and persists | VERIFIED | `lib/accent-custom.ts` derives all 10 tokens from one strict `#rrggbb` (null otherwise; OKLCH clamp L .62-.80, C .08-.17; filter search for spider/Vivian). `accent-boot.ts` embeds it into the head script and applies it before hydration. The desktop applies `customTokens` to `html` (:690-712), previews a draft live and stores only on release/blur/close (:745-766), restores through a strict check (:563-573), and a preset or factory reset clears inline tokens. `custom-color-picker.tsx` is the editor's picker (editor imports it back). CSS: 5 columns on PC, 2 columns with «Свой» spanning on the phone (`portia.css:292-299, 1198-1199`). Independent runs: `10-boot-check.mjs` against `next start` -> ok (valid custom, hostile, preset; 10 props); `--check accent` -> ok:true (a-l: boot before body parse, restore, live drag, save on release, reload, tampered colour ignored, preset switch, toggle, Escape, factory reset, no label overflow at 1920 and 520 px, phone layout) |
+| 1 | Assistant with an empty or vanished tip does not crash the desktop; a window with missing text opens | VERIFIED | Unchanged since the first verification (no change to the assistant/FormattedText code in 10-08/10-09; `git diff 7095680..HEAD` touches only portia.css, portia-editor.tsx (one line), accent-custom.ts and tests). Re-run on a fresh production build: `10-desktop-check.mjs --check assistant` -> ok:true, reasons [] |
+| 2 | Таблица, Устав and YouTube run in a shared `sandbox`; pages load, links open, video plays; owner checked on PC and phone | VERIFIED | `embedSandbox` shared by both iframes, no `allow-top-navigation`. `--check embeds` -> ok:true. The earlier open item (YouTube playback, headless only) is closed by owner UAT test 1: result `pass` on PC and phone (10-UAT.md) |
+| 3 | Zoom follows Ctrl (Cmd on a Mac), not the Windows key; overlay does not stick or block clicks; reset button speaks the percent | VERIFIED | Unchanged code; `--check zoom` -> ok:true on the fresh build; ZOOM-01/ZOOM-02 tests pass in the 304/304 run |
+| 4 | Quest notice closes with Escape without focus; roles correct in notice and virus list; Roblox portrait has a tooltip; ≡ handle has none | VERIFIED | Unchanged code; `--check toast` -> ok:true on the fresh build |
+| 5 | Settings key is one constant, a launch test catches drift; storage writes and `setWindows` are not inside state updaters | VERIFIED | Unchanged since the first verification; tests in `lib/accent-theme.test.ts` and `lib/portia-desktop.test.ts` pass (304/304) |
+| 6 | Settings has «Свой» with the editor's colour picker; it recolours everything that takes the accent and persists; the custom colour follows the pick (UAT gaps G-10-2b, G-10-2) | VERIFIED | See the gap-closure table below. Boot check ok (custom, neutral, hostile, preset; 11 props); `--check accent` steps a-n ok:true; owner approved on PC and phone |
 
-**Score:** 5/6 truths verified (criterion 2 is partly verified, one device item open)
+**Score:** 6/6 truths verified (0 present-but-behavior-unverified)
+
+### Gap-Closure Verification (10-UAT.md)
+
+| Gap | Fix claimed | What the code actually does | Status |
+|-----|-------------|-----------------------------|--------|
+| G-10-2b: #0D0D0D gave teal | 10-08, D-23 | `lib/accent-custom.ts` no longer substitutes hue 180.4 or a 0.08 chroma floor. `neutral = lch[1] < 1e-4` gives H 0, C 0, `--accent-chroma` 0 and filters exactly `hue-rotate(0deg) saturate(0)`; otherwise the pick's own hue and chroma (cap 0.17) are kept and only L is clamped to 0.62-0.80. I executed `deriveAccentTokens` directly: `#0d0d0d` -> `--teal #868686`, dim `#606060`, chroma 0, hue 0; `#808080` -> same; `#ffffff` -> `#bebebe`; `#6b4a4a` -> `#a07c7b`, hue 20.3, chroma 0.56 (muted pick keeps its hue); `#ff3366` -> chroma 1, hue 13.4; `#zzzzzz` -> null | VERIFIED |
+| `--accent-chroma` scales every tint | 10-08 | `app/portia.css`: 422 `var(--accent-hue)` occurrences = 422 `calc(C * var(--accent-chroma)) var(--accent-hue)` occurrences (my own count); `components/portia-editor.tsx:103` baseInk also scaled; `:root --accent-chroma: 1` so presets are unchanged; `--assistant-glow` has 0 matches in app/components/lib | VERIFIED |
+| Tests pin the new contract | 10-08 | `an achromatic pick gives a neutral grey theme`, `every accent tint follows --accent-chroma`, `a dark or muted pick keeps its hue and strength` in `lib/accent-theme.test.ts`. `npm test` re-run by me: 304 pass, 0 fail | VERIFIED |
+| D-23 recorded, D-05 superseded | 10-08 | `10-CONTEXT.md` line 25 marks D-05 superseded, line 32 holds D-23 | VERIFIED |
+| G-10-2: × stretched | 10-09 | `app/portia.css:294, 297, 298` use `.setting-options > button` (0 descendant selectors remain); `.custom-color-picker-head button` (:678) is `width/height 24px; line-height: 1`. Harness step (n) measures it on 1920x1080 and 390x844; `--check accent` ok:true | VERIFIED |
+| Owner device look | 10-09 Task 3 | Recorded in 10-09-SUMMARY: owner replied "verified" for the × and for black, grey, coloured and muted picks and the preset round trip, on PC and phone. This is owner evidence I cannot reproduce; it is consistent with the computed-style assertions in the harness | VERIFIED (owner) |
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `lib/accent-custom.ts` | `deriveAccentTokens`, `accentTokenNames` | VERIFIED | 107 lines, self-contained, strict hex check, wired into boot script and desktop |
-| `lib/accent-boot.ts` | settings key constant, boot script | VERIFIED | imported by desktop and layout; production HTML output exercised by the boot check |
-| `components/custom-color-picker.tsx` | picker extracted from the editor | VERIFIED | imported by editor (:5) and desktop (:11) |
-| `components/portia-desktop.tsx` | all desktop behaviours | VERIFIED | substantive, data flows from `content` / `localStorage` into rendered output |
-| `lib/accent-theme.test.ts`, `lib/portia-desktop.test.ts` | regression tests | VERIFIED | `npm test` 302/302 pass |
-| `10-boot-check.mjs`, `10-desktop-check.mjs` | harnesses | VERIFIED | not vacuous: they assert concrete DOM/storage facts (see criteria above) |
+| `lib/accent-custom.ts` | D-23 `deriveAccentTokens`, 11 `accentTokenNames` incl. `--accent-chroma` | VERIFIED | Read in full; self-contained (no imports, no outer names), strict `#rrggbb` guard intact; embedded into the head script (boot check passes against the minified production HTML) |
+| `lib/accent-boot.ts` | settings key constant, boot script | VERIFIED | Unchanged; wired in desktop and layout |
+| `components/custom-color-picker.tsx` | picker shared with the editor | VERIFIED | Used by editor and desktop |
+| `components/portia-desktop.tsx` | all desktop behaviours | VERIFIED | Wired; token loop over `accentTokenNames` picks up `--accent-chroma` with no code change |
+| `app/portia.css` | scaled tints, scoped option buttons | VERIFIED | See table above |
+| `lib/accent-theme.test.ts`, `lib/portia-desktop.test.ts`, `lib/editor-field-look.test.ts` | regression tests | VERIFIED | 304/304 |
+| `10-boot-check.mjs`, `10-desktop-check.mjs` | harnesses | VERIFIED | Step (n) present; assertions concrete (computed chroma, element rects), not vacuous |
 
 ### Key Link Verification
 
 | From | To | Via | Status |
 |------|----|-----|--------|
-| portia-desktop | accent-boot | `desktopSettingsStorageKey`, `accentIds`, `motionModes` | WIRED |
-| portia-desktop | accent-custom | `deriveAccentTokens`, `accentTokenNames` on restore, draft and apply | WIRED |
-| accent-boot | accent-custom | `deriveAccentTokens.toString()` embedded; survives the production minifier (boot check) | WIRED |
-| portia-desktop | custom-color-picker | `<CustomColorPicker group="accent" …>` in Settings | WIRED |
-| QuestToast | picker Escape | picker calls `preventDefault`, toast listener honours `defaultPrevented` | WIRED (harness h) |
+| `deriveAccentTokens` | portia.css tints | `--accent-chroma` inline on html, read by `calc(C * var(--accent-chroma))` in 422 sites | WIRED |
+| `accentTokenNames` | desktop token loop | sets all names for «Свой», removes all for a preset | WIRED |
+| `deriveAccentTokens.toString()` | `accent-boot.ts` head script | embedded before hydration | WIRED (boot check, production HTML) |
+| picker × | `.custom-color-picker-head button` | no longer matched by option-button rules | WIRED |
+| portia-desktop | accent-boot / custom-color-picker | constants, `<CustomColorPicker group="accent">` | WIRED |
 
 ### Behavioral Spot-Checks and Probes
 
-Server: `next start -p 3126` on the existing `.next` build (built after the last source edit). Stopped afterwards (PID 11880 terminated; port 3123 belongs to another process and was not touched).
+Fresh `npm run build` on current HEAD 00c72de, then `next start -p 3127`; server stopped afterwards (port 3127 no longer listening). The harness blocks any non-GET to /api/content.
 
 | Check | Command | Result | Status |
 |-------|---------|--------|--------|
-| Boot script | `node 10-boot-check.mjs --url http://localhost:3126` | `{"ok":true,"cases":{"custom":true,"hostile":true,"preset":true,"customProps":10}}` | PASS |
-| assistant, accent, embeds, zoom, toast | `node 10-desktop-check.mjs --check <name> --url http://localhost:3126` | all `ok:true`, `reasons: []` | PASS |
-| Regression gate | `npm test` | 302 pass, 0 fail | PASS |
-| Data rule | harness blocks any non-GET to /api/content | no write reason raised | PASS |
+| Build | `npm run build` | completed, route table printed | PASS |
+| Regression | `npm test` | 304 pass, 0 fail | PASS |
+| Boot script | `node 10-boot-check.mjs --url http://localhost:3127` | `{"ok":true,"cases":{"custom":true,"neutral":true,"hostile":true,"preset":true,"customProps":11}}` | PASS |
+| assistant / accent / embeds / zoom / toast | `node 10-desktop-check.mjs --check <name> --url http://localhost:3127` | all `ok:true`, `reasons: []` | PASS |
+| Direct derive | `deriveAccentTokens` on #0d0d0d, #808080, #ffffff, #6b4a4a, #ff3366, invalid | outputs as in the gap-closure table | PASS |
 
 ### Requirements Coverage
 
-| Requirement | Source Plan | Status | Evidence |
-|-------------|-------------|--------|----------|
-| ROB-01 | 10-02 | SATISFIED | Criterion 1 |
-| ROB-03 | 10-02 | SATISFIED | Criterion 5 |
-| SEC-03 | 10-05 | SATISFIED in code and headless; YouTube playback on device open (Human item 1) | Criterion 2 |
-| ZOOM-01 | 10-05 | SATISFIED | Criterion 3 (owner decision D-21 recorded in REQUIREMENTS.md) |
-| ZOOM-02 | 10-05 | SATISFIED | Criterion 3 |
-| A11Y-01 | 10-06 | SATISFIED | Criterion 4 |
-| A11Y-02 | 10-06 | SATISFIED | Criterion 4 (D-18 recorded) |
-| TEST-01 | 10-01, 10-03 | SATISFIED | Criterion 5 |
-| THEME-01 | 10-01, 10-03, 10-04 | SATISFIED | Criterion 6 |
+| Requirement | Source Plans | Status | Evidence |
+|-------------|--------------|--------|----------|
+| ROB-01 | 10-02, 10-07 | SATISFIED | Truth 1 |
+| ROB-03 | 10-02, 10-07 | SATISFIED | Truth 5 |
+| SEC-03 | 10-05, 10-07 | SATISFIED | Truth 2 (playback now owner-confirmed) |
+| ZOOM-01 | 10-05, 10-07 | SATISFIED | Truth 3 |
+| ZOOM-02 | 10-05, 10-07 | SATISFIED | Truth 3 |
+| A11Y-01 | 10-06, 10-07 | SATISFIED | Truth 4 |
+| A11Y-02 | 10-06, 10-07 | SATISFIED | Truth 4 |
+| TEST-01 | 10-01, 10-03, 10-07 | SATISFIED | Truth 5 |
+| THEME-01 | 10-01, 10-03, 10-04, 10-07, 10-08, 10-09 | SATISFIED | Truth 6 |
 
-All nine IDs in ROADMAP Phase 10 appear in plan frontmatter (10-01: THEME-01, TEST-01; 10-02: ROB-01, ROB-03; 10-03: THEME-01, TEST-01; 10-04: THEME-01; 10-05: SEC-03, ZOOM-01, ZOOM-02; 10-06: A11Y-01, A11Y-02; 10-07: all nine) and in REQUIREMENTS.md (traceability table maps each to Phase 10, marked Complete). No orphaned requirements.
+All nine IDs from the ROADMAP phase appear in plan frontmatter and in REQUIREMENTS.md (traceability table: each mapped to Phase 10, marked Complete). A11Y-03 is mapped to Phase 11 (Pending) and is correctly not claimed here. No orphaned requirements.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| `app/portia.css` | 294, 297-298 vs 678 | `.setting-options button` leaks into the picker's close button (review WR-01, open) | Warning | Close button probably distorted (min-height 54px, padding 10px over 24x24). Picker still closes through Escape or a second click on «Свой». Does not break any must-have; see Human item 2 |
-| `components/portia-desktop.tsx` | 1244-1248 | `role="listbox"/"option"` without roving tabindex or arrow keys (WR-02, open) | Warning | Plan 10-06 explicitly requires rows to stay buttons in the Tab order, so the truth holds; the ARIA pattern is half-implemented. Candidate follow-up |
-| `components/custom-color-picker.tsx` | 66-73 | Colour board is pointer-only (WR-03, open) | Warning | Decision D-07 says the editor's picker is moved unchanged and no control is added. Keyboard users have the hue slider and the hex field. Follow-up, not a goal blocker |
-| `components/portia-desktop.tsx` | 758-766 | Clicking «Свой» saves the current preset colour at once (IN-01, open) | Info | Preset choice replaced by an equivalent custom colour; no must-have broken |
-| `components/portia-desktop.tsx` | 1409 | Blur with null relatedTarget commits again (IN-02, open) | Info | Duplicate "saved" flash only |
-| `components/portia-desktop.tsx` | 31 | `allow-scripts allow-same-origin` safe only while embed sources stay cross-origin (IN-03) | Info | Current sources (docs.google.com, github.io, youtube-nocookie) are cross-origin; contract-accepted |
-| `lib/*.test.ts` | various | Source-grep tests; `navigator.platform` deprecated (IN-04) | Info | Behaviour is covered by the headless harnesses I re-ran |
+| `lib/accent-custom.ts` | filterFor loop | inner `let k` shadows the strength `k` (review WR-01, open) | Warning | Not a functional bug: `score` closes over the outer `k` and the inner loop variable is used only for the saturate grid. Readability risk only |
+| `lib/accent-theme.test.ts` | readability test | contrast tested against `--bg` only, accent text also sits on `--panel`/`--panel-2` (review WR-02, open) | Warning | Test coverage gap; the lightness clamp 0.62-0.80 is the same for all surfaces and the owner confirmed the look |
+| `components/portia-desktop.tsx` | virus rows | `role=option` without roving tabindex (P1-WR-02, open) | Warning | Plan 10-06 contract keeps rows Tab-order buttons; follow-up |
+| `components/custom-color-picker.tsx` | colour board | pointer-only (P1-WR-03, open) | Warning | D-07: picker moved unchanged; hue slider and hex field remain |
+| various | | P1-IN-01..03, IN-01 | Info | Recorded in 10-REVIEW-DISPOSITION.md; none breaks a must-have |
 
-Debt-marker grep (TBD/FIXME/XXX) over the phase's files: none. UI review (18/24, no pillar at 1): its top item, the zoom layer lacking `pointer-events: none`, is by design. A layer that ignores pointer events cannot take the wheel over a cross-origin iframe, and the layer is absent whenever no modifier is held (harness (a), (c)). Its remaining items are style or copy warnings.
+Debt markers (TBD/FIXME/XXX) in files modified by this phase: none found. Code review: 0 critical. P1-WR-01 (the × clipping) is now `fixed` (commit 90a0231). Security: `10-SECURITY.md` threats_open 0; the strict `#rrggbb` guard is unchanged and the boot check's hostile case passes. UI review re-audit 18/24, no blockers.
 
 ### Human Verification Required
 
-1. **YouTube playback inside the sandbox.** Test: open an Info page with a YouTube video block on PC and on a phone, press play. Expected: it plays. If it does not, add only the one allow-* flag it needs. Why human: criterion 2 names playback; the owner's check recorded step 3 as headless only because live content has no video block.
-2. **Picker close button.** Test: Settings -> «Свой», look at the × on PC and phone. Expected: a clean 24x24 button. Why human: visual; review WR-01 predicts distortion.
+None. Both items from the previous report are closed by owner evidence (UAT test 1 pass; 10-09 Task 3 "verified" on PC and phone).
 
 ### Gaps Summary
 
-No must-have FAILED. Nothing in the code review or UI review breaks a ROADMAP criterion: WR-01 is a visual defect with working alternatives to close the picker, WR-02 and WR-03 are ARIA/keyboard polish outside the plans' stated contracts (rows stay Tab-order buttons; picker unchanged by D-07). The phase stays at `human_needed` only because the contract's "видео играет" claim has no device evidence, and because WR-01 is worth a visual look before closing. All seven review findings are still `open` in 10-REVIEW-DISPOSITION.md, and the phase can close with them recorded as follow-ups.
+No gaps. The two UAT gaps (G-10-2b, G-10-2) are closed in code, in tests, in the production harness and by the owner on both devices. The remaining open review findings are warnings and infos outside the ROADMAP criteria and are tracked in 10-REVIEW-DISPOSITION.md as follow-ups. Note for the record: the owner's "verified" is taken from 10-09-SUMMARY.md and could not be independently re-observed by this verifier.
 
 ---
 
