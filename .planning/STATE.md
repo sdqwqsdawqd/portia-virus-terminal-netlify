@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 10
 current_phase_name: "Рабочий стол: устойчивость, встроенные документы, доступность"
 status: executing
-stopped_at: Completed PORTIA-10-07-PLAN.md
-last_updated: "2026-10-25T19:29:15.064Z"
-last_activity: 2026-10-25
-last_activity_desc: Phase PORTIA-10 execution started
-state_head: 3d53433509d95293f789365542878c237bd22868
+stopped_at: Completed PORTIA-10-08-PLAN.md
+last_updated: "2026-10-25T20:38:14.877Z"
+last_activity: 2026-10-26
+last_activity_desc: Phase PORTIA-10 execution resumed (wave continue)
+state_head: 88367ec8590b3a21dbfaf07da4995f843c039715
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 26
-  completed_plans: 26
+  total_plans: 28
+  completed_plans: 27
   percent: 57
 ---
 
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 Phase: PORTIA-10 (Рабочий стол: устойчивость, встроенные документы, доступность) — EXECUTING
 Plan: 7 of 7
 Status: Executing Phase PORTIA-10
-Last activity: 2026-10-25 — Phase PORTIA-10 execution started
+Last activity: 2026-10-26 — Phase PORTIA-10 execution resumed (wave continue)
 
 Progress: [██████░░░░] 57%
 
@@ -68,6 +68,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-10 P05 | 25min | 2 tasks | 5 files |
 | Phase PORTIA-10 P06 | 30min | 2 tasks | 5 files |
 | Phase PORTIA-10 P07 | 40 min | 3 tasks | 4 files |
+| Phase PORTIA-10 P08 | 35 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-10]: D-21 recorded: zoom reacts to Ctrl everywhere and Cmd on a Mac, never the Windows key
 - [Phase PORTIA-10]: D-18: the ≡ handle gets no tooltip; recorded in A11Y-02 and ROADMAP criterion 4
 - [Phase PORTIA-10]: 10-07: no sandbox flag added; owner check found no failing frame
+- [Phase PORTIA-10]: D-23 (owner): custom accent follows the pick; neutral picks give a neutral grey theme via --accent-chroma; only lightness is corrected (supersedes D-05)
 
 ### Pending Todos
 
@@ -138,8 +140,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-25T19:29:14.883Z
-Stopped at: Completed PORTIA-10-07-PLAN.md
+Last session: 2026-10-25T20:38:14.759Z
+Stopped at: Completed PORTIA-10-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
