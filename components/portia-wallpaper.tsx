@@ -2,7 +2,7 @@
 
 // Desktop wallpapers drawn as SVG in currentColor, so they follow the interface accent.
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { seeded, webGeometry } from "@/lib/wallpaper-web";
 import { WallpaperSpider } from "./portia-wallpaper-spider";
 
@@ -77,13 +77,11 @@ function gelLanes() {
   // One fragment per slice of the gel, so bands spread over its whole length.
   const fragments = Array.from({ length: 12 }, (_, slice) => round(top + 60 + ((slice + pickFragments() * 0.8) / 12) * (bottom - top - 160)));
   const columns: number[] = [];
-  type Drift = { from: number; to: number; duration: number; delay: number };
-  const bands: { d: string; weight: number; opacity: number; drift?: Drift }[] = [];
-  // Entry and exit lines sit inside the lane fade; the delay puts each band on its own phase (the lane term keeps replicate lanes out of step).
-  const entry = top + 20, exit = bottom - 10, duration = (exit - entry) / GEL_SPEED;
+  const bands: { d: string; weight: number; opacity: number; moving: boolean }[] = [];
+  // Sample bands run, as in a real gel, all together: they come in at the entry line and fade out at the exit line.
+  const entry = top + 20, exit = bottom - 10, period = exit - entry, duration = period / GEL_SPEED;
   const band = (x: number, y: number, weight: number, opacity: number, lane: number) => bands.push({
-    d: `M${x + 4} ${y}Q${x + width / 2} ${round(y + 2.6)} ${x + width - 4} ${y}`, weight: round(weight), opacity: Math.round(opacity * 100) / 100,
-    drift: lane === 0 ? undefined : { from: round(entry - y), to: round(exit - y), duration: round(duration), delay: -round(((y - entry) / GEL_SPEED + lane * 13.7) % duration) },
+    d: `M${x + 4} ${y}Q${x + width / 2} ${round(y + 2.6)} ${x + width - 4} ${y}`, weight: round(weight), opacity: Math.round(opacity * 100) / 100, moving: lane !== 0,
   });
   for (let lane = 0; lane < lanes; lane += 1) {
     const x = left + lane * pitch;
@@ -93,16 +91,40 @@ function gelLanes() {
     const pick = seeded((lane === 3 || lane === 4 ? 2 : lane) * 31 + 3);
     fragments.filter(() => pick() < 0.38).forEach((y) => band(x, y, 3 + pick() * 3, 0.5 + pick() * 0.4, lane));
   }
-  return { columns, width, top, bottom, left, ladder, ladderY, bands };
+  return { columns, width, top, bottom, left, ladder, ladderY, bands, entry, exit, period, duration };
 }
 
 const gel = gelLanes();
 
-// A drifting band (or its glow) rides in its own group so the one shared gel-creep keyframe reads its numbers.
-function GelDrift({ drift, children }: { drift?: (typeof gel.bands)[number]["drift"]; children: ReactNode }) {
-  if (!drift) return <>{children}</>;
-  const style = { "--gel-from": `${drift.from}px`, "--gel-to": `${drift.to}px`, animationDuration: `${drift.duration}s`, animationDelay: `${drift.delay}s` } as CSSProperties;
-  return <g className="wallpaper-gel-drift" style={style}>{children}</g>;
+// The sample bands of «Гель» on their own HTML layer, so the compositor moves them at sub-pixel steps: inside the
+// wallpaper svg every frame was a main-thread repaint that rounds to whole pixels, which read as stop-go on a PC.
+// The track holds each band twice, one period apart, and slides down by one period (half its height) per loop.
+// A static mask on the frame makes the entry and exit fades (3% and 4% of the run) and the lower gel fade.
+const gelMoving = gel.bands.filter((band) => band.moving);
+const gelMask = (() => {
+  const at = (y: number) => `${round((y / 900) * 100)}%`;
+  const fadeStart = 0.55 * 900, below = (y: number) => round(1 - (y - fadeStart) / (900 - fadeStart));
+  const holdEnd = gel.exit - 0.04 * gel.period;
+  return `linear-gradient(to bottom, transparent ${at(gel.entry)}, #000 ${at(gel.entry + 0.03 * gel.period)}, #000 55%, rgb(0 0 0 / ${below(holdEnd)}) ${at(holdEnd)}, transparent ${at(gel.exit)})`;
+})();
+
+function GelBands({ id, scale, alpha }: { id: string; scale: number; alpha: number }) {
+  return <svg className={`desktop-wallpaper wallpaper-gel-strip-${id}`} viewBox={`0 ${gel.entry - gel.period} 1440 ${2 * gel.period}`} preserveAspectRatio="none">
+    <defs><linearGradient id={`wp-gel-${id}`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="currentColor" stopOpacity="0" /><stop offset=".22" stopColor="currentColor" /><stop offset=".78" stopColor="currentColor" /><stop offset="1" stopColor="currentColor" stopOpacity="0" /></linearGradient></defs>
+    {[0, -gel.period].map((shift) => <g key={shift} transform={shift ? `translate(0 ${shift})` : undefined}>
+      {gelMoving.map((band, index) => <path key={index} d={band.d} stroke={`url(#wp-gel-${id})`} style={{ strokeWidth: band.weight * scale, opacity: band.opacity * alpha }} />)}
+    </g>)}
+  </svg>;
+}
+
+function WallpaperGelStrip() {
+  const unit = (value: number) => `calc(${value} * max(100cqw / 1440, 100cqh / 900))`;
+  return <div className="wallpaper-gel-strip" style={{ maskImage: gelMask, WebkitMaskImage: gelMask }}>
+    <div className="wallpaper-gel-strip-track" style={{ top: unit(gel.entry - gel.period), height: unit(2 * gel.period), animationDuration: `${round(gel.duration)}s` }}>
+      <GelBands id="glow" scale={3} alpha={0.16} />
+      <GelBands id="core" scale={1} alpha={0.42} />
+    </div>
+  </div>;
 }
 
 // Only the sharp zone moves, the rim is masked to .12. If a device cannot hold 60 fps, lower this first, never the amplitude.
@@ -196,7 +218,7 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
   return <div className="desktop-wallpaper-frame" aria-hidden="true">
     {shown.map((value) => <div key={value} className={`wallpaper-layer${value === layers.leaving ? " is-leaving" : layers.leaving ? " is-entering" : ""}`}>
       <WallpaperArt kind={value} />
-      {value === "radar" ? <WallpaperSpider /> : null}
+      {value === "radar" ? <WallpaperSpider /> : value === "gel" ? <WallpaperGelStrip /> : null}
     </div>)}
   </div>;
 }
@@ -218,10 +240,11 @@ function WallpaperArt({ kind }: { kind: string }) {
             {gel.columns.map((x) => <rect key={x} x={x} y={gel.top} width={gel.width} height={gel.bottom - gel.top} rx={3} className="wallpaper-gel-lane" />)}
             {gel.columns.map((x) => <rect key={`w${x}`} x={x + 3} y={gel.top - 22} width={gel.width - 6} height={10} rx={2} className="wallpaper-gel-well" />)}
             <g className="wallpaper-gel-bands">
-              <g className="wallpaper-gel-glow">
-                {gel.bands.map((band, index) => <GelDrift key={`g${index}`} drift={band.drift}><path d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight * 3, opacity: band.opacity * 0.16 }} /></GelDrift>)}
-              </g>
-              {gel.bands.map((band, index) => <GelDrift key={index} drift={band.drift}><path d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight, opacity: band.opacity * 0.42 }} /></GelDrift>)}
+              {/* The still ladder; the moving sample bands are drawn by WallpaperGelStrip. */}
+              {gel.bands.filter((band) => !band.moving).flatMap((band, index) => [
+                <path key={`g${index}`} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight * 3, opacity: band.opacity * 0.16 }} />,
+                <path key={index} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight, opacity: band.opacity * 0.42 }} />,
+              ])}
               <g className="wallpaper-gel-labels">
                 {gel.ladder.map((label, index) => <text key={label} x={gel.left - 12} y={gel.ladderY[index] + 4}>{label}</text>)}
               </g>

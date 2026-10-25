@@ -1327,7 +1327,7 @@ html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-
    width/1440 and height/900). The loop only adds a transform; legs turn about pivots given in artwork units. The body
    centre (325, 360 of 649.5 x 768) is the anchor that walks on the threads. It lives outside .wallpaper-web, whose rules
    restyle every path inside it. */
-.wallpaper-spider { position: absolute; left: calc(100cqw + (var(--rest-x) - 1440) * max(100cqw / 1440, 100cqh / 900)); top: calc(var(--rest-y) * max(100cqw / 1440, 100cqh / 900)); width: calc(97.425 * max(100cqw / 1440, 100cqh / 900)); translate: -50% -46.875%; transform-origin: 50% 46.875%; opacity: .85; color: var(--teal); will-change: transform; pointer-events: none; }
+.wallpaper-spider { position: absolute; left: calc(100cqw + (var(--rest-x) - 1440) * max(100cqw / 1440, 100cqh / 900)); top: calc(var(--rest-y) * max(100cqw / 1440, 100cqh / 900)); width: calc(72 * max(100cqw / 1440, 100cqh / 900)); translate: -50% -46.875%; transform-origin: 50% 46.875%; opacity: .85; color: var(--teal); will-change: transform; pointer-events: none; }
 .wallpaper-spider svg { display: block; width: 100%; height: auto; }
 .wallpaper-spider :is(path, circle) { stroke: none; }
 .wallpaper-spider-teal { fill: currentColor; }
@@ -1355,10 +1355,15 @@ html[data-motion="full"] .desktop-wallpaper-grid { animation: helix-scroll 60s l
 .wallpaper-gel-well { stroke-width: 1.2; opacity: .32; }
 .wallpaper-gel-bands path { stroke-linecap: butt; }
 .wallpaper-gel-labels { fill: currentColor; stroke: none; opacity: .34; font: 500 11px var(--mono); text-anchor: end; letter-spacing: .04em; }
-html[data-motion="full"] .wallpaper-gel-glow { animation: gel-glow 8s ease-in-out infinite alternate; }
+/* Sample bands on their own layer in gel units (components/portia-wallpaper.tsx, WallpaperGelStrip): only transform and opacity animate, both on the compositor. */
+.wallpaper-gel-strip { position: absolute; top: 0; right: 0; width: calc(1440 * max(100cqw / 1440, 100cqh / 900)); height: calc(900 * max(100cqw / 1440, 100cqh / 900)); overflow: hidden; pointer-events: none; }
+.wallpaper-gel-strip-track { position: absolute; left: 0; width: 100%; will-change: transform; }
+.wallpaper-gel-strip-track .desktop-wallpaper { stroke-linecap: butt; }
+.wallpaper-gel-strip-glow { will-change: opacity; }
+html[data-motion="full"] .wallpaper-gel-strip-track { animation: gel-creep linear infinite; }
+@keyframes gel-creep { to { transform: translate3d(0, 50%, 0); } }
+html[data-motion="full"] .wallpaper-gel-strip-glow { animation: gel-glow 8s ease-in-out infinite alternate; }
 @keyframes gel-glow { from { opacity: .5; } to { opacity: 1; } }
-html[data-motion="full"] .wallpaper-gel-drift { animation: gel-creep linear infinite; }
-@keyframes gel-creep { from { translate: 0 var(--gel-from); opacity: 0; } 3% { opacity: 1; } 96% { opacity: 1; } to { translate: 0 var(--gel-to); opacity: 0; } }
 /* «Клетки»: tissue through an eyepiece, sharp at the centre and out of focus at the rim; infected cells are
    brighter. With motion on, the cells of the sharp zone drift, swell and narrow, and turn a little, neighbours in
    anti-phase so they read as pushing; the nucleus wanders inside its cell; virions float and tumble round their own
