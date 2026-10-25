@@ -20,6 +20,7 @@ import {
   type Virus,
 } from "@/lib/portia-content";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
+import { MAX_TABLE_ROWS, limitStatus, limitText } from "@/lib/content-limits";
 import type { FieldSelectionEvent, FieldSelectionState } from "@/lib/rich-text-style";
 import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
 import { clampPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
@@ -1031,7 +1032,10 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                                   <button type="button" onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.splice(rowIndex, 1); }); })}>Удалить строку</button>
                                 </div>
                               ))}
-                              <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.push({ key: "", value: "" }); }); })}>+ СТРОКА</button>
+                              <div className="scientist-log-actions">
+                                <button className="secondary-control limit-add" type="button" disabled={block.rows.length >= MAX_TABLE_ROWS} aria-describedby={`limit-rows-${block.id}`} onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.push({ key: "", value: "" }); }); })}>+ СТРОКА</button>
+                                <LimitNote id={`limit-rows-${block.id}`} count={block.rows.length} max={MAX_TABLE_ROWS} />
+                              </div>
                             </>
                           )}
                         </div>
@@ -2290,6 +2294,11 @@ function ConfirmDialog({ title, text, actions, onCancel }: { title: string; text
 
 function EditorGroup({ title, children, stack = false }: { title: string; children: React.ReactNode; stack?: boolean }) {
   return <section className={`editor-group${stack ? " stack" : ""}`}><h2>{title}</h2><div className="editor-field-grid">{children}</div></section>;
+}
+
+// Always in the DOM so the change to «МАКСИМУМ» is announced (UI-SPEC).
+function LimitNote({ id, count, max }: { id: string; count: number; max: number }) {
+  return <span id={id} aria-live="polite" className={limitStatus(count, max) === "full" ? "limit-note is-full" : "limit-note"}>{limitText(count, max)}</span>;
 }
 
 function Field({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {

@@ -18,3 +18,17 @@ export const MAX_CONTENT_BODY_BYTES = 5_000_000;
 export function utf8Bytes(text: string): number {
   return new TextEncoder().encode(text).length;
 }
+
+export type LimitStatus = "free" | "counter" | "full";
+
+// D-15: the counter shows only near the limit, from 80%.
+export function limitStatus(count: number, max: number): LimitStatus {
+  if (count >= max) return "full";
+  return count >= Math.ceil(max * 0.8) ? "counter" : "free";
+}
+
+export function limitText(count: number, max: number): string {
+  const status = limitStatus(count, max);
+  if (status === "full") return `МАКСИМУМ ${max}`;
+  return status === "counter" ? `${count} / ${max}` : "";
+}
