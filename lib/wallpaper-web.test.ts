@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { REST_NODE, createPulsePool, edgesAt, emitPulse, planWalk, pointOnEdge, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
+import { REST_NODE, createPulsePool, edgesAt, emitPulse, legPose, planWalk, pointOnEdge, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
 
 const near = (a: Point, b: Point, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
 // Distance from a point to the thread drawn as a 400-piece polyline.
@@ -192,4 +192,14 @@ test("pulseShape draws a 120-unit window on the thread with fading opacity and w
   const end = pulseShape(pulse, 1.2);
   assert.ok(Math.abs(end.opacity) < 1e-9);
   assert.ok(Math.abs(end.width - 1) < 1e-9);
+});
+
+test("a leg sweeps back on the ground, then springs forward past neutral and lands where the next stance starts", () => {
+  assert.equal(legPose(0).swing, -1);
+  assert.equal(legPose(0).tuck, 0);
+  assert.ok(Math.abs(legPose(0.6).swing - 1) < 1e-9, "stance ends fully back");
+  assert.ok(legPose(0.8).tuck > 0.9, "mid-swing the leg is tucked");
+  const swing = Array.from({ length: 41 }, (_, i) => legPose(0.6 + i * 0.01).swing);
+  assert.ok(Math.min(...swing) < -1.05, "the swing overshoots forward");
+  assert.ok(Math.abs(legPose(0.99999).swing - legPose(0).swing) < 1e-3, "the cycle closes without a jump");
 });

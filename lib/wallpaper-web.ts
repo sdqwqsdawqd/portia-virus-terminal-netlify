@@ -253,3 +253,14 @@ export function pulseShape(pulse: Pulse, now: number): { points: Point[]; opacit
   }
   return { points, opacity: pulse.peak * fade, width: 1 + 0.8 * fade };
 }
+
+const SWING_SHARE = 0.4; // part of the gait cycle a spider leg is in the air
+
+const easeOutBack = (t: number) => 1 + 2.2 * (t - 1) ** 3 + 1.2 * (t - 1) ** 2;
+
+// One leg at gait phase p (0..1): stance sweeps from forward to back, swing returns with overshoot and a tuck.
+export function legPose(p: number): { swing: number; tuck: number } {
+  if (p < 1 - SWING_SHARE) return { swing: -1 + (2 * p) / (1 - SWING_SHARE), tuck: 0 };
+  const s = (p - (1 - SWING_SHARE)) / SWING_SHARE;
+  return { swing: 1 - 2 * easeOutBack(s), tuck: Math.sin(Math.PI * s) };
+}

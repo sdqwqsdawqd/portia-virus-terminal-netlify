@@ -5,7 +5,7 @@
 // it reads no layout and sets no React state.
 
 import { useEffect, useRef, type CSSProperties } from "react";
-import { REST_NODE, createPulsePool, emitAtCrossing, emitPulse, planWalk, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
+import { REST_NODE, createPulsePool, emitPulse, legPose, planWalk, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
 
 type LegId = "L1" | "L2" | "L3" | "L4" | "R1" | "R2" | "R3" | "R4";
 
@@ -18,21 +18,27 @@ const LEG_PIVOTS: Record<LegId, [number, number]> = {
 const ARTWORK_HEADING = Math.PI / 2;
 const legOrigin = (leg: LegId): CSSProperties => ({ transformOrigin: `${LEG_PIVOTS[leg][0]}px ${LEG_PIVOTS[leg][1]}px` });
 
-// Gait (D-06): groups A and B swing in opposite phase, the right side mirrored so every leg pushes the same way.
+// Gait (D-06): alternating tetrapods. Group A (first and third legs of one side with second and fourth of the other)
+// plants while group B swings, then they swap. Each leg sweeps back slowly with its foot down (stance), then
+// tucks and snaps forward with a little overshoot (swing), which reads as springy rather than a stiff wiggle.
 const GAIT_A = ["L1", "R2", "L3", "R4"];
-const legSign = (leg: string) => (GAIT_A.includes(leg) ? 1 : -1) * (leg.startsWith("R") ? -1 : 1);
-const LEG_SWING = 12; // degrees either side of neutral
-const STEP_CYCLE = 0.8; // seconds per full step cycle
+// Positive rotate sweeps a left leg toward the abdomen (artwork top), a right leg toward the head, so the right side is mirrored.
+const legBack = (leg: string) => (leg.startsWith("R") ? -1 : 1);
+const legGroup = (leg: string) => (GAIT_A.includes(leg) ? 0 : 1);
+// Legs of one group do not land as one rigid block: each pair trails the one in front a little.
+const legLag = (leg: string) => (4 - Number(leg[1])) * 0.035;
+const LEG_SWING = 14; // degrees either side of neutral
+const LEG_TUCK = 0.12; // a swinging leg shortens by up to this much, as if lifted and bent
+const BODY_BOB = 0.025; // the body swells slightly at every footfall
+const STEP_CYCLE = 0.7; // seconds per full step cycle
 const GAIT_EASE = 0.3; // legs reach neutral this fast after a stop
 const TURN_TIME = 0.1; // body turn time constant: about 95% of a turn in 300 ms
 const FIRST_WALK = 3.0; // 1.8 s fade delay + 0.6 s fade + about 0.6 s: something moves within 3 s
 const MAX_DT = 0.05; // a slow frame never makes a jump
 
-// Waves (D-05): a footstep pulse every half step cycle, a stronger one on arrival, at most 8 alive.
+// Waves (D-05): only footfalls make waves, one pair of pulses each time a leg group plants; at most 8 alive.
 const PULSE_SLOTS = 8;
-const STEP_PULSE = STEP_CYCLE / 2;
 const STEP_PEAK = 0.6;
-const ARRIVAL_PEAK = 0.75;
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
@@ -46,7 +52,7 @@ export function WallpaperSpider() {
     const root = document.documentElement;
     const reduceQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const legs = Array.from(element.querySelectorAll<SVGGElement>("[data-leg]"));
-    const signs = legs.map((leg) => legSign(leg.dataset.leg ?? ""));
+    const ids = legs.map((leg) => leg.dataset.leg ?? "L1");
     const pulsePaths = Array.from(overlay.querySelectorAll("path"));
     const pool = createPulsePool(PULSE_SLOTS);
     const drawn = pulsePaths.map(() => false);
@@ -65,7 +71,7 @@ export function WallpaperSpider() {
 
     let frame = 0, last = 0, time = 0;
     let node = REST_NODE, previous = -1, path: number[] | null = null;
-    let walked = 0, rest = FIRST_WALK, x = restX, y = restY, stepClock = 0, steps = 0;
+    let walked = 0, rest = FIRST_WALK, x = restX, y = restY;
     // heading is where the body should face (travel direction); angle is how far the artwork is turned now.
     let heading = ARTWORK_HEADING, angle = 0, phase = 0, gait = 0, clean = true, legsNeutral = true;
 
@@ -80,10 +86,10 @@ export function WallpaperSpider() {
     };
 
     const resetToRest = () => {
-      node = REST_NODE; previous = -1; path = null; walked = 0; rest = FIRST_WALK; x = restX; y = restY; stepClock = 0; steps = 0;
+      node = REST_NODE; previous = -1; path = null; walked = 0; rest = FIRST_WALK; x = restX; y = restY;
       heading = ARTWORK_HEADING; angle = 0; phase = 0; gait = 0; clean = true; legsNeutral = true;
       element.style.transform = "";
-      legs.forEach((leg) => { leg.style.rotate = ""; });
+      legs.forEach((leg) => { leg.style.rotate = ""; leg.style.scale = ""; });
       clearPulses();
     };
 
@@ -112,12 +118,11 @@ export function WallpaperSpider() {
       time += dt;
       if (path) {
         walked += dt;
-        stepClock += dt;
         const pose = walkPose(path, walked);
         x = pose.x; y = pose.y; heading = pose.heading;
-        // Every half step the foot meets the thread: a pulse runs away both ways from the spider.
-        if (Math.floor(stepClock / STEP_PULSE) > steps) {
-          steps = Math.floor(stepClock / STEP_PULSE);
+        // A group plants its feet when the gait phase passes 0 (group A) or 0.5 (group B): a pulse runs both ways from the spider.
+        const before = phase, after = (phase + dt / STEP_CYCLE) % 1;
+        if (after < before || (before < 0.5 && after >= 0.5)) {
           emitPulse(pool, pose.edge, pose.at, 1, STEP_PEAK, time);
           emitPulse(pool, pose.edge, pose.at, -1, STEP_PEAK, time);
         }
@@ -126,11 +131,10 @@ export function WallpaperSpider() {
           node = path[path.length - 1];
           path = null;
           rest = 3 + rand() * 3;
-          emitAtCrossing(pool, node, ARRIVAL_PEAK, time);
         }
       } else if ((rest -= dt) <= 0) {
         const next = planWalk(node, previous, visible, rand);
-        if (next.length > 1) { path = next; walked = 0; stepClock = 0; steps = 0; } else rest = 3 + rand() * 3;
+        if (next.length > 1) { path = next; walked = 0; } else rest = 3 + rand() * 3;
       }
       drawPulses();
       const walking = path !== null;
@@ -142,8 +146,14 @@ export function WallpaperSpider() {
       const settled = !walking && gait === 0 && Math.abs(turn) < 1e-3;
       if (settled && clean) return;
       clean = settled;
-      element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg)`;
-      if (gait > 0 || !legsNeutral) legs.forEach((leg, index) => { leg.style.rotate = `${(LEG_SWING * Math.sin(2 * Math.PI * phase) * gait * signs[index]).toFixed(2)}deg`; });
+      // The body swells a touch as each group lands (phase 0 and 0.5) and settles in between.
+      const bob = 1 + BODY_BOB * gait * Math.max(0, Math.cos(4 * Math.PI * phase)) ** 3;
+      element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg) scale(${bob.toFixed(4)})`;
+      if (gait > 0 || !legsNeutral) legs.forEach((leg, index) => {
+        const id = ids[index], pose = legPose((phase + legGroup(id) * 0.5 + legLag(id)) % 1);
+        leg.style.rotate = `${(LEG_SWING * pose.swing * gait * legBack(id)).toFixed(2)}deg`;
+        leg.style.scale = (1 - LEG_TUCK * pose.tuck * gait).toFixed(4);
+      });
       legsNeutral = gait === 0;
     };
 
