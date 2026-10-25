@@ -41,9 +41,9 @@
 
 ### Устойчивость
 
-- [ ] **ROB-01**: Помощник с пустым или исчезнувшим советом не роняет рабочий стол; `FormattedText` переносит отсутствующий текст (03.1-WR-10)
+- [x] **ROB-01**: Помощник с пустым или исчезнувшим советом не роняет рабочий стол; `FormattedText` переносит отсутствующий текст (03.1-WR-10)
 - [x] **ROB-02**: Неверный или пустой JSON в API сотрудников, редакторов и контента даёт 400 с понятным текстом, а не 500 (03.1-IN-06, 03.3-IN-03, плюс `PUT /api/content`, `POST /api/editors`)
-- [ ] **ROB-03**: Побочные эффекты (localStorage, `setWindows`) вынесены из функций обновления состояния React (03.1-IN-09)
+- [x] **ROB-03**: Побочные эффекты (localStorage, `setWindows`) вынесены из функций обновления состояния React (03.1-IN-09)
 
 ### Безопасность
 
@@ -132,9 +132,9 @@
 | CONT-07 | Phase 9 | Complete |
 | CONT-08 | Phase 9 | Complete |
 | CONT-09 | Phase 12 | Pending |
-| ROB-01 | Phase 10 | Pending |
+| ROB-01 | Phase 10 | Complete |
 | ROB-02 | Phase 7 | Complete |
-| ROB-03 | Phase 10 | Pending |
+| ROB-03 | Phase 10 | Complete |
 | SEC-01 | Phase 12 | Pending |
 | SEC-02 | Phase 12 | Pending |
 | SEC-03 | Phase 10 | Pending |

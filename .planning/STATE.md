@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 10
 current_phase_name: "Рабочий стол: устойчивость, встроенные документы, доступность"
 status: executing
-stopped_at: Completed PORTIA-10-01-PLAN.md
-last_updated: "2026-10-25T18:48:01.763Z"
+stopped_at: Completed PORTIA-10-02-PLAN.md
+last_updated: "2026-10-25T18:51:44.690Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase PORTIA-10 execution started
-state_head: 56bd3da616a2c94c93e85630c299a2285f180421
+state_head: ff4328af16be4dcc08c22aaf3cbc7d216255c373
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 26
-  completed_plans: 20
+  completed_plans: 21
   percent: 57
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 ## Current Position
 
 Phase: PORTIA-10 (Рабочий стол: устойчивость, встроенные документы, доступность) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Executing Phase PORTIA-10
 Last activity: 2026-10-25 — Phase PORTIA-10 execution started
 
@@ -62,6 +62,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-09 P06 | 8min | 2 tasks | 4 files |
 | Phase PORTIA-09 P07 | owner-paced | 3 tasks | 8 files |
 | Phase PORTIA-10 P01 | 25min | 2 tasks | 4 files |
+| Phase PORTIA-10 P02 | 20min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-09]: 09-06: editor blocks save on a reversed quest and never rewrites dates; undo/redo follows the first card whose category changed
 - [Phase PORTIA-09]: 09-07: gel bands move on a composited HTML strip (lanes in unison); spider smaller with a tetrapod gait and footfall waves; owner accepted BG-01 on PC and phone
 - [Phase PORTIA-10]: 10-01: custom accent filters found by fixed-size hue search; deriveAccentTokens self-contained and embedded in head script
+- [Phase PORTIA-10]: Assistant bubble visibility is derived (assistantSpeaking) so a tip removed by the poll closes the bubble without an effect
 
 ### Pending Todos
 
@@ -126,8 +128,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-25T18:48:01.605Z
-Stopped at: Completed PORTIA-10-01-PLAN.md
+Last session: 2026-10-25T18:51:44.527Z
+Stopped at: Completed PORTIA-10-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
