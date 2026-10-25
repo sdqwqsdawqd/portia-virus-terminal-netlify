@@ -39,3 +39,21 @@ test("every embedded frame is sandboxed with the one shared set (SEC-03)", () =>
   assert.ok(!value.includes("allow-top-navigation"));
   assert.ok((tags.find((tag) => tag.includes("youtube-nocookie")) ?? "").includes("allowFullScreen"));
 });
+
+test("zoom listens to Ctrl, Cmd only on a Mac, and clears on every way out (ZOOM-01)", () => {
+  const metaLines = source.split("\n").filter((line) => line.includes("metaKey"));
+  assert.equal(metaLines.length, 1);
+  assert.ok(metaLines[0].includes("const zoomModifier"));
+  const start = source.indexOf("function EmbeddedDocument");
+  const body = source.slice(start, source.indexOf("\nfunction ", start + 1));
+  for (const call of ['addEventListener("visibilitychange"', 'removeEventListener("visibilitychange"', 'addEventListener("blur"', 'removeEventListener("blur"']) assert.ok(body.includes(call), call);
+  const layer = /<div className="document-app-zoom-layer"[^\n]*\/>/.exec(body)?.[0] ?? "";
+  assert.ok(layer.includes("onPointerMove") && layer.includes("onPointerDown"), layer);
+});
+
+test("the zoom reset button is named by its percent (ZOOM-02)", () => {
+  const button = /<button\b[^\n]*?>\{Math\.round\(zoom \* 100\)\}%<\/button>/.exec(source)?.[0] ?? "";
+  assert.ok(button, "reset button not found");
+  assert.ok(!button.includes("aria-label") && !button.includes("title="), button);
+  assert.ok(source.includes('aria-label="Масштаб документа"'));
+});

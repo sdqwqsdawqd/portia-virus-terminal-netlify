@@ -242,6 +242,63 @@ const checks = {
     if (video.sandbox !== expected) reasons.push(`video frame sandbox ${JSON.stringify(video.sandbox)}`);
     if (!video.fullscreen) reasons.push("video frame lost allowfullscreen");
   },
+  async zoom(cdp) {
+    const layer = `!!document.querySelector(".document-app-zoom-layer")`;
+    const centre = `(() => { const r = document.querySelector(".document-app-viewport iframe").getBoundingClientRect(); return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; })()`;
+    const topTag = (p) => cdp.eval(`document.elementFromPoint(${p.x}, ${p.y})?.className === "document-app-zoom-layer" ? "LAYER" : document.elementFromPoint(${p.x}, ${p.y})?.tagName`);
+    const percent = `document.querySelector(".document-app-zoom button:nth-child(2)")?.textContent`;
+    const key = (type, name, modifiers) => cdp.send("Input.dispatchKeyEvent", { type, key: name, code: `${name}Left`, windowsVirtualKeyCode: name === "Control" ? 17 : 91, modifiers });
+    const down = (name) => key("rawKeyDown", name, name === "Control" ? 2 : 4);
+    const up = (name) => key("keyUp", name, 0);
+    const gone = (label) => waitFor(cdp, `!${layer}`, 1500).then((ok) => { if (!ok) reasons.push(`${label}: zoom layer stayed`); });
+    const open = async () => {
+      serve(fixture(), 1); await load(cdp);
+      await click(cdp, '[data-shortcut="charter"]');
+      await waitFor(cdp, `!!document.querySelector(".document-app-viewport iframe")`, 3000);
+      return cdp.eval(centre);
+    };
+    let c = await open();
+    if (!c || !(await waitFor(cdp, `document.elementFromPoint(${c.x}, ${c.y})?.tagName === "IFRAME"`, 2000))) { reasons.push(`(a) frame centre is ${await topTag(c)} without a modifier`); return; }
+    // (b) Ctrl raises the layer, Ctrl+wheel zooms, the percent is the button's whole name
+    await down("Control");
+    if (!(await waitFor(cdp, layer, 1500))) reasons.push("(b) Ctrl did not raise the layer");
+    else if ((await topTag(c)) !== "LAYER") reasons.push("(b) layer is not on top");
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseWheel", x: c.x, y: c.y, deltaX: 0, deltaY: -120, modifiers: 2 });
+    if (!(await waitFor(cdp, `${percent} === "110%"`, 1500))) reasons.push(`(b) Ctrl+wheel gave ${await cdp.eval(percent)}`);
+    if (await cdp.eval(`document.querySelector(".document-app-zoom button:nth-child(2)").hasAttribute("aria-label")`)) reasons.push("(b) reset button still has an aria-label");
+    // (c) release clears it and clicks reach the document again
+    await up("Control"); await gone("(c)");
+    if ((await topTag(c)) !== "IFRAME") reasons.push(`(c) after keyup the centre is ${await topTag(c)}`);
+    // (d) window blur
+    await down("Control"); await waitFor(cdp, layer, 1500);
+    await cdp.eval(`window.dispatchEvent(new Event("blur")); true`); await gone("(d) blur");
+    // (e) hidden tab
+    await up("Control");
+    await down("Control"); await waitFor(cdp, layer, 1500);
+    await cdp.eval(`Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" }); document.dispatchEvent(new Event("visibilitychange")); delete document.visibilityState; true`);
+    await gone("(e) hidden");
+    // (f) a lost keyup: the first pointer move that no longer carries the modifier clears the layer
+    await up("Control");
+    await down("Control"); await waitFor(cdp, layer, 1500);
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: c.x + 5, y: c.y + 5, modifiers: 0 });
+    await gone("(f) lost keyup");
+    await up("Control");
+    // (g) the Windows key (Meta on this platform) neither raises the layer nor zooms
+    await down("Meta"); await sleep(400);
+    if (await cdp.eval(layer)) reasons.push("(g) Meta raised the layer on a non-Mac platform");
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseWheel", x: c.x, y: c.y, deltaX: 0, deltaY: -120, modifiers: 4 });
+    await sleep(300);
+    if ((await cdp.eval(percent)) !== "110%") reasons.push(`(g) Meta+wheel changed the zoom to ${await cdp.eval(percent)}`);
+    await up("Meta");
+    // (h) a Mac: Cmd raises the layer
+    const ua = await cdp.eval(`navigator.userAgent`);
+    await cdp.send("Emulation.setUserAgentOverride", { userAgent: ua, platform: "MacIntel" });
+    c = await open();
+    await down("Meta");
+    if (!(await waitFor(cdp, layer, 1500))) reasons.push("(h) Cmd did not raise the layer on a Mac");
+    await up("Meta"); await gone("(h) Cmd release");
+    await cdp.send("Emulation.setUserAgentOverride", { userAgent: ua, platform: "Win32" });
+  },
 };
 
 let edge;
