@@ -143,6 +143,17 @@ test("a recycled virus is looked up in recycledViruses and moving it alone chang
   assert.deepEqual(changedDossierTabs(baseline, draft, virus.id), ["text"]);
 });
 
+test("changedDossierTabs treats a missing recycledViruses as empty", () => {
+  const old = (): PortiaContent => {
+    const content = fixture();
+    delete (content as Partial<PortiaContent>).recycledViruses;
+    return content;
+  };
+  const draft = old();
+  draft.viruses[0].physiology = "X";
+  assert.deepEqual(changedDossierTabs(old(), draft, draft.viruses[0].id), ["text"]);
+});
+
 test("a virus id in neither draft list has no changed tabs", () => {
   assert.deepEqual(changedDossierTabs(fixture(), fixture(), "nope"), []);
 });

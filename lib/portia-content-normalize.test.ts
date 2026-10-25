@@ -230,3 +230,53 @@ test("every parsed YouTube id survives normalizeInfoSections as a video block", 
   const [section] = normalizeInfoSections([{ id: "s", title: "S", body: "", subsections: [{ id: "u", title: "U", blocks: [{ id: "v", type: "video", videoId }] }] }]);
   assert.deepEqual(section.subsections[0].blocks[0], { id: "v", type: "video", videoId });
 });
+
+test("wrong-typed broadcast fields become text and nothing else changes", () => {
+  const base = { id: "a", type: "news", published: true, important: false, startsAt: "", endsAt: "", conditions: "", extra: "keep" };
+  const at = (fields: object) => normalizeBroadcasts([{ ...base, title: "", body: "", ...fields }])[0];
+  assert.equal(at({ title: {} }).title, "");
+  assert.equal(at({ title: 42 }).title, "42");
+  assert.equal(at({ body: true }).body, "true");
+  assert.equal(at({ body: [1] }).body, "");
+  assert.equal((at({}) as unknown as { extra: string }).extra, "keep");
+  assert.equal(at({ published: "yes" }).published, false);
+});
+
+test("a broadcast with a missing or blank id gets a stable position id", () => {
+  const base = { type: "news", title: "", body: "", published: true };
+  const out = normalizeBroadcasts([{ ...base }, { ...base, id: "  " }, { ...base, id: "broadcast-0", type: "wat" }]);
+  assert.deepEqual(out.map((item) => item.id), ["broadcast-0-2", "broadcast-1", "broadcast-0"]);
+  assert.ok(out.every((item) => !item.id.includes(":")));
+  assert.equal(out[2].type, "news");
+  assert.deepEqual(normalizeBroadcasts(structuredClone(out)), out);
+});
+
+test("only news can be important", () => {
+  const base = { title: "", body: "", published: true, important: true };
+  const out = normalizeBroadcasts([{ ...base, id: "q", type: "quest" }, { ...base, id: "t", type: "task" }, { ...base, id: "n", type: "news" }]);
+  assert.deepEqual(out.map((item) => item.important), [false, false, true]);
+});
+
+test("wrong-typed virus fields are coerced and missing records are filled", () => {
+  const content = structuredClone(defaultPortiaContent);
+  const odd = {
+    name: 7, ppu: null, classification: "x", mutations: [null],
+    scientistLogs: [{ title: {}, lockedLevel: "high", content: ["a"] }],
+  };
+  content.viruses = [odd, null] as never;
+  content.recycledViruses = [{ ...odd, id: "" }] as never;
+  const once = normalizePortiaContent(content);
+  assert.ok(once);
+  assert.equal(once.viruses.length, 1);
+  const [virus] = once.viruses;
+  assert.equal(virus.id, "virus-0");
+  assert.equal(virus.name, "7");
+  assert.deepEqual(virus.ppu, { health: "", speed: "", abilities: "" });
+  assert.deepEqual(Object.keys(virus.classification).sort(), ["appearance", "behavior", "danger", "escapeRisk", "mind", "spread", "transmission"]);
+  assert.ok(Object.values(virus.classification).every((item) => item === ""));
+  assert.deepEqual(virus.mutations, [{ name: "", description: "", image: "" }]);
+  assert.equal(virus.scientistLogs[0].title, "");
+  assert.equal(virus.scientistLogs[0].lockedLevel, 3);
+  assert.equal(once.recycledViruses[0].id, "recycled-0");
+  assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
+});
