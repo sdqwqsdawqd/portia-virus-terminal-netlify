@@ -1325,14 +1325,17 @@ html[data-motion="full"] .desktop-wallpaper-grid { animation: helix-scroll 60s l
 @keyframes helix-scroll { to { transform: translate3d(0, calc(100% / -3), 0); } }
 .wallpaper-helix path { stroke-width: 1.5; }
 .wallpaper-helix .wallpaper-rungs { stroke-width: 1; opacity: .7; }
-/* «Гель»: soft lane columns fading downward, wells, a labelled ladder; still, even bands that fade at their
-   ends, and only their glow breathes slowly (motion on). */
+/* «Гель»: soft lane columns fading downward, wells, a labelled ladder. Sample bands creep down their lanes, leave
+   through the bottom fade and come back in at the top; the ladder and its labels stay still, and the glow breathes
+   (motion on only; without animation every band sits at its drawn y). */
 .wallpaper-gel-lane { fill: currentColor; fill-opacity: .035; stroke: currentColor; stroke-opacity: .07; }
 .wallpaper-gel-well { stroke-width: 1.2; opacity: .32; }
 .wallpaper-gel-bands path { stroke-linecap: butt; }
 .wallpaper-gel-labels { fill: currentColor; stroke: none; opacity: .34; font: 500 11px var(--mono); text-anchor: end; letter-spacing: .04em; }
-html[data-motion="full"] .wallpaper-gel-glow { animation: gel-glow 12s ease-in-out infinite alternate; }
-@keyframes gel-glow { from { opacity: .55; } to { opacity: 1; } }
+html[data-motion="full"] .wallpaper-gel-glow { animation: gel-glow 8s ease-in-out infinite alternate; }
+@keyframes gel-glow { from { opacity: .5; } to { opacity: 1; } }
+html[data-motion="full"] .wallpaper-gel-drift { animation: gel-creep linear infinite; }
+@keyframes gel-creep { from { translate: 0 var(--gel-from); opacity: 0; } 3% { opacity: 1; } 96% { opacity: 1; } to { translate: 0 var(--gel-to); opacity: 0; } }
 /* «Клетки»: tissue through an eyepiece, sharp at the centre and out of focus at the rim; infected cells are
    brighter, and their virions drift and tumble round their own centres (fill-box). */
 .wallpaper-cells-wall { stroke-width: 1.2; opacity: .2; }

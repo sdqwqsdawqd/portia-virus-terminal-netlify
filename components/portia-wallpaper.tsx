@@ -2,7 +2,7 @@
 
 // Desktop wallpapers drawn as SVG in currentColor, so they follow the interface accent.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 type Point = [number, number];
 
@@ -75,9 +75,13 @@ function seeded(seed: number) {
   return () => (state = (state * 1664525 + 1013904223) % 4294967296) / 4294967296;
 }
 
+// Sample bands creep down their lanes at 6 units/s: visible within 3 s, still calm enough to read text on top (D-10).
+const GEL_SPEED = 6;
+
 // «Гель»: an electrophoresis gel photographed under UV, anchored top right like the other wallpapers.
-// No hard lane walls: soft lane columns, wells, a marker ladder with sizes, and still, even "smiling" bands
-// that fade at their ends under a slowly breathing glow. Replicate lanes repeat the same fragments, as real samples would.
+// No hard lane walls: soft lane columns, wells, a marker ladder with sizes, and even "smiling" bands that fade at
+// their ends under a breathing glow. Sample bands creep down their lanes and come back in at the top (the drift data
+// per band); the ladder stays still. Replicate lanes repeat the same fragments, as real samples would.
 function gelLanes() {
   const lanes = 9, left = 812, pitch = 66, width = 46, top = 74, bottom = 820;
   const ladder = ["10 000", "6000", "4000", "3000", "2000", "1500", "1000", "750", "500", "250"];
@@ -86,22 +90,33 @@ function gelLanes() {
   // One fragment per slice of the gel, so bands spread over its whole length.
   const fragments = Array.from({ length: 12 }, (_, slice) => round(top + 60 + ((slice + pickFragments() * 0.8) / 12) * (bottom - top - 160)));
   const columns: number[] = [];
-  const bands: { d: string; weight: number; opacity: number }[] = [];
-  const band = (x: number, y: number, weight: number, opacity: number) => bands.push({
+  type Drift = { from: number; to: number; duration: number; delay: number };
+  const bands: { d: string; weight: number; opacity: number; drift?: Drift }[] = [];
+  // Entry and exit lines sit inside the lane fade; the delay puts each band on its own phase (the lane term keeps replicate lanes out of step).
+  const entry = top + 20, exit = bottom - 10, duration = (exit - entry) / GEL_SPEED;
+  const band = (x: number, y: number, weight: number, opacity: number, lane: number) => bands.push({
     d: `M${x + 4} ${y}Q${x + width / 2} ${round(y + 2.6)} ${x + width - 4} ${y}`, weight: round(weight), opacity: Math.round(opacity * 100) / 100,
+    drift: lane === 0 ? undefined : { from: round(entry - y), to: round(exit - y), duration: round(duration), delay: -round(((y - entry) / GEL_SPEED + lane * 13.7) % duration) },
   });
   for (let lane = 0; lane < lanes; lane += 1) {
     const x = left + lane * pitch;
     columns.push(x);
-    if (lane === 0) { ladderY.forEach((y, step) => band(x, y, step === 6 ? 5 : 3, step === 6 ? 0.9 : 0.6)); continue; }
+    if (lane === 0) { ladderY.forEach((y, step) => band(x, y, step === 6 ? 5 : 3, step === 6 ? 0.9 : 0.6, 0)); continue; }
     // Lanes 3 and 4 are replicates of lane 2; the rest pick their own fragments.
     const pick = seeded((lane === 3 || lane === 4 ? 2 : lane) * 31 + 3);
-    fragments.filter(() => pick() < 0.38).forEach((y) => band(x, y, 3 + pick() * 3, 0.5 + pick() * 0.4));
+    fragments.filter(() => pick() < 0.38).forEach((y) => band(x, y, 3 + pick() * 3, 0.5 + pick() * 0.4, lane));
   }
   return { columns, width, top, bottom, left, ladder, ladderY, bands };
 }
 
 const gel = gelLanes();
+
+// A drifting band (or its glow) rides in its own group so the one shared gel-creep keyframe reads its numbers.
+function GelDrift({ drift, children }: { drift?: (typeof gel.bands)[number]["drift"]; children: ReactNode }) {
+  if (!drift) return <>{children}</>;
+  const style = { "--gel-from": `${drift.from}px`, "--gel-to": `${drift.to}px`, animationDuration: `${drift.duration}s`, animationDelay: `${drift.delay}s` } as CSSProperties;
+  return <g className="wallpaper-gel-drift" style={style}>{children}</g>;
+}
 
 // «Клетки»: tissue seen through an eyepiece in the top-right corner. The cells are a Voronoi tessellation
 // with rounded walls and a gap between neighbours; a few are infected, with virions at their walls.
@@ -203,9 +218,9 @@ function WallpaperArt({ kind }: { kind: string }) {
             {gel.columns.map((x) => <rect key={`w${x}`} x={x + 3} y={gel.top - 22} width={gel.width - 6} height={10} rx={2} className="wallpaper-gel-well" />)}
             <g className="wallpaper-gel-bands">
               <g className="wallpaper-gel-glow">
-                {gel.bands.map((band, index) => <path key={`g${index}`} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight * 2.2, opacity: band.opacity * 0.08 }} />)}
+                {gel.bands.map((band, index) => <GelDrift key={`g${index}`} drift={band.drift}><path d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight * 3, opacity: band.opacity * 0.16 }} /></GelDrift>)}
               </g>
-              {gel.bands.map((band, index) => <path key={index} d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight, opacity: band.opacity * 0.42 }} />)}
+              {gel.bands.map((band, index) => <GelDrift key={index} drift={band.drift}><path d={band.d} stroke="url(#wp-gel-band)" style={{ strokeWidth: band.weight, opacity: band.opacity * 0.42 }} /></GelDrift>)}
               <g className="wallpaper-gel-labels">
                 {gel.ladder.map((label, index) => <text key={label} x={gel.left - 12} y={gel.ladderY[index] + 4}>{label}</text>)}
               </g>
