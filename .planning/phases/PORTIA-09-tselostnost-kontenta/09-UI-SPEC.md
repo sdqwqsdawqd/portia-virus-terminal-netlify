@@ -1,7 +1,8 @@
 ---
 phase: "09"
 slug: tselostnost-kontenta
-status: draft
+status: approved
+reviewed_at: "2026-10-25"
 shadcn_initialized: false
 preset: none
 created: "2026-10-25"
@@ -247,7 +248,7 @@ Rules:
 | Server | does not reject (D-01); only the editor blocks |
 | Desktop | an already-stored bad quest is shown as is (both dates printed), no extra error on the visitor side |
 
-Interpretation to confirm in planning: D-18 says "saving is blocked", so one old bad quest blocks saving anything until its date is fixed (one edit away, reachable from the message). If the owner would rather allow saving other changes, scope the block to quests changed in the current draft. Default in this contract: block while any quest in the draft is invalid.
+Confirmed by the owner (2026-10-25): block while any quest in the draft is invalid, including an already-stored bad quest. The savebar message makes the fix one edit away.
 
 ### «ВАЖНО» (D-19)
 
@@ -283,7 +284,7 @@ No new visuals. The status badge (`.quest-badge`, states such as `state-*`) must
 
 ## UI Considerations
 
-Applicable state considerations resolved: 8 covered, 2 backstop, 1 unresolved.
+Applicable state considerations resolved: 9 covered, 2 backstop, 0 unresolved. The probe (9 surfaces, 52 raw candidates) was reviewed with the owner; candidates not in this table are dismissed as not applicable (see note below).
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
@@ -297,7 +298,9 @@ Applicable state considerations resolved: 8 covered, 2 backstop, 1 unresolved.
 | partial | list-collection (cards with missing or empty id) | ✅ covered | The card is kept and gets a deterministic id; nothing visible changes |
 | loading | nav / interactive-control (quest badge on first paint) | 🧪 backstop | Badge text identical on first and second render; to be confirmed by a held-out render test (no flicker) |
 | error | media (wallpaper animation frame rate) | 🧪 backstop | 60 fps on the owner's PC and phone, no stepping on the helix; confirmed by the owner in the browser and by a performance trace, not by unit tests |
-| long-text | interactive-control (savebar message with a very long quest title or field name) | ⚠ unresolved | Planner treats as assumption: ellipsis inside the single-line status slot on desktop, wrapping on phone (`display: block`); the full name is available in the field's own card |
+| long-text | interactive-control (savebar message with a very long quest title or field name) | ✅ covered | Confirmed by the owner: ellipsis inside the single-line status slot on desktop, wrapping on phone (`display: block`); the full name is available in the field's own card |
+
+Dismissed (owner-confirmed, 2026-10-25): the remaining probe candidates (loading/empty/populated/partial on the wallpaper, the «ВАЖНО» label, undo/redo focus and the delete dialog) are not applicable. These surfaces are static or derived from the in-memory draft, with no async load, no collection and no user-entered free text of their own.
 
 ---
 
@@ -312,12 +315,12 @@ Applicable state considerations resolved: 8 covered, 2 backstop, 1 unresolved.
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS
+- [x] Dimension 1 Copywriting: PASS (FLAG: existing «СОХРАНИТЬ» label kept unchanged)
+- [x] Dimension 2 Visuals: PASS (FLAG: editor focal point = disabled «СОХРАНИТЬ» + red date message when invalid)
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-10-25 (gsd-ui-checker; 2 non-blocking FLAGs)
