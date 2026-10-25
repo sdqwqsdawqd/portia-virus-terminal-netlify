@@ -26,6 +26,9 @@ const embeddedApps = {
   sheet: { src: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/htmlview?widget=true&headers=false", external: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" },
   charter: { src: "https://sdqwqsdawqd.github.io/S.E-Portia/", external: "https://sdqwqsdawqd.github.io/S.E-Portia/" },
 } as const;
+// D-19: one permission set for every third-party frame. Scripts and same-origin let the viewers run, popups escape the sandbox so links open as normal tabs;
+// no top-navigation flag, so a frame can never move the PORTIA tab. If a device needs more, add only that one flag.
+const embedSandbox = "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox";
 // Where a window appears from: a desktop icon (zoom) or its taskbar button (scales back out of it).
 type OpenOrigin = { x: number; y: number; kind: "icon" | "taskbar" };
 type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number; geometry?: WindowGeometry; exiting?: "close" | "minimize"; openOrigin?: OpenOrigin };
@@ -1325,7 +1328,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                     ? <dl key={block.id} className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row, rowIndex) => <div key={rowIndex}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl>
                     : block.type === "video" && block.videoId
                       // nocookie embed, id validated by normalizePortiaContent (D-09); default referrer policy, YouTube refuses embeds without a Referer.
-                      ? <figure key={block.id} className="info-block-video"><iframe title={`Видео YouTube: ${selectedSubsection.title}`} loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" src={`https://www.youtube-nocookie.com/embed/${block.videoId}`} /><figcaption><a href={`https://www.youtube.com/watch?v=${block.videoId}`} target="_blank" rel="noopener noreferrer">Открыть на YouTube ↗</a></figcaption></figure>
+                      ? <figure key={block.id} className="info-block-video"><iframe title={`Видео YouTube: ${selectedSubsection.title}`} loading="lazy" sandbox={embedSandbox} allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" src={`https://www.youtube-nocookie.com/embed/${block.videoId}`} /><figcaption><a href={`https://www.youtube.com/watch?v=${block.videoId}`} target="_blank" rel="noopener noreferrer">Открыть на YouTube ↗</a></figcaption></figure>
                       : block.type === "photo" && block.url
                         ? <figure key={block.id} className="info-block-photo"><img src={block.url} alt={`Иллюстрация: ${selectedSubsection.title}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" /></figure>
                         : null)}</div></div>
@@ -1620,7 +1623,7 @@ function EmbeddedDocument({ src, external, title }: { src: string; external: str
 
   return <div className="document-app" ref={frameRef}>
     <div className="document-app-viewport">
-      <iframe src={src} title={title} loading="lazy" referrerPolicy="no-referrer" onLoad={() => setFrameLoading(false)} style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})` }} />
+      <iframe src={src} title={title} loading="lazy" sandbox={embedSandbox} referrerPolicy="no-referrer" onLoad={() => setFrameLoading(false)} style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})` }} />
       {frameLoading && <LoadingState label="Загрузка документа…" />}
       {ctrlHeld && <div className="document-app-zoom-layer" aria-hidden="true" />}
     </div>

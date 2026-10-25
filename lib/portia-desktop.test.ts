@@ -29,3 +29,13 @@ test("state updaters stay pure: no storage access, state setter or timer inside 
   assert.ok(updaters >= 3, `expected at least 3 block-bodied updaters, found ${updaters}`);
   assert.deepEqual(offenders, []);
 });
+
+test("every embedded frame is sandboxed with the one shared set (SEC-03)", () => {
+  const tags = source.match(/<iframe\b[^>]*>/g) ?? [];
+  assert.equal(tags.length, 2);
+  for (const tag of tags) assert.ok(tag.includes("sandbox={embedSandbox}"), `missing shared sandbox: ${tag.slice(0, 60)}`);
+  const value = /const embedSandbox = "([^"]+)"/.exec(source)?.[1] ?? "";
+  for (const flag of ["allow-scripts", "allow-same-origin", "allow-popups", "allow-popups-to-escape-sandbox"]) assert.ok(value.split(" ").includes(flag), flag);
+  assert.ok(!value.includes("allow-top-navigation"));
+  assert.ok((tags.find((tag) => tag.includes("youtube-nocookie")) ?? "").includes("allowFullScreen"));
+});

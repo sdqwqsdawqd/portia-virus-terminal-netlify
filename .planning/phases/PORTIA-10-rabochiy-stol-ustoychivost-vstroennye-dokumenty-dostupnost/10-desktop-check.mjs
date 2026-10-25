@@ -217,6 +217,31 @@ const checks = {
     else if (!phone.below) reasons.push("(l) «Свой» is not below the four presets on a phone");
     await cdp.send("Emulation.clearDeviceMetricsOverride");
   },
+  async embeds(cdp) {
+    const expected = /const embedSandbox = "([^"]+)"/.exec(fs.readFileSync(new URL("../../../components/portia-desktop.tsx", import.meta.url), "utf8"))?.[1];
+    if (!expected) { reasons.push("embedSandbox not found in components/portia-desktop.tsx"); return; }
+    const sandboxes = `[...document.querySelectorAll(".document-app iframe")].map((f) => f.getAttribute("sandbox"))`;
+    serve(fixture({ infoSections: [{ id: "s1", title: "Раздел", body: "", subsections: [{ id: "s1a", title: "Видео", blocks: [{ id: "b1", type: "video", videoId: "jNQXAC9IVRw" }] }] }] }), 1);
+    await load(cdp);
+    for (const app of ["sheet", "charter"]) {
+      if (!(await click(cdp, `[data-shortcut="${app}"]`))) { reasons.push(`${app}: shortcut missing`); continue; }
+      await waitFor(cdp, `document.querySelectorAll(".document-app iframe").length >= ${app === "sheet" ? 1 : 2}`, 3000);
+    }
+    const frames = await cdp.eval(sandboxes);
+    if (frames.length !== 2 || frames.some((value) => value !== expected)) reasons.push(`document frames sandbox ${JSON.stringify(frames)}`);
+    // each window's own loading state goes away once its frame has loaded (needs network access to the document hosts)
+    if (!(await waitFor(cdp, `document.querySelectorAll(".document-app .loading-state").length === 0`, 30000))) {
+      const pending = await cdp.eval(`[...document.querySelectorAll(".document-app")].filter((d) => d.querySelector(".loading-state")).map((d) => d.querySelector("iframe").title)`);
+      reasons.push(`document frame never loaded: ${JSON.stringify(pending)}`);
+    }
+    await click(cdp, '[data-shortcut="info"]');
+    await waitFor(cdp, `!!document.querySelector(".info-subsections button")`, 3000);
+    await click(cdp, ".info-subsections button");
+    if (!(await waitFor(cdp, `!!document.querySelector(".info-block-video iframe")`, 3000))) { reasons.push("video frame did not render"); return; }
+    const video = await cdp.eval(`(() => { const f = document.querySelector(".info-block-video iframe"); return { sandbox: f.getAttribute("sandbox"), fullscreen: f.hasAttribute("allowfullscreen") }; })()`);
+    if (video.sandbox !== expected) reasons.push(`video frame sandbox ${JSON.stringify(video.sandbox)}`);
+    if (!video.fullscreen) reasons.push("video frame lost allowfullscreen");
+  },
 };
 
 let edge;
