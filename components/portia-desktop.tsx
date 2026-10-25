@@ -9,7 +9,7 @@ import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
-import { normalizeBroadcasts, normalizeInfoSections } from "@/lib/portia-content-normalize";
+import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 
 const PortiaEditor = dynamic(
@@ -155,16 +155,6 @@ type ContentResponse = {
   revision?: number;
   updatedAt?: string | null;
 };
-
-function isUsableContent(value: unknown): value is PortiaContent {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<PortiaContent>;
-  return Array.isArray(candidate.viruses)
-    && Array.isArray(candidate.infoSections)
-    && Array.isArray(candidate.broadcasts)
-    && Array.isArray(candidate.recycleFiles)
-    && Array.isArray(candidate.searchRecommendations);
-}
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, milliseconds = 6_000) {
   const controller = new AbortController();
@@ -376,9 +366,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       if (!response.ok) return;
       const payload = (await response.json()) as ContentResponse;
       if (!payload.content) return;
-      const fetched = { ...payload.content, broadcasts: normalizeBroadcasts(payload.content.broadcasts), infoSections: normalizeInfoSections(payload.content.infoSections) };
       const fetchedRevision = payload.revision ?? 0;
+      // The revision is checked first so an unchanged poll does no work and never hands the editor a new object (SYNC-01).
       if (!acceptFetchedContent(fetchedRevision, knownRevision.current, savesAtSend, savesStarted.current)) return;
+      const fetched = normalizePortiaContent(payload.content);
+      if (!fetched) return;
       knownRevision.current = fetchedRevision;
       setContent(fetched);
       setActiveVirusId((current) => fetched.viruses.some((virus) => virus.id === current) ? current : fetched.viruses[0]?.id ?? "");
@@ -453,8 +445,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         const cached = window.localStorage.getItem(contentCacheStorageKey);
         if (cached) {
           const parsed = JSON.parse(cached) as { content?: unknown; revision?: number };
-          if (isUsableContent(parsed.content)) {
-            const cachedContent = { ...parsed.content, broadcasts: normalizeBroadcasts(parsed.content.broadcasts), infoSections: normalizeInfoSections(parsed.content.infoSections) };
+          // The cache is device-editable and may predate any field, so it gets the same normalizer as the network (D-20, D-22).
+          const cachedContent = normalizePortiaContent(parsed.content);
+          if (cachedContent) {
             setContent(cachedContent);
             const cachedRevision = typeof parsed.revision === "number" ? parsed.revision : 0;
             knownRevision.current = cachedRevision;
@@ -1259,7 +1252,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   : block.type === "table"
                     ? <dl key={block.id} className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row, rowIndex) => <div key={rowIndex}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl>
                     : block.type === "video" && block.videoId
-                      // nocookie embed, id validated by normalizeInfoSections (D-09); default referrer policy, YouTube refuses embeds without a Referer.
+                      // nocookie embed, id validated by normalizePortiaContent (D-09); default referrer policy, YouTube refuses embeds without a Referer.
                       ? <figure key={block.id} className="info-block-video"><iframe title={`Видео YouTube: ${selectedSubsection.title}`} loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" src={`https://www.youtube-nocookie.com/embed/${block.videoId}`} /><figcaption><a href={`https://www.youtube.com/watch?v=${block.videoId}`} target="_blank" rel="noopener noreferrer">Открыть на YouTube ↗</a></figcaption></figure>
                       : block.type === "photo" && block.url
                         ? <figure key={block.id} className="info-block-photo"><img src={block.url} alt={`Иллюстрация: ${selectedSubsection.title}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" /></figure>
@@ -1279,8 +1272,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <div className="broadcast-grid">
                 {broadcastFeed(content.broadcasts, broadcastTab, today).map((item) => {
                   const state = item.type === "quest" ? questState(item, today) : null;
+                  // D-19: a quest or task never shows ВАЖНО, whatever the stored data says.
+                  const important = item.type === "news" && item.important;
                   const badge = state === "active" ? "АКТИВЕН" : state === "upcoming" ? `СКОРО · с ${formatQuestDay(item.startsAt).slice(0, 5)}` : "ЗАВЕРШЁН";
-                  return <article className={`broadcast-card ${item.type}${item.important ? " important" : ""}${state ? ` state-${state}` : ""}`} key={item.id}><span>{broadcastType(item.type)}{item.important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
+                  return <article className={`broadcast-card ${item.type}${important ? " important" : ""}${state ? ` state-${state}` : ""}`} key={item.id}><span>{broadcastType(item.type)}{important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
                 })}
                 {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>{broadcastTab === "news" ? "Новостей пока нет" : "Квестов и задач пока нет"}</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
               </div></>}
