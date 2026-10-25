@@ -33,9 +33,11 @@ function run(stored) {
 const custom = run({ accent: "custom", customAccent: "#ff3366" });
 const hostile = run({ accent: "custom", customAccent: "\"><script>alert(1)</script>" });
 const preset = run({ accent: "ice", customAccent: "#ff3366" });
+const neutral = run({ accent: "custom", customAccent: "#0d0d0d" });
 
 const cases = {
-  custom: custom.accent === "custom" && Object.keys(custom.props).length === 10 && new Set(Object.values(custom.props)).size === 10 && Number.isFinite(Number(custom.props["--accent-hue"])) && custom.askedKey,
+  custom: custom.accent === "custom" && Object.keys(custom.props).length === 11 && new Set(Object.values(custom.props)).size === 11 && Number.isFinite(Number(custom.props["--accent-hue"])) && custom.askedKey,
+  neutral: neutral.accent === "custom" && neutral.props["--accent-chroma"] === "0" && /^#([0-9a-f]{2})\1\1$/.test(neutral.props["--teal"]) && neutral.props["--mark-filter"] === "hue-rotate(0deg) saturate(0)" && neutral.askedKey,
   hostile: hostile.accent === undefined && Object.keys(hostile.props).length === 0 && hostile.askedKey,
   preset: preset.accent === "ice" && Object.keys(preset.props).length === 0 && preset.askedKey,
 };

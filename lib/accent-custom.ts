@@ -1,7 +1,7 @@
 // Why: «Свой» drives the same tokens as a preset (D-04) and is quietly made readable (D-05).
 // deriveAccentTokens is self-contained because accentBootScript embeds its source with Function.prototype.toString,
 // so it may not reference imports or anything outside its own body (no module-level names, no spread/destructuring helpers).
-export const accentTokenNames = ["--teal", "--teal-dim", "--teal-soft", "--desktop-glow", "--desktop-grid", "--desktop-base", "--desktop-deep", "--accent-hue", "--mark-filter", "--assistant-filter"] as const;
+export const accentTokenNames = ["--teal", "--teal-dim", "--teal-soft", "--desktop-glow", "--desktop-grid", "--desktop-base", "--desktop-deep", "--accent-hue", "--accent-chroma", "--mark-filter", "--assistant-filter"] as const;
 
 export function deriveAccentTokens(picked: unknown): Record<string, string> | null {
   if (typeof picked !== "string" || !/^#[0-9a-f]{6}$/i.test(picked)) return null;
@@ -54,19 +54,23 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
 
   const rgb0 = [1, 3, 5].map((i) => parseInt((picked as string).slice(i, i + 2), 16));
   const lch = oklch(rgb0);
-  const H = lch[1] < 0.02 ? 180.4 : lch[2]; // grey has no hue: fall back to the Portia hue (D-05)
+  // Exact greys measure chroma <= 4e-8 and the nearest non-grey hex >= 1e-3, so 1e-4 catches only float noise (D-23).
+  const neutral = lch[1] < 1e-4;
+  const k = neutral ? 0 : 1; // --accent-chroma: scales every accent tint in the stylesheet
+  const H = neutral ? 0 : lch[1] < 0.02 ? 180.4 : lch[2]; // grey has no hue: fall back to the Portia hue (D-05)
   const L = clamp(lch[0], 0.62, 0.80);
-  const C = clamp(lch[1], 0.08, 0.17);
-  const teal = fit(L, C, H, 0.08);
-  const accentHue = Number(oklch(teal)[2].toFixed(1));
+  const C = neutral ? 0 : clamp(lch[1], 0.08, 0.17);
+  const teal = fit(L, C, H, neutral ? 0 : 0.08);
+  const accentHue = neutral ? 0 : Number(oklch(teal)[2].toFixed(1));
   const dim = fit(Math.max(0.49, L - 0.15), C * 0.78, H, 0);
   const grid = fit(L - 0.10, C * 0.8, H, 0);
-  const base = fit(0.14, 0.02, H, 0);
-  const deep = fit(0.18, 0.03, H, 0);
+  const base = fit(0.14, 0.02 * k, H, 0);
+  const deep = fit(0.18, 0.03 * k, H, 0);
 
   // A search, not a rotation: CSS hue-rotate is not an OKLCH rotation (amber preset is -131 deg for an OKLCH change of -117 deg).
   // Fixed iteration counts, independent of the input (T-10-02). A tiny pull towards saturate(1) breaks near-ties.
   const filterFor = (refs: string[]) => {
+    if (k === 0) return "hue-rotate(0deg) saturate(0)";
     const rgbs = refs.map((r) => [1, 3, 5].map((i) => parseInt(r.slice(i, i + 2), 16)));
     const score = (d: number, s: number) => {
       let worst = 0;
@@ -101,6 +105,7 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
     "--desktop-base": hex(base),
     "--desktop-deep": hex(deep),
     "--accent-hue": String(accentHue),
+    "--accent-chroma": String(k),
     "--mark-filter": filterFor(["#00b396"]),
     "--assistant-filter": filterFor(["#008e89", "#034e4c"]),
   };

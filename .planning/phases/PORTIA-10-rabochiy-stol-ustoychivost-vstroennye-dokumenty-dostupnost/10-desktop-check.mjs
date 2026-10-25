@@ -216,6 +216,34 @@ const checks = {
     if (!phone || phone.ratio < 0.95) reasons.push(`(l) «Свой» is not full width on a phone (${phone && phone.ratio})`);
     else if (!phone.below) reasons.push("(l) «Свой» is not below the four presets on a phone");
     await cdp.send("Emulation.clearDeviceMetricsOverride");
+    // (m) a neutral pick paints neutral chrome in Edge, a coloured pick keeps its tint (D-23)
+    const chromaOf = (color) => { const n = /^oklch\(\s*[\d.]+%?\s+([\d.e+-]+)/i.exec(color || ""); return n ? Number(n[1]) : NaN; };
+    const probes = () => cdp.eval(`(() => {
+      const out = {};
+      for (const name of ["--bg", "--line-bright"]) {
+        const e = document.createElement("div"); e.style.color = "var(" + name + ")"; document.body.appendChild(e);
+        out[name] = getComputedStyle(e).color; e.remove();
+      }
+      return out;
+    })()`);
+    const seedAccent = async (customAccent) => {
+      await sleep(600);
+      await cdp.eval(`localStorage.setItem(${JSON.stringify(KEY)}, ${JSON.stringify(stored({ customAccent }))}); true`);
+      await load(cdp);
+    };
+    await seedAccent("#0d0d0d");
+    if ((await cdp.eval(inline("--accent-chroma"))) !== "0") reasons.push("(m) inline --accent-chroma is not 0 for #0d0d0d");
+    if (!/^#([0-9a-f]{2})\1\1$/.test(await cdp.eval(inline("--teal")))) reasons.push("(m) inline --teal is not a grey for #0d0d0d");
+    for (const [name, color] of Object.entries(await probes())) {
+      const c = chromaOf(color);
+      if (!(c <= 0.001)) reasons.push(`(m) ${name} has chroma ${c} (${color}) under #0d0d0d`);
+    }
+    await seedAccent("#ff3366");
+    if ((await cdp.eval(inline("--accent-chroma"))) !== "1") reasons.push("(m) inline --accent-chroma is not 1 for #ff3366");
+    for (const [name, color] of Object.entries(await probes())) {
+      const c = chromaOf(color);
+      if (!(c >= 0.01)) reasons.push(`(m) ${name} has chroma ${c} (${color}) under #ff3366`);
+    }
   },
   async embeds(cdp) {
     const expected = /const embedSandbox = "([^"]+)"/.exec(fs.readFileSync(new URL("../../../components/portia-desktop.tsx", import.meta.url), "utf8"))?.[1];

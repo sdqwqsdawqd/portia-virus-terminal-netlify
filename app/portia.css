@@ -1,17 +1,17 @@
 :root {
   color-scheme: dark;
-  --bg: oklch(.163 .014 var(--accent-hue));
-  --panel: oklch(.201 .018 var(--accent-hue));
-  --panel-2: oklch(.229 .021 var(--accent-hue));
-  --line: oklch(.33 .027 var(--accent-hue));
-  --line-bright: oklch(.445 .038 var(--accent-hue));
+  --bg: oklch(.163 calc(.014 * var(--accent-chroma)) var(--accent-hue));
+  --panel: oklch(.201 calc(.018 * var(--accent-chroma)) var(--accent-hue));
+  --panel-2: oklch(.229 calc(.021 * var(--accent-chroma)) var(--accent-hue));
+  --line: oklch(.33 calc(.027 * var(--accent-chroma)) var(--accent-hue));
+  --line-bright: oklch(.445 calc(.038 * var(--accent-chroma)) var(--accent-hue));
   --teal: #00bca6;
   --teal-dim: #12897a;
   --teal-soft: rgba(0, 188, 166, 0.13);
   --paper: #f3f0e6;
   --paper-2: #e6e2d5;
-  --ink: oklch(.238 .013 var(--accent-hue));
-  --ink-soft: oklch(.476 .018 var(--accent-hue));
+  --ink: oklch(.238 calc(.013 * var(--accent-chroma)) var(--accent-hue));
+  --ink-soft: oklch(.476 calc(.018 * var(--accent-chroma)) var(--accent-hue));
   --warning: #efb84e;
   --danger: #d55449;
   --desktop-base: #07100f;
@@ -19,6 +19,7 @@
   --desktop-glow: 0, 188, 166;
   --desktop-grid: 96, 171, 157;
   --accent-hue: 180.4;
+  --accent-chroma: 1;
   --mark-filter: hue-rotate(0deg);
   --assistant-filter: hue-rotate(0deg);
   --assistant-glow: 0, 188, 166;
