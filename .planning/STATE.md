@@ -22,10 +22,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-20)
+See: .planning/PROJECT.md (updated 2026-10-26)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-10 — Рабочий стол: устойчивость, встроенные документы, доступность
+**Current focus:** Phase 11 — Редактор: панель оформления и тексты
 
 ## Current Position
 
@@ -124,7 +124,7 @@ None.
 - ⚠️ [Данные] Сохранения проверять только на временном сотруднике вне таблицы; `PUT /api/content` скриптами не вызывать.
 - [Данные] Выгрузка владельца 2026-10-19: `portia_employee_profiles_2026-10-19.json` (18 строк) и `portia_content_2026-10-19.json` (1 строка) в `C:\Users\User\backups\portia\`, вне git.
 - ⚠️ [Phase 9] Перед подъёмом лимитов сверить размер рабочего `portia_content` и прогнать нормализатор по выгрузке: нормализатор чинит, не удаляет.
-- ⚠️ [Phase 10–11] `sandbox` и панель оформления проверяет владелец в браузере и на телефоне; тестами не закрыть.
+- ⚠️ [Phase 11] Панель оформления проверяет владелец в браузере и на телефоне; тестами не закрыть (`sandbox` проверен владельцем в Phase 10).
 - ⚠️ [Phase 12] `email_confirmed_at` в SQL может заблокировать владельца: предпроверка `auth.users`, откат, «Confirm email» включено; SQL применяет владелец сам.
 
 ## Deferred Items
@@ -141,7 +141,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-25T20:46:27.290Z
+Last session: 2026-10-26
 Stopped at: Phase PORTIA-10 complete, ready to plan Phase 11
 Resume file: None
 
