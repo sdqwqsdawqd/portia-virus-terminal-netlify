@@ -6,7 +6,9 @@ import { classificationOptions, findInfo, portiaTextKey, type Broadcast, type Po
 import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
-import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
+import { accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes } from "@/lib/accent-boot";
+import { accentTokenNames, deriveAccentTokens } from "@/lib/accent-custom";
+import { CustomColorPicker } from "@/components/custom-color-picker";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
@@ -38,14 +40,14 @@ const WINDOW_FADE_OUT_MS = 120;
 // shortcut: a 10 s poll of the CDN-cached content, not a push channel; switch to Supabase Realtime if visitors need it within a second or the content grows large
 const contentSyncMs = 10_000;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
-type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string };
+type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string; customAccent: string };
 type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
 type ShortcutPosition = { x: number; y: number };
 
-const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "on" };
+const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "on", customAccent: "" };
 // Every value a setting may hold; the same ids the «Настройки» groups offer.
-const settingValues: Record<keyof DesktopSettings, readonly string[]> = {
-  accent: accentIds,
+const settingValues: Record<Exclude<keyof DesktopSettings, "customAccent">, readonly string[]> = {
+  accent: [...accentIds, "custom"],
   wallpaper: ["radar", "grid", "gel", "cells", "quiet"],
   iconSize: ["compact", "standard", "large"],
   motion: motionModes,
@@ -297,6 +299,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const taskbarDrag = useRef<null | { app: AppId; pointerId: number; startX: number; moved: boolean }>(null);
   const suppressTaskbarClick = useRef(false);
   const [settingsSavedVisible, setSettingsSavedVisible] = useState(false);
+  const [accentPickerOpen, setAccentPickerOpen] = useState(false);
+  const [accentDraft, setAccentDraft] = useState<string | null>(null);
+  const accentDraftRef = useRef<string | null>(null);
   const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
   const [employeesReady, setEmployeesReady] = useState(false);
@@ -335,6 +340,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const assistantRecoverTimer = useRef<number | null>(null);
   const assistantAutomaticTimer = useRef<number | null>(null);
   const settingsSavedTimer = useRef<number | null>(null);
+  const customTokens = useMemo(() => deriveAccentTokens(accentDraft ?? desktopSettings.customAccent), [accentDraft, desktopSettings.customAccent]);
   const exitTimers = useRef<Partial<Record<AppId, number>>>({});
   // The editor reports unsaved edits through a ref: closing is decided inside an event handler, never during render.
   const editorDirtyRef = useRef(false);
@@ -550,12 +556,16 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     // Stored settings are visitor-editable: keep only known values, field by field.
     const restored: Partial<DesktopSettings> = {};
     try {
-      const saved: unknown = JSON.parse(window.localStorage.getItem("portia-desktop-settings-v1") ?? "{}");
+      const saved: unknown = JSON.parse(window.localStorage.getItem(desktopSettingsStorageKey) ?? "{}");
       if (saved && typeof saved === "object" && !Array.isArray(saved)) {
-        for (const key of Object.keys(settingValues) as (keyof DesktopSettings)[]) {
+        for (const key of Object.keys(settingValues) as (keyof typeof settingValues)[]) {
           const value = (saved as Record<string, unknown>)[key];
           if (typeof value === "string" && settingValues[key].includes(value)) restored[key] = value;
         }
+        const custom = (saved as Record<string, unknown>).customAccent;
+        if (typeof custom === "string" && deriveAccentTokens(custom)) restored.customAccent = custom.toLowerCase();
+        // «custom» without a valid colour is untrusted input: fall back to the default accent (D-11).
+        if (restored.accent === "custom" && !restored.customAccent) delete restored.accent;
       }
     } catch {}
     const restoreTimer = window.setTimeout(() => {
@@ -688,10 +698,21 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   // would overwrite the visitor's choice and repaint the head script's accent and motion for a frame.
   useEffect(() => {
     if (!desktopSettingsLoaded) return;
-    document.documentElement.dataset.accent = desktopSettings.accent;
-    document.documentElement.dataset.wallpaper = desktopSettings.wallpaper;
-    document.documentElement.dataset.iconSize = desktopSettings.iconSize;
-    try { window.localStorage.setItem("portia-desktop-settings-v1", JSON.stringify(desktopSettings)); } catch {}
+    const root = document.documentElement;
+    const accent = accentDraft ? "custom" : desktopSettings.accent;
+    root.dataset.accent = accent;
+    for (const name of accentTokenNames) {
+      if (accent === "custom" && customTokens) root.style.setProperty(name, customTokens[name]);
+      else root.style.removeProperty(name);
+    }
+    root.dataset.wallpaper = desktopSettings.wallpaper;
+    root.dataset.iconSize = desktopSettings.iconSize;
+  }, [desktopSettings, desktopSettingsLoaded, accentDraft, customTokens]);
+
+  // Drafts recolour live but only committed values persist (D-08).
+  useEffect(() => {
+    if (!desktopSettingsLoaded) return;
+    try { window.localStorage.setItem(desktopSettingsStorageKey, JSON.stringify(desktopSettings)); } catch {}
   }, [desktopSettings, desktopSettingsLoaded]);
 
   // Same rule as the head script: animations are on unless the visitor turned them off.
@@ -700,17 +721,57 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     document.documentElement.dataset.motion = desktopSettings.motion === "off" ? "reduce" : "full";
   }, [desktopSettings, desktopSettingsLoaded]);
 
-  const showSettingsSaved = () => {
+  const showSettingsSaved = useCallback(() => {
     setSettingsSavedVisible(true);
     if (settingsSavedTimer.current) window.clearTimeout(settingsSavedTimer.current);
     settingsSavedTimer.current = window.setTimeout(() => setSettingsSavedVisible(false), 2400);
-  };
+  }, []);
 
-  const updateDesktopSetting = (key: keyof DesktopSettings, value: string) => {
-    if (desktopSettings[key] === value) return;
-    setDesktopSettings((current) => ({ ...current, [key]: value }));
+  const updateDesktopSettings = (patch: Partial<DesktopSettings>) => {
+    if ((Object.keys(patch) as (keyof DesktopSettings)[]).every((key) => desktopSettings[key] === patch[key])) return;
+    setDesktopSettings((current) => ({ ...current, ...patch }));
     showSettingsSaved();
   };
+
+  const updateDesktopSetting = (key: keyof DesktopSettings, value: string) => updateDesktopSettings({ [key]: value });
+
+  const previewAccent = (hex: string) => {
+    accentDraftRef.current = hex;
+    setAccentDraft(hex);
+  };
+
+  const commitAccentDraft = useCallback(() => {
+    const draft = accentDraftRef.current;
+    if (!draft) return;
+    accentDraftRef.current = null;
+    setAccentDraft(null);
+    setDesktopSettings((current) => ({ ...current, accent: "custom", customAccent: draft.toLowerCase() }));
+    showSettingsSaved();
+  }, [showSettingsSaved]);
+
+  const closeAccentPicker = () => {
+    commitAccentDraft();
+    setAccentPickerOpen(false);
+  };
+
+  const chooseCustomAccent = () => {
+    if (accentPickerOpen) { closeAccentPicker(); return; }
+    const seed = desktopSettings.customAccent || getComputedStyle(document.documentElement).getPropertyValue("--teal").trim().toLowerCase();
+    if (!deriveAccentTokens(seed)) return;
+    updateDesktopSettings({ accent: "custom", customAccent: seed });
+    setAccentPickerOpen(true);
+  };
+
+  // A drag can end anywhere, including outside the picker: save when the pointer is released (D-08).
+  useEffect(() => {
+    if (!accentPickerOpen) return;
+    window.addEventListener("pointerup", commitAccentDraft);
+    window.addEventListener("pointercancel", commitAccentDraft);
+    return () => {
+      window.removeEventListener("pointerup", commitAccentDraft);
+      window.removeEventListener("pointercancel", commitAccentDraft);
+    };
+  }, [accentPickerOpen, commitAccentDraft]);
 
   const resetDesktopSettings = () => {
     const alreadyDefault = Object.entries(defaultDesktopSettings).every(([key, value]) => desktopSettings[key as keyof DesktopSettings] === value);
@@ -1329,7 +1390,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <AppWindow app="settings" state={windows.settings} active={activeApp === "settings"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window settings-window" meta="НАСТРОЙКИ">
             <div className="settings-app">
               <header><h1>Настройки рабочего стола</h1><p>Оформление и расположение ярлыков сохраняются на этом устройстве.</p></header>
-              <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => updateDesktopSetting("accent", value)} />
+              <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => updateDesktopSetting("accent", value)}>
+                <button type="button" className={desktopSettings.accent === "custom" ? "selected" : ""} aria-pressed={desktopSettings.accent === "custom"} onClick={chooseCustomAccent}><i className="swatch custom" style={customTokens ? { background: customTokens["--teal"] } : undefined} /><span>Свой</span></button>
+                {accentPickerOpen && <div className="accent-picker" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) commitAccentDraft(); }}>
+                  <CustomColorPicker key="accent" group="accent" title="Свой цвет интерфейса" color={desktopSettings.customAccent} onChange={previewAccent} onClose={closeAccentPicker} />
+                </div>}
+              </SettingGroup>
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
               <SettingGroup title="Анимации" values={[['on','Включены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
@@ -1877,8 +1943,8 @@ function MediaBlock({ src, alt, label }: { src: string; alt: string; label: stri
   return <figure className="subject-media media-empty"><img src="/assets/portia-logo.png" alt="" aria-hidden="true" /><div><span>ВИЗУАЛЬНЫЙ МАТЕРИАЛ</span><strong>ОЖИДАЕТ ЗАГРУЗКИ</strong><small>{label}</small></div></figure>;
 }
 
-function SettingGroup({ title, values, current, onSelect }: { title: string; values: [string, string][]; current: string; onSelect: (value: string) => void }) {
-  return <section className="settings-section"><h2>{title}</h2><div className="setting-options">{values.map(([value, label]) => <button key={value} type="button" className={current === value ? "selected" : ""} onClick={() => onSelect(value)}>{title === "Цвет интерфейса" && <i className={`swatch ${value}`} />}<span>{label}</span></button>)}</div></section>;
+function SettingGroup({ title, values, current, onSelect, children }: { title: string; values: [string, string][]; current: string; onSelect: (value: string) => void; children?: React.ReactNode }) {
+  return <section className="settings-section"><h2>{title}</h2><div className={`setting-options${title === "Цвет интерфейса" ? " color-options" : ""}`}>{values.map(([value, label]) => <button key={value} type="button" className={current === value ? "selected" : ""} aria-pressed={current === value} onClick={() => onSelect(value)}>{title === "Цвет интерфейса" && <i className={`swatch ${value}`} />}<span>{label}</span></button>)}{children}</div></section>;
 }
 
 function broadcastType(type: "quest" | "task" | "news") {

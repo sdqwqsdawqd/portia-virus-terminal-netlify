@@ -97,6 +97,53 @@ const checks = {
     if (await cdp.eval(bubble)) reasons.push("fixture C: bubble shown for whitespace-only tips");
     if (!(await cdp.eval(`!!document.querySelector(".desktop-assistant")`))) reasons.push("fixture C: desktop unmounted");
   },
+  async accent(cdp) {
+    const KEY = "portia-desktop-settings-v1"; // value of desktopSettingsStorageKey
+    const stored = (extra = {}) => JSON.stringify({ accent: "custom", customAccent: "#ff3366", wallpaper: "radar", iconSize: "standard", motion: "on", ...extra });
+    const inline = (name) => `document.documentElement.style.getPropertyValue("${name}").trim()`;
+    const colorButton = ".color-options > button:last-of-type";
+    serve(fixture(), 1);
+    await load(cdp);
+    await cdp.eval(`localStorage.setItem(${JSON.stringify(KEY)}, ${JSON.stringify(stored())}); true`);
+    // (a) the head script must paint the saved colour while <body> does not exist yet (D-11)
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => {
+      const record = () => { const d = document.documentElement; if (!d || window.__bootAccent || d.dataset.accent !== "custom" || !d.style.getPropertyValue("--accent-hue")) return;
+        window.__bootAccent = { accent: d.dataset.accent, hue: d.style.getPropertyValue("--accent-hue"), bodyParsed: document.body !== null }; };
+      new MutationObserver(record).observe(document, { attributes: true, childList: true, subtree: true, attributeFilter: ["style", "data-accent"] });
+    })()` });
+    await load(cdp);
+    const boot = await cdp.eval(`window.__bootAccent || null`);
+    if (!boot) reasons.push("(a) head script did not set accent custom with tokens");
+    else if (boot.bodyParsed) reasons.push("(a) tokens appeared only after the body was parsed");
+    // (b) the Settings option reflects the saved colour and opens the picker
+    await click(cdp, '[data-shortcut="settings"]');
+    if (!(await waitFor(cdp, `!!document.querySelector("${colorButton}")`, 3000))) reasons.push("(b) Settings colour row missing");
+    if ((await cdp.eval(`document.querySelector("${colorButton}")?.getAttribute("aria-pressed")`)) !== "true") reasons.push("(b) «Свой» is not pressed after restore");
+    if (!(await cdp.eval(`!!document.querySelector("${colorButton} .swatch.custom")?.style.background`))) reasons.push("(b) «Свой» swatch has no inline colour");
+    await click(cdp, colorButton);
+    if (!(await waitFor(cdp, `!!document.querySelector(".accent-picker .custom-color-picker")`, 2000))) reasons.push("(b) picker did not open");
+    // (c) dragging recolours live, nothing is stored until release (D-08)
+    const tealBefore = await cdp.eval(inline("--teal"));
+    const rect = await cdp.eval(`(() => { const r = document.querySelector(".accent-picker .custom-color-board").getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
+    const at = (fx, fy) => ({ x: rect.x + rect.w * fx, y: rect.y + rect.h * fy });
+    const mouse = (type, point, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x: point.x, y: point.y, button: "left", ...extra });
+    await mouse("mousePressed", at(0.2, 0.2), { buttons: 1, clickCount: 1 });
+    await mouse("mouseMoved", at(0.8, 0.4), { buttons: 1 });
+    await sleep(300);
+    if ((await cdp.eval(inline("--teal"))) === tealBefore) reasons.push("(c) --teal did not change while dragging");
+    const savedDuringDrag = await cdp.eval(`JSON.parse(localStorage.getItem(${JSON.stringify(KEY)})).customAccent`);
+    if (savedDuringDrag !== "#ff3366") reasons.push(`(c) stored colour changed before release: ${savedDuringDrag}`);
+    await mouse("mouseReleased", at(0.8, 0.4), { buttons: 0, clickCount: 1 });
+    await sleep(300);
+    const hexField = await cdp.eval(`document.querySelector(".accent-picker .custom-color-value input").value.toLowerCase()`);
+    const after = await cdp.eval(`JSON.parse(localStorage.getItem(${JSON.stringify(KEY)}))`);
+    if (after.customAccent !== hexField) reasons.push(`(c) stored ${after.customAccent} is not the picked ${hexField}`);
+    if (after.accent !== "custom") reasons.push("(c) stored accent is not custom after release");
+    // (d) the picked colour survives a reload
+    const tealPicked = await cdp.eval(inline("--teal"));
+    await load(cdp);
+    if ((await cdp.eval(inline("--teal"))) !== tealPicked) reasons.push("(d) --teal after reload differs from the picked colour");
+  },
 };
 
 let edge;

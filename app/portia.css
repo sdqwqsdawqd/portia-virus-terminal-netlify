@@ -289,7 +289,8 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .settings-section { margin-top: 28px; }
 .settings-section h2 { margin: 0 0 11px; color: oklch(.73 .025 var(--accent-hue)); font: 700 11px var(--sans); letter-spacing: .07em; text-transform: uppercase; }
 .setting-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.color-options { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.color-options { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.accent-picker { grid-column: 1 / -1; }
 .setting-options button { min-height: 54px; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 10px; border: 1px solid oklch(.378 .035 var(--accent-hue)); border-radius: 5px; background: rgba(255,255,255,.018); color: oklch(.776 .022 var(--accent-hue)); cursor: pointer; }
 .setting-options button:hover, .setting-options button.selected { border-color: var(--teal); background: var(--teal-soft); color: #fff; }
 .setting-options button.selected { box-shadow: inset 0 -2px 0 var(--teal); }
@@ -298,6 +299,7 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .swatch.ice { background: #7ec8e3; }
 .swatch.amber { background: #e8953f; }
 .swatch.red { background: #d94f6e; }
+.swatch.custom { background: conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
 .settings-footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 34px; padding-top: 18px; border-top: 1px solid oklch(.38 .031 var(--accent-hue)); }
 .settings-saved-status { color: oklch(.609 .029 var(--accent-hue)); font: 11px var(--sans); opacity: 0; transform: translateY(3px); transition: opacity 160ms ease, transform 160ms ease; }
 .settings-saved-status.is-visible { opacity: 1; transform: translateY(0); }
