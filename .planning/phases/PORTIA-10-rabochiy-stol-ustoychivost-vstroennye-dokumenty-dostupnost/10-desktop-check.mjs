@@ -199,6 +199,23 @@ const checks = {
     if (await cdp.eval(inline("--teal"))) reasons.push("(i) inline --teal after reset");
     if (await cdp.eval(`!!document.querySelector("${colorButton} .swatch.custom")?.style.background`)) reasons.push("(i) «Свой» swatch kept a colour after reset");
     if (await cdp.eval(pickerOpen)) reasons.push("(i) picker open after reset");
+    // (j) PC: no label overflows and the five options share one row
+    const fit = `[...document.querySelectorAll(".color-options > button")].every((b) => b.scrollWidth <= b.clientWidth + 1)`;
+    if (!(await cdp.eval(fit))) reasons.push("(j) a colour label overflows at 1920x1080");
+    if (!(await cdp.eval(`new Set([...document.querySelectorAll(".color-options > button")].map((b) => b.offsetTop)).size === 1 && document.querySelectorAll(".color-options > button").length === 5`))) reasons.push("(j) the five colour options are not on one row");
+    // (k) the Settings window at its minimum width (520 px)
+    await cdp.eval(`document.querySelector("section.settings-window").style.width = "520px"; true`);
+    await cdp.eval(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+    if (!(await cdp.eval(fit))) reasons.push(`(k) a colour label overflows at a 520 px window: ${await cdp.eval(`JSON.stringify([...document.querySelectorAll(".color-options > button")].map((b) => [b.querySelector("span").textContent, b.scrollWidth, b.clientWidth]))`)}`);
+    // (l) phone: «Свой» spans the row below the four presets
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await load(cdp);
+    await click(cdp, '[data-shortcut="settings"]');
+    await waitFor(cdp, `!!document.querySelector("${colorButton}")`, 3000);
+    const phone = await cdp.eval(`(() => { const row = document.querySelector(".color-options").getBoundingClientRect(); const last = document.querySelector("${colorButton}").getBoundingClientRect(); const first = document.querySelector(".color-options > button").getBoundingClientRect(); return { ratio: last.width / row.width, below: last.top >= first.bottom - 1 }; })()`);
+    if (!phone || phone.ratio < 0.95) reasons.push(`(l) «Свой» is not full width on a phone (${phone && phone.ratio})`);
+    else if (!phone.below) reasons.push("(l) «Свой» is not below the four presets on a phone");
+    await cdp.send("Emulation.clearDeviceMetricsOverride");
   },
 };
 
