@@ -461,6 +461,8 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .editor-savebar[data-dirty] { border-top-color: var(--warning); }
 .editor-savebar > p { min-width: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font: 11px/1.35 var(--sans); letter-spacing: .04em; }
 .editor-savebar-sections { color: var(--warning); }
+.editor-savebar-fix { display: inline-block; min-width: 0; max-width: 100%; padding: 0; border: 0; background: none; color: #e07d74; font: 700 11px/1.35 var(--sans); letter-spacing: .04em; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; cursor: pointer; }
+.editor-savebar-fix:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .editor-savebar-actions { display: flex; flex: 0 0 auto; gap: 8px; }
 .editor-undo-step { min-width: 40px; font-size: 16px; line-height: 1; }
 .tab-dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--warning); vertical-align: middle; }
@@ -549,6 +551,9 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .editor-group.stack .editor-guidance { grid-column: 1 / -1; }
 .editor-field { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .editor-field.wide { grid-column: 1 / -1; }
+.editor-field.is-invalid input { border-color: var(--danger); }
+/* The field's 6px gap minus 2px leaves the 4px between input and message. */
+.editor-field-error { margin: -2px 0 0; color: #e07d74; font: 400 11px/1.45 var(--sans); overflow-wrap: anywhere; }
 .editor-field > span { color: oklch(.614 .027 var(--accent-hue)); font: 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
 .editor-field input, .editor-field textarea, .editor-field select { width: 100%; min-height: 39px; padding: 9px 10px; border: 1px solid oklch(.383 .033 var(--accent-hue)); border-radius: 3px; outline: none; background: oklch(.168 .014 var(--accent-hue)); color: oklch(.912 .013 var(--accent-hue)); font-size: 13px; }
 .editor-field textarea { min-height: 90px; resize: vertical; line-height: 1.55; }
@@ -1171,6 +1176,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .editor-savebar { position: fixed; left: 0; right: 0; bottom: 44px; margin: 0; padding: 8px 12px; min-height: 56px; }
   .editor-savebar > p { display: block; font-size: 10px; }
   .editor-savebar > p > span { display: block; }
+  .editor-savebar-fix { display: block; min-height: 40px; white-space: normal; }
   .editor-savebar-actions button { min-height: 40px; }
   .content-editor:has(> .editor-savebar) { padding-bottom: 110px; }
   /* Lets the last field scroll above the format panel, which sits where the keyboard was. */

@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
-import { broadcastTabOf, type BroadcastTab } from "@/lib/broadcasts";
+import { broadcastTabOf, questDateError, type BroadcastTab } from "@/lib/broadcasts";
 import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
@@ -529,7 +529,10 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const oversize = useMemo(() => oversizeFields(draft), [draft]);
   const bodyBytes = useMemo(() => contentBodyBytes(draft), [draft]);
   const bodyMessage = bodyTooLargeMessage(bodyBytes);
-  const saveBlocked = bodyMessage !== "";
+  // D-18: a quest that ends before it starts is flagged and blocks the save; the editor never rewrites its dates.
+  const badQuest = draft.broadcasts.find(questDateError);
+  const dateMessage = badQuest ? `ИСПРАВЬТЕ ДАТЫ КВЕСТА: «${badQuest.title || "БЕЗ НАЗВАНИЯ"}»` : "";
+  const saveBlocked = bodyMessage !== "" || badQuest !== undefined;
   const dirty = changed.length > 0;
   const [tab, setTab] = useState<EditorTab>("viruses");
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
@@ -549,7 +552,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
   const [broadcastEditorTab, setBroadcastEditorTab] = useState<BroadcastTab>("news");
   // A new or moved card is focused once it is in the DOM; focus scrolls it into view (G-03.2-2a).
-  const revealBroadcast = useRef<{ id: string; field: "title" | "type" } | null>(null);
+  const revealBroadcast = useRef<{ id: string; field: "title" | "type" | "endsAt" } | null>(null);
+  const [revealTick, setRevealTick] = useState(0);
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface | null>(null);
   // At 900px and below a list + form layout shows either the list or the open record (D-01, D-02).
   const [recordOpen, setRecordOpen] = useState(false);
@@ -722,11 +726,22 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     const target = revealBroadcast.current;
     if (!target || tab !== "broadcasts") return;
     const card = document.querySelector(`[data-broadcast-id="${CSS.escape(target.id)}"]`);
-    const field = card?.querySelector<HTMLElement>(target.field === "title" ? "[data-broadcast-title]" : "[data-broadcast-type]");
+    const selector = target.field === "title" ? "[data-broadcast-title]" : target.field === "endsAt" ? "[data-broadcast-ends]" : "[data-broadcast-type]";
+    const field = card?.querySelector<HTMLElement>(selector);
     if (!field) return;
-    field.focus();
+    field.focus({ preventScroll: true });
+    field.scrollIntoView({ block: "nearest", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" });
     revealBroadcast.current = null;
-  }, [draft.broadcasts, broadcastEditorTab, tab]);
+  }, [draft.broadcasts, broadcastEditorTab, tab, revealTick]);
+
+  // Brings the editor to one card's field from anywhere (D-18, CONT-05).
+  const revealCard = (id: string, field: "title" | "type" | "endsAt", cardTab: BroadcastTab) => {
+    revealBroadcast.current = { id, field };
+    selectBroadcastTab(cardTab);
+    if (tab !== "broadcasts") showTab("broadcasts");
+    // revealTick re-runs the effect when the tab and sub-tab are already right.
+    setRevealTick((value) => value + 1);
+  };
 
   const showTab = (id: EditorTab) => {
     setTab(id);
@@ -1118,7 +1133,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               {broadcast.type === "quest" && (
                 <>
                   <Field label="Дата начала"><input type="date" value={broadcast.startsAt} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.startsAt = event.target.value; }))} /></Field>
-                  <Field label="Дата окончания"><input type="date" value={broadcast.endsAt} min={broadcast.startsAt || undefined} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.endsAt = event.target.value; }))} /></Field>
+                  <Field label="Дата окончания" error={questDateError(broadcast) ? "Окончание раньше начала" : undefined} errorId={`ends-error-${broadcast.id}`}><input type="date" data-broadcast-ends aria-invalid={questDateError(broadcast) || undefined} aria-describedby={questDateError(broadcast) ? `ends-error-${broadcast.id}` : undefined} value={broadcast.endsAt} min={broadcast.startsAt || undefined} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.endsAt = event.target.value; }))} /></Field>
                   <Field label="Условия" wide><textarea value={broadcast.conditions} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.conditions = event.target.value; }))} /></Field>
                 </>
               )}
@@ -1297,6 +1312,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
             {dirty && <span className="editor-savebar-sections">{`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}</span>}
             {dirty && oversize.length > 0 && <span className="editor-savebar-sections">{oversizeMessage(oversize)}</span>}
             {dirty && bodyMessage && <span className="editor-save-status error">{bodyMessage}</span>}
+            {dirty && badQuest && <button type="button" className="editor-savebar-fix" onClick={() => revealCard(badQuest.id, "endsAt", "quests")}>{dateMessage}</button>}
           </p>
           <div className="editor-savebar-actions">
             <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
@@ -1362,7 +1378,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {closeAsked && !employeeDirty && (
         <ConfirmDialog
           title="Закрыть редактор?"
-          text={`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}${saveBlocked ? ` ${bodyMessage}` : ""}`}
+          text={`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}${saveBlocked ? ` ${bodyMessage || dateMessage}` : ""}`}
           actions={[
             {
               label: "СОХРАНИТЬ",
@@ -2337,8 +2353,9 @@ function LimitNote({ id, count, max }: { id: string; count: number; max: number 
   return <span id={id} aria-live="polite" className={limitStatus(count, max) === "full" ? "limit-note is-full" : "limit-note"}>{limitText(count, max)}</span>;
 }
 
-function Field({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {
-  return <label className={`editor-field${wide ? " wide" : ""}`}><span>{label}</span>{children}</label>;
+function Field({ label, children, wide = false, error, errorId }: { label: string; children: React.ReactNode; wide?: boolean; error?: string; errorId?: string }) {
+  // The error line is hidden from the label's name so it is not read twice; the input's aria-describedby still reads it.
+  return <label className={`editor-field${wide ? " wide" : ""}${error ? " is-invalid" : ""}`}><span>{label}</span>{children}{error && <small id={errorId} className="editor-field-error" aria-hidden="true">{error}</small>}</label>;
 }
 
 // Typed text lives here; the stored id is the source of truth, so undo/redo shows the stored video without an effect.

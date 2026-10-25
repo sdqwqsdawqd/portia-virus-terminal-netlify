@@ -23,7 +23,7 @@ export function questState(item: Partial<Pick<Broadcast, "startsAt" | "endsAt">>
 
 // D-18: ISO day strings compare as dates; the editor blocks a reversed quest, the server accepts it.
 export function questDateError(item: Pick<Broadcast, "type" | "startsAt" | "endsAt">): boolean {
-  return false;
+  return item.type === "quest" && !!item.startsAt && !!item.endsAt && item.endsAt < item.startsAt;
 }
 
 export function formatQuestDay(day: string): string {
