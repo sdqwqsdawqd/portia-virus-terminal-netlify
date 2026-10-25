@@ -6,7 +6,7 @@ import { changedDossierTabs, changedSections, dossierTabs, editorSections, secti
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import { broadcastTabOf, type BroadcastTab } from "@/lib/broadcasts";
-import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, updateById } from "@/lib/editor-items";
+import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
   findInfo,
@@ -537,7 +537,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   // The Recycle selection is one of two ids; the other stays "" (the render and the row highlight rely on it).
   const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycleFiles.length ? "" : content.recycledViruses?.[0]?.id ?? "");
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">("idle");
-  const [dialog, setDialog] = useState<"discard" | "recycle" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"discard" | "recycle" | "delete" | "delete-file" | null>(null);
   // A request made before this mount is not replayed; the dialog shows while a newer one is unanswered.
   const [handledCloseRequest, setHandledCloseRequest] = useState(closeRequest);
   const closeAsked = closeRequest !== handledCloseRequest;
@@ -648,8 +648,21 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const deleteSelectedRecycledVirus = () => {
     if (!selectedRecycledVirus) return;
     const nextId = draft.recycledViruses.find((virus) => virus.id !== selectedRecycledVirus.id)?.id ?? "";
-    changeDraft((next) => { next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
+    // The panel's stored commit targets this virus, which is about to be deleted.
+    setFormatTarget(null);
+    setFormatterOpen(false);
+    changeDraft((next) => { removeRecycledVirus(next, selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
     setSelectedRecycledVirusId(nextId);
+    showRecord(false);
+  };
+
+  const deleteSelectedRecycleFile = () => {
+    if (!selectedRecycleFile) return;
+    const nextId = draft.recycleFiles.find((file) => file.id !== selectedRecycleFile.id)?.id ?? "";
+    setFormatTarget(null);
+    setFormatterOpen(false);
+    changeDraft((next) => { removeRecycleFile(next, selectedRecycleFile.id); next.recycleOrder = recycleKeys(next); });
+    setSelectedRecycleFileId(nextId);
     showRecord(false);
   };
 
@@ -1215,12 +1228,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                 <FormattedTextarea area={selectedRecycleFile.kind === "image" ? "caption" : "trash"} label={selectedRecycleFile.kind === "image" ? "Описание фотографии" : "Текст файла"} tall value={selectedRecycleFile.content} document={draft.formattedText[portiaTextKey.recycle(selectedRecycleFile.id)]} formatKey={portiaTextKey.recycle(selectedRecycleFile.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.recycle(selectedRecycleFile.id), value, document, (next, text) => updateById(next.recycleFiles, selectedRecycleFile.id, (file) => { file.content = text; }))} />
               </EditorGroup>
 
-              <button className="danger-control" type="button" onClick={() => {
-                const nextId = draft.recycleFiles.find((file) => file.id !== selectedRecycleFile.id)?.id ?? "";
-                changeDraft((next) => { next.recycleFiles = next.recycleFiles.filter((file) => file.id !== selectedRecycleFile.id); next.recycleOrder = recycleKeys(next); });
-                setSelectedRecycleFileId(nextId);
-                showRecord(false);
-              }}>УДАЛИТЬ ЭТОТ ФАЙЛ</button>
+              <button className="danger-control" type="button" onClick={() => setDialog("delete-file")}>УДАЛИТЬ ЭТОТ ФАЙЛ</button>
             </div>
           ) : <div className="editor-empty">Корзина пуста. Добавьте файл или создайте полную запись вируса.</div>}
         </div>
@@ -1332,9 +1340,20 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {dialog === "delete" && selectedRecycledVirus && (
         <ConfirmDialog
           title="УДАЛИТЬ НАВСЕГДА"
-          text={`Удалить «${selectedRecycledVirus.name}» навсегда? Это действие нельзя отменить.`}
+          text={`Удалить «${selectedRecycledVirus.name}» навсегда вместе с оформлением? Это действие нельзя отменить.`}
           actions={[
             { label: "УДАЛИТЬ НАВСЕГДА", tone: "danger", onClick: () => { setDialog(null); deleteSelectedRecycledVirus(); } },
+            { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+          ]}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog === "delete-file" && selectedRecycleFile && (
+        <ConfirmDialog
+          title="УДАЛИТЬ НАВСЕГДА"
+          text={`Удалить «${selectedRecycleFile.name}» навсегда вместе с оформлением? Это действие нельзя отменить.`}
+          actions={[
+            { label: "УДАЛИТЬ НАВСЕГДА", tone: "danger", onClick: () => { setDialog(null); deleteSelectedRecycleFile(); } },
             { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
           ]}
           onCancel={() => setDialog(null)}
