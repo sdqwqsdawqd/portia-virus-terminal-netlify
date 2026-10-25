@@ -1278,7 +1278,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
    lifts, all under 400ms) stay so the interface does not snap. The wallpaper stands still (rule below). */
 html[data-motion="reduce"], html[data-motion="reduce"] *, html[data-motion="reduce"] *::before, html[data-motion="reduce"] *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 /* «Анимации: Выключены» shows every wallpaper still and fully drawn (D-07). */
-html[data-motion="reduce"] :is(.desktop-wallpaper, .desktop-wallpaper *) { animation: none !important; }
+html[data-motion="reduce"] :is(.desktop-wallpaper, .desktop-wallpaper *, .wallpaper-spider) { animation: none !important; }
 html[data-motion="reduce"] .wallpaper-web path { stroke-dashoffset: 0; }
 html[data-motion="reduce"] .wallpaper-web-dew { opacity: 1; }
 /* Safety net if the head script never ran (blocked by an extension or a future CSP): data-motion is missing,
@@ -1306,14 +1306,23 @@ html[data-motion="reduce"] .wallpaper-layer.is-leaving { animation: fade-out 300
 /* The web is spun at an even pace, without cap dots or an elastic ease (D-07). */
 .wallpaper-web path { stroke-width: 1; opacity: .26; stroke-linecap: butt; stroke-dasharray: 1; stroke-dashoffset: 1; animation: web-draw .9s linear forwards; }
 .wallpaper-web .wallpaper-web-ring { opacity: .17; animation: web-draw 1.2s ease-in-out forwards; }
-/* Once spun (about 2.5s), the web lives without a seam: every looping animation starts from the drawn pose,
-   so nothing jumps when the spinning ends. It sways round its hub (top right) as if in a draught and dew
-   twinkles on the crossings; nothing travels along the threads. Only with motion on. */
+/* Once spun (about 2.5s) the web stands still, so nothing jumps when the spinning ends; dew twinkles on the crossings
+   and a spider walks on the threads (components/portia-wallpaper-spider.tsx). Only with motion on. */
 .wallpaper-web-dew { fill: currentColor; stroke: none; opacity: 0; animation: web-dew-in 1.6s ease-out 2.2s forwards; }
 .wallpaper-web-dew circle { opacity: .32; }
-html[data-motion="full"] .wallpaper-web { transform-box: view-box; transform-origin: 1180px 170px; animation: web-sway 24s ease-in-out 2.5s infinite; }
 html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-in-out infinite; }
-@keyframes web-sway { 0%, 100% { rotate: 0deg; } 30% { rotate: -.5deg; } 70% { rotate: .6deg; } }
+/* The spider is placed from its rest crossing with the same mapping as the web's «xMaxYMin slice» (scale = the larger of
+   width/1440 and height/900). The loop only adds a transform; legs turn about pivots given in artwork units. The body
+   centre (325, 360 of 649.5 x 768) is the anchor that walks on the threads. It lives outside .wallpaper-web, whose rules
+   restyle every path inside it. */
+.wallpaper-spider { position: absolute; left: calc(100cqw + (var(--rest-x) - 1440) * max(100cqw / 1440, 100cqh / 900)); top: calc(var(--rest-y) * max(100cqw / 1440, 100cqh / 900)); width: calc(97.425 * max(100cqw / 1440, 100cqh / 900)); translate: -50% -46.875%; transform-origin: 50% 46.875%; opacity: .85; color: var(--teal); will-change: transform; pointer-events: none; }
+.wallpaper-spider svg { display: block; width: 100%; height: auto; }
+.wallpaper-spider :is(path, circle) { stroke: none; }
+.wallpaper-spider-teal { fill: currentColor; }
+.wallpaper-spider-dark { fill: var(--desktop-base); }
+.wallpaper-spider-pale { fill: color-mix(in oklab, var(--teal) 30%, white); }
+.wallpaper-spider-leg { transform-box: view-box; }
+html[data-motion="full"] .wallpaper-spider { animation: fade-in 600ms ease-out 1.8s both; }
 @keyframes web-dew { 0%, 100% { opacity: .32; } 50% { opacity: .75; } }
 @keyframes web-draw { to { stroke-dashoffset: 0; } }
 @keyframes web-dew-in { to { opacity: 1; } }

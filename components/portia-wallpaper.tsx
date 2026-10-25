@@ -3,39 +3,32 @@
 // Desktop wallpapers drawn as SVG in currentColor, so they follow the interface accent.
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { seeded, webGeometry } from "@/lib/wallpaper-web";
+import { WallpaperSpider } from "./portia-wallpaper-spider";
 
 type Point = [number, number];
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
 // An orb web anchored in the top-right corner: radial spokes plus a sagging capture spiral.
+// Every number comes from lib/wallpaper-web, the module the spider walks on, so drawing and walking cannot drift apart.
 function webPaths() {
-  const center: Point = [1180, 170];
-  const spokes = 18;
-  const angles = Array.from({ length: spokes }, (_, index) => (index / spokes) * Math.PI * 2 + 0.11 * Math.sin(index * 1.7));
-  const reach = (angle: number) => 980 + 120 * Math.sin(angle * 3.1);
-  const spokePaths = angles.map((angle) => {
-    const end: Point = [center[0] + Math.cos(angle) * reach(angle), center[1] + Math.sin(angle) * reach(angle)];
-    return `M${center[0]} ${center[1]}L${round(end[0])} ${round(end[1])}`;
-  });
-  const rings: string[] = [];
-  for (let ring = 1; ring <= 15; ring += 1) {
-    const radius = 34 * ring ** 1.18;
-    const points = angles.map((angle): Point => [center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius]);
-    // Each thread between two spokes sags toward the hub, like silk under its own weight.
-    const segments = points.map((point, index) => {
-      const next = points[(index + 1) % points.length];
-      const mid: Point = [(point[0] + next[0]) / 2, (point[1] + next[1]) / 2];
-      const sag: Point = [mid[0] + (center[0] - mid[0]) * 0.08, mid[1] + (center[1] - mid[1]) * 0.08];
+  const { center, angles, spokeEnds, nodes, sags } = webGeometry;
+  const spokes = angles.length;
+  const spokePaths = spokeEnds.map((end) => `M${center[0]} ${center[1]}L${round(end[0])} ${round(end[1])}`);
+  const rings = Array.from({ length: nodes.length / spokes }, (_, ring) => {
+    const first = ring * spokes;
+    const segments = angles.map((_, spoke) => {
+      const sag = sags[first + spoke], next = nodes[first + ((spoke + 1) % spokes)];
       return `Q${round(sag[0])} ${round(sag[1])} ${round(next[0])} ${round(next[1])}`;
     });
-    rings.push(`M${round(points[0][0])} ${round(points[0][1])}${segments.join("")}`);
-  }
+    return `M${round(nodes[first][0])} ${round(nodes[first][1])}${segments.join("")}`;
+  });
   // Dew on a few crossings of spoke and spiral; it twinkles once the web is spun.
   const rand = seeded(23);
   const dew = Array.from({ length: 16 }, () => {
-    const ring = 3 + Math.floor(rand() * 12), angle = angles[Math.floor(rand() * spokes)], radius = 34 * ring ** 1.18;
-    return { x: round(center[0] + Math.cos(angle) * radius), y: round(center[1] + Math.sin(angle) * radius), r: round(1.4 + rand() * 1.4) };
+    const ring = 3 + Math.floor(rand() * 12), spoke = Math.floor(rand() * spokes), node = nodes[(ring - 1) * spokes + spoke];
+    return { x: round(node[0]), y: round(node[1]), r: round(1.4 + rand() * 1.4) };
   });
   return { spokePaths, rings, dew };
 }
@@ -68,12 +61,6 @@ const helices = [
   { x: 1380, amplitude: 46, period: 360, opacity: 0.16 },
   { x: 880, amplitude: 18, period: 144, opacity: 0.12 },
 ].map((column) => ({ ...column, ...helixColumn(column.x, 0, HELIX_LOOP * 3, column.amplitude, column.period) }));
-
-// Same seeded generator as the approved sketch (02-SKETCHES.html), so the shipped drawing matches the choice.
-function seeded(seed: number) {
-  let state = seed;
-  return () => (state = (state * 1664525 + 1013904223) % 4294967296) / 4294967296;
-}
 
 // Sample bands creep down their lanes at 6 units/s: visible within 3 s, still calm enough to read text on top (D-10).
 const GEL_SPEED = 6;
@@ -209,6 +196,7 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
   return <div className="desktop-wallpaper-frame" aria-hidden="true">
     {shown.map((value) => <div key={value} className={`wallpaper-layer${value === layers.leaving ? " is-leaving" : layers.leaving ? " is-entering" : ""}`}>
       <WallpaperArt kind={value} />
+      {value === "radar" ? <WallpaperSpider /> : null}
     </div>)}
   </div>;
 }
