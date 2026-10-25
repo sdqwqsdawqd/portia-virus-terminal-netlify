@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { MAX_BLOCK_TEXT, MAX_CONDITIONS, MAX_SCIENTIST_LOGS } from "./content-limits.ts";
 import { defaultPortiaContent, findInfo, type InfoSection } from "./portia-content.ts";
 import { normalizeBroadcasts, normalizeInfoSections, normalizePortiaContent, parseYoutubeId } from "./portia-content-normalize.ts";
 
@@ -18,7 +19,7 @@ test("broken payloads are rejected instead of saved", () => {
   assert.equal(normalizePortiaContent({ viruses: [] }), null);
 });
 
-test("unsafe media links and oversized logs are cleaned", () => {
+test("unsafe media links are cleaned", () => {
   const content = structuredClone(defaultPortiaContent);
   content.viruses[0].infectedImage = "javascript:alert(1)";
   content.viruses[0].scientistLogs = Array.from({ length: 7 }, (_, index) => ({
@@ -27,7 +28,28 @@ test("unsafe media links and oversized logs are cleaned", () => {
   const normalized = normalizePortiaContent(content);
   assert.ok(normalized);
   assert.equal(normalized.viruses[0].infectedImage, "");
-  assert.equal(normalized.viruses[0].scientistLogs.length, 5);
+});
+
+test("scientist logs stay capped at MAX_SCIENTIST_LOGS", () => {
+  const content = structuredClone(defaultPortiaContent);
+  content.viruses[0].scientistLogs = Array.from({ length: 7 }, (_, index) => ({
+    id: `log-${index}`, title: "", scientist: "", lockedLevel: 2, content: ["text"],
+  }));
+  assert.equal(normalizePortiaContent(content)?.viruses[0].scientistLogs.length, MAX_SCIENTIST_LOGS);
+});
+
+test("runs, run text and formatted keys beyond the old caps are kept whole", () => {
+  const content = structuredClone(defaultPortiaContent);
+  content.formattedText = {
+    big: { runs: [{ text: "x".repeat(150_000) }, ...Array.from({ length: 599 }, () => ({ text: "r" }))] },
+    ...Object.fromEntries(Array.from({ length: 1199 }, (_, index) => [`k${index}`, { runs: [{ text: "t" }] }])),
+  };
+  const once = normalizePortiaContent(content);
+  assert.ok(once);
+  assert.equal(once.formattedText.big.runs.length, 600);
+  assert.equal(once.formattedText.big.runs[0].text.length, 150_000);
+  assert.equal(Object.keys(once.formattedText).length, 1200);
+  assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
 });
 
 test("line breaks inside text survive normalization", () => {
@@ -67,7 +89,7 @@ test("normalizePortiaContent stays idempotent with old and new broadcasts", () =
   assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
 });
 
-test("quest dates keep only strict YYYY-MM-DD and conditions keep line breaks, capped at 4000", () => {
+test("quest dates keep only strict YYYY-MM-DD and conditions keep line breaks and are kept whole", () => {
   const base = { id: "q", type: "quest", title: "", body: "", published: true };
   const at = (fields: object) => normalizeBroadcasts([{ ...base, ...fields }])[0];
   assert.equal(at({ startsAt: "2026-10-20" }).startsAt, "2026-10-20");
@@ -77,7 +99,7 @@ test("quest dates keep only strict YYYY-MM-DD and conditions keep line breaks, c
   }
   assert.equal(at({ conditions: "a\nb" }).conditions, "a\nb");
   assert.equal(at({ conditions: 5 }).conditions, "");
-  assert.equal(at({ conditions: "x".repeat(4100) }).conditions.length, 4000);
+  assert.equal(at({ conditions: "x".repeat(MAX_CONDITIONS + 100) }).conditions.length, MAX_CONDITIONS + 100);
 });
 
 test("normalizePortiaContent stays idempotent with quest fields present", () => {
@@ -98,7 +120,7 @@ test("a flat section saved before 03.3 gains empty subsections and keeps everyth
   assert.deepEqual(normalizeInfoSections("nope"), []);
 });
 
-test("subsections and blocks are capped, junk blocks dropped and ids filled", () => {
+test("junk blocks are dropped, ids filled and nothing is cut", () => {
   const [section] = normalizeInfoSections([{
     id: "s",
     title: "T",
@@ -118,26 +140,33 @@ test("subsections and blocks are capped, junk blocks dropped and ids filled", ()
       ...Array.from({ length: 60 }, (_, index) => ({ id: `extra-${index}`, title: "", blocks: [] })),
     ],
   }]);
-  assert.equal(section.subsections.length, 50);
+  assert.equal(section.subsections.length, 62);
   const first = section.subsections[0];
   assert.equal(first.id, "s-sub-0");
-  assert.equal(first.title.length, 300);
+  assert.equal(first.title.length, 400);
   assert.deepEqual(first.blocks.map((block) => block.type), ["text", "table", "photo", "photo", "video", "video", "video"]);
   assert.equal(first.blocks[0].id, "s-sub-0-block-0");
-  assert.equal((first.blocks[0] as { text: string }).text.length, 20_000);
-  assert.deepEqual((first.blocks[1] as { rows: unknown }).rows, [{ key: "k".repeat(500), value: "" }, { key: "a", value: "b" }]);
+  assert.equal((first.blocks[0] as { text: string }).text.length, 20_001);
+  assert.deepEqual((first.blocks[1] as { rows: unknown }).rows, [{ key: "k".repeat(600), value: "" }, { key: "a", value: "b" }]);
   assert.equal((first.blocks[2] as { url: string }).url, "");
   assert.equal((first.blocks[3] as { url: string }).url, "https://x/y.png");
   assert.deepEqual(first.blocks.slice(4).map((block) => (block as { videoId: string }).videoId), ["dQw4w9WgXcQ", "", ""]);
   assert.deepEqual(section.subsections[1], { id: "keep", title: "", blocks: [] });
 });
 
-test("tables, blocks and rows beyond the caps are cut", () => {
+test("tables, blocks and rows beyond the old caps are kept whole", () => {
   const [section] = normalizeInfoSections([{ id: "s", title: "", body: "", subsections: [{ id: "u", title: "", blocks: [
     ...Array.from({ length: 105 }, (_, index) => ({ id: `b${index}`, type: "table", rows: Array.from({ length: 120 }, () => ({ key: "k", value: "v" })) })),
   ] }] }]);
-  assert.equal(section.subsections[0].blocks.length, 100);
-  assert.equal((section.subsections[0].blocks[0] as { rows: unknown[] }).rows.length, 100);
+  assert.equal(section.subsections[0].blocks.length, 105);
+  assert.equal((section.subsections[0].blocks[0] as { rows: unknown[] }).rows.length, 120);
+});
+
+test("a guide text block up to and beyond MAX_BLOCK_TEXT is kept whole", () => {
+  const [section] = normalizeInfoSections([{ id: "s", title: "", body: "", subsections: [{ id: "u", title: "", blocks: [
+    { id: "t", type: "text", text: "z".repeat(MAX_BLOCK_TEXT + 50_000) },
+  ] }] }]);
+  assert.equal((section.subsections[0].blocks[0] as { text: string }).text.length, MAX_BLOCK_TEXT + 50_000);
 });
 
 test("normalizePortiaContent normalizes guides, keeps section formatting and is idempotent", () => {
