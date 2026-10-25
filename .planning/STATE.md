@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 10
 current_phase_name: "Рабочий стол: устойчивость, встроенные документы, доступность"
 status: executing
-stopped_at: Completed-10-04-PLAN.md
-last_updated: "2026-10-25T19:08:30.798Z"
+stopped_at: Completed PORTIA-10-05-PLAN.md
+last_updated: "2026-10-25T19:13:16.178Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase PORTIA-10 execution started
-state_head: a53fd55b636a850a0b06f353594c34bd657952c8
+state_head: 7bef37dbd896d5add85b2fdff27810c2653c37e4
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 26
-  completed_plans: 23
+  completed_plans: 24
   percent: 57
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 ## Current Position
 
 Phase: PORTIA-10 (Рабочий стол: устойчивость, встроенные документы, доступность) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Executing Phase PORTIA-10
 Last activity: 2026-10-25 — Phase PORTIA-10 execution started
 
@@ -65,6 +65,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-10 P02 | 20min | 2 tasks | 3 files |
 | Phase PORTIA-10 P03 | 35 min | 2 tasks | 6 files |
 | Phase PORTIA-10 P04 | 30min | 2 tasks | 3 files |
+| Phase PORTIA-10 P05 | 25min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-10]: Assistant bubble visibility is derived (assistantSpeaking) so a tip removed by the poll closes the bubble without an effect
 - [Phase PORTIA-10]: 10-03: restore keeps customAccent only via deriveAccentTokens; accent custom without a valid colour is dropped
 - [Phase PORTIA-10]: 10-04: colour row buttons stack swatch over a 13px label so five fit a 520px window
+- [Phase PORTIA-10]: D-21 recorded: zoom reacts to Ctrl everywhere and Cmd on a Mac, never the Windows key
 
 ### Pending Todos
 
@@ -132,8 +134,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-25T19:08:20.832Z
-Stopped at: Completed-10-04-PLAN.md
+Last session: 2026-10-25T19:13:16.029Z
+Stopped at: Completed PORTIA-10-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
