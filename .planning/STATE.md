@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 09
 current_phase_name: Целостность контента
 status: executing
-stopped_at: Completed 09-05-PLAN.md
-last_updated: "2026-10-25T13:50:58.661Z"
+stopped_at: Completed PORTIA-09-06-PLAN.md
+last_updated: "2026-10-25T13:54:31.929Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase PORTIA-09 execution started
-state_head: 63fe04a36fc734d11b8b1aa0602d0fb989c97801
+state_head: e6ebaeeba0305ca02c80cba2e8c4a6485b51f773
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 19
-  completed_plans: 17
+  completed_plans: 18
   percent: 43
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 ## Current Position
 
 Phase: PORTIA-09 (Целостность контента) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Executing Phase PORTIA-09
 Last activity: 2026-10-25 — Phase PORTIA-09 execution started
 
@@ -59,6 +59,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-09 P03 | 25 min | 3 tasks | 9 files |
 | Phase PORTIA-09 P04 | 2 min | 2 tasks | 1 files |
 | Phase PORTIA-09 P05 | 5 min | 3 tasks | 6 files |
+| Phase PORTIA-09 P06 | 8min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-09]: 09-03: derived ids index the list after non-object entries are dropped; broadcast conditions stay string-only; backup check caps scientist logs at 5 per virus (D-25)
 - [Phase PORTIA-09]: 09-04: desktop cache and poll share normalizePortiaContent (revision gate first); ВАЖНО on news only; today is a lazy useState init (passes React Compiler lint)
 - [Phase PORTIA-09]: 09-05: bin file delete reuses the virus delete ConfirmDialog (dialog state delete-file); format panel closes before both permanent deletes; body-size check uses the longest possible revision so it blocks slightly early
+- [Phase PORTIA-09]: 09-06: editor blocks save on a reversed quest and never rewrites dates; undo/redo follows the first card whose category changed
 
 ### Pending Todos
 
@@ -120,8 +122,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-25T13:50:58.561Z
-Stopped at: Completed 09-05-PLAN.md
+Last session: 2026-10-25T13:54:31.826Z
+Stopped at: Completed PORTIA-09-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
