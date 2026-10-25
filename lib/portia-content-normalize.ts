@@ -10,8 +10,11 @@ import {
   type RichTextDocument,
   type RichTextStyle,
 } from "./portia-content.ts";
+import { MAX_SCIENTIST_LOGS } from "./content-limits.ts";
 
 // Every save and every cached read passes through here: unknown input in, a complete PortiaContent out.
+// It coerces shape and never cuts or drops user content (D-01); the limits in content-limits.ts only drive editor warnings.
+// Kept on purpose: media links at 2048 characters, formatted-text keys over 240 characters, scientist logs at MAX_SCIENTIST_LOGS.
 function normalizeRecycleFiles(value: unknown, viruses: PortiaContent["viruses"]): RecycleFile[] {
   if (!Array.isArray(value)) return createVirusRecycleFiles(viruses);
 
@@ -43,7 +46,7 @@ function normalizeHexColor(value: unknown) {
 function normalizeRichText(value: unknown): RichTextDocument | undefined {
   if (!value || typeof value !== "object" || !Array.isArray((value as RichTextDocument).runs)) return undefined;
 
-  const runs = (value as RichTextDocument).runs.slice(0, 500).flatMap((run) => {
+  const runs = (value as RichTextDocument).runs.flatMap((run) => {
     if (!run || typeof run !== "object" || typeof run.text !== "string") return [];
     const rawStyle = run.style && typeof run.style === "object" ? run.style : {};
     const style: RichTextStyle = {};
@@ -54,7 +57,7 @@ function normalizeRichText(value: unknown): RichTextDocument | undefined {
     if (typeof rawStyle.fontSize === "number" && Number.isFinite(rawStyle.fontSize)) style.fontSize = Math.min(48, Math.max(10, Math.round(rawStyle.fontSize)));
     if (typeof rawStyle.fontWeight === "number" && [400, 500, 600, 700, 800, 900].includes(rawStyle.fontWeight)) style.fontWeight = rawStyle.fontWeight;
     if (typeof rawStyle.backgroundOpacity === "number" && Number.isFinite(rawStyle.backgroundOpacity)) style.backgroundOpacity = Math.min(1, Math.max(0, rawStyle.backgroundOpacity));
-    return [{ text: run.text.slice(0, 100_000), ...(Object.keys(style).length ? { style } : {}) }];
+    return [{ text: run.text, ...(Object.keys(style).length ? { style } : {}) }];
   });
 
   return { runs };
@@ -64,7 +67,6 @@ function normalizeFormattedText(value: unknown): Record<string, RichTextDocument
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(
     Object.entries(value)
-      .slice(0, 1000)
       .flatMap(([key, document]) => {
         if (!key || key.length > 240) return [];
         const normalized = normalizeRichText(document);
@@ -92,11 +94,11 @@ export function normalizeBroadcasts(value: unknown): Broadcast[] {
       important: item.important === true,
       startsAt: normalizeDay(item.startsAt),
       endsAt: normalizeDay(item.endsAt),
-      conditions: typeof item.conditions === "string" ? item.conditions.slice(0, 4000) : "",
+      conditions: typeof item.conditions === "string" ? item.conditions : "",
     }));
 }
 
-const asText = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : "");
+const asText = (value: unknown) => (typeof value === "string" ? value : "");
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object";
 
 const youtubeIdPattern = /^[\w-]{11}$/;
@@ -121,13 +123,13 @@ function normalizeInfoBlock(value: unknown, subsectionId: string, index: number)
   const id = typeof value.id === "string" && value.id ? value.id : `${subsectionId}-block-${index}`;
   switch (value.type) {
     case "text":
-      return [{ id, type: "text", text: asText(value.text, 20_000) }];
+      return [{ id, type: "text", text: asText(value.text) }];
     case "table":
       return [{
         id,
         type: "table",
-        rows: (Array.isArray(value.rows) ? value.rows : []).filter(isRecord).slice(0, 100)
-          .map((row) => ({ key: asText(row.key, 500), value: asText(row.value, 500) })),
+        rows: (Array.isArray(value.rows) ? value.rows : []).filter(isRecord)
+          .map((row) => ({ key: asText(row.key), value: asText(row.value) })),
       }];
     case "photo":
       return [{ id, type: "photo", url: normalizeMediaUrl(value.url) }];
@@ -141,9 +143,9 @@ function normalizeInfoBlock(value: unknown, subsectionId: string, index: number)
 function normalizeInfoSubsection(value: unknown, sectionId: string, index: number): InfoSubsection[] {
   if (!isRecord(value)) return [];
   const id = typeof value.id === "string" && value.id ? value.id : `${sectionId}-sub-${index}`;
-  const blocks = (Array.isArray(value.blocks) ? value.blocks : []).slice(0, 100)
+  const blocks = (Array.isArray(value.blocks) ? value.blocks : [])
     .flatMap((block, blockIndex) => normalizeInfoBlock(block, id, blockIndex));
-  return [{ id, title: asText(value.title, 300), blocks }];
+  return [{ id, title: asText(value.title), blocks }];
 }
 
 // Sections saved before 03.3 have no subsections (D-12); title and body keep today's behaviour, never cut.
@@ -156,7 +158,7 @@ export function normalizeInfoSections(value: unknown): InfoSection[] {
       id,
       title: typeof item.title === "string" ? item.title : "",
       body: typeof item.body === "string" ? item.body : "",
-      subsections: (Array.isArray(item.subsections) ? item.subsections : []).slice(0, 50)
+      subsections: (Array.isArray(item.subsections) ? item.subsections : [])
         .flatMap((sub, subIndex) => normalizeInfoSubsection(sub, id, subIndex)),
     }];
   });
@@ -179,7 +181,7 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
       ? virus.mutations.map((mutation) => ({ ...mutation, image: normalizeMediaUrl(mutation.image) }))
       : [],
     scientistLogs: Array.isArray(virus.scientistLogs)
-      ? virus.scientistLogs.slice(0, 5).map((log) => ({
+      ? virus.scientistLogs.slice(0, MAX_SCIENTIST_LOGS).map((log) => ({
           ...log,
           content: Array.isArray(log.content) ? log.content.filter((paragraph): paragraph is string => typeof paragraph === "string") : [],
           richContent: normalizeRichText(log.richContent),

@@ -1,4 +1,5 @@
 import { defaultPortiaContent } from "@/lib/portia-content";
+import { MAX_CONTENT_BODY_BYTES, utf8Bytes } from "@/lib/content-limits";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
@@ -41,7 +42,8 @@ export async function PUT(request: Request) {
     }
 
     const raw = await request.text();
-    if (raw.length > 2_000_000) return Response.json({ error: "Данные слишком большие." }, { status: 413 });
+    // Bytes, not characters: the platform limit is in bytes and Cyrillic text is two bytes per character.
+    if (utf8Bytes(raw) > MAX_CONTENT_BODY_BYTES) return Response.json({ error: "Данные слишком большие." }, { status: 413 });
     const body = parseJsonObject(raw);
     if (!body) return Response.json({ error: "Некорректные данные." }, { status: 400 });
     const normalized = normalizePortiaContent(body.content);
