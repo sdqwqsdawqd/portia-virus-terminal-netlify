@@ -108,10 +108,13 @@ const gelMask = (() => {
   return `linear-gradient(to bottom, transparent ${at(gel.entry)}, #000 ${at(gel.entry + 0.03 * gel.period)}, #000 55%, rgb(0 0 0 / ${below(holdEnd)}) ${at(holdEnd)}, transparent ${at(gel.exit)})`;
 })();
 
-function GelBands({ id, scale, alpha }: { id: string; scale: number; alpha: number }) {
+// Soft top and bottom edges (a vertical blur, drawn once into the static layer) keep a slow band from crawling row by row:
+// a hard-edged line moved by a fraction of a pixel dwells, then jumps, on a DPR-1 screen.
+function GelBands({ id, scale, alpha, blur }: { id: string; scale: number; alpha: number; blur: number }) {
   return <svg className={`desktop-wallpaper wallpaper-gel-strip-${id}`} viewBox={`0 ${gel.entry - gel.period} 1440 ${2 * gel.period}`} preserveAspectRatio="none">
-    <defs><linearGradient id={`wp-gel-${id}`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="currentColor" stopOpacity="0" /><stop offset=".22" stopColor="currentColor" /><stop offset=".78" stopColor="currentColor" /><stop offset="1" stopColor="currentColor" stopOpacity="0" /></linearGradient></defs>
-    {[0, -gel.period].map((shift) => <g key={shift} transform={shift ? `translate(0 ${shift})` : undefined}>
+    <defs><linearGradient id={`wp-gel-${id}`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="currentColor" stopOpacity="0" /><stop offset=".22" stopColor="currentColor" /><stop offset=".78" stopColor="currentColor" /><stop offset="1" stopColor="currentColor" stopOpacity="0" /></linearGradient>
+      <filter id={`wp-gel-soft-${id}`} filterUnits="userSpaceOnUse" x="0" y={gel.entry - gel.period} width="1440" height={2 * gel.period}><feGaussianBlur stdDeviation={`0 ${blur}`} /></filter></defs>
+    {[0, -gel.period].map((shift) => <g key={shift} transform={shift ? `translate(0 ${shift})` : undefined} filter={`url(#wp-gel-soft-${id})`}>
       {gelMoving.map((band, index) => <path key={index} d={band.d} stroke={`url(#wp-gel-${id})`} style={{ strokeWidth: band.weight * scale, opacity: band.opacity * alpha }} />)}
     </g>)}
   </svg>;
@@ -121,8 +124,8 @@ function WallpaperGelStrip() {
   const unit = (value: number) => `calc(${value} * max(100cqw / 1440, 100cqh / 900))`;
   return <div className="wallpaper-gel-strip" style={{ maskImage: gelMask, WebkitMaskImage: gelMask }}>
     <div className="wallpaper-gel-strip-track" style={{ top: unit(gel.entry - gel.period), height: unit(2 * gel.period), animationDuration: `${round(gel.duration)}s` }}>
-      <GelBands id="glow" scale={3} alpha={0.16} />
-      <GelBands id="core" scale={1} alpha={0.42} />
+      <GelBands id="glow" scale={3} alpha={0.16} blur={4} />
+      <GelBands id="core" scale={1} alpha={0.5} blur={1.6} />
     </div>
   </div>;
 }
