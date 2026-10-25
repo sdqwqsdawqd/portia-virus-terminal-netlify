@@ -67,3 +67,24 @@ test("the quest notice is not a live region itself and closes on Escape from any
   for (const call of ['window.document.addEventListener("keydown"', 'window.document.removeEventListener("keydown"', "defaultPrevented", "dialog[open]"]) assert.ok(body.includes(call), call);
 });
 
+test("virus rows are options of the listbox only when there are rows (A11Y-01)", () => {
+  const row = /<button key=\{virus\.id\}[^\n]*>/.exec(source)?.[0] ?? "";
+  assert.ok(row.includes('role="option"') && row.includes("aria-selected={virus.id === activeVirus?.id}"), row);
+  assert.ok(source.includes("const virusListbox = contentReady && filteredViruses.length > 0;"));
+  const list = /<div className="virus-list"[^\n]*>/.exec(source)?.[0] ?? "";
+  assert.ok(list.includes('role={virusListbox ? "listbox" : undefined}') && list.includes('aria-label={virusListbox ? "Записи вирусов" : undefined}'), list);
+});
+
+test("the Roblox portrait link has its tooltip and the plain portrait none (A11Y-02)", () => {
+  const link = /<a className="personnel-portrait"[^>]*>/.exec(source)?.[0] ?? "";
+  assert.ok(link.includes("title={`Профиль Roblox: ${selectedEmployee.nickname}`}"), link);
+  assert.ok(!/<figure className="personnel-portrait"[^>]*title=/.test(source));
+  assert.equal(source.match(/title=\{`Профиль Roblox:/g)?.length, 1);
+});
+
+test("the ≡ handle keeps no tooltip (D-18)", () => {
+  const editor = readFileSync(new URL("../components/portia-editor.tsx", import.meta.url), "utf8");
+  const handle = /<[a-z]+\b[^>]*className="order-drag-handle"[^>]*>/.exec(editor)?.[0] ?? "";
+  assert.ok(handle, "handle not found");
+  assert.ok(!handle.includes("title="), handle);
+});

@@ -323,6 +323,20 @@ const checks = {
     await escape();
     await sleep(500);
     if (!(await cdp.eval(toast))) reasons.push("(c) Escape inside the search field closed the notice");
+    // (d) the archive list is a listbox of options only while it has rows
+    const virus = (id, name, code) => ({ id, name, code, status: "ИЗУЧЕН" });
+    serve(fixture({ viruses: [virus("v1", "Альфа", "A-1"), virus("v2", "Бета", "B-2")] }), 2);
+    await load(cdp);
+    await click(cdp, '[data-shortcut="archive"]');
+    if (!(await waitFor(cdp, `document.querySelectorAll('.virus-list [role="option"]').length === 2`, 5000))) { reasons.push("(d) the archive did not show two option rows"); return; }
+    const list = await cdp.eval(`(() => { const l = document.querySelector(".virus-list"); return { role: l.getAttribute("role"), label: l.getAttribute("aria-label"), selected: l.querySelectorAll('[aria-selected="true"]').length, rows: l.querySelectorAll("button.virus-row").length }; })()`);
+    if (list.role !== "listbox" || list.label !== "Записи вирусов") reasons.push(`(d) list is ${list.role}/${list.label}`);
+    if (list.selected !== 1 || list.rows !== 2) reasons.push(`(d) ${list.selected} selected of ${list.rows} rows`);
+    // (e) a query with no match: no listbox, the empty message shows
+    await cdp.eval(`document.querySelector(".archive-browser .search-box input").focus(); true`);
+    await cdp.send("Input.insertText", { text: "яяяяя" });
+    if (!(await waitFor(cdp, `!!document.querySelector(".virus-list .list-empty")`, 2000))) reasons.push("(e) the empty message did not show");
+    else if (await cdp.eval(`document.querySelector(".virus-list").hasAttribute("role")`)) reasons.push("(e) the empty list still has a role");
   },
 };
 

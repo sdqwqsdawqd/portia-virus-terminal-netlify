@@ -1018,6 +1018,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
   const filteredViruses = content.viruses.filter((virus) => escapeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(escapeSearch(virusQuery)));
+  const virusListbox = contentReady && filteredViruses.length > 0;
   const selectedInfoEntry = findInfo(content.infoSections, selectedInfoId)
     ?? (content.infoSections[0] ? { section: content.infoSections[0], subsection: null } : null);
   const selectedInfo = selectedInfoEntry?.section;
@@ -1240,10 +1241,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <div className="browser-heading"><div><h1>База вирусов</h1></div><span className="record-count">{String(content.viruses.length).padStart(2, "0")}</span></div>
                 <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск по базе</span><input value={virusQuery} onChange={(event) => setVirusQuery(event.target.value)} type="search" placeholder="Поиск по имени или коду" /></label>
                 <div className="browser-labels" aria-hidden="true"><span>СУБЪЕКТ</span><span>СТАТУС</span></div>
-                <div className="virus-list" role="listbox" aria-label="Записи вирусов">
+                {/* Loading and the empty message are not options, so the container is a listbox only while it holds rows; no wrapper, the phone layout is a flex row. */}
+                <div className="virus-list" role={virusListbox ? "listbox" : undefined} aria-label={virusListbox ? "Записи вирусов" : undefined}>
                   {!contentReady ? <LoadingState label="Загрузка архива…" /> : <>
                   {filteredViruses.map((virus, index) => (
-                    <button key={virus.id} type="button" className={`virus-row${virus.id === activeVirus?.id ? " active" : ""}`} onClick={() => { setActiveVirusId(virus.id); setOpenLog(null); }}>
+                    <button key={virus.id} type="button" role="option" aria-selected={virus.id === activeVirus?.id} className={`virus-row${virus.id === activeVirus?.id ? " active" : ""}`} onClick={() => { setActiveVirusId(virus.id); setOpenLog(null); }}>
                       <span className="row-index">{String(index + 1).padStart(2, "0")}</span>
                       <span className="row-main"><strong>{virus.name}</strong><small>{virus.code}</small><RowBadges virus={virus} /></span>
                       <span className="row-status">{virus.status}</span>
@@ -1278,7 +1280,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   <header className="personnel-profile-head">
                     <div className="personnel-avatar-stage">
                       <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} fallbackClassName="personnel-fallback" /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
-                      {selectedEmployee.robloxUserId ? <a className="personnel-portrait" href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer" aria-label={`Профиль Roblox: ${selectedEmployee.nickname}`}><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></a> : <figure className="personnel-portrait"><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></figure>}
+                      {selectedEmployee.robloxUserId ? <a className="personnel-portrait" href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer" aria-label={`Профиль Roblox: ${selectedEmployee.nickname}`} title={`Профиль Roblox: ${selectedEmployee.nickname}`}><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></a> : <figure className="personnel-portrait"><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></figure>}
                     </div>
                     <div className="personnel-profile-identity"><h2>{selectedEmployee.nickname}</h2>{selectedEmployee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<p className="personnel-callsign">{selectedEmployee.callsign || "Без позывного"}</p></div>
                   </header>
