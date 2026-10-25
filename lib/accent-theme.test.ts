@@ -312,15 +312,17 @@ test("every custom hue stays readable and keeps the spider and Vivian on the acc
     const t = deriveAccentTokens(pick)!;
     const teal = hex(t["--teal"]);
     const scale = Number(t["--accent-chroma"]);
+    const tealChroma = oklch(teal)[1];
     const bg = oklchToRgb(0.163, 0.014 * scale, Number(t["--accent-hue"])).map((v) => Math.min(255, Math.max(0, v))) as Rgb;
     assert.ok(contrast(teal, bg) >= 4.5, `${pick}: contrast ${contrast(teal, bg).toFixed(2)}`);
     const mark = parseFilter(t["--mark-filter"]);
     const assistant = parseFilter(t["--assistant-filter"]);
     for (const [label, rgb] of [["logo", mark(hex(LOGO_TEAL))], ["assistant light", assistant(hex(ASSISTANT_TEAL_LIGHT))], ["assistant dark", assistant(hex(ASSISTANT_TEAL_DARK))]] as const) {
       if (scale === 0) assert.ok(oklch(rgb)[1] <= 0.005, `${pick} ${label} keeps chroma ${oklch(rgb)[1].toFixed(4)}`);
-      else assert.ok(hueDistance(oklch(rgb)[2], hueOf(t["--teal"])) <= 10, `${pick} ${label} ends ${hueDistance(oklch(rgb)[2], hueOf(t["--teal"])).toFixed(1)} deg from the accent`);
+      else if (tealChroma >= 0.02) assert.ok(hueDistance(oklch(rgb)[2], hueOf(t["--teal"])) <= 10, `${pick} ${label} ends ${hueDistance(oklch(rgb)[2], hueOf(t["--teal"])).toFixed(1)} deg from the accent`);
     }
-    if (scale !== 0) assert.ok(hueDistance(Number(t["--accent-hue"]), hueOf(t["--teal"])) <= 0.5, `${pick}: --accent-hue off its --teal`);
+    // Below chroma 0.02 the 8-bit rounded --teal has no usable hue.
+    if (tealChroma >= 0.02) assert.ok(hueDistance(Number(t["--accent-hue"]), hueOf(t["--teal"])) <= 0.5, `${pick}: --accent-hue off its --teal`);
     const tealL = oklch(teal)[0];
     assert.ok(tealL >= 0.6 && tealL <= 0.82, `${pick}: --teal L ${tealL.toFixed(3)}`);
     assert.ok(oklch(hex(t["--teal-dim"]))[0] < tealL, `${pick}: --teal-dim is not darker`);
@@ -354,6 +356,61 @@ test("an achromatic pick gives a neutral grey theme", () => {
     const bg = surface.map((v) => Math.min(255, Math.max(0, v))) as Rgb;
     assert.ok(contrast(hex(t["--teal"]), bg) >= 4.5, `contrast ${contrast(hex(t["--teal"]), bg).toFixed(2)}`);
   }
+});
+
+const hsvToHex = (h: number, s: number, v: number) => {
+  const channel = (n: number) => { const k = (n + h / 60) % 6; return (v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255; };
+  return rgbToHex([channel(5), channel(3), channel(1)]);
+};
+
+test("a dark or muted pick keeps its hue and strength", () => {
+  const derive = (pick: string) => { const t = deriveAccentTokens(pick)!; return { t, lch: oklch(hex(t["--teal"])) }; };
+  const portiaHue = Number(root.get("--accent-hue"));
+  const dusky = ["#180d0d", "#1c0d0d"].map((pick) => ({ pick, ...derive(pick) }));
+  for (const { pick, lch } of dusky) {
+    assert.ok(hueDistance(lch[2], oklch(hex(pick))[2]) <= 5, `${pick}: hue ${lch[2].toFixed(1)}`);
+    assert.ok(hueDistance(lch[2], portiaHue) > 90, `${pick}: jumped to the Portia hue`);
+  }
+  assert.ok(Math.abs(dusky[0].lch[1] - dusky[1].lch[1]) <= 0.012, "no cliff between #180d0d and #1c0d0d");
+
+  const bluish = derive("#3a3a42");
+  assert.ok(hueDistance(Number(bluish.t["--accent-hue"]), 286) <= 3, `#3a3a42 hue ${bluish.t["--accent-hue"]}`);
+  assert.ok(Number(bluish.t["--accent-chroma"]) >= 0.1 && Number(bluish.t["--accent-chroma"]) <= 0.3, `#3a3a42 chroma scale ${bluish.t["--accent-chroma"]}`);
+  assert.ok(oklch(parseFilter(bluish.t["--mark-filter"])(hex(LOGO_TEAL)))[1] <= 0.03, "#3a3a42 spider is as faint as the accent");
+
+  const muted = derive("#6b4a4a");
+  assert.ok(muted.lch[1] <= 0.05, `#6b4a4a chroma ${muted.lch[1].toFixed(3)}`);
+  assert.ok(hueDistance(muted.lch[2], 19) <= 5, `#6b4a4a hue ${muted.lch[2].toFixed(1)}`);
+
+  let checked = 0;
+  for (let h = 0; h <= 330; h += 30) {
+    for (let s = 0; s <= 1.0001; s += 0.2) {
+      for (let v = 0; v <= 1.0001; v += 0.2) {
+        const pick = hsvToHex(h, s, v), pickLch = oklch(hex(pick)), { t, lch } = derive(pick);
+        const note = `${pick} (h${h} s${s.toFixed(1)} v${v.toFixed(1)})`;
+        assert.ok(lch[1] <= Math.min(pickLch[1], 0.17) + 0.003, `${note}: teal chroma ${lch[1].toFixed(4)} above the pick's ${pickLch[1].toFixed(4)}`);
+        const scale = Number(t["--accent-chroma"]);
+        const bg = oklchToRgb(0.163, 0.014 * scale, Number(t["--accent-hue"])).map((x) => Math.min(255, Math.max(0, x))) as Rgb;
+        assert.ok(contrast(hex(t["--teal"]), bg) >= 4.5, `${note}: contrast ${contrast(hex(t["--teal"]), bg).toFixed(2)}`);
+        for (const name of ["--mark-filter", "--assistant-filter"]) {
+          for (const grey of ["#000000", "#ffffff", "#808080"]) {
+            const out = parseFilter(t[name])(hex(grey));
+            hex(grey).forEach((channel, i) => assert.ok(Math.abs(out[i] - channel) <= 1, `${note} ${name} moves ${grey}`));
+          }
+        }
+        if (lch[1] >= 0.02) {
+          assert.ok(hueDistance(lch[2], pickLch[2]) <= 5, `${note}: teal hue ${lch[2].toFixed(1)} vs pick ${pickLch[2].toFixed(1)}`);
+          const mark = parseFilter(t["--mark-filter"]), assistant = parseFilter(t["--assistant-filter"]);
+          for (const [label, rgb] of [["logo", mark(hex(LOGO_TEAL))], ["assistant light", assistant(hex(ASSISTANT_TEAL_LIGHT))], ["assistant dark", assistant(hex(ASSISTANT_TEAL_DARK))]] as const) {
+            assert.ok(hueDistance(oklch(rgb)[2], lch[2]) <= 10, `${note} ${label} ends ${hueDistance(oklch(rgb)[2], lch[2]).toFixed(1)} deg from the accent`);
+          }
+        }
+        checked++;
+      }
+    }
+  }
+  assert.equal(checked, 432);
+  assert.equal(deriveAccentTokens("#ff3366")!["--accent-chroma"], "1");
 });
 
 test("tampered custom colours never reach the page", () => {

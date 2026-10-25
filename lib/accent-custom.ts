@@ -1,4 +1,4 @@
-// Why: «Свой» drives the same tokens as a preset (D-04) and is quietly made readable (D-05).
+// Why: «Свой» drives the same tokens as a preset (D-04) and is quietly made readable (D-23: lightness only).
 // deriveAccentTokens is self-contained because accentBootScript embeds its source with Function.prototype.toString,
 // so it may not reference imports or anything outside its own body (no module-level names, no spread/destructuring helpers).
 export const accentTokenNames = ["--teal", "--teal-dim", "--teal-soft", "--desktop-glow", "--desktop-grid", "--desktop-base", "--desktop-deep", "--accent-hue", "--accent-chroma", "--mark-filter", "--assistant-filter"] as const;
@@ -56,12 +56,16 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
   const lch = oklch(rgb0);
   // Exact greys measure chroma <= 4e-8 and the nearest non-grey hex >= 1e-3, so 1e-4 catches only float noise (D-23).
   const neutral = lch[1] < 1e-4;
-  const k = neutral ? 0 : 1; // --accent-chroma: scales every accent tint in the stylesheet
-  const H = neutral ? 0 : lch[1] < 0.02 ? 180.4 : lch[2]; // grey has no hue: fall back to the Portia hue (D-05)
+  // The pick keeps its own hue and chroma (cap 0.17); only lightness is corrected for readability, and gamut fitting only lowers chroma.
+  const H = neutral ? 0 : lch[2];
   const L = clamp(lch[0], 0.62, 0.80);
-  const C = neutral ? 0 : clamp(lch[1], 0.08, 0.17);
-  const teal = fit(L, C, H, neutral ? 0 : 0.08);
-  const accentHue = neutral ? 0 : Number(oklch(teal)[2].toFixed(1));
+  const C = neutral ? 0 : Math.min(lch[1], 0.17);
+  const teal = fit(L, C, H, 0);
+  const tealLch = oklch(teal);
+  // --accent-chroma scales every accent tint in the stylesheet: 1 from preset strength (about 0.08) up, 0 for a neutral pick.
+  const k = neutral ? 0 : Number(Math.min(1, tealLch[1] / 0.08).toFixed(2));
+  // Below chroma 0.02 the 8-bit rounded --teal has no usable hue, so the pick's own hue stands in.
+  const accentHue = Number((tealLch[1] >= 0.02 ? tealLch[2] : H).toFixed(1));
   const dim = fit(Math.max(0.49, L - 0.15), C * 0.78, H, 0);
   const grid = fit(L - 0.10, C * 0.8, H, 0);
   const base = fit(0.14, 0.02 * k, H, 0);
@@ -74,7 +78,7 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
     const rgbs = refs.map((r) => [1, 3, 5].map((i) => parseInt(r.slice(i, i + 2), 16)));
     const score = (d: number, s: number) => {
       let worst = 0;
-      for (let i = 0; i < rgbs.length; i++) worst = Math.max(worst, hueDistance(oklch(saturate(hueRotate(rgbs[i], d), s))[2], accentHue));
+      for (let i = 0; i < rgbs.length; i++) worst = Math.max(worst, hueDistance(oklch(saturate(hueRotate(rgbs[i], d), s * k))[2], accentHue));
       return worst + 0.02 * Math.abs(s - 1);
     };
     let bestD = 0, bestS = 1, best = Infinity;
@@ -93,7 +97,7 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
         if (sc < best) { best = sc; bestD = d0 + dd; bestS = s; }
       }
     }
-    return "hue-rotate(" + (bestD || 0) + "deg) saturate(" + Number(bestS.toFixed(2)) + ")";
+    return "hue-rotate(" + (bestD || 0) + "deg) saturate(" + Number((bestS * k).toFixed(2)) + ")";
   };
 
   return {
