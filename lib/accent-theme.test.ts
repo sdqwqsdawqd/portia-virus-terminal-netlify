@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { accentBootScript, accentIds, bootSeenStorageKey, motionModes } from "./accent-boot.ts";
+import { accentBootScript, accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes } from "./accent-boot.ts";
+import { accentTokenNames, deriveAccentTokens } from "./accent-custom.ts";
 
 type Rgb = [number, number, number];
 
@@ -198,12 +199,29 @@ test("no relative colour syntax", () => {
   assert.doesNotMatch(css, /oklch\(\s*from\b/);
 });
 
-const runBoot = (getItem: () => string | null, systemReduce = false, sessionGetItem: (key: string) => string | null = () => null) => {
+const runBoot = (getItem: (key: string) => string | null, systemReduce = false, sessionGetItem: (key: string) => string | null = () => null) => {
   const dataset: { accent?: string; motion?: string; boot?: string } = {};
+  const props: Record<string, string> = {};
+  const style = { setProperty: (name: string, value: string) => { props[name] = value; } };
   const matchMedia = (query: string) => ({ matches: systemReduce && query === "(prefers-reduced-motion: reduce)" });
-  new Function("localStorage", "sessionStorage", "document", "matchMedia", accentBootScript)({ getItem }, { getItem: sessionGetItem }, { documentElement: { dataset } }, matchMedia);
-  return dataset;
+  new Function("localStorage", "sessionStorage", "document", "matchMedia", accentBootScript)({ getItem }, { getItem: sessionGetItem }, { documentElement: { dataset, style } }, matchMedia);
+  return { ...dataset, props };
 };
+
+test("the boot script applies a saved custom accent exactly as deriveAccentTokens computes it", () => {
+  const out = runBoot(() => JSON.stringify({ accent: "custom", customAccent: "#ff3366" }));
+  const expected = deriveAccentTokens("#ff3366");
+  assert.ok(expected);
+  assert.deepEqual(Object.keys(expected).sort(), [...accentTokenNames].sort());
+  assert.equal(out.accent, "custom");
+  assert.deepEqual(out.props, expected);
+});
+
+test("a preset stays a preset when a custom colour is remembered", () => {
+  const out = runBoot(() => JSON.stringify({ accent: "ice", customAccent: "#ff3366" }));
+  assert.equal(out.accent, "ice");
+  assert.deepEqual(out.props, {});
+});
 
 test("the boot animation plays once per browser session", () => {
   const saved = () => JSON.stringify({ accent: "ice", motion: "off" });
