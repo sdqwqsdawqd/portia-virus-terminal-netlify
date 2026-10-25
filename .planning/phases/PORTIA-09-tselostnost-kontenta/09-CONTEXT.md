@@ -47,6 +47,12 @@ Content is never lost silently: the 10 s poll does not reset undo history, limit
 - **D-21:** A card with a missing or empty id is kept and gets an id automatically, nothing is dropped. The id must be stable across reads (derived deterministically, e.g. from type and position), so a poll does not change it.
 - **D-22:** Old cached content without `recycledViruses` must not crash the dossier diff (`lib/editor-changes.ts`); treat missing as empty.
 
+### Settled at plan time (2026-10-25, research open questions)
+- **D-23:** The `PUT /api/content` request-body guard (2 MB, `app/api/content/route.ts`) is raised so it is no longer the effective ceiling for the raised limits. Verify the host's real request-body limit (Netlify) before choosing the number; keep a guard, and a rejected save must never be silent in the editor.
+- **D-24:** The plain guide text block cap (currently 20 000 characters in `lib/portia-content-normalize.ts`) becomes 200 000.
+- **D-25:** Scientist logs stay capped at 5 per scientist (unchanged).
+- **D-26:** Deleting a recycle-bin file asks for confirmation with the same dialog pattern as deleting a virus.
+
 ### Claude's Discretion
 - SYNC-01 mechanics (skip equal revisions; how the desktop and editor avoid re-render).
 - CONT-03: permanent delete from Корзина removes `virus:<id>:*` / `recycle:<id>:content` formatting keys; restore keeps them. Implementation detail.
