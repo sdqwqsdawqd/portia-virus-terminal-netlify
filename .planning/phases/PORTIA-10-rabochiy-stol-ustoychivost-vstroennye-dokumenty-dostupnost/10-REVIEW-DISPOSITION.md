@@ -5,7 +5,9 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
+    fixed_in: 90a0231
+    proof: "10-desktop-check.mjs --check accent step (n), PC and phone; owner check 10-09"
     title: "`.setting-options button` also hits the picker's close button, clipping the ×"
   - id: WR-02
     severity: warning
@@ -31,7 +33,7 @@ findings:
     severity: info
     disposition: open
     title: "Many new tests grep component source; `zoomModifier` relies on deprecated `navigator.platform`"
-open: 7
+open: 6
 ---
 
 # Phase 10: Review Disposition
