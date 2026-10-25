@@ -2,95 +2,80 @@
 phase: PORTIA-10-rabochiy-stol-ustoychivost-vstroennye-dokumenty-dostupnost
 reviewed: 2026-10-26T00:00:00Z
 depth: standard
-files_reviewed: 8
+files_reviewed: 5
 files_reviewed_list:
   - app/portia.css
-  - components/custom-color-picker.tsx
-  - components/portia-desktop.tsx
   - components/portia-editor.tsx
-  - lib/accent-boot.ts
   - lib/accent-custom.ts
   - lib/accent-theme.test.ts
-  - lib/portia-desktop.test.ts
+  - lib/editor-field-look.test.ts
 findings:
   critical: 0
-  warning: 3
-  info: 4
-  total: 7
+  warning: 2
+  info: 1
+  total: 3
 status: issues_found
 ---
 
-# Phase 10: Code Review Report
+# Phase 10: Code Review Report (incremental, gap-closure plans 10-08 and 10-09)
 
 **Reviewed:** 2026-10-26
-**Depth:** standard (diff 342b3f2..HEAD)
-**Files Reviewed:** 8
+**Depth:** standard
+**Files Reviewed:** 5
 **Status:** issues_found
+
+## Prior review
+
+This file replaces the earlier phase-10 review. Its findings and how each was resolved are tracked in `10-REVIEW-DISPOSITION.md` in this directory. This pass covers only the diff `305976d..HEAD` for the files listed above.
 
 ## Summary
 
-Reviewed the custom accent feature (picker extraction, `deriveAccentTokens`, boot-script embedding), the desktop robustness changes (topZ ref, assistant tip handling, sandboxed frames, zoom modifier handling) and the a11y changes. No security or data-loss defects found. Checks that passed:
+The diff adds an `--accent-chroma` token. Every accent tint in `portia.css` and `baseInk` is now `calc(C * var(--accent-chroma))`. `deriveAccentTokens` keeps the pick's own hue and chroma and corrects only lightness. Exact greys give a neutral theme. The `.setting-options > button` selector no longer matches the buttons inside the colour picker. The unused `--assistant-glow` is removed.
 
-- `npx tsc --noEmit` is clean.
-- `npm test`: 302 of 302 pass.
-- `next build` succeeds. I extracted the boot script from the built `.next/server/app/index.html` and ran it against a stored `#ff3366` custom accent. It is self-contained after minification and sets all 10 tokens, so `Function.prototype.toString` embedding survives the production build.
-- Hostile `customAccent` values are rejected by the hex regex both in the boot script and on restore.
-- The hue-rotate/saturate matrices match the CSS Filter Effects spec.
-- The `fit` loop always terminates.
+I checked these points:
+- `node --experimental-strip-types --test lib/accent-theme.test.ts lib/editor-field-look.test.ts` passes, 38 of 38. (Under `tsx` the boot-script test fails with `__name is not defined`. That comes from esbuild's name-keeping and the project's real runner is not affected.)
+- Every `var(--accent-hue)` use in `app/`, `components/` and `lib/` is scaled. Only the five files above reference the token.
+- `accentTokenNames` now includes `--accent-chroma`. The desktop effect clears it when the accent switches back to a preset, so no stale inline value survives.
+- The boot script embeds `deriveAccentTokens` through `toString()`. The new code uses no outside names, so it stays self-contained.
+- No security issues. The input is still validated by `/^#[0-9a-f]{6}$/i`, the iteration counts are fixed, and nothing user-controlled is interpolated into the boot script.
 
-The defects are one CSS regression in the moved picker, an incomplete ARIA pattern, and a keyboard-inaccessible picker board.
+No blockers. There are two robustness and verification gaps and one cleanup.
 
 ## Warnings
 
-### WR-01: Picker close button is distorted inside the settings grid (CSS selector leak)
+### WR-01: Loop variable `k` shadows the new accent-strength `k` inside `filterFor`
 
-**File:** `app/portia.css:294` (leaks into `app/portia.css:678`), rendered from `components/portia-desktop.tsx:1405-1411`
-**Issue:** The picker is now a descendant of `.setting-options`. The rule `.setting-options button { min-height: 54px; display:flex; padding:10px; ... }` therefore also matches the picker's "x" close button (`.custom-color-picker-head button`). Both selectors have specificity (0,1,1). The later rule only sets `width/height:24px`, so `min-height:54px` wins and the button becomes 24x54. With `box-sizing:border-box` and 10px padding, the content box is about 2px wide, so the glyph is clipped or overflows. `.setting-options button:hover` (0,2,1) also overrides the picker button's hover colours. The picker only worked in the editor before, where this rule does not apply.
-**Fix:** Scope the settings rule to direct children, or reset the picker button:
-```css
-.setting-options > button { /* was: .setting-options button */ ... }
-.setting-options > button:hover, .setting-options > button.selected { ... }
-.setting-options > button.selected { ... }
+**File:** `lib/accent-custom.ts:86` (outer `k` at line 66, used at lines 77, 81 and 100)
+**Issue:** The new strength scalar `const k` (line 66) is shadowed by `for (let k = 3; k <= 25; k++)` in the coarse saturation search. The code is correct today. `score` closes over the outer `k`, the inner `k` is block-scoped, and `bestS * k` on line 100 sits outside the loops. Any edit that moves `score(...)` or the final return into that loop silently swaps "saturation step" for "accent strength". Nothing would throw. The hue-matching filters for the spider and Vivian would just be wrong, and the tests only check hue distance and grey invariance. Because the function body is serialised into the boot script, linters and reviewers cannot lean on a module-level view of it.
+**Fix:** Rename the loop variable.
+```ts
+for (let step = 3; step <= 25; step++) {
+  const sc = score(d, step / 10);
+  if (sc < best) { best = sc; bestD = d; bestS = step / 10; }
+}
 ```
-Alternatively add `min-height:0; padding:0; display:block` to `.custom-color-picker-head button`. Check that `.color-options > button` (line 296) still wins.
+The second loop already uses `ks`, so this is consistent.
 
-### WR-02: Virus rows declare `role="option"` but have no listbox keyboard model
+### WR-02: Readability is only tested against `--bg`, but accent text also sits on `--panel` and `--panel-2`
 
-**File:** `components/portia-desktop.tsx:1244-1247`
-**Issue:** `role="listbox"` plus `role="option"` and `aria-selected` promise the listbox interaction pattern (one tab stop, Up/Down/Home/End moving selection). The rows are plain `<button>`s, so each is a separate tab stop and arrow keys do nothing. Screen-reader users are told to use arrows and nothing happens. The `aria-selected` is accurate, but the pattern is half-implemented. The test in `lib/portia-desktop.test.ts` only greps for the attributes.
-**Fix:** Either implement roving tabindex and arrow handling on the container (`tabIndex={0}` on the active row, -1 on the others, `onKeyDown` for ArrowUp/ArrowDown/Home/End), or drop `role=listbox/option` and use `aria-current="true"` on the active row.
-
-### WR-03: Colour board in the custom picker is pointer-only
-
-**File:** `components/custom-color-picker.tsx:66-73`
-**Issue:** The saturation/value board is a non-focusable `<div>` with only pointer handlers. Keyboard users can change hue (range) and type a hex, but cannot adjust saturation or brightness on the board. This phase is about accessibility, and the picker is now exposed in the always-visible settings window, not only the editor. The board also has no accessible name or role, and the thumb `<i>` is unlabelled.
-**Fix:** Make the board `role="slider"` (or two sliders), give it `tabIndex={0}`, an `aria-label`, and `aria-valuetext`, and handle arrow keys in `choose(hue, saturation ± 0.02, value ± 0.02)`. Alternatively document that the hex field is the keyboard path and add `aria-hidden` to the board.
+**File:** `lib/accent-custom.ts:59-61` (the lightness clamp 0.62 to 0.80) and `lib/accent-theme.test.ts:311-340`
+**Issue:** The test asserts WCAG contrast >= 4.5 of `--teal` only against `oklch(.163 ...)` (`--bg`). The stylesheet puts `--teal` text on `--panel` (.201) and `--panel-2` (.229) as well. The lightness floor of 0.62 leaves about 0.1 contrast ratio of margin against `--bg`. For some hues, where relative luminance at a given OKLCH L is lower, the lighter panels fall below 4.5. A brute-force sweep of hue (every 5 degrees) with saturation {.3,.6,1} and value {.3,.6,1] gave a minimum of 4.26 for the pick `#990040`, whose `--teal` is `#d65073`. The 432-pick grid test and the preset sweep do not catch this, so the "stays readable" claim is not verified for the surfaces that carry most of the text. This is not a regression from 10-08 or 10-09, since the clamp predates them. The new test restructuring does rewrite those assertions without widening them.
+**Fix:** Either raise the lightness floor (for example 0.66) or extend the test to the three surfaces.
+```ts
+for (const [sl, sc] of [[0.163, 0.014], [0.201, 0.018], [0.229, 0.021]]) {
+  const bg = oklchToRgb(sl, sc * scale, Number(t["--accent-hue"])).map((v) => Math.min(255, Math.max(0, v))) as Rgb;
+  assert.ok(contrast(teal, bg) >= 4.5, `${pick}: contrast on L${sl} ${contrast(teal, bg).toFixed(2)}`);
+}
+```
+If the floor stays at 0.62, the test should state 3:1 for large text, or lower the claim.
 
 ## Info
 
-### IN-01: Clicking "Свой" immediately converts the current preset into a persisted custom accent
+### IN-01: Test duplicates the regex literal and walks the filesystem for a one-line invariant
 
-**File:** `components/portia-desktop.tsx:758-763`
-**Issue:** `chooseCustomAccent` writes `accent:"custom"` and `customAccent:<current preset --teal>` and shows "saved" before the user picks anything. Opening and closing the picker permanently replaces, for example, "Янтарный" with an equivalent custom swatch. The visual change is nil (the custom derivation shifts the amber slightly), but the preset selection is lost. It also silently returns, with no feedback, if the computed `--teal` is not a 6-digit hex. That is fine today, but fragile if a preset ever uses a non-hex token.
-**Fix:** Keep the seed in the draft only (`previewAccent(seed)`) and commit on the first real change, or at least fall back to a constant seed such as `#00bca6` when `deriveAccentTokens(seed)` fails.
-
-### IN-02: Blur-commit fires prematurely when focus moves to a non-focusable area
-
-**File:** `components/portia-desktop.tsx:1409`
-**Issue:** `onBlur` commits when `relatedTarget` is null. Clicking the non-focusable board (and clicking buttons in Safari/Firefox on macOS, which do not take focus) gives `relatedTarget === null`. That commits the draft and flashes "saved" mid-interaction. This is harmless, since the `pointerup` commit already behaves the same way, but it produces duplicate save flashes.
-**Fix:** Ignore the blur commit while a pointer is down in the picker, or commit only on `pointerup`, Escape, close and focus leaving to an element outside.
-
-### IN-03: Embedded-frame sandbox relies on every `src` staying cross-origin; Sheets compatibility unverified
-
-**File:** `components/portia-desktop.tsx:31`
-**Issue:** `allow-scripts allow-same-origin` together neutralises the sandbox for any same-origin document. This is safe for the current docs.google.com, github.io and youtube-nocookie sources only. The Google Sheets `htmlview` and charter frames have no automated or visible check that the restricted flags (no `allow-modals`, `allow-presentation`, or top-navigation-by-user-activation) do not break them. The new test only greps the string.
-**Fix:** Add a comment or assertion that `src` must never be same-origin, and manually verify the Sheets and charter embeds in a built bundle.
-
-### IN-04: Source-grep tests are brittle
-
-**File:** `lib/portia-desktop.test.ts`, `lib/accent-theme.test.ts:350-358`
-**Issue:** Many new tests assert regexes over the component source (exact attribute order, `const virusListbox = ...;` literal, one-line `<button ...>` matches, `source.slice(... indexOf("\nfunction "))`). Cosmetic refactors will fail them, while behavioural regressions (for example WR-01 and WR-02) are not caught. `navigator.platform` (used by `zoomModifier`) is deprecated; `navigator.userAgentData?.platform ?? navigator.platform` is more future-proof.
-**Fix:** Keep the pure-function behaviour tests (`deriveAccentTokens`, boot execution). Move DOM-behaviour checks to a component-level test, or accept the brittleness explicitly.
+**File:** `lib/accent-theme.test.ts:201-212`
+**Issue:** "every accent tint follows --accent-chroma" builds its own recursive `sources` walker and derives display names with `file.pathname.split("/").slice(-2)`. On Windows, `URL.pathname` still uses forward slashes, so it works. The same scaled-tint regex also appears in the gamut test (line 191) as a separate literal. If the tint syntax changes, the two copies can drift apart and one test would pass vacuously. The gamut test would match zero tints and loop over nothing.
+**Fix:** Share one regex constant, and add `assert.ok(matches.length > 0)` to the gamut test so an empty match fails loudly.
 
 ---
 
