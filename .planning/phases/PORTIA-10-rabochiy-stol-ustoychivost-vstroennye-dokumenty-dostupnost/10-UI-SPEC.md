@@ -65,7 +65,7 @@ Declared sizes: 11, 13 (2 sizes used by new/changed elements; the rest of the wi
 
 ## Color
 
-Accent is already a hue-driven system: surfaces are `oklch(L C var(--accent-hue))`, bright tokens are `--teal*`. Presets are `html[data-accent="…"]` blocks (`portia.css` ~1035). «Свой» sets the same tokens inline on `document.documentElement` and in the boot script.
+Accent is already a hue-driven system: surfaces are `oklch(L calc(C * var(--accent-chroma)) var(--accent-hue))` (amended 2026-10-26, D-23), bright tokens are `--teal*`. Presets are `html[data-accent="…"]` blocks (`portia.css` ~1035). «Свой» sets the same tokens inline on `document.documentElement` and in the boot script.
 
 | Role | Value | Usage |
 |------|-------|-------|
@@ -82,25 +82,26 @@ Accent reserved for (unchanged list, plus the one new item):
 5. Primary controls (`.primary-control`) such as «ОТКРЫТЬ КВЕСТЫ»
 6. Picker's focused HEX input border (existing)
 
-### «Свой» derived-token contract (D-04, D-05, D-08, D-11)
+### «Свой» derived-token contract (D-04, D-23, D-08, D-11)
 
-One input: picked `#rrggbb`. Convert to OKLCH, keep hue `H` (degrees), then derive every token from `H` so «Свой» is indistinguishable in structure from a preset:
+One input: picked `#rrggbb`. Convert to OKLCH and keep the pick's hue `H` (degrees) and chroma (amended 2026-10-26, D-23). Exact greys (chroma < 1e-4) are neutral: hue 0, chroma 0. Every token derives from these so «Свой» is indistinguishable in structure from a preset:
 
 | Token | Derivation |
 |-------|-----------|
-| `--accent-hue` | `H` (one decimal, like presets) |
-| `--teal` | `oklch(L C H)` as hex-or-rgb with `L` clamped to 0.62–0.80, `C` clamped to 0.08–0.17 |
+| `--accent-hue` | measured hue of the rounded `--teal` when its chroma >= 0.02, else the pick's `H`; 0 for a neutral pick (one decimal, like presets) |
+| `--accent-chroma` | `min(1, --teal chroma / 0.08)`, two decimals; 0 for a neutral pick. Scales every accent tint (`calc(C * var(--accent-chroma))`); `:root` and the presets keep 1 |
+| `--teal` | `oklch(L C H)` as hex-or-rgb with `L` clamped to 0.62–0.80, `C = min(pick C, 0.17)`; gamut fitting only lowers `C` |
 | `--teal-dim` | same hue, `L = teal L − 0.15` (min 0.49), `C = teal C × 0.78` |
 | `--teal-soft` | `rgba(teal rgb, .13)` |
 | `--desktop-glow` | teal rgb as `r, g, b` |
 | `--desktop-grid` | teal rgb, lightness lowered about 0.10, chroma × 0.8, as `r, g, b` |
-| `--desktop-base` | `oklch(.14 .02 H)` as hex (presets: `#07100f`, `#071016`, `#120e07`, `#130908`, all L about 0.14–0.16) |
-| `--desktop-deep` | `oklch(.18 .03 H)` as hex |
-| `--mark-filter`, `--assistant-filter` | `hue-rotate(H − base hue)` with the saturate factor interpolated from the nearest preset; computed by one function shared by TS and the boot script, verified by `lib/accent-theme.test.ts` |
+| `--desktop-base` | `oklch(.14 (.02 × --accent-chroma) H)` as hex (presets: `#07100f`, `#071016`, `#120e07`, `#130908`, all L about 0.14–0.16) |
+| `--desktop-deep` | `oklch(.18 (.03 × --accent-chroma) H)` as hex |
+| `--mark-filter`, `--assistant-filter` | `hue-rotate(H − base hue)` with the saturate factor scaled by `--accent-chroma` inside the search; a neutral pick gives `hue-rotate(0deg) saturate(0)`; computed by one function shared by TS and the boot script, verified by `lib/accent-theme.test.ts` |
 
-Clamp ranges come from the four presets measured in OKLCH on 2026-10-25 (bright accents L 0.713 / 0.794 / 0.740 / 0.621, C 0.129 / 0.083 / 0.140 / 0.174; dim accents L 0.567 / 0.648 / 0.588 / 0.493). A grey pick (C near 0, hue undefined) uses hue 180.4 (Portia teal hue) at the clamped chroma floor so it still yields a usable accent (D-05). No warning or message is shown for a corrected pick; the swatch and live desktop show the corrected result.
+Clamp ranges come from the four presets measured in OKLCH on 2026-10-25 (bright accents L 0.713 / 0.794 / 0.740 / 0.621, C 0.129 / 0.083 / 0.140 / 0.174; dim accents L 0.567 / 0.648 / 0.588 / 0.493). A neutral pick (black, grey, white) gives a grey theme, never teal: black → #868686, the darkest grey that keeps 4.5:1 on `--bg` and `--panel-2` (D-23). No warning or message is shown for a corrected pick; the swatch and live desktop show the corrected result.
 
-Contrast target: `--teal` on `--bg` text and frames at least 4.5:1 for text, 3:1 for frames; the L clamp guarantees this for all hues (presets already pass). The executor verifies with the extended `accent-theme.test.ts` by sweeping hues 0–359 in steps of 30.
+Contrast target: `--teal` on `--bg` text and frames at least 4.5:1 for text, 3:1 for frames; the L clamp guarantees this for all hues (presets already pass). The executor verifies with the extended `accent-theme.test.ts` by sweeping hues 0–359 in steps of 30, plus a 432-pick HSV board (hue step 30, saturation and value step 0.2) that pins the pick's hue and strength.
 
 Boot script rule (D-11): the stored custom colour is untrusted. Validate with a strict `/^#[0-9a-f]{6}$/i`, derive tokens from numbers only, set them via `d.style.setProperty(...)`, and never concatenate the stored string into the script source (existing rule at the top of `lib/accent-boot.ts`). Invalid value: ignore it and fall back to the preset (or default teal).
 
@@ -185,7 +186,7 @@ Applicable state considerations resolved: 12 covered, 3 backstop, 0 unresolved (
 | overflow | 5 options in `Цвет интерфейса` at narrow widths | ✅ covered | 5 columns on desktop; 2 columns on mobile with «Свой» spanning both |
 | long-text | Roblox nickname in `title` | ✅ covered | Native tooltip wraps/truncates by the browser; no layout impact |
 | zero-one-many | virus list with 0 / 1 / many rows | ✅ covered | `option` roles apply per row; zero rows keeps whatever empty/search-empty rendering exists today, unchanged |
-| overflow | grey, near-black or near-white custom pick | 🧪 backstop | Hue sweep plus grey case in `lib/accent-theme.test.ts` (contrast of `--teal` on `--bg` at least 4.5:1); visual check of spider and frames on a bad pick |
+| overflow | grey, near-black or near-white custom pick | 🧪 backstop | Neutral pick → neutral grey theme (D-23): unit tests for #000/#0d0d0d/#808080/#fff in `lib/accent-theme.test.ts` (contrast of `--teal` on `--bg` at least 4.5:1); owner device check 10-09 |
 | partial | sandboxed frame blocked by missing `allow-*` flag on a device | 🧪 backstop | Owner checks «Таблица», «Устав», YouTube on PC and phone (success criterion 2); «Открыть отдельно» remains as fallback |
 | loading / error | embedded document iframe | 🧪 backstop | Same owner device check as the row above; «Открыть отдельно» is the error path; no new loading UI |
 | overflow / long-text | quest notice with a long quest title | ✅ covered | Existing `.quest-toast` CSS: `width: min(360px, …)`, `max-height: calc(100svh - 160px)`, `overflow-y: auto` |
