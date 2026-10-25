@@ -104,6 +104,9 @@ const checks = {
     const colorButton = ".color-options > button:last-of-type";
     serve(fixture(), 1);
     await load(cdp);
+    // The first page writes its defaults once settings are restored; seed only after that, or the seed is overwritten.
+    await waitFor(cdp, `localStorage.getItem(${JSON.stringify(KEY)}) !== null`, 5000);
+    await sleep(300);
     await cdp.eval(`localStorage.setItem(${JSON.stringify(KEY)}, ${JSON.stringify(stored())}); true`);
     // (a) the head script must paint the saved colour while <body> does not exist yet (D-11)
     await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => {
@@ -144,6 +147,7 @@ const checks = {
     await load(cdp);
     if ((await cdp.eval(inline("--teal"))) !== tealPicked) reasons.push("(d) --teal after reload differs from the picked colour");
     // (e) a tampered stored colour is ignored: nothing applied, nothing thrown (D-11)
+    await sleep(600); // let the reloaded page finish its own write before overwriting the key
     await cdp.eval(`localStorage.setItem(${JSON.stringify(KEY)}, ${JSON.stringify(stored({ customAccent: '"><img src=x onerror=alert(1)>' }))}); true`);
     await load(cdp);
     await sleep(2000);
