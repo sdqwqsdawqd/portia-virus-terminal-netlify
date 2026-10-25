@@ -57,3 +57,13 @@ test("the zoom reset button is named by its percent (ZOOM-02)", () => {
   assert.ok(!button.includes("aria-label") && !button.includes("title="), button);
   assert.ok(source.includes('aria-label="Масштаб документа"'));
 });
+
+test("the quest notice is not a live region itself and closes on Escape from anywhere (A11Y-01)", () => {
+  const start = source.indexOf("function QuestToast");
+  const body = source.slice(start, source.indexOf("\nfunction ", start + 1));
+  const aside = /<aside\b[^>]*>/.exec(body)?.[0] ?? "";
+  assert.ok(aside.includes("quest-toast") && !aside.includes("role=") && !aside.includes("onKeyDown"), aside);
+  assert.ok(body.includes('<span role="status" className="sr-only">Новый квест: '));
+  for (const call of ['window.document.addEventListener("keydown"', 'window.document.removeEventListener("keydown"', "defaultPrevented", "dialog[open]"]) assert.ok(body.includes(call), call);
+});
+

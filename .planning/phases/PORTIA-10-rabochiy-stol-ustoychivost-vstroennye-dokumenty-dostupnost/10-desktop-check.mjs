@@ -299,6 +299,31 @@ const checks = {
     await up("Meta"); await gone("(h) Cmd release");
     await cdp.send("Emulation.setUserAgentOverride", { userAgent: ua, platform: "Win32" });
   },
+  async toast(cdp) {
+    const toast = `!!document.querySelector(".quest-toast")`;
+    const escape = async () => { await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }); await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }); };
+    serve(fixture({ broadcasts: [{ id: "q1", type: "quest", title: "Проверочный квест", body: "Текст квеста", published: true }] }), 1);
+    await load(cdp);
+    if (!(await waitFor(cdp, toast, 5000))) { reasons.push("(a) the quest notice did not appear"); return; }
+    // (a) the notice is a plain landmark; one hidden status line announces it
+    if (await cdp.eval(`document.querySelector(".quest-toast").hasAttribute("role")`)) reasons.push("(a) the notice container still has a role");
+    const line = await cdp.eval(`document.querySelector('.quest-toast [role="status"].sr-only')?.textContent`);
+    if (line !== "Новый квест: Проверочный квест") reasons.push(`(a) status line is ${JSON.stringify(line)}`);
+    // (b) Escape with nothing focused closes it
+    await cdp.eval(`document.activeElement?.blur(); true`);
+    await escape();
+    if (!(await waitFor(cdp, `!${toast}`, 1000))) reasons.push("(b) Escape with no focus did not close the notice");
+    // (c) Escape in a text field leaves it
+    await cdp.eval(`localStorage.removeItem("portia-quests-seen-v1"); true`);
+    await load(cdp);
+    if (!(await waitFor(cdp, toast, 5000))) { reasons.push("(c) the notice did not come back after clearing the seen list"); return; }
+    await click(cdp, '[data-shortcut="search"]');
+    if (!(await waitFor(cdp, `!!document.querySelector(".global-search-box input")`, 3000))) { reasons.push("(c) the search field did not open"); return; }
+    await cdp.eval(`document.querySelector(".global-search-box input").focus(); true`);
+    await escape();
+    await sleep(500);
+    if (!(await cdp.eval(toast))) reasons.push("(c) Escape inside the search field closed the notice");
+  },
 };
 
 let edge;

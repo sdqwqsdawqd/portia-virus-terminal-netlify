@@ -1867,8 +1867,22 @@ function ScientistRichText({ log }: { log: ScientistLog }) {
 function QuestToast({ quest, more, document, onDismiss }: { quest: Broadcast; more: number; document?: RichTextDocument; onDismiss: (openQuests: boolean) => void }) {
   const titleId = useId();
 
+  // The notice never takes focus, so Escape is heard on the document; handled keys, typing and modal dialogs keep their Escape.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select"))) return;
+      if (window.document.querySelector("dialog[open]")) return;
+      onDismiss(false);
+    };
+    window.document.addEventListener("keydown", onKeyDown);
+    return () => window.document.removeEventListener("keydown", onKeyDown);
+  }, [onDismiss]);
+
   return (
-    <aside className="portia-dialog quest-toast" role="status" aria-labelledby={titleId} onKeyDown={(event) => { if (event.key === "Escape") onDismiss(false); }}>
+    <aside className="portia-dialog quest-toast" aria-labelledby={titleId}>
+      <span role="status" className="sr-only">Новый квест: {quest.title || "БЕЗ НАЗВАНИЯ"}</span>
       <div>
         <div className="quest-toast-head">
           <span className="quest-toast-eyebrow">НОВЫЙ КВЕСТ</span>
