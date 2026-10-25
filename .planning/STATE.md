@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Закрытие замечаний
-current_phase: 9
+current_phase: 09
 current_phase_name: Целостность контента
 status: executing
-stopped_at: Phase 9 UI-SPEC approved
-last_updated: "2026-10-25T11:04:12.129Z"
-last_activity: 2026-10-20
-last_activity_desc: Phase 8 complete, transitioned to Phase 9
-state_head: dcf4d0364d44a040a17cd27905fe9ed3e2caa8ca
+stopped_at: Completed PORTIA-09-01-PLAN.md
+last_updated: "2026-10-25T11:26:09.423Z"
+last_activity: 2026-10-25
+last_activity_desc: Phase PORTIA-09 execution started
+state_head: 72dd439432b78356430b84c0084e14b5b651a221
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 19
-  completed_plans: 12
+  completed_plans: 13
   percent: 43
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 
 ## Current Position
 
-Phase: 9 (Целостность контента) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-20 — Phase 8 complete, transitioned to Phase 9
+Phase: PORTIA-09 (Целостность контента) — EXECUTING
+Plan: 2 of 7
+Status: Executing Phase PORTIA-09
+Last activity: 2026-10-25 — Phase PORTIA-09 execution started
 
 Progress: [████░░░░░░] 43%
 
@@ -55,6 +55,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-08 P02 | 10 min | 3 tasks | 4 files |
 | Phase PORTIA-08 P03 | 15min | 2 tasks | 3 files |
 | Phase PORTIA-08 P04 | 30min | 3 tasks | 3 files |
+| Phase PORTIA-09 P01 | 100 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,8 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-08]: 08-03: text typed during a save stays (settleDraft) and keeps the draft dirty; no automatic second save
 - [Phase PORTIA-08]: 08-03: a switch clicked during a save is queued by id and resolved after the answer (open when clean, dialog otherwise)
 - [Phase PORTIA-08]: 08-04: visitor-step ledger rows (03.1-WR-01, 03.3-WR-02) record owner browser verification; 03.2-WR-04 names both halves d3bfdd9 and 8bce191
+- [Phase 09]: 09-01: helix-scroll moves with transform (translate3d), not translate: Edge keeps translate on an outer svg off the compositor (traced)
+- [Phase 09]: 09-01: cell sharp-zone factor stays 0.8; gel and cells repaint on the main thread (SVG children), phone check in 09-07
 
 ### Pending Todos
 
@@ -111,9 +114,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-25T10:14:43.290Z
-Stopped at: Phase 9 UI-SPEC approved
-Resume file: .planning/phases/PORTIA-09-tselostnost-kontenta/09-UI-SPEC.md
+Last session: 2026-10-25T11:26:09.323Z
+Stopped at: Completed PORTIA-09-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
