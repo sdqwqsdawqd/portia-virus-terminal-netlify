@@ -1,9 +1,9 @@
-# Phase 10 — UI Review
+# Phase 10 — UI Review (re-audit after 10-08 and 10-09)
 
 **Audited:** 2026-10-26
-**Baseline:** 10-UI-SPEC.md (approved 2026-10-25)
-**Screenshots:** not captured (no dev server on 3000, 5173 or 8080; code-only audit)
-**Interaction captures:** off (workflow.ui_interaction_capture is false). Interaction findings are code-derived; the SUMMARY files report headless-Edge harness runs (10-desktop-check.mjs) that this audit did not re-run.
+**Baseline:** 10-UI-SPEC.md (approved 2026-10-25, amended 2026-10-26 for D-23)
+**Screenshots:** not captured (code-only audit; no server was built or started)
+**Interaction captures:** off (workflow.ui_interaction_capture is false). Interaction findings are code-derived. The 10-08/10-09 SUMMARY files report headless-Edge harness runs (steps j-n) and owner confirmation on PC and phone; this audit did not re-run them.
 
 ---
 
@@ -11,63 +11,75 @@
 
 | Pillar | Score | Key Finding |
 |--------|-------|-------------|
-| 1. Copywriting | 3/4 | Contract strings present; «Свой» has no noun; sr-only quest line fallback copy is invented |
-| 2. Visuals | 3/4 | «Свой» rainbow swatch and spanning layout match; swatch shows --teal only, not the picked colour exactly |
-| 3. Color | 3/4 | Accent tokens derived and kept on the declared elements; rainbow swatch uses hardcoded hexes; contrast not re-verified here |
-| 4. Typography | 3/4 | No new styles; color row forced to 13px font with column layout, a deviation from the "no new styles" claim |
-| 5. Spacing | 3/4 | New rules use 4px gap; 4px inline padding on color buttons shrinks hit width |
-| 6. Experience Design | 3/4 | State coverage good; zoom layer lacks the contracted pointer-events: none; sandbox keeps allow-scripts + allow-same-origin |
+| 1. Copywriting | 3/4 | Contract strings present; bare «Свой»; invented «БЕЗ НАЗВАНИЯ» fallback in the sr-only quest line |
+| 2. Visuals | 3/4 | Picker × is now a clean 24x24 box; «Свой» swatch still shows the derived --teal, not the raw pick |
+| 3. Color | 3/4 | `--accent-chroma` now scales the chrome tints (315 oklch uses, none unscaled); rainbow swatch hex hardcoded; contrast not re-run here |
+| 4. Typography | 3/4 | No new styles except `.color-options > button` 13px override; `line-height: 1` on × is a legitimate fix |
+| 5. Spacing | 3/4 | New rules use 4px/8px; `padding-inline: 4px` on colour buttons is thin |
+| 6. Experience Design | 3/4 | State coverage good; zoom layer still lacks `pointer-events: none`; sandbox keeps scripts + same-origin |
 
-**Overall: 18/24**
+**Overall: 18/24** (unchanged from the first review; gap-closure fixed real defects but did not clear the carried warnings, so no pillar moves up)
 
-No pillar is at 1, so no BLOCKER. All findings below are WARNINGs.
+No pillar is at 1, so there is no BLOCKER. All findings are WARNINGs.
+
+---
+
+## Gap-closure verification (10-08, 10-09)
+
+- D-23 / neutral picks: `:root` sets `--accent-chroma: 1` (app/portia.css:22). Every `oklch(` in the stylesheet that uses the accent hue is written `calc(C * var(--accent-chroma))`; a grep for `oklch(` lines without `accent-chroma` returned none. A neutral pick therefore greys the chrome, as D-23 requires. Spec token table matches shipped behaviour.
+- Combinator fix (G-10-2): base, hover and selected rules are `.setting-options > button` (portia.css:294, 297, 298); no bare `.setting-options button` remains. The picker's nested buttons no longer inherit `min-height: 54px` and the column layout.
+- Picker ×: `.custom-color-picker-head button { width: 24px; height: 24px; line-height: 1 }` (portia.css:678) matches the spec exception of a 24x24 close button.
+- WARNING (carried): 24x24 is below the 40x40 target the spec gives the quest-toast close button and below the 44px WCAG 2.5.5 guideline; it is spec-sanctioned (D-07, reuse) but small for touch on the phone, where the owner confirmed it visually only.
+- WARNING (new, minor): `.color-options > button:last-of-type` (portia.css:1199) relies on the picker being a non-button element and on «Свой» being the last button. If the picker head or any button is ever added as a sibling it silently breaks the full-width span.
 
 ---
 
 ## Top 3 Priority Fixes
 
-1. **Zoom layer does not use `pointer-events: none`** — `.document-app-zoom-layer` (app/portia.css:1579) is `position:absolute; inset:0` with pointer handlers (components/portia-desktop.tsx:1636). While Ctrl is held it swallows every click and scroll over the document. It clears on the first unmodified pointer event, but a stale held state (missed keyup) still blocks the first click. UI-SPEC says the layer must never intercept clicks. Fix: `pointer-events: none` on the layer and drive the clear from the `.document-app` wheel/key handlers, or keep the layer but verify `blur`/`visibilitychange` clearing on a real device.
-2. **Embed sandbox pairs `allow-scripts` with `allow-same-origin`** (portia-desktop.tsx:31) — for same-origin content this lets the framed page remove its own sandbox. Spec's start set mandates it, so it is a contract-accepted risk. Fix: confirm that Таблица, Устав and YouTube are all cross-origin (they appear to be) and record that in the ledger; drop `allow-same-origin` for any embed that proves not to need it.
-3. **Color row visual deviation** — `.color-options > button` (portia.css:296) changes the row to stacked column layout, 13px font and 4px inline padding, which the spec did not declare. Fix: add the exception to UI-SPEC or re-check "Холодный" at 520px and 375px with a screenshot (not captured in this audit).
+1. **Zoom layer has no `pointer-events: none`** — `.document-app-zoom-layer` (portia.css:1579) is `position:absolute; inset:0`; the spec requires `pointer-events: none` for events when the modifier is not held. The layer only clears on a pointer event without the modifier (portia-desktop.tsx:1636), so the first click while Ctrl is held is swallowed. Fix: add `pointer-events: none` and keep the wheel handler on the frame container, or document the exception in the spec.
+2. **Embed sandbox pairs `allow-scripts` with `allow-same-origin`** (portia-desktop.tsx:31) — acceptable only for third-party origins; if any frame is same-origin the page can remove its own sandbox. Spec-mandated start set; fix: confirm per-frame origin during the owner device check and drop `allow-same-origin` where the viewer works without it.
+3. **Invented fallback copy «БЕЗ НАЗВАНИЯ»** (portia-desktop.tsx:1887, 1893) — a screen reader announces «Новый квест: БЕЗ НАЗВАНИЯ» for an untitled quest, copy that is not in the contract. Fix: omit the title clause or add an agreed string to the Copywriting Contract.
 
-Further minor items: «Настройки сохранены» uses `role="status"` plus `aria-live="polite"` redundantly (portia-desktop.tsx:1416); `LoadingState` carries its own `role="status"`, so the quest notice's hidden status and the loading status can announce together; `zoomModifier` detects Mac with deprecated `navigator.platform` only, while the spec allows `userAgentData?.platform` first.
+Further minor items: «Свой» swatch uses the clamped `--teal`, so a pick like #0D0D0D shows #868686 (intended per D-23, but the picker's board shows the raw pick); `.color-options > button` 13px and column layout is an undeclared deviation from "no new type styles"; `LoadingState` carries its own `role="status"` (portia-desktop.tsx:1971) alongside the quest status span, so they can announce together; `zoomModifier` reads `navigator.platform` (deprecated) rather than `userAgentData` first as the spec suggests.
 
 ---
 
 ## Detailed Findings
 
 ### Pillar 1: Copywriting (3/4)
-- Present as contracted: «Свой» (portia-desktop.tsx:1403), picker title «Свой цвет интерфейса» (:1409), «Новый квест: {название}» in a hidden status span (:1887), Roblox tooltip `title` equal to `aria-label` (:1283), no `title` on the non-link figure.
-- WARNING: the status line falls back to «БЕЗ НАЗВАНИЯ» (:1887) when a quest has no title. Not in the contract; the announcement then reads «Новый квест: БЕЗ НАЗВАНИЯ».
-- WARNING: bare «Свой» has no noun (spec checker already flagged it, non-blocking); the picker title is the only context.
+- Present as contracted: «Свой» (portia-desktop.tsx ~1403), picker title «Свой цвет интерфейса» (:1409), `aria-label="Закрыть выбор цвета"` (custom-color-picker.tsx:65), sr-only «Новый квест: {название}» (:1887).
+- WARNING: «БЕЗ НАЗВАНИЯ» fallback (see fix 3). Same string also used as heading fallback at :1306, :1327, :1893.
+- WARNING: bare «Свой» has no noun; the picker title is the only context.
 
 ### Pillar 2: Visuals (3/4)
-- Rainbow conic swatch for the no-saved-colour state exists (portia.css:304). Picker is the last grid child spanning `1 / -1` (:293). Phone layout spans «Свой» across both columns (:1199).
-- WARNING: swatch background is `customTokens["--teal"]`, the clamped derived accent, not the raw pick; a grey or very dark pick shows a different colour than the swatch the user chose. Intended per D-05, but the picker's own swatch and this one can disagree.
-- No icon-only button lacks an accessible name in the audited sections (close button has `aria-label`).
+- Rainbow conic swatch for the empty state (portia.css:304); «Свой» spans both columns at the mobile breakpoint (:1199); picker spans `1 / -1` below the row.
+- Picker × now a defined 24x24 square with `line-height: 1`, resolving the clipped-glyph defect from G-10-2.
+- WARNING: swatch background is the derived accent, not the raw pick; for grey or muted picks it differs from the board the user just chose.
+- Icon-only controls audited all have accessible names.
 
 ### Pillar 3: Color (3/4)
-- Accent use stays on the reserved list: `.setting-options button.selected` border and inset underline (:297-298), «Свой» included.
-- WARNING: `.swatch.*` fixed hex values (:300-304) are hardcoded; acceptable for swatches that must not follow the live accent.
-- Not re-verified in this audit: contrast of `--teal` on `--bg` across the hue sweep (reported as covered by lib/accent-theme.test.ts in 10-01).
+- Accent reserved list respected: selected option border and inset underline use `var(--teal)` (:297-298).
+- `--accent-chroma` coverage is complete in portia.css (315 oklch uses, all scaled). Remaining non-scaled literals: error colours `#754b46`/`#e0aaa3` (portia.css:46), `#fff` hover text, and `.swatch.*` hexes (:300-304). The swatches are fixed by design; the owner-login alert colours stay chromatic on a grey theme, a minor inconsistency.
+- WARNING: contrast of `--teal` on `--bg` for neutral and muted picks is claimed by lib/accent-theme.test.ts (304 tests pass per 10-09 summary) but was not re-verified here.
 
 ### Pillar 4: Typography (3/4)
-- No new font stacks or weights in the audited code. Sizes 11 and 13 as declared.
-- WARNING: `.color-options > button { font-size: 13px }` (:296) changes the label size of the preset buttons for the whole row, outside the "no new type styles" statement.
+- Sizes 11 and 13 as declared; no new fonts or weights in the gap-closure CSS.
+- WARNING: `.color-options > button { font-size: 13px }` (:296) is outside the "no new type styles" claim.
 
 ### Pillar 5: Spacing (3/4)
-- New values: 4px gap (:296). Existing 9px/54px exceptions are respected (min-height 54px kept, :294).
-- WARNING: `padding-inline: 4px` on a button whose neighbour spec reserved `padding: 10px` leaves thin side padding; at 375px with 2 columns this is fine, at the 520px window it is the tightest case (SUMMARY 04 notes «Холодный» was 2px over before the fix).
+- New values: `gap: 4px` (:296), grid gap 8px (:291), 24x24 close box. `min-height: 54px` exception kept on direct children.
+- WARNING: `padding-inline: 4px` is thin at the 520px window with five columns (SUMMARY 04 noted «Холодный» overflowed by 2px before this fix); not screenshot-verified.
 
 ### Pillar 6: Experience Design (3/4)
-- Covered: assistant bubble visibility derived from usable text (`assistantSpeaking`), Escape inside the accent picker preventDefault-marked then ignored by the quest-notice document listener (:1875-1880) which also skips inputs, contenteditable and open `dialog`; virus list is a listbox only while rows exist, with `role="option"` and `aria-selected` (:1244-1248); loading state sits outside the listbox; factory reset clears the custom colour; picker keeps `aria-pressed` on «Свой».
-- WARNING: zoom layer behaviour (Top fix 1).
-- WARNING: Escape handler skips only `input, textarea, select` and contenteditable; a focused `button` in another window does not block it, so Escape dismisses the notice from any focused control. This matches the spec text but means Escape in an unrelated widget (for example a custom menu) is also consumed unless that widget calls `preventDefault`.
-- Not verified here: real-device load of the sandboxed «Таблица», «Устав» and YouTube frames (owner check, backstop in the spec).
+- State coverage matches the spec table: empty/whitespace tips, missing text, invalid stored colour (strict `#rrggbb`), preset round trip keeps saved custom colour, factory reset clears it.
+- WARNING: zoom layer behaviour (fix 1). Layer is `aria-hidden` and clears on pointer events without the modifier, a partial mitigation only.
+- WARNING: sandbox flags (fix 2). `sandbox` is never dropped, and «Открыть отдельно» remains the fallback.
+- Registry audit: not applicable (no components.json).
 
 ---
 
 ## Files Audited
-- components/portia-desktop.tsx (lines 31, 1242-1283, 1403-1426, 1588-1636, 1870-1897, 1971-1980)
-- app/portia.css (lines 78-90, 292-304, 1198-1199, 1579)
-- 10-UI-SPEC.md, 10-01 to 10-07 SUMMARY files (07 not opened in detail)
+- app/portia.css (settings, picker head, zoom layer, accent-chroma coverage)
+- components/portia-desktop.tsx (sandbox, zoom, quest notice, loading state)
+- components/custom-color-picker.tsx
+- 10-UI-SPEC.md, 10-CONTEXT.md, 10-01..10-09 SUMMARY/PLAN, previous 10-UI-REVIEW.md
