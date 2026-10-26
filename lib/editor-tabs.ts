@@ -1,4 +1,5 @@
-import { editorSections, sectionLabels, type EditorSection } from "./editor-changes.ts";
+import { deniedSections, editorSections, sectionLabels, unclassifiedTextKeys, type EditorSection } from "./editor-changes.ts";
+import type { PortiaContent } from "./portia-content.ts";
 
 export type TabKind = "regular" | "trusted";
 export type TabDef = { id: string; label: string; kind: TabKind };
@@ -47,4 +48,17 @@ export function parseTabLists(body: Record<string, unknown>): { closedTabs?: str
     result.grantedTabs = granted;
   }
   return result.closedTabs || result.grantedTabs ? result : null;
+}
+
+export type ContentRefusal = { status: 400 | 403; error: string; code?: "section-closed"; sections?: EditorSection[] };
+
+// Server rule for a restricted editor's content save: null means the save may go on (D-10, D-12, D-17).
+export function contentRefusal(baseline: PortiaContent, incoming: PortiaContent, openTabs: readonly string[]): ContentRefusal | null {
+  const closed = closedSectionsOf(openTabs);
+  if (!closed.length) return null;
+  if (closed.length === editorSections.length) return { status: 403, error: "Владелец пока не открыл вам ни одного раздела." };
+  // Fail closed: a changed key that no section owns cannot be checked, so it is refused.
+  if (unclassifiedTextKeys(baseline, incoming).length) return { status: 400, error: "Некорректная структура данных." };
+  const denied = deniedSections(baseline, incoming, closed);
+  return denied.length ? { status: 403, error: closedMessage(denied), code: "section-closed", sections: denied } : null;
 }

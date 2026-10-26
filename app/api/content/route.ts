@@ -3,12 +3,15 @@ import { MAX_CONTENT_BODY_BYTES, utf8Bytes } from "@/lib/content-limits";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
+import { closedSectionsOf, contentRefusal } from "@/lib/editor-tabs";
 import { contentCacheTag, noStoreHeaders, publicCacheHeaders, purgeCacheTag } from "@/lib/portia-cdn";
 import { parseJsonObject } from "@/lib/request-json";
 
 export const dynamic = "force-dynamic";
 
 type ContentRow = { payload: unknown; revision: number; updated_at: string };
+
+const conflictMessage = "Пока вы редактировали, кто-то другой сохранил изменения. Скопируйте свои правки и обновите страницу.";
 
 // Identical for every visitor, so the CDN serves it; each save purges the cache.
 // Who may edit comes from /api/access.
@@ -52,6 +55,20 @@ export async function PUT(request: Request) {
       return Response.json({ error: "Некорректная структура данных." }, { status: 400 });
     }
 
+    // The database does not check sections (D-11, accepted risk in PROJECT.md), so a restricted editor is checked here.
+    // The owner and editors with every tab open skip this branch and its extra read (D-00a).
+    if (closedSectionsOf(access.openTabs).length) {
+      const { data: stored, error: readError } = await supabase.from("portia_content").select("payload, revision")
+        .eq("id", "main").maybeSingle<{ payload: unknown; revision: number }>();
+      if (readError) throw readError;
+      if ((stored?.revision ?? 0) !== baseRevision) return Response.json({ error: conflictMessage }, { status: 409 });
+      // What the editor's own baseline normalizes to, so equal closed sections compare equal.
+      const baseline = normalizePortiaContent(stored?.payload ?? defaultPortiaContent) ?? normalizePortiaContent(defaultPortiaContent);
+      if (!baseline) throw new Error("PORTIA default content failed to normalize");
+      const refusal = contentRefusal(baseline, normalized, access.openTabs);
+      if (refusal) return Response.json({ error: refusal.error, code: refusal.code, sections: refusal.sections }, { status: refusal.status });
+    }
+
     // Save only if nobody else saved since this editor loaded the content; otherwise
     // the older copy would silently overwrite the other editor's work.
     const row = { payload: normalized, revision: baseRevision + 1, updated_at: new Date().toISOString(), updated_by: user.id };
@@ -61,7 +78,7 @@ export async function PUT(request: Request) {
       : await supabase.from("portia_content").update(row).eq("id", "main").eq("revision", baseRevision)
           .select("revision, updated_at").maybeSingle<{ revision: number; updated_at: string }>();
     if (!saved && (!saveError || saveError.code === "23505")) {
-      return Response.json({ error: "Пока вы редактировали, кто-то другой сохранил изменения. Скопируйте свои правки и обновите страницу." }, { status: 409 });
+      return Response.json({ error: conflictMessage }, { status: 409 });
     }
     if (saveError || !saved) throw saveError;
 
