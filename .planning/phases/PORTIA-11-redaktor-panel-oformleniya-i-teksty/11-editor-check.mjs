@@ -1,4 +1,4 @@
-// Usage: node 11-editor-check.mjs --check mark|panel|savechip|sections [--url http://localhost:3124]   (later plans add more checks)
+// Usage: node 11-editor-check.mjs --check mark|panel|savechip|sections|table [--url http://localhost:3124]   (later plans add more checks)
 // Why: Phase 11 has no DOM test runner, so headless Edge drives the production build. Inside the browser it launches,
 // GET /api/access is answered {canEdit: true} and GET /api/content is served from fixtures; every non-GET request to /api/*
 // is blocked and fails the check (nothing is ever saved, no login is needed). The only exception is the savechip fake-save
@@ -667,6 +667,98 @@ const checks = {
     await drag(cdp, grab, { x: grab.x - 100, y: grab.y - 200 });
     const phoneAfter = await panelRect(cdp);
     if (["left", "top", "right", "bottom"].some((k) => Math.abs(phoneAfter[k] - phoneBefore[k]) > 0.5)) reasons.push(`(p) the phone sheet moved: ${JSON.stringify(phoneBefore)} -> ${JSON.stringify(phoneAfter)}`);
+    await desktop(cdp);
+  },
+  async table(cdp) {
+    const row = (id, key, value) => ({ id, key, value });
+    serve(fixture({
+      ...editorFixture(),
+      infoSections: [{ id: "s1", title: "Раздел 1", body: "", subsections: [{ id: "u1", title: "Подраздел 1", blocks: [
+        { id: "t1", type: "table", rows: [row("r1", "A", "1"), row("r2", "B", "2"), row("r3", "C", "3")] },
+        { id: "t2", type: "table", rows: [] },
+      ] }] }],
+    }), 30);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    const openAll = async () => { for (let pass = 0; pass < 4; pass += 1) await cdp.eval(`document.querySelectorAll('.nested-editor-toggle[aria-expanded="false"]').forEach((b) => b.click())`); };
+    // Every card starts collapsed: open them all, nested ones last.
+    await openAll();
+    if (!(await waitFor(cdp, `document.querySelectorAll(".info-table-row").length === 3`, 3000))) { reasons.push("table: the three rows did not appear"); return; }
+    const values = (field) => cdp.eval(`[...document.querySelectorAll(".info-table-row")].map((r) => r.querySelectorAll("input")[${field}].value).join("")`);
+    const both = async () => `${await values(0)}|${await values(1)}`;
+    const center = (selector, index = 0) => cdp.eval(`(() => { const e = document.querySelectorAll(${JSON.stringify(selector)})[${index}]; e.scrollIntoView({ block: "center" }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, top: r.top, height: r.height, width: r.width }; })()`);
+    const ctrlZ = (type) => cdp.send("Input.dispatchKeyEvent", { type, key: "z", code: "KeyZ", windowsVirtualKeyCode: 90, modifiers: 2 });
+    const undo = async () => { await ctrlZ("keyDown"); await ctrlZ("keyUp"); await sleep(150); };
+    const at = (type, x, y, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x, y, button: "left", ...extra });
+    const START = "ABC|123";
+    // (a) the values are A, B, C and each row has a ≡ (34px on a PC)
+    if ((await both()) !== START) reasons.push(`(a) rows read ${await both()}, expected ${START}`);
+    const handles = await cdp.eval(`[...document.querySelectorAll(".info-table-row")].map((r) => !!r.querySelector(":scope > .order-drag-handle"))`);
+    if (handles.length !== 3 || handles.some((h) => !h)) reasons.push(`(a) row handles: ${JSON.stringify(handles)}`);
+    const size = await center(".info-table-row .order-drag-handle");
+    if (Math.abs(size.width - 34) > 1) reasons.push(`(a) the row handle is ${size.width}px wide, expected 34`);
+    // (b) hold row 3's ≡ 250 ms, move above row 1's middle: C, A, B
+    const grab = await center(".info-table-row .order-drag-handle", 2);
+    await at("mouseMoved", grab.x, grab.y, { button: "none" });
+    await at("mousePressed", grab.x, grab.y, { buttons: 1, clickCount: 1 });
+    await sleep(250);
+    const rect1 = await cdp.eval(`(() => { const r = document.querySelectorAll(".info-table-row")[0].getBoundingClientRect(); return { top: r.top, height: r.height }; })()`);
+    const to = { x: grab.x, y: rect1.top + rect1.height * 0.3 };
+    for (let step = 1; step <= 14; step += 1) { await at("mouseMoved", grab.x, grab.y + ((to.y - grab.y) * step) / 14, { buttons: 1 }); await sleep(30); }
+    await at("mouseReleased", to.x, to.y, { buttons: 0, clickCount: 1 });
+    await sleep(300);
+    if ((await both()) !== "CAB|312") reasons.push(`(b) after the drag rows read ${await both()}, expected CAB|312`);
+    // (c) one Ctrl+Z puts it back
+    await undo();
+    if ((await both()) !== START) reasons.push(`(c) after Ctrl+Z rows read ${await both()}, expected ${START}`);
+    // (d) ArrowDown on row 1's ≡: B, A, C, focus on the handle of the row that holds A
+    await cdp.eval(`document.querySelectorAll(".info-table-row .order-drag-handle")[0].focus()`);
+    await key(cdp, "ArrowDown", 40);
+    await sleep(200);
+    if ((await both()) !== "BAC|213") reasons.push(`(d) after ArrowDown rows read ${await both()}, expected BAC|213`);
+    const focused = await cdp.eval(`[...document.querySelectorAll(".info-table-row")].findIndex((r) => r.querySelector(":scope > .order-drag-handle") === document.activeElement)`);
+    if (focused !== 1) reasons.push(`(d) focus is on row index ${focused}, expected 1 (the row holding A)`);
+    await undo();
+    if ((await both()) !== START) reasons.push(`(d) after Ctrl+Z rows read ${await both()}, expected ${START}`);
+    // (e) drag the «Признак» ≡ onto the «Значение» header: columns swap in every row, one undo restores
+    const from = await center(".info-table-head [data-column='key'] .column-swap-handle");
+    const target = await center(".info-table-head [data-column='value']");
+    await at("mouseMoved", from.x, from.y, { button: "none" });
+    await at("mousePressed", from.x, from.y, { buttons: 1, clickCount: 1 });
+    for (let step = 1; step <= 6; step += 1) await at("mouseMoved", from.x + ((target.x - from.x) * step) / 6, from.y, { buttons: 1 });
+    if (!(await cdp.eval(`!!document.querySelector(".info-table-head [data-column='value'][data-drop-target]")`))) reasons.push("(e) the target header has no drop indicator during the drag");
+    await at("mouseReleased", target.x, target.y, { buttons: 0, clickCount: 1 });
+    await sleep(200);
+    if ((await both()) !== "123|ABC") reasons.push(`(e) after the column drag rows read ${await both()}, expected 123|ABC`);
+    if (await cdp.eval(`!!document.querySelector("[data-drop-target], .column-swap-handle[data-dragging]")`)) reasons.push("(e) a drop marker is left after the release");
+    await undo();
+    if ((await both()) !== START) reasons.push(`(e) after Ctrl+Z rows read ${await both()}, expected ${START}`);
+    // (f) ArrowLeft on the «Значение» ≡ swaps, again restores exactly
+    await cdp.eval(`document.querySelector(".info-table-head [data-column='value'] .column-swap-handle").focus()`);
+    await key(cdp, "ArrowLeft", 37); await sleep(150);
+    if ((await both()) !== "123|ABC") reasons.push(`(f) after ArrowLeft rows read ${await both()}, expected 123|ABC`);
+    await key(cdp, "ArrowLeft", 37); await sleep(150);
+    if ((await both()) !== START) reasons.push(`(f) after the second ArrowLeft rows read ${await both()}, expected ${START}`);
+    // (g) the empty table says how to begin and has no column handles
+    const empty = await cdp.eval(`(() => { const body = [...document.querySelectorAll(".nested-editor-body")].find((b) => !b.querySelector(".nested-editor-body") && b.textContent.includes("Строк пока нет")); return body ? { text: body.querySelector(".editor-empty")?.textContent ?? "", handles: body.querySelectorAll(".column-swap-handle").length } : null; })()`);
+    if (!empty) reasons.push("(g) the empty table block was not found");
+    else {
+      if (empty.text !== "Строк пока нет. Добавьте первую кнопкой «+ СТРОКА».") reasons.push(`(g) empty text: ${empty.text}`);
+      if (empty.handles !== 0) reasons.push(`(g) the empty table has ${empty.handles} column handles`);
+    }
+    // (h) nothing was saved: the stub blocks every non-GET request to /api/* and records it as "write blocked", which already fails the check
+    // (i) on a phone both kinds of ≡ are 44px
+    await phone(cdp);
+    await load(cdp);
+    if (await openEditor(cdp)) {
+      await clickText(cdp, ".editor-tabs button", "Информация");
+      await openAll();
+      await sleep(300);
+      const small = await cdp.eval(`(() => { const h = document.querySelector(".info-table-row > .order-drag-handle"); const k = document.querySelector(".column-swap-handle"); return h && k ? { row: h.getBoundingClientRect().width, col: k.getBoundingClientRect().width } : null; })()`);
+      if (!small) reasons.push("(i) no handles on the phone");
+      else if (Math.abs(small.row - 44) > 1 || Math.abs(small.col - 44) > 1) reasons.push(`(i) phone handles ${small.row} and ${small.col}px, expected 44`);
+    }
     await desktop(cdp);
   },
 };

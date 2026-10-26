@@ -303,6 +303,49 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
   ><span aria-hidden="true">≡</span></button>;
 }
 
+// Two table columns swap, so a header ≡ is dropped on the other header (or moved with ArrowLeft/ArrowRight) instead of sorting live.
+function ColumnSwapHandle({ label, onSwap }: { label: string; onSwap: () => void }) {
+  const otherCell = (button: HTMLElement, x: number, y: number) => {
+    const cell = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-column]") ?? null;
+    return cell && cell !== button.closest("[data-column]") && cell.closest(".info-table-head") === button.closest(".info-table-head") ? cell : null;
+  };
+  const clear = (button: HTMLElement) => {
+    delete button.dataset.dragging;
+    button.closest(".info-table-head")?.querySelectorAll("[data-drop-target]").forEach((cell) => cell.removeAttribute("data-drop-target"));
+  };
+  return <button
+    className="order-drag-handle column-swap-handle"
+    type="button"
+    aria-label={`Переставить столбец «${label}»`}
+    aria-keyshortcuts="ArrowLeft ArrowRight"
+    onPointerDown={(event) => {
+      if (!event.isPrimary || event.button !== 0) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      // "column", not "true": editKeyFor folds only row drags into one step, and a column swap is a single change on drop.
+      event.currentTarget.dataset.dragging = "column";
+    }}
+    onPointerMove={(event) => {
+      const button = event.currentTarget;
+      if (!button.dataset.dragging) return;
+      const cell = otherCell(button, event.clientX, event.clientY);
+      button.closest(".info-table-head")?.querySelectorAll("[data-column]").forEach((item) => item.toggleAttribute("data-drop-target", item === cell));
+    }}
+    onPointerUp={(event) => {
+      const button = event.currentTarget;
+      const dropped = button.dataset.dragging && otherCell(button, event.clientX, event.clientY);
+      clear(button);
+      if (dropped) onSwap();
+    }}
+    onPointerCancel={(event) => clear(event.currentTarget)}
+    onLostPointerCapture={(event) => clear(event.currentTarget)}
+    onKeyDown={(event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      onSwap();
+    }}
+  ><span aria-hidden="true">≡</span></button>;
+}
+
 function replaceRichText(document: RichTextDocument, nextText: string) {
   const previousText = document.runs.map((run) => run.text).join("");
   const previousStyles = expandStyles(document);
@@ -672,6 +715,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     editCount.current += 1;
     dispatch({ type: "change", updater, key: editKeyFor(document.activeElement), now: Date.now() });
   };
+
+  // D-19: the two columns are the key and value of every row; one changeDraft call is one undo step.
+  const swapTableColumns = (subsectionId: string, blockId: string) => changeDraft((next) => editTableRows(next, subsectionId, blockId, (rows) => rows.forEach((row) => { [row.key, row.value] = [row.value, row.key]; })));
 
   const step = (kind: "undo" | "redo") => {
     const target = kind === "undo" ? history.past.at(-1) : history.future[0];
@@ -1175,6 +1221,14 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                           {block.type === "photo" && <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="На странице: до 820 px в ширину" uploadState={uploadState} onChange={(value) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = value; }); })} onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = url; }); }))} />}
                           {block.type === "table" && (
                             <>
+                              {block.rows.length === 0 && <div className="editor-empty compact-empty">Строк пока нет. Добавьте первую кнопкой «+ СТРОКА».</div>}
+                              {block.rows.length > 0 && (
+                                <div className="info-table-head">
+                                  <div data-column="key"><ColumnSwapHandle label="Признак" onSwap={() => swapTableColumns(subsection.id, block.id)} /><span>Признак</span></div>
+                                  <div data-column="value"><ColumnSwapHandle label="Значение" onSwap={() => swapTableColumns(subsection.id, block.id)} /><span>Значение</span></div>
+                                  <span className="info-table-head-pad" aria-hidden="true">Удалить строку</span>
+                                </div>
+                              )}
                               {block.rows.map((row, rowIndex) => (
                                 <div className="info-table-row" data-sort-index={rowIndex} key={row.id}>
                                   <OrderDragHandle index={rowIndex} label={`строка ${rowIndex + 1}`} onMove={(from, to) => changeDraft((next) => editTableRows(next, subsection.id, block.id, (rows) => moveArrayItem(rows, from, to)))} />

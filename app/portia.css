@@ -352,6 +352,13 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .info-subsection-list .secondary-control { padding: 6px 10px; margin: 6px 6px 0 0; }
 .info-table-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 10px; }
 .info-table-row input { min-width: 0; }
+.info-table-head { display: grid; grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.info-table-head > [data-column] { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.info-table-head > [data-column="key"] { grid-column: 2; }
+.info-table-head > [data-column="value"] { grid-column: 3; }
+.info-table-head > [data-column] > span { font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: .08em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info-table-head [data-drop-target] { box-shadow: inset 2px 0 0 var(--teal); }
+.info-table-head-pad { grid-column: 4; visibility: hidden; height: 0; padding: 0 4px; font: 11px var(--sans); white-space: nowrap; }
 .info-table-row button:not(.order-drag-handle) { border: 0; background: transparent; color: #b96a63; font: 11px var(--sans); cursor: pointer; padding: 10px 4px; }
 .info-block-video { margin: 0; max-width: 820px; }
 .info-block-video iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; }
@@ -539,11 +546,11 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .editor-record-row { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 5px; }
 .editor-record-row > button:last-child { min-width: 0; }
 .editor-record-list .editor-record-row .order-drag-handle, .order-drag-handle { width: 34px; min-width: 34px; min-height: 34px; display: grid; place-items: center; align-content: center; gap: 1px; padding: 3px; border: 1px dashed oklch(.445 calc(.038 * var(--accent-chroma)) var(--accent-hue)); background: rgba(var(--desktop-glow), .035); color: oklch(.628 calc(.036 * var(--accent-chroma)) var(--accent-hue)); cursor: grab; touch-action: none; user-select: none; }
-.order-drag-handle:hover, .order-drag-handle[data-dragging="true"] { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); cursor: grabbing; }
+.order-drag-handle:hover, .order-drag-handle[data-dragging="true"], .column-swap-handle[data-dragging] { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); cursor: grabbing; }
 .order-drag-handle span { font: 700 17px/1 var(--sans); }
 /* Gel lanes: while a handle is held the list shows a rail and the moving record is a lit band. */
 .editor-record-list:has(.order-drag-handle[data-dragging="true"]), .recommendation-order-list:has(.order-drag-handle[data-dragging="true"]), .flat-editor-form:has(.order-drag-handle[data-dragging="true"]) { box-shadow: inset 2px 0 0 var(--teal-dim); }
-.editor-record-row:has(.order-drag-handle[data-dragging="true"]), .recommendation-order-row:has(.order-drag-handle[data-dragging="true"]), .nested-editor-card:has(.order-drag-handle[data-dragging="true"]), .info-table-row:has(.order-drag-handle[data-dragging="true"]) { position: relative; z-index: 1; outline: 1px solid var(--teal); background: var(--teal-soft); box-shadow: 0 8px 20px rgba(0,0,0,.35); }
+.editor-record-row:has(.order-drag-handle[data-dragging="true"]), .recommendation-order-row:has(.order-drag-handle[data-dragging="true"]), .nested-editor-card:has(> .nested-editor-head .order-drag-handle[data-dragging="true"]), .info-table-row:has(.order-drag-handle[data-dragging="true"]) { position: relative; z-index: 1; outline: 1px solid var(--teal); background: var(--teal-soft); box-shadow: 0 8px 20px rgba(0,0,0,.35); }
 .editor-record-list { counter-reset: lane; }
 .editor-record-row { counter-increment: lane; }
 .editor-record-row .order-drag-handle::after { content: counter(lane, decimal-leading-zero); color: oklch(.56 calc(.03 * var(--accent-chroma)) var(--accent-hue)); font: 600 9px/1 var(--mono); }
@@ -1236,6 +1243,9 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .content-control-actions button, .content-control-actions a { flex: 1 1 180px; }
   .info-ledger > div { grid-template-columns: 1fr; gap: 7px; padding: 14px; }
   .info-table-row { grid-template-columns: 44px minmax(0, 1fr); align-items: stretch; }
+  .info-table-head { display: flex; gap: 10px; }
+  .info-table-head > [data-column] { flex: 1 1 0; }
+  .info-table-head-pad { display: none; }
   .info-table-row > :not(.order-drag-handle) { grid-column: 2; }
   .info-table-row > .order-drag-handle { grid-column: 1; grid-row: 1 / span 3; align-self: start; }
   .info-app footer { flex-direction: column; gap: 6px; }

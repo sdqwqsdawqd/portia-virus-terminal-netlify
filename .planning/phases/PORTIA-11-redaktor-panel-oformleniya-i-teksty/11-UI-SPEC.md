@@ -186,11 +186,12 @@ Phone (<= 900px):
 - Applying a style to all fragments is one history step in `lib/editor-history.ts`; Ctrl+Z reverts every field at once, one `↶` press also.
 - Selection can be lost when focus moves into panel inputs; fragments are stored as (field key, start, end) and restored on apply.
 
-### 5. Tables — EDIT-07 [CTX D-18, D-19]
+### 5. Tables — EDIT-07 [CTX D-18, D-19] (amended 2026-10-26, planner)
 - Each row gets a leading `≡` (`OrderDragHandle`, reusing `moveArrayItem` + `editTableRows`); 34px desktop / 44px phone. Row grid: `[≡] [Признак input] [Значение input] [удалить ×]`; inputs `min-width: 0`.
 - Column headers `Признак` and `Значение` each get a `≡` handle (same visual, `aria-label` per table above). Dragging one over the other swaps the two columns across all rows; order persists in content and renders on the public site (`dl`: `dt` = first column, `dd` = second) — storage approach is planner's choice (swap `key`/`value` or store an order flag).
 - Drag feedback reuses existing `[data-dragging="true"]` styles (teal border, `--teal-soft`, lifted row). While a column header is dragged, a 2px `--teal` drop indicator marks the target header.
 - Keyboard reorder for handles follows the existing `OrderDragHandle` behaviour (no change).
+- **(amended 2026-10-26, planner)** Plan 11-05 decisions: (1) a column swap swaps `key` and `value` in every row, with no schema flag; the public site is unchanged (`dt` = key, `dd` = value), so after a swap the left column is still named «Признак» and holds the former values; a second swap restores it. (2) Rows carry a stable `id` (the normalizer keeps a unique stored one, else `<blockId>-row-<index>`; new rows use `makeId("row")`) so the ≡ keeps a row's identity and keyboard focus. (3) The column handle is the small `ColumnSwapHandle`: it swaps on drop (or ArrowLeft/ArrowRight) with the 2px `--teal` indicator on the target header, not live. (4) Row handles keep the house label «Изменить порядок: строка N» (not «Переставить строку N»); column handles are «Переставить столбец «…»». Handles carry no tooltip (Phase 10 D-18). With zero rows the table shows «Строк пока нет. Добавьте первую кнопкой «+ СТРОКА».» and no column handles.
 
 ---
 
