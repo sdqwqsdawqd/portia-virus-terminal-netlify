@@ -1,5 +1,5 @@
-// Usage: node 11-editor-check.mjs --check mark|panel|savechip|sections|table|multiselect|all [--url http://localhost:3124]
-// `all` runs the six checks in that order in one Edge session and prints { check: "all", ok, results: { <name>: { ok, reasons } } }.
+// Usage: node 11-editor-check.mjs --check mark|panel|savechip|sections|table|multiselect|phonefit|all [--url http://localhost:3124]
+// `all` runs the seven checks in that order in one Edge session and prints { check: "all", ok, results: { <name>: { ok, reasons } } }.
 // Why: Phase 11 has no DOM test runner, so headless Edge drives the production build. Inside the browser it launches,
 // GET /api/access is answered {canEdit: true} and GET /api/content is served from fixtures; every non-GET request to /api/*
 // is blocked and fails the check (nothing is ever saved, no login is needed). The only exception is the savechip fake-save
@@ -90,6 +90,14 @@ const sectionsFixture = (overrides = {}) => {
   });
 };
 
+/** The sections fixture with long text: section 1 has a long unbroken string and long prose in its body, subsection title and text block. */
+const fixtureWithLongText = () => {
+  const f = sectionsFixture();
+  const longText = "Очень длинный абзац без пробелов: " + "Сверхдлинноеслово".repeat(12) + " и обычный текст " + "словослово ".repeat(40);
+  f.infoSections[0] = { ...f.infoSections[0], body: longText, subsections: [{ ...f.infoSections[0].subsections[0], title: "Подраздел " + "длинный".repeat(15), blocks: [{ id: "b1", type: "text", text: longText }] }] };
+  return f;
+};
+
 const json = { "content-type": "application/json", "cache-control": "no-store" };
 function installStub(cdp) {
   cdp.on("Runtime.exceptionThrown", (p) => reasons.push(`page exception: ${String(p.exceptionDetails?.exception?.description ?? p.exceptionDetails?.text).slice(0, 120)}`));
@@ -146,13 +154,29 @@ const wordBox = (cdp, fieldSelector, index, word) => cdp.eval(`(() => {
   return null;
 })()`);
 
+/** A real Control key press around fn, as a user holding the key: keyDown first (so the page sees the key event), keyUp after. */
+async function holdCtrl(cdp, modifiers, fn) {
+  if (!(modifiers & 2)) return fn();
+  await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17, modifiers: 2 });
+  try { return await fn(); } finally { await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17, modifiers: 0 }); }
+}
 async function mouseSelect(cdp, box, modifiers = 0) {
   const at = (type, x, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x, y: box.y, button: "left", modifiers, ...extra });
-  await at("mouseMoved", box.left + 1, { button: "none" });
-  await at("mousePressed", box.left + 1, { buttons: 1, clickCount: 1 });
-  await at("mouseMoved", (box.left + box.right) / 2, { buttons: 1 });
-  await at("mouseMoved", box.right - 1, { buttons: 1 });
-  await at("mouseReleased", box.right - 1, { buttons: 0, clickCount: 1 });
+  await holdCtrl(cdp, modifiers, async () => {
+    await at("mouseMoved", box.left + 1, { button: "none" });
+    await at("mousePressed", box.left + 1, { buttons: 1, clickCount: 1 });
+    await at("mouseMoved", (box.left + box.right) / 2, { buttons: 1 });
+    await at("mouseMoved", box.right - 1, { buttons: 1 });
+    await at("mouseReleased", box.right - 1, { buttons: 0, clickCount: 1 });
+  });
+}
+/** A real mouse click at the middle of the first match: pointer, mouse and focus events fire, unlike element.click(). */
+async function realClick(cdp, selector) {
+  const c = await cdp.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; e.scrollIntoView({ block: "nearest" }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  if (!c) return false;
+  const at = (type, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x: c.x, y: c.y, button: "left", ...extra });
+  await at("mouseMoved", { button: "none" }); await at("mousePressed", { buttons: 1, clickCount: 1 }); await at("mouseReleased", { buttons: 0, clickCount: 1 });
+  return true;
 }
 const panelKey = "portia-format-panel-v1";
 const panelRect = (cdp) => cdp.eval(`(() => { const e = document.querySelector(".floating-text-format"); if (!e) return null; const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; })()`);
@@ -768,7 +792,106 @@ const checks = {
     }
     await desktop(cdp);
   },
+  /** Owner UAT 11-07: on a phone nothing is wider than the screen. A long name stays one line with «…» and never covers the buttons, an expanded card fits, the ОГЛАВЛЕНИЕ list moves only up and down. */
+  async phonefit(cdp) {
+    for (const [w, h] of [[360, 640], [390, 844]]) {
+      const where = `${w}x${h}`;
+      serve(fixtureWithLongText(), 60);
+      await phone(cdp, w, h);
+      await load(cdp);
+      if (!(await openEditor(cdp))) { await desktop(cdp); return; }
+      await clickText(cdp, ".editor-tabs button", "Информация");
+      const top = ".flat-editor-form > .nested-editor-card";
+      if (!(await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(top)}).length === 6`, 3000))) { reasons.push(`${where}: the info tab did not show 6 section cards`); continue; }
+      // a page wider than the screen shows as scrollWidth > clientWidth, or as an element whose right edge is past the screen
+      const expectFit = async (label) => {
+        await sleep(300);
+        const m = await cdp.eval(`(() => {
+          const wide = (e) => (e ? e.scrollWidth - e.clientWidth : 0);
+          const vw = document.documentElement.clientWidth, out = [];
+          for (const e of document.querySelectorAll(".content-editor *")) {
+            const r = e.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0 && r.right > vw + 1 && !e.closest(".editor-tabs, .global-format-launch")) { out.push((typeof e.className === "string" && e.className ? "." + e.className.split(" ")[0] : e.tagName) + ":" + Math.round(r.right)); if (out.length >= 4) break; }
+          }
+          return { doc: wide(document.documentElement), editor: wide(document.querySelector(".content-editor")), win: wide(document.querySelector(".editor-window")), inner: window.innerWidth, out };
+        })()`);
+        for (const part of ["doc", "editor", "win"]) if (m[part] > 0) reasons.push(`${where} ${label}: ${part} is ${m[part]}px wider than the screen`);
+        if (m.out.length) reasons.push(`${where} ${label}: sticks out of the screen: ${m.out.join(", ")}`);
+        if (m.inner > w + 1) reasons.push(`${where} ${label}: the layout viewport grew to ${m.inner}px`);
+      };
+      await expectFit("collapsed");
+      // (a) the long name keeps one line with «…» and ends before the buttons at its right
+      const clear = await cdp.eval(`(() => {
+        const head = document.querySelectorAll(${JSON.stringify(top)})[2].querySelector(":scope > .nested-editor-head");
+        const span = head.querySelector(".nested-editor-title"), toggle = head.querySelector(".nested-editor-toggle");
+        const s = span.getBoundingClientRect(), t = toggle.getBoundingClientRect(), hd = head.getBoundingClientRect();
+        const others = [...head.children].slice([...head.children].indexOf(toggle) + 1).map((c) => c.getBoundingClientRect()).filter((r) => r.width > 0);
+        return { cut: span.scrollWidth > span.clientWidth, spanRight: s.right, toggleRight: t.right, headRight: hd.right, nextLeft: others.length ? Math.min(...others.map((r) => r.left)) : null };
+      })()`);
+      if (!clear.cut) reasons.push(`${where} (a): the long name is not cut`);
+      if (clear.spanRight > clear.toggleRight + 0.5) reasons.push(`${where} (a): the name (${clear.spanRight}) runs past its button (${clear.toggleRight})`);
+      if (clear.nextLeft !== null && clear.toggleRight > clear.nextLeft + 0.5) reasons.push(`${where} (a): the name button (${clear.toggleRight}) covers the next button (${clear.nextLeft})`);
+      if (clear.toggleRight > clear.headRight + 0.5) reasons.push(`${where} (a): the name button sticks out of the head`);
+      // (b) expanded cards (the long-named section, then the one with long text, with everything inside it open) fit the screen
+      for (const n of [3, 1]) {
+        await realClick(cdp, `${top}:nth-of-type(${n}) > .nested-editor-head .nested-editor-toggle`);
+        await waitFor(cdp, `!document.querySelectorAll(${JSON.stringify(top)})[${n - 1}].querySelector(":scope > .nested-editor-body").hidden`, 2000);
+        await cdp.eval(`document.querySelectorAll(${JSON.stringify(top)})[${n - 1}].querySelectorAll(".nested-editor-card .nested-editor-toggle[aria-expanded=false]").forEach((b) => b.click())`);
+        await expectFit(`section ${n} expanded`);
+        const card = await cdp.eval(`(() => { const c = document.querySelectorAll(${JSON.stringify(top)})[${n - 1}]; return { over: c.scrollWidth - c.clientWidth, right: c.getBoundingClientRect().right }; })()`);
+        if (card.over > 0 || card.right > w + 1) reasons.push(`${where} section ${n} expanded: the card is ${card.over}px wider than itself, right edge ${card.right}`);
+      }
+      // (c) the ОГЛАВЛЕНИЕ list: it fits, scrolls only vertically, and a sideways swipe on it moves nothing
+      await cdp.eval("window.scrollTo(0, 0)");
+      await realClick(cdp, "nav.editor-toc .editor-toc-bar button");
+      await waitFor(cdp, `!document.querySelector("nav.editor-toc ol").hidden`, 2000);
+      await sleep(300);
+      const toc = await cdp.eval(`(() => {
+        const nav = document.querySelector("nav.editor-toc"), ol = nav.querySelector("ol"), s = getComputedStyle(ol), r = nav.getBoundingClientRect();
+        return { olWide: ol.scrollWidth - ol.clientWidth, navWide: nav.scrollWidth - nav.clientWidth, overflowX: s.overflowX, touch: s.touchAction, right: r.right, left: r.left, x: r.left + r.width / 2, y: r.top + 80 };
+      })()`);
+      if (toc.olWide > 0) reasons.push(`${where} (c): the TOC list is ${toc.olWide}px wider than itself`);
+      if (toc.navWide > 0) reasons.push(`${where} (c): the TOC is ${toc.navWide}px wider than itself`);
+      if (toc.right > w + 1 || toc.left < -1) reasons.push(`${where} (c): the TOC (${toc.left}..${toc.right}) is not inside the screen`);
+      if (toc.overflowX === "auto" || toc.overflowX === "scroll") reasons.push(`${where} (c): the TOC list has overflow-x ${toc.overflowX}, expected hidden`);
+      if (!/pan-y/.test(toc.touch)) reasons.push(`${where} (c): the TOC list has touch-action ${toc.touch}, expected pan-y`);
+      const state = () => cdp.eval(`({ x: window.scrollX, left: document.querySelector("nav.editor-toc ol").scrollLeft, navLeft: document.querySelector("nav.editor-toc").getBoundingClientRect().left })`);
+      const before = await state();
+      const touch = (type, x, y) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y }] });
+      await touch("touchStart", toc.x, toc.y);
+      for (let i = 1; i <= 8; i += 1) await touch("touchMove", toc.x - (140 * i) / 8, toc.y);
+      await touch("touchEnd", 0, 0);
+      await sleep(400);
+      const after = await state();
+      if (after.x !== before.x || after.left !== before.left || Math.abs(after.navLeft - before.navLeft) > 0.5) reasons.push(`${where} (c): a sideways swipe on the TOC moved it (${JSON.stringify(before)} -> ${JSON.stringify(after)})`);
+      // (d) the other long lists: nothing wider than the screen, and in every row or card head no element runs into its neighbour or past the row
+      for (const tab of ["База вирусов", "Сводка", "Корзина"]) {
+        await clickText(cdp, ".editor-tabs button", tab);
+        await sleep(500);
+        await expectFit(tab);
+        const rows = await cdp.eval(`(() => {
+          const bad = [];
+          for (const row of document.querySelectorAll(".editor-record-row, .nested-editor-head")) {
+            const box = row.getBoundingClientRect();
+            if (!box.width) continue;
+            const kids = [...row.children].map((c) => ({ c, r: c.getBoundingClientRect() })).filter((k) => k.r.width > 0).sort((a, b) => a.r.left - b.r.left);
+            kids.forEach((k, i) => {
+              if (k.r.right > box.right + 0.5) bad.push("past the row: " + (k.c.className || k.c.tagName));
+              if (i > 0 && k.r.left < kids[i - 1].r.right - 0.5) bad.push("overlap: " + (kids[i - 1].c.className || kids[i - 1].c.tagName) + " / " + (k.c.className || k.c.tagName));
+              const name = k.c.querySelector("strong, .nested-editor-title");
+              if (name && name.getBoundingClientRect().right > k.r.right + 0.5) bad.push("label past its button: " + (name.className || name.tagName));
+            });
+          }
+          return bad.slice(0, 4);
+        })()`);
+        if (rows.length) reasons.push(`${where} (d) ${tab}: ${rows.join("; ")}`);
+      }
+    }
+    await desktop(cdp);
+  },
   async multiselect(cdp) {
+    // This check uses real mouse clicks for every button (they move focus and fire pointerdown/mousedown, as a user's do), real Control key presses around Ctrl picks.
+    const click = (c, selector) => realClick(c, selector);
     serve(multiFixture(), 40);
     await load(cdp);
     if (!(await openEditor(cdp))) return;
@@ -832,7 +955,7 @@ const checks = {
       if (!box) { reasons.push(`multiselect: «${word}» not found in lead field ${index}`); return false; }
       const x = (box.left + box.right) / 2;
       const at = (type, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x, y: box.y, button: "left", modifiers: 2, ...extra });
-      await at("mouseMoved", { button: "none" }); await at("mousePressed", { buttons: 1, clickCount: 1 }); await at("mouseReleased", { buttons: 0, clickCount: 1 });
+      await holdCtrl(cdp, 2, async () => { await at("mouseMoved", { button: "none" }); await at("mousePressed", { buttons: 1, clickCount: 1 }); await at("mouseReleased", { buttons: 0, clickCount: 1 }); });
       await sleep(100);
       return true;
     };
@@ -964,6 +1087,29 @@ const checks = {
       if (hint.text !== "Ctrl (Cmd на Mac) + выделение добавляет фрагмент. Esc снимает все.") reasons.push(`(o) hint reads ${JSON.stringify(hint.text)}`);
       if (hint.display === "none") reasons.push("(o) the desktop hint is not displayed");
     }
+    // (p) the way users really pick words: a double-click, the later ones with a real Ctrl held; three fragments, one colour click styles all three
+    if (!(await fresh(46))) return;
+    const dblPick = async (index, word, modifiers = 0) => {
+      await wordBox(cdp, lead, index, word); await sleep(400);
+      const box = await wordBox(cdp, lead, index, word);
+      if (!box) { reasons.push(`(p) «${word}» not found in lead field ${index}`); return false; }
+      const at = (type, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x: (box.left + box.right) / 2, y: box.y, button: "left", modifiers, ...extra });
+      await holdCtrl(cdp, modifiers, async () => {
+        await at("mouseMoved", { button: "none" });
+        for (const n of [1, 2]) { await at("mousePressed", { buttons: 1, clickCount: n }); await at("mouseReleased", { buttons: 0, clickCount: n }); }
+      });
+      await sleep(100);
+      return true;
+    };
+    if (!(await dblPick(0, "два")) || !(await dblPick(1, "восемь", 2)) || !(await dblPick(0, "четыре", 2))) return;
+    await ensurePanel();
+    head = await headerText();
+    if (!head.includes("ВЫБРАНО: 3")) reasons.push(`(p) header reads ${JSON.stringify(head)}, expected «ВЫБРАНО: 3»`);
+    await click(cdp, '.format-swatches button[aria-label="Красный"]');
+    await sleep(300);
+    for (const word of ["два", "восемь", "четыре"]) { const c = await styleOf(word, "color"); if (c !== red) reasons.push(`(p) «${word}» colour ${c}, expected ${red}`); }
+    const untouched = await styleOf("три", "color");
+    if (untouched === red) reasons.push("(p) «три» was coloured");
   },
 };
 
@@ -973,7 +1119,7 @@ const cleanup = () => {
 };
 let code = 2;
 try {
-  const ALL = ["mark", "panel", "savechip", "sections", "table", "multiselect"];
+  const ALL = ["mark", "panel", "savechip", "sections", "table", "multiselect", "phonefit"];
   if (CHECK !== "all" && !checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")}, all)`);
   edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, "--window-size=1920,1080", "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
   let up = false;
