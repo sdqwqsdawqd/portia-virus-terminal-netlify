@@ -49,6 +49,8 @@
 * { box-sizing: border-box; }
 
 html { background: var(--bg); scroll-behavior: smooth; }
+/* The page never pans sideways: on iOS a single too-wide element would let a finger drag the whole desktop (and the ОГЛАВЛЕНИЕ with it) left and right. */
+html, body { overflow-x: clip; }
 
 body {
   margin: 0;
@@ -583,8 +585,9 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .nested-editor-head .order-drag-handle { border: 1px dashed oklch(.445 calc(.038 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.628 calc(.036 * var(--accent-chroma)) var(--accent-hue)); }
 /* EDIT-03 (D-01, D-05): a card is one header row; the title is one button that ends in «…» instead of covering the neighbouring buttons. The two-class selector beats the head's red button rule. */
 .nested-editor-head .nested-editor-toggle { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 4px 0; border: 0; background: transparent; color: oklch(.821 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .06em; text-align: left; cursor: pointer; }
-.nested-editor-head .nested-editor-toggle strong { flex: none; margin-right: 0; }
-.nested-editor-toggle .nested-editor-title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* The label is cut with «…» too (a block label such as «ТАБЛИЦА: ПРИЗНАК — ЗНАЧЕНИЕ» has no title after it), but only after the title is gone: the title shrinks 1000x faster. */
+.nested-editor-head .nested-editor-toggle strong { flex: 0 1 auto; min-width: 0; margin-right: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.nested-editor-toggle .nested-editor-title { flex: 0 1000 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .nested-editor-toggle .nested-editor-chevron { flex: none; margin-left: auto; font: 700 17px/1 var(--sans); color: oklch(.741 calc(.02 * var(--accent-chroma)) var(--accent-hue)); }
 .nested-editor-head .nested-editor-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .nested-editor-body[hidden] { display: none; }
@@ -594,7 +597,7 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
   .nested-editor-head .nested-editor-toggle { min-height: 44px; }
 }
 /* EDIT-03 (D-03): one table of contents for every long list. The doubled selectors win over the aside list's own button rules. */
-.editor-toc { position: sticky; top: 0; z-index: 3; display: grid; gap: 6px; padding: 8px 16px; border: 1px solid oklch(.353 calc(.032 * var(--accent-chroma)) var(--accent-hue)); background: oklch(.229 calc(.018 * var(--accent-chroma)) var(--accent-hue)); }
+.editor-toc { position: sticky; top: 0; z-index: 3; touch-action: pan-y pinch-zoom; display: grid; gap: 6px; padding: 8px 16px; border: 1px solid oklch(.353 calc(.032 * var(--accent-chroma)) var(--accent-hue)); background: oklch(.229 calc(.018 * var(--accent-chroma)) var(--accent-hue)); }
 .editor-toc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .editor-toc button, .editor-record-list .editor-toc button { width: auto; min-width: 0; display: block; padding: 4px 0; border: 0; background: transparent; color: oklch(.812 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .06em; text-align: left; cursor: pointer; }
 .editor-toc-bar button { text-transform: uppercase; }
@@ -1181,9 +1184,10 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .info-index { display: flex; gap: 7px; padding: 13px; overflow-x: auto; border-right: 0; border-bottom: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); }
   .info-index > .eyebrow { display: none; }
   .info-index button { flex: 0 0 190px; }
-  .info-index .info-subsections button { flex: 0 0 auto; max-width: 190px; }
+  /* A fixed basis like the section tabs: WebKit sized the group of tabs from the untrimmed titles, so the next section tab was drawn over the last subsection. */
+  .info-index .info-subsections button { flex: 0 0 190px; }
   .info-index > div, .info-subsections { display: flex; gap: 7px; margin: 0; padding: 0; border: 0; }
-  .info-index > div { flex: 0 0 auto; }
+  .info-index > div, .info-subsections { flex: 0 0 auto; }
   .info-document { padding: 27px 17px 45px; }
   .info-document h1 { font-size: 29px; }
   .info-document-copy, .info-document-copy p, .formatted-rich-input[data-area="info"] { font-size: 15px; }
