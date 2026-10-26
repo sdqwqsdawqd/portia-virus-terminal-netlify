@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, 
 import { createPortal, flushSync } from "react-dom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
 import { changedDossierTabs, changedSections, deniedSections, dossierTabs, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
-import { closedSectionsOf, tabRegistry } from "@/lib/editor-tabs";
+import { closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { dropFields, mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
 import { TYPING_PAUSE_MS, historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
@@ -2587,13 +2587,34 @@ function paintPanelOffset(panel: HTMLElement, offset: { right: number; bottom: n
   return next;
 }
 
-type EditorAccount = { email: string; created_at: string };
+type TabLists = { closedTabs: string[]; grantedTabs: string[] };
+type EditorAccount = { email: string; created_at: string } & TabLists;
+type RowNote = { error: boolean; text: string };
 
 function EditorAccessManager() {
   const [editors, setEditors] = useState<EditorAccount[]>([]);
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"loading" | "idle" | "saving" | "error">("loading");
   const [message, setMessage] = useState("");
+  const [tabsEnforced, setTabsEnforced] = useState(false);
+  const [notes, setNotes] = useState<Record<string, RowNote>>({});
+  const confirmed = useRef(new Map<string, TabLists>());
+  const noteTimers = useRef(new Map<string, number>());
+
+  useEffect(() => {
+    const timers = noteTimers.current;
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, []);
+
+  const setNote = (editorEmail: string, note: RowNote | null) => {
+    window.clearTimeout(noteTimers.current.get(editorEmail));
+    setNotes((current) => {
+      const rest = { ...current };
+      delete rest[editorEmail];
+      return note ? { ...rest, [editorEmail]: note } : rest;
+    });
+    if (note && !note.error) noteTimers.current.set(editorEmail, window.setTimeout(() => setNote(editorEmail, null), 1800));
+  };
 
   // Every call ends in idle or error, never stuck in loading or saving (D-09 #9).
   const loadEditors = async (keepMessage = false) => {
@@ -2606,8 +2627,11 @@ function EditorAccessManager() {
         setMessage(payload.error ?? "Не удалось загрузить список.");
         return;
       }
-      const payload = await response.json() as { editors?: EditorAccount[] };
-      setEditors(payload.editors ?? []);
+      const payload = await response.json() as { editors?: Partial<EditorAccount>[]; tabsEnforced?: boolean };
+      const loaded = (payload.editors ?? []).map((item) => ({ ...item, email: item.email ?? "", created_at: item.created_at ?? "", closedTabs: item.closedTabs ?? [], grantedTabs: item.grantedTabs ?? [] }));
+      loaded.forEach((item) => confirmed.current.set(item.email, { closedTabs: item.closedTabs, grantedTabs: item.grantedTabs }));
+      setEditors(loaded);
+      setTabsEnforced(payload.tabsEnforced === true);
       setState("idle");
       if (!keepMessage) setMessage("");
     } catch {
@@ -2660,6 +2684,30 @@ function EditorAccessManager() {
     }
   };
 
+  // One click saves the full lists on its own (D-02); an error puts the row back to what the server last confirmed.
+  const toggleTab = async (editor: EditorAccount, tab: TabDef) => {
+    const key = tab.kind === "trusted" ? "grantedTabs" : "closedTabs";
+    const list = editor[key].includes(tab.id) ? editor[key].filter((id) => id !== tab.id) : [...editor[key], tab.id];
+    const next: TabLists = { closedTabs: editor.closedTabs, grantedTabs: editor.grantedTabs, [key]: tabRegistry.filter((entry) => list.includes(entry.id)).map((entry) => entry.id) };
+    const patchRow = (lists: TabLists) => setEditors((current) => current.map((item) => item.email === editor.email ? { ...item, ...lists } : item));
+    patchRow(next);
+    setNote(editor.email, null);
+    try {
+      const response = await fetch("/api/editors", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: editor.email, ...next }), signal: AbortSignal.timeout(15_000) });
+      const payload = await response.json().catch(() => ({})) as { error?: string; editor?: Partial<TabLists> };
+      if (!response.ok) {
+        patchRow(confirmed.current.get(editor.email) ?? { closedTabs: [], grantedTabs: [] });
+        setNote(editor.email, { error: true, text: payload.error ?? "Не удалось сохранить." });
+        return;
+      }
+      confirmed.current.set(editor.email, { closedTabs: payload.editor?.closedTabs ?? next.closedTabs, grantedTabs: payload.editor?.grantedTabs ?? next.grantedTabs });
+      setNote(editor.email, { error: false, text: "Сохранено" });
+    } catch {
+      patchRow(confirmed.current.get(editor.email) ?? { closedTabs: [], grantedTabs: [] });
+      setNote(editor.email, { error: true, text: "Нет связи с сервером. Попробуйте ещё раз." });
+    }
+  };
+
   return <div className="editor-form flat-editor-form access-editor">
     <div className="access-editor-intro"><span className="eyebrow">ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА</span><h2>Аккаунты редакторов</h2><p>Укажите email человека, которому разрешено менять сайт. Затем он откроет страницу входа, создаст собственный аккаунт с этим email и войдёт со своим паролем.</p></div>
     <div className="access-editor-add"><label className="editor-field"><span>Email нового редактора</span><input type="email" value={email} placeholder="name@example.com" onChange={(event) => setEmail(event.target.value)} /></label><button className="primary-control" type="button" disabled={!email.trim() || state === "saving"} onClick={() => void addEditor()}>ВЫДАТЬ ДОСТУП</button></div>
@@ -2667,7 +2715,17 @@ function EditorAccessManager() {
     <div className="access-editor-list">
       {state === "loading" && <div className="editor-empty compact-empty">Загрузка списка…</div>}
       {state !== "loading" && editors.length === 0 && <div className="editor-empty compact-empty">Дополнительных редакторов пока нет.</div>}
-      {editors.map((editor) => <div key={editor.email}><div><strong>{editor.email}</strong><small>ДОСТУП К РЕДАКТОРУ</small></div><button type="button" onClick={() => void removeEditor(editor.email)}>ОТОЗВАТЬ</button></div>)}
+      {editors.map((editor) => {
+        const open = openTabIds(editor.closedTabs, editor.grantedTabs);
+        const note = notes[editor.email];
+        return <div key={editor.email}><div><strong>{editor.email}</strong><small>ДОСТУП К РЕДАКТОРУ</small>
+          <div className="access-tab-chips" role="group" aria-label={`Вкладки ${editor.email}`}>
+            {tabRegistry.map((tab) => <button key={tab.id} type="button" className="access-tab-chip" aria-pressed={open.includes(tab.id)} disabled={!tabsEnforced} onClick={() => void toggleTab(editor, tab)}>{open.includes(tab.id) ? `✓ ${tab.label}` : tab.label}</button>)}
+          </div>
+          {note && <span className={`access-tab-note${note.error ? " is-error" : ""}`} role="status">{note.text}</span>}
+        </div><button type="button" onClick={() => void removeEditor(editor.email)}>ОТОЗВАТЬ</button></div>;
+      })}
+      {!tabsEnforced && editors.length > 0 && <p className="editor-guidance">Вкладки по редакторам заработают после применения SQL</p>}
     </div>
   </div>;
 }

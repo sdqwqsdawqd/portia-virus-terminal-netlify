@@ -1,10 +1,12 @@
-// Usage: node 12-editor-check.mjs --check tabs|revert|all [--url http://localhost:3124]
+// Usage: node 12-editor-check.mjs --check tabs|revert|chips|all [--url http://localhost:3124]
 // Why: the phase-12 editor rules (closed tabs vanish, a closure resets only the closed sections' drafts, saves send closed sections
 // as stored) have no DOM test runner, so headless Edge drives the production build. Inside the browser it launches,
 // GET /api/access is answered from current.access and GET /api/content from the current fixture. EVERY non-GET request to /api/*
 // is blocked and recorded as a failure reason ("write blocked"), never forwarded, so nothing is ever saved and no login is needed.
 // One exception: while current.fakeSave is set, a PUT /api/content is answered locally (Fetch.fulfillRequest after 800 ms,
 // revision + 1), its body kept in savedBody and counted in fakeSaves; it is NEVER forwarded to the server.
+// Plan 12-07 adds GET /api/editors (current.editors, current.tabsEnforced) and a PATCH /api/editors answered locally while
+// current.fakePatch is set ({ delay, status, error?, code? }); its body and send/answer times are kept in `patches` and it is NEVER forwarded.
 // The stub is a CDP interception only: no app or server code knows about it.
 // Prints one JSON verdict { check, ok, reasons } (`all`: { check, ok, results }). Exit 0 ok, 1 not ok, 2 Edge or server unreachable or unknown check.
 import { spawn, execFileSync } from "node:child_process";
@@ -63,16 +65,18 @@ const baseFixture = (overrides = {}) => ({
 
 let revision = 0; // a new revision for every serve: the page caches content by revision, and a fake save caches revision + 1
 let current = { content: baseFixture(), revision: 1, fakeSave: false, access: defaultAccess() };
+let patches = []; // { body, sentAt, answeredAt } of every fake PATCH /api/editors
+const baseEditors = () => [{ email: "ed@example.com", created_at: "2026-01-01T00:00:00Z", closedTabs: [], grantedTabs: [] }];
 let fakeSaves = 0;
 let savedBody = ""; // the body of the last fake save
-const serve = (content, access = defaultAccess()) => { revision += 10; current = { content, revision, fakeSave: false, access }; };
+const serve = (content, access = defaultAccess()) => { revision += 10; current = { content, revision, fakeSave: false, access, editors: baseEditors(), tabsEnforced: true, fakePatch: null }; patches = []; };
 
 const json = { "content-type": "application/json", "cache-control": "no-store" };
 function installStub(cdp) {
   cdp.on("Runtime.exceptionThrown", (p) => reasons.push(`page exception: ${String(p.exceptionDetails?.exception?.description ?? p.exceptionDetails?.text).slice(0, 120)}`));
   cdp.on("Page.javascriptDialogOpening", () => { cdp.send("Page.handleJavaScriptDialog", { accept: true }).catch(() => {}); });
-  const fulfil = (p, body) => cdp.send("Fetch.fulfillRequest", {
-    requestId: p.requestId, responseCode: 200,
+  const fulfil = (p, body, responseCode = 200) => cdp.send("Fetch.fulfillRequest", {
+    requestId: p.requestId, responseCode,
     responseHeaders: Object.entries(json).map(([name, value]) => ({ name, value })),
     body: Buffer.from(JSON.stringify(body)).toString("base64"),
   }).catch(() => {});
@@ -80,8 +84,16 @@ function installStub(cdp) {
   cdp.on("Fetch.requestPaused", (p) => {
     const { pathname } = new URL(p.request.url);
     if (p.request.method === "PUT" && pathname === "/api/content" && current.fakeSave) { fakeSaves += 1; savedBody = p.request.postData ?? Buffer.concat((p.request.postDataEntries ?? []).map((e) => Buffer.from(e.bytes ?? "", "base64"))).toString("utf8"); setTimeout(() => fulfil(p, { revision: current.revision + 1 }), 800); return; }
+    if (p.request.method === "PATCH" && pathname === "/api/editors" && current.fakePatch) {
+      const { delay = 300, status = 200, error = "", code } = current.fakePatch;
+      let body = {}; try { body = JSON.parse(p.request.postData ?? "{}"); } catch { /* reported by the check's body comparison */ }
+      const entry = { body, sentAt: Date.now(), answeredAt: 0 }; patches.push(entry);
+      setTimeout(() => { entry.answeredAt = Date.now(); fulfil(p, status === 200 ? { editor: body } : { error, ...(code ? { code } : {}) }, status); }, delay);
+      return;
+    }
     if (p.request.method !== "GET") { reasons.push(`write blocked: ${p.request.method} ${pathname}`); block(p); return; }
     if (pathname === "/api/access") fulfil(p, current.access);
+    else if (pathname === "/api/editors") fulfil(p, { editors: current.editors, tabsEnforced: current.tabsEnforced });
     else if (pathname === "/api/content") fulfil(p, { content: current.content, revision: current.revision, updatedAt: null });
     else block(p);
   });
@@ -205,6 +217,30 @@ const checks = {
     const disabled = found ? await cdp.eval(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "ВОССТАНОВИТЬ В БАЗУ").disabled`) : null;
     if (disabled !== true) reasons.push(`(c) the restore button disabled is ${JSON.stringify(disabled)}, expected true`);
   },
+  async chips(cdp) {
+    const ownerAccess = { ...defaultAccess(), canManageEditors: true };
+    const CHIP = ".access-editor-list .access-tab-chip";
+    const LABELS = ["База вирусов", "Информация", "Сводка", "Корзина", "Рекомендации", "Помощник", "Сотрудники"];
+    const chipState = (cdp) => cdp.eval(`[...document.querySelectorAll(${JSON.stringify(CHIP)})].map((b) => b.getAttribute("aria-pressed"))`);
+    const clickChip = (cdp, label) => cdp.eval(`(() => { const e = [...document.querySelectorAll(${JSON.stringify(CHIP)})].find((n) => n.textContent.replace("✓ ", "").trim() === ${JSON.stringify(label)}); if (!e) return false; e.click(); return true; })()`);
+    const openAccess = async (cdp, editors, tabsEnforced = true) => {
+      serve(baseFixture(), ownerAccess); current.editors = editors; current.tabsEnforced = tabsEnforced; current.fakePatch = { delay: 300 };
+      await load(cdp);
+      if (!(await openEditor(cdp))) return false;
+      if (!(await clickText(cdp, `${STRIP} > button`, "Доступ"))) { reasons.push("no «Доступ» tab for the owner"); return false; }
+      if (!(await waitFor(cdp, `!!document.querySelector(${JSON.stringify(CHIP)})`, 5000))) { reasons.push("no chips in the «Доступ» list"); return false; }
+      return true;
+    };
+    // (a) seven chips in registry order, all on; one click flips at once and saves the full lists
+    if (!(await openAccess(cdp, baseEditors()))) return;
+    const labels = await cdp.eval(`[...document.querySelectorAll(${JSON.stringify(CHIP)})].map((b) => b.textContent.replace("✓ ", "").trim())`);
+    if (!same(labels, LABELS)) reasons.push(`(a) chips read ${JSON.stringify(labels)}, expected ${JSON.stringify(LABELS)}`);
+    if (!same(await chipState(cdp), LABELS.map(() => "true"))) reasons.push("(a) not every chip starts on");
+    await clickChip(cdp, "Сводка"); await sleep(100);
+    if (!same(await chipState(cdp), LABELS.map((l) => l === "Сводка" ? "false" : "true"))) reasons.push("(a) the chip did not flip at once");
+    if (!(await waitFor(cdp, `[...document.querySelectorAll(".access-editor-list [role=status]")].some((n) => n.textContent.trim() === "Сохранено")`, 3000))) reasons.push("(a) «Сохранено» did not appear in the row");
+    if (patches.length !== 1 || !same(patches[0].body, { email: "ed@example.com", closedTabs: ["broadcasts"], grantedTabs: [] })) reasons.push(`(a) PATCH bodies ${JSON.stringify(patches.map((x) => x.body))}`);
+  },
 };
 
 let edge;
@@ -213,7 +249,7 @@ const cleanup = () => {
 };
 let code = 2;
 try {
-  const ALL = ["tabs", "revert"];
+  const ALL = ["tabs", "revert", "chips"];
   if (CHECK !== "all" && !checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")}, all)`);
   edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, "--window-size=1920,1080", "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
   let up = false;
@@ -231,7 +267,7 @@ try {
   const names = CHECK === "all" ? ALL : [CHECK];
   const results = {};
   for (const name of names) {
-    reasons.length = 0; fakeSaves = 0; savedBody = ""; serve(baseFixture()); // each check starts from a clean verdict, fixture and access
+    reasons.length = 0; fakeSaves = 0; savedBody = ""; patches = []; serve(baseFixture()); // each check starts from a clean verdict, fixture and access
     try { await checks[name](cdp); } catch (error) { reasons.push(`check threw: ${error.message}`); }
     results[name] = { ok: reasons.length === 0, reasons: [...reasons] };
   }

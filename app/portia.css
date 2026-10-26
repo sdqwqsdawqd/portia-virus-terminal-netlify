@@ -758,6 +758,17 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .access-editor-list strong { overflow: hidden; color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 700 12px var(--sans); text-overflow: ellipsis; }
 .access-editor-list small { color: oklch(.549 calc(.028 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); }
 .access-editor-list button { flex: 0 0 auto; padding: 8px 10px; border: 1px solid #754b46; background: transparent; color: #dd8b82; font: 700 11px var(--sans); cursor: pointer; }
+/* PERM-01: one chip per tab under the email. The list-wide button rule paints the red revoke button, so the chips override it. */
+.access-editor-list > div:not(.editor-empty) { flex-wrap: wrap; }
+.access-editor-list > div > div { flex: 1 1 280px; }
+.access-tab-chips { display: flex; flex-flow: row wrap; gap: 6px; margin-top: 6px; }
+.access-editor-list .access-tab-chip { min-height: 28px; padding: 4px 8px; border: 1px solid oklch(.353 calc(.032 * var(--accent-chroma)) var(--accent-hue)); background: transparent; color: oklch(.549 calc(.028 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); cursor: pointer; }
+.access-editor-list .access-tab-chip[aria-pressed="true"] { border-color: oklch(.465 calc(.063 * var(--accent-chroma)) var(--accent-hue)); background: oklch(.236 calc(.03 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.826 calc(.077 * var(--accent-chroma)) var(--accent-hue)); }
+.access-editor-list .access-tab-chip[aria-pressed="false"] { text-decoration: line-through; }
+.access-editor-list .access-tab-chip:disabled { cursor: default; opacity: .7; }
+.access-editor-list .access-tab-chip:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.access-tab-note { margin-top: 4px; color: oklch(.826 calc(.077 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); }
+.access-tab-note.is-error { color: #e0aaa3; }
 /* One column that may shrink below its content: a nowrap card title would otherwise widen the whole form past a phone screen. */
 .flat-editor-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-width: 900px; }
 .compact-editor { max-width: 720px; }
