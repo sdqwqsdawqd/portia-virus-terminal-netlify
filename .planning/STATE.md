@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 13
 current_phase_name: Приложение «Справочник»
 status: executing
-stopped_at: Completed PORTIA-13-02-PLAN.md
-last_updated: "2026-10-26T20:12:32.586Z"
+stopped_at: Completed 13-03-PLAN.md
+last_updated: "2026-10-26T20:20:49.483Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase PORTIA-13 execution started
-state_head: f102536047af58680ca7117bf877ade9e70d2ad9
+state_head: 64920e2c8f11e41dcb1e3c34e957307953d46de5
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 49
-  completed_plans: 46
+  completed_plans: 47
   percent: 88
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-26)
 ## Current Position
 
 Phase: PORTIA-13 (Приложение «Справочник») — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Executing Phase PORTIA-13
 Last activity: 2026-10-27 — Phase PORTIA-13 execution started
 
@@ -80,6 +80,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase 11 P08 | 12 min | 3 tasks | 5 files |
 | Phase PORTIA-13 P01 | 25min | 2 tasks | 10 files |
 | Phase PORTIA-13 P02 | 10 min | 3 tasks | 4 files |
+| Phase 13 P03 | 30min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase 11]: 11-08: a gone field leaves the multi-selection through dropFields/dropFormatFields (functional setFormatTarget updater); the section delete names its block keys
 - [Phase PORTIA-13]: 13-01: guide starts empty; oversize warning checks text and callout bodies only; photo-heavy size covered by existing body-size check
 - [Phase PORTIA-13]: 13-02: guide view is derived from guideCardId (vanished card means grid); tile hover lift gated by data-motion=full; search preview rotated to first matching block
+- [Phase 13]: 13-03: every guide editor write finds its block by card id and block id (findGuideBlock), so late uploads and reorders write the right block
 
 ### Pending Todos
 
@@ -164,8 +166,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-26T20:12:32.349Z
-Stopped at: Completed PORTIA-13-02-PLAN.md
+Last session: 2026-10-26T20:20:40.915Z
+Stopped at: Completed 13-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
