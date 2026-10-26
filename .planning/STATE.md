@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 11
 current_phase_name: "Редактор: панель оформления и тексты"
 status: executing
-stopped_at: Completed PORTIA-11-03-PLAN.md
-last_updated: "2026-10-26T01:19:44.158Z"
+stopped_at: Completed PORTIA-11-04-PLAN.md
+last_updated: "2026-10-26T01:31:23.633Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase PORTIA-11 execution started
-state_head: d4050be21dc7de1f974a89c7c377cf378a5d6caa
+state_head: 1a493557c1f4de952e2fadeb42a019bdbb83c55e
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 35
-  completed_plans: 31
+  completed_plans: 32
   percent: 71
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-26)
 ## Current Position
 
 Phase: PORTIA-11 (Редактор: панель оформления и тексты) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Executing Phase PORTIA-11
 Last activity: 2026-10-26 — Phase PORTIA-11 execution started
 
@@ -73,6 +73,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-11 P01 | 40min | 2 tasks | 8 files |
 | Phase PORTIA-11 P02 | 55min | 3 tasks | 7 files |
 | Phase PORTIA-11 P03 | 35min | 2 tasks | 4 files |
+| Phase PORTIA-11 P04 | 45min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-11]: 11-01: TEST-02 own-input boundary is the 400 ms window of fieldSelectionStep; the panel clamp is tested in 11-02
 - [Phase PORTIA-11]: 11-02: format panel at z-index 950 with a focusApp on-top guard, hidden while the editor is minimized, phone sheet of fixed height min(34svh, 270px)
 - [Phase PORTIA-11]: 11-03: a failed or conflicting save also turns the save chip red with !; saved check mark lasts the desktop's 1.8 s; chip at right 54px on phones up to 520px
+- [Phase PORTIA-11]: 11-04: collapse state is a component-only Set, never stored; TOC list closed by default, fold buttons only on card lists
 
 ### Pending Todos
 
@@ -148,8 +150,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-26T01:19:44.046Z
-Stopped at: Completed PORTIA-11-03-PLAN.md
+Last session: 2026-10-26T01:31:23.521Z
+Stopped at: Completed PORTIA-11-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
