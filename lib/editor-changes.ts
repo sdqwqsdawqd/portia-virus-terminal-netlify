@@ -1,12 +1,13 @@
 import type { PortiaContent, Virus } from "./portia-content.ts";
 
-export type EditorSection = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant";
+export type EditorSection = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant";
 
-export const editorSections: EditorSection[] = ["viruses", "info", "broadcasts", "recycle", "search", "assistant"];
+export const editorSections: EditorSection[] = ["viruses", "info", "guide", "broadcasts", "recycle", "search", "assistant"];
 
 export const sectionLabels: Record<EditorSection, string> = {
   viruses: "База вирусов",
   info: "Информация",
+  guide: "Справочник",
   broadcasts: "Сводка",
   recycle: "Корзина",
   search: "Рекомендации",
@@ -16,6 +17,7 @@ export const sectionLabels: Record<EditorSection, string> = {
 export function sectionOfKey(key: string): EditorSection | null {
   if (key === "viruses") return "viruses";
   if (key === "infoSections") return "info";
+  if (key === "guideSections") return "guide";
   if (key === "broadcasts") return "broadcasts";
   if (key === "recycledViruses" || key === "recycleFiles" || key === "recycleOrder") return "recycle";
   if (key === "searchRecommendations") return "search";
@@ -26,6 +28,7 @@ export function sectionOfKey(key: string): EditorSection | null {
 const prefixSections: Record<string, EditorSection> = {
   "info:": "info",
   "info-block:": "info",
+  "guide-block:": "guide",
   "broadcast:": "broadcasts",
   "recycle:": "recycle",
   "search:": "search",

@@ -128,6 +128,39 @@ export function findInfo(sections: InfoSection[], id: string): { section: InfoSe
   return null;
 }
 
+// Справочник (Phase 13 D-01..D-06): a section holds cards, a card is one ribbon of blocks; heading text, captions and the callout label are plain strings, text and callout bodies are formatted.
+export type GuideBlock =
+  | { id: string; type: "heading"; text: string }
+  | { id: string; type: "text"; text: string }
+  | { id: string; type: "table"; rows: { id: string; key: string; value: string }[] }
+  | { id: string; type: "photo"; url: string; caption: string }
+  | { id: string; type: "video"; videoId: string }
+  | { id: string; type: "callout"; label: string; text: string };
+
+export type GuideCard = {
+  id: string;
+  title: string;
+  cover: string;
+  blocks: GuideBlock[];
+};
+
+export type GuideSection = {
+  id: string;
+  title: string;
+  photo: string;
+  cards: GuideCard[];
+};
+
+// Resolves a section id or a card id to the section (and card) it names.
+export function findGuide(sections: GuideSection[], id: string): { section: GuideSection; card: GuideCard | null } | null {
+  for (const section of sections) {
+    if (section.id === id) return { section, card: null };
+    const card = section.cards.find((item) => item.id === id);
+    if (card) return { section, card };
+  }
+  return null;
+}
+
 export type Broadcast = {
   id: string;
   type: "quest" | "task" | "news";
@@ -155,6 +188,7 @@ export type PortiaContent = {
   viruses: Virus[];
   recycledViruses: Virus[];
   infoSections: InfoSection[];
+  guideSections: GuideSection[];
   broadcasts: Broadcast[];
   recycleFiles: RecycleFile[];
   recycleOrder: string[];
@@ -180,6 +214,7 @@ export const portiaTextKey = {
   mutation: (virusId: string, index: number) => `virus:${virusId}:mutation:${index}:description`,
   info: (sectionId: string) => `info:${sectionId}:body`,
   infoBlock: (blockId: string) => `info-block:${blockId}:text`,
+  guideBlock: (blockId: string) => `guide-block:${blockId}:text`,
   broadcast: (broadcastId: string) => `broadcast:${broadcastId}:body`,
   recycle: (fileId: string) => `recycle:${fileId}:content`,
   searchRecommendations: "search:recommendations",
@@ -398,6 +433,7 @@ export const defaultPortiaContent: PortiaContent = {
       subsections: [],
     },
   ],
+  guideSections: [],
   broadcasts: [],
   searchRecommendations: ["МОРОК", "АРАХНА", "КАЛЛИСТО", "Протей", "Воздушно-пылевой"],
   assistantAdvice: [

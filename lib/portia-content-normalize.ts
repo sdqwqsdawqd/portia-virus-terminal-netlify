@@ -6,6 +6,9 @@ import {
   type InfoSubsection,
   createVirusRecycleFiles,
   defaultPortiaContent,
+  type GuideBlock,
+  type GuideCard,
+  type GuideSection,
   type PortiaContent,
   type RecycleFile,
   type RichTextDocument,
@@ -156,25 +159,24 @@ export function parseYoutubeId(value: unknown): string {
   return youtubeIdPattern.test(id) ? id : "";
 }
 
+// Stable row ids let the editor's ≡ keep a row's identity (EDIT-07); a positional fallback is stable across polls (D-21).
+function normalizeTableRows(rows: unknown, blockId: string) {
+  const seen = new Set<string>();
+  return (Array.isArray(rows) ? rows : []).filter(isRecord).map((row, rowIndex) => {
+    const rowId = typeof row.id === "string" && row.id && !seen.has(row.id) ? row.id : `${blockId}-row-${rowIndex}`;
+    seen.add(rowId);
+    return { id: rowId, key: asText(row.key), value: asText(row.value) };
+  });
+}
+
 function normalizeInfoBlock(value: unknown, subsectionId: string, index: number): InfoBlock[] {
   if (!isRecord(value)) return [];
   const id = typeof value.id === "string" && value.id ? value.id : `${subsectionId}-block-${index}`;
   switch (value.type) {
     case "text":
       return [{ id, type: "text", text: asText(value.text) }];
-    case "table": {
-      // Stable row ids let the editor's ≡ keep a row's identity (EDIT-07); a positional fallback is stable across polls (D-21).
-      const seen = new Set<string>();
-      return [{
-        id,
-        type: "table",
-        rows: (Array.isArray(value.rows) ? value.rows : []).filter(isRecord).map((row, rowIndex) => {
-          const rowId = typeof row.id === "string" && row.id && !seen.has(row.id) ? row.id : `${id}-row-${rowIndex}`;
-          seen.add(rowId);
-          return { id: rowId, key: asText(row.key), value: asText(row.value) };
-        }),
-      }];
-    }
+    case "table":
+      return [{ id, type: "table", rows: normalizeTableRows(value.rows, id) }];
     case "photo":
       return [{ id, type: "photo", url: normalizeMediaUrl(value.url) }];
     case "video":
@@ -204,6 +206,53 @@ export function normalizeInfoSections(value: unknown): InfoSection[] {
       body: typeof item.body === "string" ? item.body : "",
       subsections: (Array.isArray(item.subsections) ? item.subsections : [])
         .flatMap((sub, subIndex) => normalizeInfoSubsection(sub, id, subIndex)),
+    }];
+  });
+}
+
+function normalizeGuideBlock(value: unknown, cardId: string, index: number): GuideBlock[] {
+  if (!isRecord(value)) return [];
+  const id = typeof value.id === "string" && value.id ? value.id : `${cardId}-block-${index}`;
+  switch (value.type) {
+    case "heading":
+      return [{ id, type: "heading", text: asText(value.text) }];
+    case "text":
+      return [{ id, type: "text", text: asText(value.text) }];
+    case "table":
+      return [{ id, type: "table", rows: normalizeTableRows(value.rows, id) }];
+    case "photo":
+      return [{ id, type: "photo", url: normalizeMediaUrl(value.url), caption: asText(value.caption) }];
+    case "video":
+      return [{ id, type: "video", videoId: typeof value.videoId === "string" && youtubeIdPattern.test(value.videoId) ? value.videoId : "" }];
+    case "callout":
+      return [{ id, type: "callout", label: asText(value.label), text: asText(value.text) }];
+    default:
+      return [];
+  }
+}
+
+function normalizeGuideCard(value: unknown, sectionId: string, index: number): GuideCard[] {
+  if (!isRecord(value)) return [];
+  const id = typeof value.id === "string" && value.id ? value.id : `${sectionId}-card-${index}`;
+  return [{
+    id,
+    title: asText(value.title),
+    cover: normalizeMediaUrl(value.cover),
+    blocks: (Array.isArray(value.blocks) ? value.blocks : []).flatMap((block, blockIndex) => normalizeGuideBlock(block, id, blockIndex)),
+  }];
+}
+
+// Saves from before Phase 13 have no guide: they read as an empty one (D-00f). Text is never cut.
+export function normalizeGuideSections(value: unknown): GuideSection[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, index) => {
+    if (!isRecord(item)) return [];
+    const id = typeof item.id === "string" && item.id ? item.id : `guide-${index}`;
+    return [{
+      id,
+      title: asText(item.title),
+      photo: normalizeMediaUrl(item.photo),
+      cards: (Array.isArray(item.cards) ? item.cards : []).flatMap((card, cardIndex) => normalizeGuideCard(card, id, cardIndex)),
     }];
   });
 }
@@ -319,6 +368,7 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     viruses,
     recycledViruses,
     infoSections: normalizeInfoSections(candidate.infoSections),
+    guideSections: normalizeGuideSections(candidate.guideSections),
     broadcasts: normalizeBroadcasts(candidate.broadcasts),
     recycleFiles,
     recycleOrder,
