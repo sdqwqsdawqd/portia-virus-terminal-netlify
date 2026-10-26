@@ -1,6 +1,6 @@
 ---
 phase: PORTIA-12-prava-redaktorov-i-bezopasnost-dostupa
-verified: 2026-10-26T12:00:00Z
+verified: 2026-10-26T19:00:00Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
@@ -36,24 +36,46 @@ covered_files:
   - "lib/media-url.ts"
   - "supabase/phase12_apply.sql"
   - "supabase/portia_setup.sql"
-covered_digest: "v3:sha256:14cfe14b1d53c699ccd26792e7a52b5ce2f9fc0c2e1f6f895274683027f5437c"
+covered_digest: "v3:sha256:7a306e7f95112240b0d492e1e005a5e23c8c8566e4a4513cc1886722a9546de3"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 5/5
+  reason: "Covered file app/api/access/route.ts changed in commit e0f89ef (CR-01: getUser() retryable auth error answers 503) after the first report; fingerprint went stale."
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 human_verification:
-  - test: "Live tab toggle end to end on project wqiyghssdulzsbshjtur: as owner open «Доступ», switch off one tab (e.g. «Сводка») for the real editor, reload and reopen «Доступ» (state kept); then in the editor's session confirm the tab disappears within ~10 s and a hand-made PUT /api/content (or a save) touching that section answers 403; switch it back on."
-    expected: "Chip state persists after reload; the editor strip no longer shows the closed tab; the closed-section write is refused with 403 «section-closed»; re-enabling restores it."
-    why_human: "PATCH /api/editors under the real UPDATE policy and grant (column grant, 'Owner can change editor tabs') has never run against the live database: 12-07 and 12-06 checks used a stubbed API in a browser harness, and 12-08 only recorded login + save for owner and editor. STEP 3 proves the policy and columns exist, not that the PATCH succeeds under RLS."
-  - test: "(Minor, optional) Chips with keyboard/screen reader (Tab, Space; pressed/not pressed announced) and the list at phone width; grant a new test email and confirm all seven chips are on."
-    expected: "Chips are reachable and announce state; chips wrap and ОТОЗВАТЬ stays visible; new editor has all seven tabs."
-    why_human: "Accessibility and phone-width layout cannot be proven by grep or the harness; carried from 12-07 and 12-08, not reported by the owner."
+  - test: "Live tab toggle end to end on project wqiyghssdulzsbshjtur (owner switches a real editor's tab off/on, reload, editor loses/regains the tab)."
+    expected: "Chip state persists after reload; the editor strip drops the closed tab; re-enabling restores it."
+    why_human: "PATCH /api/editors under the real RLS UPDATE policy had no live evidence."
+    status: resolved
+    resolution: "PASSED by the owner on localhost:3123 against the live project; recorded in 12-UAT.md test 1 (result: pass)."
+  - test: "(Optional) Chips with keyboard/screen reader and the list at phone width; new editor shows all seven chips on."
+    expected: "Chips reachable and announce state; chips wrap and ОТОЗВАТЬ stays visible; new editor has all seven tabs."
+    why_human: "Accessibility and phone-width layout cannot be proven by grep or the harness."
+    status: deferred
+    resolution: "Skipped by the owner as optional; tracked in 12-UAT.md '## Deferred Follow-Ups'. Not a must-have of any success criterion."
 ---
 
 # Phase PORTIA-12: Права редакторов и безопасность доступа — Verification Report
 
 **Phase Goal:** Владелец решает, какие вкладки доступны каждому редактору, а в редактор пускает только подтверждённая почта; код работает и до, и после SQL, который владелец применяет сам, без риска блокировки
 **Verified:** 2026-10-26
-**Status:** human_needed
-**Re-verification:** No — initial verification
+**Status:** passed
+**Re-verification:** Yes — after commit e0f89ef (CR-01 fix in `app/api/access/route.ts` plus one new source test); human verification item 1 since passed by the owner (12-UAT.md), item 2 deferred; security audit 12-SECURITY.md threats_open 0.
+
+## Re-verification of e0f89ef (CR-01)
+
+Change: `app/api/access/route.ts` now destructures `{ data, error }` from `supabase.auth.getUser()` and returns 503 (`unavailableBody`, no-store) when `isAuthRetryableFetchError(error)`, before `getEditorAccess`. `lib/editor-tabs.test.ts` gains a source-order test (the guard precedes the `getEditorAccess(supabase` call).
+
+- `isAuthRetryableFetchError` is `isAuthError(error) && error.name === 'AuthRetryableFetchError'`; run directly: `(null)`, `(undefined)` and `({name:'AuthSessionMissingError'})` all return `false`. So the anonymous / no-session path is unaffected and falls through to `getEditorAccess(supabase, null)`, which returns `noAccess` (`canEdit:false`, `tabsEnforced:false`) with 200. Truth 3 (unconfirmed/no-session stays noAccess) and truth 5 (anonymous 200 `tabsEnforced:false`) hold.
+- `lib/editor-access.ts` is untouched by e0f89ef; its unconfirmed/no-session `noAccess` branch (line 23) and the pending-SQL fallback are unchanged, with tests in `lib/editor-access.test.ts` still green.
+- The desktop's `fetchAccess` (`components/portia-desktop.tsx:411-421`) returns early on `!response.ok`, so a 503 keeps the last access state and the open editor/draft: the intended CR-01 behavior; truths 1-5 are untouched.
+- Residual: the new test is a source-text order check, not a behavioral test of the 503 path; acceptable for a guard this small (no must-have depends on it).
+- `npm test`: 406 pass, 0 fail (405 before + the new test). `npx tsc --noEmit`: clean (exit 0).
+- Fingerprint recomputed with the same covered set (including `app/api/access/route.ts`); `covered_digest` copied verbatim from `verification.fingerprint`.
 
 ## Goal Achievement
 
@@ -61,13 +83,13 @@ human_verification:
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Owner grants access by email and toggles each of 7 tabs per editor; new/approved editor has all tabs by default | VERIFIED (code); live toggle in human_verification | `tabRegistry` = 6 editorSections + `employees` (lib/editor-tabs.ts); `openTabIds` regular tabs open unless in `closed_tabs`; SQL columns default `'{}'` (phase12_apply.sql:53-54) so existing and new rows are fully open; `/api/editors` GET/PATCH with `parseTabLists`, owner-only (`requireOwner`), owner self-edit refused; `EditorAccessManager` renders 7 `access-tab-chip` buttons per editor with per-row PATCH queue. Harness `chips` check ok (12-07). Live PATCH under RLS not run. |
+| 1 | Owner grants access by email and toggles each of 7 tabs per editor; new/approved editor has all tabs by default | VERIFIED (code; live toggle passed by owner, 12-UAT.md test 1) | `tabRegistry` = 6 editorSections + `employees` (lib/editor-tabs.ts); `openTabIds` regular tabs open unless in `closed_tabs`; SQL columns default `'{}'` (phase12_apply.sql:53-54) so existing and new rows are fully open; `/api/editors` GET/PATCH with `parseTabLists`, owner-only (`requireOwner`), owner self-edit refused; `EditorAccessManager` renders 7 `access-tab-chip` buttons per editor with per-row PATCH queue. Harness `chips` check ok (12-07). Live PATCH under RLS exercised by the owner (12-UAT.md test 1: state kept after reload, editor lost and regained the tab). |
 | 2 | Editor does not see closed tabs; server refuses edits to closed sections (content, employees) sent outside the UI | VERIFIED | UI: `stripTabs` filters `tabRegistry` by `openTabs` from `/api/access`, polled every 10 s, no-tab screen (portia-editor.tsx:682-694, 1194). Server: `PUT /api/content` reads stored copy and calls `contentRefusal` for restricted editors (403 `section-closed` / 400 unclassified key / 409 revision); `/api/employees` PATCH/POST/DELETE and `/api/employees/editor` refuse with 403 when `employees` not in `openTabs`; uploads need at least one open tab; RLS on employee tables via `portia_can_edit_tab('employees')`. `info-block:` prefix closes the previous bypass. Tests 405/405 incl. contentRefusal/deniedSections property tests. Accepted risk D-11 (approved editor writing `portia_content` directly through Supabase) is documented in PROJECT.md Known Limitations and 03.1 disposition. |
 | 3 | Only confirmed email enters the editor (code works before SQL); owner confirmed «Confirm email», ran preflight, applied SQL in begin/commit, then logged in as owner and editor, saving works | VERIFIED | Code: `getEditorAccess` returns `noAccess` with no rpc when `email_confirmed_at` is missing, owner included; owner-login shows `?error=unconfirmed`. SQL: `phase12_apply.sql` STEP 2 `begin;` with owner-confirmed guard raising an exception before any change, `portia_email_confirmed()` used in `portia_is_owner`/`portia_can_edit`, `commit;`; setup file has the same end state with guard. Live (12-08, owner-reported): STEP 1 preflight, STEP 3 all 9 checks matched, owner `/api/access` returned `tabsEnforced:true` with 7 tabs, owner and editor each saved and undid a change. The accidental STEP 4 run was recovered by re-applying STEP 2/2b; final state is the applied one (confirmed by STEP 3). |
 | 4 | `//host/x.png` is not local in code or SQL; CHECK added `not valid`, validated after checking existing rows | VERIFIED | `isLocalMediaPath` (lib/media-url.ts) rejects second `/`, `\`, control chars; used by normalizer, employee sanitize/profile read, editor media field. SQL: constraint `portia_employee_profiles_photo_url_local` `check (... ~ '^/([^/\\[:cntrl:]][^[:cntrl:]]*)?$') not valid` inside commit, then separate `validate constraint` (STEP 2b) after STEP 1(b) listed offending rows (0). STEP 3 showed constraint validated = true. |
 | 5 | Without the SQL all editors have all tabs and the site works as before | VERIFIED | `getEditorAccess` treats only 42703/PGRST204 on the `closed_tabs` select as "not applied": all tabs open, `tabsEnforced:false`; other errors fail closed (503). `/api/editors` GET falls back to a column-less select; PATCH maps 42501/missing column to 503 `pending-database`; chips disabled with one line while `!tabsEnforced`. Anonymous `/api/access` returned 200 `tabsEnforced:false` before SQL (12-08 Task 1). |
 
-**Score:** 5/5 truths verified in code and tests; one live path (owner toggling a real editor's tab under RLS) is not covered by any recorded evidence.
+**Score:** 5/5 truths verified in code and tests; the live owner-toggle path is now covered by the owner's UAT pass.
 
 ### Required Artifacts
 
@@ -94,7 +116,7 @@ human_verification:
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Whole test suite | `npm test` | 405 pass, 0 fail | PASS |
+| Whole test suite | `npm test` | 406 pass, 0 fail (re-run after e0f89ef) | PASS |
 | Types | `npx tsc --noEmit` | no output | PASS |
 | Browser harness (tabs, revert, chips) | 12-editor-check.mjs --check all | Not re-run by verifier (needs server); recorded `ok: true` in 12-08 Task 1 | SKIP (owner/executor evidence) |
 
@@ -105,7 +127,7 @@ human_verification:
 | SEC-01 | SATISFIED | getEditorAccess gate before any rpc; test "unconfirmed email gets noAccess and makes zero rpc calls" |
 | SEC-02 | SATISFIED | phase12_apply.sql guard + begin/commit + `portia_email_confirmed`; owner applied, STEP 3 9/9 |
 | CONT-09 | SATISFIED | isLocalMediaPath in code; SQL CHECK not valid then validated |
-| PERM-01 | SATISFIED in code; live toggle in human_verification | chips + PATCH route |
+| PERM-01 | SATISFIED (live toggle passed, 12-UAT.md) | chips + PATCH route |
 | PERM-02 | SATISFIED | column default `'{}'`, regular tabs open unless closed |
 | PERM-03 | SATISFIED | strip filtered by openTabs, 10 s poll, closure reset |
 | PERM-04 | SATISFIED | server refusal on content, employees, uploads; RLS on employee tables |
@@ -123,14 +145,16 @@ None blocking. No TBD/FIXME/XXX introduced in the covered files. `npm run lint`:
 - Pre-SQL owner `/api/access` JSON was not captured; anonymous 200 `tabsEnforced:false` plus the 12-04 preflight stands in.
 - The 12-01 unconfirmed-login check with a real unconfirmed mailbox and the 12-06 two-account closure check were never run live; covered by unit tests and the harness, judged not must-have-blocking.
 
-### Human Verification Required
+### Human Verification (resolved / deferred)
 
-1. **Live tab toggle end to end** (PERM-01/03/04 on the live DB): see frontmatter. Reason: PATCH under the real RLS UPDATE policy and column grant has no live evidence.
-2. **Chip accessibility and phone-width layout** (optional): Tab/Space with screen reader, list at phone width, new test email shows all seven on.
+1. **Live tab toggle end to end** (PERM-01/03/04 on the live DB): RESOLVED, passed by the owner (12-UAT.md test 1).
+2. **Chip accessibility and phone-width layout** (optional): DEFERRED follow-up, recorded in 12-UAT.md `## Deferred Follow-Ups`; not tied to any success criterion.
+
+No pending human items. Security audit (12-SECURITY.md): threats_open 0. Code review (12-REVIEW.md / 12-REVIEW-DISPOSITION.md): CR-01 fixed (re-verified above), WR-01/WR-03 accepted, WR-02/WR-04/IN-01/IN-02 deferred, open 0.
 
 ### Gaps Summary
 
-No gaps. All five success criteria are implemented, wired and tested; the SQL was applied by the owner and verified by STEP 3. Status is `human_needed` only because the central owner feature (toggling a real editor's tabs against the live database) has not been exercised outside a stubbed harness.
+No gaps. All five success criteria are implemented, wired and tested; the SQL was applied by the owner and verified by STEP 3; the owner confirmed the live tab toggle; the CR-01 change leaves the anonymous and unconfirmed paths unchanged. Status: `passed`.
 
 ---
 
