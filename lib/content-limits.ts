@@ -54,6 +54,11 @@ export function oversizeFields(content: PortiaContent): string[] {
       if (subsection.blocks.some((block) => block.type === "text" && (block.text.length > MAX_BLOCK_TEXT || big.includes(portiaTextKey.infoBlock(block.id))))) add(labelOf("ПОДРАЗДЕЛ", subsection.title));
     }
   }
+  for (const section of content.guideSections) {
+    for (const card of section.cards) {
+      if (card.blocks.some((block) => (block.type === "text" || block.type === "callout") && (block.text.length > MAX_BLOCK_TEXT || big.includes(portiaTextKey.guideBlock(block.id))))) add(labelOf("КАРТОЧКА", card.title));
+    }
+  }
   for (const item of content.broadcasts) if (item.conditions.length > MAX_CONDITIONS || big.includes(portiaTextKey.broadcast(item.id))) add(labelOf("СВОДКА", item.title));
   for (const file of content.recycleFiles) if (big.includes(portiaTextKey.recycle(file.id))) add(labelOf("ФАЙЛ", file.name));
   if (big.includes(portiaTextKey.searchRecommendations)) add("РЕКОМЕНДАЦИИ");
