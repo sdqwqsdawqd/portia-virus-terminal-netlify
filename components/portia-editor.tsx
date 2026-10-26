@@ -461,6 +461,17 @@ function selectionOffsets(root: HTMLElement, known: { start: number; end: number
   return pickCurrentRange(rootRanges(root), known);
 }
 
+// Firefox drops the caret at offset 0 of a field when a Ctrl press lands in it while another field holds the selection, so a Ctrl+drag
+// would start at the start of the field. After the press has been handled, put a lone caret back under the pointer (a no-op where the browser got it right).
+function pinCaretUnderPointer(editor: HTMLElement, x: number, y: number) {
+  const at = window.document.caretPositionFromPoint?.(x, y);
+  if (!at || !editor.contains(at.offsetNode)) return;
+  window.setTimeout(() => {
+    const selection = window.getSelection();
+    if (selection?.rangeCount === 1 && selection.isCollapsed && !(selection.anchorNode === at.offsetNode && selection.anchorOffset === at.offset)) selection.collapse(at.offsetNode, at.offset);
+  }, 0);
+}
+
 // On a phone the list and the record swap places; bring the new half to the top (read after the next render).
 function revealOnPhone(ref: React.RefObject<HTMLElement | null>) {
   if (!window.matchMedia("(max-width: 900px)").matches) return;
@@ -2171,7 +2182,11 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
       spellCheck
       onPointerDown={(event) => {
         track({ type: "down" });
-        if (event.isPrimary) startGesture(addsFragment(event) && !window.matchMedia("(max-width: 900px), (pointer: coarse)").matches, event.currentTarget);
+        if (event.isPrimary) {
+          const additive = addsFragment(event) && !window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
+          startGesture(additive, event.currentTarget);
+          if (additive) pinCaretUnderPointer(event.currentTarget, event.clientX, event.clientY);
+        }
       }}
       onPointerUp={() => track({ type: "up", at: Date.now() })}
       onPointerCancel={() => track({ type: "up", at: Date.now() })}
