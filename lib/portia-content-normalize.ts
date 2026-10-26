@@ -13,6 +13,7 @@ import {
   type Virus,
 } from "./portia-content.ts";
 import { MAX_SCIENTIST_LOGS } from "./content-limits.ts";
+import { isAllowedMediaUrl } from "./media-url.ts";
 
 // Every save and every cached read passes through here: unknown input in, a complete PortiaContent out.
 // It coerces shape and never cuts or drops user content (D-01); the limits in content-limits.ts only drive editor warnings.
@@ -80,7 +81,7 @@ function normalizeFormattedText(value: unknown): Record<string, RichTextDocument
 function normalizeMediaUrl(value: unknown, fallback = "") {
   if (typeof value !== "string") return fallback;
   const url = value.trim().slice(0, 2048);
-  return url.startsWith("https://") || url.startsWith("/") ? url : fallback;
+  return isAllowedMediaUrl(url) ? url : fallback;
 }
 
 const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
