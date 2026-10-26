@@ -82,7 +82,7 @@ Existing palette, 60/30/10 as already implemented in the editor [CODE]:
 | Accent (10%) | `--teal #00bca6`, `--teal-dim #12897a`, `--teal-soft rgba(0,188,166,.13)` | See reserved list below |
 | Warning | `--warning #efb84e` | Dirty (unsaved) state of chip |
 | Destructive / blocked | `--danger #d55449` (text on dark `#e07d74` as in `.editor-savebar-fix`) | Blocked-save chip, destructive confirmation |
-| Target mark (light field) | `rgba(0, 150, 132, .95)` | `::highlight(portia-format)` — see EDIT-02 |
+| Target mark (light field) | `oklch(.57 calc(.1 * var(--accent-chroma)) var(--accent-hue) / .95)` (amended 2026-10-26, planner) | `::highlight(portia-format)` — see EDIT-02 |
 
 Accent reserved for (and ONLY these in this phase):
 1. `::highlight(portia-format)` target underline for all multi-select fragments [CTX D-17]
@@ -95,6 +95,7 @@ Accent reserved for (and ONLY these in this phase):
 Not accent: the dirty chip (warning amber), the blocked chip (danger red), collapse chevrons (neutral `oklch(.741 …)`), table column handles at rest.
 
 ### EDIT-02 — target mark contrast (researcher decision, computed)
+- **(amended 2026-10-26, planner)** The mark colour is `text-decoration: underline solid oklch(.57 calc(.1 * var(--accent-chroma)) var(--accent-hue) / .95) 3px`, not the fixed rgba below. Measured minimums: **3.39:1** on every light preview field and **3.57:1** on every dark one, across hues 0-345 (step 15) and accent strength 0, 0.5 and 1; at the Portia hue it renders about rgb(16, 138, 122), still teal. Why the literal was replaced: it fails the existing test «no turquoise literal left in the stylesheet» (HSL hue 172.8), stays teal under the owner's own accent (Phase 10 D-23), and composited at .95 alpha over `#eeeee9` it measures 2.99:1. The bullets below are the original researcher text, kept for history.
 - Replace `::highlight(portia-format) { text-decoration: underline solid rgba(var(--desktop-glow), .9) 3px }` with **`text-decoration: underline solid rgba(0, 150, 132, .95) 3px`**. Teal hue is kept, still no fill [Phase 5 rule, CTX D-17].
 - Measured contrast (WCAG relative luminance): on light field `#f3f1e9` **3.26:1** (was 2.12:1; passes 1.4.11 >= 3:1); on dark field `~#101c1a` **4.73:1** (was 7.27:1; still clearly visible). Paper `#f3f0e6` / `#f5f3eb` variants differ by < 0.1.
 - `::highlight` cannot read CSS custom properties from the field, so one shared colour is used (no second highlight name). Test (TEST-02) asserts: rule exists, has `text-decoration: underline`, contains no `background`/`background-color`, and the colour is the value above.
@@ -239,7 +240,7 @@ Surfaces: E1 section list + TOC · E2 floating format panel / phone sheet · E3 
 - Contrast of new text on panel surfaces >= 4.5:1 (use existing label colours `oklch(.821 …)` / `oklch(.741 …)` on `oklch(.187–.224 …)`).
 
 ## Test Contract (TEST-02, UI-relevant)
-- `lib/*.test.ts` (node:test, `--experimental-strip-types`) assert: `::highlight(portia-format)` exists, uses `underline`, has no background fill, colour == `rgba(0, 150, 132, .95)`; window-edge boundary of own-input is covered; `lib/rich-text-style` imports in `portia-editor.tsx` are one statement.
+- `lib/*.test.ts` (node:test, `--experimental-strip-types`) assert: `::highlight(portia-format)` exists, uses `underline`, has no background fill, contrast >= 3:1 on every preview field across the hue sweep (amended 2026-10-26, planner); the own-input window of `fieldSelectionStep` closes exactly 400 ms after up (05-IN-01); the panel clamp is tested in `lib/panel-position.test.ts` (11-02) (amended 2026-10-26, planner); `lib/rich-text-style` imports in `portia-editor.tsx` are one statement.
 - Panel placement, phone sheet, chip stacking, multi-select feel are verified by the owner in a browser/phone (CONTEXT: "тестами не закрыть").
 
 ---

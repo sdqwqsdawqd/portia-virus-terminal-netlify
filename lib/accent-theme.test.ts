@@ -443,3 +443,46 @@ test("the desktop reads and writes settings through the one key constant", () =>
   assert.match(desktopSource, /localStorage\.getItem\(desktopSettingsStorageKey\)/);
   assert.match(desktopSource, /localStorage\.setItem\(desktopSettingsStorageKey,/);
 });
+
+test("the format mark is an underline with no fill and keeps 3:1 on every preview field", () => {
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selector: m[1].trim(), body: m[2] }));
+  const marks = rules.filter((r) => r.selector.includes("::highlight(portia-format)"));
+  assert.equal(marks.length, 1, "exactly one ::highlight(portia-format) rule");
+  const body = marks[0].body;
+  assert.match(body, /underline/);
+  assert.doesNotMatch(body, /background/i);
+  const m = body.match(/oklch\(([\d.]+) calc\(([\d.]+) \* var\(--accent-chroma\)\) var\(--accent-hue\) \/ ([\d.]+)\)/);
+  assert.ok(m, "the mark colour is an accent-following oklch with alpha");
+  const [markL, markC, alpha] = [Number(m[1]), Number(m[2]), Number(m[3])];
+
+  const paper = css.match(/--paper:\s*(#[0-9a-fA-F]{3,6})/)?.[1];
+  assert.ok(paper, "--paper is declared");
+  const lights = new Set<string>();
+  for (const r of rules.filter((x) => x.selector.includes("preview-light"))) {
+    const v = r.body.match(/--field-bg:\s*([^;]+);/)?.[1].trim();
+    if (v) lights.add(v === "var(--paper)" ? paper : v);
+  }
+  assert.ok(lights.size >= 5, `at least 5 light fields, found ${lights.size}`);
+  const darks: Array<[number, number]> = [];
+  for (const r of rules.filter((x) => x.selector.includes("formatted-rich-input"))) {
+    const d = r.body.match(/--field-bg:\s*oklch\(([\d.]+) calc\(([\d.]+) \* var\(--accent-chroma\)\) var\(--accent-hue\)\)/);
+    if (d) darks.push([Number(d[1]), Number(d[2])]);
+  }
+  assert.ok(darks.length >= 2, `at least 2 dark fields, found ${darks.length}`);
+
+  const clamp = (rgb: Rgb) => rgb.map((c) => Math.min(255, Math.max(0, c))) as Rgb;
+  const over = (mark: Rgb, field: Rgb) => mark.map((c, i) => alpha * c + (1 - alpha) * field[i]) as Rgb;
+  for (let h = 0; h < 360; h += 15) {
+    for (const k of [0, 0.5, 1]) {
+      const mark = clamp(oklchToRgb(markL, markC * k, h));
+      for (const light of lights) {
+        const field = hex(light);
+        assert.ok(contrast(over(mark, field), field) >= 3, `mark over ${light} at hue ${h}, strength ${k}`);
+      }
+      for (const [L, C] of darks) {
+        const field = clamp(oklchToRgb(L, C * k, h));
+        assert.ok(contrast(over(mark, field), field) >= 3, `mark over dark L${L} at hue ${h}, strength ${k}`);
+      }
+    }
+  }
+});
