@@ -6,10 +6,12 @@ import { classificationOptions, findInfo, portiaTextKey, type Broadcast, type Po
 import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
-import { accentIds, bootSeenStorageKey, motionModes } from "@/lib/accent-boot";
+import { accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes } from "@/lib/accent-boot";
+import { accentTokenNames, deriveAccentTokens } from "@/lib/accent-custom";
+import { CustomColorPicker } from "@/components/custom-color-picker";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { acceptFetchedContent } from "@/lib/content-sync";
-import { normalizeBroadcasts, normalizeInfoSections } from "@/lib/portia-content-normalize";
+import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 
 const PortiaEditor = dynamic(
@@ -24,6 +26,9 @@ const embeddedApps = {
   sheet: { src: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/htmlview?widget=true&headers=false", external: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" },
   charter: { src: "https://sdqwqsdawqd.github.io/S.E-Portia/", external: "https://sdqwqsdawqd.github.io/S.E-Portia/" },
 } as const;
+// D-19: one permission set for every third-party frame. Scripts and same-origin let the viewers run, popups escape the sandbox so links open as normal tabs;
+// no top-navigation flag, so a frame can never move the PORTIA tab. If a device needs more, add only that one flag.
+const embedSandbox = "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox";
 // Where a window appears from: a desktop icon (zoom) or its taskbar button (scales back out of it).
 type OpenOrigin = { x: number; y: number; kind: "icon" | "taskbar" };
 type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number; geometry?: WindowGeometry; exiting?: "close" | "minimize"; openOrigin?: OpenOrigin };
@@ -38,14 +43,14 @@ const WINDOW_FADE_OUT_MS = 120;
 // shortcut: a 10 s poll of the CDN-cached content, not a push channel; switch to Supabase Realtime if visitors need it within a second or the content grows large
 const contentSyncMs = 10_000;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
-type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string };
+type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string; customAccent: string };
 type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
 type ShortcutPosition = { x: number; y: number };
 
-const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "on" };
+const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "on", customAccent: "" };
 // Every value a setting may hold; the same ids the «Настройки» groups offer.
-const settingValues: Record<keyof DesktopSettings, readonly string[]> = {
-  accent: accentIds,
+const settingValues: Record<Exclude<keyof DesktopSettings, "customAccent">, readonly string[]> = {
+  accent: [...accentIds, "custom"],
   wallpaper: ["radar", "grid", "gel", "cells", "quiet"],
   iconSize: ["compact", "standard", "large"],
   motion: motionModes,
@@ -156,16 +161,6 @@ type ContentResponse = {
   updatedAt?: string | null;
 };
 
-function isUsableContent(value: unknown): value is PortiaContent {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<PortiaContent>;
-  return Array.isArray(candidate.viruses)
-    && Array.isArray(candidate.infoSections)
-    && Array.isArray(candidate.broadcasts)
-    && Array.isArray(candidate.recycleFiles)
-    && Array.isArray(candidate.searchRecommendations);
-}
-
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, milliseconds = 6_000) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), milliseconds);
@@ -186,7 +181,7 @@ function broadcastSignature(content: PortiaContent) {
 function shuffledUniqueIndices(items: string[], previousIndex = -1) {
   const seen = new Set<string>();
   const shuffled = items
-    .map((item, index) => ({ item: item.trim(), index }))
+    .map((item, index) => ({ item: typeof item === "string" ? item.trim() : "", index }))
     .filter(({ item }) => item && !seen.has(item) && Boolean(seen.add(item)))
     .map(({ index }) => index);
   for (let index = shuffled.length - 1; index > 0; index -= 1) {
@@ -277,6 +272,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [broadcastTab, setBroadcastTab] = useState<BroadcastTab>("news");
   const [canEdit, setCanEdit] = useState(false);
   const [canManageEditors, setCanManageEditors] = useState(false);
+  const [openTabs, setOpenTabs] = useState<string[]>([]);
+  // The server's reason for the last refused save, shown in the editor's save status (D-12).
+  const [saveError, setSaveError] = useState("");
+  const canEditRef = useRef(false);
+  useEffect(() => { canEditRef.current = canEdit; });
   const [revision, setRevision] = useState(0);
   // Read by the async GET: the newest revision this tab knows (cache, GET or its own save) and how many saves it started.
   const knownRevision = useRef(0);
@@ -284,12 +284,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [booting, setBooting] = useState(true);
   const [clock, setClock] = useState("--:--:--");
-  // The visitor's local day; set from the clock tick so quest states roll over at midnight without a reload (D-03).
-  const [today, setToday] = useState("");
+  // The visitor's local day, known from the first render so dated quests never flash a wrong status; the tick keeps rolling it over at midnight (D-03, CONT-07).
+  const [today, setToday] = useState(() => localDateKey(new Date()));
   const [startOpen, setStartOpen] = useState(false);
   const [windows, setWindows] = useState<Record<AppId, WindowState>>(initialWindows);
   const [activeApp, setActiveApp] = useState<AppId>("archive");
-  const [, setTopZ] = useState(20);
+  // A ref, not state: computing z inside a state updater made setWindows a side effect of it, and Strict Mode replays updaters (ROB-03).
+  const topZ = useRef(20);
   const [activeVirusId, setActiveVirusId] = useState(initialContent.viruses[0]?.id ?? "");
   const [virusQuery, setVirusQuery] = useState("");
   const [globalQuery, setGlobalQuery] = useState("");
@@ -306,6 +307,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const taskbarDrag = useRef<null | { app: AppId; pointerId: number; startX: number; moved: boolean }>(null);
   const suppressTaskbarClick = useRef(false);
   const [settingsSavedVisible, setSettingsSavedVisible] = useState(false);
+  const [accentPickerOpen, setAccentPickerOpen] = useState(false);
+  const [accentDraft, setAccentDraft] = useState<string | null>(null);
+  const accentDraftRef = useRef<string | null>(null);
+  const customAccentButton = useRef<HTMLButtonElement>(null);
   const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
   const [employeesReady, setEmployeesReady] = useState(false);
@@ -344,6 +349,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const assistantRecoverTimer = useRef<number | null>(null);
   const assistantAutomaticTimer = useRef<number | null>(null);
   const settingsSavedTimer = useRef<number | null>(null);
+  const customTokens = useMemo(() => deriveAccentTokens(accentDraft ?? desktopSettings.customAccent), [accentDraft, desktopSettings.customAccent]);
   const exitTimers = useRef<Partial<Record<AppId, number>>>({});
   // The editor reports unsaved edits through a ref: closing is decided inside an event handler, never during render.
   const editorDirtyRef = useRef(false);
@@ -376,9 +382,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       if (!response.ok) return;
       const payload = (await response.json()) as ContentResponse;
       if (!payload.content) return;
-      const fetched = { ...payload.content, broadcasts: normalizeBroadcasts(payload.content.broadcasts), infoSections: normalizeInfoSections(payload.content.infoSections) };
       const fetchedRevision = payload.revision ?? 0;
+      // The revision is checked first so an unchanged poll does no work and never hands the editor a new object (SYNC-01).
       if (!acceptFetchedContent(fetchedRevision, knownRevision.current, savesAtSend, savesStarted.current)) return;
+      const fetched = normalizePortiaContent(payload.content);
+      if (!fetched) return;
       knownRevision.current = fetchedRevision;
       setContent(fetched);
       setActiveVirusId((current) => fetched.viruses.some((virus) => virus.id === current) ? current : fetched.viruses[0]?.id ?? "");
@@ -404,9 +412,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     try {
       const response = await fetchWithTimeout("/api/access", { cache: "no-store" });
       if (!response.ok) return;
-      const access = await response.json() as { canEdit?: boolean; canManageEditors?: boolean };
+      const access = await response.json() as { canEdit?: boolean; canManageEditors?: boolean; openTabs?: unknown };
       setCanEdit(Boolean(access.canEdit));
       setCanManageEditors(Boolean(access.canManageEditors));
+      const ids = Array.isArray(access.openTabs) ? access.openTabs.filter((id): id is string => typeof id === "string") : [];
+      // Same ids keep the same array, so the editor's effects do not re-run on every poll.
+      setOpenTabs((current) => current.length === ids.length && current.every((id, index) => id === ids[index]) ? current : ids);
     } catch {}
   }, []);
 
@@ -453,8 +464,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         const cached = window.localStorage.getItem(contentCacheStorageKey);
         if (cached) {
           const parsed = JSON.parse(cached) as { content?: unknown; revision?: number };
-          if (isUsableContent(parsed.content)) {
-            const cachedContent = { ...parsed.content, broadcasts: normalizeBroadcasts(parsed.content.broadcasts), infoSections: normalizeInfoSections(parsed.content.infoSections) };
+          // The cache is device-editable and may predate any field, so it gets the same normalizer as the network (D-20, D-22).
+          const cachedContent = normalizePortiaContent(parsed.content);
+          if (cachedContent) {
             setContent(cachedContent);
             const cachedRevision = typeof parsed.revision === "number" ? parsed.revision : 0;
             knownRevision.current = cachedRevision;
@@ -493,8 +505,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const clockTimer = window.setInterval(tick, 1000);
     const initialFetchTimer = window.setTimeout(() => { void fetchContent(); void fetchAccess(); }, 0);
     const initialEmployeesTimer = window.setTimeout(() => void fetchEmployees(), 0);
-    const syncTimer = window.setInterval(() => { if (document.visibilityState === "visible") void fetchContent(); }, contentSyncMs);
-    const onVisible = () => { if (document.visibilityState === "visible") void fetchContent(); };
+    // /api/content is CDN-shared and cannot carry per-user data, so the tab list is polled separately and only for someone who may edit.
+    const syncTimer = window.setInterval(() => { if (document.visibilityState === "visible") { void fetchContent(); if (canEditRef.current) void fetchAccess(); } }, contentSyncMs);
+    const onVisible = () => { if (document.visibilityState === "visible") { void fetchContent(); if (canEditRef.current) void fetchAccess(); } };
     document.addEventListener("visibilitychange", onVisible);
     // Cheap: answered by the CDN, so other visitors see profile edits within minutes.
     const employeeSyncTimer = window.setInterval(fetchEmployees, 5 * 60 * 1000);
@@ -556,12 +569,16 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     // Stored settings are visitor-editable: keep only known values, field by field.
     const restored: Partial<DesktopSettings> = {};
     try {
-      const saved: unknown = JSON.parse(window.localStorage.getItem("portia-desktop-settings-v1") ?? "{}");
+      const saved: unknown = JSON.parse(window.localStorage.getItem(desktopSettingsStorageKey) ?? "{}");
       if (saved && typeof saved === "object" && !Array.isArray(saved)) {
-        for (const key of Object.keys(settingValues) as (keyof DesktopSettings)[]) {
+        for (const key of Object.keys(settingValues) as (keyof typeof settingValues)[]) {
           const value = (saved as Record<string, unknown>)[key];
           if (typeof value === "string" && settingValues[key].includes(value)) restored[key] = value;
         }
+        const custom = (saved as Record<string, unknown>).customAccent;
+        if (typeof custom === "string" && deriveAccentTokens(custom)) restored.customAccent = custom.toLowerCase();
+        // «custom» without a valid colour is untrusted input: fall back to the default accent (D-11).
+        if (restored.accent === "custom" && !restored.customAccent) delete restored.accent;
       }
     } catch {}
     const restoreTimer = window.setTimeout(() => {
@@ -694,10 +711,21 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   // would overwrite the visitor's choice and repaint the head script's accent and motion for a frame.
   useEffect(() => {
     if (!desktopSettingsLoaded) return;
-    document.documentElement.dataset.accent = desktopSettings.accent;
-    document.documentElement.dataset.wallpaper = desktopSettings.wallpaper;
-    document.documentElement.dataset.iconSize = desktopSettings.iconSize;
-    try { window.localStorage.setItem("portia-desktop-settings-v1", JSON.stringify(desktopSettings)); } catch {}
+    const root = document.documentElement;
+    const accent = accentDraft ? "custom" : desktopSettings.accent;
+    root.dataset.accent = accent;
+    for (const name of accentTokenNames) {
+      if (accent === "custom" && customTokens) root.style.setProperty(name, customTokens[name]);
+      else root.style.removeProperty(name);
+    }
+    root.dataset.wallpaper = desktopSettings.wallpaper;
+    root.dataset.iconSize = desktopSettings.iconSize;
+  }, [desktopSettings, desktopSettingsLoaded, accentDraft, customTokens]);
+
+  // Drafts recolour live but only committed values persist (D-08).
+  useEffect(() => {
+    if (!desktopSettingsLoaded) return;
+    try { window.localStorage.setItem(desktopSettingsStorageKey, JSON.stringify(desktopSettings)); } catch {}
   }, [desktopSettings, desktopSettingsLoaded]);
 
   // Same rule as the head script: animations are on unless the visitor turned them off.
@@ -706,22 +734,65 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     document.documentElement.dataset.motion = desktopSettings.motion === "off" ? "reduce" : "full";
   }, [desktopSettings, desktopSettingsLoaded]);
 
-  const showSettingsSaved = () => {
+  const showSettingsSaved = useCallback(() => {
     setSettingsSavedVisible(true);
     if (settingsSavedTimer.current) window.clearTimeout(settingsSavedTimer.current);
     settingsSavedTimer.current = window.setTimeout(() => setSettingsSavedVisible(false), 2400);
-  };
+  }, []);
 
-  const updateDesktopSetting = (key: keyof DesktopSettings, value: string) => {
-    if (desktopSettings[key] === value) return;
-    setDesktopSettings((current) => ({ ...current, [key]: value }));
+  const updateDesktopSettings = (patch: Partial<DesktopSettings>) => {
+    if ((Object.keys(patch) as (keyof DesktopSettings)[]).every((key) => desktopSettings[key] === patch[key])) return;
+    setDesktopSettings((current) => ({ ...current, ...patch }));
     showSettingsSaved();
   };
+
+  const updateDesktopSetting = (key: keyof DesktopSettings, value: string) => updateDesktopSettings({ [key]: value });
+
+  const previewAccent = (hex: string) => {
+    accentDraftRef.current = hex;
+    setAccentDraft(hex);
+  };
+
+  const commitAccentDraft = useCallback(() => {
+    const draft = accentDraftRef.current;
+    if (!draft) return;
+    accentDraftRef.current = null;
+    setAccentDraft(null);
+    setDesktopSettings((current) => ({ ...current, accent: "custom", customAccent: draft.toLowerCase() }));
+    showSettingsSaved();
+  }, [showSettingsSaved]);
+
+  const closeAccentPicker = () => {
+    commitAccentDraft();
+    setAccentPickerOpen(false);
+  };
+
+  const chooseCustomAccent = () => {
+    if (accentPickerOpen) { closeAccentPicker(); return; }
+    const seed = desktopSettings.customAccent || getComputedStyle(document.documentElement).getPropertyValue("--teal").trim().toLowerCase();
+    if (!deriveAccentTokens(seed)) return;
+    updateDesktopSettings({ accent: "custom", customAccent: seed });
+    setAccentPickerOpen(true);
+  };
+
+  // A drag can end anywhere, including outside the picker: save when the pointer is released (D-08).
+  useEffect(() => {
+    if (!accentPickerOpen) return;
+    window.addEventListener("pointerup", commitAccentDraft);
+    window.addEventListener("pointercancel", commitAccentDraft);
+    return () => {
+      window.removeEventListener("pointerup", commitAccentDraft);
+      window.removeEventListener("pointercancel", commitAccentDraft);
+    };
+  }, [accentPickerOpen, commitAccentDraft]);
 
   const resetDesktopSettings = () => {
     const alreadyDefault = Object.entries(defaultDesktopSettings).every(([key, value]) => desktopSettings[key as keyof DesktopSettings] === value);
     const shortcutsAlreadyDefault = Object.keys(shortcutPositions).length === 0;
     if (alreadyDefault && shortcutsAlreadyDefault) return;
+    accentDraftRef.current = null;
+    setAccentDraft(null);
+    setAccentPickerOpen(false);
     setDesktopSettings(defaultDesktopSettings);
     setShortcutPositions({});
     showSettingsSaved();
@@ -732,11 +803,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   };
 
   const focusApp = (appId: AppId) => {
-    setTopZ((current) => {
-      const next = current + 1;
+    // Every click in a window calls this, so a window already on top keeps its z and z stays far below the format panel's 950 (EDIT-04).
+    // shortcut: windows still climb by one per switch between windows; after about 930 switches in one page session they pass the panel — renumber z here if that is ever seen
+    if (windows[appId].z !== topZ.current) {
+      topZ.current += 1;
+      const next = topZ.current;
       setWindows((state) => ({ ...state, [appId]: { ...state[appId], z: next } }));
-      return next;
-    });
+    }
     setActiveApp(appId);
   };
 
@@ -919,9 +992,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     if (saveStateTimer.current !== null) window.clearTimeout(saveStateTimer.current);
     // Polls sent before this save may answer with the copy it replaces.
     savesStarted.current += 1;
+    setSaveError("");
     setSaveState("saving");
     try {
-      // Up to 2 MB plus auth, upsert and CDN purge: aborting after the server committed would turn the retry into a false conflict.
+      // Up to MAX_CONTENT_BODY_BYTES (5 MB, lib/content-limits.ts) plus auth, upsert and CDN purge: aborting after the server committed would turn the retry into a false conflict.
       const response = await fetchWithTimeout("/api/content", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -933,7 +1007,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         setSaveState("conflict");
         throw new Error("PORTIA content changed by another editor");
       }
-      if (!response.ok) throw new Error("save failed");
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: unknown } | null;
+        if (typeof body?.error === "string") setSaveError(body.error);
+        // A refusal usually means the tab list changed: read it now instead of at the next poll (D-15).
+        if (response.status === 403) void fetchAccess();
+        throw new Error("save failed");
+      }
       const payload = (await response.json()) as { revision?: number };
       const savedRevision = payload.revision ?? baseRevision + 1;
       knownRevision.current = savedRevision;
@@ -958,6 +1038,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
   const filteredViruses = content.viruses.filter((virus) => escapeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(escapeSearch(virusQuery)));
+  const virusListbox = contentReady && filteredViruses.length > 0;
   const selectedInfoEntry = findInfo(content.infoSections, selectedInfoId)
     ?? (content.infoSections[0] ? { section: content.infoSections[0], subsection: null } : null);
   const selectedInfo = selectedInfoEntry?.section;
@@ -1064,6 +1145,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
     const nextTipIndex = assistantAdviceBag.current.shift() ?? -1;
     assistantLastTipIndex.current = nextTipIndex;
+    if (nextTipIndex < 0) {
+      // No usable tip: no bubble, no placeholder text (D-12).
+      setAssistantTipIndex(-1);
+      setAssistantTipVisible(false);
+      return;
+    }
     setAssistantTipIndex(nextTipIndex);
     setAssistantTipVisible(true);
     if (assistantTipTimer.current) window.clearTimeout(assistantTipTimer.current);
@@ -1131,7 +1218,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         ? (activityPhrases[assistantActivityPhraseIndex] ?? activityPhrases[0])
         : assistantTipIndex >= 0
           ? content.assistantAdvice[assistantTipIndex]
-          : "Добавьте советы в редакторе PORTIA.";
+          : undefined;
+  // Derived, not stored: a tip removed by the 10 s content poll closes the bubble on the next render (D-13).
+  const assistantSpeaking = assistantTipVisible && typeof assistantMessageText === "string" && assistantMessageText.trim() !== "";
   const assistantMessageDocument = assistantOffended
     ? richTextLine(content.formattedText[portiaTextKey.assistantOffended], content.assistantOffendedPhrases ?? [content.assistantOffendedPhrase], Math.max(0, assistantOffendedPhraseIndex))
     : assistantAutomaticKind === "idle"
@@ -1172,10 +1261,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <div className="browser-heading"><div><h1>База вирусов</h1></div><span className="record-count">{String(content.viruses.length).padStart(2, "0")}</span></div>
                 <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск по базе</span><input value={virusQuery} onChange={(event) => setVirusQuery(event.target.value)} type="search" placeholder="Поиск по имени или коду" /></label>
                 <div className="browser-labels" aria-hidden="true"><span>СУБЪЕКТ</span><span>СТАТУС</span></div>
-                <div className="virus-list" role="listbox" aria-label="Записи вирусов">
+                {/* Loading and the empty message are not options, so the container is a listbox only while it holds rows; no wrapper, the phone layout is a flex row. */}
+                <div className="virus-list" role={virusListbox ? "listbox" : undefined} aria-label={virusListbox ? "Записи вирусов" : undefined}>
                   {!contentReady ? <LoadingState label="Загрузка архива…" /> : <>
                   {filteredViruses.map((virus, index) => (
-                    <button key={virus.id} type="button" className={`virus-row${virus.id === activeVirus?.id ? " active" : ""}`} onClick={() => { setActiveVirusId(virus.id); setOpenLog(null); }}>
+                    <button key={virus.id} type="button" role="option" aria-selected={virus.id === activeVirus?.id} className={`virus-row${virus.id === activeVirus?.id ? " active" : ""}`} onClick={() => { setActiveVirusId(virus.id); setOpenLog(null); }}>
                       <span className="row-index">{String(index + 1).padStart(2, "0")}</span>
                       <span className="row-main"><strong>{virus.name}</strong><small>{virus.code}</small><RowBadges virus={virus} /></span>
                       <span className="row-status">{virus.status}</span>
@@ -1210,7 +1300,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   <header className="personnel-profile-head">
                     <div className="personnel-avatar-stage">
                       <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} fallbackClassName="personnel-fallback" /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
-                      {selectedEmployee.robloxUserId ? <a className="personnel-portrait" href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer" aria-label={`Профиль Roblox: ${selectedEmployee.nickname}`}><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></a> : <figure className="personnel-portrait"><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></figure>}
+                      {selectedEmployee.robloxUserId ? <a className="personnel-portrait" href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer" aria-label={`Профиль Roblox: ${selectedEmployee.nickname}`} title={`Профиль Roblox: ${selectedEmployee.nickname}`}><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></a> : <figure className="personnel-portrait"><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></figure>}
                     </div>
                     <div className="personnel-profile-identity"><h2>{selectedEmployee.nickname}</h2>{selectedEmployee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<p className="personnel-callsign">{selectedEmployee.callsign || "Без позывного"}</p></div>
                   </header>
@@ -1259,8 +1349,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   : block.type === "table"
                     ? <dl key={block.id} className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row, rowIndex) => <div key={rowIndex}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl>
                     : block.type === "video" && block.videoId
-                      // nocookie embed, id validated by normalizeInfoSections (D-09); default referrer policy, YouTube refuses embeds without a Referer.
-                      ? <figure key={block.id} className="info-block-video"><iframe title={`Видео YouTube: ${selectedSubsection.title}`} loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" src={`https://www.youtube-nocookie.com/embed/${block.videoId}`} /><figcaption><a href={`https://www.youtube.com/watch?v=${block.videoId}`} target="_blank" rel="noopener noreferrer">Открыть на YouTube ↗</a></figcaption></figure>
+                      // nocookie embed, id validated by normalizePortiaContent (D-09); default referrer policy, YouTube refuses embeds without a Referer.
+                      ? <figure key={block.id} className="info-block-video"><iframe title={`Видео YouTube: ${selectedSubsection.title}`} loading="lazy" sandbox={embedSandbox} allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" src={`https://www.youtube-nocookie.com/embed/${block.videoId}`} /><figcaption><a href={`https://www.youtube.com/watch?v=${block.videoId}`} target="_blank" rel="noopener noreferrer">Открыть на YouTube ↗</a></figcaption></figure>
                       : block.type === "photo" && block.url
                         ? <figure key={block.id} className="info-block-photo"><img src={block.url} alt={`Иллюстрация: ${selectedSubsection.title}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" /></figure>
                         : null)}</div></div>
@@ -1279,8 +1369,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <div className="broadcast-grid">
                 {broadcastFeed(content.broadcasts, broadcastTab, today).map((item) => {
                   const state = item.type === "quest" ? questState(item, today) : null;
+                  // D-19: a quest or task never shows ВАЖНО, whatever the stored data says.
+                  const important = item.type === "news" && item.important;
                   const badge = state === "active" ? "АКТИВЕН" : state === "upcoming" ? `СКОРО · с ${formatQuestDay(item.startsAt).slice(0, 5)}` : "ЗАВЕРШЁН";
-                  return <article className={`broadcast-card ${item.type}${item.important ? " important" : ""}${state ? ` state-${state}` : ""}`} key={item.id}><span>{broadcastType(item.type)}{item.important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
+                  return <article className={`broadcast-card ${item.type}${important ? " important" : ""}${state ? ` state-${state}` : ""}`} key={item.id}><span>{broadcastType(item.type)}{important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
                 })}
                 {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>{broadcastTab === "news" ? "Новостей пока нет" : "Квестов и задач пока нет"}</strong><span>Новые квесты, задачи и новости появятся здесь.</span></div>}
               </div></>}
@@ -1327,7 +1419,16 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <AppWindow app="settings" state={windows.settings} active={activeApp === "settings"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window settings-window" meta="НАСТРОЙКИ">
             <div className="settings-app">
               <header><h1>Настройки рабочего стола</h1><p>Оформление и расположение ярлыков сохраняются на этом устройстве.</p></header>
-              <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => updateDesktopSetting("accent", value)} />
+              <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => { closeAccentPicker(); updateDesktopSetting("accent", value); }}>
+                <button type="button" ref={customAccentButton} className={desktopSettings.accent === "custom" ? "selected" : ""} aria-pressed={desktopSettings.accent === "custom"} onClick={chooseCustomAccent}><i className="swatch custom" style={customTokens ? { background: customTokens["--teal"] } : undefined} /><span>Свой</span></button>
+                {accentPickerOpen && <div className="accent-picker" onKeyDown={(event) => {
+                  if (event.key !== "Escape") return;
+                  // preventDefault marks Escape as handled so the document-level quest-notice listener skips it; focus returns to «Свой» because the picker unmounts.
+                  event.preventDefault(); closeAccentPicker(); customAccentButton.current?.focus();
+                }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) commitAccentDraft(); }}>
+                  <CustomColorPicker key="accent" group="accent" title="Свой цвет интерфейса" color={desktopSettings.customAccent} onChange={previewAccent} onClose={closeAccentPicker} />
+                </div>}
+              </SettingGroup>
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
               <SettingGroup title="Анимации" values={[['on','Включены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
@@ -1337,12 +1438,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="editor" state={windows.editor} active={activeApp === "editor"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="editor-window" meta="ДОСТУП ВЛАДЕЛЬЦА">
-            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
+            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} openTabs={openTabs} active={activeApp === "editor" && !windows.editor.minimized} minimized={windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} saveError={saveError} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
           </AppWindow>
         </main>
 
-        <div className={`desktop-assistant${assistantTipVisible ? " is-speaking" : ""}${assistantOffended ? " is-offended" : ""}${assistantRecovering ? " is-recovering" : ""}`} data-mood={assistantMood || undefined} data-squish={assistantSquish ? (assistantSquish % 2 ? "a" : "b") : undefined} data-auto={assistantAutomaticKind ?? undefined}>
-          {assistantTipVisible && <div className="assistant-bubble" role="status"><span>{assistantMessageHeading}</span><FormattedText className="assistant-formatted-text" text={assistantMessageText} document={assistantMessageDocument} /></div>}
+        <div className={`desktop-assistant${assistantSpeaking ? " is-speaking" : ""}${assistantOffended ? " is-offended" : ""}${assistantRecovering ? " is-recovering" : ""}`} data-mood={assistantMood || undefined} data-squish={assistantSquish ? (assistantSquish % 2 ? "a" : "b") : undefined} data-auto={assistantAutomaticKind ?? undefined}>
+          {assistantSpeaking && <div className="assistant-bubble" role="status"><span>{assistantMessageHeading}</span><FormattedText className="assistant-formatted-text" text={assistantMessageText} document={assistantMessageDocument} /></div>}
           <button className="assistant-button" type="button" onClick={activateAssistant} onContextMenu={(event) => event.preventDefault()} aria-disabled={assistantOffended} aria-label="Получить совет Вивьян"><img src="/assets/portia-assistant.png" alt="" draggable={false} /></button>
           <span className="assistant-label">ВИВЬЯН // ПОМОЩНИК</span>
         </div>
@@ -1503,6 +1604,8 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
 }
 
 const zoomSteps = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+// D-21: Ctrl zooms everywhere and Cmd on a Mac; the Windows key never does (trackpad pinch arrives as ctrlKey).
+const zoomModifier = (event: { ctrlKey: boolean; metaKey: boolean }) => event.ctrlKey || (event.metaKey && /^(Mac|iPhone|iPad|iPod)/.test(navigator.platform));
 
 function EmbeddedDocument({ src, external, title }: { src: string; external: string; title: string }) {
   const [zoom, setZoom] = useState(1);
@@ -1517,15 +1620,18 @@ function EmbeddedDocument({ src, external, title }: { src: string; external: str
   // Wheel events over the embedded page never reach PORTIA, so while Ctrl is held a clear
   // layer covers the document and takes the wheel for our own zoom.
   useEffect(() => {
-    const key = (event: KeyboardEvent) => setCtrlHeld(event.ctrlKey || event.metaKey);
+    const key = (event: KeyboardEvent) => setCtrlHeld(zoomModifier(event));
     const release = () => setCtrlHeld(false);
+    const hide = () => { if (document.visibilityState === "hidden") setCtrlHeld(false); };
     window.addEventListener("keydown", key);
     window.addEventListener("keyup", key);
     window.addEventListener("blur", release);
+    document.addEventListener("visibilitychange", hide);
     return () => {
       window.removeEventListener("keydown", key);
       window.removeEventListener("keyup", key);
       window.removeEventListener("blur", release);
+      document.removeEventListener("visibilitychange", hide);
     };
   }, []);
 
@@ -1534,7 +1640,7 @@ function EmbeddedDocument({ src, external, title }: { src: string; external: str
     if (!frame) return;
     // Non-passive so Ctrl+wheel zooms the document instead of the whole browser tab.
     const wheel = (event: WheelEvent) => {
-      if (!event.ctrlKey && !event.metaKey) return;
+      if (!zoomModifier(event)) return;
       event.preventDefault();
       step(event.deltaY < 0 ? 1 : -1);
     };
@@ -1544,14 +1650,15 @@ function EmbeddedDocument({ src, external, title }: { src: string; external: str
 
   return <div className="document-app" ref={frameRef}>
     <div className="document-app-viewport">
-      <iframe src={src} title={title} loading="lazy" referrerPolicy="no-referrer" onLoad={() => setFrameLoading(false)} style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})` }} />
+      <iframe src={src} title={title} loading="lazy" sandbox={embedSandbox} referrerPolicy="no-referrer" onLoad={() => setFrameLoading(false)} style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})` }} />
       {frameLoading && <LoadingState label="Загрузка документа…" />}
-      {ctrlHeld && <div className="document-app-zoom-layer" aria-hidden="true" />}
+      {/* A lost keyup (Ctrl+key shortcut that moved focus, a context menu) clears on the first move or press instead of leaving the document blocked (01-WR-03). */}
+      {ctrlHeld && <div className="document-app-zoom-layer" aria-hidden="true" onPointerMove={(event) => { if (!zoomModifier(event)) setCtrlHeld(false); }} onPointerDown={(event) => { if (!zoomModifier(event)) setCtrlHeld(false); }} />}
     </div>
     <div className="document-app-bar">
       <div className="document-app-zoom" role="group" aria-label="Масштаб документа">
         <button type="button" onClick={() => step(-1)} aria-label="Уменьшить">−</button>
-        <button type="button" onClick={() => setZoom(1)} aria-label="Сбросить масштаб">{Math.round(zoom * 100)}%</button>
+        <button type="button" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
         <button type="button" onClick={() => step(1)} aria-label="Увеличить">+</button>
       </div>
       <a className="document-app-external" href={external} target="_blank" rel="noreferrer">Открыть отдельно</a>
@@ -1782,8 +1889,22 @@ function ScientistRichText({ log }: { log: ScientistLog }) {
 function QuestToast({ quest, more, document, onDismiss }: { quest: Broadcast; more: number; document?: RichTextDocument; onDismiss: (openQuests: boolean) => void }) {
   const titleId = useId();
 
+  // The notice never takes focus, so Escape is heard on the document; handled keys, typing and modal dialogs keep their Escape.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select"))) return;
+      if (window.document.querySelector("dialog[open]")) return;
+      onDismiss(false);
+    };
+    window.document.addEventListener("keydown", onKeyDown);
+    return () => window.document.removeEventListener("keydown", onKeyDown);
+  }, [onDismiss]);
+
   return (
-    <aside className="portia-dialog quest-toast" role="status" aria-labelledby={titleId} onKeyDown={(event) => { if (event.key === "Escape") onDismiss(false); }}>
+    <aside className="portia-dialog quest-toast" aria-labelledby={titleId}>
+      <span role="status" className="sr-only">Новый квест: {quest.title || "БЕЗ НАЗВАНИЯ"}</span>
       <div>
         <div className="quest-toast-head">
           <span className="quest-toast-eyebrow">НОВЫЙ КВЕСТ</span>
@@ -1802,8 +1923,8 @@ function QuestToast({ quest, more, document, onDismiss }: { quest: Broadcast; mo
   );
 }
 
-function FormattedText({ text, document, className = "" }: { text: string; document?: RichTextDocument; className?: string }) {
-  const runs = document?.runs?.length ? document.runs : [{ text }];
+function FormattedText({ text, document, className = "" }: { text?: string; document?: RichTextDocument; className?: string }) {
+  const runs = document?.runs?.length ? document.runs : [{ text: text ?? "" }];
   const fullText = runs.map((run) => run.text).join("");
   const runRanges = runs.map((run, index) => {
     const start = runs.slice(0, index).reduce((total, item) => total + item.text.length, 0);
@@ -1875,8 +1996,8 @@ function MediaBlock({ src, alt, label }: { src: string; alt: string; label: stri
   return <figure className="subject-media media-empty"><img src="/assets/portia-logo.png" alt="" aria-hidden="true" /><div><span>ВИЗУАЛЬНЫЙ МАТЕРИАЛ</span><strong>ОЖИДАЕТ ЗАГРУЗКИ</strong><small>{label}</small></div></figure>;
 }
 
-function SettingGroup({ title, values, current, onSelect }: { title: string; values: [string, string][]; current: string; onSelect: (value: string) => void }) {
-  return <section className="settings-section"><h2>{title}</h2><div className="setting-options">{values.map(([value, label]) => <button key={value} type="button" className={current === value ? "selected" : ""} onClick={() => onSelect(value)}>{title === "Цвет интерфейса" && <i className={`swatch ${value}`} />}<span>{label}</span></button>)}</div></section>;
+function SettingGroup({ title, values, current, onSelect, children }: { title: string; values: [string, string][]; current: string; onSelect: (value: string) => void; children?: React.ReactNode }) {
+  return <section className="settings-section"><h2>{title}</h2><div className={`setting-options${title === "Цвет интерфейса" ? " color-options" : ""}`}>{values.map(([value, label]) => <button key={value} type="button" className={current === value ? "selected" : ""} aria-pressed={current === value} onClick={() => onSelect(value)}>{title === "Цвет интерфейса" && <i className={`swatch ${value}`} />}<span>{label}</span></button>)}{children}</div></section>;
 }
 
 function broadcastType(type: "quest" | "task" | "news") {

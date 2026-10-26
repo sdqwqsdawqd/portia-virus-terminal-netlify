@@ -6,8 +6,8 @@ test("a newer revision is taken", () => {
   assert.equal(acceptFetchedContent(7, 6, 0, 0), true);
 });
 
-test("the same revision is taken so a server-normalized copy still replaces the cache", () => {
-  assert.equal(acceptFetchedContent(6, 6, 0, 0), true);
+test("the same revision is dropped so a poll never replaces the content and undo survives", () => {
+  assert.equal(acceptFetchedContent(6, 6, 0, 0), false);
 });
 
 test("an answer older than the tab's last save is dropped", () => {
@@ -27,7 +27,8 @@ test("a late poll after a save is dropped and the next poll is taken", () => {
   known = 6;
   assert.equal(acceptFetchedContent(5, known, lateSavesAtSend, saves), false);
   const nextSavesAtSend = saves;
-  assert.equal(acceptFetchedContent(6, known, nextSavesAtSend, saves), true);
+  assert.equal(acceptFetchedContent(6, known, nextSavesAtSend, saves), false);
+  assert.equal(acceptFetchedContent(7, known, nextSavesAtSend, saves), true);
 });
 
 test("a stale CDN copy older than the cached one is dropped", () => {

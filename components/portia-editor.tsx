@@ -1,12 +1,15 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
-import { flushSync } from "react-dom";
-import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { createPortal, flushSync } from "react-dom";
+import { CustomColorPicker } from "@/components/custom-color-picker";
+import { changedDossierTabs, changedSections, deniedSections, dossierTabs, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
+import { closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
-import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
-import { broadcastTabOf, type BroadcastTab } from "@/lib/broadcasts";
-import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, updateById } from "@/lib/editor-items";
+import { dropFields, mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
+import { TYPING_PAUSE_MS, historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
+import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
+import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
   findInfo,
@@ -19,10 +22,11 @@ import {
   type RichTextStyle,
   type Virus,
 } from "@/lib/portia-content";
+import { isLocalMediaPath } from "@/lib/media-url";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
-import type { FieldSelectionEvent, FieldSelectionState } from "@/lib/rich-text-style";
-import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
-import { clampPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
+import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS, MAX_TABLE_ROWS, bodyTooLargeMessage, contentBodyBytes, limitStatus, limitText, oversizeFields, oversizeMessage } from "@/lib/content-limits";
+import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
+import { clampPanelOffset, initialPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
@@ -33,7 +37,11 @@ type Props = {
   revision: number;
   saveState: "idle" | "saving" | "saved" | "error" | "conflict";
   canManageEditors: boolean;
+  // Ids of the registry tabs the owner left open for this editor (GET /api/access); the owner gets all of them.
+  openTabs: readonly string[];
   active: boolean;
+  // True while the window manager has the editor window minimized; the format panel is hidden then and comes back on restore (D-06).
+  minimized: boolean;
   onDirtyChange: (dirty: boolean) => void;
   // Bumped by the window manager each time × is pressed while the editor reports unsaved edits.
   closeRequest: number;
@@ -42,6 +50,8 @@ type Props = {
   onSave: (content: PortiaContent, baseRevision: number) => Promise<number>;
   onEmployeeSaved: (employee: PortiaEmployee) => void;
   onEmployeeRemoved: (id: string) => void;
+  // The server's reason for the last refused save (D-12); empty when there is none.
+  saveError: string;
 };
 
 type FormatTarget = {
@@ -52,7 +62,16 @@ type FormatTarget = {
   selection: { start: number; end: number } | null;
   area: DisplayArea;
   onCommit: (value: string, document: RichTextDocument) => void;
+  // EDIT-06: the pointer or key gesture that made this target decides whether fragments are kept, extended or cleared (D-13, D-14).
+  gesture: { id: number; additive: boolean };
+  // The fragments other than the current selection, and the targets of the other fields that hold them. A target made by a field has neither.
+  fragments: FormatFragment[];
+  peers: Record<string, FormatTarget>;
 };
+
+let gestureCounter = 0;
+// Phase 10 D-21: Ctrl everywhere, Cmd on a Mac, never the Windows key.
+const addsFragment = (event: { ctrlKey: boolean; metaKey: boolean }) => event.ctrlKey || (event.metaKey && /^(Mac|iPhone|iPad|iPod)/.test(navigator.platform));
 
 type EditorPreviewSurface = "light" | "dark";
 // Site area whose font the field mirrors; paired in the shared font block in app/portia.css.
@@ -75,7 +94,7 @@ function mediaUrlFromText(value: string) {
   const trimmed = value.trim();
   const markdown = trimmed.match(/^!\[[^\]]*\]\((https:\/\/[^\s)]+)\)$/i);
   const plain = trimmed.match(/https:\/\/[^\s<>"']+/i);
-  const extracted = (markdown?.[1] ?? plain?.[0] ?? (trimmed.startsWith("/") ? trimmed : "")).replace(/[),.;]+$/, "");
+  const extracted = (markdown?.[1] ?? plain?.[0] ?? (isLocalMediaPath(trimmed) ? trimmed : "")).replace(/[),.;]+$/, "");
   if (!extracted) return trimmed;
 
   try {
@@ -98,7 +117,7 @@ const textColorPalette = [
 ];
 
 // D-06 / D-07 base text colours; oklch is the source of truth (D-17). «Основной» shows this and stores no colour.
-const baseInk = { dark: "oklch(.79 .02 var(--accent-hue))", light: "oklch(.237 .015 var(--accent-hue))" };
+const baseInk = { dark: "oklch(.79 calc(.02 * var(--accent-chroma)) var(--accent-hue))", light: "oklch(.237 calc(.015 * var(--accent-chroma)) var(--accent-hue))" };
 
 const backgroundColorPalette = [
   { value: "#f0d66a", label: "Жёлтый" },
@@ -143,7 +162,7 @@ function moveArrayItem<T>(items: T[], from: number, to: number) {
 }
 
 // Table rows are located by block id, then by their current index inside the same changeDraft call.
-function editTableRows(content: PortiaContent, subsectionId: string, blockId: string, edit: (rows: { key: string; value: string }[]) => void) {
+function editTableRows(content: PortiaContent, subsectionId: string, blockId: string, edit: (rows: { id: string; key: string; value: string }[]) => void) {
   const block = findInfo(content.infoSections, subsectionId)?.subsection?.blocks.find((item) => item.id === blockId);
   if (block?.type === "table") edit(block.rows);
 }
@@ -300,6 +319,49 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
   ><span aria-hidden="true">≡</span></button>;
 }
 
+// Two table columns swap, so a header ≡ is dropped on the other header (or moved with ArrowLeft/ArrowRight) instead of sorting live.
+function ColumnSwapHandle({ label, onSwap }: { label: string; onSwap: () => void }) {
+  const otherCell = (button: HTMLElement, x: number, y: number) => {
+    const cell = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-column]") ?? null;
+    return cell && cell !== button.closest("[data-column]") && cell.closest(".info-table-head") === button.closest(".info-table-head") ? cell : null;
+  };
+  const clear = (button: HTMLElement) => {
+    delete button.dataset.dragging;
+    button.closest(".info-table-head")?.querySelectorAll("[data-drop-target]").forEach((cell) => cell.removeAttribute("data-drop-target"));
+  };
+  return <button
+    className="order-drag-handle column-swap-handle"
+    type="button"
+    aria-label={`Переставить столбец «${label}»`}
+    aria-keyshortcuts="ArrowLeft ArrowRight"
+    onPointerDown={(event) => {
+      if (!event.isPrimary || event.button !== 0) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      // "column", not "true": editKeyFor folds only row drags into one step, and a column swap is a single change on drop.
+      event.currentTarget.dataset.dragging = "column";
+    }}
+    onPointerMove={(event) => {
+      const button = event.currentTarget;
+      if (!button.dataset.dragging) return;
+      const cell = otherCell(button, event.clientX, event.clientY);
+      button.closest(".info-table-head")?.querySelectorAll("[data-column]").forEach((item) => item.toggleAttribute("data-drop-target", item === cell));
+    }}
+    onPointerUp={(event) => {
+      const button = event.currentTarget;
+      const dropped = button.dataset.dragging && otherCell(button, event.clientX, event.clientY);
+      clear(button);
+      if (dropped) onSwap();
+    }}
+    onPointerCancel={(event) => clear(event.currentTarget)}
+    onLostPointerCapture={(event) => clear(event.currentTarget)}
+    onKeyDown={(event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      onSwap();
+    }}
+  ><span aria-hidden="true">≡</span></button>;
+}
+
 function replaceRichText(document: RichTextDocument, nextText: string) {
   const previousText = document.runs.map((run) => run.text).join("");
   const previousStyles = expandStyles(document);
@@ -383,18 +445,37 @@ function editorPlainText(root: HTMLElement) {
 }
 
 // null when the document has no range in this field: a lost selection must not look like a caret at 0 (D-05).
-function selectionOffsets(root: HTMLElement) {
+// Firefox keeps every range of a Ctrl selection (Chromium keeps one), so all ranges inside the field are read and pickCurrentRange chooses the new one.
+function rootRanges(root: HTMLElement) {
   const selection = window.getSelection();
-  if (!selection?.rangeCount) return null;
-  const range = selection.getRangeAt(0);
-  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
-  const beforeStart = range.cloneRange();
-  beforeStart.selectNodeContents(root);
-  beforeStart.setEnd(range.startContainer, range.startOffset);
-  const beforeEnd = range.cloneRange();
-  beforeEnd.selectNodeContents(root);
-  beforeEnd.setEnd(range.endContainer, range.endOffset);
-  return { start: beforeStart.toString().length, end: beforeEnd.toString().length };
+  const found: { start: number; end: number }[] = [];
+  for (let index = 0; selection && index < selection.rangeCount; index += 1) {
+    const range = selection.getRangeAt(index);
+    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) continue;
+    const beforeStart = range.cloneRange();
+    beforeStart.selectNodeContents(root);
+    beforeStart.setEnd(range.startContainer, range.startOffset);
+    const beforeEnd = range.cloneRange();
+    beforeEnd.selectNodeContents(root);
+    beforeEnd.setEnd(range.endContainer, range.endOffset);
+    found.push({ start: beforeStart.toString().length, end: beforeEnd.toString().length });
+  }
+  return found;
+}
+
+function selectionOffsets(root: HTMLElement, known: { start: number; end: number }[] = []) {
+  return pickCurrentRange(rootRanges(root), known);
+}
+
+// Firefox drops the caret at offset 0 of a field when a Ctrl press lands in it while another field holds the selection, so a Ctrl+drag
+// would start at the start of the field. After the press has been handled, put a lone caret back under the pointer (a no-op where the browser got it right).
+function pinCaretUnderPointer(editor: HTMLElement, x: number, y: number) {
+  const at = window.document.caretPositionFromPoint?.(x, y);
+  if (!at || !editor.contains(at.offsetNode)) return;
+  window.setTimeout(() => {
+    const selection = window.getSelection();
+    if (selection?.rangeCount === 1 && selection.isCollapsed && !(selection.anchorNode === at.offsetNode && selection.anchorOffset === at.offset)) selection.collapse(at.offsetNode, at.offset);
+  }, 0);
 }
 
 // On a phone the list and the record swap places; bring the new half to the top (read after the next render).
@@ -450,37 +531,100 @@ function restoreSelection(root: HTMLElement, offsets: { start: number; end: numb
   selection?.addRange(range);
 }
 
+// D-01/D-05: a card is one header row (handle, one toggle button, actions); the body is hidden, not unmounted, so rich fields keep their DOM and aria-controls always points at an element.
+function CollapsibleCard({ id, label, title, open, onToggle, sortIndex, handle, actions, cardProps, children }: {
+  id: string; label: string; title?: string; open: boolean; onToggle: () => void; sortIndex?: number;
+  handle?: ReactNode; actions?: ReactNode; cardProps?: Record<string, string>; children: ReactNode;
+}) {
+  const bodyId = useId();
+  const name = title || label;
+  return (
+    <div className="nested-editor-card" id={`card-${id}`} data-sort-index={sortIndex} data-open={open || undefined} {...cardProps}>
+      <div className="nested-editor-head">
+        {handle}
+        <button type="button" className="nested-editor-toggle" aria-expanded={open} aria-controls={bodyId} aria-label={`${open ? "Свернуть" : "Развернуть"} раздел «${name}»`} onClick={onToggle}>
+          <strong>{label}</strong>
+          {title ? <span className="nested-editor-title" title={title}>{title}</span> : null}
+          <span className="nested-editor-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
+        </button>
+        {actions}
+      </div>
+      <div className="nested-editor-body" id={bodyId} hidden={!open}>{children}</div>
+    </div>
+  );
+}
+
+type TocItem = { id: string; label: string; depth: 0 | 1 };
+
+// D-03: a compact table of contents for a long list (5 or more entries). It owns only its list state and the entry in view; what a jump does is the caller's.
+// The row lists (viruses, Корзина) pass no onAll, since nothing in them folds.
+function EditorToc({ items, onJump, onAll }: { items: TocItem[]; onJump: (id: string) => void; onAll?: (open: boolean) => void }) {
+  const listId = useId();
+  const [listOpen, setListOpen] = useState(false);
+  const [active, setActive] = useState("");
+  const idsKey = items.map((item) => item.id).join("\n");
+  // The first entry in list order that sits in the band below the TOC is the one in view.
+  useEffect(() => {
+    if (!idsKey) return;
+    const ids = idsKey.split("\n");
+    const seen = new Set<string>();
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) { if (entry.isIntersecting) seen.add(entry.target.id); else seen.delete(entry.target.id); }
+      setActive(ids.find((id) => seen.has(`card-${id}`)) ?? "");
+    }, { rootMargin: "-80px 0px -60% 0px" });
+    for (const id of ids) { const element = document.getElementById(`card-${id}`); if (element) observer.observe(element); }
+    return () => observer.disconnect();
+  }, [idsKey]);
+  if (items.length < 5) return null;
+  return (
+    <nav className="editor-toc" aria-label="Оглавление">
+      <div className="editor-toc-bar">
+        <button type="button" aria-expanded={listOpen} aria-controls={listId} onClick={() => setListOpen((value) => !value)}>ОГЛАВЛЕНИЕ ▾</button>
+        {onAll && <button type="button" onClick={() => onAll(false)}>СВЕРНУТЬ ВСЕ</button>}
+        {onAll && <button type="button" onClick={() => onAll(true)}>РАЗВЕРНУТЬ ВСЕ</button>}
+      </div>
+      <ol id={listId} hidden={!listOpen}>
+        {items.map((item) => (
+          <li key={item.id} data-depth={item.depth}>
+            <button type="button" title={item.label} aria-current={active === item.id ? "location" : undefined} onClick={() => { setListOpen(false); onJump(item.id); }}>{item.label}</button>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
+// D-16: the batch of a panel control. The id is kept while the same control fires again within the typing pause (a slider or colour board drag).
+function nextBatch(last: { control: string; id: string; at: number } | null, control: string) {
+  const at = Date.now();
+  const id = last && last.control === control && at - last.at <= TYPING_PAUSE_MS ? last.id : `batch:${makeId("batch")}`;
+  return { control, id, at };
+}
+
+// EDIT-06: what a field activation makes of the target before it. A plain gesture starts over (D-14); an additive one keeps the fragments and,
+// on its first activation, turns the previous non-empty selection into one (D-13). A collapsed caret in an additive gesture drops the fragment it lands in.
+function joinFormatTarget(prev: FormatTarget | null, target: FormatTarget): FormatTarget {
+  if (!target.gesture.additive || !prev) return target;
+  let fragments = prev.fragments;
+  let peers = prev.peers;
+  if (prev.gesture.id !== target.gesture.id) {
+    const length = prev.document.runs.reduce((sum, run) => sum + run.text.length, 0);
+    const clamp = (value: number) => Math.max(0, Math.min(length, value));
+    const selection = prev.selection;
+    const picked = selection && selection.start !== selection.end ? [{ key: prev.key, from: clamp(selection.start), to: clamp(selection.end) }] : [];
+    fragments = [...prev.fragments, ...picked];
+    peers = { ...prev.peers, [prev.key]: { ...prev, fragments: [], peers: {} } };
+  }
+  fragments = mergeFragments(fragments);
+  const caret = target.selection;
+  if (caret && caret.start === caret.end) fragments = removeFragmentAt(fragments, target.key, caret.start);
+  const kept: Record<string, FormatTarget> = {};
+  for (const fragment of fragments) if (fragment.key !== target.key && peers[fragment.key]) kept[fragment.key] = peers[fragment.key];
+  return { ...target, fragments, peers: kept };
+}
+
 function findFormatField(key: string) {
   return window.document.querySelector<HTMLElement>(`[data-format-key="${CSS.escape(key)}"]`);
-}
-
-function hsvToHex(hue: number, saturation: number, value: number) {
-  const chroma = value * saturation;
-  const segment = hue / 60;
-  const secondary = chroma * (1 - Math.abs((segment % 2) - 1));
-  const [red, green, blue] = segment < 1 ? [chroma, secondary, 0]
-    : segment < 2 ? [secondary, chroma, 0]
-      : segment < 3 ? [0, chroma, secondary]
-        : segment < 4 ? [0, secondary, chroma]
-          : segment < 5 ? [secondary, 0, chroma]
-            : [chroma, 0, secondary];
-  const match = value - chroma;
-  return `#${[red, green, blue].map((channel) => Math.round((channel + match) * 255).toString(16).padStart(2, "0")).join("")}`;
-}
-
-function hexToHsv(hex: string) {
-  const normalized = /^#[0-9a-f]{6}$/i.test(hex) ? hex : "#252827";
-  const red = Number.parseInt(normalized.slice(1, 3), 16) / 255;
-  const green = Number.parseInt(normalized.slice(3, 5), 16) / 255;
-  const blue = Number.parseInt(normalized.slice(5, 7), 16) / 255;
-  const maximum = Math.max(red, green, blue);
-  const minimum = Math.min(red, green, blue);
-  const delta = maximum - minimum;
-  const hue = delta === 0 ? 0
-    : maximum === red ? 60 * (((green - blue) / delta) % 6)
-      : maximum === green ? 60 * ((blue - red) / delta + 2)
-        : 60 * ((red - green) / delta + 4);
-  return { hue: (hue + 360) % 360, saturation: maximum === 0 ? 0 : delta / maximum, value: maximum };
 }
 
 const blankVirus = (): Virus => ({
@@ -518,20 +662,42 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, revision, saveState, canManageEditors, active, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved }: Props) {
+export function PortiaEditor({ content, revision, saveState, canManageEditors, openTabs, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved, saveError }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
   // The revision the draft's baseline came from; a stale draft then gets the 409 instead of overwriting newer content (uat-03-owner-broadcast-vanishes).
   const baseRevision = useRef(revision);
   const draft = history.present;
   const changed = useMemo(() => changedSections(history.baseline, history.present), [history.baseline, history.present]);
+  // Invisible limits only warn (D-16); a body the server would refuse blocks the save with its reason (D-23).
+  const oversize = useMemo(() => oversizeFields(draft), [draft]);
+  const bodyBytes = useMemo(() => contentBodyBytes(draft), [draft]);
+  const bodyMessage = bodyTooLargeMessage(bodyBytes);
+  // D-18: a quest that ends before it starts is flagged and blocks the save; the editor never rewrites its dates.
+  const badQuest = draft.broadcasts.find(questDateError);
+  const dateMessage = badQuest ? `ИСПРАВЬТЕ ДАТЫ КВЕСТА: «${badQuest.title || "БЕЗ НАЗВАНИЯ"}»` : "";
+  const saveBlocked = bodyMessage !== "" || badQuest !== undefined;
   const dirty = changed.length > 0;
-  const [tab, setTab] = useState<EditorTab>("viruses");
+  const [pickedTab, setTab] = useState<EditorTab>("viruses");
+  // Derived at render, not by an effect: a closed pick shows the first open tab (D-14, D-17).
+  const stripTabs = ([
+    ...tabRegistry.filter((entry) => openTabs.includes(entry.id)).map((entry) => [entry.id, entry.label]),
+    ...(canManageEditors ? [["access", "Доступ"]] : []),
+  ]) as [EditorTab, string][];
+  const noTabs = stripTabs.length === 0;
+  // The owner has every section; for an editor the sections outside the open list are closed (D-14).
+  const closedKey = canManageEditors ? "" : closedSectionsOf(openTabs).join(",");
+  const closedSections = (closedKey ? closedKey.split(",") : []) as EditorSection[];
+  const employeesClosed = !canManageEditors && !openTabs.includes("employees");
+  // Closed sections are never shown; a D-13 move still counts in `dirty`.
+  const shownChanged = changed.filter((section) => !closedSections.includes(section));
+  const [closureNotice, setClosureNotice] = useState("");
+  const tab: EditorTab = stripTabs.some(([id]) => id === pickedTab) ? pickedTab : stripTabs[0]?.[0] ?? pickedTab;
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
   // The Recycle selection is one of two ids; the other stays "" (the render and the row highlight rely on it).
   const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycleFiles.length ? "" : content.recycledViruses?.[0]?.id ?? "");
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">("idle");
-  const [dialog, setDialog] = useState<"discard" | "recycle" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"discard" | "recycle" | "delete" | "delete-file" | null>(null);
   // A request made before this mount is not replayed; the dialog shows while a newer one is unanswered.
   const [handledCloseRequest, setHandledCloseRequest] = useState(closeRequest);
   const closeAsked = closeRequest !== handledCloseRequest;
@@ -540,15 +706,33 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const leaving = employeeDirty && (leaveTo !== null || closeAsked);
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const chipRef = useRef<HTMLDivElement>(null);
+  const popoverId = useId();
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
   const [broadcastEditorTab, setBroadcastEditorTab] = useState<BroadcastTab>("news");
   // A new or moved card is focused once it is in the DOM; focus scrolls it into view (G-03.2-2a).
-  const revealBroadcast = useRef<{ id: string; field: "title" | "type" } | null>(null);
+  const revealBroadcast = useRef<{ id: string; field: "title" | "type" | "endsAt" } | null>(null);
+  const [revealTick, setRevealTick] = useState(0);
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface | null>(null);
   // At 900px and below a list + form layout shows either the list or the open record (D-01, D-02).
+  // D-01: which cards are open. Component state only, never stored, so every visit starts collapsed.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const isOpen = (id: string) => expanded.has(id);
+  const setOpen = (ids: string[], open: boolean) => setExpanded((current) => {
+    const next = new Set(current);
+    for (const id of ids) { if (open) next.add(id); else next.delete(id); }
+    return next;
+  });
   const [recordOpen, setRecordOpen] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLElement>(null);
+  const toggleCard = (id: string) => {
+    const open = isOpen(id);
+    const body = document.getElementById(`card-${id}`)?.querySelector(":scope > .nested-editor-body");
+    if (open) dropFormatFields((key) => !!body?.contains(findFormatField(key)));
+    setOpen([id], !open);
+  };
   const showRecord = (open: boolean) => {
     setRecordOpen(open);
     revealOnPhone(layoutRef);
@@ -571,6 +755,38 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     }, 0);
     return () => window.clearTimeout(syncTimer);
   }, [content, dirty, revision]);
+
+  // D-15, D-16: when the owner closes a section, its unsaved edits go back to the stored copy, in the history too, so Ctrl+Z cannot bring them back.
+  const closureRef = useRef({ history, employeeDirty });
+  useEffect(() => { closureRef.current = { history, employeeDirty }; });
+  const shutRef = useRef<string[]>([]);
+  useEffect(() => {
+    const closed = (closedKey ? closedKey.split(",") : []) as EditorSection[];
+    const shut = [...closed, ...(employeesClosed ? ["employees"] : [])];
+    const added = shut.filter((id) => !shutRef.current.includes(id));
+    shutRef.current = shut;
+    if (!shut.length) return;
+    // Read now: the employee editor unmounts with its tab and reports clean before the timer fires.
+    const wasEmployeeDirty = closureRef.current.employeeDirty;
+    const timer = window.setTimeout(() => {
+      const { baseline, present } = closureRef.current.history;
+      const lost: string[] = deniedSections(baseline, present, closed);
+      if (wasEmployeeDirty && added.includes("employees")) lost.push("employees");
+      if (closed.length) dispatch({ type: "restrict", project: (content) => revertSections(baseline, content, closed) });
+      if (!added.length) return;
+      setFormatTarget(null);
+      setFormatterOpen(false);
+      setRecordOpen(false);
+      setPreviewSurface(null);
+      setLeaveTo(null);
+      if (!lost.length) return;
+      const names = lost.map((id) => `«${id === "employees" ? "Сотрудники" : sectionLabels[id as EditorSection]}»`);
+      setClosureNotice(lost.length === 1
+        ? `Владелец закрыл раздел ${names[0]}, несохранённые правки в нём сброшены`
+        : `Владелец закрыл разделы ${names.join(", ")}, несохранённые правки в них сброшены`);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [closedKey, employeesClosed]);
 
   const selectedVirusIndex = useMemo(
     () => draft.viruses.findIndex((virus) => virus.id === selectedVirusId),
@@ -602,10 +818,19 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
 
   // Counted at dispatch, not after commit, so a save can tell synchronously whether the draft changed while it ran.
   const editCount = useRef(0);
+  // D-16: while the panel applies one control to several fields every change carries its batch:<id> key, so they are one undo step.
+  const batchKey = useRef<string | null>(null);
   const changeDraft = (updater: (next: PortiaContent) => void) => {
     editCount.current += 1;
-    dispatch({ type: "change", updater, key: editKeyFor(document.activeElement), now: Date.now() });
+    dispatch({ type: "change", updater, key: batchKey.current ?? editKeyFor(document.activeElement), now: Date.now() });
   };
+  const runBatch = (id: string, run: () => void) => {
+    batchKey.current = id;
+    try { run(); } finally { batchKey.current = null; }
+  };
+
+  // D-19: the two columns are the key and value of every row; one changeDraft call is one undo step.
+  const swapTableColumns = (subsectionId: string, blockId: string) => changeDraft((next) => editTableRows(next, subsectionId, blockId, (rows) => rows.forEach((row) => { [row.key, row.value] = [row.value, row.key]; })));
 
   const step = (kind: "undo" | "redo") => {
     const target = kind === "undo" ? history.past.at(-1) : history.future[0];
@@ -614,6 +839,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     setFormatTarget(null);
     setFormatterOpen(false);
     repairSelections(target);
+    // CONT-05: an undo/redo that moves a card between news and quests takes the editor to that card.
+    const change = categoryChange(draft.broadcasts, target.broadcasts);
+    if (change) revealCard(change.id, "type", change.tab);
     editCount.current += 1;
     dispatch({ type: kind });
   };
@@ -642,8 +870,21 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const deleteSelectedRecycledVirus = () => {
     if (!selectedRecycledVirus) return;
     const nextId = draft.recycledViruses.find((virus) => virus.id !== selectedRecycledVirus.id)?.id ?? "";
-    changeDraft((next) => { next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
+    // The panel's stored commit targets this virus, which is about to be deleted.
+    setFormatTarget(null);
+    setFormatterOpen(false);
+    changeDraft((next) => { removeRecycledVirus(next, selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
     setSelectedRecycledVirusId(nextId);
+    showRecord(false);
+  };
+
+  const deleteSelectedRecycleFile = () => {
+    if (!selectedRecycleFile) return;
+    const nextId = draft.recycleFiles.find((file) => file.id !== selectedRecycleFile.id)?.id ?? "";
+    setFormatTarget(null);
+    setFormatterOpen(false);
+    changeDraft((next) => { removeRecycleFile(next, selectedRecycleFile.id); next.recycleOrder = recycleKeys(next); });
+    setSelectedRecycleFileId(nextId);
     showRecord(false);
   };
 
@@ -676,13 +917,15 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     next.formattedText[key] = document;
   });
 
-  const activateFormatter = (target: FormatTarget) => setFormatTarget(target);
-  // The panel's stored commit for a deleted item would write its formatting back.
-  const closeFormatterFor = (key: string) => {
-    if (formatTarget?.key !== key) return;
-    setFormatTarget(null);
-    setFormatterOpen(false);
+  const activateFormatter = (target: FormatTarget) => setFormatTarget((prev) => joinFormatTarget(prev, target));
+  // A gone field (deleted, folded) closes the panel when it is the main target and leaves the multi-selection otherwise, with its fragments (CR-01, WR-02).
+  // The updater is functional so several calls in one handler chain.
+  const dropFormatFields = (gone: (key: string) => boolean) => {
+    if (formatTarget && gone(formatTarget.key)) setFormatterOpen(false);
+    setFormatTarget((prev) => prev && dropFields(prev, gone));
   };
+  // The panel's stored commit for a deleted item would write its formatting back; peers too (CR-01).
+  const closeFormatterFor = (...keys: string[]) => dropFormatFields((key) => keys.includes(key));
 
   // The format panel keeps a target in the tab being hidden; leaving it open could write old text back (Pitfall 7).
   const selectDossierTab = (id: DossierTab) => {
@@ -692,6 +935,40 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   };
 
   const shownBroadcasts = draft.broadcasts.filter((item) => broadcastTabOf(item.type) === broadcastEditorTab);
+
+  // D-03: every TOC ends in this one scroll. Smooth only when the house motion switch is on; scroll-margin-top keeps the card clear of the sticky TOC.
+  const jumpToCard = (id: string) => requestAnimationFrame(() => document.getElementById(`card-${id}`)?.scrollIntoView({ block: "start", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" }));
+  // Folding everything also drops a format target that sat in a card body (Pitfall 7), peers too (WR-02).
+  const setAllOpen = (ids: string[], open: boolean) => {
+    if (!open) dropFormatFields((key) => !!findFormatField(key)?.closest(".nested-editor-body"));
+    setOpen(ids, open);
+  };
+  const infoTocItems: TocItem[] = draft.infoSections.flatMap((section) => [
+    { id: section.id, label: section.title || "БЕЗ НАЗВАНИЯ", depth: 0 as const },
+    ...section.subsections.map((subsection) => ({ id: subsection.id, label: subsection.title || "БЕЗ НАЗВАНИЯ", depth: 1 as const })),
+  ]);
+  const infoCardIds = draft.infoSections.flatMap((section) => [section.id, ...section.subsections.flatMap((subsection) => [subsection.id, ...subsection.blocks.map((block) => block.id)])]);
+  const jumpInfo = (id: string) => {
+    const found = findInfo(draft.infoSections, id);
+    setOpen(found ? [found.section.id, id] : [id], true);
+    jumpToCard(id);
+  };
+  const broadcastTocItems: TocItem[] = shownBroadcasts.map((broadcast) => ({ id: broadcast.id, label: broadcast.title || "БЕЗ НАЗВАНИЯ", depth: 0 }));
+  // The row button and its TOC entry share these two handlers, so the TOC never duplicates selection logic.
+  const openVirus = (id: string) => { setSelectedVirusId(id); showRecord(true); };
+  const openRecycleEntry = (key: string) => {
+    const id = key.slice(key.indexOf(":") + 1);
+    if (key.startsWith("virus:")) { setSelectedRecycledVirusId(id); setSelectedRecycleFileId(""); }
+    else { setSelectedRecycleFileId(id); setSelectedRecycledVirusId(""); }
+    showRecord(true);
+  };
+  const virusTocItems: TocItem[] = draft.viruses.map((virus) => ({ id: virus.id, label: virus.name || "БЕЗ НАЗВАНИЯ", depth: 0 }));
+  // The same filter the rows use: a key whose record is gone has no row and no entry.
+  const recycleTocItems: TocItem[] = orderedRecycleKeys.flatMap((key) => {
+    const id = key.slice(key.indexOf(":") + 1);
+    const record = key.startsWith("virus:") ? draft.recycledViruses.find((item) => item.id === id) : draft.recycleFiles.find((item) => item.id === id);
+    return record ? [{ id: key, label: record.name || "БЕЗ ИМЕНИ", depth: 0 as const }] : [];
+  });
   // Same reason as selectDossierTab: the panel's target may sit in a card of the category being hidden (T-03.2-20).
   const selectBroadcastTab = (id: BroadcastTab) => {
     setBroadcastEditorTab(id);
@@ -703,14 +980,27 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     const target = revealBroadcast.current;
     if (!target || tab !== "broadcasts") return;
     const card = document.querySelector(`[data-broadcast-id="${CSS.escape(target.id)}"]`);
-    const field = card?.querySelector<HTMLElement>(target.field === "title" ? "[data-broadcast-title]" : "[data-broadcast-type]");
+    const selector = target.field === "title" ? "[data-broadcast-title]" : target.field === "endsAt" ? "[data-broadcast-ends]" : "[data-broadcast-type]";
+    const field = card?.querySelector<HTMLElement>(selector);
     if (!field) return;
-    field.focus();
+    field.focus({ preventScroll: true });
+    field.scrollIntoView({ block: "nearest", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" });
     revealBroadcast.current = null;
-  }, [draft.broadcasts, broadcastEditorTab, tab]);
+  }, [draft.broadcasts, broadcastEditorTab, tab, revealTick]);
+
+  // Brings the editor to one card's field from anywhere (D-18, CONT-05).
+  const revealCard = (id: string, field: "title" | "type" | "endsAt", cardTab: BroadcastTab) => {
+    revealBroadcast.current = { id, field };
+    setOpen([id], true);
+    selectBroadcastTab(cardTab);
+    if (tab !== "broadcasts") showTab("broadcasts");
+    // revealTick re-runs the effect when the tab and sub-tab are already right.
+    setRevealTick((value) => value + 1);
+  };
 
   const showTab = (id: EditorTab) => {
     setTab(id);
+    setClosureNotice("");
     setRecordOpen(false);
     setPreviewSurface(null);
     setFormatTarget(null);
@@ -756,6 +1046,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   // Resolves true only when nothing is left unsaved: the draft was clean, or the save succeeded and nothing was typed meanwhile.
   const save = async (): Promise<boolean> => {
     if (!dirty) return true;
+    // D-23: the server would answer 413; the savebar already shows why.
+    if (saveBlocked) return false;
     if (saveState === "saving") return false;
     // The reducer compares this very object after the request to tell whether the owner kept typing meanwhile.
     const savedFrom = draft;
@@ -792,10 +1084,13 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       if (normalized.assistantAutoMinSeconds > normalized.assistantAutoMaxSeconds) {
         [normalized.assistantAutoMinSeconds, normalized.assistantAutoMaxSeconds] = [normalized.assistantAutoMaxSeconds, normalized.assistantAutoMinSeconds];
       }
-      normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, 5); });
-      baseRevision.current = await onSave(normalized, baseRevision.current);
+      normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, MAX_SCIENTIST_LOGS); });
+      // Closed sections go exactly as stored, so the normalization above can never look like an edit of them (RESEARCH P4).
+      const outgoing = closedSections.length ? revertSections(history.baseline, normalized, closedSections) : normalized;
+      baseRevision.current = await onSave(outgoing, baseRevision.current);
       const clean = editCount.current === editsBefore;
-      dispatch({ type: "saved", normalized, savedFrom });
+      setClosureNotice("");
+      dispatch({ type: "saved", normalized: outgoing, savedFrom });
       return clean;
     } catch {
       // Keep the local draft marked as changed so a temporary network error
@@ -861,34 +1156,51 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
+  useEffect(() => {
+    if (!popoverOpen) return;
+    const away = (event: PointerEvent) => { if (!chipRef.current?.contains(event.target as Node)) setPopoverOpen(false); };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [popoverOpen]);
+
   // Only a save starts a new saveState, so after ОТМЕНИТЬ or undo back to clean the conflict text would sit over a current editor.
   const conflict = saveState === "conflict" && dirty;
-  // While the format panel is open the bar is its anchor, so it must not appear under the panel mid-session (D-01/D-02).
-  const barVisible = dirty || saveState === "saving" || saveState === "saved" || formatterOpen;
+  // The chip stays while anything is unsaved, so a compact chip never hides unsaved work (D-09).
+  const chipVisible = dirty || saveState === "saving" || saveState === "saved";
+  // Derived reset: the popover only lists unsaved sections, so it closes when the draft is clean.
+  if (popoverOpen && !dirty) setPopoverOpen(false);
+  // A blocked, failed or conflicting save turns the chip red, so a compact chip never hides a failed save (D-10).
+  const alarm = dirty && (saveBlocked || saveState === "error" || conflict);
+  const chipLabel = saveState === "saving" ? "Сохранение…"
+    : dirty ? `Не сохранено разделов: ${shownChanged.length}${alarm ? (saveBlocked ? ", сохранение невозможно" : ", ошибка сохранения") : ""}`
+    : "Сохранено";
+  const chipText = saveState === "saving" ? "…" : dirty ? `${alarm ? "!" : ""}${shownChanged.length}` : "✓";
   const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
     : conflict ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
-    : saveState === "error" ? "ОШИБКА"
+    : saveState === "error" ? (saveError || "ОШИБКА")
     : saveState === "saved" && !dirty ? "СОХРАНЕНО"
     : "";
+
+  const header = (
+    <header className="editor-header">
+      <div>
+        <span className="eyebrow">УПРАВЛЕНИЕ СОДЕРЖИМЫМ</span>
+        <h1>Редактор PORTIA</h1>
+        <p>Изменения сохраняются в общей базе!</p>
+      </div>
+    </header>
+  );
+  // D-17: the window stays; nothing of the sections is rendered.
+  if (noTabs) return <div className="content-editor">{header}<div className="editor-empty">Владелец пока не открыл вам ни одного раздела</div></div>;
 
   return (
     <ActiveFormatContext.Provider value={{ key: formatTarget?.key ?? null, surface: previewSurface, phonePanelOpen: formatterOpen && window.matchMedia("(max-width: 900px)").matches }}>
     <div className="content-editor">
-      <header className="editor-header">
-        <div>
-          <span className="eyebrow">УПРАВЛЕНИЕ СОДЕРЖИМЫМ</span>
-          <h1>Редактор PORTIA</h1>
-          <p>Изменения сохраняются в общей базе!</p>
-        </div>
-      </header>
+      {header}
 
       <nav className="editor-tabs" aria-label="Разделы редактора" ref={tabsRef}>
-        {([
-          ...editorSections.map((id) => [id, sectionLabels[id]]),
-          ["employees", "Сотрудники"],
-          ...(canManageEditors ? [["access", "Доступ"]] : []),
-        ] as [EditorTab, string][]).map(([id, label]) => {
-          const unsaved = changed.some((section) => section === id);
+        {stripTabs.map(([id, label]) => {
+          const unsaved = shownChanged.some((section) => section === id);
           return (
             <button key={id} type="button" className={tab === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => switchTab(id)}>
               {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}
@@ -896,6 +1208,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
           );
         })}
       </nav>
+      {closureNotice && <p className="editor-guidance" role="status">{closureNotice}</p>}
 
       <div className="global-format-launch">
         <button
@@ -922,11 +1235,12 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
         <div className="virus-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>
           <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
           <aside className="editor-record-list">
+            <EditorToc items={virusTocItems} onJump={(id) => { openVirus(id); jumpToCard(id); }} />
             {draft.viruses.map((virus, index) => (
-              <div className="editor-record-row" data-sort-index={index} key={virus.id}>
+              <div className="editor-record-row" id={`card-${virus.id}`} data-sort-index={index} key={virus.id}>
                 <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => moveArrayItem(next.viruses, from, to)); }} />
-                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => { setSelectedVirusId(virus.id); showRecord(true); }}>
-                  <strong>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small>{virus.code || "БЕЗ КОДА"}</small>
+                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => openVirus(virus.id)}>
+                  <strong title={virus.name || "БЕЗ НАЗВАНИЯ"}>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small title={virus.code || "БЕЗ КОДА"}>{virus.code || "БЕЗ КОДА"}</small>
                 </button>
               </div>
             ))}
@@ -993,7 +1307,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                     <FormattedTextarea area="scientist" label="Текст записи" value={scientistLogPlainText(log)} document={log.richContent} formatKey={`scientist:${log.id}`} onActivate={activateFormatter} onChange={(value, document) => updateVirus((virus) => { virus.scientistLogs[index].content = value.split(/\n\s*\n/); virus.scientistLogs[index].richContent = document; })} />
                   </div>
                 ))}
-                <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= 5} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / 5</span></div>
+                <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / {MAX_SCIENTIST_LOGS}</span></div>
               </EditorGroup>}
 
               <button className="danger-control" type="button" onClick={() => setDialog("recycle")}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
@@ -1005,49 +1319,74 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {tab === "info" && (
         <div className="editor-form flat-editor-form">
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация». Раздел может содержать подразделы, собранные из блоков в любом порядке.</p>
+          <EditorToc items={infoTocItems} onJump={jumpInfo} onAll={(open) => setAllOpen(infoCardIds, open)} />
+          {draft.infoSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
           {draft.infoSections.map((section, index) => (
-            <div className="nested-editor-card" data-sort-index={index} key={section.id}>
-              <div className="nested-editor-head"><OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} /><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id)); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div></div>
+            <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${String(index + 1).padStart(2, "0")}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
+              handle={<OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} />}
+              actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id), ...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div>}>
               <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
               <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
               <div className="info-subsection-list">
                 {section.subsections.map((subsection, subIndex) => (
-                  <div className="nested-editor-card" data-sort-index={subIndex} key={subsection.id}>
-                    <div className="nested-editor-head"><OrderDragHandle index={subIndex} label={subsection.title || "подраздел"} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} /><strong>ПОДРАЗДЕЛ {String(subIndex + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => { subsection.blocks.forEach((block) => closeFormatterFor(portiaTextKey.infoBlock(block.id))); changeDraft((next) => removeInfoSubsection(next, section.id, subsection.id)); }}>Удалить</button></div></div>
+                  <CollapsibleCard key={subsection.id} id={subsection.id} sortIndex={subIndex} label={`ПОДРАЗДЕЛ ${String(subIndex + 1).padStart(2, "0")}`} title={subsection.title} open={isOpen(subsection.id)} onToggle={() => toggleCard(subsection.id)}
+                    handle={<OrderDragHandle index={subIndex} label={subsection.title || "подраздел"} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} />}
+                    actions={<div className="nested-editor-actions"><button type="button" onClick={() => { subsection.blocks.forEach((block) => closeFormatterFor(portiaTextKey.infoBlock(block.id))); changeDraft((next) => removeInfoSubsection(next, section.id, subsection.id)); }}>Удалить</button></div>}>
                     <Field label="Заголовок подраздела"><input maxLength={300} value={subsection.title} onChange={(event) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.title = event.target.value; })} /></Field>
                     <div className="info-block-list">
                       {subsection.blocks.map((block, blockIndex) => (
-                        <div className="nested-editor-card" data-sort-index={blockIndex} key={block.id}>
-                          <div className="nested-editor-head"><OrderDragHandle index={blockIndex} label={infoBlockHeads[block.type].label} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) moveArrayItem(target.blocks, from, to); })} /><strong>{infoBlockHeads[block.type].title}</strong><div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.infoBlock(block.id)); changeDraft((next) => removeInfoBlock(next, subsection.id, block.id)); }} disabled={block.type === "photo" && uploadState === "uploading"}>Удалить</button></div></div>
+                        <CollapsibleCard key={block.id} id={block.id} sortIndex={blockIndex} label={infoBlockHeads[block.type].title} title={block.type === "text" ? block.text.split("\n").map((line) => line.trim()).find(Boolean) : undefined} open={isOpen(block.id)} onToggle={() => toggleCard(block.id)}
+                          handle={<OrderDragHandle index={blockIndex} label={infoBlockHeads[block.type].label} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) moveArrayItem(target.blocks, from, to); })} />}
+                          actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.infoBlock(block.id)); changeDraft((next) => removeInfoBlock(next, subsection.id, block.id)); }} disabled={block.type === "photo" && uploadState === "uploading"}>Удалить</button></div>}>
                           {block.type === "text" && <FormattedTextarea area="info" label="Текст" tall value={block.text} document={draft.formattedText[portiaTextKey.infoBlock(block.id)]} formatKey={portiaTextKey.infoBlock(block.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.infoBlock(block.id), value, document, (next, text) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "text") item.text = text; }); })} />}
                           {block.type === "video" && <YoutubeField videoId={block.videoId} onChange={(videoId) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "video") item.videoId = videoId; }); })} />}
                           {block.type === "photo" && <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="На странице: до 820 px в ширину" uploadState={uploadState} onChange={(value) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = value; }); })} onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = url; }); }))} />}
                           {block.type === "table" && (
                             <>
+                              {block.rows.length === 0 && <div className="editor-empty compact-empty">Строк пока нет. Добавьте первую кнопкой «+ СТРОКА».</div>}
+                              {block.rows.length > 0 && (
+                                <div className="info-table-head">
+                                  <div data-column="key"><ColumnSwapHandle label="Признак" onSwap={() => swapTableColumns(subsection.id, block.id)} /><span>Признак</span></div>
+                                  <div data-column="value"><ColumnSwapHandle label="Значение" onSwap={() => swapTableColumns(subsection.id, block.id)} /><span>Значение</span></div>
+                                  <span className="info-table-head-pad" aria-hidden="true">Удалить строку</span>
+                                </div>
+                              )}
                               {block.rows.map((row, rowIndex) => (
-                                <div className="info-table-row" key={rowIndex}>
+                                <div className="info-table-row" data-sort-index={rowIndex} key={row.id}>
+                                  <OrderDragHandle index={rowIndex} label={`строка ${rowIndex + 1}`} onMove={(from, to) => changeDraft((next) => editTableRows(next, subsection.id, block.id, (rows) => moveArrayItem(rows, from, to)))} />
                                   <Field label="Признак"><input maxLength={500} value={row.key} onChange={(event) => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { if (rows[rowIndex]) rows[rowIndex].key = event.target.value; }); })} /></Field>
                                   <Field label="Значение"><input maxLength={500} value={row.value} onChange={(event) => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { if (rows[rowIndex]) rows[rowIndex].value = event.target.value; }); })} /></Field>
                                   <button type="button" onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.splice(rowIndex, 1); }); })}>Удалить строку</button>
                                 </div>
                               ))}
-                              <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.push({ key: "", value: "" }); }); })}>+ СТРОКА</button>
+                              <div className="scientist-log-actions">
+                                <button className="secondary-control limit-add" type="button" disabled={block.rows.length >= MAX_TABLE_ROWS} aria-describedby={`limit-rows-${block.id}`} onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.push({ id: makeId("row"), key: "", value: "" }); }); })}>+ СТРОКА</button>
+                                <LimitNote id={`limit-rows-${block.id}`} count={block.rows.length} max={MAX_TABLE_ROWS} />
+                              </div>
                             </>
                           )}
-                        </div>
+                        </CollapsibleCard>
                       ))}
                     </div>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "text", text: "" }); })}>+ ТЕКСТ</button>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "table", rows: [{ key: "", value: "" }] }); })}>+ ТАБЛИЦА</button>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "video", videoId: "" }); })}>+ ВИДЕО</button>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "photo", url: "" }); })}>+ ФОТО</button>
-                  </div>
+                    <div className="scientist-log-actions">
+                      <div className="limit-buttons">
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "text", text: "" }); }); setOpen([id], true); }}>+ ТЕКСТ</button>
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "table", rows: [{ id: makeId("row"), key: "", value: "" }] }); }); setOpen([id], true); }}>+ ТАБЛИЦА</button>
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "video", videoId: "" }); }); setOpen([id], true); }}>+ ВИДЕО</button>
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "photo", url: "" }); }); setOpen([id], true); }}>+ ФОТО</button>
+                      </div>
+                      <LimitNote id={`limit-blocks-${subsection.id}`} count={subsection.blocks.length} max={MAX_BLOCKS} />
+                    </div>
+                  </CollapsibleCard>
                 ))}
               </div>
-              <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id: makeId("info"), title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); })}>+ ПОДРАЗДЕЛ</button>
-            </div>
+              <div className="scientist-log-actions">
+                <button className="secondary-control limit-add" type="button" disabled={section.subsections.length >= MAX_SUBSECTIONS} aria-describedby={`limit-subsections-${section.id}`} onClick={() => { const id = makeId("info"); changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); }); setOpen([id], true); }}>+ ПОДРАЗДЕЛ</button>
+                <LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} />
+              </div>
+            </CollapsibleCard>
           ))}
-          <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.infoSections.push({ id: makeId("info"), title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] }))}>+ ДОБАВИТЬ РАЗДЕЛ</button>
+          <button className="secondary-control" type="button" onClick={() => { const id = makeId("info"); changeDraft((next) => next.infoSections.push({ id, title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] })); setOpen([id], true); }}>+ ДОБАВИТЬ РАЗДЕЛ</button>
         </div>
       )}
 
@@ -1061,23 +1400,30 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               </button>
             ))}
           </nav>
+          <EditorToc items={broadcastTocItems} onJump={(id) => { setOpen([id], true); jumpToCard(id); }} onAll={(open) => setAllOpen(broadcastTocItems.map((item) => item.id), open)} />
           <button className="secondary-control" type="button" onClick={() => {
             const id = makeId("broadcast");
             revealBroadcast.current = { id, field: "title" };
+            setOpen([id], true);
             setFormatTarget(null);
             setFormatterOpen(false);
             changeDraft((next) => addBroadcast(next, id, broadcastEditorTab === "news" ? "news" : "quest"));
           }}>{broadcastEditorTab === "news" ? "+ НОВАЯ НОВОСТЬ" : "+ НОВЫЙ КВЕСТ"}</button>
           {shownBroadcasts.length === 0 && <div className="editor-empty">{broadcastEditorTab === "news" ? "Новостей пока нет." : "Квестов и задач пока нет."}</div>}
           {shownBroadcasts.map((broadcast, index) => (
-            <div className="nested-editor-card" key={broadcast.id} data-broadcast-id={broadcast.id}>
-              <div className="nested-editor-head"><strong>{broadcast.type === "news" ? "НОВОСТЬ" : broadcast.type === "quest" ? "КВЕСТ" : "ЗАДАЧА"} {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.broadcast(broadcast.id)); changeDraft((next) => removeBroadcast(next, broadcast.id)); }}>Удалить</button></div>
+            <CollapsibleCard key={broadcast.id} id={broadcast.id} label={`${broadcast.type === "news" ? "НОВОСТЬ" : broadcast.type === "quest" ? "КВЕСТ" : "ЗАДАЧА"} ${String(index + 1).padStart(2, "0")}`} title={broadcast.title} open={isOpen(broadcast.id)} onToggle={() => toggleCard(broadcast.id)} cardProps={{ "data-broadcast-id": broadcast.id }}
+              actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.broadcast(broadcast.id)); changeDraft((next) => removeBroadcast(next, broadcast.id)); }}>Удалить</button></div>}>
               <Field label="Тип"><select data-broadcast-type value={broadcast.type} onChange={(event) => {
                 const type = event.target.value as Broadcast["type"];
-                changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.type = type; }));
+                changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => {
+                  item.type = type;
+                  // D-19: switching back does not restore it; undo restores the whole previous card.
+                  if (type !== "news") item.important = false;
+                }));
                 // A card that changes category would vanish from this list, so the view follows it.
                 if (broadcastTabOf(type) !== broadcastEditorTab) {
                   revealBroadcast.current = { id: broadcast.id, field: "type" };
+                  setOpen([broadcast.id], true);
                   selectBroadcastTab(broadcastTabOf(type));
                 }
               }}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
@@ -1086,13 +1432,13 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               {broadcast.type === "quest" && (
                 <>
                   <Field label="Дата начала"><input type="date" value={broadcast.startsAt} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.startsAt = event.target.value; }))} /></Field>
-                  <Field label="Дата окончания"><input type="date" value={broadcast.endsAt} min={broadcast.startsAt || undefined} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.endsAt = event.target.value; }))} /></Field>
+                  <Field label="Дата окончания" error={questDateError(broadcast) ? "Окончание раньше начала" : undefined} errorId={`ends-error-${broadcast.id}`}><input type="date" data-broadcast-ends aria-invalid={questDateError(broadcast) || undefined} aria-describedby={questDateError(broadcast) ? `ends-error-${broadcast.id}` : undefined} value={broadcast.endsAt} min={broadcast.startsAt || undefined} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.endsAt = event.target.value; }))} /></Field>
                   <Field label="Условия" wide><textarea value={broadcast.conditions} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.conditions = event.target.value; }))} /></Field>
                 </>
               )}
               <label className="publish-toggle"><input type="checkbox" checked={broadcast.published} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.published = event.target.checked; }))} /><span>Показывать посетителям</span></label>
               {broadcast.type === "news" && <label className="publish-toggle"><input type="checkbox" checked={broadcast.important} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.important = event.target.checked; }))} /><span>Важная новость — выделить и закрепить сверху</span></label>}
-            </div>
+            </CollapsibleCard>
           ))}
         </div>
       )}
@@ -1101,6 +1447,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
         <div className="virus-editor-layout recycle-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && (selectedRecycledVirus || selectedRecycleFile) ? "record" : "list"}>
           <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
           <aside className="editor-record-list">
+            <EditorToc items={recycleTocItems} onJump={(key) => { openRecycleEntry(key); jumpToCard(key); }} />
             {orderedRecycleKeys.map((key, index) => {
               const isVirus = key.startsWith("virus:");
               const id = key.slice(key.indexOf(":") + 1);
@@ -1108,14 +1455,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               const file = !isVirus ? draft.recycleFiles.find((item) => item.id === id) : null;
               if (!virus && !file) return null;
               const title = virus?.name || file?.name || "БЕЗ ИМЕНИ";
-              return <div className="editor-record-row" data-sort-index={index} key={key}>
+              const kindText = virus ? "ВИРУС В КОРЗИНЕ" : file!.kind === "virus" ? "ФАЙЛ ВИРУСА" : file!.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ";
+              return <div className="editor-record-row" id={`card-${key}`} data-sort-index={index} key={key}>
                 <OrderDragHandle index={index} label={title} onMove={(from, to) => changeDraft((next) => { const order = recycleKeys(next); moveArrayItem(order, from, to); next.recycleOrder = order; })} />
-                <button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} onClick={() => {
-                  if (virus) { setSelectedRecycledVirusId(virus.id); setSelectedRecycleFileId(""); }
-                  else { setSelectedRecycleFileId(file!.id); setSelectedRecycledVirusId(""); }
-                  showRecord(true);
-                }}>
-                  <strong>{title}</strong><small>{virus ? "ВИРУС В КОРЗИНЕ" : file!.kind === "virus" ? "ФАЙЛ ВИРУСА" : file!.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ"}</small>
+                <button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} onClick={() => openRecycleEntry(key)}>
+                  <strong title={title}>{title}</strong><small title={kindText}>{kindText}</small>
                 </button>
               </div>;
             })}
@@ -1142,7 +1486,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               uploadState={uploadState}
               onUpload={uploadImage}
               onChange={updateRecycledVirus}
-              onRemoveMutation={(index) => changeDraft((next) => updateById(next.recycledViruses ?? [], selectedRecycledVirus.id, (virus) => removeMutation(next, virus, index)))}
+              // Index-keyed formatting shifts on delete, so the target is cleared as in the live list.
+              onRemoveMutation={(index) => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => updateById(next.recycledViruses ?? [], selectedRecycledVirus.id, (virus) => removeMutation(next, virus, index))); }}
               // No confirm(): embedded browsers may answer it "no" without showing it, and a restore only
               // changes the unsaved draft and can be undone by moving the virus back.
               onRestore={() => {
@@ -1159,6 +1504,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                 showRecord(true);
               }}
               onDelete={() => setDialog("delete")}
+              restoreBlocked={closedSections.includes("viruses")}
             />
           ) : selectedRecycleFile ? (
             <div className="editor-form">
@@ -1196,12 +1542,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                 <FormattedTextarea area={selectedRecycleFile.kind === "image" ? "caption" : "trash"} label={selectedRecycleFile.kind === "image" ? "Описание фотографии" : "Текст файла"} tall value={selectedRecycleFile.content} document={draft.formattedText[portiaTextKey.recycle(selectedRecycleFile.id)]} formatKey={portiaTextKey.recycle(selectedRecycleFile.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.recycle(selectedRecycleFile.id), value, document, (next, text) => updateById(next.recycleFiles, selectedRecycleFile.id, (file) => { file.content = text; }))} />
               </EditorGroup>
 
-              <button className="danger-control" type="button" onClick={() => {
-                const nextId = draft.recycleFiles.find((file) => file.id !== selectedRecycleFile.id)?.id ?? "";
-                changeDraft((next) => { next.recycleFiles = next.recycleFiles.filter((file) => file.id !== selectedRecycleFile.id); next.recycleOrder = recycleKeys(next); });
-                setSelectedRecycleFileId(nextId);
-                showRecord(false);
-              }}>УДАЛИТЬ ЭТОТ ФАЙЛ</button>
+              <button className="danger-control" type="button" onClick={() => setDialog("delete-file")}>УДАЛИТЬ ЭТОТ ФАЙЛ</button>
             </div>
           ) : <div className="editor-empty">Корзина пуста. Добавьте файл или создайте полную запись вируса.</div>}
         </div>
@@ -1217,7 +1558,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               const reordered = reorderRichTextLines(currentText, next.formattedText[portiaTextKey.searchRecommendations], from, to);
               next.searchRecommendations = reordered.text.split("\n");
               next.formattedText[portiaTextKey.searchRecommendations] = reordered.document;
-            })} /><span><small>{String(index + 1).padStart(2, "0")}</small>{recommendation || "ПУСТАЯ СТРОКА"}</span></div>)}
+            })} /><span title={recommendation}><small>{String(index + 1).padStart(2, "0")}</small>{recommendation || "ПУСТАЯ СТРОКА"}</span></div>)}
           </div>
         </div>
       )}
@@ -1255,31 +1596,51 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               <Field label="Максимум, секунд"><input type="number" min="1" max="3600" step="1" value={draft.assistantAutoMaxSeconds} onChange={(event) => changeDraft((next) => { next.assistantAutoMaxSeconds = Number(event.target.value); })} /></Field>
             </div>
           )}
-          <p className="editor-guidance">Если за выбранный промежуток дружок пирожок ничего не делал, Вивьян выберет фразу бездействия. Если он нажимал, печатал, прокручивал страницу или двигал указатель — фразу активности</p>
+          <p className="editor-guidance">Если за выбранный промежуток пользователь ничего не делал, Вивьян выберет фразу бездействия. Если он нажимал, печатал, прокручивал страницу или двигал указатель — фразу активности</p>
         </div>
       )}
 
       {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
-      {formatterOpen && formatTarget && <FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />}
-      {barVisible && (
-        <div className="editor-savebar" data-dirty={dirty || undefined}>
-          <p role="status" aria-live="polite">
-            {statusText && <span className={`editor-save-status ${saveState}`}>{statusText}</span>}
-            {dirty && <span className="editor-savebar-sections">{`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}</span>}
-          </p>
-          <div className="editor-savebar-actions">
-            <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
-            <button type="button" className="secondary-control" disabled={!dirty || saveState === "saving"} onClick={() => setDialog("discard")}>ОТМЕНИТЬ</button>
-            <button type="button" className="primary-control" disabled={!dirty || saveState === "saving"} onClick={() => void save()}>СОХРАНИТЬ</button>
-          </div>
+      {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={runBatch} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
+      <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? ` Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>
+      {chipVisible && (
+        <div
+          className="editor-save-chip"
+          data-dirty={dirty || undefined}
+          data-blocked={alarm || undefined}
+          ref={chipRef}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || !popoverOpen) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setPopoverOpen(false);
+            chipRef.current?.querySelector<HTMLButtonElement>(":scope > button")?.focus();
+          }}
+        >
+          <button type="button" aria-label={chipLabel} title={`Не сохранено: ${shownChanged.length}`} aria-expanded={popoverOpen} aria-haspopup="dialog" aria-controls={popoverId} onClick={() => setPopoverOpen((open) => !open)}>{chipText}</button>
+          {popoverOpen && dirty && (
+            <div className="editor-save-popover" id={popoverId} role="dialog" aria-label="Несохранённые изменения">
+              <strong>НЕ СОХРАНЕНО</strong>
+              <ul>{shownChanged.map((id) => <li key={id} title={sectionLabels[id]}>{sectionLabels[id]}</li>)}</ul>
+              {statusText && <span className={`editor-save-status ${saveState}`}>{statusText}</span>}
+              {oversize.length > 0 && <span className="editor-save-reason">{oversizeMessage(oversize)}</span>}
+              {bodyMessage && <span className="editor-save-status error">{bodyMessage}</span>}
+              {badQuest && <button type="button" className="editor-save-fix" onClick={() => { setPopoverOpen(false); revealCard(badQuest.id, "endsAt", "quests"); }}>{dateMessage}</button>}
+              <div className="editor-save-actions">
+                <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
+                <button type="button" className="secondary-control" disabled={!dirty || saveState === "saving"} onClick={() => setDialog("discard")}>ОТМЕНИТЬ</button>
+                <button type="button" className="primary-control" disabled={!dirty || saveState === "saving" || saveBlocked} onClick={() => void save()}>СОХРАНИТЬ</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       {dialog === "discard" && (
         <ConfirmDialog
           title="Отменить несохранённые правки?"
-          text={`Черновик вернётся к последнему сохранённому состоянию. Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}
+          text={`Черновик вернётся к последнему сохранённому состоянию. Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}`}
           actions={[
             {
               label: "ВЕРНУТЬ СОХРАНЁННОЕ",
@@ -1311,9 +1672,20 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {dialog === "delete" && selectedRecycledVirus && (
         <ConfirmDialog
           title="УДАЛИТЬ НАВСЕГДА"
-          text={`Удалить «${selectedRecycledVirus.name}» навсегда? Это действие нельзя отменить.`}
+          text={`Удалить «${selectedRecycledVirus.name}» навсегда вместе с оформлением? Это действие нельзя отменить.`}
           actions={[
             { label: "УДАЛИТЬ НАВСЕГДА", tone: "danger", onClick: () => { setDialog(null); deleteSelectedRecycledVirus(); } },
+            { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+          ]}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog === "delete-file" && selectedRecycleFile && (
+        <ConfirmDialog
+          title="УДАЛИТЬ НАВСЕГДА"
+          text={`Удалить «${selectedRecycleFile.name}» навсегда вместе с оформлением? Это действие нельзя отменить.`}
+          actions={[
+            { label: "УДАЛИТЬ НАВСЕГДА", tone: "danger", onClick: () => { setDialog(null); deleteSelectedRecycleFile(); } },
             { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
           ]}
           onCancel={() => setDialog(null)}
@@ -1322,7 +1694,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {closeAsked && !employeeDirty && (
         <ConfirmDialog
           title="Закрыть редактор?"
-          text={`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}
+          text={`Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}${saveBlocked ? ` ${bodyMessage || dateMessage}` : ""}`}
           actions={[
             {
               label: "СОХРАНИТЬ",
@@ -1330,7 +1702,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               // The modal stays up during the request, so nothing can be typed that the close would lose.
               // Closes only if the save left nothing unsaved and the close was not cancelled meanwhile;
               // otherwise the window stays and the bar shows the unsaved edits, ОШИБКА or the conflict.
-              disabled: saveState === "saving",
+              disabled: saveState === "saving" || saveBlocked,
               onClick: () => {
                 void save().then((clean) => {
                   if (!latest.current.closeAsked) return;
@@ -1706,7 +2078,8 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   </div>;
 }
 
-function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRemoveMutation, onRestore, onDelete, dossierChanged }: {
+function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRemoveMutation, onRestore, onDelete, dossierChanged, restoreBlocked }: {
+  restoreBlocked: boolean;
   virus: Virus;
   uploadState: "idle" | "uploading" | "error";
   onUpload: (file: File, onUploaded: (url: string) => void) => void;
@@ -1756,9 +2129,9 @@ function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRemoveM
         <Field label="Уровень доступа"><select value={log.lockedLevel} onChange={(event) => onChange((item) => { item.scientistLogs[index].lockedLevel = Number(event.target.value); })}><option value={2}>II — доступна</option><option value={3}>III — заблокирована</option><option value={4}>IV — заблокирована</option></select></Field>
         <Field label="Текст записи" wide><textarea value={scientistLogPlainText(log)} onChange={(event) => onChange((item) => { item.scientistLogs[index].content = event.target.value.split(/\n\s*\n/); item.scientistLogs[index].richContent = { runs: [{ text: event.target.value }] }; })} /></Field>
       </div>)}
-      <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= 5} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
+      <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
     </EditorGroup>}
-    <div className="archive-virus-actions"><button className="secondary-control" type="button" onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
+    <div className="archive-virus-actions"><button className="secondary-control" type="button" disabled={restoreBlocked} title={restoreBlocked ? "Раздел «База вирусов» для вас закрыт" : undefined} onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
   </div>;
 }
 
@@ -1819,10 +2192,15 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
   const documentSignature = JSON.stringify(currentDocument);
 
   const track = (event: FieldSelectionEvent) => { selectionRef.current = fieldSelectionStep(selectionRef.current, event); };
+  // EDIT-06: every pointer press or editing key starts a gesture; only a Ctrl/Cmd press on a PC is additive (D-12, D-13).
+  // known: the ranges the browser already held when an additive press began (Firefox keeps them next to the new one).
+  const gestureRef = useRef({ id: 0, additive: false });
+  const knownRef = useRef<{ start: number; end: number }[]>([]);
+  const startGesture = (additive: boolean, editor?: HTMLElement) => { gestureRef.current = { id: ++gestureCounter, additive }; knownRef.current = additive && editor ? rootRanges(editor) : []; };
 
   const activate = (editor: HTMLDivElement, nextValue = value, nextDocument = currentDocument) => {
-    track({ type: "read", at: Date.now(), incoming: selectionOffsets(editor), guarded: activeFormat.phonePanelOpen });
-    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection: selectionRef.current.stored, area, onCommit: onChange });
+    track({ type: "read", at: Date.now(), incoming: selectionOffsets(editor, knownRef.current), guarded: activeFormat.phonePanelOpen });
+    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection: selectionRef.current.stored, area, onCommit: onChange, gesture: gestureRef.current, fragments: [], peers: {} });
   };
 
   const editorSelection = (editor: HTMLElement, text: string) =>
@@ -1833,13 +2211,15 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
     nextValue: string,
     selection: { start: number; end: number },
   ) => {
+    // Every text change, also one made with Ctrl/Cmd held or from the context menu, ends an additive gesture, so the activation below clears the fragments (WR-01, D-14).
+    startGesture(false);
     const nextDocument = replaceRichText(currentDocument, nextValue);
     selectionRef.current = { ...selectionRef.current, stored: selection };
     renderRichTextEditor(editor, nextDocument);
     localDocumentSignatureRef.current = JSON.stringify(nextDocument);
     restoreSelection(editor, selection);
     onChange(nextValue, nextDocument);
-    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection, area, onCommit: onChange });
+    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection, area, onCommit: onChange, gesture: gestureRef.current, fragments: [], peers: {} });
   };
 
   useLayoutEffect(() => {
@@ -1851,7 +2231,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
   }, [currentDocument, documentSignature]);
 
   return <div className="editor-field wide formatted-text-field">
-    <div className="formatted-text-field-head"><span>{label}</span><small></small></div>
+    <div className="formatted-text-field-head"><span>{label}</span></div>
     <div
       ref={editorRef}
       data-area={area}
@@ -1863,15 +2243,23 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
       role="textbox"
       aria-multiline="true"
       spellCheck
-      onPointerDown={() => track({ type: "down" })}
+      onPointerDown={(event) => {
+        track({ type: "down" });
+        if (event.isPrimary) {
+          const additive = addsFragment(event) && !window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
+          startGesture(additive, event.currentTarget);
+          if (additive) pinCaretUnderPointer(event.currentTarget, event.clientX, event.clientY);
+        }
+      }}
       onPointerUp={() => track({ type: "up", at: Date.now() })}
       onPointerCancel={() => track({ type: "up", at: Date.now() })}
-      onBlur={() => track({ type: "blur" })}
+      onBlur={() => { track({ type: "blur" }); startGesture(false); }}
       onFocus={(event) => activate(event.currentTarget)}
       onSelect={(event) => activate(event.currentTarget)}
       onMouseUp={(event) => activate(event.currentTarget)}
       onKeyDown={(event) => {
         track({ type: "down" });
+        if (!["Control", "Meta", "Shift", "Alt"].includes(event.key) && !event.ctrlKey && !event.metaKey) startGesture(false);
         if (event.key !== "Enter") return;
         event.preventDefault();
         const editor = event.currentTarget;
@@ -1901,15 +2289,16 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
         commitEditorValue(event.currentTarget, nextValue, selection);
       }}
     />
-    <small className="formatted-text-field-hint">Текст и GIF можно использовать вместе, не добавляй всякой фигни ок?</small>
+    <small className="formatted-text-field-hint">Текст и GIF можно использовать вместе. Не добавляйте лишних элементов.</small>
   </div>;
 }
 
-function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onUpdate, onClose }: {
+function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onUpdate, onBatch, onClose }: {
   target: FormatTarget;
   previewSurface: EditorPreviewSurface | null;
   onPreviewSurface: (surface: EditorPreviewSurface) => void;
   onUpdate: (target: FormatTarget) => void;
+  onBatch: (id: string, run: () => void) => void;
   onClose: () => void;
 }) {
   // Seeds the custom colour picker for text without a colour: baseInk at the default accent.
@@ -1921,11 +2310,29 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   // Every control acts on one range: the selection, else the word under the caret, else nothing (D-04).
   const text = target.document.runs.map((run) => run.text).join("");
   const range = resolveRange(text, target.selection);
+  // EDIT-06: with fragments the controls act on all of them (the current non-empty selection included); a bare caret is not a fragment (planner decision 2).
+  const multi = target.fragments.length > 0;
+  const set = useMemo(() => {
+    if (target.fragments.length === 0) return [];
+    const selection = target.selection;
+    const length = target.document.runs.reduce((sum, run) => sum + run.text.length, 0);
+    const clamp = (value: number) => Math.max(0, Math.min(length, value));
+    const picked = selection && selection.start !== selection.end ? [{ key: target.key, from: clamp(selection.start), to: clamp(selection.end) }] : [];
+    return mergeFragments([...target.fragments, ...picked]).filter((fragment) => fragment.key === target.key || target.peers[fragment.key] !== undefined);
+  }, [target]);
+  const docFor = (key: string) => (key === target.key ? target.document : target.peers[key]?.document ?? target.document);
   // The readout comes from the committed document, so a click shows exactly what it applied. A repeat click on a manual control
   // re-applies the same value; the row styles toggle (D-02). Unstyled text marks no size or weight, because every area renders its own.
-  const style = richTextStyleAt(target.document, range?.from ?? target.selection?.start ?? 0);
-  const marked = (preset: RichTextStyle) => range !== null && rangeHasStyle(target.document, range.from, range.to, preset);
-  const plainMarked = range !== null && rangeIsPlain(target.document, range.from, range.to);
+  const style = multi
+    ? (set[0] ? richTextStyleAt(docFor(set[0].key), set[0].from) : {})
+    : richTextStyleAt(target.document, range?.from ?? target.selection?.start ?? 0);
+  const hasTarget = multi ? set.length > 0 : range !== null;
+  const marked = (preset: RichTextStyle) => multi
+    ? set.length > 0 && set.every((fragment) => rangeHasStyle(docFor(fragment.key), fragment.from, fragment.to, preset))
+    : range !== null && rangeHasStyle(target.document, range.from, range.to, preset);
+  const plainMarked = multi
+    ? set.length > 0 && set.every((fragment) => rangeIsPlain(docFor(fragment.key), fragment.from, fragment.to))
+    : range !== null && rangeIsPlain(target.document, range.from, range.to);
   const color = style.color ?? defaultTextColor;
   const { fontSize, fontWeight } = style;
   const backgroundColor = style.backgroundColor ?? "#f0d66a";
@@ -1933,6 +2340,8 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const [colorPicker, setColorPicker] = useState<"text" | "background" | null>(null);
   // Phone only: one control group at a time under the style row (D-12); on a PC every group shows.
   const [tab, setTab] = useState<"color" | "size" | "background">("color");
+  // Phone only: the sheet folds to a 44px strip so the text shows (D-08). The panel remounts on every opening, so a sheet opens expanded.
+  const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { documentRef.current = target.document; }, [target.document]);
 
   const formatKey = target.key;
@@ -1947,10 +2356,15 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     const field = findFormatField(formatKey);
     const panel = panelRef.current;
     if (!field || !panel) return;
-    // Paint what the next style will change: the selection, else the word under the caret (D-04, D-05).
-    const painted = paintFrom !== undefined && paintTo !== undefined ? rangeFromOffsets(field, { start: paintFrom, end: paintTo }) : null;
-    const paints = painted !== null && typeof Highlight !== "undefined" && "highlights" in CSS;
-    if (paints) CSS.highlights.set("portia-format", new Highlight(painted));
+    // Paint what the next style will change: every fragment, else the selection, else the word under the caret (D-04, D-05, D-17).
+    const items = multi ? set : paintFrom !== undefined && paintTo !== undefined ? [{ key: formatKey, from: paintFrom, to: paintTo }] : [];
+    const ranges = items.flatMap((item) => {
+      const holder = findFormatField(item.key);
+      return holder ? [rangeFromOffsets(holder, { start: item.from, end: item.to })] : [];
+    });
+    const painted = ranges[0] ?? null;
+    const paints = ranges.length > 0 && typeof Highlight !== "undefined" && "highlights" in CSS;
+    if (paints) CSS.highlights.set("portia-format", new Highlight(...ranges));
     const keepVisible = () => {
       const rect = painted ? painted.getBoundingClientRect() : field.getBoundingClientRect();
       const overlap = rect.bottom - (panel.getBoundingClientRect().top - 16);
@@ -1965,7 +2379,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       window.visualViewport?.removeEventListener("resize", keepVisible);
       if (paints) CSS.highlights.delete("portia-format");
     };
-  }, [formatKey, paintFrom, paintTo, formatDocument]);
+  }, [formatKey, paintFrom, paintTo, formatDocument, collapsed, multi, set]);
 
   // On a phone, closing returns the caret to the field in the same tap so the keyboard can come back (iOS may still need one more tap);
   // flushSync commits the close first so the field has dropped inputMode none before it gets focus.
@@ -1973,17 +2387,21 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     flushSync(onClose);
     if (!window.matchMedia("(max-width: 900px)").matches) return;
     const field = findFormatField(formatKey);
-    if (!field) return;
+    // Nothing is known: a focused field would store the browser's caret at 0 as the next target.
+    if (!field || !target.selection) return;
     field.focus({ preventScroll: true });
-    if (target.selection) restoreSelection(field, target.selection);
+    restoreSelection(field, target.selection);
   };
 
   const word = range ? text.slice(range.from, range.to) : "";
-  const selectionLabel = !range
-    ? "ВЫДЕЛИТЕ ТЕКСТ"
-    : target.selection?.start !== target.selection?.end
-      ? `${range.to - range.from} ЗНАК.`
-      : `СЛОВО: «${word.length > 12 ? `${word.slice(0, 12)}…` : word}»`;
+  const selectionLabel = multi
+    ? (set.length === 1 ? `${set[0].to - set[0].from} ЗНАК.` : "ВЫДЕЛИТЕ ТЕКСТ")
+    : !range
+      ? "ВЫДЕЛИТЕ ТЕКСТ"
+      : target.selection?.start !== target.selection?.end
+        ? `${range.to - range.from} ЗНАК.`
+        : `СЛОВО: «${word.length > 12 ? `${word.slice(0, 12)}…` : word}»`;
+  const clearFragments = () => onUpdate({ ...target, fragments: [], peers: {} });
 
   const commit = (document: RichTextDocument) => {
     documentRef.current = document;
@@ -1991,19 +2409,54 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     onUpdate({ ...target, document });
   };
 
-  const applyStyle = (style: RichTextStyle) => {
-    if (range) commit(applyRichTextStyle(documentRef.current, range.from, range.to, style));
+  // One path for every control. With fragments each field's document is folded over that field's ranges and committed once (D-13);
+  // the offsets are the stored ones, so a DOM selection lost to a panel input changes nothing. applyRichTextStyle clamps stale offsets (T-11-13).
+  // D-16: a fresh batch id per control interaction; the same control firing again within the typing pause (a slider or colour board drag) keeps its id.
+  const lastBatch = useRef<{ control: string; id: string; at: number } | null>(null);
+  const batchFor = (control: string) => {
+    lastBatch.current = nextBatch(lastBatch.current, control);
+    return lastBatch.current.id;
   };
 
-  const togglePresetStyle = (preset: RichTextStyle) => {
-    if (range) commit(togglePreset(documentRef.current, range.from, range.to, preset));
+  const applyOp = (control: string, op: (document: RichTextDocument, from: number, to: number) => RichTextDocument) => {
+    if (!multi) {
+      if (range) commit(op(documentRef.current, range.from, range.to));
+      return;
+    }
+    onBatch(batchFor(control), () => {
+      let currentDocument = documentRef.current;
+      const nextPeers = { ...target.peers };
+      for (const key of new Set(set.map((fragment) => fragment.key))) {
+        const mine = set.filter((fragment) => fragment.key === key);
+        if (key === target.key) {
+          currentDocument = mine.reduce((doc, fragment) => op(doc, fragment.from, fragment.to), documentRef.current);
+          documentRef.current = currentDocument;
+          target.onCommit(target.value, currentDocument);
+        } else {
+          const peer = target.peers[key];
+          const next = mine.reduce((doc, fragment) => op(doc, fragment.from, fragment.to), peer.document);
+          nextPeers[key] = { ...peer, document: next };
+          peer.onCommit(peer.value, next);
+        }
+      }
+      onUpdate({ ...target, document: currentDocument, peers: nextPeers });
+    });
   };
 
-  // Restore the remembered place on mount and press it to the edge whenever the editor window changes size (D-11). The phone panel is docked by CSS.
+  const applyStyle = (control: string, style: RichTextStyle) => applyOp(control, (doc, from, to) => applyRichTextStyle(doc, from, to, style));
+
+  // D-02: the preset leaves when every fragment already carries it, else it is applied to every fragment.
+  const togglePresetStyle = (name: string, preset: RichTextStyle) => {
+    const keys = Object.keys(preset) as (keyof RichTextStyle)[];
+    if (!multi) applyOp(`preset:${name}`, (doc, from, to) => togglePreset(doc, from, to, preset));
+    else if (marked(preset)) applyOp(`preset:${name}`, (doc, from, to) => removeRichTextStyleKeys(doc, from, to, keys));
+    else applyOp(`preset:${name}`, (doc, from, to) => applyRichTextStyle(doc, from, to, preset));
+  };
+
+  // Restore the remembered place on mount and keep 64px of it on screen whenever the browser window changes size (D-07). The phone panel is docked by CSS.
   useLayoutEffect(() => {
     const panel = panelRef.current;
-    const parent = panel?.offsetParent;
-    if (!panel || !parent) return;
+    if (!panel) return;
     const place = () => {
       if (window.matchMedia("(max-width: 900px)").matches) {
         panel.style.right = "";
@@ -2012,33 +2465,33 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       }
       let saved: PanelOffset | null = null;
       try { saved = parsePanelOffset(localStorage.getItem(formatPanelStorageKey)); } catch { saved = null; }
-      if (saved) paintPanelOffset(panel, parent, saved);
+      // Nothing remembered (or storage unreadable): beside the editor window when it fits, else the default corner (D-07).
+      const editor = document.querySelector(".editor-window")?.getBoundingClientRect() ?? null;
+      paintPanelOffset(panel, saved ?? initialPanelOffset(editor, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight }));
     };
     place();
-    const observer = new ResizeObserver(place);
-    observer.observe(parent);
-    return () => observer.disconnect();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
   }, []);
 
-  // PC: the panel moves by its header like a desktop window and never leaves the editor window (D-10). The phone panel is docked.
+  // PC: the panel is a layer of the desktop and moves by its header anywhere on the screen (D-06, EDIT-04). The phone panel is docked.
   const beginDrag = (event: React.PointerEvent<HTMLElement>) => {
     const panel = panelRef.current;
-    const parent = panel?.offsetParent;
-    if (!panel || !parent || window.matchMedia("(max-width: 900px)").matches) return;
+    if (!panel || window.matchMedia("(max-width: 900px)").matches) return;
     if ((event.target as HTMLElement).closest("button")) return;
     event.currentTarget.setPointerCapture(event.pointerId);
+    const rect = panel.getBoundingClientRect();
     dragRef.current = {
       pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
-      right: parent.clientWidth - panel.offsetLeft - panel.offsetWidth, bottom: parent.clientHeight - panel.offsetTop - panel.offsetHeight, last: null,
+      right: document.documentElement.clientWidth - rect.right, bottom: document.documentElement.clientHeight - rect.bottom, last: null,
     };
   };
 
   const moveDrag = (event: React.PointerEvent<HTMLElement>) => {
     const drag = dragRef.current;
     const panel = panelRef.current;
-    const parent = panel?.offsetParent;
-    if (!drag || !panel || !parent || drag.pointerId !== event.pointerId) return;
-    drag.last = paintPanelOffset(panel, parent, { right: drag.right - (event.clientX - drag.startX), bottom: drag.bottom - (event.clientY - drag.startY) });
+    if (!drag || !panel || drag.pointerId !== event.pointerId) return;
+    drag.last = paintPanelOffset(panel, { right: drag.right - (event.clientX - drag.startX), bottom: drag.bottom - (event.clientY - drag.startY) });
   };
 
   const endDrag = (event: React.PointerEvent<HTMLElement>) => {
@@ -2049,18 +2502,48 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     if (drag.last) try { localStorage.setItem(formatPanelStorageKey, JSON.stringify(drag.last)); } catch { /* ignore */ }
   };
 
+  // Arrow keys move the panel from its header: 8px, Shift 32px (EDIT-04). Only when the header itself has focus, so buttons keep their keys.
+  const keyMove = (event: React.KeyboardEvent<HTMLElement>) => {
+    const panel = panelRef.current;
+    if (!panel || event.target !== event.currentTarget || window.matchMedia("(max-width: 900px)").matches) return;
+    const step = event.shiftKey ? 32 : 8;
+    const delta = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    const rect = panel.getBoundingClientRect();
+    const next = paintPanelOffset(panel, { right: document.documentElement.clientWidth - rect.right + delta[0], bottom: document.documentElement.clientHeight - rect.bottom + delta[1] });
+    try { localStorage.setItem(formatPanelStorageKey, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+
+  // Esc leaves the panel for the text: the field with its selection back, else the ✎ button. The panel stays open.
+  const leavePanel = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    if (multi) clearFragments();
+    const field = findFormatField(formatKey);
+    if (field && target.selection) {
+      field.focus({ preventScroll: true });
+      restoreSelection(field, target.selection);
+    } else document.querySelector<HTMLElement>(".global-format-launch > button")?.focus();
+  };
+
   // mousedown is the event whose default moves focus and clears the field's selection; pointerdown alone does not stop it in Chromium or WebKit (WR-04); inputs keep focus.
   const keepFieldFocus = (event: React.SyntheticEvent) => { if (!(event.target as HTMLElement).closest("input")) event.preventDefault(); };
-  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus}>
-    <header onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus} onKeyDown={leavePanel} data-collapsed={collapsed || undefined}>
+    <header tabIndex={0} role="group" aria-label="Перемещение панели: стрелки, с Shift шагом 32 px" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onKeyDown={keyMove} onClick={(event) => { if (window.matchMedia("(max-width: 900px)").matches && !(event.target as HTMLElement).closest("button")) setCollapsed((value) => !value); }}>
       <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
-      <small>{selectionLabel}</small>
-      <button type="button" onClick={finish} aria-label="Закрыть редактор">×</button>
+      <small>
+        {set.length >= 2
+          ? <><span className="format-selection-count">ВЫБРАНО: <b>{set.length}</b></span><button type="button" className="format-reset-fragments" aria-label="Снять все выделенные фрагменты" onClick={clearFragments}>СБРОСИТЬ</button></>
+          : selectionLabel}
+      </small>
+      <button type="button" data-sheet-toggle aria-expanded={!collapsed} aria-label={collapsed ? "Развернуть панель оформления" : "Свернуть панель оформления"} onClick={() => setCollapsed((value) => !value)}>{collapsed ? "ОФОРМЛЕНИЕ ▴" : "▾"}</button>
+      <button type="button" onClick={finish} aria-label="Закрыть панель оформления">×</button>
     </header>
     <div className="format-presets format-choice-row" role="group" aria-label="Готовые стили">
-      <button type="button" className={plainMarked ? "selected" : ""} aria-pressed={plainMarked} disabled={!range} onClick={() => range && commit(resetRichTextStyle(documentRef.current, range.from, range.to))}>Обычный</button>
-      <button type="button" className={marked(stylePresets.heading) ? "selected" : ""} aria-pressed={marked(stylePresets.heading)} disabled={!range} onClick={() => togglePresetStyle(stylePresets.heading)}>Заголовок</button>
-      <button type="button" className={marked(stylePresets.important) ? "selected" : ""} aria-pressed={marked(stylePresets.important)} disabled={!range} onClick={() => togglePresetStyle(stylePresets.important)}>Важно</button>
+      <button type="button" className={plainMarked ? "selected" : ""} aria-pressed={plainMarked} disabled={!hasTarget} onClick={() => applyOp("reset", resetRichTextStyle)}>Обычный</button>
+      <button type="button" className={marked(stylePresets.heading) ? "selected" : ""} aria-pressed={marked(stylePresets.heading)} disabled={!hasTarget} onClick={() => togglePresetStyle("heading", stylePresets.heading)}>Заголовок</button>
+      <button type="button" className={marked(stylePresets.important) ? "selected" : ""} aria-pressed={marked(stylePresets.important)} disabled={!hasTarget} onClick={() => togglePresetStyle("important", stylePresets.important)}>Важно</button>
     </div>
     <div className="format-tabs format-choice-row" role="tablist" aria-label="Группы оформления">
       {([["color", "Цвет"], ["size", "Размер"], ["background", "Фон"]] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "selected" : ""} onClick={() => setTab(id)}>{label}</button>)}
@@ -2068,11 +2551,11 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     <div className="rich-text-toolbar" aria-label="Оформление текста" data-tab={tab}>
       {target.area === "assistant" && <p className="format-area-note">Помощник показывает фразы своим цветом, размером и толщиной — эти настройки здесь не действуют. Фон текста работает.</p>}
       <div data-tab-group="background" className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={surface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={surface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
-      <div data-tab-group="color" className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: style.color ?? baseInk[surface] }} />{style.color ? style.color.toUpperCase() : "ОСНОВНОЙ"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={style.color ? "" : "selected"} title="Основной" aria-label="Основной" onClick={() => { setColorPicker(null); if (range) commit(removeRichTextStyleKeys(documentRef.current, range.from, range.to, ["color"])); }}><i style={{ backgroundColor: baseInk[surface] }} /></button>{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={style.color?.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
-      <div data-tab-group="size" className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" disabled={!range} className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle({ fontSize: value }); }}>{label}</button>)}</div></div>
-      <div data-tab-group="size" className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" disabled={!range} className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); applyStyle({ fontWeight: value }); }}>{label}</button>)}</div></div>
-      <div data-tab-group="background" className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle({ backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle({ backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
-      <label data-tab-group="background" className="format-control opacity-control"><span>Плотность фона: {Math.round(backgroundOpacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={backgroundOpacity} disabled={!range} onChange={(event) => { const opacity = Number(event.target.value); applyStyle({ backgroundColor, backgroundOpacity: opacity }); }} /></label>
+      <div data-tab-group="color" className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: style.color ?? baseInk[surface] }} />{style.color ? style.color.toUpperCase() : "ОСНОВНОЙ"}</b></span><div className="format-swatches"><button type="button" disabled={!hasTarget} className={style.color ? "" : "selected"} title="Основной" aria-label="Основной" onClick={() => { setColorPicker(null); applyOp("colour-base", (doc, from, to) => removeRichTextStyleKeys(doc, from, to, ["color"])); }}><i style={{ backgroundColor: baseInk[surface] }} /></button>{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!hasTarget} className={style.color?.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle(`color:${item.value}`, { color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!hasTarget} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
+      <div data-tab-group="size" className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" disabled={!hasTarget} className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle(`size:${value}`, { fontSize: value }); }}>{label}</button>)}</div></div>
+      <div data-tab-group="size" className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" disabled={!hasTarget} className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); applyStyle(`weight:${value}`, { fontWeight: value }); }}>{label}</button>)}</div></div>
+      <div data-tab-group="background" className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" disabled={!hasTarget} className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle("no-background", { backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" disabled={!hasTarget} className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle(`background:${item.value}`, { backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!hasTarget} title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
+      <label data-tab-group="background" className="format-control opacity-control"><span>Плотность фона: {Math.round(backgroundOpacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={backgroundOpacity} disabled={!hasTarget} onChange={(event) => { const opacity = Number(event.target.value); applyStyle("density", { backgroundColor, backgroundOpacity: opacity }); }} /></label>
       {colorPicker && <CustomColorPicker
         key={`${colorPicker}:${target.selection?.start}:${target.selection?.end}`}
         group={colorPicker === "text" ? "color" : "background"}
@@ -2080,95 +2563,61 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
         color={colorPicker === "text" ? color : backgroundColor}
         onChange={(nextColor) => {
           if (colorPicker === "text") {
-            applyStyle({ color: nextColor });
+            applyStyle("picker:text", { color: nextColor });
           } else {
             const opacity = backgroundOpacity || .45;
-            applyStyle({ backgroundColor: nextColor, backgroundOpacity: opacity });
+            applyStyle("picker:background", { backgroundColor: nextColor, backgroundOpacity: opacity });
           }
         }}
         onClose={() => setColorPicker(null)}
       />}
     </div>
-    <footer><p>Изменения применяются сразу. Без выделения меняется слово под курсором.</p><div><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
+    <footer><div className="format-notes"><p>Изменения применяются сразу. Без выделения меняется слово под курсором.</p><p className="format-multi-hint">Ctrl (Cmd на Mac) + выделение добавляет фрагмент. Esc снимает все.</p></div><div><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
   </section>;
 }
 
-// Where the PC format panel was left, px from the editor window's bottom-right; read back on mount (D-11).
+// Where the PC format panel was left, px from the viewport's right and bottom edges; read back on mount (D-07).
 const formatPanelStorageKey = "portia-format-panel-v1";
 
 // Writes the clamped right/bottom straight on the panel (no React render per move) and returns what was painted.
-function paintPanelOffset(panel: HTMLElement, parent: Element, offset: { right: number; bottom: number }) {
-  const next = clampPanelOffset(offset, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: parent.clientWidth, height: parent.clientHeight });
+function paintPanelOffset(panel: HTMLElement, offset: { right: number; bottom: number }) {
+  const next = clampPanelOffset(offset, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight });
   panel.style.right = `${next.right}px`;
   panel.style.bottom = `${next.bottom}px`;
   return next;
 }
 
-function CustomColorPicker({ group, title, color, onChange, onClose }: {
-  group: "color" | "background";
-  title: string;
-  color: string;
-  onChange: (color: string) => void;
-  onClose: () => void;
-}) {
-  const initial = hexToHsv(color);
-  const [hue, setHue] = useState(initial.hue);
-  const [saturation, setSaturation] = useState(initial.saturation);
-  const [value, setValue] = useState(initial.value);
-  const [hex, setHex] = useState(color.toUpperCase());
-
-  const choose = (nextHue: number, nextSaturation: number, nextValue: number) => {
-    setHue(nextHue);
-    setSaturation(nextSaturation);
-    setValue(nextValue);
-    const nextHex = hsvToHex(nextHue, nextSaturation, nextValue).toUpperCase();
-    setHex(nextHex);
-    onChange(nextHex);
-  };
-
-  const chooseFromBoard = (event: React.PointerEvent<HTMLDivElement>) => {
-    const board = event.currentTarget;
-    const rect = board.getBoundingClientRect();
-    const nextSaturation = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-    const nextValue = Math.max(0, Math.min(1, 1 - (event.clientY - rect.top) / rect.height));
-    choose(hue, nextSaturation, nextValue);
-  };
-
-  return <div className="custom-color-picker" data-tab-group={group} role="group" aria-label={title}>
-    <div className="custom-color-picker-head"><strong>{title}</strong><button type="button" onClick={onClose} aria-label="Закрыть выбор цвета">×</button></div>
-    <div
-      className="custom-color-board"
-      style={{ background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hue} 100% 50%))` }}
-      onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); chooseFromBoard(event); }}
-      onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) chooseFromBoard(event); }}
-    >
-      <i style={{ left: `${saturation * 100}%`, top: `${(1 - value) * 100}%` }} />
-    </div>
-    <label className="custom-hue"><span>ТОН</span><input type="range" min="0" max="359" value={Math.round(hue)} onChange={(event) => choose(Number(event.target.value), saturation, value)} /></label>
-    <div className="custom-color-value">
-      <i style={{ backgroundColor: hex }} />
-      <label><span>HEX</span><input value={hex} maxLength={7} onChange={(event) => {
-        const nextHex = event.target.value.toUpperCase();
-        setHex(nextHex);
-        if (/^#[0-9A-F]{6}$/.test(nextHex)) {
-          const next = hexToHsv(nextHex);
-          setHue(next.hue);
-          setSaturation(next.saturation);
-          setValue(next.value);
-          onChange(nextHex);
-        }
-      }} /></label>
-    </div>
-  </div>;
-}
-
-type EditorAccount = { email: string; created_at: string };
+type TabLists = { closedTabs: string[]; grantedTabs: string[] };
+type EditorAccount = { email: string; created_at: string } & TabLists;
+type RowNote = { error: boolean; text: string };
 
 function EditorAccessManager() {
   const [editors, setEditors] = useState<EditorAccount[]>([]);
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"loading" | "idle" | "saving" | "error">("loading");
   const [message, setMessage] = useState("");
+  const [tabsEnforced, setTabsEnforced] = useState(false);
+  const [notes, setNotes] = useState<Record<string, RowNote>>({});
+  const confirmed = useRef(new Map<string, TabLists>());
+  const noteTimers = useRef(new Map<string, number>());
+  // Per row: what the owner wants saved last, and whether a PATCH is in flight (at most one, T-12-27).
+  const wanted = useRef(new Map<string, TabLists>());
+  const busy = useRef(new Set<string>());
+
+  useEffect(() => {
+    const timers = noteTimers.current;
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, []);
+
+  const setNote = (editorEmail: string, note: RowNote | null) => {
+    window.clearTimeout(noteTimers.current.get(editorEmail));
+    setNotes((current) => {
+      const rest = { ...current };
+      delete rest[editorEmail];
+      return note ? { ...rest, [editorEmail]: note } : rest;
+    });
+    if (note && !note.error) noteTimers.current.set(editorEmail, window.setTimeout(() => setNote(editorEmail, null), 1800));
+  };
 
   // Every call ends in idle or error, never stuck in loading or saving (D-09 #9).
   const loadEditors = async (keepMessage = false) => {
@@ -2181,8 +2630,12 @@ function EditorAccessManager() {
         setMessage(payload.error ?? "Не удалось загрузить список.");
         return;
       }
-      const payload = await response.json() as { editors?: EditorAccount[] };
-      setEditors(payload.editors ?? []);
+      const payload = await response.json() as { editors?: Partial<EditorAccount>[]; tabsEnforced?: boolean };
+      const loaded = (payload.editors ?? []).map((item) => ({ ...item, email: item.email ?? "", created_at: item.created_at ?? "", closedTabs: item.closedTabs ?? [], grantedTabs: item.grantedTabs ?? [] }));
+      // A row with a request in flight keeps its local lists: a reload must not undo a click.
+      loaded.filter((item) => !busy.current.has(item.email)).forEach((item) => { const lists = { closedTabs: item.closedTabs, grantedTabs: item.grantedTabs }; confirmed.current.set(item.email, lists); wanted.current.set(item.email, lists); });
+      setEditors((current) => loaded.map((item) => busy.current.has(item.email) ? current.find((row) => row.email === item.email) ?? item : item));
+      setTabsEnforced(payload.tabsEnforced === true);
       setState("idle");
       if (!keepMessage) setMessage("");
     } catch {
@@ -2227,12 +2680,58 @@ function EditorAccessManager() {
         return;
       }
       setEditors((current) => current.filter((item) => item.email !== editorEmail));
+      confirmed.current.delete(editorEmail);
+      wanted.current.delete(editorEmail);
       setMessage("Доступ отозван.");
       setState("idle");
     } catch {
       setState("error");
       setMessage("Нет связи с сервером. Попробуйте ещё раз.");
     }
+  };
+
+  const sameLists = (a: TabLists, b: TabLists) => JSON.stringify(a) === JSON.stringify(b);
+  const patchRow = (editorEmail: string, lists: TabLists) => setEditors((current) => current.map((item) => item.email === editorEmail ? { ...item, ...lists } : item));
+
+  // Sends the row's latest wanted lists, one request at a time; if the owner clicked meanwhile, sends once more.
+  const flushRow = async (editorEmail: string) => {
+    if (busy.current.has(editorEmail)) return;
+    busy.current.add(editorEmail);
+    const rollback = (text: string) => {
+      const back = confirmed.current.get(editorEmail) ?? { closedTabs: [], grantedTabs: [] };
+      wanted.current.set(editorEmail, back);
+      patchRow(editorEmail, back);
+      setNote(editorEmail, { error: true, text });
+    };
+    try {
+      for (;;) {
+        const sent = wanted.current.get(editorEmail);
+        const stored = confirmed.current.get(editorEmail);
+        if (!sent || (stored && sameLists(sent, stored))) return;
+        const response = await fetch("/api/editors", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: editorEmail, ...sent }), signal: AbortSignal.timeout(15_000) });
+        const payload = await response.json().catch(() => ({})) as { error?: string; editor?: Partial<TabLists> };
+        if (!response.ok) { rollback(payload.error ?? "Не удалось сохранить."); return; }
+        const answered = { closedTabs: payload.editor?.closedTabs ?? sent.closedTabs, grantedTabs: payload.editor?.grantedTabs ?? sent.grantedTabs };
+        confirmed.current.set(editorEmail, answered);
+        if (wanted.current.get(editorEmail) === sent) { setNote(editorEmail, { error: false, text: "Сохранено" }); return; }
+      }
+    } catch {
+      rollback("Нет связи с сервером. Попробуйте ещё раз.");
+    } finally {
+      busy.current.delete(editorEmail);
+    }
+  };
+
+  // One click saves the full lists on its own (D-02); an error puts the row back to what the server last confirmed.
+  const toggleTab = (editor: EditorAccount, tab: TabDef) => {
+    const base = wanted.current.get(editor.email) ?? editor;
+    const key = tab.kind === "trusted" ? "grantedTabs" : "closedTabs";
+    const list = base[key].includes(tab.id) ? base[key].filter((id) => id !== tab.id) : [...base[key], tab.id];
+    const next: TabLists = { closedTabs: base.closedTabs, grantedTabs: base.grantedTabs, [key]: tabRegistry.filter((entry) => list.includes(entry.id)).map((entry) => entry.id) };
+    wanted.current.set(editor.email, next);
+    patchRow(editor.email, next);
+    setNote(editor.email, null);
+    void flushRow(editor.email);
   };
 
   return <div className="editor-form flat-editor-form access-editor">
@@ -2242,7 +2741,17 @@ function EditorAccessManager() {
     <div className="access-editor-list">
       {state === "loading" && <div className="editor-empty compact-empty">Загрузка списка…</div>}
       {state !== "loading" && editors.length === 0 && <div className="editor-empty compact-empty">Дополнительных редакторов пока нет.</div>}
-      {editors.map((editor) => <div key={editor.email}><div><strong>{editor.email}</strong><small>ДОСТУП К РЕДАКТОРУ</small></div><button type="button" onClick={() => void removeEditor(editor.email)}>ОТОЗВАТЬ</button></div>)}
+      {editors.map((editor) => {
+        const open = openTabIds(editor.closedTabs, editor.grantedTabs);
+        const note = notes[editor.email];
+        return <div key={editor.email}><div><strong>{editor.email}</strong><small>ДОСТУП К РЕДАКТОРУ</small>
+          <div className="access-tab-chips" role="group" aria-label={`Вкладки ${editor.email}`}>
+            {tabRegistry.map((tab) => <button key={tab.id} type="button" className="access-tab-chip" aria-pressed={open.includes(tab.id)} disabled={!tabsEnforced} onClick={() => toggleTab(editor, tab)}>{open.includes(tab.id) ? `✓ ${tab.label}` : tab.label}</button>)}
+          </div>
+          {note && <span className={`access-tab-note${note.error ? " is-error" : ""}`} role="status">{note.text}</span>}
+        </div><button type="button" onClick={() => void removeEditor(editor.email)}>ОТОЗВАТЬ</button></div>;
+      })}
+      {!tabsEnforced && editors.length > 0 && <p className="editor-guidance">Вкладки по редакторам заработают после применения SQL</p>}
     </div>
   </div>;
 }
@@ -2292,8 +2801,14 @@ function EditorGroup({ title, children, stack = false }: { title: string; childr
   return <section className={`editor-group${stack ? " stack" : ""}`}><h2>{title}</h2><div className="editor-field-grid">{children}</div></section>;
 }
 
-function Field({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {
-  return <label className={`editor-field${wide ? " wide" : ""}`}><span>{label}</span>{children}</label>;
+// Always in the DOM so the change to «МАКСИМУМ» is announced (UI-SPEC).
+function LimitNote({ id, count, max }: { id: string; count: number; max: number }) {
+  return <span id={id} aria-live="polite" className={limitStatus(count, max) === "full" ? "limit-note is-full" : "limit-note"}>{limitText(count, max)}</span>;
+}
+
+function Field({ label, children, wide = false, error, errorId }: { label: string; children: React.ReactNode; wide?: boolean; error?: string; errorId?: string }) {
+  // The error line is hidden from the label's name so it is not read twice; the input's aria-describedby still reads it.
+  return <label className={`editor-field${wide ? " wide" : ""}${error ? " is-invalid" : ""}`}><span>{label}</span>{children}{error && <small id={errorId} className="editor-field-error" aria-hidden="true">{error}</small>}</label>;
 }
 
 // Typed text lives here; the stored id is the source of truth, so undo/redo shows the stored video without an effect.

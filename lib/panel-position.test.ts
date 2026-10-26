@@ -1,26 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clampPanelOffset, parsePanelOffset } from "./panel-position.ts";
+import { clampPanelOffset, initialPanelOffset, parsePanelOffset } from "./panel-position.ts";
 
 const panel = { width: 680, height: 300 };
-const bounds = { width: 1100, height: 760 };
+const bounds = { width: 1920, height: 1080 };
 
-test("a place inside the window is kept", () => {
+test("a place inside the screen is kept", () => {
   assert.deepEqual(clampPanelOffset({ right: 100, bottom: 120 }, panel, bounds), { right: 100, bottom: 120 });
 });
 
-test("the panel keeps 8px from the sides", () => {
-  assert.equal(clampPanelOffset({ right: 2, bottom: 120 }, panel, bounds).right, 8);
-  assert.equal(clampPanelOffset({ right: 9999, bottom: 120 }, panel, bounds).right, 1100 - 680 - 8);
+test("64px of the panel stay on screen sideways", () => {
+  assert.equal(clampPanelOffset({ right: -9999, bottom: 120 }, panel, bounds).right, -616);
+  assert.equal(clampPanelOffset({ right: 9999, bottom: 120 }, panel, bounds).right, 1856);
 });
 
-test("the panel stays above the save bar and below the title bar", () => {
-  assert.equal(clampPanelOffset({ right: 100, bottom: 10 }, panel, bounds).bottom, 72);
-  assert.equal(clampPanelOffset({ right: 100, bottom: 9999 }, panel, bounds).bottom, 760 - 300 - 54);
+test("the top edge stays on screen and 64px of the header stay above the bottom", () => {
+  assert.equal(clampPanelOffset({ right: 100, bottom: 9999 }, panel, bounds).bottom, 780);
+  assert.equal(clampPanelOffset({ right: 100, bottom: -9999 }, panel, bounds).bottom, -236);
 });
 
-test("a window smaller than the panel gives the default corner", () => {
-  assert.deepEqual(clampPanelOffset({ right: 500, bottom: 500 }, panel, { width: 400, height: 200 }), { right: 8, bottom: 72 });
+test("the same limits hold at 1280x720", () => {
+  const small = { width: 1280, height: 720 };
+  assert.equal(clampPanelOffset({ right: 100, bottom: 9999 }, panel, small).bottom, 420);
+  assert.equal(clampPanelOffset({ right: 9999, bottom: 120 }, panel, small).right, 1216);
+});
+
+test("a legacy editor-relative place is kept as a viewport place", () => {
+  assert.deepEqual(clampPanelOffset({ right: 14, bottom: 72 }, panel, bounds), { right: 14, bottom: 72 });
+});
+
+test("a screen lower than the panel keeps the header on screen", () => {
+  assert.equal(clampPanelOffset({ right: 100, bottom: -9999 }, panel, { width: 1280, height: 200 }).bottom, -236);
 });
 
 test("fractional places come back in whole pixels", () => {
@@ -37,4 +47,20 @@ test("junk in storage gives no place", () => {
 
 test("extra keys are dropped", () => {
   assert.deepEqual(parsePanelOffset('{"right":5,"bottom":1,"x":9}'), { right: 5, bottom: 1 });
+});
+
+test("the first place is 16px right of the editor window when the panel fits there", () => {
+  assert.deepEqual(initialPanelOffset({ right: 1120, bottom: 880 }, panel, bounds), { right: 104, bottom: 200 });
+});
+
+test("without room beside the editor the first place is the default corner above the taskbar", () => {
+  assert.deepEqual(initialPanelOffset({ right: 1400, bottom: 880 }, panel, bounds), { right: 16, bottom: 60 });
+});
+
+test("without an editor window the first place is the default corner", () => {
+  assert.deepEqual(initialPanelOffset(null, panel, bounds), { right: 16, bottom: 60 });
+});
+
+test("the first place always passes through the clamp", () => {
+  assert.equal(initialPanelOffset({ right: 1120, bottom: 2000 }, panel, bounds).bottom, -236);
 });

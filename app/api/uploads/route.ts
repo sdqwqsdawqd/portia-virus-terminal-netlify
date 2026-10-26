@@ -15,7 +15,8 @@ export async function POST(request: Request) {
     const supabase = await createServerSupabaseClient();
     const { data: authData } = await supabase.auth.getUser();
     const access = await getEditorAccess(supabase, authData.user);
-    if (!authData.user || !access.canEdit) {
+    // The owner always has every tab; an editor needs at least one open.
+    if (!authData.user || !access.canEdit || access.openTabs.length === 0) {
       return Response.json({ error: "У вас нет доступа к загрузке." }, { status: 403 });
     }
 

@@ -17,6 +17,17 @@ export function removeBroadcast(content: PortiaContent, id: string): void {
   delete content.formattedText[portiaTextKey.broadcast(id)];
 }
 
+// The trailing colon keeps "ab" from matching the formatting of "abc".
+export function removeRecycledVirus(content: PortiaContent, id: string): void {
+  content.recycledViruses = content.recycledViruses.filter((virus) => virus.id !== id);
+  for (const key of Object.keys(content.formattedText)) if (key.startsWith(`virus:${id}:`)) delete content.formattedText[key];
+}
+
+export function removeRecycleFile(content: PortiaContent, id: string): void {
+  content.recycleFiles = content.recycleFiles.filter((file) => file.id !== id);
+  delete content.formattedText[portiaTextKey.recycle(id)];
+}
+
 export function removeInfoSection(content: PortiaContent, id: string): void {
   const section = content.infoSections.find((item) => item.id === id);
   content.infoSections = content.infoSections.filter((item) => item.id !== id);

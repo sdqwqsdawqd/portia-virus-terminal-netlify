@@ -83,6 +83,18 @@ test("a drag key coalesces regardless of time", () => {
   assert.equal(state.present.text, "c");
 });
 
+test("a batch key coalesces regardless of time", () => {
+  const state = [edit("b", "batch:a", 0), edit("c", "batch:a", 5000)].reduce(reduce, start());
+  assert.equal(state.past.length, 1);
+  assert.equal(state.present.text, "c");
+  assert.equal(reduce(state, { type: "undo" }).present.text, "a");
+});
+
+test("a batch key and another batch key are two steps", () => {
+  const state = [edit("b", "batch:a", 0), edit("c", "batch:b", 10)].reduce(reduce, start());
+  assert.equal(state.past.length, 2);
+});
+
 test("past is capped at HISTORY_LIMIT entries", () => {
   let state = start();
   for (let index = 1; index <= 55; index += 1) state = reduce(state, edit(`v${index}`, null, index));
@@ -189,4 +201,49 @@ test("undo right after a discard brings the discarded edits back", () => {
   const edited = reduce(start(), edit("b", null, 1000));
   const back = reduce(reduce(edited, { type: "discard" }), { type: "undo" });
   assert.equal(back.present, edited.present);
+});
+
+const setN = (n: number, now: number): HistoryAction<Doc> => ({ type: "change", updater: (next) => { next.n = n; }, key: null, now });
+
+test("restrict projects present, past and future and keeps baseline and source", () => {
+  const edited = [edit("b", null, 1000), edit("c", null, 2000), edit("d", null, 3000)].reduce(reduce, start());
+  const undone = reduce(edited, { type: "undo" });
+  const state = reduce(undone, { type: "restrict", project: (doc) => ({ ...doc, text: doc.text.toUpperCase() }) });
+  assert.equal(state.baseline, undone.baseline);
+  assert.equal(state.source, undone.source);
+  assert.equal(state.key, null);
+  assert.equal(state.present.text, "C");
+  assert.deepEqual(state.past.map((doc) => doc.text), ["A", "B"]);
+  assert.deepEqual(state.future.map((doc) => doc.text), ["D"]);
+});
+
+test("restrict keeps the object of an entry the projection leaves equal", () => {
+  const edited = [edit("b", null, 1000), edit("c", null, 2000)].reduce(reduce, start());
+  const state = reduce(edited, { type: "restrict", project: (doc) => (doc.text === "b" ? { ...doc, text: "B" } : { ...doc }) });
+  assert.equal(state.past[0], edited.past[0]);
+  assert.equal(state.present, edited.present);
+  assert.equal(state.past[1].text, "B");
+});
+
+test("restrict drops past entries that equal the entry after them", () => {
+  const edited = [setN(1, 1000), setN(2, 2000), edit("z", null, 3000)].reduce(reduce, start());
+  assert.equal(edited.past.length, 3);
+  const state = reduce(edited, { type: "restrict", project: (doc) => ({ ...doc, n: 0 }) });
+  assert.deepEqual(state.past.map((doc) => doc.text), ["a"]);
+  assert.equal(state.present.text, "z");
+  assert.notDeepEqual(reduce(state, { type: "undo" }).present, state.present);
+});
+
+test("restrict that changes nothing returns the same state", () => {
+  const edited = [edit("b", "field:1", 1000), edit("c", null, 2000)].reduce(reduce, start());
+  assert.equal(reduce(edited, { type: "restrict", project: (doc) => ({ ...doc }) }), edited);
+});
+
+test("after restrict no undo or redo brings the dropped value back", () => {
+  const edited = [edit("b", null, 1000), setN(9, 2000), edit("d", null, 3000)].reduce(reduce, start());
+  let state = reduce(edited, { type: "restrict", project: (doc) => ({ ...doc, n: 0 }) });
+  const seen: number[] = [state.present.n];
+  for (let step = 0; step < 6; step += 1) { state = reduce(state, { type: "undo" }); seen.push(state.present.n); }
+  for (let step = 0; step < 8; step += 1) { state = reduce(state, { type: "redo" }); seen.push(state.present.n); }
+  assert.deepEqual([...new Set(seen)], [0]);
 });

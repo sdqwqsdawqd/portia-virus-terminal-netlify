@@ -19,7 +19,8 @@ export type HistoryAction<T> =
   | { type: "undo" }
   | { type: "redo" }
   | { type: "saved"; normalized: T; savedFrom: T }
-  | { type: "sync"; content: T };
+  | { type: "sync"; content: T }
+  | { type: "restrict"; project: (content: T) => T };
 
 export function initHistory<T>(content: T, clone: (value: T) => T): EditorHistory<T> {
   const present = clone(content);
@@ -34,8 +35,9 @@ export function historyReducer<T>(state: EditorHistory<T>, action: HistoryAction
       action.updater(next);
       if (JSON.stringify(next) === JSON.stringify(state.present)) return state;
       const { key, now } = action;
+      // drag: and batch: keys name one gesture (a ≡ drag, one panel application over several fields), so they fold whatever the pause.
       const coalesce = key !== null && key === state.key
-        && (key.startsWith("drag:") || (now - state.at <= TYPING_PAUSE_MS && now - state.since <= TYPING_SPAN_MS));
+        && (key.startsWith("drag:") || key.startsWith("batch:") || (now - state.at <= TYPING_PAUSE_MS && now - state.since <= TYPING_SPAN_MS));
       if (coalesce) return { ...state, present: next, at: now };
       return { ...state, present: next, past: [...state.past, state.present].slice(-HISTORY_LIMIT), future: [], key, at: now, since: now };
     }
@@ -60,5 +62,22 @@ export function historyReducer<T>(state: EditorHistory<T>, action: HistoryAction
     }
     case "sync":
       return action.content === state.source ? state : initHistory(action.content, clone);
+    case "restrict": {
+      // D-16: project every entry so undo cannot bring back an edit the projection removed. project must return a new object.
+      const same = (a: T, b: T) => a === b || JSON.stringify(a) === JSON.stringify(b);
+      const keep = (entry: T) => {
+        const next = action.project(entry);
+        return same(next, entry) ? entry : next;
+      };
+      const present = keep(state.present);
+      const projectedPast = state.past.map(keep);
+      const past = projectedPast.filter((entry, index) => !same(entry, projectedPast[index + 1] ?? present));
+      const projectedFuture = state.future.map(keep);
+      const future = projectedFuture.filter((entry, index) => !same(entry, projectedFuture[index - 1] ?? present));
+      const unchanged = present === state.present
+        && past.length === state.past.length && past.every((entry, index) => entry === state.past[index])
+        && future.length === state.future.length && future.every((entry, index) => entry === state.future[index]);
+      return unchanged ? state : { ...state, present, past, future, key: null };
+    }
   }
 }

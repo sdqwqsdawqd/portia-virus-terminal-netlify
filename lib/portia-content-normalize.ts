@@ -1,5 +1,6 @@
 import {
   type Broadcast,
+  classificationOptions,
   type InfoBlock,
   type InfoSection,
   type InfoSubsection,
@@ -9,9 +10,14 @@ import {
   type RecycleFile,
   type RichTextDocument,
   type RichTextStyle,
+  type Virus,
 } from "./portia-content.ts";
+import { MAX_SCIENTIST_LOGS } from "./content-limits.ts";
+import { isAllowedMediaUrl } from "./media-url.ts";
 
 // Every save and every cached read passes through here: unknown input in, a complete PortiaContent out.
+// It coerces shape and never cuts or drops user content (D-01); the limits in content-limits.ts only drive editor warnings.
+// Kept on purpose: media links at 2048 characters, formatted-text keys over 240 characters, scientist logs at MAX_SCIENTIST_LOGS.
 function normalizeRecycleFiles(value: unknown, viruses: PortiaContent["viruses"]): RecycleFile[] {
   if (!Array.isArray(value)) return createVirusRecycleFiles(viruses);
 
@@ -43,7 +49,7 @@ function normalizeHexColor(value: unknown) {
 function normalizeRichText(value: unknown): RichTextDocument | undefined {
   if (!value || typeof value !== "object" || !Array.isArray((value as RichTextDocument).runs)) return undefined;
 
-  const runs = (value as RichTextDocument).runs.slice(0, 500).flatMap((run) => {
+  const runs = (value as RichTextDocument).runs.flatMap((run) => {
     if (!run || typeof run !== "object" || typeof run.text !== "string") return [];
     const rawStyle = run.style && typeof run.style === "object" ? run.style : {};
     const style: RichTextStyle = {};
@@ -54,7 +60,7 @@ function normalizeRichText(value: unknown): RichTextDocument | undefined {
     if (typeof rawStyle.fontSize === "number" && Number.isFinite(rawStyle.fontSize)) style.fontSize = Math.min(48, Math.max(10, Math.round(rawStyle.fontSize)));
     if (typeof rawStyle.fontWeight === "number" && [400, 500, 600, 700, 800, 900].includes(rawStyle.fontWeight)) style.fontWeight = rawStyle.fontWeight;
     if (typeof rawStyle.backgroundOpacity === "number" && Number.isFinite(rawStyle.backgroundOpacity)) style.backgroundOpacity = Math.min(1, Math.max(0, rawStyle.backgroundOpacity));
-    return [{ text: run.text.slice(0, 100_000), ...(Object.keys(style).length ? { style } : {}) }];
+    return [{ text: run.text, ...(Object.keys(style).length ? { style } : {}) }];
   });
 
   return { runs };
@@ -64,7 +70,6 @@ function normalizeFormattedText(value: unknown): Record<string, RichTextDocument
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(
     Object.entries(value)
-      .slice(0, 1000)
       .flatMap(([key, document]) => {
         if (!key || key.length > 240) return [];
         const normalized = normalizeRichText(document);
@@ -76,28 +81,63 @@ function normalizeFormattedText(value: unknown): Record<string, RichTextDocument
 function normalizeMediaUrl(value: unknown, fallback = "") {
   if (typeof value !== "string") return fallback;
   const url = value.trim().slice(0, 2048);
-  return url.startsWith("https://") || url.startsWith("/") ? url : fallback;
+  return isAllowedMediaUrl(url) ? url : fallback;
 }
 
 const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
 const normalizeDay = (value: unknown) => (typeof value === "string" && dayPattern.test(value) ? value : "");
 
+// Text slots only ever hold text: a number or boolean becomes its text, anything else "" (D-20, never an object in a text slot).
+const textOf = (value: unknown) => (typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : "");
+const asText = (value: unknown) => (typeof value === "string" ? value : "");
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object";
+
+const realId = (value: unknown) => {
+  const id = textOf(value);
+  return id.trim() ? id : "";
+};
+const claimIds = (items: Record<string, unknown>[], taken: Set<string>) => {
+  for (const item of items) {
+    const id = realId(item.id);
+    if (id) taken.add(id);
+  }
+};
+// D-21: a blank id becomes `${prefix}-${position}`, stable across polls because it depends on position only; never ':' because formatted keys split on it.
+function deriveIds(items: Record<string, unknown>[], prefix: string, taken: Set<string>): string[] {
+  return items.map((item, index) => {
+    const id = realId(item.id);
+    if (id) return id;
+    let derived = `${prefix}-${index}`;
+    for (let n = 2; taken.has(derived); n += 1) derived = `${prefix}-${index}-${n}`;
+    taken.add(derived);
+    return derived;
+  });
+}
+
 // Broadcasts saved before 03.2 have no important flag, dates or conditions.
 export function normalizeBroadcasts(value: unknown): Broadcast[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is Broadcast => Boolean(item) && typeof item === "object")
-    .map((item) => ({
+  const items = value.filter(isRecord);
+  const taken = new Set<string>();
+  claimIds(items, taken);
+  const ids = deriveIds(items, "broadcast", taken);
+  return items.map((item, index) => {
+    const type = item.type === "quest" || item.type === "task" ? item.type : "news";
+    return {
       ...item,
-      important: item.important === true,
+      id: ids[index],
+      type,
+      title: textOf(item.title),
+      body: textOf(item.body),
+      published: item.published === true,
+      // D-19: only news can be important.
+      important: type === "news" && item.important === true,
       startsAt: normalizeDay(item.startsAt),
       endsAt: normalizeDay(item.endsAt),
-      conditions: typeof item.conditions === "string" ? item.conditions.slice(0, 4000) : "",
-    }));
+      conditions: typeof item.conditions === "string" ? item.conditions : "",
+    };
+  });
 }
-
-const asText = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : "");
-const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object";
 
 const youtubeIdPattern = /^[\w-]{11}$/;
 const youtubeHosts = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtube-nocookie.com"]);
@@ -121,14 +161,20 @@ function normalizeInfoBlock(value: unknown, subsectionId: string, index: number)
   const id = typeof value.id === "string" && value.id ? value.id : `${subsectionId}-block-${index}`;
   switch (value.type) {
     case "text":
-      return [{ id, type: "text", text: asText(value.text, 20_000) }];
-    case "table":
+      return [{ id, type: "text", text: asText(value.text) }];
+    case "table": {
+      // Stable row ids let the editor's ≡ keep a row's identity (EDIT-07); a positional fallback is stable across polls (D-21).
+      const seen = new Set<string>();
       return [{
         id,
         type: "table",
-        rows: (Array.isArray(value.rows) ? value.rows : []).filter(isRecord).slice(0, 100)
-          .map((row) => ({ key: asText(row.key, 500), value: asText(row.value, 500) })),
+        rows: (Array.isArray(value.rows) ? value.rows : []).filter(isRecord).map((row, rowIndex) => {
+          const rowId = typeof row.id === "string" && row.id && !seen.has(row.id) ? row.id : `${id}-row-${rowIndex}`;
+          seen.add(rowId);
+          return { id: rowId, key: asText(row.key), value: asText(row.value) };
+        }),
       }];
+    }
     case "photo":
       return [{ id, type: "photo", url: normalizeMediaUrl(value.url) }];
     case "video":
@@ -141,9 +187,9 @@ function normalizeInfoBlock(value: unknown, subsectionId: string, index: number)
 function normalizeInfoSubsection(value: unknown, sectionId: string, index: number): InfoSubsection[] {
   if (!isRecord(value)) return [];
   const id = typeof value.id === "string" && value.id ? value.id : `${sectionId}-sub-${index}`;
-  const blocks = (Array.isArray(value.blocks) ? value.blocks : []).slice(0, 100)
+  const blocks = (Array.isArray(value.blocks) ? value.blocks : [])
     .flatMap((block, blockIndex) => normalizeInfoBlock(block, id, blockIndex));
-  return [{ id, title: asText(value.title, 300), blocks }];
+  return [{ id, title: asText(value.title), blocks }];
 }
 
 // Sections saved before 03.3 have no subsections (D-12); title and body keep today's behaviour, never cut.
@@ -156,7 +202,7 @@ export function normalizeInfoSections(value: unknown): InfoSection[] {
       id,
       title: typeof item.title === "string" ? item.title : "",
       body: typeof item.body === "string" ? item.body : "",
-      subsections: (Array.isArray(item.subsections) ? item.subsections : []).slice(0, 50)
+      subsections: (Array.isArray(item.subsections) ? item.subsections : [])
         .flatMap((sub, subIndex) => normalizeInfoSubsection(sub, id, subIndex)),
     }];
   });
@@ -172,24 +218,54 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     !Array.isArray(candidate.searchRecommendations)
   ) return null;
 
-  const normalizeVirus = (virus: PortiaContent["viruses"][number]) => ({
-    ...virus,
-    infectedImage: normalizeMediaUrl(virus.infectedImage),
-    mutations: Array.isArray(virus.mutations)
-      ? virus.mutations.map((mutation) => ({ ...mutation, image: normalizeMediaUrl(mutation.image) }))
-      : [],
-    scientistLogs: Array.isArray(virus.scientistLogs)
-      ? virus.scientistLogs.slice(0, 5).map((log) => ({
-          ...log,
-          content: Array.isArray(log.content) ? log.content.filter((paragraph): paragraph is string => typeof paragraph === "string") : [],
-          richContent: normalizeRichText(log.richContent),
-        }))
-      : [],
-  });
-  const viruses = candidate.viruses.map(normalizeVirus);
-  const recycledViruses = Array.isArray(candidate.recycledViruses)
-    ? candidate.recycledViruses.map(normalizeVirus)
-    : [];
+  const normalizeVirus = (virus: Record<string, unknown>, id: string): Virus => {
+    const ppu = isRecord(virus.ppu) ? virus.ppu : {};
+    const classification = isRecord(virus.classification) ? virus.classification : {};
+    return {
+      ...virus,
+      id,
+      code: textOf(virus.code),
+      name: textOf(virus.name),
+      status: textOf(virus.status),
+      external: textOf(virus.external),
+      physiology: textOf(virus.physiology),
+      ppu: { health: textOf(ppu.health), speed: textOf(ppu.speed), abilities: textOf(ppu.abilities) },
+      classification: Object.fromEntries(
+        Object.keys(classificationOptions).map((key) => [key, textOf(classification[key])]),
+      ) as Virus["classification"],
+      infectedImage: normalizeMediaUrl(virus.infectedImage),
+      mutations: Array.isArray(virus.mutations)
+        ? virus.mutations.map((item) => {
+            const mutation = isRecord(item) ? item : {};
+            return { ...mutation, name: textOf(mutation.name), description: textOf(mutation.description), image: normalizeMediaUrl(mutation.image) };
+          })
+        : [],
+      scientistLogs: Array.isArray(virus.scientistLogs)
+        ? virus.scientistLogs.slice(0, MAX_SCIENTIST_LOGS).map((item) => {
+            const log = isRecord(item) ? item : {};
+            return {
+              ...log,
+              id: textOf(log.id),
+              title: textOf(log.title),
+              scientist: textOf(log.scientist),
+              lockedLevel: typeof log.lockedLevel === "number" && Number.isFinite(log.lockedLevel) ? log.lockedLevel : 3,
+              content: Array.isArray(log.content) ? log.content.filter((paragraph): paragraph is string => typeof paragraph === "string") : [],
+              richContent: normalizeRichText(log.richContent),
+            };
+          })
+        : [],
+    };
+  };
+  // One id set spans both lists: they share the `virus:<id>:` formatting namespace and recycleOrder.
+  const rawViruses = candidate.viruses.filter(isRecord);
+  const rawRecycled = (Array.isArray(candidate.recycledViruses) ? candidate.recycledViruses : []).filter(isRecord);
+  const takenIds = new Set<string>();
+  claimIds(rawViruses, takenIds);
+  claimIds(rawRecycled, takenIds);
+  const virusIds = deriveIds(rawViruses, "virus", takenIds);
+  const recycledIds = deriveIds(rawRecycled, "recycled", takenIds);
+  const viruses = rawViruses.map((virus, index) => normalizeVirus(virus, virusIds[index]));
+  const recycledViruses = rawRecycled.map((virus, index) => normalizeVirus(virus, recycledIds[index]));
   const recycleFiles = normalizeRecycleFiles(candidate.recycleFiles, viruses);
   const validRecycleKeys = new Set([
     ...recycleFiles.map((file) => `file:${file.id}`),

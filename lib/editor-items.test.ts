@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, updateById } from "./editor-items.ts";
+import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "./editor-items.ts";
 import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
 const fixture = (): PortiaContent => {
@@ -137,4 +137,47 @@ test("a new item is blank, not a copy of the last edited one", () => {
   assert.equal(content.broadcasts[0].body, "");
   assert.equal(content.broadcasts[0].title, "");
   assert.equal(content.broadcasts[1].body, "текст A2");
+});
+
+const binFixture = (): PortiaContent => {
+  const content = structuredClone(defaultPortiaContent);
+  const [first] = content.viruses;
+  content.recycledViruses = [{ ...structuredClone(first), id: "ab" }, { ...structuredClone(first), id: "abc" }];
+  content.recycleFiles = [
+    { id: "f1", name: "F1", location: "", kind: "text", content: "1", image: "", virusId: "" },
+    { id: "f2", name: "F2", location: "", kind: "text", content: "2", image: "", virusId: "" },
+  ];
+  content.formattedText = {
+    "virus:ab:external": { runs: [] },
+    "virus:ab:ppu-health": { runs: [] },
+    "virus:ab:mutation:0:description": { runs: [] },
+    "virus:abc:external": { runs: [] },
+    [portiaTextKey.recycle("f1")]: { runs: [] },
+    [portiaTextKey.recycle("f2")]: { runs: [] },
+  };
+  return content;
+};
+
+test("permanently deleting a recycled virus removes all of its formatting and nothing else", () => {
+  const content = binFixture();
+  removeRecycledVirus(content, "ab");
+  assert.deepEqual(content.recycledViruses.map((virus) => virus.id), ["abc"]);
+  assert.deepEqual(Object.keys(content.formattedText).sort(), ["recycle:f1:content", "recycle:f2:content", "virus:abc:external"]);
+});
+
+test("permanently deleting a recycle file removes only its text formatting", () => {
+  const content = binFixture();
+  removeRecycleFile(content, "f1");
+  assert.deepEqual(content.recycleFiles.map((file) => file.id), ["f2"]);
+  assert.equal("recycle:f1:content" in content.formattedText, false);
+  assert.equal("recycle:f2:content" in content.formattedText, true);
+  assert.equal(Object.keys(content.formattedText).length, 5);
+});
+
+test("restoring from the bin keeps formatting", () => {
+  const content = binFixture();
+  const restored = content.recycledViruses.find((virus) => virus.id === "ab")!;
+  content.recycledViruses = content.recycledViruses.filter((virus) => virus.id !== "ab");
+  content.viruses.push(restored);
+  assert.equal(Object.keys(content.formattedText).filter((key) => key.startsWith("virus:ab:")).length, 3);
 });
