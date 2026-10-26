@@ -1,3 +1,4 @@
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
 import { noStoreHeaders } from "@/lib/portia-cdn";
@@ -10,7 +11,9 @@ const unavailableBody = { error: "Проверка доступа временн
 export async function GET() {
   try {
     const supabase = await createServerSupabaseClient();
-    const { data } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getUser();
+    // A network or 5xx auth failure is not "logged out": answering canEdit:false would unmount the open editor.
+    if (isAuthRetryableFetchError(error)) return Response.json(unavailableBody, { status: 503, headers: noStoreHeaders });
     const access = await getEditorAccess(supabase, data.user);
     if (access.unavailable) return Response.json(unavailableBody, { status: 503, headers: noStoreHeaders });
     const { canEdit, canManageEditors, openTabs, tabsEnforced } = access;

@@ -166,3 +166,8 @@ test("/api/editors has an owner-only PATCH with full lists and a pending-databas
   assert.ok(bodyOf(route, "GET").includes("tabsEnforced"));
   assert.ok(bodyOf(route, "POST").includes(".insert({ email, granted_by: access.user.id })"));
 });
+
+test("an auth network blip makes /api/access answer 503, not canEdit:false (CR-01)", () => {
+  const route = routeText("access");
+  assert.ok(route.indexOf("isAuthRetryableFetchError(") > 0 && route.indexOf("isAuthRetryableFetchError(") < route.indexOf("getEditorAccess(supabase"));
+});
