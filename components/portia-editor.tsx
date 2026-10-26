@@ -5,7 +5,7 @@ import { createPortal, flushSync } from "react-dom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
-import { mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
+import { dropFields, mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
 import { TYPING_PAUSE_MS, historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
 import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
@@ -869,12 +869,14 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   });
 
   const activateFormatter = (target: FormatTarget) => setFormatTarget((prev) => joinFormatTarget(prev, target));
-  // The panel's stored commit for a deleted item would write its formatting back.
-  const closeFormatterFor = (key: string) => {
-    if (formatTarget?.key !== key) return;
-    setFormatTarget(null);
-    setFormatterOpen(false);
+  // A gone field (deleted, folded) closes the panel when it is the main target and leaves the multi-selection otherwise, with its fragments (CR-01, WR-02).
+  // The updater is functional so several calls in one handler chain.
+  const dropFormatFields = (gone: (key: string) => boolean) => {
+    if (formatTarget && gone(formatTarget.key)) setFormatterOpen(false);
+    setFormatTarget((prev) => prev && dropFields(prev, gone));
   };
+  // The panel's stored commit for a deleted item would write its formatting back; peers too (CR-01).
+  const closeFormatterFor = (...keys: string[]) => dropFormatFields((key) => keys.includes(key));
 
   // The format panel keeps a target in the tab being hidden; leaving it open could write old text back (Pitfall 7).
   const selectDossierTab = (id: DossierTab) => {

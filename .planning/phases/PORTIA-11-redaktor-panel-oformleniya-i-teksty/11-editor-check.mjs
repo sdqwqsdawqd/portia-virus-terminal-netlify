@@ -51,6 +51,7 @@ const reasons = [];
 const fixture = (overrides = {}) => ({ viruses: [], infoSections: [], broadcasts: [], searchRecommendations: [], ...overrides });
 let current = { content: fixture(), revision: 1, fakeSave: false };
 let fakeSaves = 0;
+let savedBody = ""; // the body of the last fake save, so a check can see what a save would have sent
 const serve = (content, revision, fakeSave = false) => { current = { content, revision, fakeSave }; };
 
 /** One virus with plain text in both lead fields; the editor opens on it. */
@@ -110,7 +111,7 @@ function installStub(cdp) {
   const block = (p) => cdp.send("Fetch.failRequest", { requestId: p.requestId, errorReason: "BlockedByClient" }).catch(() => {});
   cdp.on("Fetch.requestPaused", (p) => {
     const { pathname } = new URL(p.request.url);
-    if (p.request.method === "PUT" && pathname === "/api/content" && current.fakeSave) { fakeSaves += 1; setTimeout(() => fulfil(p, { revision: current.revision + 1 }), 800); return; }
+    if (p.request.method === "PUT" && pathname === "/api/content" && current.fakeSave) { fakeSaves += 1; savedBody = p.request.postData ?? Buffer.concat((p.request.postDataEntries ?? []).map((e) => Buffer.from(e.bytes ?? "", "base64"))).toString("utf8"); setTimeout(() => fulfil(p, { revision: current.revision + 1 }), 800); return; }
     if (p.request.method !== "GET") { reasons.push(`write blocked: ${p.request.method} ${pathname}`); block(p); return; }
     if (pathname === "/api/access") fulfil(p, { canEdit: true, canManageEditors: false });
     else if (pathname === "/api/content") fulfil(p, { content: current.content, revision: current.revision, updatedAt: null });
@@ -1111,6 +1112,65 @@ const checks = {
     const untouched = await styleOf("три", "color");
     if (untouched === red) reasons.push("(p) «три» was coloured");
   },
+  async peers(cdp) {
+    // Real clicks and a real Control press, as in multiselect. The fake save keeps its body, so an orphan formattedText entry of a deleted item shows in it.
+    const click = (c, selector) => realClick(c, selector);
+    const red = "rgb(180, 54, 50)";
+    const card1 = ".flat-editor-form > .nested-editor-card:nth-of-type(1)";
+    const sel = (formatKey) => `[data-format-key="${formatKey}"]`;
+    const painted = () => cdp.eval(`(() => { const h = CSS.highlights.get("portia-format"); return h ? [...h].map(String) : null; })()`);
+    const headerText = () => cdp.eval(`document.querySelector(".floating-text-format > header")?.textContent ?? ""`);
+    const panelOpen = () => cdp.eval(`!!document.querySelector(".floating-text-format")`);
+    const ensurePanel = async () => { if (!(await panelOpen())) await click(cdp, ".global-format-launch > button"); await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000); await sleep(150); };
+    const fresh = async (revision) => {
+      serve(sectionsFixture({ sections: 2 }), revision, true);
+      await load(cdp);
+      if (!(await openEditor(cdp))) return false;
+      await clickText(cdp, ".editor-tabs button", "Информация");
+      if (!(await waitFor(cdp, `document.querySelectorAll(".flat-editor-form > .nested-editor-card").length === 2`, 3000))) { reasons.push("peers: the info tab did not show 2 section cards"); return false; }
+      for (let pass = 0; pass < 4; pass += 1) await cdp.eval(`document.querySelectorAll('.nested-editor-toggle[aria-expanded="false"]').forEach((b) => b.click())`);
+      if (!(await waitFor(cdp, `!!document.querySelector(${JSON.stringify(sel("info:s1:body"))})`, 3000))) { reasons.push("peers: the section body field did not appear"); return false; }
+      return true;
+    };
+    const pickIn = async (formatKey, word, modifiers = 0) => {
+      await wordBox(cdp, sel(formatKey), 0, word); await sleep(400); // the scroll into view may be smooth, so measure again once it has settled
+      const box = await wordBox(cdp, sel(formatKey), 0, word);
+      if (!box) { reasons.push(`peers: word «${word}» not found in ${formatKey}`); return false; }
+      await mouseSelect(cdp, box, modifiers); // no removeAllRanges between picks: it would null the stored selection a Ctrl press turns into a fragment
+      await sleep(100);
+      return true;
+    };
+    const colorIn = (formatKey, word) => cdp.eval(`(() => { const f = document.querySelector(${JSON.stringify(sel(formatKey))}); if (!f) return null; const w = document.createTreeWalker(f, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) if (n.data.includes(${JSON.stringify(word)})) return getComputedStyle(n.parentElement).color; return null; })()`);
+    const save = async () => {
+      const before = fakeSaves; savedBody = "";
+      // The chip may sit under the floating panel, so open it as the savechip check does: focus, then a programmatic click.
+      await waitFor(cdp, `!!document.querySelector(".editor-save-chip > button")`, 3000);
+      await cdp.eval(`(() => { const b = document.querySelector(".editor-save-chip > button"); b.focus(); if (b.getAttribute("aria-expanded") !== "true") b.click(); })()`); await sleep(200);
+      await clickText(cdp, ".editor-save-popover button", "СОХРАНИТЬ");
+      for (let waited = 0; waited < 3000 && fakeSaves === before; waited += 100) await sleep(100);
+      await sleep(100);
+      return savedBody;
+    };
+    // (a) a section whose body is held only as a peer is deleted: it leaves the selection, and the next style click writes nothing for it (CR-01)
+    if (!(await fresh(70))) return;
+    if (!(await pickIn("info:s1:body", "Текст")) || !(await pickIn("info:s2:body", "раздела", 2))) return;
+    await ensurePanel();
+    let head = await headerText();
+    if (!head.includes("ВЫБРАНО: 2")) { reasons.push(`(a) header reads ${JSON.stringify(head)} before the delete, expected «ВЫБРАНО: 2»`); return; }
+    await click(cdp, `${card1} > .nested-editor-head .nested-editor-actions button`);
+    await sleep(200);
+    head = await headerText();
+    if (head.includes("ВЫБРАНО")) reasons.push(`(a) the header still reads ${JSON.stringify(head)} after the delete`);
+    const left = await painted();
+    if (JSON.stringify(left) !== JSON.stringify(["раздела"])) reasons.push(`(a) painted ${JSON.stringify(left)} after the delete, expected ["раздела"]`);
+    if (!(await panelOpen())) reasons.push("(a) the panel closed after the delete");
+    await click(cdp, '.format-swatches button[aria-label="Красный"]');
+    await sleep(200);
+    if ((await colorIn("info:s2:body", "раздела")) !== red) reasons.push(`(a) «раздела» colour ${await colorIn("info:s2:body", "раздела")}, expected ${red}`);
+    const saved = await save();
+    if (!saved.includes('"info:s2:body"')) reasons.push("(a) the saved body has no formatting for section 2");
+    if (saved.includes('"info:s1:body"')) reasons.push("(a) the saved body still holds formatting for the deleted section 1");
+  },
 };
 
 let edge;
@@ -1119,7 +1179,7 @@ const cleanup = () => {
 };
 let code = 2;
 try {
-  const ALL = ["mark", "panel", "savechip", "sections", "table", "multiselect", "phonefit"];
+  const ALL = ["mark", "panel", "savechip", "sections", "table", "multiselect", "peers", "phonefit"];
   if (CHECK !== "all" && !checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")}, all)`);
   edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, "--window-size=1920,1080", "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
   let up = false;

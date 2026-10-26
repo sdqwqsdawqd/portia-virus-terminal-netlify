@@ -29,3 +29,14 @@ export function pickCurrentRange(ranges: { start: number; end: number }[], known
   const fresh = ranges.filter((range) => !known.some((old) => old.start === range.start && old.end === range.end));
   return fresh[fresh.length - 1] ?? ranges[ranges.length - 1] ?? null;
 }
+
+/** A deleted or folded field leaves the multi-selection; a gone target drops it all (CR-01, WR-02). */
+export function dropFields<T extends { key: string; fragments: FormatFragment[]; peers: Record<string, unknown> }>(target: T, gone: (key: string) => boolean): T | null {
+  if (gone(target.key)) return null;
+  if (!target.fragments.some((fragment) => gone(fragment.key)) && !Object.keys(target.peers).some(gone)) return target;
+  return {
+    ...target,
+    fragments: target.fragments.filter((fragment) => !gone(fragment.key)),
+    peers: Object.fromEntries(Object.entries(target.peers).filter(([key]) => !gone(key))),
+  } as T;
+}

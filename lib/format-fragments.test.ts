@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "./format-fragments.ts";
+import { dropFields, mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "./format-fragments.ts";
 
 const f = (key: string, from: number, to: number): FormatFragment => ({ key, from, to });
 
@@ -78,4 +78,25 @@ test("one range, no range, and nothing new", () => {
   assert.equal(pickCurrentRange([]), null);
   assert.deepEqual(pickCurrentRange([{ start: 1, end: 3 }]), { start: 1, end: 3 });
   assert.deepEqual(pickCurrentRange([{ start: 1, end: 3 }, { start: 5, end: 8 }], [{ start: 1, end: 3 }, { start: 5, end: 8 }]), { start: 5, end: 8 });
+});
+
+const target = (key: string, fragments: FormatFragment[], peers: string[]) => ({ key, document: "doc", selection: { start: 0, end: 1 }, fragments, peers: Object.fromEntries(peers.map((name) => [name, { key: name }])) });
+
+test("a gone target drops the whole selection", () => {
+  assert.equal(dropFields(target("b", [f("a", 1, 3)], ["a"]), (key) => key === "b"), null);
+});
+
+test("a gone peer leaves with its fragments", () => {
+  const before = target("b", [f("a", 1, 3), f("c", 0, 2)], ["a", "c"]);
+  const after = dropFields(before, (key) => key === "a");
+  assert.deepEqual(after?.fragments, [f("c", 0, 2)]);
+  assert.deepEqual(Object.keys(after?.peers ?? {}), ["c"]);
+  assert.equal(after?.key, "b");
+  assert.equal(after?.document, "doc");
+  assert.deepEqual(after?.selection, { start: 0, end: 1 });
+});
+
+test("nothing gone keeps the same target", () => {
+  const before = target("b", [f("a", 1, 3)], ["a"]);
+  assert.equal(dropFields(before, (key) => key === "z"), before);
 });
