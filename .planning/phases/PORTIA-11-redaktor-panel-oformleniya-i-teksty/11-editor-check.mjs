@@ -1,4 +1,4 @@
-// Usage: node 11-editor-check.mjs --check mark|panel [--url http://localhost:3124]   (later plans add more checks)
+// Usage: node 11-editor-check.mjs --check mark|panel|savechip [--url http://localhost:3124]   (later plans add more checks)
 // Why: Phase 11 has no DOM test runner, so headless Edge drives the production build. Inside the browser it launches,
 // GET /api/access is answered {canEdit: true} and GET /api/content is served from fixtures; every non-GET request to /api/*
 // is blocked and fails the check (nothing is ever saved, no login is needed). The stub is a CDP interception only: no app
@@ -202,6 +202,63 @@ const checks = {
     if (heads !== 0) reasons.push(`(c) ${heads} empty <small> in the field heads`);
     const hint = await cdp.eval(`document.querySelector(".formatted-text-field-hint")?.textContent ?? null`);
     if (hint !== "Текст и GIF можно использовать вместе. Не добавляйте лишних элементов.") reasons.push(`(c) hint reads ${JSON.stringify(hint)}`);
+  },
+  async savechip(cdp) {
+    serve(editorFixture(), 1);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    const chip = '.editor-save-chip';
+    const chipInfo = () => cdp.eval(`(() => { const w = document.querySelector(".editor-save-chip"); const b = w?.querySelector(":scope > button"); if (!b) return null; const r = b.getBoundingClientRect(); const win = document.querySelector(".editor-window").getBoundingClientRect(); return { text: b.textContent, label: b.getAttribute("aria-label"), expanded: b.getAttribute("aria-expanded"), border: getComputedStyle(b).borderTopColor, blocked: w.hasAttribute("data-blocked"), rect: { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }, win: { left: win.left, right: win.right, top: win.top, bottom: win.bottom } }; })()`);
+    const popover = () => cdp.eval(`(() => { const p = document.querySelector(".editor-save-popover"); if (!p) return null; const r = p.getBoundingClientRect(); return { text: p.textContent, buttons: [...p.querySelectorAll("button")].map((b) => b.textContent.trim() || b.getAttribute("aria-label")), visible: r.width > 0 && r.height > 0 }; })()`);
+    const typeX = async () => { // «Х» into the virus name (first input of the form)
+      await cdp.eval(`(() => { const i = document.querySelector(".virus-editor-form input"); i.scrollIntoView({ block: "center" }); i.focus(); })()`);
+      await cdp.send("Input.insertText", { text: "Х" });
+      await sleep(200);
+    };
+    // (a) a clean draft has no chip and exactly one polite live region
+    if (await cdp.eval(`!!document.querySelector(${JSON.stringify(chip)})`)) reasons.push("(a) a chip is shown for a clean draft");
+    const live = await cdp.eval(`document.querySelectorAll('.content-editor [role="status"][aria-live="polite"]').length`);
+    if (live !== 1) reasons.push(`(a) ${live} polite live regions in the editor, expected 1`);
+    // (b) one edit: the chip counts 1 and is amber
+    await typeX();
+    let info = await chipInfo();
+    if (!info) { reasons.push("(b) no chip after an edit"); return; }
+    if (info.text !== "1") reasons.push(`(b) chip text "${info.text}", expected 1`);
+    if (info.label !== "Не сохранено разделов: 1") reasons.push(`(b) aria-label "${info.label}"`);
+    if (info.border !== "rgb(239, 184, 78)") reasons.push(`(b) chip border ${info.border}, expected rgb(239, 184, 78)`);
+    // (c) it sits inside the editor window and is small
+    const { rect: r, win } = info;
+    if (!(r.left >= win.left && r.right <= win.right && r.top >= win.top && r.bottom <= win.bottom)) reasons.push(`(c) chip ${JSON.stringify(r)} is outside the editor window ${JSON.stringify(win)}`);
+    if (!(r.height <= 44 && r.width <= 64)) reasons.push(`(c) chip is ${r.width}x${r.height}, expected at most 64x44`);
+    // (d) a click opens the list with the three actions
+    const open = async () => { await cdp.eval(`document.querySelector(${JSON.stringify(`${chip} > button`)}).focus()`); if ((await chipInfo()).expanded !== "true") await click(cdp, `${chip} > button`); await sleep(150); }; // a real tap also focuses the button
+    await open();
+    let pop = await popover();
+    if (!pop?.visible) reasons.push("(d) the popover is not visible after a click");
+    else {
+      if (!pop.text.includes("НЕ СОХРАНЕНО")) reasons.push("(d) the popover has no «НЕ СОХРАНЕНО» title");
+      if (!pop.text.includes("База вирусов")) reasons.push("(d) the popover does not list «База вирусов»");
+      for (const name of ["↶", "ОТМЕНИТЬ", "СОХРАНИТЬ"]) if (!pop.buttons.includes(name)) reasons.push(`(d) button ${name} missing: ${JSON.stringify(pop.buttons)}`);
+    }
+    if ((await chipInfo()).expanded !== "true") reasons.push("(d) aria-expanded is not true");
+    // (e) Escape closes it and returns focus to the chip button
+    await key(cdp, "Escape", 27);
+    if (await popover()) reasons.push("(e) the popover is still open after Escape");
+    if (!(await cdp.eval(`document.activeElement === document.querySelector(${JSON.stringify(`${chip} > button`)})`))) reasons.push("(e) focus did not return to the chip button");
+    // (f) ОТМЕНИТЬ asks first; «НЕ ОТМЕНЯТЬ» keeps the draft
+    await open();
+    await clickText(cdp, ".editor-save-popover button", "ОТМЕНИТЬ");
+    if (!(await waitFor(cdp, `!!document.querySelector("dialog.portia-dialog[open]")`, 2000))) reasons.push("(f) no discard dialog after ОТМЕНИТЬ");
+    await clickText(cdp, "dialog.portia-dialog[open] button", "НЕ ОТМЕНЯТЬ");
+    if (!(await waitFor(cdp, `!document.querySelector("dialog.portia-dialog[open]")`, 2000))) reasons.push("(f) the dialog did not close");
+    if ((await chipInfo())?.text !== "1") reasons.push("(f) the chip lost its count after НЕ ОТМЕНЯТЬ");
+    // (g) a pointer press outside closes the popover
+    await cdp.eval(`document.activeElement?.blur()`);
+    await open();
+    if (!(await popover())) reasons.push("(g) the popover did not reopen");
+    await cdp.eval(`document.querySelector(".editor-header").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))`);
+    await sleep(150);
+    if (await popover()) reasons.push("(g) the popover is still open after a press on the header");
   },
   async panel(cdp) {
     serve(editorFixture(), 1);

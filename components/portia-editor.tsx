@@ -522,6 +522,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const leaving = employeeDirty && (leaveTo !== null || closeAsked);
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const chipRef = useRef<HTMLDivElement>(null);
+  const popoverId = useId();
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
   const [broadcastEditorTab, setBroadcastEditorTab] = useState<BroadcastTab>("news");
   // A new or moved card is focused once it is in the DOM; focus scrolls it into view (G-03.2-2a).
@@ -873,10 +876,21 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
+  useEffect(() => {
+    if (!popoverOpen) return;
+    const away = (event: PointerEvent) => { if (!chipRef.current?.contains(event.target as Node)) setPopoverOpen(false); };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [popoverOpen]);
+
   // Only a save starts a new saveState, so after ОТМЕНИТЬ or undo back to clean the conflict text would sit over a current editor.
   const conflict = saveState === "conflict" && dirty;
-  // While the format panel is open the bar is its anchor, so it must not appear under the panel mid-session (D-01/D-02).
-  const barVisible = dirty || saveState === "saving" || saveState === "saved" || formatterOpen;
+  // The chip stays while anything is unsaved, so a compact chip never hides unsaved work (D-09).
+  const chipVisible = dirty || saveState === "saving" || saveState === "saved";
+  // Derived reset: the popover only lists unsaved sections, so it closes when the draft is clean.
+  if (popoverOpen && !dirty) setPopoverOpen(false);
+  const chipLabel = saveState === "saving" ? "Сохранение…" : dirty ? `Не сохранено разделов: ${changed.length}` : "Сохранено";
+  const chipText = saveState === "saving" ? "…" : dirty ? String(changed.length) : "✓";
   const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
     : conflict ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
     : saveState === "error" ? "ОШИБКА"
@@ -1285,20 +1299,36 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
-      {barVisible && (
-        <div className="editor-savebar" data-dirty={dirty || undefined}>
-          <p role="status" aria-live="polite">
-            {statusText && <span className={`editor-save-status ${saveState}`}>{statusText}</span>}
-            {dirty && <span className="editor-savebar-sections">{`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}</span>}
-            {dirty && oversize.length > 0 && <span className="editor-savebar-sections">{oversizeMessage(oversize)}</span>}
-            {dirty && bodyMessage && <span className="editor-save-status error">{bodyMessage}</span>}
-            {dirty && badQuest && <button type="button" className="editor-savebar-fix" onClick={() => revealCard(badQuest.id, "endsAt", "quests")}>{dateMessage}</button>}
-          </p>
-          <div className="editor-savebar-actions">
-            <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
-            <button type="button" className="secondary-control" disabled={!dirty || saveState === "saving"} onClick={() => setDialog("discard")}>ОТМЕНИТЬ</button>
-            <button type="button" className="primary-control" disabled={!dirty || saveState === "saving" || saveBlocked} onClick={() => void save()}>СОХРАНИТЬ</button>
-          </div>
+      <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? ` Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>
+      {chipVisible && (
+        <div
+          className="editor-save-chip"
+          data-dirty={dirty || undefined}
+          ref={chipRef}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || !popoverOpen) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setPopoverOpen(false);
+            chipRef.current?.querySelector<HTMLButtonElement>(":scope > button")?.focus();
+          }}
+        >
+          <button type="button" aria-label={chipLabel} title={`Не сохранено: ${changed.length}`} aria-expanded={popoverOpen} aria-haspopup="dialog" aria-controls={popoverId} onClick={() => setPopoverOpen((open) => !open)}>{chipText}</button>
+          {popoverOpen && dirty && (
+            <div className="editor-save-popover" id={popoverId} role="dialog" aria-label="Несохранённые изменения">
+              <strong>НЕ СОХРАНЕНО</strong>
+              <ul>{changed.map((id) => <li key={id} title={sectionLabels[id]}>{sectionLabels[id]}</li>)}</ul>
+              {statusText && <span className={`editor-save-status ${saveState}`}>{statusText}</span>}
+              {oversize.length > 0 && <span className="editor-save-reason">{oversizeMessage(oversize)}</span>}
+              {bodyMessage && <span className="editor-save-status error">{bodyMessage}</span>}
+              {badQuest && <button type="button" className="editor-save-fix" onClick={() => { setPopoverOpen(false); revealCard(badQuest.id, "endsAt", "quests"); }}>{dateMessage}</button>}
+              <div className="editor-save-actions">
+                <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
+                <button type="button" className="secondary-control" disabled={!dirty || saveState === "saving"} onClick={() => setDialog("discard")}>ОТМЕНИТЬ</button>
+                <button type="button" className="primary-control" disabled={!dirty || saveState === "saving" || saveBlocked} onClick={() => void save()}>СОХРАНИТЬ</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       {dialog === "discard" && (
