@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isAllowedMediaUrl } from "./media-url.ts";
 
 export type PortiaEmployee = {
   id: string;
@@ -284,7 +285,7 @@ const storedRating = (value: unknown) => (typeof value === "number" && Number.is
 export function profileFromRow(row: ProfileColumns): EmployeeProfile {
   return {
     biography: row.biography,
-    photoUrl: row.photo_url,
+    photoUrl: typeof row.photo_url === "string" && isAllowedMediaUrl(row.photo_url) ? row.photo_url : "",
     knowledgeRating: row.knowledge_rating,
     pawsRating: storedRating(row.paws_rating),
     bioRating: storedRating(row.bio_rating),
@@ -520,7 +521,7 @@ export function sanitizeEmployeeUpdate(value: unknown): EmployeeUpdate | null {
   if (candidate.photoUrl !== undefined) {
     if (typeof candidate.photoUrl !== "string") return null;
     const photoUrl = candidate.photoUrl.trim().slice(0, 2048);
-    if (photoUrl && !photoUrl.startsWith("https://") && !photoUrl.startsWith("/")) return null;
+    if (photoUrl && !isAllowedMediaUrl(photoUrl)) return null;
     update.photoUrl = photoUrl;
   }
   for (const { key } of optionalRatings) {

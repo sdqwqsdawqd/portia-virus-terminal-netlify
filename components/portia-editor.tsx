@@ -21,6 +21,7 @@ import {
   type RichTextStyle,
   type Virus,
 } from "@/lib/portia-content";
+import { isLocalMediaPath } from "@/lib/media-url";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS, MAX_TABLE_ROWS, bodyTooLargeMessage, contentBodyBytes, limitStatus, limitText, oversizeFields, oversizeMessage } from "@/lib/content-limits";
 import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
@@ -88,7 +89,7 @@ function mediaUrlFromText(value: string) {
   const trimmed = value.trim();
   const markdown = trimmed.match(/^!\[[^\]]*\]\((https:\/\/[^\s)]+)\)$/i);
   const plain = trimmed.match(/https:\/\/[^\s<>"']+/i);
-  const extracted = (markdown?.[1] ?? plain?.[0] ?? (trimmed.startsWith("/") ? trimmed : "")).replace(/[),.;]+$/, "");
+  const extracted = (markdown?.[1] ?? plain?.[0] ?? (isLocalMediaPath(trimmed) ? trimmed : "")).replace(/[),.;]+$/, "");
   if (!extracted) return trimmed;
 
   try {
