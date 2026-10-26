@@ -30,7 +30,15 @@ findings:
     severity: info
     disposition: open
     title: "Save chip has a dangling aria-controls and a dialog without focus management"
-open: 3
+  - id: IN-03
+    severity: info
+    disposition: open
+    title: "Fold predicate reads the DOM inside a setFormatTarget updater (re-review IN-01)"
+  - id: IN-04
+    severity: info
+    disposition: open
+    title: "Peers commit snapshot value/document; sync effect does not clear formatTarget (re-review IN-02)"
+open: 5
 ---
 
 # Phase 11 — code review disposition
@@ -40,6 +48,8 @@ open: 3
 | CR-01 | critical | fixed | fixed in 0bdf9b4, 7be2bba; test «a gone peer leaves with its fragments» (`node --experimental-strip-types --test lib/format-fragments.test.ts`); harness `--check peers` steps (a), (b); the archived `onRemoveMutation` clears the target like the live delete; `node .planning/phases/PORTIA-11-redaktor-panel-oformleniya-i-teksty/11-editor-check.mjs --check peers --url http://localhost:3124` |
 | WR-01 | warning | fixed | fixed in 7be2bba; `commitEditorValue` starts a plain gesture; harness `--check peers` step (c); `node .planning/phases/PORTIA-11-redaktor-panel-oformleniya-i-teksty/11-editor-check.mjs --check peers --url http://localhost:3124` |
 | WR-02 | warning | fixed | fixed in 7be2bba; `toggleCard`/`setAllOpen` prune peers via `dropFormatFields`; harness `--check peers` step (d); `node .planning/phases/PORTIA-11-redaktor-panel-oformleniya-i-teksty/11-editor-check.mjs --check peers --url http://localhost:3124` |
-| WR-03 | warning | open | 11-REVIEW.md |
-| IN-01 | info | open | 11-REVIEW.md |
-| IN-02 | info | open | 11-REVIEW.md |
+| WR-03 | warning | open | 11-REVIEW.md at 89eea5a (pre-11-08 review) |
+| IN-01 | info | open | 11-REVIEW.md at 89eea5a (pre-11-08 review) |
+| IN-02 | info | open | 11-REVIEW.md at 89eea5a (pre-11-08 review) |
+| IN-03 | info | open | 11-REVIEW.md (re-review after 11-08), its IN-01 |
+| IN-04 | info | open | 11-REVIEW.md (re-review after 11-08), its IN-02 |
