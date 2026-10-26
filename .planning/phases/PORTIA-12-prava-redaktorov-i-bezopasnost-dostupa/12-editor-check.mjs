@@ -240,6 +240,40 @@ const checks = {
     if (!same(await chipState(cdp), LABELS.map((l) => l === "Сводка" ? "false" : "true"))) reasons.push("(a) the chip did not flip at once");
     if (!(await waitFor(cdp, `[...document.querySelectorAll(".access-editor-list [role=status]")].some((n) => n.textContent.trim() === "Сохранено")`, 3000))) reasons.push("(a) «Сохранено» did not appear in the row");
     if (patches.length !== 1 || !same(patches[0].body, { email: "ed@example.com", closedTabs: ["broadcasts"], grantedTabs: [] })) reasons.push(`(a) PATCH bodies ${JSON.stringify(patches.map((x) => x.body))}`);
+    // (b) two quick clicks while the answer takes 800 ms: the second request goes out only after the first was answered
+    if (!(await openAccess(cdp, baseEditors()))) return;
+    current.fakePatch = { delay: 800 };
+    await clickChip(cdp, "Сводка"); await sleep(100); await clickChip(cdp, "Корзина");
+    await sleep(2600); // both answers: 800 ms, then the resend for 800 ms
+    if (patches.length !== 2) reasons.push(`(b) ${patches.length} PATCH requests, expected exactly 2`);
+    else {
+      if (patches[1].sentAt < patches[0].answeredAt) reasons.push(`(b) the second PATCH was sent at ${patches[1].sentAt} before the first was answered at ${patches[0].answeredAt}`);
+      if (!same(patches[1].body.closedTabs, ["broadcasts", "recycle"])) reasons.push(`(b) the second closedTabs is ${JSON.stringify(patches[1].body.closedTabs)}`);
+      console.error(`(b) send/answer times (ms after the first send): ${JSON.stringify(patches.map((x) => ({ sent: x.sentAt - patches[0].sentAt, answered: x.answeredAt - patches[0].sentAt })))}`);
+    }
+    if (!same(await chipState(cdp), LABELS.map((l) => l === "Сводка" || l === "Корзина" ? "false" : "true"))) reasons.push("(b) the two chips do not both end off");
+    // (c) a 503 pending-database answer: the chip goes back and the row shows the text
+    const pending = "Вкладки по редакторам заработают после применения SQL.";
+    if (!(await openAccess(cdp, baseEditors()))) return;
+    current.fakePatch = { delay: 200, status: 503, code: "pending-database", error: pending };
+    await clickChip(cdp, "Сводка");
+    await waitFor(cdp, `[...document.querySelectorAll(".access-editor-list [role=status]")].some((n) => n.textContent.trim() === ${JSON.stringify(pending)})`, 3000);
+    if (!same(await chipState(cdp), LABELS.map(() => "true"))) reasons.push("(c) the chip did not go back after the 503");
+    if (!(await cdp.eval(`[...document.querySelectorAll(".access-editor-list [role=status]")].some((n) => n.textContent.trim() === ${JSON.stringify(pending)})`))) reasons.push("(c) the row does not show the error text");
+    // (d) tabsEnforced false: every chip disabled, the line exactly once (two editors)
+    const two = [...baseEditors(), { email: "second@example.com", created_at: "2026-01-02T00:00:00Z", closedTabs: [], grantedTabs: [] }];
+    if (!(await openAccess(cdp, two, false))) return;
+    const disabledCount = await cdp.eval(`[...document.querySelectorAll(${JSON.stringify(CHIP)})].filter((b) => b.disabled).length`);
+    if (disabledCount !== 14) reasons.push(`(d) ${disabledCount} of 14 chips are disabled`);
+    const lines = await cdp.eval(`[...document.querySelectorAll(".access-editor-list p.editor-guidance")].filter((n) => n.textContent.trim() === "Вкладки по редакторам заработают после применения SQL").length`);
+    if (lines !== 1) reasons.push(`(d) the pending line shows ${lines} times, expected 1`);
+    // (e) all seven off: the row and ОТОЗВАТЬ stay
+    if (!(await openAccess(cdp, baseEditors()))) return;
+    for (const label of LABELS) { await clickChip(cdp, label); await sleep(100); }
+    await sleep(2500);
+    if (!same(await chipState(cdp), LABELS.map(() => "false"))) reasons.push("(e) not every chip ended off");
+    // looked at, never clicked: a DELETE would be blocked
+    if (!(await cdp.eval(`[...document.querySelectorAll(".access-editor-list > div > button")].some((b) => b.textContent.trim() === "ОТОЗВАТЬ")`))) reasons.push("(e) the row or ОТОЗВАТЬ is gone");
   },
 };
 

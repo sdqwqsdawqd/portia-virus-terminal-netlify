@@ -2600,6 +2600,9 @@ function EditorAccessManager() {
   const [notes, setNotes] = useState<Record<string, RowNote>>({});
   const confirmed = useRef(new Map<string, TabLists>());
   const noteTimers = useRef(new Map<string, number>());
+  // Per row: what the owner wants saved last, and whether a PATCH is in flight (at most one, T-12-27).
+  const wanted = useRef(new Map<string, TabLists>());
+  const busy = useRef(new Set<string>());
 
   useEffect(() => {
     const timers = noteTimers.current;
@@ -2629,8 +2632,9 @@ function EditorAccessManager() {
       }
       const payload = await response.json() as { editors?: Partial<EditorAccount>[]; tabsEnforced?: boolean };
       const loaded = (payload.editors ?? []).map((item) => ({ ...item, email: item.email ?? "", created_at: item.created_at ?? "", closedTabs: item.closedTabs ?? [], grantedTabs: item.grantedTabs ?? [] }));
-      loaded.forEach((item) => confirmed.current.set(item.email, { closedTabs: item.closedTabs, grantedTabs: item.grantedTabs }));
-      setEditors(loaded);
+      // A row with a request in flight keeps its local lists: a reload must not undo a click.
+      loaded.filter((item) => !busy.current.has(item.email)).forEach((item) => { const lists = { closedTabs: item.closedTabs, grantedTabs: item.grantedTabs }; confirmed.current.set(item.email, lists); wanted.current.set(item.email, lists); });
+      setEditors((current) => loaded.map((item) => busy.current.has(item.email) ? current.find((row) => row.email === item.email) ?? item : item));
       setTabsEnforced(payload.tabsEnforced === true);
       setState("idle");
       if (!keepMessage) setMessage("");
@@ -2676,6 +2680,8 @@ function EditorAccessManager() {
         return;
       }
       setEditors((current) => current.filter((item) => item.email !== editorEmail));
+      confirmed.current.delete(editorEmail);
+      wanted.current.delete(editorEmail);
       setMessage("Доступ отозван.");
       setState("idle");
     } catch {
@@ -2684,28 +2690,48 @@ function EditorAccessManager() {
     }
   };
 
-  // One click saves the full lists on its own (D-02); an error puts the row back to what the server last confirmed.
-  const toggleTab = async (editor: EditorAccount, tab: TabDef) => {
-    const key = tab.kind === "trusted" ? "grantedTabs" : "closedTabs";
-    const list = editor[key].includes(tab.id) ? editor[key].filter((id) => id !== tab.id) : [...editor[key], tab.id];
-    const next: TabLists = { closedTabs: editor.closedTabs, grantedTabs: editor.grantedTabs, [key]: tabRegistry.filter((entry) => list.includes(entry.id)).map((entry) => entry.id) };
-    const patchRow = (lists: TabLists) => setEditors((current) => current.map((item) => item.email === editor.email ? { ...item, ...lists } : item));
-    patchRow(next);
-    setNote(editor.email, null);
+  const sameLists = (a: TabLists, b: TabLists) => JSON.stringify(a) === JSON.stringify(b);
+  const patchRow = (editorEmail: string, lists: TabLists) => setEditors((current) => current.map((item) => item.email === editorEmail ? { ...item, ...lists } : item));
+
+  // Sends the row's latest wanted lists, one request at a time; if the owner clicked meanwhile, sends once more.
+  const flushRow = async (editorEmail: string) => {
+    if (busy.current.has(editorEmail)) return;
+    busy.current.add(editorEmail);
+    const rollback = (text: string) => {
+      const back = confirmed.current.get(editorEmail) ?? { closedTabs: [], grantedTabs: [] };
+      wanted.current.set(editorEmail, back);
+      patchRow(editorEmail, back);
+      setNote(editorEmail, { error: true, text });
+    };
     try {
-      const response = await fetch("/api/editors", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: editor.email, ...next }), signal: AbortSignal.timeout(15_000) });
-      const payload = await response.json().catch(() => ({})) as { error?: string; editor?: Partial<TabLists> };
-      if (!response.ok) {
-        patchRow(confirmed.current.get(editor.email) ?? { closedTabs: [], grantedTabs: [] });
-        setNote(editor.email, { error: true, text: payload.error ?? "Не удалось сохранить." });
-        return;
+      for (;;) {
+        const sent = wanted.current.get(editorEmail);
+        const stored = confirmed.current.get(editorEmail);
+        if (!sent || (stored && sameLists(sent, stored))) return;
+        const response = await fetch("/api/editors", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: editorEmail, ...sent }), signal: AbortSignal.timeout(15_000) });
+        const payload = await response.json().catch(() => ({})) as { error?: string; editor?: Partial<TabLists> };
+        if (!response.ok) { rollback(payload.error ?? "Не удалось сохранить."); return; }
+        const answered = { closedTabs: payload.editor?.closedTabs ?? sent.closedTabs, grantedTabs: payload.editor?.grantedTabs ?? sent.grantedTabs };
+        confirmed.current.set(editorEmail, answered);
+        if (wanted.current.get(editorEmail) === sent) { setNote(editorEmail, { error: false, text: "Сохранено" }); return; }
       }
-      confirmed.current.set(editor.email, { closedTabs: payload.editor?.closedTabs ?? next.closedTabs, grantedTabs: payload.editor?.grantedTabs ?? next.grantedTabs });
-      setNote(editor.email, { error: false, text: "Сохранено" });
     } catch {
-      patchRow(confirmed.current.get(editor.email) ?? { closedTabs: [], grantedTabs: [] });
-      setNote(editor.email, { error: true, text: "Нет связи с сервером. Попробуйте ещё раз." });
+      rollback("Нет связи с сервером. Попробуйте ещё раз.");
+    } finally {
+      busy.current.delete(editorEmail);
     }
+  };
+
+  // One click saves the full lists on its own (D-02); an error puts the row back to what the server last confirmed.
+  const toggleTab = (editor: EditorAccount, tab: TabDef) => {
+    const base = wanted.current.get(editor.email) ?? editor;
+    const key = tab.kind === "trusted" ? "grantedTabs" : "closedTabs";
+    const list = base[key].includes(tab.id) ? base[key].filter((id) => id !== tab.id) : [...base[key], tab.id];
+    const next: TabLists = { closedTabs: base.closedTabs, grantedTabs: base.grantedTabs, [key]: tabRegistry.filter((entry) => list.includes(entry.id)).map((entry) => entry.id) };
+    wanted.current.set(editor.email, next);
+    patchRow(editor.email, next);
+    setNote(editor.email, null);
+    void flushRow(editor.email);
   };
 
   return <div className="editor-form flat-editor-form access-editor">
@@ -2720,7 +2746,7 @@ function EditorAccessManager() {
         const note = notes[editor.email];
         return <div key={editor.email}><div><strong>{editor.email}</strong><small>ДОСТУП К РЕДАКТОРУ</small>
           <div className="access-tab-chips" role="group" aria-label={`Вкладки ${editor.email}`}>
-            {tabRegistry.map((tab) => <button key={tab.id} type="button" className="access-tab-chip" aria-pressed={open.includes(tab.id)} disabled={!tabsEnforced} onClick={() => void toggleTab(editor, tab)}>{open.includes(tab.id) ? `✓ ${tab.label}` : tab.label}</button>)}
+            {tabRegistry.map((tab) => <button key={tab.id} type="button" className="access-tab-chip" aria-pressed={open.includes(tab.id)} disabled={!tabsEnforced} onClick={() => toggleTab(editor, tab)}>{open.includes(tab.id) ? `✓ ${tab.label}` : tab.label}</button>)}
           </div>
           {note && <span className={`access-tab-note${note.error ? " is-error" : ""}`} role="status">{note.text}</span>}
         </div><button type="button" onClick={() => void removeEditor(editor.email)}>ОТОЗВАТЬ</button></div>;
