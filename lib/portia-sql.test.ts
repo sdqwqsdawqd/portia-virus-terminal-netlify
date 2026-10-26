@@ -89,3 +89,54 @@ test("STEP 4 is one transaction", () => {
   assert.match(body, /^begin;/);
   assert.match(body, /commit;$/);
 });
+
+// Setup file: the same end state for a fresh install (D-20).
+const setup = readFileSync(new URL("../supabase/portia_setup.sql", import.meta.url), "utf8");
+
+function functionBlock(sql: string, name: string) {
+  const match = sql.match(new RegExp(`create or replace function public\\.${name}\\([\\s\\S]*?\\$\\$;`));
+  assert.ok(match, `function ${name} is missing`);
+  return collapse(match[0]);
+}
+
+test("setup and apply define the same functions (D-20)", () => {
+  const applyStep2 = step("2");
+  for (const name of ["portia_email_confirmed", "portia_is_owner", "portia_can_edit", "portia_can_edit_tab", "portia_has_tab_grant"]) {
+    assert.equal(functionBlock(setup, name), functionBlock(applyStep2, name), name);
+  }
+});
+
+test("setup defines portia_email_confirmed before portia_is_owner uses it", () => {
+  assert.ok(setup.indexOf("function public.portia_email_confirmed") < setup.indexOf("function public.portia_is_owner"));
+});
+
+test("setup is one transaction that starts with the owner guard", () => {
+  const body = withoutComments(setup);
+  assert.match(body, /^begin;\s*do \$\$/);
+  const guard = body.slice(body.indexOf("do $$"), body.indexOf("$$;"));
+  assert.match(guard, /raise exception/);
+  assert.match(guard, /email_confirmed_at is null/);
+  assert.match(body, /commit;$/);
+});
+
+test("setup carries the same photo_url regex and no inline photo_url check", () => {
+  const literals = regexLiterals(setup);
+  assert.ok(literals.length > 0);
+  for (const literal of literals) assert.equal(literal, PHOTO_REGEX);
+  const table = setup.slice(setup.indexOf("create table if not exists public.portia_employee_profiles"));
+  assert.doesNotMatch(table.slice(0, table.indexOf("\n);")), /check \(photo_url/);
+});
+
+test("setup employee write policies use portia_can_edit_tab('employees') and never portia_can_edit()", () => {
+  for (const name of employeePolicies) {
+    const block = policyBlock(setup, name);
+    assert.match(block, /portia_can_edit_tab\('employees'\)/, name);
+    assert.doesNotMatch(block, /portia_can_edit\(\)/, name);
+  }
+});
+
+test("setup keeps the content and storage policies on portia_can_edit()", () => {
+  for (const name of ["Editors can create PORTIA content", "Editors can update PORTIA content", "Editors can upload PORTIA media"]) {
+    assert.match(policyBlock(setup, name), /portia_can_edit\(\)/, name);
+  }
+});
