@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { classificationOptions, findInfo, portiaTextKey, type Broadcast, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
+import { classificationOptions, findGuide, findInfo, portiaTextKey, type Broadcast, type GuideBlock, type GuideSection, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
 import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
@@ -19,7 +19,7 @@ const PortiaEditor = dynamic(
   { ssr: false, loading: () => <div className="editor-empty">Загрузка редактора…</div> },
 );
 
-type AppId = "archive" | "employees" | "search" | "info" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor";
+type AppId = "archive" | "employees" | "search" | "info" | "guide" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor";
 
 // Department documents that live elsewhere, shown inside PORTIA as app windows.
 const embeddedApps = {
@@ -44,7 +44,7 @@ const WINDOW_FADE_OUT_MS = 120;
 const contentSyncMs = 10_000;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string; customAccent: string };
-type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "settings" | "charter" | "sheet" | "trash";
+type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "settings" | "charter" | "sheet" | "trash";
 type ShortcutPosition = { x: number; y: number };
 
 const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "on", customAccent: "" };
@@ -61,6 +61,7 @@ const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName
   employees: { label: "Сотрудники", path: "PORTIA://PERSONNEL", icon: "employees" },
   search: { label: "Глобальный поиск", path: "PORTIA://GLOBAL_SEARCH", icon: "search" },
   info: { label: "Информация", path: "PORTIA://INFORMATION", icon: "info" },
+  guide: { label: "Справочник", path: "PORTIA://GUIDE", icon: "guide" },
   settings: { label: "Настройки", path: "PORTIA://DESKTOP_SETTINGS", icon: "settings" },
   broadcasts: { label: "Сводка", path: "PORTIA://NEWS", icon: "broadcasts" },
   trash: { label: "Корзина", path: "PORTIA://RECYCLE_BIN", icon: "trash" },
@@ -74,6 +75,7 @@ const initialWindows: Record<AppId, WindowState> = {
   employees: { open: false, minimized: false, maximized: false, z: 10 },
   search: { open: false, minimized: false, maximized: false, z: 10 },
   info: { open: false, minimized: false, maximized: false, z: 10 },
+  guide: { open: false, minimized: false, maximized: false, z: 10 },
   settings: { open: false, minimized: false, maximized: false, z: 10 },
   broadcasts: { open: false, minimized: false, maximized: false, z: 10 },
   trash: { open: false, minimized: false, maximized: false, z: 10 },
@@ -91,6 +93,7 @@ function createWindowGeometry(appId: AppId, cascadeIndex: number): WindowGeometr
     employees: [960, 680],
     search: [760, 590],
     info: [820, 650],
+    guide: [820, 650],
     settings: [820, 650],
     broadcasts: [820, 650],
     trash: [980, 680],
@@ -118,6 +121,7 @@ const windowMinimums: Record<AppId, { width: number; height: number }> = {
   editor: { width: 720, height: 480 },
   search: { width: 520, height: 420 },
   info: { width: 560, height: 420 },
+  guide: { width: 560, height: 420 },
   settings: { width: 520, height: 420 },
   broadcasts: { width: 520, height: 420 },
   trash: { width: 640, height: 440 },
@@ -296,6 +300,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [globalQuery, setGlobalQuery] = useState("");
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [selectedInfoId, setSelectedInfoId] = useState(initialContent.infoSections[0]?.id ?? "");
+  const [guideCardId, setGuideCardId] = useState("");
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings>(defaultDesktopSettings);
   const [shortcutPositions, setShortcutPositions] = useState<Partial<Record<DesktopShortcutId, ShortcutPosition>>>({});
   const [shortcutPositionsLoaded, setShortcutPositionsLoaded] = useState(false);
@@ -391,6 +396,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       setContent(fetched);
       setActiveVirusId((current) => fetched.viruses.some((virus) => virus.id === current) ? current : fetched.viruses[0]?.id ?? "");
       setSelectedInfoId((current) => findInfo(fetched.infoSections, current) ? current : fetched.infoSections[0]?.id ?? "");
+      setGuideCardId((current) => findGuide(fetched.guideSections, current)?.card ? current : "");
       setRevision(fetchedRevision);
       try {
         window.localStorage.setItem(contentCacheStorageKey, JSON.stringify({
@@ -473,6 +479,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             setRevision(cachedRevision);
             setActiveVirusId((current) => cachedContent.viruses.some((virus) => virus.id === current) ? current : cachedContent.viruses[0]?.id ?? "");
             setSelectedInfoId((current) => findInfo(cachedContent.infoSections, current) ? current : cachedContent.infoSections[0]?.id ?? "");
+            setGuideCardId((current) => findGuide(cachedContent.guideSections, current)?.card ? current : "");
             setContentReady(true);
           }
         }
@@ -593,7 +600,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     try {
       const saved = window.localStorage.getItem(shortcutPositionsStorageKey);
       const parsed = saved ? JSON.parse(saved) as Record<string, ShortcutPosition> : {};
-      const allowed = new Set<DesktopShortcutId>(["search", "archive", "employees", "broadcasts", "info", "settings", "charter", "sheet", "trash"]);
+      const allowed = new Set<DesktopShortcutId>(["search", "archive", "employees", "broadcasts", "info", "guide", "settings", "charter", "sheet", "trash"]);
       const restored = Object.fromEntries(Object.entries(parsed).filter(([key, value]) => allowed.has(key as DesktopShortcutId) && Number.isFinite(value?.x) && Number.isFinite(value?.y))) as Partial<Record<DesktopShortcutId, ShortcutPosition>>;
       restoreTimer = window.setTimeout(() => {
         setShortcutPositions(restored);
@@ -1018,6 +1025,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       const savedRevision = payload.revision ?? baseRevision + 1;
       knownRevision.current = savedRevision;
       setContent(next);
+      setGuideCardId((current) => findGuide(next.guideSections, current)?.card ? current : "");
       setRevision(savedRevision);
       try {
         window.localStorage.setItem(contentCacheStorageKey, JSON.stringify({
@@ -1248,6 +1256,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <DesktopIcon app="employees" onOpen={openApp} position={shortcutPositions.employees} onMove={moveDesktopShortcut} />
             <DesktopIcon app="broadcasts" onOpen={openApp} position={shortcutPositions.broadcasts} onMove={moveDesktopShortcut} badge={broadcastUnread} />
             <DesktopIcon app="info" onOpen={openApp} position={shortcutPositions.info} onMove={moveDesktopShortcut} />
+            <DesktopIcon app="guide" onOpen={openApp} position={shortcutPositions.guide} onMove={moveDesktopShortcut} />
             <DesktopIcon app="settings" onOpen={openApp} position={shortcutPositions.settings} onMove={moveDesktopShortcut} />
             <DesktopIcon app="charter" onOpen={openApp} position={shortcutPositions.charter} onMove={moveDesktopShortcut} />
             <DesktopIcon app="sheet" onOpen={openApp} position={shortcutPositions.sheet} onMove={moveDesktopShortcut} />
@@ -1357,6 +1366,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 : <div className="content-fade" key={selectedInfo.id}><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></div>
               ) : <div className="editor-empty">Разделов пока нет.</div>}</article>
             </div>}
+          </AppWindow>
+
+          <AppWindow app="guide" state={windows.guide} active={activeApp === "guide"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window guide-window" meta="СПРАВОЧНИК">
+            {!contentReady ? <LoadingState label="Загрузка справочника…" /> : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={setGuideCardId} />}
           </AppWindow>
 
           <AppWindow app="broadcasts" state={windows.broadcasts} active={activeApp === "broadcasts"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window broadcasts-window" meta="КАНАЛ СТАНЦИИ">
@@ -1664,6 +1677,70 @@ function EmbeddedDocument({ src, external, title }: { src: string; external: str
       <a className="document-app-external" href={external} target="_blank" rel="noreferrer">Открыть отдельно</a>
     </div>
   </div>;
+}
+
+// «Справочник»: the grid and the card page are one derived view of openCardId; a card that vanished simply means the grid (D-00d).
+function GuideApp({ sections, formattedText, openCardId, onOpenCard }: {
+  sections: GuideSection[];
+  formattedText: PortiaContent["formattedText"];
+  openCardId: string;
+  onOpenCard: (id: string) => void;
+}) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const page = useRef<HTMLElement>(null);
+  const returnTo = useRef<{ cardId: string; scrollTop: number; sections: string } | null>(null);
+  const backIntent = useRef(false);
+  const lastShown = useRef("");
+  const found = findGuide(sections, openCardId);
+  const card = found?.card ?? null;
+  const shownId = card?.id ?? "";
+
+  useLayoutEffect(() => {
+    const root = scroller.current;
+    const previous = lastShown.current;
+    if (!root || previous === shownId) return;
+    lastShown.current = shownId;
+    if (shownId) {
+      root.scrollTop = 0;
+      page.current?.focus({ preventScroll: true });
+      return;
+    }
+    const back = backIntent.current;
+    backIntent.current = false;
+    const saved = returnTo.current;
+    root.scrollTop = back && saved && saved.cardId === previous && saved.sections === JSON.stringify(sections) ? saved.scrollTop : 0;
+    if (back) (root.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(previous)}"]`) ?? root).focus({ preventScroll: true });
+  }, [shownId, sections]);
+
+  const openTile = (cardId: string) => {
+    returnTo.current = { cardId, scrollTop: scroller.current?.scrollTop ?? 0, sections: JSON.stringify(sections) };
+    onOpenCard(cardId);
+  };
+
+  return <div className="guide-app" ref={scroller} tabIndex={-1}>
+    {found && card ? <>
+      <div className="guide-back-bar"><button type="button" aria-label="Назад к списку карточек" onClick={() => { backIntent.current = true; onOpenCard(""); }}><span aria-hidden="true">←</span> Назад</button></div>
+      <article className="guide-page" tabIndex={-1} ref={page}>
+        <span className="eyebrow">{found.section.title || "Без названия"}</span>
+        <h1>{card.title || "Без названия"}</h1>
+        <div className="guide-blocks">{card.blocks.map((block) => <GuideBlockView key={block.id} block={block} formattedText={formattedText} cardTitle={card.title} />)}</div>
+      </article>
+    </> : sections.map((section) => <section className="guide-section" key={section.id}>
+      <button type="button" className="guide-section-head"><span className="guide-section-title">{section.title || "Без названия"}</span></button>
+      <div className="guide-grid" id={`guide-grid-${section.id}`}>
+        {section.cards.map((item) => <button key={item.id} type="button" className="guide-tile" data-card-id={item.id} onClick={() => openTile(item.id)}>
+          {item.cover && <span className="guide-tile-cover"><img src={item.cover} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" /></span>}
+          <span className="guide-tile-title">{item.title || "Без названия"}</span>
+        </button>)}
+      </div>
+    </section>)}
+  </div>;
+}
+
+function GuideBlockView({ block, formattedText }: { block: GuideBlock; formattedText: PortiaContent["formattedText"]; cardTitle: string }) {
+  if (block.type === "heading") return block.text.trim() ? <h2 className="guide-heading">{block.text}</h2> : null;
+  if (block.type === "text") return <FormattedText className="info-document-copy" text={block.text} document={formattedText[portiaTextKey.guideBlock(block.id)]} />;
+  return null;
 }
 
 function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClose, onGeometry, className, meta, children }: {

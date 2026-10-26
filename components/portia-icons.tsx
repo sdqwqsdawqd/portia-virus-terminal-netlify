@@ -1,7 +1,7 @@
 import type { SVGProps } from "react";
 
 export type PortiaIconName =
-  | "search" | "virus" | "employees" | "broadcasts" | "info"
+  | "search" | "virus" | "employees" | "broadcasts" | "info" | "guide"
   | "settings" | "charter" | "sheet" | "trash" | "editor"
   | "class-hephaestus" | "class-proteus" | "class-apeiron"
   | "class-nomos" | "class-theseus" | "class-abraxas"
@@ -60,6 +60,10 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
     <path d="M6 3.5h8.5L19 8v12.5H6Z" />
     <path d="M14.5 3.5V8H19" />
     <path d="M9 12h7M9 15h7M9 18h4.5" />
+  </>,
+  guide: <>
+    <path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4.2l2 2.2H19a1.5 1.5 0 0 1 1.5 1.5V17.5A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5Z" />
+    <path d="M3.5 10.5h17" />
   </>,
   settings: <>
     <path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1" />
