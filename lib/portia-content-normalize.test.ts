@@ -30,6 +30,34 @@ test("unsafe media links are cleaned", () => {
   assert.equal(normalized.viruses[0].infectedImage, "");
 });
 
+test("protocol-relative and backslash image links are cleaned (CONT-09)", () => {
+  const content = structuredClone(defaultPortiaContent);
+  content.recycleFiles = [
+    { id: "r1", name: "a", location: "", kind: "image", content: "", image: "//evil.example/x.png", virusId: "" },
+    { id: "r2", name: "b", location: "", kind: "image", content: "", image: "/local.png", virusId: "" },
+  ];
+  content.viruses[0].infectedImage = "/\\evil/x.png";
+  content.viruses[0].mutations[0].image = "//evil/m.png";
+  content.viruses[1].infectedImage = "https://ok.example/a.png";
+  content.infoSections[0].subsections = [{
+    id: "sub-1",
+    title: "",
+    blocks: [
+      { id: "b1", type: "photo", url: "//evil/p.png" },
+      { id: "b2", type: "photo", url: "/local.png" },
+    ],
+  }];
+  const normalized = normalizePortiaContent(content);
+  assert.ok(normalized);
+  assert.equal(normalized.recycleFiles[0].image, "");
+  assert.equal(normalized.recycleFiles[1].image, "/local.png");
+  assert.equal(normalized.viruses[0].infectedImage, "");
+  assert.equal(normalized.viruses[0].mutations[0].image, "");
+  assert.equal(normalized.viruses[1].infectedImage, "https://ok.example/a.png");
+  const blocks = normalized.infoSections[0].subsections[0].blocks;
+  assert.deepEqual(blocks.map((block) => block.type === "photo" ? block.url : null), ["", "/local.png"]);
+});
+
 test("scientist logs stay capped at MAX_SCIENTIST_LOGS", () => {
   const content = structuredClone(defaultPortiaContent);
   content.viruses[0].scientistLogs = Array.from({ length: 7 }, (_, index) => ({
