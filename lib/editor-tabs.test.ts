@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { editorSections, sectionLabels } from "./editor-changes.ts";
-import { closedMessage, closedSectionsOf, openTabIds, parseTabLists, tabRegistry, type TabDef } from "./editor-tabs.ts";
+import { readFileSync } from "node:fs";
+import { defaultPortiaContent, type PortiaContent } from "./portia-content.ts";
+import { closedMessage, closedSectionsOf, contentRefusal, openTabIds, parseTabLists, tabRegistry, type TabDef } from "./editor-tabs.ts";
 
 const allSeven = ["viruses", "info", "broadcasts", "recycle", "search", "assistant", "employees"];
 
@@ -60,4 +62,83 @@ test("parseTabLists rejects bad bodies", () => {
 
 test("parseTabLists removes duplicates and keeps registry order", () => {
   assert.deepEqual(parseTabLists({ closedTabs: ["recycle", "viruses", "recycle"] }), { closedTabs: ["viruses", "recycle"] });
+});
+
+const fixture = (): PortiaContent => structuredClone(defaultPortiaContent);
+const sixSections = allSeven.slice(0, 6);
+const without = (...ids: string[]) => allSeven.filter((id) => !ids.includes(id));
+const withBroadcast = (): PortiaContent => {
+  const content = fixture();
+  content.broadcasts.push({ id: "b1", type: "news", title: "a", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" });
+  return content;
+};
+
+test("contentRefusal: all seven open is null even when every section changed", () => {
+  const draft = fixture();
+  draft.viruses[0].name = "X";
+  draft.broadcasts.push(withBroadcast().broadcasts[0]);
+  draft.recycleFiles[0].name = "X";
+  assert.equal(contentRefusal(fixture(), draft, allSeven), null);
+});
+
+test("contentRefusal: a changed broadcast with «Сводка» closed gives 403 naming it", () => {
+  const baseline = withBroadcast();
+  const draft = structuredClone(baseline);
+  draft.broadcasts[0].title = "b";
+  assert.deepEqual(contentRefusal(baseline, draft, without("broadcasts")), {
+    status: 403, error: "Раздел «Сводка» для вас закрыт.", code: "section-closed", sections: ["broadcasts"],
+  });
+});
+
+test("contentRefusal: two closed and changed sections are both named", () => {
+  const draft = fixture();
+  draft.broadcasts.push(withBroadcast().broadcasts[0]);
+  draft.assistantOffendedPhrase = "X";
+  const refusal = contentRefusal(fixture(), draft, without("broadcasts", "assistant"));
+  assert.equal(refusal?.status, 403);
+  assert.equal(refusal?.error, "Разделы «Сводка», «Помощник» для вас закрыты.");
+  assert.deepEqual(refusal?.sections, ["broadcasts", "assistant"]);
+});
+
+test("contentRefusal: D-13 a live virus moved to the bin saves with «Корзина» closed, a bin edit does not", () => {
+  const moved = fixture();
+  const [virus] = moved.viruses.splice(0, 1);
+  moved.recycledViruses.push(virus);
+  moved.recycleOrder.push(`virus:${virus.id}`);
+  assert.equal(contentRefusal(fixture(), moved, without("recycle")), null);
+
+  const edited = fixture();
+  edited.recycleFiles[0].name = "X";
+  const refusal = contentRefusal(fixture(), edited, without("recycle"));
+  assert.equal(refusal?.status, 403);
+  assert.equal(refusal?.error, "Раздел «Корзина» для вас закрыт.");
+});
+
+test("contentRefusal: every content section closed is frozen, even with no change (D-17)", () => {
+  for (const open of [["employees"], []]) {
+    assert.deepEqual(contentRefusal(fixture(), fixture(), open), { status: 403, error: "Владелец пока не открыл вам ни одного раздела." });
+  }
+});
+
+test("contentRefusal: a changed key that belongs to no section is refused with 400 for a restricted editor", () => {
+  const draft = fixture();
+  draft.formattedText["zzz:1"] = { runs: [{ text: "x" }] } as never;
+  assert.deepEqual(contentRefusal(fixture(), draft, without("search")), { status: 400, error: "Некорректная структура данных." });
+});
+
+test("contentRefusal: only «Сотрудники» closed leaves content free", () => {
+  const draft = fixture();
+  draft.viruses[0].name = "X";
+  assert.equal(contentRefusal(fixture(), draft, sixSections), null);
+});
+
+const routeText = (path: string) => readFileSync(new URL(`../app/api/${path}/route.ts`, import.meta.url), "utf8");
+
+test("PUT /api/content refuses before the write and the cache purge", () => {
+  const put = routeText("content").split("export async function PUT")[1];
+  const refusal = put.indexOf("contentRefusal(");
+  assert.ok(refusal > 0);
+  for (const later of [".update(row)", ".insert(", "purgeCacheTag("]) {
+    assert.ok(refusal < put.indexOf(later), `contentRefusal must come before ${later}`);
+  }
 });
