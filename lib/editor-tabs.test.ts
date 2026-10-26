@@ -158,3 +158,11 @@ test("the editor employee roster and uploads respect the tab list", () => {
   assert.ok(bodyOf(routeText("employees/editor"), "GET").includes('openTabs.includes("employees")'));
   assert.ok(routeText("uploads").includes("access.openTabs.length"));
 });
+
+test("/api/editors has an owner-only PATCH with full lists and a pending-database answer; POST still inserts only email and granted_by", () => {
+  const route = routeText("editors");
+  const patch = bodyOf(route, "PATCH");
+  assert.ok(patch.includes("requireOwner(") && patch.includes("parseTabLists(") && patch.includes("pendingDatabase(") && route.includes(`code: "pending-database"`));
+  assert.ok(bodyOf(route, "GET").includes("tabsEnforced"));
+  assert.ok(bodyOf(route, "POST").includes(".insert({ email, granted_by: access.user.id })"));
+});
