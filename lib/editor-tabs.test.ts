@@ -142,3 +142,19 @@ test("PUT /api/content refuses before the write and the cache purge", () => {
     assert.ok(refusal < put.indexOf(later), `contentRefusal must come before ${later}`);
   }
 });
+
+const bodyOf = (text: string, name: string) => text.split(`export async function ${name}`)[1].split("export async function")[0];
+
+test("employee writes check the Сотрудники tab after canEdit; the public GET does not", () => {
+  const route = routeText("employees");
+  for (const method of ["PATCH", "POST", "DELETE"]) {
+    const body = bodyOf(route, method);
+    assert.ok(body.indexOf('openTabs.includes("employees")') > body.indexOf("access.canEdit"), method);
+  }
+  assert.ok(!bodyOf(route, "GET").includes("openTabs"));
+});
+
+test("the editor employee roster and uploads respect the tab list", () => {
+  assert.ok(bodyOf(routeText("employees/editor"), "GET").includes('openTabs.includes("employees")'));
+  assert.ok(routeText("uploads").includes("access.openTabs.length"));
+});

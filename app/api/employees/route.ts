@@ -1,5 +1,6 @@
 import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
+import { closedMessage } from "@/lib/editor-tabs";
 import { employeesCacheTag, noStoreHeaders, publicCacheHeaders, purgeCacheTag } from "@/lib/portia-cdn";
 import { parseJsonObject } from "@/lib/request-json";
 import { addManualEmployee, loadEmployees, removeManualEmployee, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, saveEmployeePatch, withProfile } from "@/lib/portia-employees";
@@ -30,6 +31,7 @@ export async function PATCH(request: Request) {
     const { data } = await supabase.auth.getUser();
     const access = await getEditorAccess(supabase, data.user);
     if (!data.user || !access.canEdit) return Response.json({ error: "Нет доступа к редактору." }, { status: 403 });
+    if (!access.openTabs.includes("employees")) return Response.json({ error: closedMessage(["employees"]) }, { status: 403 });
 
     const body = parseJsonObject(await request.text());
     if (!body) return Response.json({ error: "Некорректные данные." }, { status: 400 });
@@ -68,6 +70,7 @@ export async function POST(request: Request) {
     const { data } = await supabase.auth.getUser();
     const access = await getEditorAccess(supabase, data.user);
     if (!data.user || !access.canEdit) return Response.json({ error: "Нет доступа к редактору." }, { status: 403 });
+    if (!access.openTabs.includes("employees")) return Response.json({ error: closedMessage(["employees"]) }, { status: 403 });
 
     const input = sanitizeManualEmployee(parseJsonObject(await request.text()));
     if (!input) return Response.json({ error: "Некорректные данные." }, { status: 400 });
@@ -101,6 +104,7 @@ export async function DELETE(request: Request) {
     const { data } = await supabase.auth.getUser();
     const access = await getEditorAccess(supabase, data.user);
     if (!data.user || !access.canEdit) return Response.json({ error: "Нет доступа к редактору." }, { status: 403 });
+    if (!access.openTabs.includes("employees")) return Response.json({ error: closedMessage(["employees"]) }, { status: 403 });
 
     const body = parseJsonObject(await request.text());
     const id = typeof body?.id === "string" ? body.id : "";
