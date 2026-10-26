@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
@@ -453,6 +453,29 @@ function restoreSelection(root: HTMLElement, offsets: { start: number; end: numb
   selection?.addRange(range);
 }
 
+// D-01/D-05: a card is one header row (handle, one toggle button, actions); the body is hidden, not unmounted, so rich fields keep their DOM and aria-controls always points at an element.
+function CollapsibleCard({ id, label, title, open, onToggle, sortIndex, handle, actions, cardProps, children }: {
+  id: string; label: string; title?: string; open: boolean; onToggle: () => void; sortIndex?: number;
+  handle?: ReactNode; actions?: ReactNode; cardProps?: Record<string, string>; children: ReactNode;
+}) {
+  const bodyId = useId();
+  const name = title || label;
+  return (
+    <div className="nested-editor-card" id={`card-${id}`} data-sort-index={sortIndex} data-open={open || undefined} {...cardProps}>
+      <div className="nested-editor-head">
+        {handle}
+        <button type="button" className="nested-editor-toggle" aria-expanded={open} aria-controls={bodyId} aria-label={`${open ? "Свернуть" : "Развернуть"} раздел «${name}»`} onClick={onToggle}>
+          <strong>{label}</strong>
+          {title ? <span className="nested-editor-title" title={title}>{title}</span> : null}
+          <span className="nested-editor-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
+        </button>
+        {actions}
+      </div>
+      <div className="nested-editor-body" id={bodyId} hidden={!open}>{children}</div>
+    </div>
+  );
+}
+
 function findFormatField(key: string) {
   return window.document.querySelector<HTMLElement>(`[data-format-key="${CSS.escape(key)}"]`);
 }
@@ -532,6 +555,14 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const [revealTick, setRevealTick] = useState(0);
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface | null>(null);
   // At 900px and below a list + form layout shows either the list or the open record (D-01, D-02).
+  // D-01: which cards are open. Component state only, never stored, so every visit starts collapsed.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const isOpen = (id: string) => expanded.has(id);
+  const setOpen = (ids: string[], open: boolean) => setExpanded((current) => {
+    const next = new Set(current);
+    for (const id of ids) { if (open) next.add(id); else next.delete(id); }
+    return next;
+  });
   const [recordOpen, setRecordOpen] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLElement>(null);
@@ -1036,8 +1067,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
         <div className="editor-form flat-editor-form">
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация». Раздел может содержать подразделы, собранные из блоков в любом порядке.</p>
           {draft.infoSections.map((section, index) => (
-            <div className="nested-editor-card" data-sort-index={index} key={section.id}>
-              <div className="nested-editor-head"><OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} /><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id)); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div></div>
+            <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${String(index + 1).padStart(2, "0")}`} title={section.title} open={isOpen(section.id)} onToggle={() => setOpen([section.id], !isOpen(section.id))}
+              handle={<OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} />}
+              actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id)); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div>}>
               <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
               <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
               <div className="info-subsection-list">
@@ -1086,7 +1118,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                 <button className="secondary-control limit-add" type="button" disabled={section.subsections.length >= MAX_SUBSECTIONS} aria-describedby={`limit-subsections-${section.id}`} onClick={() => changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id: makeId("info"), title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); })}>+ ПОДРАЗДЕЛ</button>
                 <LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} />
               </div>
-            </div>
+            </CollapsibleCard>
           ))}
           <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.infoSections.push({ id: makeId("info"), title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] }))}>+ ДОБАВИТЬ РАЗДЕЛ</button>
         </div>

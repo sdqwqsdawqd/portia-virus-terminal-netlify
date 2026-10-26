@@ -1,4 +1,4 @@
-// Usage: node 11-editor-check.mjs --check mark|panel|savechip [--url http://localhost:3124]   (later plans add more checks)
+// Usage: node 11-editor-check.mjs --check mark|panel|savechip|sections [--url http://localhost:3124]   (later plans add more checks)
 // Why: Phase 11 has no DOM test runner, so headless Edge drives the production build. Inside the browser it launches,
 // GET /api/access is answered {canEdit: true} and GET /api/content is served from fixtures; every non-GET request to /api/*
 // is blocked and fails the check (nothing is ever saved, no login is needed). The only exception is the savechip fake-save
@@ -58,6 +58,17 @@ const editorFixture = (overrides = {}) => fixture({
   infoSections: [], broadcasts: [], searchRecommendations: [],
   ...overrides,
 });
+
+const LONG = "Оченьдлинноеназвание".repeat(10); // 200 unbroken characters
+/** Info sections 1..count, each with one subsection and one text block; section 3 has the long name. */
+const sectionsFixture = (overrides = {}) => {
+  const count = overrides.sections ?? 6;
+  const infoSections = Array.from({ length: count }, (_, i) => ({
+    id: `s${i + 1}`, title: i === 2 ? LONG : `Раздел ${i + 1}`, body: `Текст раздела ${i + 1}`,
+    subsections: (overrides.noSubsections ? [] : [{ id: `u${i + 1}`, title: `Подраздел ${i + 1}`, blocks: [{ id: `b${i + 1}`, type: "text", text: `Блок ${i + 1}` }] }]),
+  }));
+  return fixture({ ...editorFixture(), infoSections });
+};
 
 const json = { "content-type": "application/json", "cache-control": "no-store" };
 function installStub(cdp) {
@@ -335,6 +346,39 @@ const checks = {
       noOverlap(`(l) ${at}:`, b);
     }
     await desktop(cdp);
+  },
+  async sections(cdp) {
+    serve(sectionsFixture(), 20);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    const top = '.flat-editor-form > .nested-editor-card';
+    const toggle = (n) => `${top}:nth-of-type(${n}) > .nested-editor-head .nested-editor-toggle`;
+    // (a) on entry every top-level card is collapsed to its header
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    if (!(await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(top)}).length === 6`, 3000))) { reasons.push("(a) the info tab did not show 6 section cards"); return; }
+    const a = await cdp.eval(`(() => ({ bodies: [...document.querySelectorAll(${JSON.stringify(top + " > .nested-editor-body")})].map((b) => b.hidden && getComputedStyle(b).display === "none"), toggles: [...document.querySelectorAll(${JSON.stringify(top + " > .nested-editor-head .nested-editor-toggle")})].map((b) => b.getAttribute("aria-expanded")) }))()`);
+    if (a.bodies.length !== 6 || a.bodies.some((hidden) => !hidden)) reasons.push(`(a) bodies hidden: ${JSON.stringify(a.bodies)}`);
+    if (a.toggles.length !== 6 || a.toggles.some((v) => v !== "false")) reasons.push(`(a) aria-expanded: ${JSON.stringify(a.toggles)}`);
+    // (c) the 200-character name is one line with «…», the full name in title, and never reaches «Удалить» or the card edge
+    const c = await cdp.eval(`(() => {
+      const card = document.querySelectorAll(${JSON.stringify(top)})[2];
+      const head = card.querySelector(":scope > .nested-editor-head");
+      const span = head.querySelector(".nested-editor-title");
+      const del = head.querySelector(".nested-editor-actions button");
+      const s = span.getBoundingClientRect(), d = del.getBoundingClientRect(), h = head.getBoundingClientRect(), k = card.getBoundingClientRect();
+      return { over: span.scrollWidth > span.clientWidth, title: span.title, overlap: s.left < d.right && d.left < s.right && s.top < d.bottom && d.top < s.bottom, headRight: h.right, cardRight: k.right, delVisible: d.width > 0 };
+    })()`);
+    if (!c.over) reasons.push("(c) the long name is not cut (scrollWidth <= clientWidth)");
+    if (c.title !== LONG) reasons.push("(c) the title attribute is not the full name");
+    if (c.overlap) reasons.push("(c) the name overlaps «Удалить»");
+    if (!c.delVisible) reasons.push("(c) «Удалить» is not visible");
+    if (c.headRight > c.cardRight + 0.5) reasons.push(`(c) the head (${c.headRight}) sticks out of the card (${c.cardRight})`);
+    // (d) a click opens the section, another closes it
+    const body1 = `document.querySelectorAll(${JSON.stringify(top + " > .nested-editor-body")})[0].hidden`;
+    await click(cdp, toggle(1));
+    if (await cdp.eval(body1)) reasons.push("(d) the first click did not show the body");
+    await click(cdp, toggle(1));
+    if (!(await cdp.eval(body1))) reasons.push("(d) the second click did not hide the body");
   },
   async panel(cdp) {
     serve(editorFixture(), 1);
