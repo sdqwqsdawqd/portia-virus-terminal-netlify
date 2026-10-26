@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, 
 import { createPortal, flushSync } from "react-dom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
+import { tabRegistry } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { dropFields, mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
 import { TYPING_PAUSE_MS, historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
@@ -36,6 +37,8 @@ type Props = {
   revision: number;
   saveState: "idle" | "saving" | "saved" | "error" | "conflict";
   canManageEditors: boolean;
+  // Ids of the registry tabs the owner left open for this editor (GET /api/access); the owner gets all of them.
+  openTabs: readonly string[];
   active: boolean;
   // True while the window manager has the editor window minimized; the format panel is hidden then and comes back on restore (D-06).
   minimized: boolean;
@@ -657,7 +660,7 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, revision, saveState, canManageEditors, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved }: Props) {
+export function PortiaEditor({ content, revision, saveState, canManageEditors, openTabs, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
   // The revision the draft's baseline came from; a stale draft then gets the 409 instead of overwriting newer content (uat-03-owner-broadcast-vanishes).
   const baseRevision = useRef(revision);
@@ -672,7 +675,14 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const dateMessage = badQuest ? `ИСПРАВЬТЕ ДАТЫ КВЕСТА: «${badQuest.title || "БЕЗ НАЗВАНИЯ"}»` : "";
   const saveBlocked = bodyMessage !== "" || badQuest !== undefined;
   const dirty = changed.length > 0;
-  const [tab, setTab] = useState<EditorTab>("viruses");
+  const [pickedTab, setTab] = useState<EditorTab>("viruses");
+  // Derived at render, not by an effect: a closed pick shows the first open tab (D-14, D-17).
+  const stripTabs = ([
+    ...tabRegistry.filter((entry) => openTabs.includes(entry.id)).map((entry) => [entry.id, entry.label]),
+    ...(canManageEditors ? [["access", "Доступ"]] : []),
+  ]) as [EditorTab, string][];
+  const noTabs = stripTabs.length === 0;
+  const tab: EditorTab = stripTabs.some(([id]) => id === pickedTab) ? pickedTab : stripTabs[0]?.[0] ?? pickedTab;
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
   // The Recycle selection is one of two ids; the other stays "" (the render and the row highlight rely on it).
@@ -1126,23 +1136,25 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     : saveState === "saved" && !dirty ? "СОХРАНЕНО"
     : "";
 
+  const header = (
+    <header className="editor-header">
+      <div>
+        <span className="eyebrow">УПРАВЛЕНИЕ СОДЕРЖИМЫМ</span>
+        <h1>Редактор PORTIA</h1>
+        <p>Изменения сохраняются в общей базе!</p>
+      </div>
+    </header>
+  );
+  // D-17: the window stays; nothing of the sections is rendered.
+  if (noTabs) return <div className="content-editor">{header}<div className="editor-empty">Владелец пока не открыл вам ни одного раздела</div></div>;
+
   return (
     <ActiveFormatContext.Provider value={{ key: formatTarget?.key ?? null, surface: previewSurface, phonePanelOpen: formatterOpen && window.matchMedia("(max-width: 900px)").matches }}>
     <div className="content-editor">
-      <header className="editor-header">
-        <div>
-          <span className="eyebrow">УПРАВЛЕНИЕ СОДЕРЖИМЫМ</span>
-          <h1>Редактор PORTIA</h1>
-          <p>Изменения сохраняются в общей базе!</p>
-        </div>
-      </header>
+      {header}
 
       <nav className="editor-tabs" aria-label="Разделы редактора" ref={tabsRef}>
-        {([
-          ...editorSections.map((id) => [id, sectionLabels[id]]),
-          ["employees", "Сотрудники"],
-          ...(canManageEditors ? [["access", "Доступ"]] : []),
-        ] as [EditorTab, string][]).map(([id, label]) => {
+        {stripTabs.map(([id, label]) => {
           const unsaved = changed.some((section) => section === id);
           return (
             <button key={id} type="button" className={tab === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => switchTab(id)}>

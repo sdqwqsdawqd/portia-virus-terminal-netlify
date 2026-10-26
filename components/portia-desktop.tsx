@@ -272,6 +272,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [broadcastTab, setBroadcastTab] = useState<BroadcastTab>("news");
   const [canEdit, setCanEdit] = useState(false);
   const [canManageEditors, setCanManageEditors] = useState(false);
+  const [openTabs, setOpenTabs] = useState<string[]>([]);
+  const canEditRef = useRef(false);
+  useEffect(() => { canEditRef.current = canEdit; });
   const [revision, setRevision] = useState(0);
   // Read by the async GET: the newest revision this tab knows (cache, GET or its own save) and how many saves it started.
   const knownRevision = useRef(0);
@@ -407,9 +410,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     try {
       const response = await fetchWithTimeout("/api/access", { cache: "no-store" });
       if (!response.ok) return;
-      const access = await response.json() as { canEdit?: boolean; canManageEditors?: boolean };
+      const access = await response.json() as { canEdit?: boolean; canManageEditors?: boolean; openTabs?: unknown };
       setCanEdit(Boolean(access.canEdit));
       setCanManageEditors(Boolean(access.canManageEditors));
+      const ids = Array.isArray(access.openTabs) ? access.openTabs.filter((id): id is string => typeof id === "string") : [];
+      // Same ids keep the same array, so the editor's effects do not re-run on every poll.
+      setOpenTabs((current) => current.length === ids.length && current.every((id, index) => id === ids[index]) ? current : ids);
     } catch {}
   }, []);
 
@@ -497,8 +503,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const clockTimer = window.setInterval(tick, 1000);
     const initialFetchTimer = window.setTimeout(() => { void fetchContent(); void fetchAccess(); }, 0);
     const initialEmployeesTimer = window.setTimeout(() => void fetchEmployees(), 0);
-    const syncTimer = window.setInterval(() => { if (document.visibilityState === "visible") void fetchContent(); }, contentSyncMs);
-    const onVisible = () => { if (document.visibilityState === "visible") void fetchContent(); };
+    // /api/content is CDN-shared and cannot carry per-user data, so the tab list is polled separately and only for someone who may edit.
+    const syncTimer = window.setInterval(() => { if (document.visibilityState === "visible") { void fetchContent(); if (canEditRef.current) void fetchAccess(); } }, contentSyncMs);
+    const onVisible = () => { if (document.visibilityState === "visible") { void fetchContent(); if (canEditRef.current) void fetchAccess(); } };
     document.addEventListener("visibilitychange", onVisible);
     // Cheap: answered by the CDN, so other visitors see profile edits within minutes.
     const employeeSyncTimer = window.setInterval(fetchEmployees, 5 * 60 * 1000);
@@ -1422,7 +1429,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="editor" state={windows.editor} active={activeApp === "editor"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="editor-window" meta="ДОСТУП ВЛАДЕЛЬЦА">
-            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} minimized={windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
+            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} openTabs={openTabs} active={activeApp === "editor" && !windows.editor.minimized} minimized={windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
           </AppWindow>
         </main>
 
