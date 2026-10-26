@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { changedDossierTabs, changedSections, deniedSections, dossierTabs, editorSections, sectionOfKey, unclassifiedTextKeys, type EditorSection } from "./editor-changes.ts";
+import { changedDossierTabs, changedSections, deniedSections, dossierTabs, editorSections, revertSections, sectionOfKey, unclassifiedTextKeys, type EditorSection } from "./editor-changes.ts";
 import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./portia-content.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
 
@@ -286,5 +286,124 @@ test("normalizePortiaContent is idempotent, so a normalized compare shows no pha
     const twice = normalizePortiaContent(once)!;
     assert.deepEqual(twice, once);
     assert.deepEqual(deniedSections(once, twice, editorSections), []);
+  }
+});
+
+// PERM-03 (Phase 12): putting closed sections back to the stored copy.
+const idsIn = (content: PortiaContent, id: string) => [
+  content.viruses.some((virus) => virus.id === id),
+  (content.recycledViruses ?? []).some((virus) => virus.id === id),
+].filter(Boolean).length;
+
+test("revertSections puts the named sections back and leaves the rest, without mutating", () => {
+  const baseline = fixture();
+  baseline.broadcasts.push({ id: "b1", type: "news", title: "a", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" });
+  baseline.formattedText[portiaTextKey.broadcast("b1")] = richText;
+  baseline.formattedText[portiaTextKey.broadcast("gone")] = richText;
+  const draft = structuredClone(baseline);
+  draft.broadcasts[0].title = "b";
+  draft.viruses[0].name = "RENAMED";
+  draft.formattedText[portiaTextKey.broadcast("new")] = richText;
+  delete draft.formattedText[portiaTextKey.broadcast("gone")];
+  const before = [JSON.stringify(baseline), JSON.stringify(draft)];
+
+  const result = revertSections(baseline, draft, ["broadcasts"]);
+  assert.deepEqual(result.broadcasts, baseline.broadcasts);
+  assert.equal(result.formattedText[portiaTextKey.broadcast("new")], undefined);
+  assert.deepEqual(result.formattedText[portiaTextKey.broadcast("gone")], richText);
+  assert.equal(result.viruses[0].name, "RENAMED");
+  assert.deepEqual([JSON.stringify(baseline), JSON.stringify(draft)], before);
+});
+
+test("revertSections with no sections returns an equal copy", () => {
+  const draft = fixture();
+  draft.viruses[0].name = "X";
+  const result = revertSections(fixture(), draft, []);
+  assert.deepEqual(result, draft);
+  assert.notEqual(result, draft);
+});
+
+test("D-13: a closed bin keeps a live to bin move and reverts other bin edits", () => {
+  const baseline = withBinVirus();
+  const draft = structuredClone(baseline);
+  const moved = moveToBin(draft);
+  draft.recycledViruses[0].name = "EDITED BIN ENTRY";
+  const result = revertSections(baseline, draft, ["recycle"]);
+  assert.equal(idsIn(result, moved.id), 1);
+  assert.deepEqual(result.recycledViruses.map((virus) => virus.id), [baseline.recycledViruses[0].id, moved.id]);
+  assert.deepEqual(result.recycledViruses[0], baseline.recycledViruses[0]);
+  assert.ok(result.recycleOrder.includes(`virus:${moved.id}`));
+  assert.deepEqual(deniedSections(baseline, result, ["recycle"]), []);
+});
+
+test("a closed viruses section sends a moved virus back to the live list only", () => {
+  const draft = fixture();
+  const moved = moveToBin(draft);
+  const result = revertSections(fixture(), draft, ["viruses"]);
+  assert.equal(result.viruses.some((virus) => virus.id === moved.id), true);
+  assert.equal(result.recycledViruses.some((virus) => virus.id === moved.id), false);
+  assert.equal(result.recycleOrder.includes(`virus:${moved.id}`), false);
+});
+
+test("a closed viruses section sends a restored virus back to the bin with its order key", () => {
+  const baseline = withBinVirus();
+  const draft = structuredClone(baseline);
+  const restored = draft.recycledViruses.pop()!;
+  draft.viruses.push(restored);
+  draft.recycleOrder = draft.recycleOrder.filter((key) => key !== `virus:${restored.id}`);
+  const result = revertSections(baseline, draft, ["viruses"]);
+  assert.equal(idsIn(result, restored.id), 1);
+  assert.equal(result.recycledViruses.some((virus) => virus.id === restored.id), true);
+  assert.ok(result.recycleOrder.includes(`virus:${restored.id}`));
+});
+
+test("a closed bin leaves a restored virus in the bin only", () => {
+  const baseline = withBinVirus();
+  const draft = structuredClone(baseline);
+  const restored = draft.recycledViruses.pop()!;
+  draft.viruses.push(restored);
+  const result = revertSections(baseline, draft, ["recycle"]);
+  assert.equal(idsIn(result, restored.id), 1);
+  assert.equal(result.recycledViruses.some((virus) => virus.id === restored.id), true);
+});
+
+test("deleting a bin entry in an open bin survives a closed viruses section", () => {
+  const baseline = withBinVirus();
+  const draft = structuredClone(baseline);
+  const gone = draft.recycledViruses.pop()!;
+  draft.recycleOrder = draft.recycleOrder.filter((key) => key !== `virus:${gone.id}`);
+  const result = revertSections(baseline, draft, ["viruses"]);
+  assert.equal(idsIn(result, gone.id), 0);
+});
+
+test("a stored virus id ends up in exactly one list for every closed set, and the result is never denied", () => {
+  const baseline = withBinVirus();
+  baseline.formattedText[portiaTextKey.infoBlock("b")] = richText;
+  const draft = structuredClone(baseline);
+  const [live0, live1] = draft.viruses;
+  const binned = baseline.recycledViruses[0];
+  live0.name = "RENAMED";
+  draft.formattedText[portiaTextKey.virus(live0.id, "external")] = richText;
+  moveToBin(draft, 1);
+  draft.formattedText[portiaTextKey.virus(live1.id, "physiology")] = richText;
+  draft.viruses.push(draft.recycledViruses.splice(0, 1)[0]);
+  draft.recycleOrder = draft.recycleOrder.filter((key) => key !== `virus:${binned.id}`);
+  draft.formattedText[portiaTextKey.virus(binned.id, "external")] = richText;
+  draft.infoSections[0].title = "T";
+  draft.formattedText[portiaTextKey.infoBlock("b")] = { runs: [{ text: "y" }] } as never;
+  draft.broadcasts.push({ id: "b9", type: "news", title: "n", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" });
+  draft.recycleFiles[0].name = "X";
+  draft.recycleOrder.reverse();
+  draft.searchRecommendations.push("ЕЩЁ");
+  draft.assistantIdleEnabled = !draft.assistantIdleEnabled;
+  assert.deepEqual(changedSections(baseline, draft), editorSections);
+
+  const storedIds = [...baseline.viruses, ...baseline.recycledViruses].map((virus) => virus.id);
+  for (let mask = 0; mask < 1 << editorSections.length; mask += 1) {
+    const closed = editorSections.filter((_, index) => mask & (1 << index));
+    const result = revertSections(baseline, draft, closed);
+    for (const id of storedIds) assert.equal(idsIn(result, id), 1, `${id} with closed ${closed.join(",")}`);
+    assert.deepEqual(deniedSections(baseline, result, closed), [], `closed ${closed.join(",")}`);
+    assert.deepEqual(unclassifiedTextKeys(baseline, result), []);
   }
 });
