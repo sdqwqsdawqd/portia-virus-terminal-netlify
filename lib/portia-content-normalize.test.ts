@@ -147,7 +147,7 @@ test("junk blocks are dropped, ids filled and nothing is cut", () => {
   assert.deepEqual(first.blocks.map((block) => block.type), ["text", "table", "photo", "photo", "video", "video", "video"]);
   assert.equal(first.blocks[0].id, "s-sub-0-block-0");
   assert.equal((first.blocks[0] as { text: string }).text.length, 20_001);
-  assert.deepEqual((first.blocks[1] as { rows: unknown }).rows, [{ key: "k".repeat(600), value: "" }, { key: "a", value: "b" }]);
+  assert.deepEqual((first.blocks[1] as { rows: unknown }).rows, [{ id: "t-row-0", key: "k".repeat(600), value: "" }, { id: "t-row-1", key: "a", value: "b" }]);
   assert.equal((first.blocks[2] as { url: string }).url, "");
   assert.equal((first.blocks[3] as { url: string }).url, "https://x/y.png");
   assert.deepEqual(first.blocks.slice(4).map((block) => (block as { videoId: string }).videoId), ["dQw4w9WgXcQ", "", ""]);
@@ -162,6 +162,25 @@ test("tables, blocks and rows beyond the old caps are kept whole", () => {
   assert.equal((section.subsections[0].blocks[0] as { rows: unknown[] }).rows.length, 120);
 });
 
+const tableRows = (rows: unknown[]) => (normalizeInfoSections([{ id: "s", title: "", body: "", subsections: [{ id: "u", title: "", blocks: [
+  { id: "tb", type: "table", rows },
+] }] }])[0].subsections[0].blocks[0] as { rows: { id: string; key: string; value: string }[] }).rows;
+
+test("table rows keep their ids and order", () => {
+  assert.deepEqual(tableRows([{ id: "r2", key: "b", value: "2" }, { id: "r1", key: "a", value: "1" }]),
+    [{ id: "r2", key: "b", value: "2" }, { id: "r1", key: "a", value: "1" }]);
+});
+
+test("a missing or repeated row id gets its position", () => {
+  assert.deepEqual(tableRows([{ id: "x", key: "a", value: "1" }, { id: "x", key: "b", value: "2" }, { key: "c", value: "3" }, { id: 7, key: "d", value: "4" }]).map((row) => row.id),
+    ["x", "tb-row-1", "tb-row-2", "tb-row-3"]);
+});
+
+test("a column swap survives normalization", () => {
+  assert.deepEqual(tableRows([{ id: "r1", key: "1", value: "A" }, { id: "r2", key: "2", value: "B" }]),
+    [{ id: "r1", key: "1", value: "A" }, { id: "r2", key: "2", value: "B" }]);
+});
+
 test("a guide text block up to and beyond MAX_BLOCK_TEXT is kept whole", () => {
   const [section] = normalizeInfoSections([{ id: "s", title: "", body: "", subsections: [{ id: "u", title: "", blocks: [
     { id: "t", type: "text", text: "z".repeat(MAX_BLOCK_TEXT + 50_000) },
@@ -173,7 +192,7 @@ test("normalizePortiaContent normalizes guides, keeps section formatting and is 
   const content = structuredClone(defaultPortiaContent);
   content.infoSections.push({ id: "guide", title: "G", body: "", subsections: [{ id: "g1", title: "Sub", blocks: [
     { id: "b1", type: "text", text: "hello" },
-    { id: "b2", type: "table", rows: [{ key: "a", value: "b" }] },
+    { id: "b2", type: "table", rows: [{ id: "r1", key: "a", value: "b" }] },
     { id: "b3", type: "photo", url: "/img/a.png" },
     { id: "b4", type: "video", videoId: "dQw4w9WgXcQ" },
   ] }] });

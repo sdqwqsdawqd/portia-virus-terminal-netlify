@@ -350,8 +350,9 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .info-subsection-list > .nested-editor-card + .nested-editor-card, .info-block-list > .nested-editor-card + .nested-editor-card { margin-top: 0; }
 .info-subsection-list .editor-field { margin-top: 6px; }
 .info-subsection-list .secondary-control { padding: 6px 10px; margin: 6px 6px 0 0; }
-.info-table-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 10px; }
-.info-table-row button { border: 0; background: transparent; color: #b96a63; font: 11px var(--sans); cursor: pointer; padding: 10px 4px; }
+.info-table-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 10px; }
+.info-table-row input { min-width: 0; }
+.info-table-row button:not(.order-drag-handle) { border: 0; background: transparent; color: #b96a63; font: 11px var(--sans); cursor: pointer; padding: 10px 4px; }
 .info-block-video { margin: 0; max-width: 820px; }
 .info-block-video iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; }
 .info-block-video figcaption { margin-top: 8px; font: 12px var(--sans); }
@@ -542,7 +543,7 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .order-drag-handle span { font: 700 17px/1 var(--sans); }
 /* Gel lanes: while a handle is held the list shows a rail and the moving record is a lit band. */
 .editor-record-list:has(.order-drag-handle[data-dragging="true"]), .recommendation-order-list:has(.order-drag-handle[data-dragging="true"]), .flat-editor-form:has(.order-drag-handle[data-dragging="true"]) { box-shadow: inset 2px 0 0 var(--teal-dim); }
-.editor-record-row:has(.order-drag-handle[data-dragging="true"]), .recommendation-order-row:has(.order-drag-handle[data-dragging="true"]), .nested-editor-card:has(.order-drag-handle[data-dragging="true"]) { position: relative; z-index: 1; outline: 1px solid var(--teal); background: var(--teal-soft); box-shadow: 0 8px 20px rgba(0,0,0,.35); }
+.editor-record-row:has(.order-drag-handle[data-dragging="true"]), .recommendation-order-row:has(.order-drag-handle[data-dragging="true"]), .nested-editor-card:has(.order-drag-handle[data-dragging="true"]), .info-table-row:has(.order-drag-handle[data-dragging="true"]) { position: relative; z-index: 1; outline: 1px solid var(--teal); background: var(--teal-soft); box-shadow: 0 8px 20px rgba(0,0,0,.35); }
 .editor-record-list { counter-reset: lane; }
 .editor-record-row { counter-increment: lane; }
 .editor-record-row .order-drag-handle::after { content: counter(lane, decimal-leading-zero); color: oklch(.56 calc(.03 * var(--accent-chroma)) var(--accent-hue)); font: 600 9px/1 var(--mono); }
@@ -1234,7 +1235,9 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .content-control-actions { width: 100%; }
   .content-control-actions button, .content-control-actions a { flex: 1 1 180px; }
   .info-ledger > div { grid-template-columns: 1fr; gap: 7px; padding: 14px; }
-  .info-table-row { grid-template-columns: 1fr; align-items: stretch; }
+  .info-table-row { grid-template-columns: 44px minmax(0, 1fr); align-items: stretch; }
+  .info-table-row > :not(.order-drag-handle) { grid-column: 2; }
+  .info-table-row > .order-drag-handle { grid-column: 1; grid-row: 1 / span 3; align-self: start; }
   .info-app footer { flex-direction: column; gap: 6px; }
   .color-options, .setting-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .color-options > button:last-of-type { grid-column: 1 / -1; }

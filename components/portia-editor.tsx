@@ -146,7 +146,7 @@ function moveArrayItem<T>(items: T[], from: number, to: number) {
 }
 
 // Table rows are located by block id, then by their current index inside the same changeDraft call.
-function editTableRows(content: PortiaContent, subsectionId: string, blockId: string, edit: (rows: { key: string; value: string }[]) => void) {
+function editTableRows(content: PortiaContent, subsectionId: string, blockId: string, edit: (rows: { id: string; key: string; value: string }[]) => void) {
   const block = findInfo(content.infoSections, subsectionId)?.subsection?.blocks.find((item) => item.id === blockId);
   if (block?.type === "table") edit(block.rows);
 }
@@ -1176,14 +1176,15 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                           {block.type === "table" && (
                             <>
                               {block.rows.map((row, rowIndex) => (
-                                <div className="info-table-row" key={rowIndex}>
+                                <div className="info-table-row" data-sort-index={rowIndex} key={row.id}>
+                                  <OrderDragHandle index={rowIndex} label={`строка ${rowIndex + 1}`} onMove={(from, to) => changeDraft((next) => editTableRows(next, subsection.id, block.id, (rows) => moveArrayItem(rows, from, to)))} />
                                   <Field label="Признак"><input maxLength={500} value={row.key} onChange={(event) => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { if (rows[rowIndex]) rows[rowIndex].key = event.target.value; }); })} /></Field>
                                   <Field label="Значение"><input maxLength={500} value={row.value} onChange={(event) => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { if (rows[rowIndex]) rows[rowIndex].value = event.target.value; }); })} /></Field>
                                   <button type="button" onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.splice(rowIndex, 1); }); })}>Удалить строку</button>
                                 </div>
                               ))}
                               <div className="scientist-log-actions">
-                                <button className="secondary-control limit-add" type="button" disabled={block.rows.length >= MAX_TABLE_ROWS} aria-describedby={`limit-rows-${block.id}`} onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.push({ key: "", value: "" }); }); })}>+ СТРОКА</button>
+                                <button className="secondary-control limit-add" type="button" disabled={block.rows.length >= MAX_TABLE_ROWS} aria-describedby={`limit-rows-${block.id}`} onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.push({ id: makeId("row"), key: "", value: "" }); }); })}>+ СТРОКА</button>
                                 <LimitNote id={`limit-rows-${block.id}`} count={block.rows.length} max={MAX_TABLE_ROWS} />
                               </div>
                             </>
@@ -1194,7 +1195,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                     <div className="scientist-log-actions">
                       <div className="limit-buttons">
                         <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "text", text: "" }); }); setOpen([id], true); }}>+ ТЕКСТ</button>
-                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "table", rows: [{ key: "", value: "" }] }); }); setOpen([id], true); }}>+ ТАБЛИЦА</button>
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "table", rows: [{ id: makeId("row"), key: "", value: "" }] }); }); setOpen([id], true); }}>+ ТАБЛИЦА</button>
                         <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "video", videoId: "" }); }); setOpen([id], true); }}>+ ВИДЕО</button>
                         <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "photo", url: "" }); }); setOpen([id], true); }}>+ ФОТО</button>
                       </div>

@@ -161,13 +161,19 @@ function normalizeInfoBlock(value: unknown, subsectionId: string, index: number)
   switch (value.type) {
     case "text":
       return [{ id, type: "text", text: asText(value.text) }];
-    case "table":
+    case "table": {
+      // Stable row ids let the editor's ≡ keep a row's identity (EDIT-07); a positional fallback is stable across polls (D-21).
+      const seen = new Set<string>();
       return [{
         id,
         type: "table",
-        rows: (Array.isArray(value.rows) ? value.rows : []).filter(isRecord)
-          .map((row) => ({ key: asText(row.key), value: asText(row.value) })),
+        rows: (Array.isArray(value.rows) ? value.rows : []).filter(isRecord).map((row, rowIndex) => {
+          const rowId = typeof row.id === "string" && row.id && !seen.has(row.id) ? row.id : `${id}-row-${rowIndex}`;
+          seen.add(rowId);
+          return { id: rowId, key: asText(row.key), value: asText(row.value) };
+        }),
       }];
+    }
     case "photo":
       return [{ id, type: "photo", url: normalizeMediaUrl(value.url) }];
     case "video":

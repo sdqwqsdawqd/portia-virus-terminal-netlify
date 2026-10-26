@@ -101,7 +101,7 @@ export type Virus = {
 // Guides (03.3 D-06..D-08): a category holds ordered subcategories, each a list of blocks in any order.
 export type InfoBlock =
   | { id: string; type: "text"; text: string }
-  | { id: string; type: "table"; rows: { key: string; value: string }[] }
+  | { id: string; type: "table"; rows: { id: string; key: string; value: string }[] }
   | { id: string; type: "photo"; url: string }
   | { id: string; type: "video"; videoId: string };
 
