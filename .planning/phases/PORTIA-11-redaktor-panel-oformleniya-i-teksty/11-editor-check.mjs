@@ -1,4 +1,4 @@
-// Usage: node 11-editor-check.mjs --check mark|panel|savechip|sections|table [--url http://localhost:3124]   (later plans add more checks)
+// Usage: node 11-editor-check.mjs --check mark|panel|savechip|sections|table|multiselect [--url http://localhost:3124]   (later plans add more checks)
 // Why: Phase 11 has no DOM test runner, so headless Edge drives the production build. Inside the browser it launches,
 // GET /api/access is answered {canEdit: true} and GET /api/content is served from fixtures; every non-GET request to /api/*
 // is blocked and fails the check (nothing is ever saved, no login is needed). The only exception is the savechip fake-save
@@ -57,6 +57,11 @@ const editorFixture = (overrides = {}) => fixture({
   viruses: [{ id: "v1", name: "Альфа", code: "A-1", status: "ИЗУЧЕН", external: "Первое слово второе третье", physiology: "Четвёртое пятое шестое" }],
   infoSections: [], broadcasts: [], searchRecommendations: [],
   ...overrides,
+});
+
+/** One virus with two lead fields of six distinct words each, for the Ctrl multi-selection check. */
+const multiFixture = () => fixture({
+  viruses: [{ id: "v1", name: "Альфа", code: "A-1", status: "ИЗУЧЕН", external: "один два три четыре пять шесть", physiology: "семь восемь девять десять одиннадцать двенадцать" }],
 });
 
 const LONG = "Оченьдлинноеназвание".repeat(10); // 200 unbroken characters
@@ -157,6 +162,7 @@ const closePanel = async (cdp) => { await click(cdp, '.floating-text-format [ari
 const viewportSize = (cdp) => cdp.eval(`({ w: document.documentElement.clientWidth, h: document.documentElement.clientHeight })`); // the viewport differs a little between loads (scrollbars)
 const forgetPlace = (cdp) => cdp.eval(`localStorage.removeItem(${JSON.stringify(panelKey)})`);
 const key = (cdp, name, code, modifiers = 0) => ["keyDown", "keyUp"].reduce((chain, type) => chain.then(() => cdp.send("Input.dispatchKeyEvent", { type, key: name, code: name, windowsVirtualKeyCode: code, modifiers })), Promise.resolve());
+const ctrlZ = async (cdp) => { for (const type of ["keyDown", "keyUp"]) await cdp.send("Input.dispatchKeyEvent", { type, key: "z", code: "KeyZ", windowsVirtualKeyCode: 90, modifiers: 2 }); await sleep(150); };
 const windowBox = (cdp) => cdp.eval(`(() => { const r = document.querySelector(".editor-window").getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; })()`);
 
 /** Describe tab, «второе» selected with the mouse, ✎ clicked, waits for the panel. */
@@ -760,6 +766,44 @@ const checks = {
       else if (Math.abs(small.row - 44) > 1 || Math.abs(small.col - 44) > 1) reasons.push(`(i) phone handles ${small.row} and ${small.col}px, expected 44`);
     }
     await desktop(cdp);
+  },
+  async multiselect(cdp) {
+    serve(multiFixture(), 40);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    const lead = '.formatted-rich-input[data-area="lead"]';
+    await clickText(cdp, ".dossier-tabs button", "Описание");
+    if (!(await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(lead)}).length === 2`, 3000))) { reasons.push("multiselect: the two lead fields did not appear"); return; }
+    const painted = () => cdp.eval(`(() => { const h = CSS.highlights.get("portia-format"); return h ? [...h].map(String) : null; })()`);
+    // No removeAllRanges between picks: it would null the stored selection that a Ctrl press turns into a fragment.
+    const pick = async (index, word, modifiers = 0) => {
+      await wordBox(cdp, lead, index, word); await sleep(400); // the scroll into view may be smooth, so measure again once it has settled
+      const box = await wordBox(cdp, lead, index, word);
+      if (!box) { reasons.push(`multiselect: word «${word}» not found in lead field ${index}`); return false; }
+      await mouseSelect(cdp, box, modifiers);
+      await sleep(100);
+      return true;
+    };
+    const wordColor = (word) => cdp.eval(`(() => { for (const f of document.querySelectorAll(${JSON.stringify(lead)})) { const w = document.createTreeWalker(f, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) if (n.data.includes(${JSON.stringify(word)})) return getComputedStyle(n.parentElement).color; } return null; })()`);
+    const fieldTexts = () => cdp.eval(`[...document.querySelectorAll(${JSON.stringify(lead)})].map((f) => f.textContent)`);
+    const TEXTS = ["один два три четыре пять шесть", "семь восемь девять десять одиннадцать двенадцать"];
+    // (a) a plain pick in field 0, (b) a Ctrl pick in field 1, (c) both are painted
+    if (!(await pick(0, "два")) || !(await pick(1, "восемь", 2))) return;
+    await click(cdp, ".global-format-launch > button");
+    if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) { reasons.push("(c) the format panel did not open"); return; }
+    await sleep(150);
+    const both = await painted();
+    if (JSON.stringify(both) !== JSON.stringify(["два", "восемь"])) reasons.push(`(c) painted ${JSON.stringify(both)}, expected ["два","восемь"]`);
+    // (d) one colour click styles both words and nothing else; the text is untouched
+    await click(cdp, '.format-swatches button[aria-label="Красный"]');
+    await sleep(200);
+    const red = "rgb(180, 54, 50)";
+    for (const word of ["два", "восемь"]) { const c = await wordColor(word); if (c !== red) reasons.push(`(d) «${word}» colour ${c}, expected ${red}`); }
+    for (const word of ["три", "семь"]) { const c = await wordColor(word); if (c === red) reasons.push(`(d) «${word}» was coloured`); }
+    if (JSON.stringify(await fieldTexts()) !== JSON.stringify(TEXTS)) reasons.push(`(d) the text changed: ${JSON.stringify(await fieldTexts())}`);
+    // (e) one Ctrl+Z takes the colour back from both fields
+    await ctrlZ(cdp);
+    for (const word of ["два", "восемь"]) { const c = await wordColor(word); if (c === red) reasons.push(`(e) «${word}» is still coloured after one Ctrl+Z`); }
   },
 };
 

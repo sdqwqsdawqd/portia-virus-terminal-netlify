@@ -5,6 +5,7 @@ import { createPortal, flushSync } from "react-dom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
+import { mergeFragments, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
 import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
@@ -55,7 +56,16 @@ type FormatTarget = {
   selection: { start: number; end: number } | null;
   area: DisplayArea;
   onCommit: (value: string, document: RichTextDocument) => void;
+  // EDIT-06: the pointer or key gesture that made this target decides whether fragments are kept, extended or cleared (D-13, D-14).
+  gesture: { id: number; additive: boolean };
+  // The fragments other than the current selection, and the targets of the other fields that hold them. A target made by a field has neither.
+  fragments: FormatFragment[];
+  peers: Record<string, FormatTarget>;
 };
+
+let gestureCounter = 0;
+// Phase 10 D-21: Ctrl everywhere, Cmd on a Mac, never the Windows key.
+const addsFragment = (event: { ctrlKey: boolean; metaKey: boolean }) => event.ctrlKey || (event.metaKey && /^(Mac|iPhone|iPad|iPod)/.test(navigator.platform));
 
 type EditorPreviewSurface = "light" | "dark";
 // Site area whose font the field mirrors; paired in the shared font block in app/portia.css.
@@ -559,6 +569,28 @@ function EditorToc({ items, onJump, onAll }: { items: TocItem[]; onJump: (id: st
   );
 }
 
+// EDIT-06: what a field activation makes of the target before it. A plain gesture starts over (D-14); an additive one keeps the fragments and,
+// on its first activation, turns the previous non-empty selection into one (D-13). A collapsed caret in an additive gesture drops the fragment it lands in.
+function joinFormatTarget(prev: FormatTarget | null, target: FormatTarget): FormatTarget {
+  if (!target.gesture.additive || !prev) return target;
+  let fragments = prev.fragments;
+  let peers = prev.peers;
+  if (prev.gesture.id !== target.gesture.id) {
+    const length = prev.document.runs.reduce((sum, run) => sum + run.text.length, 0);
+    const clamp = (value: number) => Math.max(0, Math.min(length, value));
+    const selection = prev.selection;
+    const picked = selection && selection.start !== selection.end ? [{ key: prev.key, from: clamp(selection.start), to: clamp(selection.end) }] : [];
+    fragments = [...prev.fragments, ...picked];
+    peers = { ...prev.peers, [prev.key]: { ...prev, fragments: [], peers: {} } };
+  }
+  fragments = mergeFragments(fragments);
+  const caret = target.selection;
+  if (caret && caret.start === caret.end) fragments = removeFragmentAt(fragments, target.key, caret.start);
+  const kept: Record<string, FormatTarget> = {};
+  for (const fragment of fragments) if (fragment.key !== target.key && peers[fragment.key]) kept[fragment.key] = peers[fragment.key];
+  return { ...target, fragments, peers: kept };
+}
+
 function findFormatField(key: string) {
   return window.document.querySelector<HTMLElement>(`[data-format-key="${CSS.escape(key)}"]`);
 }
@@ -804,7 +836,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     next.formattedText[key] = document;
   });
 
-  const activateFormatter = (target: FormatTarget) => setFormatTarget(target);
+  const activateFormatter = (target: FormatTarget) => setFormatTarget((prev) => joinFormatTarget(prev, target));
   // The panel's stored commit for a deleted item would write its formatting back.
   const closeFormatterFor = (key: string) => {
     if (formatTarget?.key !== key) return;
@@ -2067,10 +2099,13 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
   const documentSignature = JSON.stringify(currentDocument);
 
   const track = (event: FieldSelectionEvent) => { selectionRef.current = fieldSelectionStep(selectionRef.current, event); };
+  // EDIT-06: every pointer press or editing key starts a gesture; only a Ctrl/Cmd press on a PC is additive (D-12, D-13).
+  const gestureRef = useRef({ id: 0, additive: false });
+  const startGesture = (additive: boolean) => { gestureRef.current = { id: ++gestureCounter, additive }; };
 
   const activate = (editor: HTMLDivElement, nextValue = value, nextDocument = currentDocument) => {
     track({ type: "read", at: Date.now(), incoming: selectionOffsets(editor), guarded: activeFormat.phonePanelOpen });
-    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection: selectionRef.current.stored, area, onCommit: onChange });
+    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection: selectionRef.current.stored, area, onCommit: onChange, gesture: gestureRef.current, fragments: [], peers: {} });
   };
 
   const editorSelection = (editor: HTMLElement, text: string) =>
@@ -2087,7 +2122,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
     localDocumentSignatureRef.current = JSON.stringify(nextDocument);
     restoreSelection(editor, selection);
     onChange(nextValue, nextDocument);
-    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection, area, onCommit: onChange });
+    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection, area, onCommit: onChange, gesture: gestureRef.current, fragments: [], peers: {} });
   };
 
   useLayoutEffect(() => {
@@ -2111,15 +2146,19 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
       role="textbox"
       aria-multiline="true"
       spellCheck
-      onPointerDown={() => track({ type: "down" })}
+      onPointerDown={(event) => {
+        track({ type: "down" });
+        if (event.isPrimary) startGesture(addsFragment(event) && !window.matchMedia("(max-width: 900px), (pointer: coarse)").matches);
+      }}
       onPointerUp={() => track({ type: "up", at: Date.now() })}
       onPointerCancel={() => track({ type: "up", at: Date.now() })}
-      onBlur={() => track({ type: "blur" })}
+      onBlur={() => { track({ type: "blur" }); startGesture(false); }}
       onFocus={(event) => activate(event.currentTarget)}
       onSelect={(event) => activate(event.currentTarget)}
       onMouseUp={(event) => activate(event.currentTarget)}
       onKeyDown={(event) => {
         track({ type: "down" });
+        if (!["Control", "Meta", "Shift", "Alt"].includes(event.key) && !event.ctrlKey && !event.metaKey) startGesture(false);
         if (event.key !== "Enter") return;
         event.preventDefault();
         const editor = event.currentTarget;
@@ -2169,9 +2208,21 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   // Every control acts on one range: the selection, else the word under the caret, else nothing (D-04).
   const text = target.document.runs.map((run) => run.text).join("");
   const range = resolveRange(text, target.selection);
+  // EDIT-06: with fragments the controls act on all of them (the current non-empty selection included); a bare caret is not a fragment (planner decision 2).
+  const multi = target.fragments.length > 0;
+  const set = useMemo(() => {
+    if (target.fragments.length === 0) return [];
+    const selection = target.selection;
+    const clamp = (value: number) => Math.max(0, Math.min(text.length, value));
+    const picked = selection && selection.start !== selection.end ? [{ key: target.key, from: clamp(selection.start), to: clamp(selection.end) }] : [];
+    return mergeFragments([...target.fragments, ...picked]).filter((fragment) => fragment.key === target.key || target.peers[fragment.key] !== undefined);
+  }, [target.fragments, target.selection, target.key, target.peers, text]);
+  const docFor = (key: string) => (key === target.key ? target.document : target.peers[key]?.document ?? target.document);
   // The readout comes from the committed document, so a click shows exactly what it applied. A repeat click on a manual control
   // re-applies the same value; the row styles toggle (D-02). Unstyled text marks no size or weight, because every area renders its own.
-  const style = richTextStyleAt(target.document, range?.from ?? target.selection?.start ?? 0);
+  const style = multi
+    ? (set[0] ? richTextStyleAt(docFor(set[0].key), set[0].from) : {})
+    : richTextStyleAt(target.document, range?.from ?? target.selection?.start ?? 0);
   const marked = (preset: RichTextStyle) => range !== null && rangeHasStyle(target.document, range.from, range.to, preset);
   const plainMarked = range !== null && rangeIsPlain(target.document, range.from, range.to);
   const color = style.color ?? defaultTextColor;
@@ -2197,10 +2248,15 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     const field = findFormatField(formatKey);
     const panel = panelRef.current;
     if (!field || !panel) return;
-    // Paint what the next style will change: the selection, else the word under the caret (D-04, D-05).
-    const painted = paintFrom !== undefined && paintTo !== undefined ? rangeFromOffsets(field, { start: paintFrom, end: paintTo }) : null;
-    const paints = painted !== null && typeof Highlight !== "undefined" && "highlights" in CSS;
-    if (paints) CSS.highlights.set("portia-format", new Highlight(painted));
+    // Paint what the next style will change: every fragment, else the selection, else the word under the caret (D-04, D-05, D-17).
+    const items = multi ? set : paintFrom !== undefined && paintTo !== undefined ? [{ key: formatKey, from: paintFrom, to: paintTo }] : [];
+    const ranges = items.flatMap((item) => {
+      const holder = findFormatField(item.key);
+      return holder ? [rangeFromOffsets(holder, { start: item.from, end: item.to })] : [];
+    });
+    const painted = ranges[0] ?? null;
+    const paints = ranges.length > 0 && typeof Highlight !== "undefined" && "highlights" in CSS;
+    if (paints) CSS.highlights.set("portia-format", new Highlight(...ranges));
     const keepVisible = () => {
       const rect = painted ? painted.getBoundingClientRect() : field.getBoundingClientRect();
       const overlap = rect.bottom - (panel.getBoundingClientRect().top - 16);
@@ -2215,7 +2271,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       window.visualViewport?.removeEventListener("resize", keepVisible);
       if (paints) CSS.highlights.delete("portia-format");
     };
-  }, [formatKey, paintFrom, paintTo, formatDocument, collapsed]);
+  }, [formatKey, paintFrom, paintTo, formatDocument, collapsed, multi, set]);
 
   // On a phone, closing returns the caret to the field in the same tap so the keyboard can come back (iOS may still need one more tap);
   // flushSync commits the close first so the field has dropped inputMode none before it gets focus.
@@ -2242,9 +2298,32 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     onUpdate({ ...target, document });
   };
 
-  const applyStyle = (style: RichTextStyle) => {
-    if (range) commit(applyRichTextStyle(documentRef.current, range.from, range.to, style));
+  // One path for every control. With fragments each field's document is folded over that field's ranges and committed once (D-13);
+  // the offsets are the stored ones, so a DOM selection lost to a panel input changes nothing. applyRichTextStyle clamps stale offsets (T-11-13).
+  const applyOp = (op: (document: RichTextDocument, from: number, to: number) => RichTextDocument) => {
+    if (!multi) {
+      if (range) commit(op(documentRef.current, range.from, range.to));
+      return;
+    }
+    let currentDocument = documentRef.current;
+    const nextPeers = { ...target.peers };
+    for (const key of new Set(set.map((fragment) => fragment.key))) {
+      const mine = set.filter((fragment) => fragment.key === key);
+      if (key === target.key) {
+        currentDocument = mine.reduce((doc, fragment) => op(doc, fragment.from, fragment.to), documentRef.current);
+        documentRef.current = currentDocument;
+        target.onCommit(target.value, currentDocument);
+      } else {
+        const peer = target.peers[key];
+        const next = mine.reduce((doc, fragment) => op(doc, fragment.from, fragment.to), peer.document);
+        nextPeers[key] = { ...peer, document: next };
+        peer.onCommit(peer.value, next);
+      }
+    }
+    onUpdate({ ...target, document: currentDocument, peers: nextPeers });
   };
+
+  const applyStyle = (style: RichTextStyle) => applyOp((doc, from, to) => applyRichTextStyle(doc, from, to, style));
 
   const togglePresetStyle = (preset: RichTextStyle) => {
     if (range) commit(togglePreset(documentRef.current, range.from, range.to, preset));
