@@ -710,10 +710,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const toggleCard = (id: string) => {
     const open = isOpen(id);
     const body = document.getElementById(`card-${id}`)?.querySelector(":scope > .nested-editor-body");
-    if (open && formatTarget && body?.contains(findFormatField(formatTarget.key))) {
-      setFormatTarget(null);
-      setFormatterOpen(false);
-    }
+    if (open) dropFormatFields((key) => !!body?.contains(findFormatField(key)));
     setOpen([id], !open);
   };
   const showRecord = (open: boolean) => {
@@ -889,9 +886,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
 
   // D-03: every TOC ends in this one scroll. Smooth only when the house motion switch is on; scroll-margin-top keeps the card clear of the sticky TOC.
   const jumpToCard = (id: string) => requestAnimationFrame(() => document.getElementById(`card-${id}`)?.scrollIntoView({ block: "start", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" }));
-  // Folding everything also drops a format target that sat in a card body (Pitfall 7).
+  // Folding everything also drops a format target that sat in a card body (Pitfall 7), peers too (WR-02).
   const setAllOpen = (ids: string[], open: boolean) => {
-    if (!open && formatTarget && findFormatField(formatTarget.key)?.closest(".nested-editor-body")) { setFormatTarget(null); setFormatterOpen(false); }
+    if (!open) dropFormatFields((key) => !!findFormatField(key)?.closest(".nested-editor-body"));
     setOpen(ids, open);
   };
   const infoTocItems: TocItem[] = draft.infoSections.flatMap((section) => [
@@ -1268,7 +1265,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
           {draft.infoSections.map((section, index) => (
             <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${String(index + 1).padStart(2, "0")}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
               handle={<OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} />}
-              actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id)); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div>}>
+              actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id), ...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div>}>
               <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
               <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
               <div className="info-subsection-list">
@@ -1430,7 +1427,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               uploadState={uploadState}
               onUpload={uploadImage}
               onChange={updateRecycledVirus}
-              onRemoveMutation={(index) => changeDraft((next) => updateById(next.recycledViruses ?? [], selectedRecycledVirus.id, (virus) => removeMutation(next, virus, index)))}
+              // Index-keyed formatting shifts on delete, so the target is cleared as in the live list.
+              onRemoveMutation={(index) => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => updateById(next.recycledViruses ?? [], selectedRecycledVirus.id, (virus) => removeMutation(next, virus, index))); }}
               // No confirm(): embedded browsers may answer it "no" without showing it, and a restore only
               // changes the unsaved draft and can be undone by moving the virus back.
               onRestore={() => {
@@ -2152,6 +2150,8 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
     nextValue: string,
     selection: { start: number; end: number },
   ) => {
+    // Every text change, also one made with Ctrl/Cmd held or from the context menu, ends an additive gesture, so the activation below clears the fragments (WR-01, D-14).
+    startGesture(false);
     const nextDocument = replaceRichText(currentDocument, nextValue);
     selectionRef.current = { ...selectionRef.current, stored: selection };
     renderRichTextEditor(editor, nextDocument);

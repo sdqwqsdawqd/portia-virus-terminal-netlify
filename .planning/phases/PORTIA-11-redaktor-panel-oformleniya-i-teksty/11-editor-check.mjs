@@ -1170,6 +1170,59 @@ const checks = {
     const saved = await save();
     if (!saved.includes('"info:s2:body"')) reasons.push("(a) the saved body has no formatting for section 2");
     if (saved.includes('"info:s1:body"')) reasons.push("(a) the saved body still holds formatting for the deleted section 1");
+    // The first pick is plain, the panel opens, and the second is a Ctrl pick in section 2: two fragments, focus left in section 2's field.
+    const pair = async (step, revision, firstKey, firstWord) => {
+      if (!(await fresh(revision)) || !(await pickIn(firstKey, firstWord))) return false;
+      await ensurePanel();
+      if (!(await pickIn("info:s2:body", "раздела", 2))) return false;
+      await sleep(150);
+      const text = await headerText();
+      if (!text.includes("ВЫБРАНО: 2")) { reasons.push(`(${step}) header reads ${JSON.stringify(text)} before the action, expected «ВЫБРАНО: 2»`); return false; }
+      return true;
+    };
+    const red2 = async () => { // one colour click, then what ended up coloured in section 2
+      await ensurePanel();
+      await click(cdp, '.format-swatches button[aria-label="Красный"]');
+      await sleep(200);
+    };
+    // (b) deleting a section also releases the fragments in its blocks (CR-01)
+    if (await pair("b", 71, "info-block:b1:text", "Блок")) {
+      await click(cdp, `${card1} > .nested-editor-head .nested-editor-actions button`);
+      await sleep(200);
+      const afterB = await headerText();
+      if (afterB.includes("ВЫБРАНО")) reasons.push(`(b) the header still reads ${JSON.stringify(afterB)} after the section delete`);
+      const paintedB = await painted();
+      if (JSON.stringify(paintedB) !== JSON.stringify(["раздела"])) reasons.push(`(b) painted ${JSON.stringify(paintedB)} after the section delete, expected ["раздела"]`);
+      await red2();
+      const savedB = await save();
+      if (!savedB.includes('"info:s2:body"')) reasons.push("(b) the saved body has no formatting for section 2");
+      if (savedB.includes('"info-block:b1:text"')) reasons.push("(b) the saved body still holds formatting for the deleted section's block");
+    }
+    // (c) a text change with Ctrl held (here Ctrl+Backspace) ends the gesture: the fragments go, so a colour click leaves section 1 alone (WR-01)
+    if (await pair("c", 72, "info:s1:body", "Текст")) {
+      await holdCtrl(cdp, 2, async () => {
+        for (const type of ["keyDown", "keyUp"]) await cdp.send("Input.dispatchKeyEvent", { type, key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8, modifiers: 2, ...(type === "keyDown" ? { commands: ["deleteWordBackward"] } : {}) });
+      });
+      await sleep(300);
+      const fieldText = await cdp.eval(`document.querySelector(${JSON.stringify(sel("info:s2:body"))})?.textContent ?? null`);
+      if (fieldText === null || fieldText.includes("раздела")) reasons.push(`(c) section 2 reads ${JSON.stringify(fieldText)} after Ctrl+Backspace, expected «раздела» gone`);
+      await red2();
+      if ((await colorIn("info:s1:body", "Текст")) === red) reasons.push("(c) «Текст» in section 1 was coloured after a Ctrl edit in section 2");
+    }
+    // (d) folding a card releases the fragments inside it, so a colour click does not style hidden text (WR-02)
+    if (await pair("d", 73, "info:s1:body", "Текст")) {
+      await click(cdp, `${card1} > .nested-editor-head .nested-editor-toggle`);
+      await sleep(200);
+      const afterD = await headerText();
+      if (afterD.includes("ВЫБРАНО")) reasons.push(`(d) the header still reads ${JSON.stringify(afterD)} after the fold`);
+      const paintedD = await painted();
+      if (JSON.stringify(paintedD) !== JSON.stringify(["раздела"])) reasons.push(`(d) painted ${JSON.stringify(paintedD)} after the fold, expected ["раздела"]`);
+      await red2();
+      if ((await colorIn("info:s2:body", "раздела")) !== red) reasons.push(`(d) «раздела» colour ${await colorIn("info:s2:body", "раздела")} after the fold, expected ${red}`);
+      await click(cdp, `${card1} > .nested-editor-head .nested-editor-toggle`);
+      await sleep(200);
+      if ((await colorIn("info:s1:body", "Текст")) === red) reasons.push("(d) «Текст» in the folded section 1 was coloured");
+    }
   },
 };
 
