@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 11
 current_phase_name: "Редактор: панель оформления и тексты"
 status: executing
-stopped_at: Completed PORTIA-11-05-PLAN.md
-last_updated: "2026-10-26T01:40:06.881Z"
+stopped_at: Completed PORTIA-11-06-PLAN.md
+last_updated: "2026-10-26T01:55:45.489Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase PORTIA-11 execution started
-state_head: 70501ebdaa53f86885281de2cd646cd5cfc091e6
+state_head: 6fac27f47f2992db9fb379f9ba9520a10eb918ca
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 35
-  completed_plans: 33
+  completed_plans: 34
   percent: 71
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-26)
 ## Current Position
 
 Phase: PORTIA-11 (Редактор: панель оформления и тексты) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Executing Phase PORTIA-11
 Last activity: 2026-10-26 — Phase PORTIA-11 execution started
 
@@ -75,6 +75,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-11 P03 | 35min | 2 tasks | 4 files |
 | Phase PORTIA-11 P04 | 45min | 3 tasks | 4 files |
 | Phase PORTIA-11 P05 | 35min | 2 tasks | 7 files |
+| Phase PORTIA-11 P06 | 15min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-11]: 11-03: a failed or conflicting save also turns the save chip red with !; saved check mark lasts the desktop's 1.8 s; chip at right 54px on phones up to 520px
 - [Phase PORTIA-11]: 11-04: collapse state is a component-only Set, never stored; TOC list closed by default, fold buttons only on card lists
 - [Phase PORTIA-11]: 11-05: column swap swaps key and value in every row; table rows carry a normalizer-backed id (positional fallback)
+- [Phase PORTIA-11]: 11-06: multi-selection state lives in FormatTarget (gesture, fragments, peers); a Ctrl/Cmd press adds a fragment, any plain press, editing key, Esc or СБРОСИТЬ clears; one panel application is one batch:<id> undo step
 
 ### Pending Todos
 
@@ -152,8 +154,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-26T01:40:06.768Z
-Stopped at: Completed PORTIA-11-05-PLAN.md
+Last session: 2026-10-26T01:55:45.371Z
+Stopped at: Completed PORTIA-11-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
