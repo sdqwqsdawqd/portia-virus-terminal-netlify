@@ -97,6 +97,74 @@ export function deniedSections(baseline: PortiaContent, incoming: PortiaContent,
   return changedSections(baseline, compared).filter((section) => closed.includes(section));
 }
 
+const cloneOf = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+
+// Puts the given sections back to the stored copy and returns a new object; neither input is mutated.
+// Rule: the result never loses or duplicates a stored virus. A virus moved between the live list and the bin is
+// kept in one list when only one of the two is reverted, so every stored id sits in exactly one list.
+export function revertSections(baseline: PortiaContent, content: PortiaContent, sections: readonly EditorSection[]): PortiaContent {
+  const result = cloneOf(content);
+  if (!sections.length) return result;
+  const reverted = new Set(sections);
+  const out = result as unknown as Record<string, unknown>;
+  const stored = baseline as unknown as Record<string, unknown>;
+
+  for (const key of new Set([...Object.keys(baseline), ...Object.keys(content)])) {
+    const section = key === "formattedText" ? null : sectionOfKey(key);
+    if (!section || !reverted.has(section)) continue;
+    if (key in stored) out[key] = cloneOf(stored[key]);
+    else delete out[key];
+  }
+
+  // D-13: with the bin closed and the viruses open, a live virus moved to the bin stays moved.
+  if (reverted.has("recycle") && !reverted.has("viruses")) {
+    const moved = movedVirusIds(baseline, content);
+    for (const virus of content.recycledViruses ?? []) {
+      if (!moved.has(virus.id)) continue;
+      (result.recycledViruses ??= []).push(cloneOf(virus));
+      (result.recycleOrder ??= []).push(`virus:${virus.id}`);
+    }
+  }
+
+  // A move or restore in the draft puts an id in two lists or none once only one list is reverted.
+  if (reverted.has("viruses") || reverted.has("recycle")) {
+    const inContent = new Set([...content.viruses, ...(content.recycledViruses ?? [])].map((virus) => virus.id));
+    const homes: [Virus, "live" | "bin", number][] = [
+      ...baseline.viruses.map((virus, index): [Virus, "live" | "bin", number] => [virus, "live", index]),
+      ...(baseline.recycledViruses ?? []).map((virus, index): [Virus, "live" | "bin", number] => [virus, "bin", index]),
+    ];
+    for (const [virus, home, index] of homes) {
+      const live = result.viruses.some((item) => item.id === virus.id);
+      const binned = (result.recycledViruses ?? []).some((item) => item.id === virus.id);
+      const key = `virus:${virus.id}`;
+      if (live && binned) {
+        if (home === "live") {
+          result.recycledViruses = result.recycledViruses.filter((item) => item.id !== virus.id);
+          result.recycleOrder = (result.recycleOrder ?? []).filter((item) => item !== key);
+        } else result.viruses = result.viruses.filter((item) => item.id !== virus.id);
+      // Gone from both lists and absent from the draft means an open section deleted it on purpose.
+      } else if (!live && !binned && inContent.has(virus.id)) {
+        const list = home === "live" ? result.viruses : (result.recycledViruses ??= []);
+        list.splice(Math.min(index, list.length), 0, cloneOf(virus));
+        if (home === "bin" && !(result.recycleOrder ??= []).includes(key)) result.recycleOrder.push(key);
+      }
+    }
+  }
+
+  // A key is reverted when its section is reverted in the draft's view or in the result's view, so a restored virus's texts follow where it ended up.
+  const before = baseline.formattedText ?? {};
+  const after = content.formattedText ?? {};
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const hit = [sectionOfFormattedKey(key, baseline, content), sectionOfFormattedKey(key, baseline, result)].some((section) => section && reverted.has(section));
+    if (!hit) continue;
+    result.formattedText ??= {};
+    if (key in before) result.formattedText[key] = cloneOf(before[key]);
+    else delete result.formattedText[key];
+  }
+
+  return result;
+}
+
 export type DossierTab = "main" | "text" | "mutations" | "logs";
 
 export const dossierTabs: [DossierTab, string][] = [
