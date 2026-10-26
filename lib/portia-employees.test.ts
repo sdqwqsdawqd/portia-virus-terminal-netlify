@@ -363,6 +363,17 @@ test("loadEmployees says whether the manual rows were read, so a delete can refu
   assert.equal((await loadEmployees(healthy.client)).manualRead, true);
 });
 
+test("employee photos follow the shared local-path rule (CONT-09)", () => {
+  assert.equal(sanitizeEmployeeUpdate({ photoUrl: "//host/x.png" }), null);
+  assert.equal(sanitizeEmployeeUpdate({ photoUrl: "/\\host/x.png" }), null);
+  assert.deepEqual(sanitizeEmployeeUpdate({ photoUrl: "/photos/a.png" }), { photoUrl: "/photos/a.png" });
+  assert.deepEqual(sanitizeEmployeeUpdate({ photoUrl: "https://x/a.png" }), { photoUrl: "https://x/a.png" });
+  assert.deepEqual(sanitizeEmployeeUpdate({ photoUrl: "" }), { photoUrl: "" });
+  const base = { biography: "b", knowledge_rating: 3 };
+  assert.equal(profileFromRow({ ...base, photo_url: "//host/x.png" }).photoUrl, "");
+  assert.equal(profileFromRow({ ...base, photo_url: "https://x/a.png" }).photoUrl, "https://x/a.png");
+});
+
 test("stored rows without rating columns, or with junk, map to empty ratings", () => {
   const base = { biography: "b", photo_url: "", knowledge_rating: 3 };
   assert.equal(profileFromRow(base).pawsRating, null);
