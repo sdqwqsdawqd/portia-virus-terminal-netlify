@@ -159,6 +159,11 @@ const checks = {
       if (!rules[0].includes("accent-chroma")) reasons.push("(b) the mark rule does not follow --accent-chroma");
       if (rules[0].includes("background")) reasons.push("(b) the mark rule has a background");
     }
+    // (c) the field head carries only its label and the hint is neutral (A11Y-03)
+    const heads = await cdp.eval(`document.querySelectorAll(".formatted-text-field-head small").length`);
+    if (heads !== 0) reasons.push(`(c) ${heads} empty <small> in the field heads`);
+    const hint = await cdp.eval(`document.querySelector(".formatted-text-field-hint")?.textContent ?? null`);
+    if (hint !== "Текст и GIF можно использовать вместе. Не добавляйте лишних элементов.") reasons.push(`(c) hint reads ${JSON.stringify(hint)}`);
   },
 };
 

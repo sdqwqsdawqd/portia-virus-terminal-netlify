@@ -608,7 +608,6 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .formatted-text-field { margin-top: 11px; }
 .formatted-text-field-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .formatted-text-field-head > span { color: oklch(.614 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
-.formatted-text-field-head > small { color: oklch(.501 calc(.033 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); letter-spacing: .05em; }
 .formatted-rich-input { min-width: 0; min-height: 126px; max-height: 340px; padding: 13px 15px; overflow: auto; border: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); border-radius: 3px; outline: none; --field-ink: oklch(.79 calc(.02 * var(--accent-chroma)) var(--accent-hue)); --field-bg: oklch(.168 calc(.014 * var(--accent-chroma)) var(--accent-hue)); background: var(--field-bg); color: var(--field-ink); box-shadow: inset 0 0 0 1px rgba(255,255,255,.015); white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; caret-color: oklch(.506 calc(.088 * var(--accent-chroma)) var(--accent-hue)); transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease; }
 .formatted-rich-input.tall { min-height: 205px; }
 .formatted-rich-input.preview-light { --field-ink: oklch(.237 calc(.015 * var(--accent-chroma)) var(--accent-hue)); --field-bg: #f3f1e9; }

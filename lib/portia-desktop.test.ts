@@ -88,3 +88,12 @@ test("the ≡ handle keeps no tooltip (D-18)", () => {
   assert.ok(handle, "handle not found");
   assert.ok(!handle.includes("title="), handle);
 });
+
+test("the editor imports rich-text-style once and ships no joke or empty labels (TEST-02, A11Y-03)", () => {
+  const editor = readFileSync(new URL("../components/portia-editor.tsx", import.meta.url), "utf8");
+  assert.equal(editor.split('from "@/lib/rich-text-style"').length - 1, 1);
+  assert.doesNotMatch(editor, /<small>\s*<\/small>|<small\s*\/>/);
+  for (const word of ["\u0444\u0438\u0433\u043d\u0438", "\u0434\u0440\u0443\u0436\u043e\u043a", "\u043f\u0438\u0440\u043e\u0436\u043e\u043a"]) {
+    assert.ok(!editor.includes(word), `joke word ${word} is back`);
+  }
+});

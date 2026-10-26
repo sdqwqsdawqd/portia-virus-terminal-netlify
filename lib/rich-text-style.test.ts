@@ -218,3 +218,9 @@ test("event order: owner scenario, weight buttons keep acting on the touched wor
   doc = applyRichTextStyle(doc, range().from, range().to, { fontWeight: 600 });
   assert.deepEqual(doc.runs, [{ text: "привет мир " }, { text: "сегодня", style: { fontWeight: 600 } }]);
 });
+
+test("the own-input window closes exactly 400 ms after up (05-IN-01)", () => {
+  const incoming = { start: 0, end: 0 };
+  assert.deepEqual(run({ start: 2, end: 6 }, [down, up(1000), read(1400, incoming)]).stored, { start: 2, end: 6 });
+  assert.deepEqual(run({ start: 2, end: 6 }, [down, up(1000), read(1399, incoming)]).stored, incoming);
+});

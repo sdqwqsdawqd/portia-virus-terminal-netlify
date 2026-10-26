@@ -22,8 +22,7 @@ import {
 } from "@/lib/portia-content";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS, MAX_TABLE_ROWS, bodyTooLargeMessage, contentBodyBytes, limitStatus, limitText, oversizeFields, oversizeMessage } from "@/lib/content-limits";
-import type { FieldSelectionEvent, FieldSelectionState } from "@/lib/rich-text-style";
-import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
+import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
 import { clampPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
@@ -1276,7 +1275,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               <Field label="Максимум, секунд"><input type="number" min="1" max="3600" step="1" value={draft.assistantAutoMaxSeconds} onChange={(event) => changeDraft((next) => { next.assistantAutoMaxSeconds = Number(event.target.value); })} /></Field>
             </div>
           )}
-          <p className="editor-guidance">Если за выбранный промежуток дружок пирожок ничего не делал, Вивьян выберет фразу бездействия. Если он нажимал, печатал, прокручивал страницу или двигал указатель — фразу активности</p>
+          <p className="editor-guidance">Если за выбранный промежуток пользователь ничего не делал, Вивьян выберет фразу бездействия. Если он нажимал, печатал, прокручивал страницу или двигал указатель — фразу активности</p>
         </div>
       )}
 
@@ -1886,7 +1885,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
   }, [currentDocument, documentSignature]);
 
   return <div className="editor-field wide formatted-text-field">
-    <div className="formatted-text-field-head"><span>{label}</span><small></small></div>
+    <div className="formatted-text-field-head"><span>{label}</span></div>
     <div
       ref={editorRef}
       data-area={area}
@@ -1936,7 +1935,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
         commitEditorValue(event.currentTarget, nextValue, selection);
       }}
     />
-    <small className="formatted-text-field-hint">Текст и GIF можно использовать вместе, не добавляй всякой фигни ок?</small>
+    <small className="formatted-text-field-hint">Текст и GIF можно использовать вместе. Не добавляйте лишних элементов.</small>
   </div>;
 }
 
@@ -2008,9 +2007,10 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     flushSync(onClose);
     if (!window.matchMedia("(max-width: 900px)").matches) return;
     const field = findFormatField(formatKey);
-    if (!field) return;
+    // Nothing is known: a focused field would store the browser's caret at 0 as the next target.
+    if (!field || !target.selection) return;
     field.focus({ preventScroll: true });
-    if (target.selection) restoreSelection(field, target.selection);
+    restoreSelection(field, target.selection);
   };
 
   const word = range ? text.slice(range.from, range.to) : "";
