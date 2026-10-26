@@ -20,3 +20,12 @@ export function mergeFragments(list: FormatFragment[]): FormatFragment[] {
 export function removeFragmentAt(list: FormatFragment[], key: string, at: number): FormatFragment[] {
   return list.filter((fragment) => !(fragment.key === key && fragment.from <= at && at <= fragment.to));
 }
+
+/**
+ * The selection a field reads when the browser holds several ranges in it (Firefox keeps every Ctrl range, Chromium one): the newest one,
+ * i.e. the last range that was not already there when the press began (`known`); with none new, the last. Zero ranges is null.
+ */
+export function pickCurrentRange(ranges: { start: number; end: number }[], known: { start: number; end: number }[] = []): { start: number; end: number } | null {
+  const fresh = ranges.filter((range) => !known.some((old) => old.start === range.start && old.end === range.end));
+  return fresh[fresh.length - 1] ?? ranges[ranges.length - 1] ?? null;
+}

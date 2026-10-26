@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mergeFragments, removeFragmentAt, type FormatFragment } from "./format-fragments.ts";
+import { mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "./format-fragments.ts";
 
 const f = (key: string, from: number, to: number): FormatFragment => ({ key, from, to });
 
@@ -65,4 +65,17 @@ test("removeFragmentAt leaves the list equal on a miss or another field", () => 
   const list = [f("a", 2, 6), f("b", 2, 6)];
   assert.deepEqual(removeFragmentAt(list, "a", 7), list);
   assert.deepEqual(removeFragmentAt(list, "c", 4), list);
+});
+
+test("a Firefox Ctrl selection holding two ranges reads the new one, not range 0", () => {
+  const first = { start: 2, end: 6 };
+  const second = { start: 20, end: 25 };
+  assert.deepEqual(pickCurrentRange([first, second], [first]), second);
+  assert.deepEqual(pickCurrentRange([second, first], [first]), second); // sorted in document order the new range may come first
+});
+
+test("one range, no range, and nothing new", () => {
+  assert.equal(pickCurrentRange([]), null);
+  assert.deepEqual(pickCurrentRange([{ start: 1, end: 3 }]), { start: 1, end: 3 });
+  assert.deepEqual(pickCurrentRange([{ start: 1, end: 3 }, { start: 5, end: 8 }], [{ start: 1, end: 3 }, { start: 5, end: 8 }]), { start: 5, end: 8 });
 });

@@ -5,7 +5,7 @@ import { createPortal, flushSync } from "react-dom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
-import { mergeFragments, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
+import { mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
 import { TYPING_PAUSE_MS, historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
 import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
@@ -439,18 +439,26 @@ function editorPlainText(root: HTMLElement) {
 }
 
 // null when the document has no range in this field: a lost selection must not look like a caret at 0 (D-05).
-function selectionOffsets(root: HTMLElement) {
+// Firefox keeps every range of a Ctrl selection (Chromium keeps one), so all ranges inside the field are read and pickCurrentRange chooses the new one.
+function rootRanges(root: HTMLElement) {
   const selection = window.getSelection();
-  if (!selection?.rangeCount) return null;
-  const range = selection.getRangeAt(0);
-  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
-  const beforeStart = range.cloneRange();
-  beforeStart.selectNodeContents(root);
-  beforeStart.setEnd(range.startContainer, range.startOffset);
-  const beforeEnd = range.cloneRange();
-  beforeEnd.selectNodeContents(root);
-  beforeEnd.setEnd(range.endContainer, range.endOffset);
-  return { start: beforeStart.toString().length, end: beforeEnd.toString().length };
+  const found: { start: number; end: number }[] = [];
+  for (let index = 0; selection && index < selection.rangeCount; index += 1) {
+    const range = selection.getRangeAt(index);
+    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) continue;
+    const beforeStart = range.cloneRange();
+    beforeStart.selectNodeContents(root);
+    beforeStart.setEnd(range.startContainer, range.startOffset);
+    const beforeEnd = range.cloneRange();
+    beforeEnd.selectNodeContents(root);
+    beforeEnd.setEnd(range.endContainer, range.endOffset);
+    found.push({ start: beforeStart.toString().length, end: beforeEnd.toString().length });
+  }
+  return found;
+}
+
+function selectionOffsets(root: HTMLElement, known: { start: number; end: number }[] = []) {
+  return pickCurrentRange(rootRanges(root), known);
 }
 
 // On a phone the list and the record swap places; bring the new half to the top (read after the next render).
@@ -2113,11 +2121,13 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
 
   const track = (event: FieldSelectionEvent) => { selectionRef.current = fieldSelectionStep(selectionRef.current, event); };
   // EDIT-06: every pointer press or editing key starts a gesture; only a Ctrl/Cmd press on a PC is additive (D-12, D-13).
+  // known: the ranges the browser already held when an additive press began (Firefox keeps them next to the new one).
   const gestureRef = useRef({ id: 0, additive: false });
-  const startGesture = (additive: boolean) => { gestureRef.current = { id: ++gestureCounter, additive }; };
+  const knownRef = useRef<{ start: number; end: number }[]>([]);
+  const startGesture = (additive: boolean, editor?: HTMLElement) => { gestureRef.current = { id: ++gestureCounter, additive }; knownRef.current = additive && editor ? rootRanges(editor) : []; };
 
   const activate = (editor: HTMLDivElement, nextValue = value, nextDocument = currentDocument) => {
-    track({ type: "read", at: Date.now(), incoming: selectionOffsets(editor), guarded: activeFormat.phonePanelOpen });
+    track({ type: "read", at: Date.now(), incoming: selectionOffsets(editor, knownRef.current), guarded: activeFormat.phonePanelOpen });
     onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection: selectionRef.current.stored, area, onCommit: onChange, gesture: gestureRef.current, fragments: [], peers: {} });
   };
 
@@ -2161,7 +2171,7 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
       spellCheck
       onPointerDown={(event) => {
         track({ type: "down" });
-        if (event.isPrimary) startGesture(addsFragment(event) && !window.matchMedia("(max-width: 900px), (pointer: coarse)").matches);
+        if (event.isPrimary) startGesture(addsFragment(event) && !window.matchMedia("(max-width: 900px), (pointer: coarse)").matches, event.currentTarget);
       }}
       onPointerUp={() => track({ type: "up", at: Date.now() })}
       onPointerCancel={() => track({ type: "up", at: Date.now() })}
