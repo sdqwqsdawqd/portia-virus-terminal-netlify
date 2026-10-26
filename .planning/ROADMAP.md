@@ -216,7 +216,7 @@ Plans:
   7. С Ctrl выделяется несколько фрагментов текста, и выбранное оформление (например, цвет) применяется ко всем сразу
   8. В таблицах редактора меняется порядок строк (столбцов — по итогам обсуждения фазы), и порядок сохраняется
 
-**Plans**: 7/7 plans executed
+**Plans**: 7/8 plans executed
 
 Plans (strictly sequential: every plan edits `components/portia-editor.tsx` and/or `app/portia.css`):
 - [x] 11-01-PLAN.md — W1: метка цели 3:1 на светлом и тёмном поле, тесты `::highlight` и окна своего ввода, один импорт `rich-text-style`, нейтральные надписи, ГОТОВО без каретки в 0; браузерный стенд `11-editor-check.mjs` (EDIT-01, EDIT-02, A11Y-03, TEST-02)
@@ -226,6 +226,7 @@ Plans (strictly sequential: every plan edits `components/portia-editor.tsx` and/
 - [x] 11-05-PLAN.md — W5: ≡ у строк таблиц (стабильный id строки) и перестановка столбцов (EDIT-07, D-18, D-19)
 - [x] 11-06-PLAN.md — W6: мультивыделение с Ctrl по разным полям, одно применение — один шаг истории (EDIT-06, D-12..D-17)
 - [x] 11-07-PLAN.md — W7: полный прогон стенда, проверка владельцем на ПК и телефоне (checkpoint), закрытие 05 WR-01/IN-03/WR-06/IN-06 и 03.1 IN-05
+- [ ] 11-08-PLAN.md — W8 (gap closure): мультивыделение не переживает удаление поля, правку с Ctrl и сворачивание карточки (CR-01, WR-01, WR-02); тест `dropFields` и проверка стенда `peers` (EDIT-06, EDIT-03, TEST-02)
 
 **UI hint**: yes
 
