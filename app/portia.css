@@ -733,6 +733,12 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .floating-text-format > footer > div { display: flex; gap: 8px; }
 .floating-text-format > footer button { min-height: 30px; padding: 5px 10px; border: 1px solid oklch(.416 calc(.027 * var(--accent-chroma)) var(--accent-hue)); border-radius: 4px; background: transparent; color: oklch(.744 calc(.022 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); cursor: pointer; }
 .floating-text-format > footer button.finish-format { border-color: var(--teal-dim); background: var(--teal-soft); color: var(--teal); }
+/* EDIT-06: the count and reset sit in the header next to the label; the extra hint sits under the footer note (D-14). */
+.floating-text-format > header .format-selection-count b { color: var(--teal); font: 700 11px var(--sans); }
+.floating-text-format > header .format-reset-fragments { width: auto; height: auto; min-height: 32px; margin-left: 10px; padding: 5px 10px; border-color: oklch(.416 calc(.027 * var(--accent-chroma)) var(--accent-hue)); background: transparent; color: oklch(.744 calc(.022 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); letter-spacing: .04em; }
+.floating-text-format > header .format-reset-fragments:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.floating-text-format > footer > .format-notes { display: block; min-width: 0; }
+.floating-text-format > footer .format-multi-hint { margin-top: 2px; font-size: 10px; font-weight: 400; }
 .scientist-rich-text { max-width: 100%; color: #252827; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .access-editor { max-width: 760px; }
 .access-editor-intro { padding: 20px; border: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); background: rgba(255,255,255,.015); }
@@ -1214,6 +1220,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .floating-text-format > header, .floating-text-format > footer { flex: none; }
   .floating-text-format > header { grid-template-columns: minmax(0,1fr) auto auto auto; min-height: 44px; }
   .floating-text-format > header button { width: 44px; height: 44px; }
+  /* D-12: multi-selection is PC only. */
+  .floating-text-format .format-multi-hint, .floating-text-format > header .format-reset-fragments { display: none; }
   /* Folded: only the header strip, «ОФОРМЛЕНИЕ ▴» and the close button remain. */
   .floating-text-format[data-collapsed] { height: 44px; }
   .floating-text-format[data-collapsed] > :not(header) { display: none; }

@@ -83,6 +83,18 @@ test("a drag key coalesces regardless of time", () => {
   assert.equal(state.present.text, "c");
 });
 
+test("a batch key coalesces regardless of time", () => {
+  const state = [edit("b", "batch:a", 0), edit("c", "batch:a", 5000)].reduce(reduce, start());
+  assert.equal(state.past.length, 1);
+  assert.equal(state.present.text, "c");
+  assert.equal(reduce(state, { type: "undo" }).present.text, "a");
+});
+
+test("a batch key and another batch key are two steps", () => {
+  const state = [edit("b", "batch:a", 0), edit("c", "batch:b", 10)].reduce(reduce, start());
+  assert.equal(state.past.length, 2);
+});
+
 test("past is capped at HISTORY_LIMIT entries", () => {
   let state = start();
   for (let index = 1; index <= 55; index += 1) state = reduce(state, edit(`v${index}`, null, index));

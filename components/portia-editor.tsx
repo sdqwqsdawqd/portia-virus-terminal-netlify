@@ -6,7 +6,7 @@ import { CustomColorPicker } from "@/components/custom-color-picker";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { mergeFragments, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
-import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
+import { TYPING_PAUSE_MS, historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
 import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
 import {
@@ -569,6 +569,13 @@ function EditorToc({ items, onJump, onAll }: { items: TocItem[]; onJump: (id: st
   );
 }
 
+// D-16: the batch of a panel control. The id is kept while the same control fires again within the typing pause (a slider or colour board drag).
+function nextBatch(last: { control: string; id: string; at: number } | null, control: string) {
+  const at = Date.now();
+  const id = last && last.control === control && at - last.at <= TYPING_PAUSE_MS ? last.id : `batch:${makeId("batch")}`;
+  return { control, id, at };
+}
+
 // EDIT-06: what a field activation makes of the target before it. A plain gesture starts over (D-14); an additive one keeps the fragments and,
 // on its first activation, turns the previous non-empty selection into one (D-13). A collapsed caret in an additive gesture drops the fragment it lands in.
 function joinFormatTarget(prev: FormatTarget | null, target: FormatTarget): FormatTarget {
@@ -743,9 +750,15 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
 
   // Counted at dispatch, not after commit, so a save can tell synchronously whether the draft changed while it ran.
   const editCount = useRef(0);
+  // D-16: while the panel applies one control to several fields every change carries its batch:<id> key, so they are one undo step.
+  const batchKey = useRef<string | null>(null);
   const changeDraft = (updater: (next: PortiaContent) => void) => {
     editCount.current += 1;
-    dispatch({ type: "change", updater, key: editKeyFor(document.activeElement), now: Date.now() });
+    dispatch({ type: "change", updater, key: batchKey.current ?? editKeyFor(document.activeElement), now: Date.now() });
+  };
+  const runBatch = (id: string, run: () => void) => {
+    batchKey.current = id;
+    try { run(); } finally { batchKey.current = null; }
   };
 
   // D-19: the two columns are the key and value of every row; one changeDraft call is one undo step.
@@ -1511,7 +1524,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
-      {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
+      {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={runBatch} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
       <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? ` Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>
       {chipVisible && (
         <div
@@ -2192,11 +2205,12 @@ function FormattedTextarea({ label, area, value, document, formatKey, onChange, 
   </div>;
 }
 
-function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onUpdate, onClose }: {
+function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onUpdate, onBatch, onClose }: {
   target: FormatTarget;
   previewSurface: EditorPreviewSurface | null;
   onPreviewSurface: (surface: EditorPreviewSurface) => void;
   onUpdate: (target: FormatTarget) => void;
+  onBatch: (id: string, run: () => void) => void;
   onClose: () => void;
 }) {
   // Seeds the custom colour picker for text without a colour: baseInk at the default accent.
@@ -2213,18 +2227,24 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const set = useMemo(() => {
     if (target.fragments.length === 0) return [];
     const selection = target.selection;
-    const clamp = (value: number) => Math.max(0, Math.min(text.length, value));
+    const length = target.document.runs.reduce((sum, run) => sum + run.text.length, 0);
+    const clamp = (value: number) => Math.max(0, Math.min(length, value));
     const picked = selection && selection.start !== selection.end ? [{ key: target.key, from: clamp(selection.start), to: clamp(selection.end) }] : [];
     return mergeFragments([...target.fragments, ...picked]).filter((fragment) => fragment.key === target.key || target.peers[fragment.key] !== undefined);
-  }, [target.fragments, target.selection, target.key, target.peers, text]);
+  }, [target]);
   const docFor = (key: string) => (key === target.key ? target.document : target.peers[key]?.document ?? target.document);
   // The readout comes from the committed document, so a click shows exactly what it applied. A repeat click on a manual control
   // re-applies the same value; the row styles toggle (D-02). Unstyled text marks no size or weight, because every area renders its own.
   const style = multi
     ? (set[0] ? richTextStyleAt(docFor(set[0].key), set[0].from) : {})
     : richTextStyleAt(target.document, range?.from ?? target.selection?.start ?? 0);
-  const marked = (preset: RichTextStyle) => range !== null && rangeHasStyle(target.document, range.from, range.to, preset);
-  const plainMarked = range !== null && rangeIsPlain(target.document, range.from, range.to);
+  const hasTarget = multi ? set.length > 0 : range !== null;
+  const marked = (preset: RichTextStyle) => multi
+    ? set.length > 0 && set.every((fragment) => rangeHasStyle(docFor(fragment.key), fragment.from, fragment.to, preset))
+    : range !== null && rangeHasStyle(target.document, range.from, range.to, preset);
+  const plainMarked = multi
+    ? set.length > 0 && set.every((fragment) => rangeIsPlain(docFor(fragment.key), fragment.from, fragment.to))
+    : range !== null && rangeIsPlain(target.document, range.from, range.to);
   const color = style.color ?? defaultTextColor;
   const { fontSize, fontWeight } = style;
   const backgroundColor = style.backgroundColor ?? "#f0d66a";
@@ -2286,11 +2306,14 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   };
 
   const word = range ? text.slice(range.from, range.to) : "";
-  const selectionLabel = !range
-    ? "ВЫДЕЛИТЕ ТЕКСТ"
-    : target.selection?.start !== target.selection?.end
-      ? `${range.to - range.from} ЗНАК.`
-      : `СЛОВО: «${word.length > 12 ? `${word.slice(0, 12)}…` : word}»`;
+  const selectionLabel = multi
+    ? (set.length === 1 ? `${set[0].to - set[0].from} ЗНАК.` : "ВЫДЕЛИТЕ ТЕКСТ")
+    : !range
+      ? "ВЫДЕЛИТЕ ТЕКСТ"
+      : target.selection?.start !== target.selection?.end
+        ? `${range.to - range.from} ЗНАК.`
+        : `СЛОВО: «${word.length > 12 ? `${word.slice(0, 12)}…` : word}»`;
+  const clearFragments = () => onUpdate({ ...target, fragments: [], peers: {} });
 
   const commit = (document: RichTextDocument) => {
     documentRef.current = document;
@@ -2300,33 +2323,46 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
 
   // One path for every control. With fragments each field's document is folded over that field's ranges and committed once (D-13);
   // the offsets are the stored ones, so a DOM selection lost to a panel input changes nothing. applyRichTextStyle clamps stale offsets (T-11-13).
-  const applyOp = (op: (document: RichTextDocument, from: number, to: number) => RichTextDocument) => {
+  // D-16: a fresh batch id per control interaction; the same control firing again within the typing pause (a slider or colour board drag) keeps its id.
+  const lastBatch = useRef<{ control: string; id: string; at: number } | null>(null);
+  const batchFor = (control: string) => {
+    lastBatch.current = nextBatch(lastBatch.current, control);
+    return lastBatch.current.id;
+  };
+
+  const applyOp = (control: string, op: (document: RichTextDocument, from: number, to: number) => RichTextDocument) => {
     if (!multi) {
       if (range) commit(op(documentRef.current, range.from, range.to));
       return;
     }
-    let currentDocument = documentRef.current;
-    const nextPeers = { ...target.peers };
-    for (const key of new Set(set.map((fragment) => fragment.key))) {
-      const mine = set.filter((fragment) => fragment.key === key);
-      if (key === target.key) {
-        currentDocument = mine.reduce((doc, fragment) => op(doc, fragment.from, fragment.to), documentRef.current);
-        documentRef.current = currentDocument;
-        target.onCommit(target.value, currentDocument);
-      } else {
-        const peer = target.peers[key];
-        const next = mine.reduce((doc, fragment) => op(doc, fragment.from, fragment.to), peer.document);
-        nextPeers[key] = { ...peer, document: next };
-        peer.onCommit(peer.value, next);
+    onBatch(batchFor(control), () => {
+      let currentDocument = documentRef.current;
+      const nextPeers = { ...target.peers };
+      for (const key of new Set(set.map((fragment) => fragment.key))) {
+        const mine = set.filter((fragment) => fragment.key === key);
+        if (key === target.key) {
+          currentDocument = mine.reduce((doc, fragment) => op(doc, fragment.from, fragment.to), documentRef.current);
+          documentRef.current = currentDocument;
+          target.onCommit(target.value, currentDocument);
+        } else {
+          const peer = target.peers[key];
+          const next = mine.reduce((doc, fragment) => op(doc, fragment.from, fragment.to), peer.document);
+          nextPeers[key] = { ...peer, document: next };
+          peer.onCommit(peer.value, next);
+        }
       }
-    }
-    onUpdate({ ...target, document: currentDocument, peers: nextPeers });
+      onUpdate({ ...target, document: currentDocument, peers: nextPeers });
+    });
   };
 
-  const applyStyle = (style: RichTextStyle) => applyOp((doc, from, to) => applyRichTextStyle(doc, from, to, style));
+  const applyStyle = (control: string, style: RichTextStyle) => applyOp(control, (doc, from, to) => applyRichTextStyle(doc, from, to, style));
 
-  const togglePresetStyle = (preset: RichTextStyle) => {
-    if (range) commit(togglePreset(documentRef.current, range.from, range.to, preset));
+  // D-02: the preset leaves when every fragment already carries it, else it is applied to every fragment.
+  const togglePresetStyle = (name: string, preset: RichTextStyle) => {
+    const keys = Object.keys(preset) as (keyof RichTextStyle)[];
+    if (!multi) applyOp(`preset:${name}`, (doc, from, to) => togglePreset(doc, from, to, preset));
+    else if (marked(preset)) applyOp(`preset:${name}`, (doc, from, to) => removeRichTextStyleKeys(doc, from, to, keys));
+    else applyOp(`preset:${name}`, (doc, from, to) => applyRichTextStyle(doc, from, to, preset));
   };
 
   // Restore the remembered place on mount and keep 64px of it on screen whenever the browser window changes size (D-07). The phone panel is docked by CSS.
@@ -2395,6 +2431,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const leavePanel = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape") return;
     event.preventDefault();
+    if (multi) clearFragments();
     const field = findFormatField(formatKey);
     if (field && target.selection) {
       field.focus({ preventScroll: true });
@@ -2407,14 +2444,18 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus} onKeyDown={leavePanel} data-collapsed={collapsed || undefined}>
     <header tabIndex={0} role="group" aria-label="Перемещение панели: стрелки, с Shift шагом 32 px" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onKeyDown={keyMove} onClick={(event) => { if (window.matchMedia("(max-width: 900px)").matches && !(event.target as HTMLElement).closest("button")) setCollapsed((value) => !value); }}>
       <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
-      <small>{selectionLabel}</small>
+      <small>
+        {set.length >= 2
+          ? <><span className="format-selection-count">ВЫБРАНО: <b>{set.length}</b></span><button type="button" className="format-reset-fragments" aria-label="Снять все выделенные фрагменты" onClick={clearFragments}>СБРОСИТЬ</button></>
+          : selectionLabel}
+      </small>
       <button type="button" data-sheet-toggle aria-expanded={!collapsed} aria-label={collapsed ? "Развернуть панель оформления" : "Свернуть панель оформления"} onClick={() => setCollapsed((value) => !value)}>{collapsed ? "ОФОРМЛЕНИЕ ▴" : "▾"}</button>
       <button type="button" onClick={finish} aria-label="Закрыть панель оформления">×</button>
     </header>
     <div className="format-presets format-choice-row" role="group" aria-label="Готовые стили">
-      <button type="button" className={plainMarked ? "selected" : ""} aria-pressed={plainMarked} disabled={!range} onClick={() => range && commit(resetRichTextStyle(documentRef.current, range.from, range.to))}>Обычный</button>
-      <button type="button" className={marked(stylePresets.heading) ? "selected" : ""} aria-pressed={marked(stylePresets.heading)} disabled={!range} onClick={() => togglePresetStyle(stylePresets.heading)}>Заголовок</button>
-      <button type="button" className={marked(stylePresets.important) ? "selected" : ""} aria-pressed={marked(stylePresets.important)} disabled={!range} onClick={() => togglePresetStyle(stylePresets.important)}>Важно</button>
+      <button type="button" className={plainMarked ? "selected" : ""} aria-pressed={plainMarked} disabled={!hasTarget} onClick={() => applyOp("reset", resetRichTextStyle)}>Обычный</button>
+      <button type="button" className={marked(stylePresets.heading) ? "selected" : ""} aria-pressed={marked(stylePresets.heading)} disabled={!hasTarget} onClick={() => togglePresetStyle("heading", stylePresets.heading)}>Заголовок</button>
+      <button type="button" className={marked(stylePresets.important) ? "selected" : ""} aria-pressed={marked(stylePresets.important)} disabled={!hasTarget} onClick={() => togglePresetStyle("important", stylePresets.important)}>Важно</button>
     </div>
     <div className="format-tabs format-choice-row" role="tablist" aria-label="Группы оформления">
       {([["color", "Цвет"], ["size", "Размер"], ["background", "Фон"]] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "selected" : ""} onClick={() => setTab(id)}>{label}</button>)}
@@ -2422,11 +2463,11 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     <div className="rich-text-toolbar" aria-label="Оформление текста" data-tab={tab}>
       {target.area === "assistant" && <p className="format-area-note">Помощник показывает фразы своим цветом, размером и толщиной — эти настройки здесь не действуют. Фон текста работает.</p>}
       <div data-tab-group="background" className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={surface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={surface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
-      <div data-tab-group="color" className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: style.color ?? baseInk[surface] }} />{style.color ? style.color.toUpperCase() : "ОСНОВНОЙ"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={style.color ? "" : "selected"} title="Основной" aria-label="Основной" onClick={() => { setColorPicker(null); if (range) commit(removeRichTextStyleKeys(documentRef.current, range.from, range.to, ["color"])); }}><i style={{ backgroundColor: baseInk[surface] }} /></button>{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={style.color?.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
-      <div data-tab-group="size" className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" disabled={!range} className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle({ fontSize: value }); }}>{label}</button>)}</div></div>
-      <div data-tab-group="size" className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" disabled={!range} className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); applyStyle({ fontWeight: value }); }}>{label}</button>)}</div></div>
-      <div data-tab-group="background" className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle({ backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle({ backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
-      <label data-tab-group="background" className="format-control opacity-control"><span>Плотность фона: {Math.round(backgroundOpacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={backgroundOpacity} disabled={!range} onChange={(event) => { const opacity = Number(event.target.value); applyStyle({ backgroundColor, backgroundOpacity: opacity }); }} /></label>
+      <div data-tab-group="color" className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: style.color ?? baseInk[surface] }} />{style.color ? style.color.toUpperCase() : "ОСНОВНОЙ"}</b></span><div className="format-swatches"><button type="button" disabled={!hasTarget} className={style.color ? "" : "selected"} title="Основной" aria-label="Основной" onClick={() => { setColorPicker(null); applyOp("colour-base", (doc, from, to) => removeRichTextStyleKeys(doc, from, to, ["color"])); }}><i style={{ backgroundColor: baseInk[surface] }} /></button>{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!hasTarget} className={style.color?.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle(`color:${item.value}`, { color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!hasTarget} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
+      <div data-tab-group="size" className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" disabled={!hasTarget} className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle(`size:${value}`, { fontSize: value }); }}>{label}</button>)}</div></div>
+      <div data-tab-group="size" className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" disabled={!hasTarget} className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); applyStyle(`weight:${value}`, { fontWeight: value }); }}>{label}</button>)}</div></div>
+      <div data-tab-group="background" className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" disabled={!hasTarget} className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle("no-background", { backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" disabled={!hasTarget} className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle(`background:${item.value}`, { backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!hasTarget} title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
+      <label data-tab-group="background" className="format-control opacity-control"><span>Плотность фона: {Math.round(backgroundOpacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={backgroundOpacity} disabled={!hasTarget} onChange={(event) => { const opacity = Number(event.target.value); applyStyle("density", { backgroundColor, backgroundOpacity: opacity }); }} /></label>
       {colorPicker && <CustomColorPicker
         key={`${colorPicker}:${target.selection?.start}:${target.selection?.end}`}
         group={colorPicker === "text" ? "color" : "background"}
@@ -2434,16 +2475,16 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
         color={colorPicker === "text" ? color : backgroundColor}
         onChange={(nextColor) => {
           if (colorPicker === "text") {
-            applyStyle({ color: nextColor });
+            applyStyle("picker:text", { color: nextColor });
           } else {
             const opacity = backgroundOpacity || .45;
-            applyStyle({ backgroundColor: nextColor, backgroundOpacity: opacity });
+            applyStyle("picker:background", { backgroundColor: nextColor, backgroundOpacity: opacity });
           }
         }}
         onClose={() => setColorPicker(null)}
       />}
     </div>
-    <footer><p>Изменения применяются сразу. Без выделения меняется слово под курсором.</p><div><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
+    <footer><div className="format-notes"><p>Изменения применяются сразу. Без выделения меняется слово под курсором.</p><p className="format-multi-hint">Ctrl (Cmd на Mac) + выделение добавляет фрагмент. Esc снимает все.</p></div><div><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
   </section>;
 }
 

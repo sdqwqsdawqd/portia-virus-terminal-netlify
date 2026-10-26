@@ -34,8 +34,9 @@ export function historyReducer<T>(state: EditorHistory<T>, action: HistoryAction
       action.updater(next);
       if (JSON.stringify(next) === JSON.stringify(state.present)) return state;
       const { key, now } = action;
+      // drag: and batch: keys name one gesture (a ≡ drag, one panel application over several fields), so they fold whatever the pause.
       const coalesce = key !== null && key === state.key
-        && (key.startsWith("drag:") || (now - state.at <= TYPING_PAUSE_MS && now - state.since <= TYPING_SPAN_MS));
+        && (key.startsWith("drag:") || key.startsWith("batch:") || (now - state.at <= TYPING_PAUSE_MS && now - state.since <= TYPING_SPAN_MS));
       if (coalesce) return { ...state, present: next, at: now };
       return { ...state, present: next, past: [...state.past, state.present].slice(-HISTORY_LIMIT), future: [], key, at: now, since: now };
     }

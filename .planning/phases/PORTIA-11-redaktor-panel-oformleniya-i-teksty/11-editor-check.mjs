@@ -804,6 +804,165 @@ const checks = {
     // (e) one Ctrl+Z takes the colour back from both fields
     await ctrlZ(cdp);
     for (const word of ["два", "восемь"]) { const c = await wordColor(word); if (c === red) reasons.push(`(e) «${word}» is still coloured after one Ctrl+Z`); }
+    // ---- plan 11-06 task 2: every control, counts, removal and clearing, 10 fragments, the phone ----
+    const fresh = async (revision) => {
+      serve(multiFixture(), revision);
+      await load(cdp);
+      if (!(await openEditor(cdp))) return false;
+      await clickText(cdp, ".dossier-tabs button", "Описание");
+      if (!(await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(lead)}).length === 2`, 3000))) { reasons.push("multiselect: the two lead fields did not appear after a reload"); return false; }
+      return true;
+    };
+    const panelOpen = () => cdp.eval(`!!document.querySelector(".floating-text-format")`);
+    const ensurePanel = async () => { if (!(await panelOpen())) await click(cdp, ".global-format-launch > button"); await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000); await sleep(150); };
+    const headerText = () => cdp.eval(`document.querySelector(".floating-text-format > header")?.textContent ?? ""`);
+    const styleOf = (word, property) => cdp.eval(`(() => { for (const f of document.querySelectorAll(${JSON.stringify(lead)})) { const w = document.createTreeWalker(f, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) if (n.data.includes(${JSON.stringify(word)})) return getComputedStyle(n.parentElement)[${JSON.stringify(property)}]; } return null; })()`);
+    const pickRange = async (index, first, last, modifiers = 0) => { // from the start of `first` to the end of `last`, both in one field
+      await wordBox(cdp, lead, index, first); await sleep(400);
+      const a = await wordBox(cdp, lead, index, first), b = await wordBox(cdp, lead, index, last);
+      if (!a || !b) { reasons.push(`multiselect: «${first}»..«${last}» not found in lead field ${index}`); return false; }
+      await mouseSelect(cdp, { left: a.left, right: b.right, y: a.y }, modifiers);
+      await sleep(100);
+      return true;
+    };
+    const ctrlClick = async (index, word) => { // press and release in the middle of the word with Ctrl
+      await wordBox(cdp, lead, index, word); await sleep(400);
+      const box = await wordBox(cdp, lead, index, word);
+      if (!box) { reasons.push(`multiselect: «${word}» not found in lead field ${index}`); return false; }
+      const x = (box.left + box.right) / 2;
+      const at = (type, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x, y: box.y, button: "left", modifiers: 2, ...extra });
+      await at("mouseMoved", { button: "none" }); await at("mousePressed", { buttons: 1, clickCount: 1 }); await at("mouseReleased", { buttons: 0, clickCount: 1 });
+      await sleep(100);
+      return true;
+    };
+    const twoFragments = async () => (await pick(0, "два")) && (await pick(1, "восемь", 2));
+    // (f) three picks make «ВЫБРАНО: 3»; a Ctrl pick over «два три» swallows two of them, so the count is 2 and the highlights are the merged text
+    if (!(await fresh(41))) return;
+    if (!(await pick(0, "два")) || !(await pick(1, "восемь", 2)) || !(await pick(0, "три", 2))) return;
+    await ensurePanel();
+    let head = await headerText();
+    if (!head.includes("ВЫБРАНО: 3")) reasons.push(`(f) header reads ${JSON.stringify(head)}, expected «ВЫБРАНО: 3»`);
+    if (!(await pickRange(0, "два", "три", 2))) return;
+    head = await headerText();
+    if (!head.includes("ВЫБРАНО: 2")) reasons.push(`(f) after the Ctrl pick over «два три» the header reads ${JSON.stringify(head)}, expected «ВЫБРАНО: 2»`);
+    const merged = await painted();
+    if (JSON.stringify(merged) !== JSON.stringify(["два три", "восемь"])) reasons.push(`(f) painted ${JSON.stringify(merged)}, expected ["два три","восемь"]`);
+    // (g) a Ctrl+click inside «восемь» removes only that fragment
+    if (!(await ctrlClick(1, "восемь"))) return;
+    head = await headerText();
+    if (head.includes("ВЫБРАНО")) reasons.push(`(g) the header still reads ${JSON.stringify(head)} after the Ctrl+click`);
+    if (!head.includes("7 ЗНАК.")) reasons.push(`(g) header ${JSON.stringify(head)} does not show «7 ЗНАК.»`);
+    const left = await painted();
+    if (left?.length !== 1) reasons.push(`(g) ${left?.length} highlight ranges after the removal, expected 1`);
+    // (h) «Заголовок» styles both fragments, a second click takes it away from both, one Ctrl+Z puts it back on both
+    if (!(await pick(1, "восемь", 2))) return;
+    await ensurePanel();
+    if (!(await clickText(cdp, ".format-presets button", "Заголовок"))) { reasons.push("(h) no «Заголовок» button"); return; }
+    await sleep(200);
+    for (const word of ["два", "восемь"]) { const size = await styleOf(word, "fontSize"); if (size !== "22px") reasons.push(`(h) «${word}» font size ${size}, expected 22px`); }
+    const pressed = await cdp.eval(`[...document.querySelectorAll(".format-presets button")].find((b) => b.textContent.trim() === "Заголовок")?.getAttribute("aria-pressed")`);
+    if (pressed !== "true") reasons.push(`(h) «Заголовок» aria-pressed ${pressed}, expected true`);
+    await sleep(900); // the same control within the typing pause is one undo step by design
+    await clickText(cdp, ".format-presets button", "Заголовок");
+    await sleep(200);
+    for (const word of ["два", "восемь"]) { const size = await styleOf(word, "fontSize"); if (size === "22px") reasons.push(`(h) «${word}» is still 22px after the second click`); }
+    await ctrlZ(cdp);
+    for (const word of ["два", "восемь"]) { const size = await styleOf(word, "fontSize"); if (size !== "22px") reasons.push(`(h) «${word}» font size ${size} after Ctrl+Z, expected 22px`); }
+    // (i) a swatch and then a density drag are two steps; one Ctrl+Z takes back only the drag, in both fields
+    if (!(await fresh(42))) return;
+    if (!(await twoFragments())) return;
+    await ensurePanel();
+    if (!(await click(cdp, `[data-tab-group="background"].format-control .format-swatches button[title]:not(.custom-color)`))) { reasons.push("(i) no background swatch"); return; }
+    await sleep(300);
+    for (const word of ["два", "восемь"]) { const bg = await styleOf(word, "backgroundColor"); if (!String(bg).endsWith(", 0.45)")) reasons.push(`(i) «${word}» background ${bg} after the swatch, expected alpha 0.45`); }
+    for (const value of [0.5, 0.6, 0.7, 0.8, 0.9]) {
+      await cdp.eval(`(() => { const i = document.querySelector(".opacity-control input[type=range]"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(i, ${value}); i.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+      await sleep(50);
+    }
+    await sleep(200);
+    for (const word of ["два", "восемь"]) { const bg = await styleOf(word, "backgroundColor"); if (!String(bg).endsWith(", 0.9)")) reasons.push(`(i) «${word}» background ${bg} after the drag, expected alpha 0.9`); }
+    await ctrlZ(cdp);
+    for (const word of ["два", "восемь"]) { const bg = await styleOf(word, "backgroundColor"); if (!String(bg).endsWith(", 0.45)")) reasons.push(`(i) «${word}» background ${bg} after one Ctrl+Z, expected alpha 0.45`); }
+    // (j) Esc from the panel header clears every fragment
+    if (!(await twoFragments())) return;
+    await ensurePanel();
+    await cdp.eval(`document.querySelector(".floating-text-format > header").focus()`);
+    await key(cdp, "Escape", 27);
+    await sleep(150);
+    if ((await headerText()).includes("ВЫБРАНО")) reasons.push("(j) «ВЫБРАНО» is still shown after Esc in the panel");
+    if (((await painted()) ?? []).length > 1) reasons.push(`(j) ${(await painted()).length} highlight ranges after Esc, expected at most 1`);
+    // (k) СБРОСИТЬ clears every fragment
+    if (!(await twoFragments())) return;
+    await ensurePanel();
+    if (!(await headerText()).includes("ВЫБРАНО: 2")) reasons.push("(k) two fragments did not show «ВЫБРАНО: 2» before СБРОСИТЬ");
+    if (await cdp.eval(`document.querySelector(".format-reset-fragments")?.getAttribute("aria-label")`) !== "Снять все выделенные фрагменты") reasons.push("(k) СБРОСИТЬ has no aria-label «Снять все выделенные фрагменты»");
+    await click(cdp, ".format-reset-fragments");
+    await sleep(150);
+    if ((await headerText()).includes("ВЫБРАНО")) reasons.push("(k) «ВЫБРАНО» is still shown after СБРОСИТЬ");
+    // (l) a plain click in a field clears every fragment
+    if (!(await twoFragments())) return;
+    await ensurePanel();
+    const spot = await wordBox(cdp, lead, 0, "четыре");
+    await mouseSelect(cdp, { left: spot.left + 3, right: spot.left + 3, y: spot.y }); // press and release on one point: a caret
+    await sleep(150);
+    await ensurePanel();
+    if ((await headerText()).includes("ВЫБРАНО")) reasons.push("(l) «ВЫБРАНО» is still shown after a plain click");
+    // (m) ten fragments across both fields
+    if (!(await fresh(43))) return;
+    const ten = [[0, "один"], [1, "семь", 2], [0, "два", 2], [1, "восемь", 2], [0, "три", 2], [1, "девять", 2], [0, "четыре", 2], [1, "десять", 2], [0, "пять", 2], [1, "одиннадцать", 2]];
+    for (const [index, word, modifiers] of ten) if (!(await pick(index, word, modifiers ?? 0))) return;
+    await ensurePanel();
+    head = await headerText();
+    if (!head.includes("ВЫБРАНО: 10")) reasons.push(`(m) header reads ${JSON.stringify(head)}, expected «ВЫБРАНО: 10»`);
+    const tenRanges = await painted();
+    if (tenRanges?.length !== 10) reasons.push(`(m) ${tenRanges?.length} highlight ranges, expected 10`);
+    await click(cdp, '.format-swatches button[aria-label="Красный"]');
+    await sleep(300);
+    for (const [, word] of ten) { const c = await styleOf(word, "color"); if (c !== red) reasons.push(`(m) «${word}» colour ${c}, expected ${red}`); }
+    // (n) on a phone a Ctrl press adds nothing: one selection, no count, no hint
+    await phone(cdp);
+    serve(multiFixture(), 44);
+    await load(cdp);
+    if (!(await openEditor(cdp))) { await desktop(cdp); return; }
+    await click(cdp, ".editor-record-row > button:last-child");
+    await sleep(300);
+    await clickText(cdp, ".dossier-tabs button", "Описание");
+    await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(lead)}).length === 2`, 3000);
+    const phoneSelect = (index, word, ctrl) => cdp.eval(`(() => {
+      const f = document.querySelectorAll(${JSON.stringify(lead)})[${index}];
+      if (${ctrl}) f.dispatchEvent(new PointerEvent("pointerdown", { ctrlKey: true, isPrimary: true, bubbles: true }));
+      f.focus();
+      const w = document.createTreeWalker(f, NodeFilter.SHOW_TEXT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) {
+        const at = n.data.indexOf(${JSON.stringify(word)}); if (at < 0) continue;
+        const r = document.createRange(); r.setStart(n, at); r.setEnd(n, at + ${JSON.stringify(word)}.length);
+        const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+        f.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+        return true;
+      }
+      return false;
+    })()`);
+    if (!(await phoneSelect(0, "два", false)) || !(await phoneSelect(1, "восемь", true))) reasons.push("(n) the phone selections could not be made");
+    await sleep(150);
+    await click(cdp, ".global-format-launch > button");
+    if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) reasons.push("(n) the phone panel did not open");
+    else {
+      head = await headerText();
+      if (head.includes("ВЫБРАНО")) reasons.push(`(n) the phone header reads ${JSON.stringify(head)}`);
+      const hintDisplay = await cdp.eval(`(() => { const e = document.querySelector(".format-multi-hint"); return e ? getComputedStyle(e).display : "missing"; })()`);
+      if (hintDisplay !== "none") reasons.push(`(n) the phone multi-select hint has display ${hintDisplay}, expected none`);
+    }
+    await desktop(cdp);
+    // (o) on the desktop the hint is shown
+    if (!(await fresh(45))) return;
+    if (!(await pick(0, "два"))) return;
+    await ensurePanel();
+    const hint = await cdp.eval(`(() => { const e = document.querySelector(".format-multi-hint"); return e ? { text: e.textContent, display: getComputedStyle(e).display } : null; })()`);
+    if (!hint) reasons.push("(o) no .format-multi-hint on the desktop");
+    else {
+      if (hint.text !== "Ctrl (Cmd на Mac) + выделение добавляет фрагмент. Esc снимает все.") reasons.push(`(o) hint reads ${JSON.stringify(hint.text)}`);
+      if (hint.display === "none") reasons.push("(o) the desktop hint is not displayed");
+    }
   },
 };
 
