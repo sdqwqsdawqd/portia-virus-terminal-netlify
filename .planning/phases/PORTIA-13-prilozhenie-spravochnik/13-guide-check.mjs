@@ -1,5 +1,5 @@
 // Usage: node 13-guide-check.mjs --check <name>|all [--url http://localhost:3124]
-// Checks: open-card, grid, card-blocks, poll-gone, search (the «Справочник» desktop window of phase 13).
+// Checks: open-card, grid, card-blocks, poll-gone, search, editor-save (the «Справочник» desktop window of phase 13).
 // Why: the guide window (grid, card page, remembered folding, poll safety, search) has no DOM test runner, so headless Edge drives the production build.
 // Inside the browser it launches, GET /api/access and GET /api/content are answered from the current fixture. EVERY non-GET request to /api/*
 // is blocked and recorded as a failure reason ("write blocked"), never forwarded, so nothing is ever saved and no login is needed.
@@ -136,6 +136,51 @@ async function openGuide(cdp, sections) {
   if (!(await click(cdp, '[data-shortcut="guide"]'))) { reasons.push("the guide shortcut is missing on the desktop"); return false; }
   if (!(await waitFor(cdp, `!!document.querySelector(".guide-window .guide-app")`, 6000))) { reasons.push("the guide window did not open"); return false; }
   return true;
+}
+/** An editor session (canEdit) with the tabs in `openTabs`. */
+const editorAccess = (openTabs = ALL_TABS) => ({ canEdit: true, canManageEditors: false, openTabs: [...openTabs], tabsEnforced: true });
+
+async function openEditor(cdp) {
+  if (!(await click(cdp, '[data-shortcut="settings"]'))) { reasons.push("openEditor: settings shortcut missing"); return false; }
+  if (!(await waitFor(cdp, `(() => { const b = document.querySelector(".content-control-actions button"); return !!b && !b.disabled; })()`, 5000))) { reasons.push("openEditor: editor button not enabled"); return false; }
+  await click(cdp, ".content-control-actions button");
+  if (!(await waitFor(cdp, `!!document.querySelector(".content-editor")`, 8000))) { reasons.push("openEditor: .content-editor did not appear"); return false; }
+  return true;
+}
+const bootEditor = async (cdp, sections, access = editorAccess()) => { serve(baseFixture(sections), access); await load(cdp); return openEditor(cdp); };
+const STRIP = ".content-editor > .editor-tabs";
+const stripLabels = (cdp) => cdp.eval(`[...document.querySelectorAll(${JSON.stringify(`${STRIP} > button`)})].map((b) => b.textContent.trim())`);
+const ctrlZ = async (cdp) => { for (const type of ["keyDown", "keyUp"]) await cdp.send("Input.dispatchKeyEvent", { type, key: "z", code: "KeyZ", windowsVirtualKeyCode: 90, modifiers: 2 }); await sleep(250); };
+/** Focuses the element, selects what it holds and types over it (works for inputs and the formatted fields). */
+const typeInto = async (cdp, selector, value, nth = 0) => {
+  const ok = await cdp.eval(`(() => { const i = document.querySelectorAll(${JSON.stringify(selector)})[${nth}]; if (!i) return false; i.scrollIntoView({ block: "center" }); i.focus(); if (i.select) i.select(); else document.getSelection().selectAllChildren(i); return true; })()`);
+  if (!ok) return false;
+  await cdp.send("Input.insertText", { text: value }); await sleep(250);
+  return true;
+};
+/** Types over the input of the editor field with this label (the nth one in the DOM). */
+const typeLabel = async (cdp, label, value, nth = 0) => {
+  const ok = await cdp.eval(`(() => { const l = [...document.querySelectorAll(".content-editor label.editor-field")].filter((n) => n.querySelector(":scope > span")?.textContent.trim() === ${JSON.stringify(label)})[${nth}]; const i = l?.querySelector("input"); if (!i) return false; i.scrollIntoView({ block: "center" }); i.focus(); i.select(); return true; })()`);
+  if (!ok) { reasons.push(`no field «${label}» (#${nth})`); return false; }
+  await cdp.send("Input.insertText", { text: value }); await sleep(250);
+  return true;
+};
+const editorClick = (cdp, label, nth = 0) => cdp.eval(`(() => { const e = [...document.querySelectorAll(".content-editor button")].filter((n) => n.textContent.trim() === ${JSON.stringify(label)})[${nth}]; if (!e) return false; e.click(); return true; })()`);
+const chipOpen = async (cdp) => {
+  if (!(await cdp.eval(`!!document.querySelector(".editor-save-chip")`))) return false;
+  if (!(await cdp.eval(`!!document.querySelector(".editor-save-popover")`))) await cdp.eval(`document.querySelector(".editor-save-chip > button").click()`);
+  return waitFor(cdp, `!!document.querySelector(".editor-save-popover")`, 2000);
+};
+/** Presses СОХРАНИТЬ in the popover with fake saves on; returns the parsed content of the one save it caused, or null. */
+async function fakeSave(cdp) {
+  fakeSaves = 0; savedBody = ""; current.fakeSave = true;
+  if (!(await chipOpen(cdp))) { reasons.push("fakeSave: no chip to open"); current.fakeSave = false; return null; }
+  await clickText(cdp, ".editor-save-popover button", "СОХРАНИТЬ");
+  for (let waited = 0; waited < 6000 && fakeSaves === 0; waited += 100) await sleep(100);
+  await sleep(1200); // the answer, then «СОХРАНЕНО»
+  current.fakeSave = false;
+  if (fakeSaves !== 1) { reasons.push(`fakeSave: ${fakeSaves} saves, expected exactly 1`); return null; }
+  try { return JSON.parse(savedBody).content; } catch { reasons.push("fakeSave: the saved body is not JSON"); return null; }
 }
 const tileSelector = (id) => `.guide-window .guide-tile[data-card-id="${id}"]`;
 
@@ -299,6 +344,30 @@ const checks = {
     if (!caption.some((r) => r.mark === "REF" && r.title === "Все блоки")) reasons.push(`caption search: ${JSON.stringify(caption)}`);
     else if (!caption.find((r) => r.title === "Все блоки").preview.startsWith("Подпись к фото")) reasons.push(`the preview does not start at the match: ${caption.find((r) => r.title === "Все блоки").preview}`);
   },
+
+  async "editor-save"(cdp) {
+    if (!(await bootEditor(cdp, []))) return;
+    const labels = await stripLabels(cdp);
+    if (labels.indexOf("Справочник") < 0 || labels.indexOf("Справочник") !== labels.indexOf("Информация") + 1) reasons.push(`the strip reads ${JSON.stringify(labels)}: «Справочник» is not right after «Информация»`);
+    if (!(await clickText(cdp, `${STRIP} > button`, "Справочник"))) { reasons.push("no «Справочник» strip button"); return; }
+    if (!(await waitFor(cdp, `document.querySelector(".content-editor").textContent.includes("Разделов пока нет")`, 3000))) { reasons.push("the empty guide does not say «Разделов пока нет»"); return; }
+    await editorClick(cdp, "+ ДОБАВИТЬ РАЗДЕЛ");
+    if (!(await typeLabel(cdp, "Заголовок раздела", "Лаборатория"))) return;
+    if (!(await editorClick(cdp, "+ ДОБАВИТЬ КАРТОЧКУ"))) { reasons.push("no «+ ДОБАВИТЬ КАРТОЧКУ»"); return; }
+    if (!(await typeLabel(cdp, "Заголовок карточки", "Как пройти"))) return;
+    if (!(await editorClick(cdp, "+ ТЕКСТ"))) { reasons.push("no «+ ТЕКСТ»"); return; }
+    if (!(await typeInto(cdp, ".content-editor .formatted-rich-input", "Идите по коридору B."))) { reasons.push("no formatted text field"); return; }
+    const saved = await fakeSave(cdp);
+    if (!saved) return;
+    const section = saved.guideSections?.[0];
+    const block = section?.cards?.[0]?.blocks?.[0];
+    if (section?.title !== "Лаборатория" || section?.cards?.[0]?.title !== "Как пройти" || block?.type !== "text" || block?.text !== "Идите по коридору B.") reasons.push(`saved guide: ${JSON.stringify(saved.guideSections)}`);
+    if (!(await click(cdp, '[data-shortcut="guide"]'))) { reasons.push("the guide shortcut is missing"); return; }
+    if (!(await waitFor(cdp, `[...document.querySelectorAll(".guide-window .guide-tile")].some((t) => t.textContent.includes("Как пройти"))`, 5000))) { reasons.push("the saved card is not a tile on the desktop"); return; }
+    await click(cdp, ".guide-window .guide-tile");
+    if (!(await waitFor(cdp, `!!document.querySelector(".guide-page")`, 3000))) { reasons.push("the saved card did not open"); return; }
+    if (!String(await text(cdp, ".guide-page")).includes("Идите по коридору B.")) reasons.push("the saved text is missing from the card page");
+  },
 };
 
 let edge;
@@ -307,7 +376,7 @@ const cleanup = () => {
 };
 let code = 2;
 try {
-  const ALL = ["open-card", "grid", "card-blocks", "poll-gone", "search"];
+  const ALL = ["open-card", "grid", "card-blocks", "poll-gone", "search", "editor-save"];
   if (CHECK !== "all" && !checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")}, all)`);
   edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, "--window-size=1920,1080", "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
   let up = false;

@@ -9,13 +9,15 @@ import { shortcutOf } from "@/lib/editor-shortcuts";
 import { dropFields, mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
 import { TYPING_PAUSE_MS, historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
-import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
+import { addBroadcast, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
+  findGuide,
   findInfo,
   portiaTextKey,
   scientistLogPlainText,
   type Broadcast,
+  type GuideBlock,
   type PortiaContent,
   type RecycleFile,
   type RichTextDocument,
@@ -29,7 +31,7 @@ import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rang
 import { clampPanelOffset, initialPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
-type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
+type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
 
 type Props = {
   content: PortiaContent;
@@ -166,6 +168,14 @@ function editTableRows(content: PortiaContent, subsectionId: string, blockId: st
   const block = findInfo(content.infoSections, subsectionId)?.subsection?.blocks.find((item) => item.id === blockId);
   if (block?.type === "table") edit(block.rows);
 }
+
+// Guide blocks are found by card id and block id, so an upload that ends after a reorder or delete still writes the right block (T-13-09).
+function findGuideBlock(content: PortiaContent, cardId: string, blockId: string) {
+  return findGuide(content.guideSections, cardId)?.card?.blocks.find((item) => item.id === blockId);
+}
+
+const guideNo = (index: number) => String(index + 1).padStart(2, "0");
+const guideBlockTitle = (block: GuideBlock) => (block.type === "text" ? block.text.split("\n").map((line) => line.trim()).find(Boolean) : undefined);
 
 function recycleKeys(content: PortiaContent) {
   const valid = new Set([
@@ -953,6 +963,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
     setOpen(found ? [found.section.id, id] : [id], true);
     jumpToCard(id);
   };
+  const addGuideBlock = (cardId: string, make: (id: string) => GuideBlock) => {
+    const id = makeId("block");
+    changeDraft((next) => { findGuide(next.guideSections, cardId)?.card?.blocks.push(make(id)); });
+    setOpen([id], true);
+  };
   const broadcastTocItems: TocItem[] = shownBroadcasts.map((broadcast) => ({ id: broadcast.id, label: broadcast.title || "БЕЗ НАЗВАНИЯ", depth: 0 }));
   // The row button and its TOC entry share these two handlers, so the TOC never duplicates selection logic.
   const openVirus = (id: string) => { setSelectedVirusId(id); showRecord(true); };
@@ -1387,6 +1402,50 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
             </CollapsibleCard>
           ))}
           <button className="secondary-control" type="button" onClick={() => { const id = makeId("info"); changeDraft((next) => next.infoSections.push({ id, title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] })); setOpen([id], true); }}>+ ДОБАВИТЬ РАЗДЕЛ</button>
+        </div>
+      )}
+
+      {tab === "guide" && (
+        <div className="editor-form flat-editor-form">
+          <p className="editor-guidance">Справочник на рабочем столе состоит из разделов, в разделах лежат карточки-плитки. Нажатие на плитку открывает страницу карточки из блоков в любом порядке.</p>
+          {draft.guideSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
+          {draft.guideSections.map((section, index) => (
+            <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${guideNo(index)}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
+              handle={<OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.guideSections, from, to))} />}
+              actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить раздел «${section.title || "Без названия"}» вместе с карточками`} onClick={() => { closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)))); changeDraft((next) => removeGuideSection(next, section.id)); }}>Удалить</button></div>}>
+              <Field label="Заголовок раздела"><input maxLength={300} value={section.title} onChange={(event) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
+              <div className="info-subsection-list">
+                {section.cards.length === 0 && <div className="editor-empty compact-empty">В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ».</div>}
+                {section.cards.map((card, cardIndex) => (
+                  <CollapsibleCard key={card.id} id={card.id} sortIndex={cardIndex} label={`КАРТОЧКА ${guideNo(cardIndex)}`} title={card.title} open={isOpen(card.id)} onToggle={() => toggleCard(card.id)}
+                    handle={<OrderDragHandle index={cardIndex} label={card.title || "карточка"} onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, section.id)?.section; if (target) moveArrayItem(target.cards, from, to); })} />}
+                    actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить карточку «${card.title || "Без названия"}»`} onClick={() => { closeFormatterFor(...card.blocks.map((block) => portiaTextKey.guideBlock(block.id))); changeDraft((next) => removeGuideCard(next, card.id)); }}>Удалить</button></div>}>
+                    <Field label="Заголовок карточки"><input maxLength={300} value={card.title} onChange={(event) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.title = event.target.value; })} /></Field>
+                    <div className="info-block-list">
+                      {card.blocks.map((block, blockIndex) => (
+                        <CollapsibleCard key={block.id} id={block.id} sortIndex={blockIndex} label="ТЕКСТ" title={guideBlockTitle(block)} open={isOpen(block.id)} onToggle={() => toggleCard(block.id)}
+                          handle={<OrderDragHandle index={blockIndex} label="текст" onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) moveArrayItem(target.blocks, from, to); })} />}
+                          actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.guideBlock(block.id)); changeDraft((next) => removeGuideBlock(next, card.id, block.id)); }}>Удалить</button></div>}>
+                          {block.type === "text" && <FormattedTextarea area="info" label="Текст" tall value={block.text} document={draft.formattedText[portiaTextKey.guideBlock(block.id)]} formatKey={portiaTextKey.guideBlock(block.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.guideBlock(block.id), value, document, (next, text) => { const target = findGuideBlock(next, card.id, block.id); if (target?.type === "text") target.text = text; })} />}
+                        </CollapsibleCard>
+                      ))}
+                    </div>
+                    <div className="scientist-log-actions">
+                      <div className="limit-buttons">
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "text", text: "" }))}>+ ТЕКСТ</button>
+                      </div>
+                      <LimitNote id={`limit-blocks-${card.id}`} count={card.blocks.length} max={MAX_BLOCKS} />
+                    </div>
+                  </CollapsibleCard>
+                ))}
+              </div>
+              <div className="scientist-log-actions">
+                <button className="secondary-control limit-add" type="button" disabled={section.cards.length >= MAX_SUBSECTIONS} aria-describedby={`limit-cards-${section.id}`} onClick={() => { const id = makeId("card"); changeDraft((next) => { updateById(next.guideSections, section.id, (item) => { item.cards.push({ id, title: "НОВАЯ КАРТОЧКА", cover: "", blocks: [] }); }); }); setOpen([id], true); }}>+ ДОБАВИТЬ КАРТОЧКУ</button>
+                <LimitNote id={`limit-cards-${section.id}`} count={section.cards.length} max={MAX_SUBSECTIONS} />
+              </div>
+            </CollapsibleCard>
+          ))}
+          <button className="secondary-control" type="button" onClick={() => { const id = makeId("guide"); changeDraft((next) => next.guideSections.push({ id, title: "НОВЫЙ РАЗДЕЛ", photo: "", cards: [] })); setOpen([id], true); }}>+ ДОБАВИТЬ РАЗДЕЛ</button>
         </div>
       )}
 
