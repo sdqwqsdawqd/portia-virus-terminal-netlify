@@ -1,5 +1,5 @@
 // Usage: node 13-guide-check.mjs --check <name>|all [--url http://localhost:3124]
-// Checks: open-card, grid, card-blocks, poll-gone, search, editor-save, editor-blocks, editor-undo, closed-tab (the «Справочник» desktop window of phase 13).
+// Checks: open-card, grid, card-blocks, poll-gone, search, editor-save, editor-blocks, editor-undo, closed-tab, drag-across (the «Справочник» desktop window of phase 13).
 // Why: the guide window (grid, card page, remembered folding, poll safety, search) has no DOM test runner, so headless Edge drives the production build.
 // Inside the browser it launches, GET /api/access and GET /api/content are answered from the current fixture. EVERY non-GET request to /api/*
 // is blocked and recorded as a failure reason ("write blocked"), never forwarded, so nothing is ever saved and no login is needed.
@@ -194,6 +194,37 @@ async function fakeSave(cdp) {
   if (fakeSaves !== 1) { reasons.push(`fakeSave: ${fakeSaves} saves, expected exactly 1`); return null; }
   try { return JSON.parse(savedBody).content; } catch { reasons.push("fakeSave: the saved body is not JSON"); return null; }
 }
+const ctrlY = async (cdp) => { for (const type of ["keyDown", "keyUp"]) await cdp.send("Input.dispatchKeyEvent", { type, key: "y", code: "KeyY", windowsVirtualKeyCode: 89, modifiers: 2 }); await sleep(250); };
+/** Where an element sits on screen: its box and a point `at` (0..1) of the way down it. */
+const pointIn = (cdp, selector, at = 0.5) => cdp.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + Math.min(r.width / 2, 200), y: r.top + r.height * ${at} }; })()`);
+/** Presses the left button on the handle, holds past the 170 ms hold delay, moves in 12 steps toward targetFn() (asked again each step, rows shift), settles on it and releases. */
+async function pointerDrag(cdp, handleSelector, targetFn) {
+  await cdp.eval(`document.querySelector(${JSON.stringify(handleSelector)})?.scrollIntoView({ block: "center" }); true`);
+  const from = await pointIn(cdp, handleSelector);
+  if (!from) { reasons.push(`pointerDrag: no handle ${handleSelector}`); return false; }
+  const mouse = (type, point) => cdp.send("Input.dispatchMouseEvent", { type, x: point.x, y: point.y, button: type === "mouseMoved" ? "none" : "left", buttons: type === "mouseReleased" ? 0 : 1, clickCount: type === "mouseMoved" ? 0 : 1 });
+  await mouse("mousePressed", from);
+  await sleep(300);
+  let at = from;
+  for (let step = 1; step <= 12; step += 1) {
+    const to = await targetFn();
+    if (!to) { reasons.push("pointerDrag: no target"); await mouse("mouseReleased", at); return false; }
+    at = { x: from.x + (to.x - from.x) * step / 12, y: from.y + (to.y - from.y) * step / 12 };
+    await mouse("mouseMoved", at);
+    await sleep(30);
+  }
+  await sleep(200);
+  // Rows shifted when the card changed places, so the pointer settles on the target's new position, as a hand would.
+  const last = await targetFn();
+  if (last) { at = last; await mouse("mouseMoved", at); await sleep(150); }
+  await mouse("mouseReleased", at);
+  await sleep(300);
+  return true;
+}
+/** The card ids, in order, of the direct rows of a section's card list. */
+const cardOrder = (cdp, sectionId) => cdp.eval(`[...document.querySelectorAll('[data-group-id="${sectionId}"] > [data-sort-index]')].map((e) => e.id.replace(/^card-/, ""))`);
+const handleOf = (id) => `#card-${id} > .nested-editor-head .order-drag-handle`;
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const tileSelector = (id) => `.guide-window .guide-tile[data-card-id="${id}"]`;
 
 const checks = {
@@ -457,6 +488,32 @@ const checks = {
     if ("guide-block:t1:text" in (saved.formattedText ?? {})) reasons.push("the saved content still holds the formatting of the deleted block");
   },
 
+  async "drag-across"(cdp) {
+    const sections = [
+      { id: "g1", title: "Первый", photo: "", cards: [{ id: "c1", title: "Первая", cover: "", blocks: [] }, { id: "c2", title: "Вторая", cover: "", blocks: [] }] },
+      { id: "g2", title: "Второй", photo: "", cards: [{ id: "c3", title: "Третья", cover: "", blocks: [] }, { id: "c4", title: "Четвёртая", cover: "", blocks: [] }] },
+    ];
+    if (!(await bootEditor(cdp, sections))) return;
+    if (!(await clickText(cdp, `${STRIP} > button`, "Справочник"))) { reasons.push("no «Справочник» strip button"); return; }
+    await waitFor(cdp, `!!document.querySelector("#card-g1")`, 3000);
+    await openCard(cdp, "g1"); await openCard(cdp, "g2");
+    const expect = async (g1, g2, when) => {
+      const got = [await cardOrder(cdp, "g1"), await cardOrder(cdp, "g2")];
+      if (!same(got, [g1, g2])) reasons.push(`${when}: g1/g2 are ${JSON.stringify(got)}, expected ${JSON.stringify([g1, g2])}`);
+    };
+    if (!(await pointerDrag(cdp, handleOf("c1"), () => pointIn(cdp, "#card-c4", 0.75)))) return;
+    await expect(["c2"], ["c3", "c4", "c1"], "after the drag");
+    if (await has(cdp, ".content-editor [data-dragging]")) reasons.push("a [data-dragging] marker is left after the drag");
+    await ctrlZ(cdp);
+    await expect(["c1", "c2"], ["c3", "c4"], "after one Ctrl+Z");
+    await ctrlY(cdp);
+    await expect(["c2"], ["c3", "c4", "c1"], "after Ctrl+Y");
+    const saved = await fakeSave(cdp);
+    if (!saved) return;
+    const order = (saved.guideSections ?? []).map((section) => section.cards.map((card) => card.id));
+    if (!same(order, [["c2"], ["c3", "c4", "c1"]])) reasons.push(`saved order: ${JSON.stringify(order)}`);
+  },
+
   async "closed-tab"(cdp) {
     if (!(await bootEditor(cdp, [], editorAccess(ALL_TABS.filter((id) => id !== "guide"))))) return;
     const labels = await stripLabels(cdp);
@@ -470,7 +527,7 @@ const cleanup = () => {
 };
 let code = 2;
 try {
-  const ALL = ["open-card", "grid", "card-blocks", "poll-gone", "search", "editor-save", "editor-blocks", "editor-undo", "closed-tab"];
+  const ALL = ["open-card", "grid", "card-blocks", "poll-gone", "search", "editor-save", "editor-blocks", "editor-undo", "closed-tab", "drag-across"];
   if (CHECK !== "all" && !checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")}, all)`);
   edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, "--window-size=1920,1080", "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
   let up = false;

@@ -9,7 +9,7 @@ import { shortcutOf } from "@/lib/editor-shortcuts";
 import { dropFields, mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
 import { TYPING_PAUSE_MS, historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
-import { addBroadcast, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
+import { addBroadcast, moveGuideCard, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
   findGuide,
@@ -220,15 +220,20 @@ function reorderRichTextLines(text: string, document: RichTextDocument | undefin
   return { text: nextText, document: compactRuns(nextText, nextStyles) };
 }
 
-function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (from: number, to: number) => void; label: string }) {
+// A card moved to another section remounts its handle, and the new handle takes the drag over so one drag stays one gesture and one undo step.
+let dragHandoff: { itemId: string; dragId: string; x: number; y: number } | null = null;
+
+function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: { index: number; onMove: (from: number, to: number) => void; label: string; itemId?: string; onMoveAcross?: (groupId: string, toIndex: number) => void }) {
   const button = useRef<HTMLButtonElement>(null);
   const indexRef = useRef(index);
   const onMoveRef = useRef(onMove);
+  const onMoveAcrossRef = useRef(onMoveAcross);
+  const itemIdRef = useRef(itemId);
   const holdTimer = useRef<number | null>(null);
   const frame = useRef<number | null>(null);
   const pointer = useRef({ x: 0, y: 0 });
   const active = useRef(false);
-  useEffect(() => { indexRef.current = index; onMoveRef.current = onMove; });
+  useEffect(() => { indexRef.current = index; onMoveRef.current = onMove; onMoveAcrossRef.current = onMoveAcross; itemIdRef.current = itemId; });
   const placed = useRef<{ index: number; top: number } | null>(null);
   // Per-handle FLIP: every row whose index changed slides itself, so the dragged row and its displaced neighbours all animate.
   useLayoutEffect(() => {
@@ -257,14 +262,45 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
     }
     if (event?.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
+  // Only lists of the same data-sort-group kind take a card (a card never becomes a block or a section, D-11); the new place is the row, the empty hint or the section head under the pointer.
+  const moveAcross = (own: HTMLElement | null | undefined, hits: Element[], x: number, y: number) => {
+    const kind = own?.dataset.sortGroup;
+    const across = onMoveAcrossRef.current;
+    const itemId = itemIdRef.current;
+    if (!own || !kind || !across || !itemId) return;
+    const list = `[data-sort-group="${kind}"]`;
+    for (const element of hits) {
+      let groupId: string | undefined;
+      let toIndex = 0;
+      const row = element.closest<HTMLElement>(`${list} > [data-sort-index]`);
+      const empty = element.closest<HTMLElement>(list);
+      const head = element.closest<HTMLElement>("[data-drop-group] > .nested-editor-head");
+      if (row && row.parentElement !== own) {
+        const { top, height } = row.getBoundingClientRect();
+        groupId = row.parentElement?.dataset.groupId;
+        toIndex = Number(row.dataset.sortIndex) + (y > top + height / 2 ? 1 : 0);
+      } else if (!row && empty && empty !== own && !empty.querySelector(":scope > [data-sort-index]")) {
+        groupId = empty.dataset.groupId;
+      } else if (head && head.parentElement?.dataset.dropGroup !== own.dataset.groupId) {
+        groupId = head.parentElement?.dataset.dropGroup;
+        toIndex = Number.MAX_SAFE_INTEGER;
+      }
+      if (!groupId) continue;
+      dragHandoff = { itemId, dragId: button.current?.dataset.dragId ?? makeId("drag"), x, y };
+      across(groupId, toIndex);
+      return;
+    }
+  };
   // A row swaps only once the pointer crosses its vertical middle, so rows of unequal height do not flip back and forth.
   const moveTo = (x: number, y: number) => {
     // Nested «Информация» lists must not swap across levels: only rows sharing the dragged row's parent are targets.
     const parent = button.current?.closest<HTMLElement>("[data-sort-index]")?.parentElement;
-    const row = document.elementsFromPoint(x, y)
+    const hits = document.elementsFromPoint(x, y);
+    const row = hits
       .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
       .find((candidate) => candidate && candidate.parentElement === parent);
-    const target = Number(row?.dataset.sortIndex);
+    if (!row) { moveAcross(parent, hits, x, y); return; }
+    const target = Number(row.dataset.sortIndex);
     if (!row || !Number.isInteger(target) || target === indexRef.current) return;
     const { top, height } = row.getBoundingClientRect();
     const middle = top + height / 2;
@@ -277,13 +313,22 @@ function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (fro
   // window focus, and on a release anywhere: once pointer capture is lost the handle may never see its pointerup.
   // Tracking lives on window too, because a downward swap re-inserts the dragged row and drops pointer capture (03-REVIEW IN-05).
   useEffect(() => {
-    const onBlur = () => stop();
-    const onRelease = (event: PointerEvent) => { if (event.isPrimary) stop(); };
+    const onBlur = () => { dragHandoff = null; stop(); };
+    const onRelease = (event: PointerEvent) => { if (event.isPrimary) { dragHandoff = null; stop(); } };
     const onTrack = (event: PointerEvent) => {
       if (!event.isPrimary || holdTimer.current === null) return;
       pointer.current = { x: event.clientX, y: event.clientY };
       if (active.current) moveTo(event.clientX, event.clientY);
     };
+    // Not cleared here: Strict Mode runs this effect twice; a release or blur clears it.
+    if (dragHandoff && dragHandoff.itemId === itemIdRef.current && button.current) {
+      holdTimer.current = 0;
+      active.current = true;
+      pointer.current = { x: dragHandoff.x, y: dragHandoff.y };
+      button.current.dataset.dragging = "true";
+      button.current.dataset.dragId = dragHandoff.dragId;
+      frame.current = requestAnimationFrame(autoscroll);
+    }
     window.addEventListener("blur", onBlur);
     window.addEventListener("pointermove", onTrack);
     window.addEventListener("pointerup", onRelease);
@@ -1414,18 +1459,19 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
           <EditorToc items={guideTocItems} onJump={jumpGuide} onAll={(open) => setAllOpen(guideCardIds, open)} />
           {draft.guideSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
           {draft.guideSections.map((section, index) => (
-            <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${guideNo(index)}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
+            <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${guideNo(index)}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)} cardProps={{ "data-drop-group": section.id }}
               handle={<OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.guideSections, from, to))} />}
               actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить раздел «${section.title || "Без названия"}» вместе с карточками`} onClick={() => { closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)))); changeDraft((next) => removeGuideSection(next, section.id)); }}>Удалить</button></div>}>
               <Field label="Заголовок раздела"><input maxLength={300} value={section.title} onChange={(event) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
               <ImageEditorField label="Фото раздела" value={section.photo} placement="guide" maxHint="За заголовком раздела: низкая полоса во всю ширину" removeLabel="Убрать фото" uploadState={uploadState}
                 onChange={(value) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = value; }))}
                 onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = url; })))} />
-              <div className="info-subsection-list">
+              <div className="info-subsection-list" data-sort-group="guide-cards" data-group-id={section.id}>
                 {section.cards.length === 0 && <div className="editor-empty compact-empty">В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ».</div>}
                 {section.cards.map((card, cardIndex) => (
                   <CollapsibleCard key={card.id} id={card.id} sortIndex={cardIndex} label={`КАРТОЧКА ${guideNo(cardIndex)}`} title={card.title} open={isOpen(card.id)} onToggle={() => toggleCard(card.id)}
-                    handle={<OrderDragHandle index={cardIndex} label={card.title || "карточка"} onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, section.id)?.section; if (target) moveArrayItem(target.cards, from, to); })} />}
+                    handle={<OrderDragHandle index={cardIndex} label={card.title || "карточка"} itemId={card.id} onMoveAcross={(groupId, toIndex) => changeDraft((next) => moveGuideCard(next, card.id, groupId, toIndex))}
+                      onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, section.id)?.section; if (target) moveArrayItem(target.cards, from, to); })} />}
                     actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить карточку «${card.title || "Без названия"}»`} onClick={() => { closeFormatterFor(...card.blocks.map((block) => portiaTextKey.guideBlock(block.id))); changeDraft((next) => removeGuideCard(next, card.id)); }}>Удалить</button></div>}>
                     <Field label="Заголовок карточки"><input maxLength={300} value={card.title} onChange={(event) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.title = event.target.value; })} /></Field>
                     <ImageEditorField label="Обложка" value={card.cover} placement="guide" maxHint="На плитке: 4:3, края обрезаются" removeLabel="Убрать обложку" uploadState={uploadState}
