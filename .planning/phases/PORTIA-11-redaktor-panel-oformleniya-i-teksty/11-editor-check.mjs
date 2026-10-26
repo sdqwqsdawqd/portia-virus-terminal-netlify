@@ -1122,6 +1122,7 @@ const checks = {
     const headerText = () => cdp.eval(`document.querySelector(".floating-text-format > header")?.textContent ?? ""`);
     const panelOpen = () => cdp.eval(`!!document.querySelector(".floating-text-format")`);
     const ensurePanel = async () => { if (!(await panelOpen())) await click(cdp, ".global-format-launch > button"); await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000); await sleep(150); };
+    // Revisions 47-50 stay above multiselect (40-46) and below phonefit (60): the page keeps the highest revision it has read, so a higher one here would hide phonefit's content in --check all.
     const fresh = async (revision) => {
       serve(sectionsFixture({ sections: 2 }), revision, true);
       await load(cdp);
@@ -1152,7 +1153,7 @@ const checks = {
       return savedBody;
     };
     // (a) a section whose body is held only as a peer is deleted: it leaves the selection, and the next style click writes nothing for it (CR-01)
-    if (!(await fresh(70))) return;
+    if (!(await fresh(47))) return;
     if (!(await pickIn("info:s1:body", "Текст")) || !(await pickIn("info:s2:body", "раздела", 2))) return;
     await ensurePanel();
     let head = await headerText();
@@ -1186,7 +1187,7 @@ const checks = {
       await sleep(200);
     };
     // (b) deleting a section also releases the fragments in its blocks (CR-01)
-    if (await pair("b", 71, "info-block:b1:text", "Блок")) {
+    if (await pair("b", 48, "info-block:b1:text", "Блок")) {
       await click(cdp, `${card1} > .nested-editor-head .nested-editor-actions button`);
       await sleep(200);
       const afterB = await headerText();
@@ -1199,7 +1200,7 @@ const checks = {
       if (savedB.includes('"info-block:b1:text"')) reasons.push("(b) the saved body still holds formatting for the deleted section's block");
     }
     // (c) a text change with Ctrl held (here Ctrl+Backspace) ends the gesture: the fragments go, so a colour click leaves section 1 alone (WR-01)
-    if (await pair("c", 72, "info:s1:body", "Текст")) {
+    if (await pair("c", 49, "info:s1:body", "Текст")) {
       await holdCtrl(cdp, 2, async () => {
         for (const type of ["keyDown", "keyUp"]) await cdp.send("Input.dispatchKeyEvent", { type, key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8, modifiers: 2, ...(type === "keyDown" ? { commands: ["deleteWordBackward"] } : {}) });
       });
@@ -1210,7 +1211,7 @@ const checks = {
       if ((await colorIn("info:s1:body", "Текст")) === red) reasons.push("(c) «Текст» in section 1 was coloured after a Ctrl edit in section 2");
     }
     // (d) folding a card releases the fragments inside it, so a colour click does not style hidden text (WR-02)
-    if (await pair("d", 73, "info:s1:body", "Текст")) {
+    if (await pair("d", 50, "info:s1:body", "Текст")) {
       await click(cdp, `${card1} > .nested-editor-head .nested-editor-toggle`);
       await sleep(200);
       const afterD = await headerText();
