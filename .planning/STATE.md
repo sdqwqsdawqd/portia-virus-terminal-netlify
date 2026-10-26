@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Закрытие замечаний
 current_phase: 11
-current_phase_name: redaktor-panel-oformleniya-i-teksty
+current_phase_name: "Редактор: панель оформления и тексты"
 status: executing
-stopped_at: Completed PORTIA-11-07-PLAN.md
-last_updated: "2026-10-26T09:07:56.770Z"
+stopped_at: Completed 11-08-PLAN.md
+last_updated: "2026-10-26T09:35:26.229Z"
 last_activity: 2026-10-26
-last_activity_desc: Phase PORTIA-11 execution started
-state_head: e3006be259820ab17fdd4a17b978525ab21977a4
+last_activity_desc: Phase 11 execution started
+state_head: cc7b84482d43dd55682fb903084a87454c962038
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 36
-  completed_plans: 35
+  completed_plans: 36
   percent: 71
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-26)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-11 — Редактор: панель оформления и тексты
+**Current focus:** Phase 11 — Редактор: панель оформления и тексты
 
 ## Current Position
 
-Phase: 11 (redaktor-panel-oformleniya-i-teksty) — READY TO EXECUTE
-Plan: 7 of 7
-Status: Executing Phase PORTIA-11
-Last activity: 2026-10-26 — Phase PORTIA-11 execution started
+Phase: 11 (Редактор: панель оформления и тексты) — EXECUTING
+Plan: 8 of 8
+Status: Gap closure 11-08 done; ready for phase re-verification
+Last activity: 2026-10-26 — Phase 11 execution started
 
 Progress: [███████░░░] 71%
 
@@ -77,6 +77,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-11 P05 | 35min | 2 tasks | 7 files |
 | Phase PORTIA-11 P06 | 15min | 2 tasks | 7 files |
 | Phase PORTIA-11 P07 | owner-paced | 3 tasks | 7 files |
+| Phase 11 P08 | 12 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,8 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-11]: 11-05: column swap swaps key and value in every row; table rows carry a normalizer-backed id (positional fallback)
 - [Phase PORTIA-11]: 11-06: multi-selection state lives in FormatTarget (gesture, fragments, peers); a Ctrl/Cmd press adds a fragment, any plain press, editing key, Esc or СБРОСИТЬ clears; one panel application is one batch:<id> undo step
 - [Phase PORTIA-11]: 11-07: real-engine checks (Firefox, iPhone WebKit via 11-engines-check.mjs) sit beside the Edge harness; Edge alone missed Gecko/WebKit bugs
+- [Phase 11]: 11-08: WR-01 is fixed at the commitEditorValue funnel (startGesture(false)), not with a key list, so Ctrl+X/V, context-menu cut/paste and non-Latin layouts are all covered
+- [Phase 11]: 11-08: a gone field leaves the multi-selection through dropFields/dropFormatFields (functional setFormatTarget updater); the section delete names its block keys
 
 ### Pending Todos
 
@@ -156,8 +159,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-26T08:42:30.036Z
-Stopped at: Completed PORTIA-11-07-PLAN.md
+Last session: 2026-10-26T09:35:26.039Z
+Stopped at: Completed 11-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
