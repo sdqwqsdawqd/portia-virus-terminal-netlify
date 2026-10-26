@@ -18,6 +18,13 @@ export function clampPanelOffset(offset: PanelOffset, panel: Bounds, bounds: Bou
   };
 }
 
+/** First opening: 16px right of the editor window with its bottom edge on the window's, else the corner 16px above the 44px taskbar (D-07). */
+export function initialPanelOffset(editor: { right: number; bottom: number } | null, panel: Bounds, bounds: Bounds): PanelOffset {
+  const beside = editor !== null && bounds.width - editor.right - 16 >= panel.width;
+  const place = beside ? { right: bounds.width - editor.right - 16 - panel.width, bottom: bounds.height - editor.bottom } : { right: 16, bottom: 60 };
+  return clampPanelOffset(place, panel, bounds);
+}
+
 /** Reads a saved place; anything that is not an object with two finite numbers gives null (storage can hold junk). */
 export function parsePanelOffset(raw: string | null): PanelOffset | null {
   try {

@@ -124,16 +124,26 @@ const panelRect = (cdp) => cdp.eval(`(() => { const e = document.querySelector("
 /** A point on the panel header (8px below its top edge, so it can still be grabbed when the taskbar covers the rest) away from its buttons: fraction 0 is its left end, 1 its right end; "left"/"right" are the outermost grabbable points. */
 const headerPoint = (cdp, fraction = 0.15) => cdp.eval(`(() => { const e = document.querySelector(".floating-text-format > header"); if (!e) return null; const r = e.getBoundingClientRect(); const f = ${JSON.stringify(fraction)}; const x = f === "left" ? r.left + 5 : f === "right" ? r.right - 46 : r.left + 20 + (r.width - 120) * f; return { x, y: r.top + 8 }; })()`);
 
+const closePanel = async (cdp) => { await click(cdp, '.floating-text-format [aria-label="Закрыть панель оформления"]'); await waitFor(cdp, `!document.querySelector(".floating-text-format")`, 2000); };
+const viewportSize = (cdp) => cdp.eval(`({ w: document.documentElement.clientWidth, h: document.documentElement.clientHeight })`); // the viewport differs a little between loads (scrollbars)
+const forgetPlace = (cdp) => cdp.eval(`localStorage.removeItem(${JSON.stringify(panelKey)})`);
+const key = (cdp, name, code, modifiers = 0) => ["keyDown", "keyUp"].reduce((chain, type) => chain.then(() => cdp.send("Input.dispatchKeyEvent", { type, key: name, code: name, windowsVirtualKeyCode: code, modifiers })), Promise.resolve());
+const windowBox = (cdp) => cdp.eval(`(() => { const r = document.querySelector(".editor-window").getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; })()`);
+
 /** Describe tab, «второе» selected with the mouse, ✎ clicked, waits for the panel. */
+let opens = 0;
 async function openPanel(cdp) {
+  opens += 1;
   await clickText(cdp, ".dossier-tabs button", "Описание");
   const lead = '.formatted-rich-input[data-area="lead"]';
-  if (!(await waitFor(cdp, `!!document.querySelector(${JSON.stringify(lead)})`, 3000))) { reasons.push("openPanel: no lead field"); return false; }
+  if (!(await waitFor(cdp, `!!document.querySelector(${JSON.stringify(lead)})`, 3000))) { reasons.push(`openPanel #${opens}: no lead field`); return false; }
+  await cdp.eval("getSelection().removeAllRanges()"); // a mouse press inside a selected word starts a text drag instead of a new selection
+  await wordBox(cdp, lead, 0, "второе"); await sleep(500); // the scroll into view may be smooth, so measure again once it has settled
   const box = await wordBox(cdp, lead, 0, "второе");
-  if (!box) { reasons.push("openPanel: word «второе» not found"); return false; }
+  if (!box) { reasons.push(`openPanel #${opens}: word «второе» not found`); return false; }
   await mouseSelect(cdp, box);
   await click(cdp, ".global-format-launch > button");
-  if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) { reasons.push("openPanel: the format panel did not open"); return false; }
+  if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) { reasons.push(`openPanel #${opens}: the format panel did not open (${await cdp.eval(`(() => { const b = document.querySelector(".global-format-launch > button"); const a = document.elementFromPoint(${box.left + 1}, ${box.y}); return "launch disabled=" + b?.disabled + " expanded=" + b?.getAttribute("aria-expanded") + " selection=" + JSON.stringify(String(getSelection())) + " at word: " + (a?.className || a?.tagName) + " box " + ${Math.round(box.left)} + "," + ${Math.round(box.y)}; })()`)})`); return false; }
   await sleep(150);
   return true;
 }
@@ -222,7 +232,7 @@ const checks = {
     await drag(cdp, await headerPoint(cdp, "right"), { x: edge.w - 1, y: edge.h / 2 });
     await drag(cdp, await headerPoint(cdp, "left"), { x: edge.w - 1, y: edge.h - 1 });
     rect = await panelRect(cdp);
-    const size = edge;
+    let size = edge;
     if (!(rect.left <= size.w - 63.5)) reasons.push(`(c) down-right: left ${rect.left} > ${size.w - 64}`);
     if (!(rect.top <= size.h - 63.5)) reasons.push(`(c) down-right: top ${rect.top} > ${size.h - 64}`);
     if (Math.abs(rect.left - (size.w - 64)) > 1 || Math.abs(rect.top - (size.h - 64)) > 1) reasons.push(`(c) down-right: the drag stopped short of the clamp (left ${rect.left}, top ${rect.top})`);
@@ -239,6 +249,61 @@ const checks = {
     await cdp.eval(`(() => { const w = document.querySelector(".editor-window"); for (let i = 0; i < 150; i += 1) w.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); })()`);
     const still = await cdp.eval(`(() => { const h = document.querySelector(".floating-text-format > header").getBoundingClientRect(); const e = document.elementFromPoint(h.left + h.width / 2, h.top + h.height / 2); return !!e?.closest(".floating-text-format"); })()`);
     if (!still) reasons.push(`(e) after 150 window clicks the panel is no longer topmost: ${await cdp.eval(`(() => { const h = document.querySelector(".floating-text-format > header").getBoundingClientRect(); const e = document.elementFromPoint(h.left + h.width / 2, h.top + h.height / 2); return (e?.className || e?.tagName) + " win z=" + document.querySelector(".editor-window").style.zIndex + " rect " + Math.round(h.left) + "," + Math.round(h.top); })()`)}`);
+    // (f) the first place is 16px right of the editor window once the window has moved aside
+    const title = await cdp.eval(`(() => { const r = document.querySelector(".editor-window .window-titlebar").getBoundingClientRect(); return { x: r.left + 120, y: r.top + r.height / 2 }; })()`);
+    await drag(cdp, title, { x: title.x - 400, y: title.y });
+    await closePanel(cdp); await forgetPlace(cdp);
+    if (!(await openPanel(cdp))) return;
+    let win = await windowBox(cdp); rect = await panelRect(cdp);
+    if (Math.abs(rect.left - (win.right + 16)) > 2) reasons.push(`(f) panel left ${rect.left}, expected ${win.right + 16} (window right + 16)`);
+    // (g) a maximized editor leaves no room beside it: the default corner, 16px from the right and 60px from the bottom
+    await click(cdp, '.editor-window [data-window-action="maximize"]'); await sleep(600);
+    await closePanel(cdp); await forgetPlace(cdp);
+    if (!(await openPanel(cdp))) return;
+    rect = await panelRect(cdp);
+    size = await viewportSize(cdp);
+    if (Math.abs(rect.right - (size.w - 16)) > 2 || Math.abs(rect.bottom - (size.h - 60)) > 2) reasons.push(`(g) maximized: right ${rect.right}, bottom ${rect.bottom}, expected ${size.w - 16}, ${size.h - 60}`);
+    await click(cdp, '.editor-window [data-window-action="maximize"]'); await sleep(600);
+    // (h) storage that throws still gives a usable panel
+    const blocker = await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const bad = ${JSON.stringify(panelKey)}; for (const m of ["getItem", "setItem"]) { const orig = Storage.prototype[m]; Storage.prototype[m] = function (k, ...rest) { if (k === bad) throw new Error("storage blocked"); return orig.call(this, k, ...rest); }; } })()` });
+    await load(cdp);
+    if (!(await openEditor(cdp)) || !(await openPanel(cdp))) return;
+    rect = await panelRect(cdp);
+    size = await viewportSize(cdp);
+    if (!(rect.width > 0 && rect.right > 64 && rect.left < size.w - 64 && rect.top >= 0 && rect.top < size.h - 64)) reasons.push(`(h) blocked storage: the panel is not usable ${JSON.stringify(rect)}`);
+    await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: blocker.identifier });
+    // (i) a legacy value is read as a viewport place
+    await load(cdp); // the page still carries the throwing storage of (h) until it is reloaded
+    await cdp.eval(`localStorage.setItem(${JSON.stringify(panelKey)}, ${JSON.stringify(JSON.stringify({ right: 14, bottom: 72 }))})`);
+    await load(cdp);
+    if (!(await openEditor(cdp)) || !(await openPanel(cdp))) return;
+    rect = await panelRect(cdp);
+    size = await viewportSize(cdp);
+    if (Math.abs(rect.right - (size.w - 14)) > 1 || Math.abs(rect.bottom - (size.h - 72)) > 1) reasons.push(`(i) legacy value: right ${rect.right}, bottom ${rect.bottom}, expected ${size.w - 14}, ${size.h - 72}`);
+    // (j) arrow keys move the focused header 8px, Shift 32px
+    await cdp.eval(`document.querySelector(".floating-text-format > header").focus()`);
+    const left0 = (await panelRect(cdp)).left;
+    await key(cdp, "ArrowLeft", 37);
+    const left1 = (await panelRect(cdp)).left;
+    if (Math.abs(left0 - left1 - 8) > 0.5) reasons.push(`(j) ArrowLeft moved ${left0 - left1}px, expected 8`);
+    await key(cdp, "ArrowLeft", 37, 8);
+    const left2 = (await panelRect(cdp)).left;
+    if (Math.abs(left1 - left2 - 32) > 0.5) reasons.push(`(j) Shift+ArrowLeft moved ${left1 - left2}px, expected 32`);
+    // (k) Esc from the header returns to the first lead field
+    await key(cdp, "Escape", 27);
+    const back = await cdp.eval(`document.activeElement === document.querySelector('.formatted-rich-input[data-area="lead"]')`);
+    if (!back) reasons.push("(k) Esc did not return focus to the lead field");
+    // (l) the panel hides with a minimized editor and comes back on restore
+    await click(cdp, '.editor-window [data-window-action="minimize"]');
+    if (!(await waitFor(cdp, `!document.querySelector(".floating-text-format")`, 3000))) reasons.push("(l) the panel is still shown while the editor is minimized");
+    await click(cdp, '[data-taskbar-app="editor"]');
+    if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) reasons.push("(l) the panel did not come back after restoring the editor");
+    // (m) more clicks never raise a window that is already on top
+    await sleep(500);
+    const z0 = await cdp.eval(`document.querySelector(".editor-window").style.zIndex`);
+    await cdp.eval(`(() => { const w = document.querySelector(".editor-window"); for (let i = 0; i < 50; i += 1) w.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); })()`);
+    const z1 = await cdp.eval(`document.querySelector(".editor-window").style.zIndex`);
+    if (z0 !== z1) reasons.push(`(m) editor window z went ${z0} -> ${z1} on repeated clicks`);
   },
 };
 

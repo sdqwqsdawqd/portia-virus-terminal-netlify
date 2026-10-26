@@ -23,7 +23,7 @@ import {
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS, MAX_TABLE_ROWS, bodyTooLargeMessage, contentBodyBytes, limitStatus, limitText, oversizeFields, oversizeMessage } from "@/lib/content-limits";
 import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
-import { clampPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
+import { clampPanelOffset, initialPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 
 type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
@@ -35,6 +35,8 @@ type Props = {
   saveState: "idle" | "saving" | "saved" | "error" | "conflict";
   canManageEditors: boolean;
   active: boolean;
+  // True while the window manager has the editor window minimized; the format panel is hidden then and comes back on restore (D-06).
+  minimized: boolean;
   onDirtyChange: (dirty: boolean) => void;
   // Bumped by the window manager each time × is pressed while the editor reports unsaved edits.
   closeRequest: number;
@@ -490,7 +492,7 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, revision, saveState, canManageEditors, active, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved }: Props) {
+export function PortiaEditor({ content, revision, saveState, canManageEditors, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
   // The revision the draft's baseline came from; a stale draft then gets the 409 instead of overwriting newer content (uat-03-owner-broadcast-vanishes).
   const baseRevision = useRef(revision);
@@ -1282,7 +1284,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
-      {formatterOpen && formatTarget && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
+      {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
       {barVisible && (
         <div className="editor-savebar" data-dirty={dirty || undefined}>
           <p role="status" aria-live="polite">
@@ -2046,7 +2048,9 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       }
       let saved: PanelOffset | null = null;
       try { saved = parsePanelOffset(localStorage.getItem(formatPanelStorageKey)); } catch { saved = null; }
-      if (saved) paintPanelOffset(panel, saved);
+      // Nothing remembered (or storage unreadable): beside the editor window when it fits, else the default corner (D-07).
+      const editor = document.querySelector(".editor-window")?.getBoundingClientRect() ?? null;
+      paintPanelOffset(panel, saved ?? initialPanelOffset(editor, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight }));
     };
     place();
     window.addEventListener("resize", place);
@@ -2081,13 +2085,37 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     if (drag.last) try { localStorage.setItem(formatPanelStorageKey, JSON.stringify(drag.last)); } catch { /* ignore */ }
   };
 
+  // Arrow keys move the panel from its header: 8px, Shift 32px (EDIT-04). Only when the header itself has focus, so buttons keep their keys.
+  const keyMove = (event: React.KeyboardEvent<HTMLElement>) => {
+    const panel = panelRef.current;
+    if (!panel || event.target !== event.currentTarget || window.matchMedia("(max-width: 900px)").matches) return;
+    const step = event.shiftKey ? 32 : 8;
+    const delta = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    const rect = panel.getBoundingClientRect();
+    const next = paintPanelOffset(panel, { right: document.documentElement.clientWidth - rect.right + delta[0], bottom: document.documentElement.clientHeight - rect.bottom + delta[1] });
+    try { localStorage.setItem(formatPanelStorageKey, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+
+  // Esc leaves the panel for the text: the field with its selection back, else the ✎ button. The panel stays open.
+  const leavePanel = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    const field = findFormatField(formatKey);
+    if (field && target.selection) {
+      field.focus({ preventScroll: true });
+      restoreSelection(field, target.selection);
+    } else document.querySelector<HTMLElement>(".global-format-launch > button")?.focus();
+  };
+
   // mousedown is the event whose default moves focus and clears the field's selection; pointerdown alone does not stop it in Chromium or WebKit (WR-04); inputs keep focus.
   const keepFieldFocus = (event: React.SyntheticEvent) => { if (!(event.target as HTMLElement).closest("input")) event.preventDefault(); };
-  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus}>
-    <header onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus} onKeyDown={leavePanel}>
+    <header tabIndex={0} role="group" aria-label="Перемещение панели: стрелки, с Shift шагом 32 px" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onKeyDown={keyMove}>
       <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
       <small>{selectionLabel}</small>
-      <button type="button" onClick={finish} aria-label="Закрыть редактор">×</button>
+      <button type="button" onClick={finish} aria-label="Закрыть панель оформления">×</button>
     </header>
     <div className="format-presets format-choice-row" role="group" aria-label="Готовые стили">
       <button type="button" className={plainMarked ? "selected" : ""} aria-pressed={plainMarked} disabled={!range} onClick={() => range && commit(resetRichTextStyle(documentRef.current, range.from, range.to))}>Обычный</button>

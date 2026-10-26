@@ -794,9 +794,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   };
 
   const focusApp = (appId: AppId) => {
-    topZ.current += 1;
-    const next = topZ.current;
-    setWindows((state) => ({ ...state, [appId]: { ...state[appId], z: next } }));
+    // Every click in a window calls this, so a window already on top keeps its z and z stays far below the format panel's 950 (EDIT-04).
+    // shortcut: windows still climb by one per switch between windows; after about 930 switches in one page session they pass the panel — renumber z here if that is ever seen
+    if (windows[appId].z !== topZ.current) {
+      topZ.current += 1;
+      const next = topZ.current;
+      setWindows((state) => ({ ...state, [appId]: { ...state[appId], z: next } }));
+    }
     setActiveApp(appId);
   };
 
@@ -1418,7 +1422,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="editor" state={windows.editor} active={activeApp === "editor"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="editor-window" meta="ДОСТУП ВЛАДЕЛЬЦА">
-            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
+            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} active={activeApp === "editor" && !windows.editor.minimized} minimized={windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
           </AppWindow>
         </main>
 

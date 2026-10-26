@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clampPanelOffset, parsePanelOffset } from "./panel-position.ts";
+import { clampPanelOffset, initialPanelOffset, parsePanelOffset } from "./panel-position.ts";
 
 const panel = { width: 680, height: 300 };
 const bounds = { width: 1920, height: 1080 };
@@ -47,4 +47,20 @@ test("junk in storage gives no place", () => {
 
 test("extra keys are dropped", () => {
   assert.deepEqual(parsePanelOffset('{"right":5,"bottom":1,"x":9}'), { right: 5, bottom: 1 });
+});
+
+test("the first place is 16px right of the editor window when the panel fits there", () => {
+  assert.deepEqual(initialPanelOffset({ right: 1120, bottom: 880 }, panel, bounds), { right: 104, bottom: 200 });
+});
+
+test("without room beside the editor the first place is the default corner above the taskbar", () => {
+  assert.deepEqual(initialPanelOffset({ right: 1400, bottom: 880 }, panel, bounds), { right: 16, bottom: 60 });
+});
+
+test("without an editor window the first place is the default corner", () => {
+  assert.deepEqual(initialPanelOffset(null, panel, bounds), { right: 16, bottom: 60 });
+});
+
+test("the first place always passes through the clamp", () => {
+  assert.equal(initialPanelOffset({ right: 1120, bottom: 2000 }, panel, bounds).bottom, -236);
 });
