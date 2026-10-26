@@ -3,8 +3,8 @@
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
-import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
-import { tabRegistry } from "@/lib/editor-tabs";
+import { changedDossierTabs, changedSections, deniedSections, dossierTabs, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
+import { closedSectionsOf, tabRegistry } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { dropFields, mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
 import { TYPING_PAUSE_MS, historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
@@ -50,6 +50,8 @@ type Props = {
   onSave: (content: PortiaContent, baseRevision: number) => Promise<number>;
   onEmployeeSaved: (employee: PortiaEmployee) => void;
   onEmployeeRemoved: (id: string) => void;
+  // The server's reason for the last refused save (D-12); empty when there is none.
+  saveError: string;
 };
 
 type FormatTarget = {
@@ -660,7 +662,7 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, revision, saveState, canManageEditors, openTabs, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved }: Props) {
+export function PortiaEditor({ content, revision, saveState, canManageEditors, openTabs, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved, saveError }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
   // The revision the draft's baseline came from; a stale draft then gets the 409 instead of overwriting newer content (uat-03-owner-broadcast-vanishes).
   const baseRevision = useRef(revision);
@@ -682,6 +684,13 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
     ...(canManageEditors ? [["access", "Доступ"]] : []),
   ]) as [EditorTab, string][];
   const noTabs = stripTabs.length === 0;
+  // The owner has every section; for an editor the sections outside the open list are closed (D-14).
+  const closedKey = canManageEditors ? "" : closedSectionsOf(openTabs).join(",");
+  const closedSections = (closedKey ? closedKey.split(",") : []) as EditorSection[];
+  const employeesClosed = !canManageEditors && !openTabs.includes("employees");
+  // Closed sections are never shown; a D-13 move still counts in `dirty`.
+  const shownChanged = changed.filter((section) => !closedSections.includes(section));
+  const [closureNotice, setClosureNotice] = useState("");
   const tab: EditorTab = stripTabs.some(([id]) => id === pickedTab) ? pickedTab : stripTabs[0]?.[0] ?? pickedTab;
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
@@ -746,6 +755,38 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
     }, 0);
     return () => window.clearTimeout(syncTimer);
   }, [content, dirty, revision]);
+
+  // D-15, D-16: when the owner closes a section, its unsaved edits go back to the stored copy, in the history too, so Ctrl+Z cannot bring them back.
+  const closureRef = useRef({ history, employeeDirty });
+  useEffect(() => { closureRef.current = { history, employeeDirty }; });
+  const shutRef = useRef<string[]>([]);
+  useEffect(() => {
+    const closed = (closedKey ? closedKey.split(",") : []) as EditorSection[];
+    const shut = [...closed, ...(employeesClosed ? ["employees"] : [])];
+    const added = shut.filter((id) => !shutRef.current.includes(id));
+    shutRef.current = shut;
+    if (!shut.length) return;
+    // Read now: the employee editor unmounts with its tab and reports clean before the timer fires.
+    const wasEmployeeDirty = closureRef.current.employeeDirty;
+    const timer = window.setTimeout(() => {
+      const { baseline, present } = closureRef.current.history;
+      const lost: string[] = deniedSections(baseline, present, closed);
+      if (wasEmployeeDirty && added.includes("employees")) lost.push("employees");
+      if (closed.length) dispatch({ type: "restrict", project: (content) => revertSections(baseline, content, closed) });
+      if (!added.length) return;
+      setFormatTarget(null);
+      setFormatterOpen(false);
+      setRecordOpen(false);
+      setPreviewSurface(null);
+      setLeaveTo(null);
+      if (!lost.length) return;
+      const names = lost.map((id) => `«${id === "employees" ? "Сотрудники" : sectionLabels[id as EditorSection]}»`);
+      setClosureNotice(lost.length === 1
+        ? `Владелец закрыл раздел ${names[0]}, несохранённые правки в нём сброшены`
+        : `Владелец закрыл разделы ${names.join(", ")}, несохранённые правки в них сброшены`);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [closedKey, employeesClosed]);
 
   const selectedVirusIndex = useMemo(
     () => draft.viruses.findIndex((virus) => virus.id === selectedVirusId),
@@ -959,6 +1000,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
 
   const showTab = (id: EditorTab) => {
     setTab(id);
+    setClosureNotice("");
     setRecordOpen(false);
     setPreviewSurface(null);
     setFormatTarget(null);
@@ -1043,9 +1085,12 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
         [normalized.assistantAutoMinSeconds, normalized.assistantAutoMaxSeconds] = [normalized.assistantAutoMaxSeconds, normalized.assistantAutoMinSeconds];
       }
       normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, MAX_SCIENTIST_LOGS); });
-      baseRevision.current = await onSave(normalized, baseRevision.current);
+      // Closed sections go exactly as stored, so the normalization above can never look like an edit of them (RESEARCH P4).
+      const outgoing = closedSections.length ? revertSections(history.baseline, normalized, closedSections) : normalized;
+      baseRevision.current = await onSave(outgoing, baseRevision.current);
       const clean = editCount.current === editsBefore;
-      dispatch({ type: "saved", normalized, savedFrom });
+      setClosureNotice("");
+      dispatch({ type: "saved", normalized: outgoing, savedFrom });
       return clean;
     } catch {
       // Keep the local draft marked as changed so a temporary network error
@@ -1127,12 +1172,12 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   // A blocked, failed or conflicting save turns the chip red, so a compact chip never hides a failed save (D-10).
   const alarm = dirty && (saveBlocked || saveState === "error" || conflict);
   const chipLabel = saveState === "saving" ? "Сохранение…"
-    : dirty ? `Не сохранено разделов: ${changed.length}${alarm ? (saveBlocked ? ", сохранение невозможно" : ", ошибка сохранения") : ""}`
+    : dirty ? `Не сохранено разделов: ${shownChanged.length}${alarm ? (saveBlocked ? ", сохранение невозможно" : ", ошибка сохранения") : ""}`
     : "Сохранено";
-  const chipText = saveState === "saving" ? "…" : dirty ? `${alarm ? "!" : ""}${changed.length}` : "✓";
+  const chipText = saveState === "saving" ? "…" : dirty ? `${alarm ? "!" : ""}${shownChanged.length}` : "✓";
   const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
     : conflict ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
-    : saveState === "error" ? "ОШИБКА"
+    : saveState === "error" ? (saveError || "ОШИБКА")
     : saveState === "saved" && !dirty ? "СОХРАНЕНО"
     : "";
 
@@ -1155,7 +1200,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
 
       <nav className="editor-tabs" aria-label="Разделы редактора" ref={tabsRef}>
         {stripTabs.map(([id, label]) => {
-          const unsaved = changed.some((section) => section === id);
+          const unsaved = shownChanged.some((section) => section === id);
           return (
             <button key={id} type="button" className={tab === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => switchTab(id)}>
               {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}
@@ -1163,6 +1208,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
           );
         })}
       </nav>
+      {closureNotice && <p className="editor-guidance" role="status">{closureNotice}</p>}
 
       <div className="global-format-launch">
         <button
@@ -1458,6 +1504,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
                 showRecord(true);
               }}
               onDelete={() => setDialog("delete")}
+              restoreBlocked={closedSections.includes("viruses")}
             />
           ) : selectedRecycleFile ? (
             <div className="editor-form">
@@ -1557,7 +1604,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={runBatch} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
-      <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? ` Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>
+      <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? ` Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>
       {chipVisible && (
         <div
           className="editor-save-chip"
@@ -1572,11 +1619,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
             chipRef.current?.querySelector<HTMLButtonElement>(":scope > button")?.focus();
           }}
         >
-          <button type="button" aria-label={chipLabel} title={`Не сохранено: ${changed.length}`} aria-expanded={popoverOpen} aria-haspopup="dialog" aria-controls={popoverId} onClick={() => setPopoverOpen((open) => !open)}>{chipText}</button>
+          <button type="button" aria-label={chipLabel} title={`Не сохранено: ${shownChanged.length}`} aria-expanded={popoverOpen} aria-haspopup="dialog" aria-controls={popoverId} onClick={() => setPopoverOpen((open) => !open)}>{chipText}</button>
           {popoverOpen && dirty && (
             <div className="editor-save-popover" id={popoverId} role="dialog" aria-label="Несохранённые изменения">
               <strong>НЕ СОХРАНЕНО</strong>
-              <ul>{changed.map((id) => <li key={id} title={sectionLabels[id]}>{sectionLabels[id]}</li>)}</ul>
+              <ul>{shownChanged.map((id) => <li key={id} title={sectionLabels[id]}>{sectionLabels[id]}</li>)}</ul>
               {statusText && <span className={`editor-save-status ${saveState}`}>{statusText}</span>}
               {oversize.length > 0 && <span className="editor-save-reason">{oversizeMessage(oversize)}</span>}
               {bodyMessage && <span className="editor-save-status error">{bodyMessage}</span>}
@@ -1593,7 +1640,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       {dialog === "discard" && (
         <ConfirmDialog
           title="Отменить несохранённые правки?"
-          text={`Черновик вернётся к последнему сохранённому состоянию. Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}
+          text={`Черновик вернётся к последнему сохранённому состоянию. Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}`}
           actions={[
             {
               label: "ВЕРНУТЬ СОХРАНЁННОЕ",
@@ -1647,7 +1694,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       {closeAsked && !employeeDirty && (
         <ConfirmDialog
           title="Закрыть редактор?"
-          text={`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}${saveBlocked ? ` ${bodyMessage || dateMessage}` : ""}`}
+          text={`Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}${saveBlocked ? ` ${bodyMessage || dateMessage}` : ""}`}
           actions={[
             {
               label: "СОХРАНИТЬ",
@@ -2031,7 +2078,8 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   </div>;
 }
 
-function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRemoveMutation, onRestore, onDelete, dossierChanged }: {
+function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRemoveMutation, onRestore, onDelete, dossierChanged, restoreBlocked }: {
+  restoreBlocked: boolean;
   virus: Virus;
   uploadState: "idle" | "uploading" | "error";
   onUpload: (file: File, onUploaded: (url: string) => void) => void;
@@ -2083,7 +2131,7 @@ function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRemoveM
       </div>)}
       <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
     </EditorGroup>}
-    <div className="archive-virus-actions"><button className="secondary-control" type="button" onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
+    <div className="archive-virus-actions"><button className="secondary-control" type="button" disabled={restoreBlocked} title={restoreBlocked ? "Раздел «База вирусов» для вас закрыт" : undefined} onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
   </div>;
 }
 

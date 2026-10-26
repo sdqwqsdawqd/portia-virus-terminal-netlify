@@ -273,6 +273,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [canEdit, setCanEdit] = useState(false);
   const [canManageEditors, setCanManageEditors] = useState(false);
   const [openTabs, setOpenTabs] = useState<string[]>([]);
+  // The server's reason for the last refused save, shown in the editor's save status (D-12).
+  const [saveError, setSaveError] = useState("");
   const canEditRef = useRef(false);
   useEffect(() => { canEditRef.current = canEdit; });
   const [revision, setRevision] = useState(0);
@@ -990,6 +992,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     if (saveStateTimer.current !== null) window.clearTimeout(saveStateTimer.current);
     // Polls sent before this save may answer with the copy it replaces.
     savesStarted.current += 1;
+    setSaveError("");
     setSaveState("saving");
     try {
       // Up to MAX_CONTENT_BODY_BYTES (5 MB, lib/content-limits.ts) plus auth, upsert and CDN purge: aborting after the server committed would turn the retry into a false conflict.
@@ -1004,7 +1007,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         setSaveState("conflict");
         throw new Error("PORTIA content changed by another editor");
       }
-      if (!response.ok) throw new Error("save failed");
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: unknown } | null;
+        if (typeof body?.error === "string") setSaveError(body.error);
+        // A refusal usually means the tab list changed: read it now instead of at the next poll (D-15).
+        if (response.status === 403) void fetchAccess();
+        throw new Error("save failed");
+      }
       const payload = (await response.json()) as { revision?: number };
       const savedRevision = payload.revision ?? baseRevision + 1;
       knownRevision.current = savedRevision;
@@ -1429,7 +1438,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="editor" state={windows.editor} active={activeApp === "editor"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="editor-window" meta="ДОСТУП ВЛАДЕЛЬЦА">
-            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} openTabs={openTabs} active={activeApp === "editor" && !windows.editor.minimized} minimized={windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
+            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} openTabs={openTabs} active={activeApp === "editor" && !windows.editor.minimized} minimized={windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} saveError={saveError} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
           </AppWindow>
         </main>
 

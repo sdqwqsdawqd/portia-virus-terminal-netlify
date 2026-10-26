@@ -61,11 +61,11 @@ const baseFixture = (overrides = {}) => ({
   ...overrides,
 });
 
-let revision = 0; // a new revision for every serve: the page caches content by revision
+let revision = 0; // a new revision for every serve: the page caches content by revision, and a fake save caches revision + 1
 let current = { content: baseFixture(), revision: 1, fakeSave: false, access: defaultAccess() };
 let fakeSaves = 0;
 let savedBody = ""; // the body of the last fake save
-const serve = (content, access = defaultAccess()) => { revision += 1; current = { content, revision, fakeSave: false, access }; };
+const serve = (content, access = defaultAccess()) => { revision += 10; current = { content, revision, fakeSave: false, access }; };
 
 const json = { "content-type": "application/json", "cache-control": "no-store" };
 function installStub(cdp) {
@@ -199,6 +199,8 @@ const checks = {
     const bin = baseFixture({ recycledViruses: [{ id: "r1", name: "Архив 1", code: "R", status: "ИЗУЧЕН", external: "", physiology: "" }], recycleOrder: ["virus:r1"] });
     if (!(await bootEditor(cdp, bin, { ...defaultAccess(), openTabs: without("viruses") }))) return;
     await clickText(cdp, `${STRIP} > button`, "Корзина");
+    await waitFor(cdp, `!!document.querySelector('[id="card-virus:r1"] > button:last-of-type')`, 3000);
+    await click(cdp, '[id="card-virus:r1"] > button:last-of-type'); // the first button is the drag handle
     const found = await waitFor(cdp, `[...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "ВОССТАНОВИТЬ В БАЗУ")`, 3000);
     const disabled = found ? await cdp.eval(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "ВОССТАНОВИТЬ В БАЗУ").disabled`) : null;
     if (disabled !== true) reasons.push(`(c) the restore button disabled is ${JSON.stringify(disabled)}, expected true`);
