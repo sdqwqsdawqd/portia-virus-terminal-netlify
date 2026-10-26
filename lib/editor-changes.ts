@@ -25,6 +25,7 @@ export function sectionOfKey(key: string): EditorSection | null {
 
 const prefixSections: Record<string, EditorSection> = {
   "info:": "info",
+  "info-block:": "info",
   "broadcast:": "broadcasts",
   "recycle:": "recycle",
   "search:": "search",
@@ -61,6 +62,39 @@ export function changedSections(baseline: PortiaContent, draft: PortiaContent): 
   }
 
   return editorSections.filter((section) => found.has(section));
+}
+
+// Fail closed: the server refuses these for a restricted editor, since no section owns them.
+export function unclassifiedTextKeys(baseline: PortiaContent, draft: PortiaContent): string[] {
+  const before = baseline.formattedText ?? {};
+  const after = draft.formattedText ?? {};
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+    (key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]) && sectionOfFormattedKey(key, baseline, draft) === null,
+  );
+}
+
+// D-13: a virus is moved when it was live in the stored copy, is not in its bin, and now sits in the incoming bin and not in the live list.
+function movedVirusIds(baseline: PortiaContent, incoming: PortiaContent): Set<string> {
+  const live = new Set(incoming.viruses.map((virus) => virus.id));
+  const binned = new Set((baseline.recycledViruses ?? []).map((virus) => virus.id));
+  const inBin = new Set((incoming.recycledViruses ?? []).map((virus) => virus.id));
+  return new Set(baseline.viruses.filter((virus) => !live.has(virus.id) && !binned.has(virus.id) && inBin.has(virus.id)).map((virus) => virus.id));
+}
+
+// Closed sections that the incoming copy changes compared with the stored one.
+export function deniedSections(baseline: PortiaContent, incoming: PortiaContent, closed: readonly EditorSection[]): EditorSection[] {
+  let compared = incoming;
+  if (closed.includes("recycle")) {
+    // D-13, a live virus moved to the bin is a «База вирусов» edit; its `virus:<id>:*` texts already count as viruses because the id is in baseline.viruses.
+    const moved = movedVirusIds(baseline, incoming);
+    // Comparison copy only: never returned or saved.
+    if (moved.size) compared = {
+      ...incoming,
+      recycledViruses: (incoming.recycledViruses ?? []).filter((virus) => !moved.has(virus.id)),
+      recycleOrder: (incoming.recycleOrder ?? []).filter((key) => !(key.startsWith("virus:") && moved.has(key.slice("virus:".length)))),
+    };
+  }
+  return changedSections(baseline, compared).filter((section) => closed.includes(section));
 }
 
 export type DossierTab = "main" | "text" | "mutations" | "logs";
