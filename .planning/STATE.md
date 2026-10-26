@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 11
 current_phase_name: "Редактор: панель оформления и тексты"
 status: executing
-stopped_at: Completed PORTIA-11-06-PLAN.md
-last_updated: "2026-10-26T01:55:45.489Z"
+stopped_at: Completed PORTIA-11-07-PLAN.md
+last_updated: "2026-10-26T08:42:30.231Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase PORTIA-11 execution started
-state_head: 6fac27f47f2992db9fb379f9ba9520a10eb918ca
+state_head: 930bf54c0ae1151cf001715f844740ab9d40ca33
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 35
-  completed_plans: 34
+  completed_plans: 35
   percent: 71
 ---
 
@@ -76,6 +76,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-11 P04 | 45min | 3 tasks | 4 files |
 | Phase PORTIA-11 P05 | 35min | 2 tasks | 7 files |
 | Phase PORTIA-11 P06 | 15min | 2 tasks | 7 files |
+| Phase PORTIA-11 P07 | owner-paced | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-11]: 11-04: collapse state is a component-only Set, never stored; TOC list closed by default, fold buttons only on card lists
 - [Phase PORTIA-11]: 11-05: column swap swaps key and value in every row; table rows carry a normalizer-backed id (positional fallback)
 - [Phase PORTIA-11]: 11-06: multi-selection state lives in FormatTarget (gesture, fragments, peers); a Ctrl/Cmd press adds a fragment, any plain press, editing key, Esc or СБРОСИТЬ clears; one panel application is one batch:<id> undo step
+- [Phase PORTIA-11]: 11-07: real-engine checks (Firefox, iPhone WebKit via 11-engines-check.mjs) sit beside the Edge harness; Edge alone missed Gecko/WebKit bugs
 
 ### Pending Todos
 
@@ -154,8 +156,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-26T01:55:45.371Z
-Stopped at: Completed PORTIA-11-06-PLAN.md
+Last session: 2026-10-26T08:42:30.036Z
+Stopped at: Completed PORTIA-11-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
