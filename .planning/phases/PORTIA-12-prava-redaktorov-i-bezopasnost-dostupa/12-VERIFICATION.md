@@ -1,7 +1,7 @@
 ---
 phase: PORTIA-12-prava-redaktorov-i-bezopasnost-dostupa
 verified: 2026-10-26T12:00:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - ".planning/phases/PORTIA-12-prava-redaktorov-i-bezopasnost-dostupa/12-01-PLAN.md"
