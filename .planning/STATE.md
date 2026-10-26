@@ -5,16 +5,16 @@ milestone_name: Закрытие замечаний
 current_phase: 13
 current_phase_name: Приложение «Справочник»
 status: executing
-stopped_at: Phase 13 UI-SPEC approved
-last_updated: "2026-10-26T19:52:27.316Z"
-last_activity: 2026-10-26
-last_activity_desc: Phase PORTIA-12 complete, transitioned to Phase 13
-state_head: 41aa560b78651c5d811647329e8bef2f40748ba8
+stopped_at: Completed PORTIA-13-01-PLAN.md
+last_updated: "2026-10-26T20:01:56.453Z"
+last_activity: 2026-10-27
+last_activity_desc: Phase PORTIA-13 execution started
+state_head: 1728590aae2873f82922bc6914f5e1801ac5124f
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 49
-  completed_plans: 44
+  completed_plans: 45
   percent: 88
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-26)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase 11 — Редактор: панель оформления и тексты
+**Current focus:** Phase PORTIA-13 — Приложение «Справочник»
 
 ## Current Position
 
-Phase: 13 (Приложение «Справочник») — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-26 — Phase PORTIA-12 complete, transitioned to Phase 13
+Phase: PORTIA-13 (Приложение «Справочник») — EXECUTING
+Plan: 2 of 5
+Status: Executing Phase PORTIA-13
+Last activity: 2026-10-27 — Phase PORTIA-13 execution started
 
 Progress: [█████████░] 88%
 
@@ -78,6 +78,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-11 P06 | 15min | 2 tasks | 7 files |
 | Phase PORTIA-11 P07 | owner-paced | 3 tasks | 7 files |
 | Phase 11 P08 | 12 min | 3 tasks | 5 files |
+| Phase PORTIA-13 P01 | 25min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-11]: 11-07: real-engine checks (Firefox, iPhone WebKit via 11-engines-check.mjs) sit beside the Edge harness; Edge alone missed Gecko/WebKit bugs
 - [Phase 11]: 11-08: WR-01 is fixed at the commitEditorValue funnel (startGesture(false)), not with a key list, so Ctrl+X/V, context-menu cut/paste and non-Latin layouts are all covered
 - [Phase 11]: 11-08: a gone field leaves the multi-selection through dropFields/dropFormatFields (functional setFormatTarget updater); the section delete names its block keys
+- [Phase PORTIA-13]: 13-01: guide starts empty; oversize warning checks text and callout bodies only; photo-heavy size covered by existing body-size check
 
 ### Pending Todos
 
@@ -160,9 +162,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-26T19:19:57.056Z
-Stopped at: Phase 13 UI-SPEC approved
-Resume file: .planning/phases/PORTIA-13-prilozhenie-spravochnik/13-UI-SPEC.md
+Last session: 2026-10-26T20:01:56.216Z
+Stopped at: Completed PORTIA-13-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
