@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Закрытие замечаний
 current_phase: 11
-current_phase_name: redaktor-panel-oformleniya-i-teksty
+current_phase_name: "Редактор: панель оформления и тексты"
 status: executing
-stopped_at: Phase 11 UI-SPEC approved
-last_updated: "2026-10-26T00:37:08.851Z"
+stopped_at: Completed PORTIA-11-01-PLAN.md
+last_updated: "2026-10-26T00:59:02.200Z"
 last_activity: 2026-10-26
-last_activity_desc: Phase PORTIA-10 complete, transitioned to Phase 11
-state_head: 8d26967dfff4ce7e6302d22676fd988e1698d9b8
+last_activity_desc: Phase PORTIA-11 execution started
+state_head: 73d1100d5f3236cd65f78f688ab3e1bfd2d394b3
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 35
-  completed_plans: 28
+  completed_plans: 29
   percent: 71
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-26)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase 11 — Редактор: панель оформления и тексты
+**Current focus:** Phase PORTIA-11 — Редактор: панель оформления и тексты
 
 ## Current Position
 
-Phase: PORTIA-11 (redaktor-panel-oformleniya-i-teksty) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-26 — Phase PORTIA-10 complete, transitioned to Phase 11
+Phase: PORTIA-11 (Редактор: панель оформления и тексты) — EXECUTING
+Plan: 2 of 7
+Status: Executing Phase PORTIA-11
+Last activity: 2026-10-26 — Phase PORTIA-11 execution started
 
 Progress: [███████░░░] 71%
 
@@ -70,6 +70,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-10 P07 | 40 min | 3 tasks | 4 files |
 | Phase PORTIA-10 P08 | 35 min | 3 tasks | 9 files |
 | Phase PORTIA-10 P10-09 | 40min | 3 tasks | 3 files |
+| Phase PORTIA-11 P01 | 40min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,8 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 - [Phase PORTIA-10]: D-18: the ≡ handle gets no tooltip; recorded in A11Y-02 and ROADMAP criterion 4
 - [Phase PORTIA-10]: 10-07: no sandbox flag added; owner check found no failing frame
 - [Phase PORTIA-10]: D-23 (owner): custom accent follows the pick; neutral picks give a neutral grey theme via --accent-chroma; only lightness is corrected (supersedes D-05)
+- [Phase PORTIA-11]: 11-01: format mark colour is oklch(.57 calc(.1 * var(--accent-chroma)) var(--accent-hue) / .95), keeping 3:1 on every preview field under any accent (replaces fixed rgba)
+- [Phase PORTIA-11]: 11-01: TEST-02 own-input boundary is the 400 ms window of fieldSelectionStep; the panel clamp is tested in 11-02
 
 ### Pending Todos
 
@@ -141,9 +144,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-25T21:25:24.476Z
-Stopped at: Phase 11 UI-SPEC approved
-Resume file: .planning/phases/PORTIA-11-redaktor-panel-oformleniya-i-teksty/11-UI-SPEC.md
+Last session: 2026-10-26T00:59:02.091Z
+Stopped at: Completed PORTIA-11-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
