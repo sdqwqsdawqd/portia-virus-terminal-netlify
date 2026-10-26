@@ -49,6 +49,19 @@ test("oversizeFields names fields in editor order", () => {
   assert.deepEqual(oversizeFields(keys), ["РЕКОМЕНДАЦИИ", "ПОМОЩНИК", "ОФОРМЛЕНИЕ ТЕКСТОВ"]);
 });
 
+test("oversizeFields names a guide card after info entries and before СВОДКА", () => {
+  const content = draft();
+  content.guideSections = [{ id: "g1", title: "", photo: "", cards: [
+    { id: "c1", title: "Длинная", cover: "", blocks: [{ id: "b1", type: "callout", label: "", text: "x".repeat(MAX_BLOCK_TEXT + 1) }] },
+    { id: "c2", title: "", cover: "", blocks: [{ id: "b2", type: "text", text: "" }] },
+    { id: "c3", title: "Короткая", cover: "", blocks: [{ id: "b3", type: "text", text: "коротко" }, { id: "b4", type: "heading", text: "x".repeat(MAX_BLOCK_TEXT + 1) }] },
+  ] }];
+  content.formattedText[portiaTextKey.guideBlock("b2")] = manyRuns;
+  content.broadcasts[0].conditions = "x".repeat(MAX_CONDITIONS + 1);
+  content.formattedText[portiaTextKey.info("s1")] = manyRuns;
+  assert.deepEqual(oversizeFields(content), ["РАЗДЕЛ «Раздел»", "КАРТОЧКА «Длинная»", "КАРТОЧКА «БЕЗ НАЗВАНИЯ»", "СВОДКА «Сводка»"]);
+});
+
 test("oversizeMessage names one field or the first and the rest count", () => {
   assert.equal(oversizeMessage([]), "");
   assert.equal(oversizeMessage(["ВИРУС «A»"]), "ТЕКСТ ОЧЕНЬ БОЛЬШОЙ: ВИРУС «A». СОХРАНЯЕТСЯ ЦЕЛИКОМ.");
