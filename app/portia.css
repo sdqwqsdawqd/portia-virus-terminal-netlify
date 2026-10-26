@@ -585,6 +585,25 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 @media (max-width: 900px) {
   .nested-editor-head .nested-editor-toggle { min-height: 44px; }
 }
+/* EDIT-03 (D-03): one table of contents for every long list. The doubled selectors win over the aside list's own button rules. */
+.editor-toc { position: sticky; top: 0; z-index: 3; display: grid; gap: 6px; padding: 8px 16px; border: 1px solid oklch(.353 calc(.032 * var(--accent-chroma)) var(--accent-hue)); background: oklch(.229 calc(.018 * var(--accent-chroma)) var(--accent-hue)); }
+.editor-toc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.editor-toc button, .editor-record-list .editor-toc button { width: auto; min-width: 0; display: block; padding: 4px 0; border: 0; background: transparent; color: oklch(.812 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .06em; text-align: left; cursor: pointer; }
+.editor-toc-bar button { text-transform: uppercase; }
+.editor-toc button:hover, .editor-record-list .editor-toc button:hover { background: transparent; color: var(--teal); }
+.editor-toc button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.editor-toc ol { max-height: 40svh; margin: 0; padding: 0; overflow: auto; list-style: none; display: grid; gap: 8px; }
+.editor-toc ol[hidden] { display: none; }
+.editor-toc ol button, .editor-record-list .editor-toc ol button { width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.editor-toc li[data-depth="1"] { padding-left: 16px; }
+.editor-toc ol button[aria-current], .editor-record-list .editor-toc ol button[aria-current] { color: var(--teal); }
+/* A jumped-to card or row stops below the sticky TOC. */
+.nested-editor-card, .editor-record-row { scroll-margin-top: 56px; }
+@media (max-width: 900px) {
+  .editor-toc { top: 44px; }
+  .editor-toc button, .editor-record-list .editor-toc button { min-height: 44px; }
+  .nested-editor-card, .editor-record-row { scroll-margin-top: 100px; }
+}
 .recommendation-order-list { display: grid; gap: 6px; margin-top: 14px; }
 .recommendation-order-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: stretch; gap: 7px; padding: 7px; border: 1px solid oklch(.353 calc(.032 * var(--accent-chroma)) var(--accent-hue)); background: rgba(255,255,255,.012); }
 .recommendation-order-row > span { min-width: 0; display: flex; align-items: center; gap: 10px; overflow: hidden; color: oklch(.79 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }

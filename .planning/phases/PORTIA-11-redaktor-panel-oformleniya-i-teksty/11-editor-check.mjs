@@ -74,7 +74,14 @@ const sectionsFixture = (overrides = {}) => {
     ...Array.from({ length: (overrides.viruses ?? 6) - 2 }, (_, i) => ({ id: `v${i + 3}`, name: `Вирус ${i + 3}`, code: `A-${i + 3}`, status: "ИЗУЧЕН", external: "", physiology: "" })),
   ];
   const broadcasts = Array.from({ length: overrides.news ?? 6 }, (_, i) => ({ id: `n${i + 1}`, type: "news", title: `Новость ${i + 1}`, body: "", published: true, important: false, startsAt: "", endsAt: "", conditions: "" }));
-  return fixture({ ...editorFixture(), viruses, infoSections, broadcasts });
+  const archived = (id, name) => ({ id, name, code: "R", status: "ИЗУЧЕН", external: "", physiology: "" });
+  const file = (id, name) => ({ id, name, location: "", kind: "text", content: "", image: "", virusId: "" });
+  return fixture({
+    ...editorFixture(), viruses, infoSections, broadcasts,
+    recycledViruses: [archived("r1", "Архив 1"), archived("r2", "Архив 2"), archived("r3", "Архив 3")],
+    recycleFiles: [file("f1", "Файл 1"), file("f2", "Файл 2")],
+    recycleOrder: ["virus:r1", "file:f1", "virus:r2", "file:f2", "virus:r3"],
+  });
 };
 
 const json = { "content-type": "application/json", "cache-control": "no-store" };
@@ -359,6 +366,7 @@ const checks = {
     await load(cdp);
     if (!(await openEditor(cdp))) return;
     const top = '.flat-editor-form > .nested-editor-card';
+    const tocCount = `document.querySelectorAll("nav.editor-toc ol button").length`;
     const toggle = (n) => `${top}:nth-of-type(${n}) > .nested-editor-head .nested-editor-toggle`;
     // (a) on entry every top-level card is collapsed to its header
     await clickText(cdp, ".editor-tabs button", "Информация");
@@ -386,6 +394,23 @@ const checks = {
     if (await cdp.eval(body1)) reasons.push("(d) the first click did not show the body");
     await click(cdp, toggle(1));
     if (!(await cdp.eval(body1))) reasons.push("(d) the second click did not hide the body");
+    // (b) the TOC lists sections and subsections; one click expands the section and brings it to the top
+    const tocItems = await cdp.eval(tocCount);
+    if (tocItems !== 12) reasons.push(`(b) ${tocItems} TOC items, expected 12`);
+    await click(cdp, "nav.editor-toc .editor-toc-bar button");
+    await clickText(cdp, "nav.editor-toc ol button", "Раздел 4");
+    const body4 = `document.querySelectorAll(${JSON.stringify(top + " > .nested-editor-body")})[3].hidden`;
+    if (await cdp.eval(body4)) reasons.push("(b) section 4 is still folded after its TOC entry");
+    if ((await cdp.eval(`document.querySelector(${JSON.stringify(toggle(4))}).getAttribute("aria-expanded")`)) !== "true") reasons.push("(b) section 4's toggle is not aria-expanded");
+    const placed = await waitFor(cdp, `(() => { const c = document.querySelectorAll(${JSON.stringify(top)})[3].getBoundingClientRect(); const e = document.querySelector(".content-editor").getBoundingClientRect(); return c.top >= e.top && c.top <= e.top + 120; })()`, 1500);
+    if (!placed) reasons.push(`(b) section 4 did not reach the top of the editor: ${await cdp.eval(`(() => { const c = document.querySelectorAll(${JSON.stringify(top)})[3].getBoundingClientRect(); const e = document.querySelector(".content-editor").getBoundingClientRect(); return Math.round(c.top - e.top); })()`)}px below it`);
+    // (e) РАЗВЕРНУТЬ ВСЕ opens every body, СВЕРНУТЬ ВСЕ folds every body
+    const hiddenCount = () => cdp.eval(`[...document.querySelectorAll(".nested-editor-body")].filter((b) => b.hidden).length`);
+    await clickText(cdp, "nav.editor-toc .editor-toc-bar button", "РАЗВЕРНУТЬ ВСЕ");
+    if ((await hiddenCount()) !== 0) reasons.push(`(e) ${await hiddenCount()} bodies still folded after РАЗВЕРНУТЬ ВСЕ`);
+    await clickText(cdp, "nav.editor-toc .editor-toc-bar button", "СВЕРНУТЬ ВСЕ");
+    const total = await cdp.eval(`document.querySelectorAll(".nested-editor-body").length`);
+    if ((await hiddenCount()) !== total) reasons.push(`(e) ${total - await hiddenCount()} bodies still open after СВЕРНУТЬ ВСЕ`);
     // (g) an expanded card is shown folded while it is dragged and the drag lands on the right row
     const titles = () => cdp.eval(`[...document.querySelectorAll(${JSON.stringify(top + " > .nested-editor-head .nested-editor-title")})].map((e) => e.textContent)`);
     await click(cdp, toggle(2));
@@ -425,12 +450,36 @@ const checks = {
       if (v.title !== LONG_VIRUS) reasons.push("(i) the virus name has no full-name title");
       if (v.right > v.asideRight + 0.5) reasons.push(`(i) the name (${v.right}) sticks out of the aside (${v.asideRight})`);
     }
+    // (o) the virus list gets the same TOC (no fold buttons); an entry opens that record and the rows stay one line
+    const virusToc = await cdp.eval(`(() => ({ items: document.querySelectorAll(".editor-record-list nav.editor-toc ol button").length, fold: [...document.querySelectorAll(".editor-record-list nav.editor-toc button")].some((b) => /ВСЕ/.test(b.textContent)) }))()`);
+    if (virusToc.items !== 6) reasons.push(`(o) ${virusToc.items} virus TOC items, expected 6`);
+    if (virusToc.fold) reasons.push("(o) the virus TOC has fold buttons");
+    await click(cdp, ".editor-record-list nav.editor-toc .editor-toc-bar button");
+    await clickText(cdp, ".editor-record-list nav.editor-toc ol button", "Вирус 5");
+    const fifth = await cdp.eval(`(() => { const row = document.querySelectorAll(".editor-record-row")[4]; return { active: row.querySelector(":scope > button:last-child").classList.contains("active"), white: getComputedStyle(row.querySelector("strong")).whiteSpace }; })()`);
+    if (!fifth.active) reasons.push("(o) the 5th virus row is not active after its TOC entry");
+    if (fifth.white !== "nowrap") reasons.push(`(o) the row name wraps (white-space ${fifth.white})`);
+    // (p) Корзина: 5 entries, the 4th entry opens the 4th row
+    await clickText(cdp, ".editor-tabs button", "Корзина");
+    await waitFor(cdp, `document.querySelectorAll(".editor-record-row").length === 5`, 3000);
+    const recycleItems = await cdp.eval(tocCount);
+    if (recycleItems !== 5) reasons.push(`(p) ${recycleItems} Корзина TOC items, expected 5`);
+    await click(cdp, ".editor-record-list nav.editor-toc .editor-toc-bar button");
+    await clickText(cdp, ".editor-record-list nav.editor-toc ol button", "Файл 2");
+    const fourth = await cdp.eval(`document.getElementById("card-file:f2")?.querySelector(":scope > button:last-child")?.classList.contains("active") ?? null`);
+    if (fourth !== true) reasons.push(`(p) the 4th Корзина row is not active after its TOC entry (${fourth})`);
     // (m) Сводка cards are folded and keep «Удалить» in sight
     await clickText(cdp, ".editor-tabs button", "Сводка");
     await waitFor(cdp, `document.querySelectorAll("[data-broadcast-id]").length === 6`, 3000);
     const m = await cdp.eval(`(() => { const cards = [...document.querySelectorAll("[data-broadcast-id]")]; const del = cards[0]?.querySelector(":scope > .nested-editor-head .nested-editor-actions button")?.getBoundingClientRect(); return { count: cards.length, folded: cards.every((c) => c.querySelector(":scope > .nested-editor-body").hidden), delVisible: !!del && del.width > 0 }; })()`);
     if (m.count !== 6 || !m.folded) reasons.push(`(m) Сводка cards: ${m.count}, all folded ${m.folded}`);
     if (!m.delVisible) reasons.push("(m) «Удалить» of the first card is not visible");
+    // (h) Сводка: a TOC with 6 items; the 5th entry opens that card
+    const newsToc = await cdp.eval(tocCount);
+    if (newsToc !== 6) reasons.push(`(h) ${newsToc} Сводка TOC items, expected 6`);
+    await click(cdp, "nav.editor-toc .editor-toc-bar button");
+    await clickText(cdp, "nav.editor-toc ol button", "Новость 5");
+    if (await cdp.eval(`document.querySelector('[data-broadcast-id="n5"] > .nested-editor-body').hidden`)) reasons.push("(h) news card 5 is still folded after its TOC entry");
     // (k) no sections: the empty line names the real button
     serve(sectionsFixture({ sections: 0 }), 22);
     await load(cdp);
@@ -438,6 +487,50 @@ const checks = {
     await clickText(cdp, ".editor-tabs button", "Информация");
     const empty = await cdp.eval(`(() => { const e = document.querySelector(".flat-editor-form .editor-empty"); return e ? e.textContent : null; })()`);
     if (!empty || !empty.includes("Разделов пока нет") || !empty.includes("+ ДОБАВИТЬ РАЗДЕЛ")) reasons.push(`(k) empty line: ${JSON.stringify(empty)}`);
+    if (await cdp.eval(`!!document.querySelector("nav.editor-toc")`)) reasons.push("(k) a TOC is shown for an empty list");
+    // (l) 4 sections and 4 viruses: no TOC anywhere; one section: its ≡ is there and dragging it changes nothing
+    serve(sectionsFixture({ sections: 4, noSubsections: true, viruses: 4 }), 23);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    if (await cdp.eval(`!!document.querySelector("nav.editor-toc")`)) reasons.push("(l) a TOC is shown for 4 viruses");
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(top)}).length === 4`, 3000);
+    if (await cdp.eval(`!!document.querySelector("nav.editor-toc")`)) reasons.push("(l) a TOC is shown for 4 sections");
+    serve(sectionsFixture({ sections: 1, noSubsections: true }), 24);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(top)}).length === 1`, 3000);
+    const lone = await cdp.eval(`(() => { const h = document.querySelector(${JSON.stringify(top + " > .nested-editor-head .order-drag-handle")}); if (!h) return null; h.scrollIntoView({ block: "center" }); return true; })()`);
+    if (!lone) reasons.push("(l) the only section has no ≡ handle");
+    else {
+      await sleep(300);
+      const grab1 = await cdp.eval(`(() => { const r = document.querySelector(${JSON.stringify(top + " > .nested-editor-head .order-drag-handle")}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      const at1 = (type, y, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x: grab1.x, y, button: "left", ...extra });
+      await at1("mouseMoved", grab1.y, { button: "none" });
+      await at1("mousePressed", grab1.y, { buttons: 1, clickCount: 1 });
+      await sleep(250);
+      for (let step = 1; step <= 4; step += 1) await at1("mouseMoved", grab1.y + step * 15, { buttons: 1 });
+      await at1("mouseReleased", grab1.y + 60, { buttons: 0, clickCount: 1 });
+      await sleep(300);
+      if (await cdp.eval(`!!document.querySelector(".editor-save-chip")`)) reasons.push("(l) dragging the only section marked the draft changed");
+    }
+    // (n) on a phone the TOC sticks 44px down, under the system bar
+    serve(sectionsFixture(), 25);
+    await phone(cdp);
+    await load(cdp);
+    if (!(await openEditor(cdp))) { await desktop(cdp); return; }
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    await waitFor(cdp, `!!document.querySelector("nav.editor-toc")`, 3000);
+    await cdp.eval("window.scrollBy(0, 400)");
+    await sleep(200);
+    const phoneToc = await cdp.eval(`(() => { const t = document.querySelector("nav.editor-toc"); if (!t) return null; return { top: getComputedStyle(t).top, small: [...t.querySelectorAll("button")].filter((b) => b.getBoundingClientRect().height > 0 && b.getBoundingClientRect().height < 43).length }; })()`);
+    if (!phoneToc) reasons.push("(n) no TOC on the phone");
+    else {
+      if (phoneToc.top !== "44px") reasons.push(`(n) the phone TOC top is ${phoneToc.top}, expected 44px`);
+      if (phoneToc.small) reasons.push(`(n) ${phoneToc.small} TOC buttons under 44px tall on the phone`);
+    }
+    await desktop(cdp);
   },
   async panel(cdp) {
     serve(editorFixture(), 1);

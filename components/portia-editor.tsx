@@ -476,6 +476,46 @@ function CollapsibleCard({ id, label, title, open, onToggle, sortIndex, handle, 
   );
 }
 
+type TocItem = { id: string; label: string; depth: 0 | 1 };
+
+// D-03: a compact table of contents for a long list (5 or more entries). It owns only its list state and the entry in view; what a jump does is the caller's.
+// The row lists (viruses, Корзина) pass no onAll, since nothing in them folds.
+function EditorToc({ items, onJump, onAll }: { items: TocItem[]; onJump: (id: string) => void; onAll?: (open: boolean) => void }) {
+  const listId = useId();
+  const [listOpen, setListOpen] = useState(false);
+  const [active, setActive] = useState("");
+  const idsKey = items.map((item) => item.id).join("\n");
+  // The first entry in list order that sits in the band below the TOC is the one in view.
+  useEffect(() => {
+    if (!idsKey) return;
+    const ids = idsKey.split("\n");
+    const seen = new Set<string>();
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) { if (entry.isIntersecting) seen.add(entry.target.id); else seen.delete(entry.target.id); }
+      setActive(ids.find((id) => seen.has(`card-${id}`)) ?? "");
+    }, { rootMargin: "-80px 0px -60% 0px" });
+    for (const id of ids) { const element = document.getElementById(`card-${id}`); if (element) observer.observe(element); }
+    return () => observer.disconnect();
+  }, [idsKey]);
+  if (items.length < 5) return null;
+  return (
+    <nav className="editor-toc" aria-label="Оглавление">
+      <div className="editor-toc-bar">
+        <button type="button" aria-expanded={listOpen} aria-controls={listId} onClick={() => setListOpen((value) => !value)}>ОГЛАВЛЕНИЕ ▾</button>
+        {onAll && <button type="button" onClick={() => onAll(false)}>СВЕРНУТЬ ВСЕ</button>}
+        {onAll && <button type="button" onClick={() => onAll(true)}>РАЗВЕРНУТЬ ВСЕ</button>}
+      </div>
+      <ol id={listId} hidden={!listOpen}>
+        {items.map((item) => (
+          <li key={item.id} data-depth={item.depth}>
+            <button type="button" title={item.label} aria-current={active === item.id ? "location" : undefined} onClick={() => { setListOpen(false); onJump(item.id); }}>{item.label}</button>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
 function findFormatField(key: string) {
   return window.document.querySelector<HTMLElement>(`[data-format-key="${CSS.escape(key)}"]`);
 }
@@ -734,6 +774,40 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   };
 
   const shownBroadcasts = draft.broadcasts.filter((item) => broadcastTabOf(item.type) === broadcastEditorTab);
+
+  // D-03: every TOC ends in this one scroll. Smooth only when the house motion switch is on; scroll-margin-top keeps the card clear of the sticky TOC.
+  const jumpToCard = (id: string) => requestAnimationFrame(() => document.getElementById(`card-${id}`)?.scrollIntoView({ block: "start", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" }));
+  // Folding everything also drops a format target that sat in a card body (Pitfall 7).
+  const setAllOpen = (ids: string[], open: boolean) => {
+    if (!open && formatTarget && findFormatField(formatTarget.key)?.closest(".nested-editor-body")) { setFormatTarget(null); setFormatterOpen(false); }
+    setOpen(ids, open);
+  };
+  const infoTocItems: TocItem[] = draft.infoSections.flatMap((section) => [
+    { id: section.id, label: section.title || "БЕЗ НАЗВАНИЯ", depth: 0 as const },
+    ...section.subsections.map((subsection) => ({ id: subsection.id, label: subsection.title || "БЕЗ НАЗВАНИЯ", depth: 1 as const })),
+  ]);
+  const infoCardIds = draft.infoSections.flatMap((section) => [section.id, ...section.subsections.flatMap((subsection) => [subsection.id, ...subsection.blocks.map((block) => block.id)])]);
+  const jumpInfo = (id: string) => {
+    const found = findInfo(draft.infoSections, id);
+    setOpen(found ? [found.section.id, id] : [id], true);
+    jumpToCard(id);
+  };
+  const broadcastTocItems: TocItem[] = shownBroadcasts.map((broadcast) => ({ id: broadcast.id, label: broadcast.title || "БЕЗ НАЗВАНИЯ", depth: 0 }));
+  // The row button and its TOC entry share these two handlers, so the TOC never duplicates selection logic.
+  const openVirus = (id: string) => { setSelectedVirusId(id); showRecord(true); };
+  const openRecycleEntry = (key: string) => {
+    const id = key.slice(key.indexOf(":") + 1);
+    if (key.startsWith("virus:")) { setSelectedRecycledVirusId(id); setSelectedRecycleFileId(""); }
+    else { setSelectedRecycleFileId(id); setSelectedRecycledVirusId(""); }
+    showRecord(true);
+  };
+  const virusTocItems: TocItem[] = draft.viruses.map((virus) => ({ id: virus.id, label: virus.name || "БЕЗ НАЗВАНИЯ", depth: 0 }));
+  // The same filter the rows use: a key whose record is gone has no row and no entry.
+  const recycleTocItems: TocItem[] = orderedRecycleKeys.flatMap((key) => {
+    const id = key.slice(key.indexOf(":") + 1);
+    const record = key.startsWith("virus:") ? draft.recycledViruses.find((item) => item.id === id) : draft.recycleFiles.find((item) => item.id === id);
+    return record ? [{ id: key, label: record.name || "БЕЗ ИМЕНИ", depth: 0 as const }] : [];
+  });
   // Same reason as selectDossierTab: the panel's target may sit in a card of the category being hidden (T-03.2-20).
   const selectBroadcastTab = (id: BroadcastTab) => {
     setBroadcastEditorTab(id);
@@ -993,10 +1067,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
         <div className="virus-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>
           <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
           <aside className="editor-record-list">
+            <EditorToc items={virusTocItems} onJump={(id) => { openVirus(id); jumpToCard(id); }} />
             {draft.viruses.map((virus, index) => (
-              <div className="editor-record-row" data-sort-index={index} key={virus.id}>
+              <div className="editor-record-row" id={`card-${virus.id}`} data-sort-index={index} key={virus.id}>
                 <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => moveArrayItem(next.viruses, from, to)); }} />
-                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => { setSelectedVirusId(virus.id); showRecord(true); }}>
+                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => openVirus(virus.id)}>
                   <strong title={virus.name || "БЕЗ НАЗВАНИЯ"}>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small title={virus.code || "БЕЗ КОДА"}>{virus.code || "БЕЗ КОДА"}</small>
                 </button>
               </div>
@@ -1076,6 +1151,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {tab === "info" && (
         <div className="editor-form flat-editor-form">
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация». Раздел может содержать подразделы, собранные из блоков в любом порядке.</p>
+          <EditorToc items={infoTocItems} onJump={jumpInfo} onAll={(open) => setAllOpen(infoCardIds, open)} />
           {draft.infoSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
           {draft.infoSections.map((section, index) => (
             <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${String(index + 1).padStart(2, "0")}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
@@ -1147,6 +1223,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               </button>
             ))}
           </nav>
+          <EditorToc items={broadcastTocItems} onJump={(id) => { setOpen([id], true); jumpToCard(id); }} onAll={(open) => setAllOpen(broadcastTocItems.map((item) => item.id), open)} />
           <button className="secondary-control" type="button" onClick={() => {
             const id = makeId("broadcast");
             revealBroadcast.current = { id, field: "title" };
@@ -1193,6 +1270,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
         <div className="virus-editor-layout recycle-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && (selectedRecycledVirus || selectedRecycleFile) ? "record" : "list"}>
           <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
           <aside className="editor-record-list">
+            <EditorToc items={recycleTocItems} onJump={(key) => { openRecycleEntry(key); jumpToCard(key); }} />
             {orderedRecycleKeys.map((key, index) => {
               const isVirus = key.startsWith("virus:");
               const id = key.slice(key.indexOf(":") + 1);
@@ -1201,13 +1279,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               if (!virus && !file) return null;
               const title = virus?.name || file?.name || "БЕЗ ИМЕНИ";
               const kindText = virus ? "ВИРУС В КОРЗИНЕ" : file!.kind === "virus" ? "ФАЙЛ ВИРУСА" : file!.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ";
-              return <div className="editor-record-row" data-sort-index={index} key={key}>
+              return <div className="editor-record-row" id={`card-${key}`} data-sort-index={index} key={key}>
                 <OrderDragHandle index={index} label={title} onMove={(from, to) => changeDraft((next) => { const order = recycleKeys(next); moveArrayItem(order, from, to); next.recycleOrder = order; })} />
-                <button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} onClick={() => {
-                  if (virus) { setSelectedRecycledVirusId(virus.id); setSelectedRecycleFileId(""); }
-                  else { setSelectedRecycleFileId(file!.id); setSelectedRecycledVirusId(""); }
-                  showRecord(true);
-                }}>
+                <button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} onClick={() => openRecycleEntry(key)}>
                   <strong title={title}>{title}</strong><small title={kindText}>{kindText}</small>
                 </button>
               </div>;

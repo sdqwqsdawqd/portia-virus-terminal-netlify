@@ -141,13 +141,19 @@ Rule for A11Y-03: after the phase `grep -nE "фигни|пирожок|<small></
 
 ## Layout & Interaction Contracts
 
-### 1. Section navigation — EDIT-03 [CTX D-01..D-05]
+### 1. Section navigation — EDIT-03 [CTX D-01..D-05] (amended 2026-10-26, planner)
 - On editor entry every section/subsection (Информация sections+subsections, virus cards, summary, trash, and all other lists using `OrderDragHandle`) renders **collapsed**: only the header row (handle `≡`, title, collapse toggle, existing row actions). State is held in component state only; never persisted.
 - Header row layout: `[≡ handle] [title (flex 1, min-width 0)] [toggle] [row actions]`. Title: `overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0`, with `title` attribute = full text. Row actions never overlap — this fixes the existing bug where a long title spills over the neighbour's buttons.
 - Toggle: button `▸` collapsed / `▾` expanded, `aria-expanded`, `aria-controls` the body id. Whole title is also clickable to toggle (not the handle).
 - TOC: a compact `ОГЛАВЛЕНИЕ` block pinned at the top of each long list (sticky inside the list, `top: 0`, 11px/700 items, 8px gap, `max-height: 40svh`, scrolls). Each item is a button: click expands that section and `scrollIntoView({ block: "start", behavior: smooth })` — use `behavior: auto` when `prefers-reduced-motion: reduce`. Rendered only when the list has >= 5 items [DEFAULT]. No search field [CTX D-03].
 - Reorder: handle `≡` drags collapsed rows within one screen; no up/down buttons [CTX D-04]. A section being dragged is force-collapsed for the drag duration.
 - Expanded sections keep current inner layout unchanged.
+- Amendment (2026-10-26, planner; plan 11-04):
+  1. Cards fold, rows do not. The folding lists are the «Информация» sections, subsections and blocks, and the Сводка cards (named by the owner in D-02; they have no ≡ and none is added). The lists that are already one-line rows with ≡ (the virus list, «Корзина», the recommendation rows) never fold. They get the ellipsis and the full-name `title`. This replaces «virus cards, summary, trash … renders collapsed» for those row lists.
+  2. Owner clarification (2026-10-26, in chat): the virus list and «Корзина» get the same «ОГЛАВЛЕНИЕ» at the top of the list at 5 or more entries. Their rows stay one line with «…». A TOC entry does what the row's own button does (selects the entry and opens its record) and scrolls the row into view. These two lists have no «СВЕРНУТЬ ВСЕ» / «РАЗВЕРНУТЬ ВСЕ», since nothing in them folds. The recommendation rows keep only the «…» and the title, with no TOC.
+  3. Collapsed bodies use the `hidden` attribute, not unmounting, so rich fields keep their DOM and selection state and `aria-controls` always points at an element.
+  4. The TOC counts sections plus subsections on «Информация», the cards of the shown category on Сводка, the viruses on the virus list and the shown rows on «Корзина». The empty «Информация» line names the real button: «Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».» (the spec said «+ РАЗДЕЛ»).
+  5. The active TOC entry is the first card or row, in list order, that intersects the band below the TOC (root margin top -80px, bottom -60%); it carries the accent and `aria-current="location"`.
 
 ### 2. Floating format panel — EDIT-04, EDIT-01 [CTX D-06..D-08] (amended 2026-10-26, planner)
 Desktop (> 900px):
