@@ -2,7 +2,59 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { MAX_BLOCK_TEXT, MAX_CONDITIONS, MAX_SCIENTIST_LOGS } from "./content-limits.ts";
 import { defaultPortiaContent, findInfo, type InfoSection } from "./portia-content.ts";
-import { normalizeBroadcasts, normalizeInfoSections, normalizePortiaContent, parseYoutubeId } from "./portia-content-normalize.ts";
+import { normalizeBroadcasts, normalizeGuideSections, normalizeInfoSections, normalizePortiaContent, parseYoutubeId } from "./portia-content-normalize.ts";
+
+test("a save from before Phase 13 reads as an empty guide (D-00f)", () => {
+  const old: Record<string, unknown> = structuredClone(defaultPortiaContent);
+  delete old.guideSections;
+  assert.deepEqual(normalizePortiaContent(old)?.guideSections, []);
+  assert.deepEqual(normalizeGuideSections("garbage"), []);
+  assert.deepEqual(normalizeGuideSections(null), []);
+  assert.deepEqual(normalizeGuideSections({ id: "s" }), []);
+});
+
+test("guide blocks keep every text and blank only bad media (D-01..D-06)", () => {
+  const input = [{
+    id: "s1", title: "Раздел  ", photo: "/assets/a.png",
+    cards: [{
+      id: "c1", title: " Карточка", cover: "//evil.example/x.png",
+      blocks: [
+        { id: "b1", type: "heading", text: "Как найти лабораторию" },
+        { id: "b2", type: "text", text: "Абзац" },
+        { id: "b3", type: "table", rows: [{ id: "r1", key: "Уровень", value: "III" }] },
+        { id: "b4", type: "photo", url: "https://ok.example/p.png", caption: "Подпись" },
+        { id: "b5", type: "video", videoId: "dQw4w9WgXcQ" },
+        { id: "b6", type: "callout", label: "ВАЖНО", text: "Не открывать" },
+        { id: "b7", type: "video", videoId: "not-an-id" },
+        { id: "b8", type: "gallery" },
+      ],
+    }],
+  }];
+  const [section] = normalizeGuideSections(input);
+  assert.equal(section.title, "Раздел  ");
+  assert.equal(section.photo, "/assets/a.png");
+  const [card] = section.cards;
+  assert.equal(card.title, " Карточка");
+  assert.equal(card.cover, "");
+  assert.deepEqual(card.blocks, [
+    { id: "b1", type: "heading", text: "Как найти лабораторию" },
+    { id: "b2", type: "text", text: "Абзац" },
+    { id: "b3", type: "table", rows: [{ id: "r1", key: "Уровень", value: "III" }] },
+    { id: "b4", type: "photo", url: "https://ok.example/p.png", caption: "Подпись" },
+    { id: "b5", type: "video", videoId: "dQw4w9WgXcQ" },
+    { id: "b6", type: "callout", label: "ВАЖНО", text: "Не открывать" },
+    { id: "b7", type: "video", videoId: "" },
+  ]);
+  assert.deepEqual(normalizeGuideSections(normalizeGuideSections(input)), normalizeGuideSections(input));
+});
+
+test("guide sections, cards and blocks without ids get positional ids", () => {
+  const [section] = normalizeGuideSections([{ cards: [{ blocks: [{ type: "text" }, "x", { type: "text", text: "t" }] }] }]);
+  assert.equal(section.id, "guide-0");
+  assert.equal(section.cards[0].id, "guide-0-card-0");
+  assert.deepEqual(section.cards[0].blocks.map((block) => block.id), ["guide-0-card-0-block-0", "guide-0-card-0-block-2"]);
+  assert.deepEqual(normalizeGuideSections([{ id: "a" }, 5, { id: "b" }]).map((item) => item.id), ["a", "b"]);
+});
 
 test("a save round-trip keeps every field", () => {
   const once = normalizePortiaContent(structuredClone(defaultPortiaContent));

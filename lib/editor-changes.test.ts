@@ -180,6 +180,36 @@ test("info-block formatting keys count as an info change", () => {
   assert.deepEqual(deniedSections(fixture(), draft, ["info"]), ["info"]);
 });
 
+const guideCard = (title: string) => ({ id: "c1", title, cover: "", blocks: [{ id: "b", type: "text" as const, text: "t" }] });
+const withGuide = (): PortiaContent => {
+  const content = fixture();
+  content.guideSections = [{ id: "g1", title: "Раздел", photo: "", cards: [guideCard("Карточка")] }];
+  content.formattedText[portiaTextKey.guideBlock("b")] = richText;
+  return content;
+};
+
+test("a guide formattedText entry marks the guide section", () => {
+  const draft = fixture();
+  draft.formattedText[portiaTextKey.guideBlock("b")] = richText;
+  assert.deepEqual(changedSections(fixture(), draft), ["guide"]);
+  assert.deepEqual(unclassifiedTextKeys(fixture(), draft), []);
+  assert.deepEqual(deniedSections(fixture(), draft, ["guide"]), ["guide"]);
+  const renamed = withGuide();
+  renamed.guideSections[0].cards[0].title = "Другая";
+  assert.deepEqual(changedSections(withGuide(), renamed), ["guide"]);
+});
+
+test("closing the guide reverts guide sections and guide formatting only", () => {
+  const baseline = fixture();
+  const draft = withGuide();
+  draft.infoSections[0].title = "T";
+  const result = revertSections(baseline, draft, ["guide"]);
+  assert.deepEqual(result.guideSections, []);
+  assert.equal(portiaTextKey.guideBlock("b") in result.formattedText, false);
+  assert.equal(result.infoSections[0].title, "T");
+  assert.deepEqual(deniedSections(baseline, result, ["guide"]), []);
+});
+
 test("every portiaTextKey builder output classifies into a section", () => {
   const id = fixture().viruses[0].id;
   const cases: [string, EditorSection][] = [
@@ -187,6 +217,7 @@ test("every portiaTextKey builder output classifies into a section", () => {
     [portiaTextKey.mutation(id, 0), "viruses"],
     [portiaTextKey.info("s"), "info"],
     [portiaTextKey.infoBlock("b"), "info"],
+    [portiaTextKey.guideBlock("b"), "guide"],
     [portiaTextKey.broadcast("n"), "broadcasts"],
     [portiaTextKey.recycle("f"), "recycle"],
     [portiaTextKey.searchRecommendations, "search"],
@@ -391,6 +422,7 @@ test("a stored virus id ends up in exactly one list for every closed set, and th
   draft.formattedText[portiaTextKey.virus(binned.id, "external")] = richText;
   draft.infoSections[0].title = "T";
   draft.formattedText[portiaTextKey.infoBlock("b")] = { runs: [{ text: "y" }] } as never;
+  draft.guideSections.push({ id: "g9", title: "G", photo: "", cards: [] });
   draft.broadcasts.push({ id: "b9", type: "news", title: "n", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" });
   draft.recycleFiles[0].name = "X";
   draft.recycleOrder.reverse();
