@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
 import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
 import { shortcutOf } from "@/lib/editor-shortcuts";
@@ -1282,7 +1282,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
-      {formatterOpen && formatTarget && <FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />}
+      {formatterOpen && formatTarget && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
       {barVisible && (
         <div className="editor-savebar" data-dirty={dirty || undefined}>
           <p role="status" aria-live="polite">
@@ -2034,11 +2034,10 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
     if (range) commit(togglePreset(documentRef.current, range.from, range.to, preset));
   };
 
-  // Restore the remembered place on mount and press it to the edge whenever the editor window changes size (D-11). The phone panel is docked by CSS.
+  // Restore the remembered place on mount and keep 64px of it on screen whenever the browser window changes size (D-07). The phone panel is docked by CSS.
   useLayoutEffect(() => {
     const panel = panelRef.current;
-    const parent = panel?.offsetParent;
-    if (!panel || !parent) return;
+    if (!panel) return;
     const place = () => {
       if (window.matchMedia("(max-width: 900px)").matches) {
         panel.style.right = "";
@@ -2047,33 +2046,31 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       }
       let saved: PanelOffset | null = null;
       try { saved = parsePanelOffset(localStorage.getItem(formatPanelStorageKey)); } catch { saved = null; }
-      if (saved) paintPanelOffset(panel, parent, saved);
+      if (saved) paintPanelOffset(panel, saved);
     };
     place();
-    const observer = new ResizeObserver(place);
-    observer.observe(parent);
-    return () => observer.disconnect();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
   }, []);
 
-  // PC: the panel moves by its header like a desktop window and never leaves the editor window (D-10). The phone panel is docked.
+  // PC: the panel is a layer of the desktop and moves by its header anywhere on the screen (D-06, EDIT-04). The phone panel is docked.
   const beginDrag = (event: React.PointerEvent<HTMLElement>) => {
     const panel = panelRef.current;
-    const parent = panel?.offsetParent;
-    if (!panel || !parent || window.matchMedia("(max-width: 900px)").matches) return;
+    if (!panel || window.matchMedia("(max-width: 900px)").matches) return;
     if ((event.target as HTMLElement).closest("button")) return;
     event.currentTarget.setPointerCapture(event.pointerId);
+    const rect = panel.getBoundingClientRect();
     dragRef.current = {
       pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
-      right: parent.clientWidth - panel.offsetLeft - panel.offsetWidth, bottom: parent.clientHeight - panel.offsetTop - panel.offsetHeight, last: null,
+      right: document.documentElement.clientWidth - rect.right, bottom: document.documentElement.clientHeight - rect.bottom, last: null,
     };
   };
 
   const moveDrag = (event: React.PointerEvent<HTMLElement>) => {
     const drag = dragRef.current;
     const panel = panelRef.current;
-    const parent = panel?.offsetParent;
-    if (!drag || !panel || !parent || drag.pointerId !== event.pointerId) return;
-    drag.last = paintPanelOffset(panel, parent, { right: drag.right - (event.clientX - drag.startX), bottom: drag.bottom - (event.clientY - drag.startY) });
+    if (!drag || !panel || drag.pointerId !== event.pointerId) return;
+    drag.last = paintPanelOffset(panel, { right: drag.right - (event.clientX - drag.startX), bottom: drag.bottom - (event.clientY - drag.startY) });
   };
 
   const endDrag = (event: React.PointerEvent<HTMLElement>) => {
@@ -2128,12 +2125,12 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   </section>;
 }
 
-// Where the PC format panel was left, px from the editor window's bottom-right; read back on mount (D-11).
+// Where the PC format panel was left, px from the viewport's right and bottom edges; read back on mount (D-07).
 const formatPanelStorageKey = "portia-format-panel-v1";
 
 // Writes the clamped right/bottom straight on the panel (no React render per move) and returns what was painted.
-function paintPanelOffset(panel: HTMLElement, parent: Element, offset: { right: number; bottom: number }) {
-  const next = clampPanelOffset(offset, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: parent.clientWidth, height: parent.clientHeight });
+function paintPanelOffset(panel: HTMLElement, offset: { right: number; bottom: number }) {
+  const next = clampPanelOffset(offset, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight });
   panel.style.right = `${next.right}px`;
   panel.style.bottom = `${next.bottom}px`;
   return next;

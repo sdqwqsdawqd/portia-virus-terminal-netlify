@@ -1,4 +1,4 @@
-// Usage: node 11-editor-check.mjs --check mark [--url http://localhost:3124]   (later plans add more checks)
+// Usage: node 11-editor-check.mjs --check mark|panel [--url http://localhost:3124]   (later plans add more checks)
 // Why: Phase 11 has no DOM test runner, so headless Edge drives the production build. Inside the browser it launches,
 // GET /api/access is answered {canEdit: true} and GET /api/content is served from fixtures; every non-GET request to /api/*
 // is blocked and fails the check (nothing is ever saved, no login is needed). The stub is a CDP interception only: no app
@@ -119,6 +119,34 @@ async function mouseSelect(cdp, box, modifiers = 0) {
   await at("mouseMoved", box.right - 1, { buttons: 1 });
   await at("mouseReleased", box.right - 1, { buttons: 0, clickCount: 1 });
 }
+const panelKey = "portia-format-panel-v1";
+const panelRect = (cdp) => cdp.eval(`(() => { const e = document.querySelector(".floating-text-format"); if (!e) return null; const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; })()`);
+/** A point on the panel header (8px below its top edge, so it can still be grabbed when the taskbar covers the rest) away from its buttons: fraction 0 is its left end, 1 its right end; "left"/"right" are the outermost grabbable points. */
+const headerPoint = (cdp, fraction = 0.15) => cdp.eval(`(() => { const e = document.querySelector(".floating-text-format > header"); if (!e) return null; const r = e.getBoundingClientRect(); const f = ${JSON.stringify(fraction)}; const x = f === "left" ? r.left + 5 : f === "right" ? r.right - 46 : r.left + 20 + (r.width - 120) * f; return { x, y: r.top + 8 }; })()`);
+
+/** Describe tab, «второе» selected with the mouse, ✎ clicked, waits for the panel. */
+async function openPanel(cdp) {
+  await clickText(cdp, ".dossier-tabs button", "Описание");
+  const lead = '.formatted-rich-input[data-area="lead"]';
+  if (!(await waitFor(cdp, `!!document.querySelector(${JSON.stringify(lead)})`, 3000))) { reasons.push("openPanel: no lead field"); return false; }
+  const box = await wordBox(cdp, lead, 0, "второе");
+  if (!box) { reasons.push("openPanel: word «второе» not found"); return false; }
+  await mouseSelect(cdp, box);
+  await click(cdp, ".global-format-launch > button");
+  if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) { reasons.push("openPanel: the format panel did not open"); return false; }
+  await sleep(150);
+  return true;
+}
+
+/** Mouse pressed at from, six intermediate moves with the button down, released at to. */
+async function drag(cdp, from, to) {
+  const at = (type, x, y, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x, y, button: "left", ...extra });
+  await at("mouseMoved", from.x, from.y, { button: "none" });
+  await at("mousePressed", from.x, from.y, { buttons: 1, clickCount: 1 });
+  for (let step = 1; step <= 6; step += 1) await at("mouseMoved", from.x + ((to.x - from.x) * step) / 6, from.y + ((to.y - from.y) * step) / 6, { buttons: 1 });
+  await at("mouseReleased", to.x, to.y, { buttons: 0, clickCount: 1 });
+  await sleep(100);
+}
 const phone = async (cdp) => {
   await cdp.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true });
@@ -164,6 +192,53 @@ const checks = {
     if (heads !== 0) reasons.push(`(c) ${heads} empty <small> in the field heads`);
     const hint = await cdp.eval(`document.querySelector(".formatted-text-field-hint")?.textContent ?? null`);
     if (hint !== "Текст и GIF можно использовать вместе. Не добавляйте лишних элементов.") reasons.push(`(c) hint reads ${JSON.stringify(hint)}`);
+  },
+  async panel(cdp) {
+    serve(editorFixture(), 1);
+    await load(cdp);
+    await cdp.eval(`localStorage.removeItem(${JSON.stringify(panelKey)})`);
+    if (!(await openEditor(cdp))) return;
+    if (!(await openPanel(cdp))) return;
+    // (a) the panel is a layer of the desktop above the windows
+    const layer = await cdp.eval(`(() => { const e = document.querySelector(".floating-text-format"); return { parent: e.parentElement.id, z: getComputedStyle(e).zIndex }; })()`);
+    if (layer.parent !== "desktop") reasons.push(`(a) panel parent is "${layer.parent}", expected "desktop"`);
+    if (layer.z !== "950") reasons.push(`(a) panel z-index is ${layer.z}, expected 950`);
+    // (b) dragged by its header out of the editor window
+    const windowLeft = await cdp.eval(`document.querySelector(".editor-window").getBoundingClientRect().left`);
+    await drag(cdp, await headerPoint(cdp), { x: 40, y: 80 });
+    let rect = await panelRect(cdp);
+    if (!(rect.left < windowLeft)) reasons.push(`(b) panel left ${rect.left} is not left of the editor window ${windowLeft}`);
+    const top = await cdp.eval(`(() => { const h = document.querySelector(".floating-text-format > header").getBoundingClientRect(); const e = document.elementFromPoint(h.left + h.width / 2, h.top + h.height / 2); return !!e?.closest(".floating-text-format"); })()`);
+    if (!top) reasons.push("(b) the panel header is not topmost at its centre");
+    // (c) the clamp keeps 64px and the top edge on screen
+    await drag(cdp, await headerPoint(cdp, "right"), { x: 1, y: 1 });
+    rect = await panelRect(cdp);
+    if (!(rect.right >= 63.5)) reasons.push(`(c) up-left: right ${rect.right} < 64`);
+    if (!(rect.top >= 0)) reasons.push(`(c) up-left: top ${rect.top} < 0`);
+    // the drag must have reached the limit, else the bounds above were never tested
+    if (Math.abs(rect.right - 64) > 1 || Math.abs(rect.top) > 1) reasons.push(`(c) up-left: the drag stopped short of the clamp (right ${rect.right}, top ${rect.top})`);
+    const edge = await cdp.eval(`({ w: document.documentElement.clientWidth, h: document.documentElement.clientHeight })`);
+    // the header's left end is off screen after the first drag, so the panel is first walked right by its visible end
+    await drag(cdp, await headerPoint(cdp, "right"), { x: edge.w - 1, y: edge.h / 2 });
+    await drag(cdp, await headerPoint(cdp, "left"), { x: edge.w - 1, y: edge.h - 1 });
+    rect = await panelRect(cdp);
+    const size = edge;
+    if (!(rect.left <= size.w - 63.5)) reasons.push(`(c) down-right: left ${rect.left} > ${size.w - 64}`);
+    if (!(rect.top <= size.h - 63.5)) reasons.push(`(c) down-right: top ${rect.top} > ${size.h - 64}`);
+    if (Math.abs(rect.left - (size.w - 64)) > 1 || Math.abs(rect.top - (size.h - 64)) > 1) reasons.push(`(c) down-right: the drag stopped short of the clamp (left ${rect.left}, top ${rect.top})`);
+    // (d) the place is stored and survives a reload
+    await drag(cdp, await headerPoint(cdp, 0), { x: 400, y: 300 });
+    const before = await panelRect(cdp);
+    const stored = await cdp.eval(`(() => { try { const v = JSON.parse(localStorage.getItem(${JSON.stringify(panelKey)})); return Number.isFinite(v?.right) && Number.isFinite(v?.bottom); } catch { return false; } })()`);
+    if (!stored) reasons.push("(d) portia-format-panel-v1 does not hold finite right/bottom");
+    await load(cdp);
+    if (!(await openEditor(cdp)) || !(await openPanel(cdp))) return;
+    const after = await panelRect(cdp);
+    if (["left", "top", "right", "bottom"].some((k) => Math.abs(after[k] - before[k]) > 1)) reasons.push(`(d) after reload the panel moved: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
+    // (e) windows clicked again and again never rise over the panel
+    await cdp.eval(`(() => { const w = document.querySelector(".editor-window"); for (let i = 0; i < 150; i += 1) w.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); })()`);
+    const still = await cdp.eval(`(() => { const h = document.querySelector(".floating-text-format > header").getBoundingClientRect(); const e = document.elementFromPoint(h.left + h.width / 2, h.top + h.height / 2); return !!e?.closest(".floating-text-format"); })()`);
+    if (!still) reasons.push(`(e) after 150 window clicks the panel is no longer topmost: ${await cdp.eval(`(() => { const h = document.querySelector(".floating-text-format > header").getBoundingClientRect(); const e = document.elementFromPoint(h.left + h.width / 2, h.top + h.height / 2); return (e?.className || e?.tagName) + " win z=" + document.querySelector(".editor-window").style.zIndex + " rect " + Math.round(h.left) + "," + Math.round(h.top); })()`)}`);
   },
 };
 
