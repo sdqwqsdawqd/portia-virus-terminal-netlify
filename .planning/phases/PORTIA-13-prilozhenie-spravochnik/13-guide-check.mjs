@@ -1,5 +1,5 @@
 // Usage: node 13-guide-check.mjs --check <name>|all [--url http://localhost:3124]
-// Checks: open-card, grid, card-blocks, poll-gone, search, editor-save (the «Справочник» desktop window of phase 13).
+// Checks: open-card, grid, card-blocks, poll-gone, search, editor-save, editor-blocks, editor-undo, closed-tab (the «Справочник» desktop window of phase 13).
 // Why: the guide window (grid, card page, remembered folding, poll safety, search) has no DOM test runner, so headless Edge drives the production build.
 // Inside the browser it launches, GET /api/access and GET /api/content are answered from the current fixture. EVERY non-GET request to /api/*
 // is blocked and recorded as a failure reason ("write blocked"), never forwarded, so nothing is ever saved and no login is needed.
@@ -80,12 +80,13 @@ const guideFixture = (ids) => {
   ];
   return ids ? sections.filter((section) => ids.includes(section.id)) : sections;
 };
-const baseFixture = (guideSections) => ({
+const baseFixture = (guideSections, formattedText = {}) => ({
   viruses: [{ id: "v1", name: "Альфа", code: "A-1", status: "ИЗУЧЕН", external: "", physiology: "" }],
   infoSections: [{ id: "s1", title: "Раздел 1", body: "Текст раздела", subsections: [] }],
   broadcasts: [],
   searchRecommendations: [],
   guideSections,
+  formattedText,
 });
 
 let revision = 0; // a new revision for every serve: the page caches content by revision
@@ -147,7 +148,7 @@ async function openEditor(cdp) {
   if (!(await waitFor(cdp, `!!document.querySelector(".content-editor")`, 8000))) { reasons.push("openEditor: .content-editor did not appear"); return false; }
   return true;
 }
-const bootEditor = async (cdp, sections, access = editorAccess()) => { serve(baseFixture(sections), access); await load(cdp); return openEditor(cdp); };
+const bootEditor = async (cdp, sections, access = editorAccess(), formattedText = {}) => { serve(baseFixture(sections, formattedText), access); await load(cdp); return openEditor(cdp); };
 const STRIP = ".content-editor > .editor-tabs";
 const stripLabels = (cdp) => cdp.eval(`[...document.querySelectorAll(${JSON.stringify(`${STRIP} > button`)})].map((b) => b.textContent.trim())`);
 const ctrlZ = async (cdp) => { for (const type of ["keyDown", "keyUp"]) await cdp.send("Input.dispatchKeyEvent", { type, key: "z", code: "KeyZ", windowsVirtualKeyCode: 90, modifiers: 2 }); await sleep(250); };
@@ -165,6 +166,17 @@ const typeLabel = async (cdp, label, value, nth = 0) => {
   await cdp.send("Input.insertText", { text: value }); await sleep(250);
   return true;
 };
+/** Types a link into the image field with this label (the nth one) and leaves it, so the link is read as on blur. */
+const typeImage = async (cdp, label, url, nth = 0) => {
+  const ok = await cdp.eval(`(() => { const d = [...document.querySelectorAll(".content-editor .image-editor-field")].filter((n) => n.querySelector(":scope > span")?.textContent.trim() === ${JSON.stringify(label)})[${nth}]; const i = d?.querySelector("input:not([type=file])"); if (!i) return false; i.scrollIntoView({ block: "center" }); i.focus(); i.select(); return true; })()`);
+  if (!ok) { reasons.push(`no image field «${label}» (#${nth})`); return false; }
+  await cdp.send("Input.insertText", { text: url });
+  await cdp.eval(`document.activeElement.blur(); true`); await sleep(250);
+  return true;
+};
+const toggles = (cdp) => cdp.eval(`[...document.querySelectorAll(".content-editor .nested-editor-toggle")].map((b) => b.getAttribute("aria-expanded"))`);
+const openCard = (cdp, id) => cdp.eval(`(() => { const b = document.querySelector("#card-${id} > .nested-editor-head .nested-editor-toggle"); if (!b) return false; if (b.getAttribute("aria-expanded") !== "true") b.click(); return true; })()`);
+const has = (cdp, selector) => cdp.eval(`!!document.querySelector(${JSON.stringify(selector)})`);
 const editorClick = (cdp, label, nth = 0) => cdp.eval(`(() => { const e = [...document.querySelectorAll(".content-editor button")].filter((n) => n.textContent.trim() === ${JSON.stringify(label)})[${nth}]; if (!e) return false; e.click(); return true; })()`);
 const chipOpen = async (cdp) => {
   if (!(await cdp.eval(`!!document.querySelector(".editor-save-chip")`))) return false;
@@ -368,6 +380,88 @@ const checks = {
     if (!(await waitFor(cdp, `!!document.querySelector(".guide-page")`, 3000))) { reasons.push("the saved card did not open"); return; }
     if (!String(await text(cdp, ".guide-page")).includes("Идите по коридору B.")) reasons.push("the saved text is missing from the card page");
   },
+
+  async "editor-blocks"(cdp) {
+    const g1 = [{ id: "g1", title: "Лаборатория", photo: "", cards: [{ id: "c1", title: "Карта", cover: "", blocks: [] }] }];
+    if (!(await bootEditor(cdp, g1))) return;
+    if (!(await clickText(cdp, `${STRIP} > button`, "Справочник"))) { reasons.push("no «Справочник» strip button"); return; }
+    await waitFor(cdp, `!!document.querySelector("#card-g1")`, 3000);
+    const folded = await toggles(cdp);
+    if (!folded.length || folded.some((value) => value !== "false")) reasons.push(`not everything is collapsed on entry: ${JSON.stringify(folded)}`);
+    await openCard(cdp, "g1"); await openCard(cdp, "c1");
+    for (const label of ["+ ЗАГОЛОВОК", "+ ТЕКСТ", "+ ТАБЛИЦА", "+ ФОТО", "+ ВИДЕО", "+ ВРЕЗКА"]) if (!(await editorClick(cdp, label))) { reasons.push(`no adder ${label}`); return; }
+    if (!(await typeLabel(cdp, "Заголовок", "Маршрут"))) return;
+    if (!(await typeLabel(cdp, "Признак", "Уровень"))) return;
+    if (!(await typeLabel(cdp, "Значение", "III"))) return;
+    if (!(await typeImage(cdp, "Фото", LOGO))) return;
+    if (!(await typeLabel(cdp, "Подпись", "Подпись"))) return;
+    if (!(await typeLabel(cdp, "Ссылка на YouTube", "https://youtu.be/dQw4w9WgXcQ"))) return;
+    if (!(await typeLabel(cdp, "Подпись врезки", "ВАЖНО"))) return;
+    if (!(await typeInto(cdp, ".content-editor .formatted-rich-input", "Не открывать", 1))) { reasons.push("no callout body field"); return; }
+    if (!(await typeImage(cdp, "Обложка", LOGO))) return;
+    if (!(await typeImage(cdp, "Фото раздела", LOGO))) return;
+    const saved = await fakeSave(cdp);
+    if (!saved) return;
+    const section = saved.guideSections?.[0], card = section?.cards?.[0], blocks = card?.blocks ?? [];
+    if (section?.photo !== LOGO || card?.cover !== LOGO) reasons.push(`section photo / cover: ${section?.photo} / ${card?.cover}`);
+    const types = blocks.map((block) => block.type).join(",");
+    if (types !== "heading,text,table,photo,video,callout") reasons.push(`block types: ${types}`);
+    if (blocks[0]?.text !== "Маршрут") reasons.push(`heading: ${JSON.stringify(blocks[0])}`);
+    if (blocks[2]?.rows?.[0]?.key !== "Уровень" || blocks[2]?.rows?.[0]?.value !== "III") reasons.push(`table: ${JSON.stringify(blocks[2])}`);
+    if (blocks[3]?.url !== LOGO || blocks[3]?.caption !== "Подпись") reasons.push(`photo: ${JSON.stringify(blocks[3])}`);
+    if (blocks[4]?.videoId !== "dQw4w9WgXcQ") reasons.push(`video: ${JSON.stringify(blocks[4])}`);
+    if (blocks[5]?.label !== "ВАЖНО" || blocks[5]?.text !== "Не открывать") reasons.push(`callout: ${JSON.stringify(blocks[5])}`);
+    if (!(await clickText(cdp, ".content-editor button", "Убрать обложку"))) { reasons.push("no «Убрать обложку»"); return; }
+    await sleep(250);
+    const again = await fakeSave(cdp);
+    if (again && again.guideSections?.[0]?.cards?.[0]?.cover !== "") reasons.push(`cover after «Убрать обложку»: ${again.guideSections?.[0]?.cards?.[0]?.cover}`);
+  },
+
+  async "editor-undo"(cdp) {
+    const sections = [
+      { id: "g1", title: "Лаборатория", photo: "", cards: [
+        { id: "c1", title: "Первая", cover: "", blocks: [{ id: "t1", type: "text", text: "Текст блока" }] },
+        { id: "c2", title: "Вторая", cover: "", blocks: [] },
+      ] },
+      { id: "g2", title: "Склад", photo: "", cards: [{ id: "c3", title: "Третья", cover: "", blocks: [] }] },
+      { id: "g3", title: "Архив", photo: "", cards: [{ id: "c4", title: "Четвёртая", cover: "", blocks: [] }] },
+    ];
+    if (!(await bootEditor(cdp, sections, editorAccess(), { "guide-block:t1:text": { runs: [{ text: "Текст блока" }] } }))) return;
+    if (!(await clickText(cdp, `${STRIP} > button`, "Справочник"))) { reasons.push("no «Справочник» strip button"); return; }
+    await waitFor(cdp, `!!document.querySelector("#card-g1")`, 3000);
+    if (!(await has(cdp, ".editor-toc"))) reasons.push("no table of contents for 7 entries");
+    const exists = (id) => has(cdp, `#card-${id}`);
+    const press = (aria) => cdp.eval(`(() => { const b = [...document.querySelectorAll(".content-editor button")].find((n) => n.getAttribute("aria-label") === ${JSON.stringify(aria)}); if (!b) return false; b.click(); return true; })()`);
+    if (!(await press("Удалить раздел «Лаборатория» вместе с карточками"))) { reasons.push("no delete button on the section"); return; }
+    await sleep(300);
+    if (await has(cdp, "dialog[open]")) reasons.push("deleting a section opened a dialog");
+    if (await exists("g1")) reasons.push("g1 is still there after «Удалить»");
+    await ctrlZ(cdp);
+    if (!(await exists("g1")) || !(await exists("c1")) || !(await exists("c2"))) reasons.push("Ctrl+Z did not bring g1 with c1 and c2 back");
+    if (!(await press("Удалить карточку «Третья»"))) { reasons.push("no delete button on c3"); return; }
+    await sleep(300);
+    if (await exists("c3")) reasons.push("c3 is still there after «Удалить»");
+    await ctrlZ(cdp);
+    if (!(await exists("c3"))) reasons.push("Ctrl+Z did not bring c3 back");
+    if (!(await cdp.eval(`(() => { const b = document.querySelector("#card-t1 > .nested-editor-head .nested-editor-actions button"); if (!b) return false; b.click(); return true; })()`))) { reasons.push("no delete button on the text block"); return; }
+    await sleep(300);
+    if (await exists("t1")) reasons.push("the text block is still there after «Удалить»");
+    await ctrlZ(cdp);
+    if (!(await exists("t1"))) reasons.push("Ctrl+Z did not bring the text block back");
+    await press("Удалить раздел «Лаборатория» вместе с карточками");
+    await sleep(300);
+    const saved = await fakeSave(cdp);
+    if (!saved) return;
+    const ids = JSON.stringify(saved.guideSections ?? []);
+    if (ids.includes('"g1"') || ids.includes('"c1"') || ids.includes('"c2"')) reasons.push(`the saved guide still holds the deleted section: ${ids}`);
+    if ("guide-block:t1:text" in (saved.formattedText ?? {})) reasons.push("the saved content still holds the formatting of the deleted block");
+  },
+
+  async "closed-tab"(cdp) {
+    if (!(await bootEditor(cdp, [], editorAccess(ALL_TABS.filter((id) => id !== "guide"))))) return;
+    const labels = await stripLabels(cdp);
+    if (labels.includes("Справочник") || !labels.includes("Информация")) reasons.push(`the strip reads ${JSON.stringify(labels)}`);
+  },
 };
 
 let edge;
@@ -376,7 +470,7 @@ const cleanup = () => {
 };
 let code = 2;
 try {
-  const ALL = ["open-card", "grid", "card-blocks", "poll-gone", "search", "editor-save"];
+  const ALL = ["open-card", "grid", "card-blocks", "poll-gone", "search", "editor-save", "editor-blocks", "editor-undo", "closed-tab"];
   if (CHECK !== "all" && !checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")}, all)`);
   edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, "--window-size=1920,1080", "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
   let up = false;

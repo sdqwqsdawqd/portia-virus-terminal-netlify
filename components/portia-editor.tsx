@@ -87,6 +87,15 @@ const infoBlockHeads = {
   video: { label: "видео", title: "ВИДЕО YOUTUBE" },
 } as const;
 
+const guideBlockHeads = {
+  heading: { label: "заголовок", title: "ЗАГОЛОВОК" },
+  text: { label: "текст", title: "ТЕКСТ" },
+  table: { label: "таблица", title: "ТАБЛИЦА" },
+  photo: { label: "фото", title: "ФОТО" },
+  video: { label: "видео", title: "ВИДЕО" },
+  callout: { label: "врезка", title: "ВРЕЗКА" },
+} as const;
+
 // The surface each field opens on is its site place's own (D-09, D-17); an explicit БЕЛЫЙ/ЧЁРНЫЙ choice overrides it until the next tab switch.
 const nativeSurface: Record<DisplayArea, EditorPreviewSurface> = { lead: "light", metric: "light", mutation: "light", scientist: "light", trash: "light", info: "dark", broadcast: "dark", caption: "dark", search: "dark", assistant: "dark" };
 
@@ -175,7 +184,13 @@ function findGuideBlock(content: PortiaContent, cardId: string, blockId: string)
 }
 
 const guideNo = (index: number) => String(index + 1).padStart(2, "0");
-const guideBlockTitle = (block: GuideBlock) => (block.type === "text" ? block.text.split("\n").map((line) => line.trim()).find(Boolean) : undefined);
+const firstLine = (value: string) => value.split("\n").map((line) => line.trim()).find(Boolean);
+const guideBlockTitle = (block: GuideBlock) => (block.type === "heading" || block.type === "text" ? firstLine(block.text) : block.type === "callout" ? firstLine(block.label) ?? firstLine(block.text) : undefined);
+
+function editGuideTableRows(content: PortiaContent, cardId: string, blockId: string, edit: (rows: { id: string; key: string; value: string }[]) => void) {
+  const block = findGuideBlock(content, cardId, blockId);
+  if (block?.type === "table") edit(block.rows);
+}
 
 function recycleKeys(content: PortiaContent) {
   const valid = new Set([
@@ -839,9 +854,6 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
     try { run(); } finally { batchKey.current = null; }
   };
 
-  // D-19: the two columns are the key and value of every row; one changeDraft call is one undo step.
-  const swapTableColumns = (subsectionId: string, blockId: string) => changeDraft((next) => editTableRows(next, subsectionId, blockId, (rows) => rows.forEach((row) => { [row.key, row.value] = [row.value, row.key]; })));
-
   const step = (kind: "undo" | "redo") => {
     const target = kind === "undo" ? history.past.at(-1) : history.future[0];
     if (!target) return;
@@ -960,6 +972,20 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   const infoCardIds = draft.infoSections.flatMap((section) => [section.id, ...section.subsections.flatMap((subsection) => [subsection.id, ...subsection.blocks.map((block) => block.id)])]);
   const jumpInfo = (id: string) => {
     const found = findInfo(draft.infoSections, id);
+    setOpen(found ? [found.section.id, id] : [id], true);
+    jumpToCard(id);
+  };
+  const writeGuideBlock = (cardId: string, blockId: string, write: (block: GuideBlock) => void) => changeDraft((next) => {
+    const block = findGuideBlock(next, cardId, blockId);
+    if (block) write(block);
+  });
+  const guideTocItems: TocItem[] = draft.guideSections.flatMap((section) => [
+    { id: section.id, label: section.title || "БЕЗ НАЗВАНИЯ", depth: 0 as const },
+    ...section.cards.map((card) => ({ id: card.id, label: card.title || "БЕЗ НАЗВАНИЯ", depth: 1 as const })),
+  ]);
+  const guideCardIds = draft.guideSections.flatMap((section) => [section.id, ...section.cards.flatMap((card) => [card.id, ...card.blocks.map((block) => block.id)])]);
+  const jumpGuide = (id: string) => {
+    const found = findGuide(draft.guideSections, id);
     setOpen(found ? [found.section.id, id] : [id], true);
     jumpToCard(id);
   };
@@ -1356,30 +1382,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
                           {block.type === "text" && <FormattedTextarea area="info" label="Текст" tall value={block.text} document={draft.formattedText[portiaTextKey.infoBlock(block.id)]} formatKey={portiaTextKey.infoBlock(block.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.infoBlock(block.id), value, document, (next, text) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "text") item.text = text; }); })} />}
                           {block.type === "video" && <YoutubeField videoId={block.videoId} onChange={(videoId) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "video") item.videoId = videoId; }); })} />}
                           {block.type === "photo" && <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="На странице: до 820 px в ширину" uploadState={uploadState} onChange={(value) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = value; }); })} onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = url; }); }))} />}
-                          {block.type === "table" && (
-                            <>
-                              {block.rows.length === 0 && <div className="editor-empty compact-empty">Строк пока нет. Добавьте первую кнопкой «+ СТРОКА».</div>}
-                              {block.rows.length > 0 && (
-                                <div className="info-table-head">
-                                  <div data-column="key"><ColumnSwapHandle label="Признак" onSwap={() => swapTableColumns(subsection.id, block.id)} /><span>Признак</span></div>
-                                  <div data-column="value"><ColumnSwapHandle label="Значение" onSwap={() => swapTableColumns(subsection.id, block.id)} /><span>Значение</span></div>
-                                  <span className="info-table-head-pad" aria-hidden="true">Удалить строку</span>
-                                </div>
-                              )}
-                              {block.rows.map((row, rowIndex) => (
-                                <div className="info-table-row" data-sort-index={rowIndex} key={row.id}>
-                                  <OrderDragHandle index={rowIndex} label={`строка ${rowIndex + 1}`} onMove={(from, to) => changeDraft((next) => editTableRows(next, subsection.id, block.id, (rows) => moveArrayItem(rows, from, to)))} />
-                                  <Field label="Признак"><input maxLength={500} value={row.key} onChange={(event) => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { if (rows[rowIndex]) rows[rowIndex].key = event.target.value; }); })} /></Field>
-                                  <Field label="Значение"><input maxLength={500} value={row.value} onChange={(event) => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { if (rows[rowIndex]) rows[rowIndex].value = event.target.value; }); })} /></Field>
-                                  <button type="button" onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.splice(rowIndex, 1); }); })}>Удалить строку</button>
-                                </div>
-                              ))}
-                              <div className="scientist-log-actions">
-                                <button className="secondary-control limit-add" type="button" disabled={block.rows.length >= MAX_TABLE_ROWS} aria-describedby={`limit-rows-${block.id}`} onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.push({ id: makeId("row"), key: "", value: "" }); }); })}>+ СТРОКА</button>
-                                <LimitNote id={`limit-rows-${block.id}`} count={block.rows.length} max={MAX_TABLE_ROWS} />
-                              </div>
-                            </>
-                          )}
+                          {block.type === "table" && <TableBlockEditor blockId={block.id} rows={block.rows} onEdit={(edit) => changeDraft((next) => editTableRows(next, subsection.id, block.id, edit))} />}
                         </CollapsibleCard>
                       ))}
                     </div>
@@ -1408,12 +1411,16 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       {tab === "guide" && (
         <div className="editor-form flat-editor-form">
           <p className="editor-guidance">Справочник на рабочем столе состоит из разделов, в разделах лежат карточки-плитки. Нажатие на плитку открывает страницу карточки из блоков в любом порядке.</p>
+          <EditorToc items={guideTocItems} onJump={jumpGuide} onAll={(open) => setAllOpen(guideCardIds, open)} />
           {draft.guideSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
           {draft.guideSections.map((section, index) => (
             <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${guideNo(index)}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
               handle={<OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.guideSections, from, to))} />}
               actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить раздел «${section.title || "Без названия"}» вместе с карточками`} onClick={() => { closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)))); changeDraft((next) => removeGuideSection(next, section.id)); }}>Удалить</button></div>}>
               <Field label="Заголовок раздела"><input maxLength={300} value={section.title} onChange={(event) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
+              <ImageEditorField label="Фото раздела" value={section.photo} placement="guide" maxHint="За заголовком раздела: низкая полоса во всю ширину" removeLabel="Убрать фото" uploadState={uploadState}
+                onChange={(value) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = value; }))}
+                onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = url; })))} />
               <div className="info-subsection-list">
                 {section.cards.length === 0 && <div className="editor-empty compact-empty">В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ».</div>}
                 {section.cards.map((card, cardIndex) => (
@@ -1421,18 +1428,43 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
                     handle={<OrderDragHandle index={cardIndex} label={card.title || "карточка"} onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, section.id)?.section; if (target) moveArrayItem(target.cards, from, to); })} />}
                     actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить карточку «${card.title || "Без названия"}»`} onClick={() => { closeFormatterFor(...card.blocks.map((block) => portiaTextKey.guideBlock(block.id))); changeDraft((next) => removeGuideCard(next, card.id)); }}>Удалить</button></div>}>
                     <Field label="Заголовок карточки"><input maxLength={300} value={card.title} onChange={(event) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.title = event.target.value; })} /></Field>
+                    <ImageEditorField label="Обложка" value={card.cover} placement="guide" maxHint="На плитке: 4:3, края обрезаются" removeLabel="Убрать обложку" uploadState={uploadState}
+                      onChange={(value) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.cover = value; })}
+                      onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.cover = url; }))} />
                     <div className="info-block-list">
                       {card.blocks.map((block, blockIndex) => (
-                        <CollapsibleCard key={block.id} id={block.id} sortIndex={blockIndex} label="ТЕКСТ" title={guideBlockTitle(block)} open={isOpen(block.id)} onToggle={() => toggleCard(block.id)}
-                          handle={<OrderDragHandle index={blockIndex} label="текст" onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) moveArrayItem(target.blocks, from, to); })} />}
-                          actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.guideBlock(block.id)); changeDraft((next) => removeGuideBlock(next, card.id, block.id)); }}>Удалить</button></div>}>
+                        <CollapsibleCard key={block.id} id={block.id} sortIndex={blockIndex} label={guideBlockHeads[block.type].title} title={guideBlockTitle(block)} open={isOpen(block.id)} onToggle={() => toggleCard(block.id)}
+                          handle={<OrderDragHandle index={blockIndex} label={guideBlockHeads[block.type].label} onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) moveArrayItem(target.blocks, from, to); })} />}
+                          actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.guideBlock(block.id)); changeDraft((next) => removeGuideBlock(next, card.id, block.id)); }} disabled={block.type === "photo" && uploadState === "uploading"}>Удалить</button></div>}>
+                          {block.type === "heading" && <Field label="Заголовок"><input maxLength={300} value={block.text} onChange={(event) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "heading") item.text = event.target.value; })} /></Field>}
                           {block.type === "text" && <FormattedTextarea area="info" label="Текст" tall value={block.text} document={draft.formattedText[portiaTextKey.guideBlock(block.id)]} formatKey={portiaTextKey.guideBlock(block.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.guideBlock(block.id), value, document, (next, text) => { const target = findGuideBlock(next, card.id, block.id); if (target?.type === "text") target.text = text; })} />}
+                          {block.type === "table" && <TableBlockEditor blockId={block.id} rows={block.rows} onEdit={(edit) => changeDraft((next) => editGuideTableRows(next, card.id, block.id, edit))} />}
+                          {block.type === "photo" && (
+                            <>
+                              <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="На странице: во всю ширину, до 820 px" uploadState={uploadState}
+                                onChange={(value) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.url = value; })}
+                                onUpload={(file) => uploadImage(file, (url) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.url = url; }))} />
+                              <Field label="Подпись"><input maxLength={300} value={block.caption} onChange={(event) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.caption = event.target.value; })} /></Field>
+                            </>
+                          )}
+                          {block.type === "video" && <YoutubeField videoId={block.videoId} onChange={(videoId) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "video") item.videoId = videoId; })} />}
+                          {block.type === "callout" && (
+                            <>
+                              <Field label="Подпись врезки"><input maxLength={300} value={block.label} onChange={(event) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "callout") item.label = event.target.value; })} /></Field>
+                              <FormattedTextarea area="info" label="Текст врезки" tall value={block.text} document={draft.formattedText[portiaTextKey.guideBlock(block.id)]} formatKey={portiaTextKey.guideBlock(block.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.guideBlock(block.id), value, document, (next, text) => { const target = findGuideBlock(next, card.id, block.id); if (target?.type === "callout") target.text = text; })} />
+                            </>
+                          )}
                         </CollapsibleCard>
                       ))}
                     </div>
                     <div className="scientist-log-actions">
                       <div className="limit-buttons">
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "heading", text: "" }))}>+ ЗАГОЛОВОК</button>
                         <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "text", text: "" }))}>+ ТЕКСТ</button>
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "table", rows: [{ id: makeId("row"), key: "", value: "" }] }))}>+ ТАБЛИЦА</button>
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "photo", url: "", caption: "" }))}>+ ФОТО</button>
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "video", videoId: "" }))}>+ ВИДЕО</button>
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "callout", label: "", text: "" }))}>+ ВРЕЗКА</button>
                       </div>
                       <LimitNote id={`limit-blocks-${card.id}`} count={card.blocks.length} max={MAX_BLOCKS} />
                     </div>
@@ -2870,6 +2902,35 @@ function Field({ label, children, wide = false, error, errorId }: { label: strin
   return <label className={`editor-field${wide ? " wide" : ""}${error ? " is-invalid" : ""}`}><span>{label}</span>{children}{error && <small id={errorId} className="editor-field-error" aria-hidden="true">{error}</small>}</label>;
 }
 
+// One table editor for «Информация» and «Справочник»: onEdit applies one edit to this block's rows, so a column swap is one change and one undo step (D-19).
+function TableBlockEditor({ blockId, rows, onEdit }: { blockId: string; rows: { id: string; key: string; value: string }[]; onEdit: (edit: (rows: { id: string; key: string; value: string }[]) => void) => void }) {
+  const swapColumns = () => onEdit((items) => items.forEach((row) => { [row.key, row.value] = [row.value, row.key]; }));
+  return (
+    <>
+      {rows.length === 0 && <div className="editor-empty compact-empty">Строк пока нет. Добавьте первую кнопкой «+ СТРОКА».</div>}
+      {rows.length > 0 && (
+        <div className="info-table-head">
+          <div data-column="key"><ColumnSwapHandle label="Признак" onSwap={swapColumns} /><span>Признак</span></div>
+          <div data-column="value"><ColumnSwapHandle label="Значение" onSwap={swapColumns} /><span>Значение</span></div>
+          <span className="info-table-head-pad" aria-hidden="true">Удалить строку</span>
+        </div>
+      )}
+      {rows.map((row, rowIndex) => (
+        <div className="info-table-row" data-sort-index={rowIndex} key={row.id}>
+          <OrderDragHandle index={rowIndex} label={`строка ${rowIndex + 1}`} onMove={(from, to) => onEdit((items) => moveArrayItem(items, from, to))} />
+          <Field label="Признак"><input maxLength={500} value={row.key} onChange={(event) => onEdit((items) => { if (items[rowIndex]) items[rowIndex].key = event.target.value; })} /></Field>
+          <Field label="Значение"><input maxLength={500} value={row.value} onChange={(event) => onEdit((items) => { if (items[rowIndex]) items[rowIndex].value = event.target.value; })} /></Field>
+          <button type="button" onClick={() => onEdit((items) => { items.splice(rowIndex, 1); })}>Удалить строку</button>
+        </div>
+      ))}
+      <div className="scientist-log-actions">
+        <button className="secondary-control limit-add" type="button" disabled={rows.length >= MAX_TABLE_ROWS} aria-describedby={`limit-rows-${blockId}`} onClick={() => onEdit((items) => { items.push({ id: makeId("row"), key: "", value: "" }); })}>+ СТРОКА</button>
+        <LimitNote id={`limit-rows-${blockId}`} count={rows.length} max={MAX_TABLE_ROWS} />
+      </div>
+    </>
+  );
+}
+
 // Typed text lives here; the stored id is the source of truth, so undo/redo shows the stored video without an effect.
 function YoutubeField({ videoId, onChange }: { videoId: string; onChange: (videoId: string) => void }) {
   const [typed, setTyped] = useState("");
@@ -2881,11 +2942,13 @@ function YoutubeField({ videoId, onChange }: { videoId: string; onChange: (video
   </label>;
 }
 
-function ImageEditorField({ label, value, placement, maxHint, uploadState = "idle", onChange, onUpload }: {
+function ImageEditorField({ label, value, placement, maxHint, removeLabel, uploadState = "idle", onChange, onUpload }: {
   label: string;
   value: string;
   placement: ImagePlacement;
   maxHint: string;
+  // When set and the field holds an image, a button with this text clears it.
+  removeLabel?: string;
   uploadState?: "idle" | "uploading" | "error";
   onChange: (value: string) => void;
   onUpload?: (file: File) => void;
@@ -2908,6 +2971,7 @@ function ImageEditorField({ label, value, placement, maxHint, uploadState = "idl
     </label>}
     <span className={`editor-upload-status ${uploadState}`}>{uploadState === "uploading" ? "ЗАГРУЗКА…" : uploadState === "error" ? "НЕ УДАЛОСЬ ЗАГРУЗИТЬ" : ""}</span>
     {value && !previewFailed && <figure className={`editor-image-preview ${placement}`}><img src={value} alt={`Предпросмотр: ${label}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedPreviewUrl(value)} /></figure>}
+    {value && removeLabel && <button type="button" className="secondary-control" onClick={() => onChange("")}>{removeLabel}</button>}
     {value && previewFailed && <span className="editor-media-error">Не удалось открыть ссылку. Нужна прямая HTTPS-ссылка на файл изображения или GIF.</span>}
   </div>;
 }
