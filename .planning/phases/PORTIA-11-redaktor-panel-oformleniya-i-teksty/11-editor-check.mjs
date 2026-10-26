@@ -1,4 +1,5 @@
-// Usage: node 11-editor-check.mjs --check mark|panel|savechip|sections|table|multiselect [--url http://localhost:3124]   (later plans add more checks)
+// Usage: node 11-editor-check.mjs --check mark|panel|savechip|sections|table|multiselect|all [--url http://localhost:3124]
+// `all` runs the six checks in that order in one Edge session and prints { check: "all", ok, results: { <name>: { ok, reasons } } }.
 // Why: Phase 11 has no DOM test runner, so headless Edge drives the production build. Inside the browser it launches,
 // GET /api/access is answered {canEdit: true} and GET /api/content is served from fixtures; every non-GET request to /api/*
 // is blocked and fails the check (nothing is ever saved, no login is needed). The only exception is the savechip fake-save
@@ -972,7 +973,8 @@ const cleanup = () => {
 };
 let code = 2;
 try {
-  if (!checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")})`);
+  const ALL = ["mark", "panel", "savechip", "sections", "table", "multiselect"];
+  if (CHECK !== "all" && !checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")}, all)`);
   edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, "--window-size=1920,1080", "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
   let up = false;
   for (let i = 0; i < 50 && !up; i += 1) { up = await fetch(`http://127.0.0.1:${PORT}/json/version`).then((r) => r.ok, () => false); if (!up) await sleep(200); }
@@ -986,11 +988,25 @@ try {
   installStub(cdp);
   await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `sessionStorage.setItem("portia-boot-seen-v1", "1")` });
   await cdp.send("Fetch.enable", { patterns: [{ urlPattern: "*/api/*", requestStage: "Request" }] });
-  await checks[CHECK](cdp);
-  ws.close();
-  const ok = reasons.length === 0;
-  console.log(JSON.stringify({ check: CHECK, ok, reasons }, null, 2));
-  code = ok ? 0 : 1;
+  if (CHECK === "all") {
+    const results = {};
+    for (const name of ALL) {
+      reasons.length = 0; fakeSaves = 0; serve(fixture(), 1); // each check starts from a clean verdict, fixture and desktop viewport
+      await desktop(cdp);
+      try { await checks[name](cdp); } catch (error) { reasons.push(`check threw: ${error.message}`); }
+      results[name] = { ok: reasons.length === 0, reasons: [...reasons] };
+    }
+    ws.close();
+    const ok = ALL.every((name) => results[name].ok);
+    console.log(JSON.stringify({ check: "all", ok, results }, null, 2));
+    code = ok ? 0 : 1;
+  } else {
+    await checks[CHECK](cdp);
+    ws.close();
+    const ok = reasons.length === 0;
+    console.log(JSON.stringify({ check: CHECK, ok, reasons }, null, 2));
+    code = ok ? 0 : 1;
+  }
 } catch (error) {
   console.error(`editor check failed: ${error.message}`);
   code = 2;
