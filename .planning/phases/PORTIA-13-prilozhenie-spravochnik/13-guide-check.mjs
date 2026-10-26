@@ -1,5 +1,5 @@
 // Usage: node 13-guide-check.mjs --check <name>|all [--url http://localhost:3124]
-// Checks: open-card, grid, card-blocks, poll-gone, search, editor-save, editor-blocks, editor-undo, closed-tab, drag-across (the «Справочник» desktop window of phase 13).
+// Checks: open-card, grid, card-blocks, poll-gone, search, editor-save, editor-blocks, editor-undo, closed-tab, drag-across, drag-edges (the «Справочник» desktop window of phase 13).
 // Why: the guide window (grid, card page, remembered folding, poll safety, search) has no DOM test runner, so headless Edge drives the production build.
 // Inside the browser it launches, GET /api/access and GET /api/content are answered from the current fixture. EVERY non-GET request to /api/*
 // is blocked and recorded as a failure reason ("write blocked"), never forwarded, so nothing is ever saved and no login is needed.
@@ -198,7 +198,7 @@ const ctrlY = async (cdp) => { for (const type of ["keyDown", "keyUp"]) await cd
 /** Where an element sits on screen: its box and a point `at` (0..1) of the way down it. */
 const pointIn = (cdp, selector, at = 0.5) => cdp.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + Math.min(r.width / 2, 200), y: r.top + r.height * ${at} }; })()`);
 /** Presses the left button on the handle, holds past the 170 ms hold delay, moves in 12 steps toward targetFn() (asked again each step, rows shift), settles on it and releases. */
-async function pointerDrag(cdp, handleSelector, targetFn) {
+async function pointerDrag(cdp, handleSelector, targetFn, beforeRelease) {
   await cdp.eval(`document.querySelector(${JSON.stringify(handleSelector)})?.scrollIntoView({ block: "center" }); true`);
   const from = await pointIn(cdp, handleSelector);
   if (!from) { reasons.push(`pointerDrag: no handle ${handleSelector}`); return false; }
@@ -217,6 +217,7 @@ async function pointerDrag(cdp, handleSelector, targetFn) {
   // Rows shifted when the card changed places, so the pointer settles on the target's new position, as a hand would.
   const last = await targetFn();
   if (last) { at = last; await mouse("mouseMoved", at); await sleep(150); }
+  if (beforeRelease) await beforeRelease();
   await mouse("mouseReleased", at);
   await sleep(300);
   return true;
@@ -225,6 +226,9 @@ async function pointerDrag(cdp, handleSelector, targetFn) {
 const cardOrder = (cdp, sectionId) => cdp.eval(`[...document.querySelectorAll('[data-group-id="${sectionId}"] > [data-sort-index]')].map((e) => e.id.replace(/^card-/, ""))`);
 const handleOf = (id) => `#card-${id} > .nested-editor-head .order-drag-handle`;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const pressKey = async (cdp, key, code) => { for (const type of ["keyDown", "keyUp"]) await cdp.send("Input.dispatchKeyEvent", { type, key, code: key, windowsVirtualKeyCode: code }); await sleep(300); };
+const closeCard = (cdp, id) => cdp.eval(`(() => { const b = document.querySelector("#card-${id} > .nested-editor-head .nested-editor-toggle"); if (!b) return false; if (b.getAttribute("aria-expanded") === "true") b.click(); return true; })()`);
+const blockOrder = (cdp, cardId) => cdp.eval(`[...document.querySelectorAll('#card-${cardId} .info-block-list > [data-sort-index]')].map((e) => e.id.replace(/^card-/, ""))`);
 const tileSelector = (id) => `.guide-window .guide-tile[data-card-id="${id}"]`;
 
 const checks = {
@@ -514,6 +518,66 @@ const checks = {
     if (!same(order, [["c2"], ["c3", "c4", "c1"]])) reasons.push(`saved order: ${JSON.stringify(order)}`);
   },
 
+  async "drag-edges"(cdp) {
+    const text = (id, value) => ({ id, type: "text", text: value });
+    const sections = [
+      { id: "g1", title: "Первый", photo: "", cards: [{ id: "c1", title: "Первая", cover: "", blocks: [text("b1", "один"), text("b2", "два")] }, { id: "c2", title: "Вторая", cover: "", blocks: [] }] },
+      { id: "g2", title: "Второй", photo: "", cards: [{ id: "c3", title: "Третья", cover: "", blocks: [text("b3", "три")] }, { id: "c4", title: "Четвёртая", cover: "", blocks: [] }] },
+      { id: "g3", title: "Пустой", photo: "", cards: [] },
+    ];
+    if (!(await bootEditor(cdp, sections))) return;
+    if (!(await clickText(cdp, `${STRIP} > button`, "Справочник"))) { reasons.push("no «Справочник» strip button"); return; }
+    await waitFor(cdp, `!!document.querySelector("#card-g1")`, 3000);
+    const expect = async (want, when) => {
+      const got = {};
+      for (const id of Object.keys(want)) got[id] = await cardOrder(cdp, id);
+      if (!same(got, want)) reasons.push(`${when}: ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`);
+    };
+    const clean = async (when) => { if (await has(cdp, ".content-editor [data-dragging]")) reasons.push(`a [data-dragging] marker is left ${when}`); };
+    const start = { g1: ["c1", "c2"], g2: ["c3", "c4"], g3: [] };
+    // Keyboard: the last card of a section goes to the start of the next one, and back.
+    await openCard(cdp, "g1");
+    await cdp.eval(`document.querySelector(${JSON.stringify(handleOf("c2"))}).focus(); true`);
+    await pressKey(cdp, "ArrowDown", 40);
+    await expect({ g1: ["c1"], g2: ["c2", "c3", "c4"] }, "ArrowDown on the last card of g1");
+    if (!(await cdp.eval(`!!document.activeElement?.closest("#card-c2")`))) reasons.push(`focus left c2 after ArrowDown: ${await cdp.eval(`document.activeElement?.outerHTML?.slice(0, 80)`)}`);
+    await pressKey(cdp, "ArrowUp", 38);
+    await expect(start, "ArrowUp on the first card of g2");
+    if (!(await cdp.eval(`!!document.activeElement?.closest("#card-c2")`))) reasons.push("focus left c2 after ArrowUp");
+    // A collapsed section is a target: its head shows the drop and the card goes to its end.
+    await closeCard(cdp, "g2");
+    let marked = "";
+    if (!(await pointerDrag(cdp, handleOf("c1"), () => pointIn(cdp, "#card-g2 > .nested-editor-head"), async () => { marked = await cdp.eval(`getComputedStyle(document.querySelector("#card-g2 > .nested-editor-head")).boxShadow`); }))) return;
+    if (!String(marked).includes("inset")) reasons.push(`the collapsed head shows no drop marker: ${marked}`);
+    await clean("after the drag onto a collapsed head");
+    await openCard(cdp, "g2");
+    await expect({ g1: ["c2"], g2: ["c3", "c4", "c1"], g3: [] }, "after the drag onto a collapsed head");
+    await ctrlZ(cdp);
+    await expect(start, "after Ctrl+Z of the collapsed-head drag");
+    // An empty section takes a card when the pointer is on its line.
+    await openCard(cdp, "g3");
+    if (!(await pointerDrag(cdp, handleOf("c2"), () => pointIn(cdp, '[data-group-id="g3"] > .editor-empty')))) return;
+    await clean("after the drag into the empty section");
+    await expect({ g1: ["c1"], g2: ["c3", "c4"], g3: ["c2"] }, "after the drag into the empty section");
+    await ctrlZ(cdp);
+    await expect(start, "after Ctrl+Z of the empty-section drag");
+    // Levels: a section ≡ moves sections only, a block ≡ stays in its card.
+    const before = (a, b) => cdp.eval(`!!(document.getElementById("card-${a}").compareDocumentPosition(document.getElementById("card-${b}")) & Node.DOCUMENT_POSITION_FOLLOWING)`);
+    if (!(await pointerDrag(cdp, handleOf("g1"), () => pointIn(cdp, "#card-c4", 0.75)))) return;
+    await clean("after the section drag");
+    await expect(start, "after dragging section g1 over the cards of g2");
+    if (!(await before("g2", "g1"))) reasons.push("dragging g1 down over g2 did not put g2 before g1");
+    await ctrlZ(cdp);
+    if (!(await before("g1", "g2"))) reasons.push("Ctrl+Z did not put g1 back before g2");
+    await openCard(cdp, "c1"); await openCard(cdp, "c3");
+    if (!(await pointerDrag(cdp, handleOf("b1"), () => pointIn(cdp, "#card-b3")))) return;
+    await clean("after the block drag");
+    // b1 may swap with b2 on the way (same list), but it never reaches c3.
+    const blocks = [(await blockOrder(cdp, "c1")).sort(), await blockOrder(cdp, "c3")];
+    if (!same(blocks, [["b1", "b2"], ["b3"]])) reasons.push(`a block left its card: ${JSON.stringify(blocks)}`);
+    await expect(start, "after dragging a block over another card");
+  },
+
   async "closed-tab"(cdp) {
     if (!(await bootEditor(cdp, [], editorAccess(ALL_TABS.filter((id) => id !== "guide"))))) return;
     const labels = await stripLabels(cdp);
@@ -527,7 +591,7 @@ const cleanup = () => {
 };
 let code = 2;
 try {
-  const ALL = ["open-card", "grid", "card-blocks", "poll-gone", "search", "editor-save", "editor-blocks", "editor-undo", "closed-tab", "drag-across"];
+  const ALL = ["open-card", "grid", "card-blocks", "poll-gone", "search", "editor-save", "editor-blocks", "editor-undo", "closed-tab", "drag-across", "drag-edges"];
   if (CHECK !== "all" && !checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")}, all)`);
   edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, "--window-size=1920,1080", "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
   let up = false;

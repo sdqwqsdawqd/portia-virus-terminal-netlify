@@ -309,6 +309,22 @@ function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: { index
     indexRef.current = target;
   };
 
+  // Near the edge of whatever scrolls (the editor, or the page on phones) the list keeps moving under a still finger.
+  const autoscroll = () => {
+    const editor = button.current?.closest<HTMLElement>(".content-editor") ?? null;
+    const scrolls = editor !== null && editor.scrollHeight > editor.clientHeight && /auto|scroll/.test(getComputedStyle(editor).overflowY);
+    const scroller: { scrollBy: (x: number, y: number) => void } = scrolls ? editor : window;
+    // 56px: sticky system bar; 44px: taskbar (window mode only).
+    const { top, bottom } = scrolls ? editor.getBoundingClientRect() : { top: 56, bottom: window.innerHeight - 44 };
+    const { x, y } = pointer.current;
+    const direction = y < top + 48 ? -1 : y > bottom - 48 ? 1 : 0;
+    if (direction) {
+      scroller.scrollBy(0, direction * 8);
+      moveTo(x, y);
+    }
+    frame.current = requestAnimationFrame(autoscroll);
+  };
+
   // A stuck drag marker would fold every later edit into one undo step, so the drag also ends on unmount, on lost
   // window focus, and on a release anywhere: once pointer capture is lost the handle may never see its pointerup.
   // Tracking lives on window too, because a downward swap re-inserts the dragged row and drops pointer capture (03-REVIEW IN-05).
@@ -341,22 +357,6 @@ function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: { index
       stop();
     };
   }, []);
-
-  // Near the edge of whatever scrolls (the editor, or the page on phones) the list keeps moving under a still finger.
-  const autoscroll = () => {
-    const editor = button.current?.closest<HTMLElement>(".content-editor") ?? null;
-    const scrolls = editor !== null && editor.scrollHeight > editor.clientHeight && /auto|scroll/.test(getComputedStyle(editor).overflowY);
-    const scroller: { scrollBy: (x: number, y: number) => void } = scrolls ? editor : window;
-    // 56px: sticky system bar; 44px: taskbar (window mode only).
-    const { top, bottom } = scrolls ? editor.getBoundingClientRect() : { top: 56, bottom: window.innerHeight - 44 };
-    const { x, y } = pointer.current;
-    const direction = y < top + 48 ? -1 : y > bottom - 48 ? 1 : 0;
-    if (direction) {
-      scroller.scrollBy(0, direction * 8);
-      moveTo(x, y);
-    }
-    frame.current = requestAnimationFrame(autoscroll);
-  };
 
   return <button
     ref={button}
@@ -1471,7 +1471,14 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
                 {section.cards.map((card, cardIndex) => (
                   <CollapsibleCard key={card.id} id={card.id} sortIndex={cardIndex} label={`КАРТОЧКА ${guideNo(cardIndex)}`} title={card.title} open={isOpen(card.id)} onToggle={() => toggleCard(card.id)}
                     handle={<OrderDragHandle index={cardIndex} label={card.title || "карточка"} itemId={card.id} onMoveAcross={(groupId, toIndex) => changeDraft((next) => moveGuideCard(next, card.id, groupId, toIndex))}
-                      onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, section.id)?.section; if (target) moveArrayItem(target.cards, from, to); })} />}
+                      onMove={(from, to) => {
+                      // Keyboard only: ArrowUp on the first card or ArrowDown on the last goes to the neighbouring section (D-11); pointer drags never pass an out-of-range target.
+                      const neighbour = to < 0 ? draft.guideSections[index - 1] : to >= section.cards.length ? draft.guideSections[index + 1] : undefined;
+                      if (!neighbour) { changeDraft((next) => { const target = findGuide(next.guideSections, section.id)?.section; if (target) moveArrayItem(target.cards, from, to); }); return; }
+                      changeDraft((next) => moveGuideCard(next, card.id, neighbour.id, to < 0 ? Number.MAX_SAFE_INTEGER : 0));
+                      setOpen([neighbour.id], true);
+                      requestAnimationFrame(() => document.getElementById(`card-${card.id}`)?.querySelector<HTMLElement>(":scope > .nested-editor-head .order-drag-handle")?.focus());
+                    }} />}
                     actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить карточку «${card.title || "Без названия"}»`} onClick={() => { closeFormatterFor(...card.blocks.map((block) => portiaTextKey.guideBlock(block.id))); changeDraft((next) => removeGuideCard(next, card.id)); }}>Удалить</button></div>}>
                     <Field label="Заголовок карточки"><input maxLength={300} value={card.title} onChange={(event) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.title = event.target.value; })} /></Field>
                     <ImageEditorField label="Обложка" value={card.cover} placement="guide" maxHint="На плитке: 4:3, края обрезаются" removeLabel="Убрать обложку" uploadState={uploadState}
