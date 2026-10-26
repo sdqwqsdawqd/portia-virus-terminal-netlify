@@ -1,8 +1,10 @@
 // Usage: node 11-editor-check.mjs --check mark|panel|savechip [--url http://localhost:3124]   (later plans add more checks)
 // Why: Phase 11 has no DOM test runner, so headless Edge drives the production build. Inside the browser it launches,
 // GET /api/access is answered {canEdit: true} and GET /api/content is served from fixtures; every non-GET request to /api/*
-// is blocked and fails the check (nothing is ever saved, no login is needed). The stub is a CDP interception only: no app
-// or server code knows about it.
+// is blocked and fails the check (nothing is ever saved, no login is needed). The only exception is the savechip fake-save
+// step: while current.fakeSave is set, a PUT /api/content is answered locally (Fetch.fulfillRequest after 800 ms, revision + 1)
+// and counted in fakeSaves; it is NEVER forwarded to the server (no Fetch.continueRequest for a non-GET anywhere).
+// The stub is a CDP interception only: no app or server code knows about it.
 // Prints one JSON verdict { check, ok, reasons } (booleans, numbers, fixture labels, exception text only).
 // Exit 0 ok, 1 not ok, 2 Edge or server unreachable or unknown check.
 import { spawn, execFileSync } from "node:child_process";
@@ -46,8 +48,9 @@ class Cdp {
 
 const reasons = [];
 const fixture = (overrides = {}) => ({ viruses: [], infoSections: [], broadcasts: [], searchRecommendations: [], ...overrides });
-let current = { content: fixture(), revision: 1 };
-const serve = (content, revision) => { current = { content, revision }; };
+let current = { content: fixture(), revision: 1, fakeSave: false };
+let fakeSaves = 0;
+const serve = (content, revision, fakeSave = false) => { current = { content, revision, fakeSave }; };
 
 /** One virus with plain text in both lead fields; the editor opens on it. */
 const editorFixture = (overrides = {}) => fixture({
@@ -68,6 +71,7 @@ function installStub(cdp) {
   const block = (p) => cdp.send("Fetch.failRequest", { requestId: p.requestId, errorReason: "BlockedByClient" }).catch(() => {});
   cdp.on("Fetch.requestPaused", (p) => {
     const { pathname } = new URL(p.request.url);
+    if (p.request.method === "PUT" && pathname === "/api/content" && current.fakeSave) { fakeSaves += 1; setTimeout(() => fulfil(p, { revision: current.revision + 1 }), 800); return; }
     if (p.request.method !== "GET") { reasons.push(`write blocked: ${p.request.method} ${pathname}`); block(p); return; }
     if (pathname === "/api/access") fulfil(p, { canEdit: true, canManageEditors: false });
     else if (pathname === "/api/content") fulfil(p, { content: current.content, revision: current.revision, updatedAt: null });
@@ -157,8 +161,8 @@ async function drag(cdp, from, to) {
   await at("mouseReleased", to.x, to.y, { buttons: 0, clickCount: 1 });
   await sleep(100);
 }
-const phone = async (cdp) => {
-  await cdp.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+const phone = async (cdp, width = 390, height = 844) => {
+  await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 2, mobile: true });
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true });
 };
 const desktop = async (cdp) => {
@@ -259,6 +263,78 @@ const checks = {
     await cdp.eval(`document.querySelector(".editor-header").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))`);
     await sleep(150);
     if (await popover()) reasons.push("(g) the popover is still open after a press on the header");
+    // (h) a save the server would refuse (quest ends before it starts) turns the chip red and the reason jumps to the date
+    serve(editorFixture({ broadcasts: [{ id: "b1", type: "quest", title: "Квест", body: "", published: false, important: false, startsAt: "2026-10-20", endsAt: "2026-10-10", conditions: "" }] }), 2); // a new revision each time: the page caches content by revision
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await typeX();
+    info = await chipInfo();
+    if (!info) reasons.push("(h) no chip with a blocked quest");
+    else {
+      if (!info.blocked) reasons.push("(h) the chip has no data-blocked");
+      if (!info.text.startsWith("!")) reasons.push(`(h) chip text "${info.text}" does not start with «!»`);
+      if (info.border !== "rgb(213, 84, 73)") reasons.push(`(h) chip border ${info.border}, expected rgb(213, 84, 73)`);
+      await open();
+      if (await cdp.eval(`!![...document.querySelectorAll(".editor-save-popover button")].find((b) => b.textContent.trim() === "СОХРАНИТЬ" && !b.disabled)`)) reasons.push("(h) СОХРАНИТЬ is enabled while the quest dates are wrong");
+      if (!(await click(cdp, ".editor-save-popover .editor-save-fix"))) reasons.push("(h) no .editor-save-fix in the popover");
+      else if (!(await waitFor(cdp, `document.activeElement?.matches("[data-broadcast-ends]")`, 3000))) reasons.push("(h) the date field did not get focus");
+    }
+    // (i) a save shows … then ✓ then no chip; the PUT is answered locally and counted
+    serve(editorFixture(), 3, true);
+    fakeSaves = 0;
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await typeX();
+    await open();
+    await clickText(cdp, ".editor-save-popover button", "СОХРАНИТЬ");
+    if (!(await waitFor(cdp, `document.querySelector(".editor-save-chip > button")?.textContent === "…"`, 400))) reasons.push(`(i) the chip did not show … within 400 ms (${(await chipInfo())?.text})`);
+    if (!(await waitFor(cdp, `document.querySelector(".editor-save-chip > button")?.textContent === "✓"`, 2000))) reasons.push(`(i) the chip did not show ✓ within 2 s (${(await chipInfo())?.text})`);
+    if (!(await waitFor(cdp, `!document.querySelector(".editor-save-chip")`, 4000))) reasons.push("(i) the chip is still there 4 s after the save");
+    if (fakeSaves !== 1) reasons.push(`(i) fakeSaves is ${fakeSaves}, expected 1`);
+    serve(editorFixture(), 10);
+    // (j)-(l) phone stacking at two sizes: chip, format sheet, bottom nav and the ✎ button never overlap
+    const hit = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    const boxes = () => cdp.eval(`(() => { const box = (e) => { if (!e) return null; const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; }; return { chip: box(document.querySelector(".editor-save-chip > button")), sheet: box(document.querySelector(".floating-text-format")), launch: box(document.querySelector(".global-format-launch > button")), w: innerWidth, h: innerHeight }; })()`);
+    const noOverlap = (label, b) => {
+      if (!b.chip) { reasons.push(`${label} no chip`); return; }
+      const nav = { left: 0, right: b.w, top: b.h - 44, bottom: b.h };
+      if (hit(b.chip, nav)) reasons.push(`${label} the chip overlaps the bottom nav`);
+      if (b.sheet && hit(b.chip, b.sheet)) reasons.push(`${label} the chip overlaps the format sheet`);
+      if (b.launch && hit(b.chip, b.launch)) reasons.push(`${label} the chip overlaps the ✎ button`);
+    };
+    for (const [w, h] of [[390, 844], [360, 640]]) {
+      const at = `${w}x${h}`;
+      await phone(cdp, w, h);
+      await load(cdp);
+      if (!(await openEditor(cdp))) { await desktop(cdp); return; }
+      await click(cdp, ".editor-record-row > button:last-child");
+      await sleep(300);
+      await typeX();
+      let b = await boxes();
+      if (!b.chip) { reasons.push(`(j) ${at}: no chip`); continue; }
+      if (Math.abs(b.chip.bottom - (b.h - 52)) > 1) reasons.push(`(j) ${at}: chip bottom ${b.chip.bottom}, expected ${b.h - 52}`);
+      if (Math.abs(b.chip.right - (b.w - 54)) > 1) reasons.push(`(j) ${at}: chip right ${b.chip.right}, expected ${b.w - 54}`);
+      if (b.chip.width < 43.5 || b.chip.height < 43.5) reasons.push(`(j) ${at}: chip is ${b.chip.width}x${b.chip.height}, expected at least 44x44`);
+      noOverlap(`(j) ${at}:`, b);
+      // (k) with the sheet open the chip sits 8px above it
+      await clickText(cdp, ".dossier-tabs button", "Описание");
+      await waitFor(cdp, `!!document.querySelector('.formatted-rich-input[data-area="lead"]')`, 3000);
+      await cdp.eval(`document.querySelector('.formatted-rich-input[data-area="lead"]').focus()`);
+      await click(cdp, ".global-format-launch > button");
+      if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) { reasons.push(`(k) ${at}: the sheet did not open`); continue; }
+      await sleep(250);
+      b = await boxes();
+      if (!b.chip || !b.sheet) { reasons.push(`(k) ${at}: chip or sheet missing`); continue; }
+      if (!(b.chip.bottom <= b.sheet.top - 7)) reasons.push(`(k) ${at}: chip bottom ${b.chip.bottom} is not 7px above the sheet top ${b.sheet.top}`);
+      noOverlap(`(k) ${at}:`, b);
+      // (l) folded, the chip sits 96px above the bottom
+      await click(cdp, "[data-sheet-toggle]"); await sleep(250);
+      b = await boxes();
+      if (!b.chip) { reasons.push(`(l) ${at}: no chip`); continue; }
+      if (Math.abs(b.chip.bottom - (b.h - 96)) > 1) reasons.push(`(l) ${at}: chip bottom ${b.chip.bottom}, expected ${b.h - 96}`);
+      noOverlap(`(l) ${at}:`, b);
+    }
+    await desktop(cdp);
   },
   async panel(cdp) {
     serve(editorFixture(), 1);

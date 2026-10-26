@@ -889,8 +889,12 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const chipVisible = dirty || saveState === "saving" || saveState === "saved";
   // Derived reset: the popover only lists unsaved sections, so it closes when the draft is clean.
   if (popoverOpen && !dirty) setPopoverOpen(false);
-  const chipLabel = saveState === "saving" ? "Сохранение…" : dirty ? `Не сохранено разделов: ${changed.length}` : "Сохранено";
-  const chipText = saveState === "saving" ? "…" : dirty ? String(changed.length) : "✓";
+  // A blocked, failed or conflicting save turns the chip red, so a compact chip never hides a failed save (D-10).
+  const alarm = dirty && (saveBlocked || saveState === "error" || conflict);
+  const chipLabel = saveState === "saving" ? "Сохранение…"
+    : dirty ? `Не сохранено разделов: ${changed.length}${alarm ? (saveBlocked ? ", сохранение невозможно" : ", ошибка сохранения") : ""}`
+    : "Сохранено";
+  const chipText = saveState === "saving" ? "…" : dirty ? `${alarm ? "!" : ""}${changed.length}` : "✓";
   const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
     : conflict ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
     : saveState === "error" ? "ОШИБКА"
@@ -1304,6 +1308,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
         <div
           className="editor-save-chip"
           data-dirty={dirty || undefined}
+          data-blocked={alarm || undefined}
           ref={chipRef}
           onKeyDown={(event) => {
             if (event.key !== "Escape" || !popoverOpen) return;
