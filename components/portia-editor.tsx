@@ -1969,6 +1969,8 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
   const [colorPicker, setColorPicker] = useState<"text" | "background" | null>(null);
   // Phone only: one control group at a time under the style row (D-12); on a PC every group shows.
   const [tab, setTab] = useState<"color" | "size" | "background">("color");
+  // Phone only: the sheet folds to a 44px strip so the text shows (D-08). The panel remounts on every opening, so a sheet opens expanded.
+  const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { documentRef.current = target.document; }, [target.document]);
 
   const formatKey = target.key;
@@ -2001,7 +2003,7 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
       window.visualViewport?.removeEventListener("resize", keepVisible);
       if (paints) CSS.highlights.delete("portia-format");
     };
-  }, [formatKey, paintFrom, paintTo, formatDocument]);
+  }, [formatKey, paintFrom, paintTo, formatDocument, collapsed]);
 
   // On a phone, closing returns the caret to the field in the same tap so the keyboard can come back (iOS may still need one more tap);
   // flushSync commits the close first so the field has dropped inputMode none before it gets focus.
@@ -2111,10 +2113,11 @@ function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onU
 
   // mousedown is the event whose default moves focus and clears the field's selection; pointerdown alone does not stop it in Chromium or WebKit (WR-04); inputs keep focus.
   const keepFieldFocus = (event: React.SyntheticEvent) => { if (!(event.target as HTMLElement).closest("input")) event.preventDefault(); };
-  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus} onKeyDown={leavePanel}>
-    <header tabIndex={0} role="group" aria-label="Перемещение панели: стрелки, с Shift шагом 32 px" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onKeyDown={keyMove}>
+  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus} onKeyDown={leavePanel} data-collapsed={collapsed || undefined}>
+    <header tabIndex={0} role="group" aria-label="Перемещение панели: стрелки, с Shift шагом 32 px" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onKeyDown={keyMove} onClick={(event) => { if (window.matchMedia("(max-width: 900px)").matches && !(event.target as HTMLElement).closest("button")) setCollapsed((value) => !value); }}>
       <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
       <small>{selectionLabel}</small>
+      <button type="button" data-sheet-toggle aria-expanded={!collapsed} aria-label={collapsed ? "Развернуть панель оформления" : "Свернуть панель оформления"} onClick={() => setCollapsed((value) => !value)}>{collapsed ? "ОФОРМЛЕНИЕ ▴" : "▾"}</button>
       <button type="button" onClick={finish} aria-label="Закрыть панель оформления">×</button>
     </header>
     <div className="format-presets format-choice-row" role="group" aria-label="Готовые стили">

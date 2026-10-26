@@ -149,17 +149,17 @@ Rule for A11Y-03: after the phase `grep -nE "фигни|пирожок|<small></
 - Reorder: handle `≡` drags collapsed rows within one screen; no up/down buttons [CTX D-04]. A section being dragged is force-collapsed for the drag duration.
 - Expanded sections keep current inner layout unchanged.
 
-### 2. Floating format panel — EDIT-04, EDIT-01 [CTX D-06..D-08]
+### 2. Floating format panel — EDIT-04, EDIT-01 [CTX D-06..D-08] (amended 2026-10-26, planner)
 Desktop (> 900px):
-- Rendered through a React portal into the desktop layer in `portia-desktop.tsx`, `position: fixed`, `z-index: 130` (existing value; above windows, below modal `ConfirmDialog`/toasts). Not a PORTIA OS window: no taskbar entry, no minimise.
-- Width `min(680px, calc(100vw - 28px))`, max-height `min(48svh, 390px)` [CODE]. Drag by `header` (cursor `grab` / `grabbing`, `touch-action: none`, `user-select: none`) anywhere on the whole screen; clamp so >= 64px of the header stays inside the viewport on all sides (extend `clampPanelOffset`).
+- Rendered through a React portal into the desktop layer in `portia-desktop.tsx`, `position: fixed`, `z-index: 950` (amended: 130 sank under the editor after about 110 clicks, because window z grows inside `#desktop` with every click; 950 stays under the taskbar 960, quest toast 965 and start panel 970, and modal `ConfirmDialog` uses `showModal()`, so it stays in the top layer above; `focusApp` also stops raising a window that is already on top). Not a PORTIA OS window: no taskbar entry, no minimise.
+- Width `min(680px, calc(100vw - 28px))`, max-height `min(48svh, 390px)` [CODE]. Drag by `header` (cursor `grab` / `grabbing`, `touch-action: none`, `user-select: none`) anywhere on the whole screen; clamp so >= 64px of the panel stays inside the viewport sideways, the top edge never leaves the screen and 64px of the header stay above the bottom edge (`clampPanelOffset`, unit-tested at 1280x720 and 1920x1080).
 - Header buttons (×) remain clickable and are excluded from drag start.
-- Initial position (no stored value): right of the editor window with 16px gap if it fits; otherwise bottom-right of viewport with 16px inset. Stored position (`portia-format-panel-v1`) is now relative to the desktop/viewport; legacy editor-relative values are reinterpreted via clamp, never throw. Storage read/write inside try/catch.
-- Closes with the editor window (unmount). Panel survives editor window being moved/resized/focused.
-- Keyboard: `Esc` in panel returns focus to last text field (does not close panel). Header is focusable (`tabindex=0`); arrow keys move panel 8px (Shift = 32px) [DEFAULT, a11y alternative to drag].
+- Initial position (no stored value): right of the editor window with 16px gap if it fits; otherwise the default corner: right 16px, bottom 60px (16px above the 44px taskbar). Stored position (`portia-format-panel-v1`) is now relative to the desktop/viewport; legacy editor-relative values are reinterpreted via clamp, never throw. Storage read/write inside try/catch.
+- Closes with the editor window (unmount) and is hidden while the editor window is minimized; restoring the editor shows it again. Panel survives editor window being moved/resized/focused.
+- Keyboard: `Esc` in panel returns focus to last text field (does not close panel). Header is focusable (`tabindex=0`, `role="group"`, `aria-label` «Перемещение панели: стрелки, с Shift шагом 32 px»); the × is labelled «Закрыть панель оформления»; arrow keys move panel 8px (Shift = 32px) [DEFAULT, a11y alternative to drag].
 
 Phone (<= 900px):
-- Bottom sheet: `position: fixed; left: 0; right: 0; bottom: 44px` (above bottom nav), `max-height: min(34svh, 270px)` [CODE], no free drag, no stored offset.
+- Bottom sheet: `position: fixed; left: 0; right: 0; bottom: 44px` (above bottom nav), fixed `height: min(34svh, 270px)` (amended: fixed, not a maximum, so the save chip of 11-03 can stack exactly above it), no free drag, no stored offset.
 - One tap on the header strip (or the `▾` toggle, 44px target) collapses to a **44px strip** showing `ОФОРМЛЕНИЕ` + `▴`; tap again expands. State is per-session, default expanded when opened.
 - EDIT-01: tapping ГОТОВО with no known selection must NOT place the caret at offset 0; the next ✎ opens with `ВЫДЕЛИТЕ ТЕКСТ`, no word targeted.
 

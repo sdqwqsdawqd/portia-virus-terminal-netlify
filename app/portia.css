@@ -493,6 +493,7 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
   /* The panel is a layer of the desktop and is dragged by its header anywhere on the screen (D-06, EDIT-04). */
   .floating-text-format > header { cursor: grab; touch-action: none; user-select: none; }
   .floating-text-format > header:active { cursor: grabbing; }
+  .floating-text-format > header > [data-sheet-toggle] { display: none; }
   /* The roster can be dozens of rows, so the list scrolls in its own column (D-04). */
   .content-editor > .employee-editor-layout { flex: 1 1 0; min-height: 320px; }
   .virus-editor-layout.employee-editor-layout { align-items: stretch; grid-template-rows: minmax(0, 1fr); }
@@ -639,6 +640,8 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .floating-text-format > header strong { overflow: hidden; color: oklch(.951 calc(.01 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); text-overflow: ellipsis; white-space: nowrap; }
 .floating-text-format > header small { color: oklch(.63 calc(.032 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); white-space: nowrap; }
 .floating-text-format > header button { width: 28px; height: 28px; border: 1px solid oklch(.414 calc(.029 * var(--accent-chroma)) var(--accent-hue)); border-radius: 4px; background: oklch(.261 calc(.023 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.806 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font-size: 17px; cursor: pointer; }
+.floating-text-format > header:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+.floating-text-format > header > [data-sheet-toggle]:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .rich-text-toolbar { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 9px; background: oklch(.196 calc(.018 * var(--accent-chroma)) var(--accent-hue)); }
 .format-area-note { grid-column: 1 / -1; margin: 0; color: oklch(.66 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font-size: 11px; line-height: 1.4; }
 .format-control { min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid oklch(.366 calc(.036 * var(--accent-chroma)) var(--accent-hue)); border-radius: 5px; background: rgba(255,255,255,.018); color: oklch(.66 calc(.027 * var(--accent-chroma)) var(--accent-hue)); }
@@ -1158,8 +1161,17 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .editor-upload-control input[type="file"] { flex-basis: 200px; min-width: 0; }
   /* Header and ГОТОВО stay pinned; only the toolbar between them scrolls. */
   /* bottom: 44px taskbar + 56px save bar, which stays visible under the panel (D-01). */
-  .floating-text-format { right: 8px; bottom: 108px; width: min(620px, calc(100% - 16px)); max-height: min(34svh, 270px); display: flex; flex-direction: column; overflow: hidden; }
+  /* A bottom sheet from edge to edge above the 44px bottom nav; a fixed height so the save chip can stack exactly above it (D-08). */
+  .floating-text-format { left: 0; right: 0; bottom: 44px; width: auto; height: min(34svh, 270px); max-height: none; border-radius: 7px 7px 0 0; display: flex; flex-direction: column; overflow: hidden; }
   .floating-text-format > header, .floating-text-format > footer { flex: none; }
+  .floating-text-format > header { grid-template-columns: minmax(0,1fr) auto auto auto; min-height: 44px; }
+  .floating-text-format > header button { width: 44px; height: 44px; }
+  /* Folded: only the header strip, «ОФОРМЛЕНИЕ ▴» and the close button remain. */
+  .floating-text-format[data-collapsed] { height: 44px; }
+  .floating-text-format[data-collapsed] > :not(header) { display: none; }
+  .floating-text-format[data-collapsed] > header { grid-template-columns: minmax(0,1fr) auto; border-bottom: 0; }
+  .floating-text-format[data-collapsed] > header > div, .floating-text-format[data-collapsed] > header small { display: none; }
+  .floating-text-format > header > [data-sheet-toggle][aria-expanded="false"] { width: auto; justify-self: start; padding-inline: 12px; font: 700 11px var(--sans); letter-spacing: .08em; }
   /* Phone tabs, one group at a time (D-12). */
   .format-tabs { display: flex; flex: none; padding: 6px 9px 0; background: oklch(.196 calc(.018 * var(--accent-chroma)) var(--accent-hue)); }
   .floating-text-format > .format-presets { flex: none; }
@@ -1174,7 +1186,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .editor-savebar-actions button { min-height: 40px; }
   .content-editor:has(> .editor-savebar) { padding-bottom: 110px; }
   /* Lets the last field scroll above the format panel, which sits where the keyboard was. */
-  .content-editor:has(.floating-text-format) { padding-bottom: calc(min(34svh, 270px) + 146px); }
+  .desktop:has(> .floating-text-format) .content-editor { padding-bottom: calc(min(34svh, 270px) + 96px); }
   .rich-text-toolbar { grid-template-columns: 1fr; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .access-editor-add { grid-template-columns: 1fr; }
   .content-control-entry { align-items: stretch; flex-direction: column; }
@@ -1257,7 +1269,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .taskbar-app { max-width: 42px; overflow: hidden; }
   .editor-tabs { margin-inline: -4px; }
   .nested-editor-card { padding: 12px; }
-  .floating-text-format > header { grid-template-columns: minmax(0,1fr) auto; padding: 6px 10px; }
+  .floating-text-format > header { grid-template-columns: minmax(0,1fr) auto auto; padding: 6px 10px; }
   .floating-text-format > header > div { align-items: flex-start; flex-direction: column; gap: 2px; }
   .floating-text-format > header small { display: none; }
   .rich-text-toolbar { grid-template-columns: 1fr; gap: 6px; padding: 7px; }

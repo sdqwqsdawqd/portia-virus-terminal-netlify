@@ -304,6 +304,41 @@ const checks = {
     await cdp.eval(`(() => { const w = document.querySelector(".editor-window"); for (let i = 0; i < 50; i += 1) w.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); })()`);
     const z1 = await cdp.eval(`document.querySelector(".editor-window").style.zIndex`);
     if (z0 !== z1) reasons.push(`(m) editor window z went ${z0} -> ${z1} on repeated clicks`);
+    // (n) on a phone the panel is a bottom sheet above the 44px nav, with no stored place
+    await phone(cdp);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await click(cdp, ".editor-record-row > button:last-child");
+    await sleep(300);
+    await clickText(cdp, ".dossier-tabs button", "Описание");
+    await waitFor(cdp, `!!document.querySelector('.formatted-rich-input[data-area="lead"]')`, 3000);
+    await cdp.eval(`document.querySelector('.formatted-rich-input[data-area="lead"]').focus()`);
+    await click(cdp, ".global-format-launch > button");
+    if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) { reasons.push("(n) the phone panel did not open"); await desktop(cdp); return; }
+    await sleep(200);
+    const sheet = await cdp.eval(`(() => { const e = document.querySelector(".floating-text-format"); const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, bottom: r.bottom, height: r.height, w: innerWidth, h: innerHeight, styleRight: e.style.right, styleBottom: e.style.bottom }; })()`);
+    if (Math.abs(sheet.bottom - (sheet.h - 44)) > 1) reasons.push(`(n) sheet bottom ${sheet.bottom}, expected ${sheet.h - 44}`);
+    if (sheet.left !== 0 || Math.abs(sheet.right - sheet.w) > 1) reasons.push(`(n) sheet spans ${sheet.left}..${sheet.right}, expected 0..${sheet.w}`);
+    if (sheet.height > Math.min(0.34 * sheet.h, 270) + 1) reasons.push(`(n) sheet height ${sheet.height} exceeds min(34svh, 270)`);
+    if (sheet.styleRight !== "" || sheet.styleBottom !== "") reasons.push(`(n) inline place on a phone: right "${sheet.styleRight}", bottom "${sheet.styleBottom}"`);
+    // (o) one tap folds it to a 44px strip, another unfolds it
+    const toggleText = () => cdp.eval(`document.querySelector("[data-sheet-toggle]").textContent`);
+    const fold = () => cdp.eval(`(() => { const e = document.querySelector(".floating-text-format"); const r = e.getBoundingClientRect(); return { collapsed: e.hasAttribute("data-collapsed"), height: r.height, bottom: r.bottom, h: innerHeight }; })()`);
+    await click(cdp, "[data-sheet-toggle]"); await sleep(250);
+    let folded = await fold();
+    if (!folded.collapsed || Math.abs(folded.height - 44) > 1) reasons.push(`(o) after the tap: collapsed ${folded.collapsed}, height ${folded.height}`);
+    if (!(await toggleText()).includes("ОФОРМЛЕНИЕ")) reasons.push("(o) the folded toggle does not read ОФОРМЛЕНИЕ");
+    if (Math.abs(folded.bottom - (folded.h - 44)) > 1) reasons.push(`(o) the folded strip bottom ${folded.bottom}, expected ${folded.h - 44}`);
+    await click(cdp, "[data-sheet-toggle]"); await sleep(250);
+    folded = await fold();
+    if (folded.collapsed || folded.height < 100) reasons.push(`(o) the second tap did not unfold: collapsed ${folded.collapsed}, height ${folded.height}`);
+    // (p) no free drag
+    const phoneBefore = await panelRect(cdp);
+    const grab = await headerPoint(cdp, 0.3);
+    await drag(cdp, grab, { x: grab.x - 100, y: grab.y - 200 });
+    const phoneAfter = await panelRect(cdp);
+    if (["left", "top", "right", "bottom"].some((k) => Math.abs(phoneAfter[k] - phoneBefore[k]) > 0.5)) reasons.push(`(p) the phone sheet moved: ${JSON.stringify(phoneBefore)} -> ${JSON.stringify(phoneAfter)}`);
+    await desktop(cdp);
   },
 };
 
