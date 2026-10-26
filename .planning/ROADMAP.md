@@ -246,7 +246,7 @@ Plans (strictly sequential: every plan edits `components/portia-editor.tsx` and/
 **Plans**: 8 plans
 
 Plans:
-- [ ] 12-01-PLAN.md — реестр вкладок и getEditorAccess: подтверждённая почта, openTabs, «нет столбца» = всё открыто, 503 у /api/access; сообщение D-19 на входе
+- [ ] 12-01-PLAN.md — реестр вкладок и getEditorAccess: подтверждённая почта, openTabs, «нет столбца» = всё открыто, 503 у /api/access; сообщение D-19 на входе (после предпроверки 12-04: почта владельца подтверждена)
 - [ ] 12-02-PLAN.md — чистые правила: deniedSections (перенос в Корзину по D-13), revertSections без потери вирусов, действие истории restrict, дыра `info-block:`
 - [ ] 12-03-PLAN.md — `//host` в коде: общий isLocalMediaPath в нормализаторе, профиле сотрудника и поле редактора
 - [ ] 12-04-PLAN.md — SQL владельца: phase12_apply.sql (предпроверка, применение с откатом), portia_setup.sql, риск D-11 в PROJECT.md; владелец прогоняет предпроверку (checkpoint)
