@@ -1,5 +1,5 @@
 // Usage: node 13-guide-check.mjs --check <name>|all [--url http://localhost:3124]
-// Checks: open-card, grid, card-blocks, poll-gone, search, editor-save, editor-blocks, editor-undo, closed-tab, drag-across, drag-edges (the «Справочник» desktop window of phase 13).
+// Checks: open-card, grid, card-blocks, poll-gone, search, editor-save, editor-blocks, editor-undo, closed-tab, drag-across, drag-edges, layout (the «Справочник» desktop window of phase 13).
 // Why: the guide window (grid, card page, remembered folding, poll safety, search) has no DOM test runner, so headless Edge drives the production build.
 // Inside the browser it launches, GET /api/access and GET /api/content are answered from the current fixture. EVERY non-GET request to /api/*
 // is blocked and recorded as a failure reason ("write blocked"), never forwarded, so nothing is ever saved and no login is needed.
@@ -265,7 +265,7 @@ const checks = {
       };
     })()`);
     if (!geometry.c1Img || !(geometry.c1Height > 120)) reasons.push(`c1 tile: ${JSON.stringify({ img: geometry.c1Img, h: geometry.c1Height })}`);
-    if (!geometry.c2Thin || geometry.c2Img || !(geometry.c2Height >= 43 && geometry.c2Height <= 45)) reasons.push(`c2 thin row: ${JSON.stringify({ thin: geometry.c2Thin, img: geometry.c2Img, h: geometry.c2Height })}`);
+    if (!geometry.c2Thin || geometry.c2Img || !(geometry.c2Height >= 44 && geometry.c2Height / geometry.c1Height <= 0.3)) reasons.push(`c2 thin row: ${JSON.stringify({ thin: geometry.c2Thin, img: geometry.c2Img, h: geometry.c2Height })}`);
     if (!geometry.g1Photo || geometry.g1Alt !== "") reasons.push(`g1 head: ${JSON.stringify({ photo: geometry.g1Photo, alt: geometry.g1Alt })}`);
     if (geometry.g2Img) reasons.push("g2 head holds an image though the section has no photo");
     if (geometry.inputs) reasons.push(`${geometry.inputs} input(s) inside the guide window (D-17)`);
@@ -578,6 +578,88 @@ const checks = {
     await expect(start, "after dragging a block over another card");
   },
 
+  async layout(cdp) {
+    const cover = (id) => ({ id, title: `Плитка ${id}`, cover: LOGO, blocks: [] });
+    const thin = (id) => ({ id, title: `Строка ${id}`, cover: "", blocks: [] });
+    const sections = [
+      { id: "m1", title: "Смешанный", photo: "", cards: [cover("p1"), thin("t1"), cover("p2"), cover("p3"), thin("t2"), cover("p4"), thin("t3"), cover("p5")] },
+      { id: "s1", title: "Одна", photo: "", cards: [cover("o1")] },
+      { id: "w1", title: "Таблица", photo: "", cards: [{ id: "wt", title: "Широкая таблица", cover: "", blocks: [{ id: "wb", type: "table", rows: [{ id: "wr", key: "Ключ", value: "Ы".repeat(300) }] }] }] },
+    ];
+    const frames = () => cdp.eval(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+    /** Rects of a section's tiles in DOM order, with the thin flag. */
+    const tiles = (id) => cdp.eval(`[...document.querySelectorAll("#guide-grid-${id} .guide-tile")].map((t) => { const r = t.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height, right: r.right, bottom: r.bottom, thin: t.classList.contains("guide-tile-thin") }; })`);
+    /** Number of distinct left offsets among the tiles that share the first tile's top: the columns in use. */
+    const columns = async (id) => { const all = await tiles(id); if (!all.length) return 0; const top = Math.round(all[0].top); return new Set(all.filter((t) => Math.round(t.top) === top).map((t) => Math.round(t.left))).size; };
+    const mixed = async (when) => {
+      const all = await tiles("m1");
+      if (all.length !== 8) { reasons.push(`${when}: expected 8 tiles in m1, found ${all.length}`); return; }
+      for (let a = 0; a < all.length; a += 1) for (let b = a + 1; b < all.length; b += 1) {
+        const w = Math.min(all[a].right, all[b].right) - Math.max(all[a].left, all[b].left), h = Math.min(all[a].bottom, all[b].bottom) - Math.max(all[a].top, all[b].top);
+        if (w > 0.5 && h > 0.5) reasons.push(`${when}: tiles #${a} and #${b} overlap`);
+      }
+      const order = all.map((t, i) => ({ i, top: Math.round(t.top), left: Math.round(t.left) })).sort((x, y) => x.top - y.top || x.left - y.left).map((t) => t.i);
+      if (!same(order, all.map((_, i) => i))) reasons.push(`${when}: the visual order is ${JSON.stringify(order)}, not the stored one`);
+    };
+    const ratio = async (when) => {
+      const all = await tiles("m1"), photo = all.find((t) => !t.thin);
+      for (const row of all.filter((t) => t.thin)) { const q = row.height / photo.height; if (q < 0.2 || q > 0.3) reasons.push(`${when}: a thin row is ${(q * 100).toFixed(1)} % of a photo tile (want 20-30 %)`); }
+    };
+    const single = async (when) => {
+      const [one] = await tiles("s1"), photo = (await tiles("m1")).find((t) => !t.thin);
+      if (!one || Math.abs(one.width - photo.width) > 1) reasons.push(`${when}: the one-card tile is ${one?.width} px wide, a photo tile in m1 is ${photo.width} px`);
+    };
+    const reopen = async () => {
+      if (!(await openGuide(cdp, sections))) return false;
+      if (!(await waitFor(cdp, `document.querySelectorAll("#guide-grid-m1 .guide-tile").length === 8`, 5000))) { reasons.push("the m1 tiles did not render"); return false; }
+      await sleep(300); // images decode and the window finishes opening
+      return true;
+    };
+    // Default window, then a 560 px window, then maximized (D-09).
+    if (!(await reopen())) return;
+    const first = await columns("m1");
+    if (first < 3) reasons.push(`default window: ${first} columns, expected 3 or more`);
+    await ratio("default window"); await single("default window"); await mixed("default window");
+    await cdp.eval(`document.querySelector(".guide-window").style.width = "560px"; true`); await frames();
+    const narrow = await columns("m1");
+    if (narrow !== 2) reasons.push(`560 px window: ${narrow} columns, expected 2`);
+    await ratio("560 px window"); await single("560 px window"); await mixed("560 px window");
+    await cdp.eval(`document.querySelector(".guide-window").style.width = ""; true`); await frames();
+    await click(cdp, '.guide-window [data-window-action="maximize"]'); await sleep(500); await frames();
+    const wide = await columns("m1");
+    if (!(wide > first)) reasons.push(`maximized window: ${wide} columns, not more than the default ${first}`);
+    await ratio("maximized window"); await single("maximized window"); await mixed("maximized window");
+    // Phones: two columns (D-09), the ratio and the order hold, a wide table stays in its box.
+    for (const [width, height] of [[390, 844], [320, 640]]) {
+      await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 2, mobile: true });
+      if (!(await reopen())) break;
+      const phone = await columns("m1");
+      if (phone !== 2) reasons.push(`phone ${width}: ${phone} columns, expected 2`);
+      if (width === 390) { await ratio("phone 390"); await single("phone 390"); }
+      await mixed(`phone ${width}`);
+      if (width === 320) {
+        await click(cdp, tileSelector("wt"));
+        if (!(await waitFor(cdp, `!!document.querySelector(".guide-page")`, 3000))) { reasons.push("card wt did not open"); break; }
+        await sleep(300);
+        const box = await cdp.eval(`(() => { const a = document.querySelector(".guide-app"), p = document.querySelector(".guide-page").getBoundingClientRect(); return { scroll: a.scrollWidth, client: a.clientWidth, right: p.right, view: innerWidth, doc: document.documentElement.scrollWidth }; })()`);
+        if (box.scroll > box.client + 1) reasons.push(`wide table: .guide-app scrolls sideways (${box.scroll} > ${box.client})`);
+        if (box.right > box.view) reasons.push(`wide table: the page column ends at ${box.right}, past the ${box.view} px viewport`);
+      }
+    }
+    await cdp.send("Emulation.clearDeviceMetricsOverride");
+    // Motion off (D-00e): nothing inside the guide animates while folding, opening a card or going back.
+    await cdp.eval(`localStorage.setItem("portia-desktop-settings-v1", JSON.stringify({ motion: "off" })); true`);
+    if (!(await reopen())) return;
+    if (await cdp.eval(`document.documentElement.dataset.motion`) !== "reduce") { reasons.push(`html[data-motion] is ${await cdp.eval(`document.documentElement.dataset.motion`)}, expected reduce`); return; }
+    const moving = (when, action) => cdp.eval(`(() => { ${action}; return document.getAnimations().filter((a) => a.effect?.target?.closest?.(".guide-app")).map((a) => a.animationName || a.transitionProperty || "animation"); })()`).then((list) => { if (list.length) reasons.push(`motion off, ${when}: ${list.length} animation(s) in the guide: ${list.join(", ")}`); });
+    const head = `document.querySelector('.guide-window [aria-controls="guide-grid-m1"]')`;
+    await moving("folding m1", `${head}.click()`); await sleep(100);
+    await moving("opening m1", `${head}.click()`); await sleep(100);
+    await moving("opening a card", `document.querySelector(${JSON.stringify(tileSelector("p1"))}).click()`); await sleep(100);
+    await moving("going back", `document.querySelector(".guide-window .guide-back-bar button").click()`);
+    await cdp.eval(`localStorage.removeItem("portia-desktop-settings-v1"); true`);
+  },
+
   async "closed-tab"(cdp) {
     if (!(await bootEditor(cdp, [], editorAccess(ALL_TABS.filter((id) => id !== "guide"))))) return;
     const labels = await stripLabels(cdp);
@@ -591,7 +673,7 @@ const cleanup = () => {
 };
 let code = 2;
 try {
-  const ALL = ["open-card", "grid", "card-blocks", "poll-gone", "search", "editor-save", "editor-blocks", "editor-undo", "closed-tab", "drag-across", "drag-edges"];
+  const ALL = ["open-card", "grid", "card-blocks", "poll-gone", "search", "editor-save", "editor-blocks", "editor-undo", "closed-tab", "drag-across", "drag-edges", "layout"];
   if (CHECK !== "all" && !checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")}, all)`);
   edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, "--window-size=1920,1080", "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
   let up = false;

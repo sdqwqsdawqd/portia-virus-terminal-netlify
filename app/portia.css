@@ -1697,8 +1697,9 @@ html[data-motion="reduce"] :is(.boot-core > .portia-mark, .boot-thread) { animat
   .guide-app { padding: 16px; }
   .guide-back-bar { margin: -16px -16px 24px; padding: 0 16px; }
 }
-.guide-tile-thin { display: flex; align-items: center; height: 44px; }
-.guide-tile-thin .guide-tile-title { display: block; min-height: 0; flex: 1; min-width: 0; padding: 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The thin row stays about a quarter of a photo tile at any cell width: 18.75 % of the cell plus the title zone's share (D-05); 44 px is the touch-target floor. */
+.guide-tile-thin { container-type: inline-size; display: block; }
+.guide-tile-thin .guide-tile-title { --thin: max(44px, calc(18.75cqw + 11px)); display: block; min-height: 0; height: var(--thin); line-height: var(--thin); min-width: 0; padding: 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .guide-section-head.has-photo { position: relative; min-height: 64px; overflow: hidden; }
 .guide-section-band { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .guide-section-head.has-photo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, oklch(.14 calc(.02 * var(--accent-chroma)) var(--accent-hue) / .88), oklch(.14 calc(.02 * var(--accent-chroma)) var(--accent-hue) / .55)); }
