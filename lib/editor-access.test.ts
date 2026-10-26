@@ -82,3 +82,12 @@ test("canEdit false gives noAccess with no open tabs", async () => {
   assert.deepEqual(access, noAccess);
   assert.deepEqual(access.openTabs, []);
 });
+
+test("login wiring sends unconfirmed users to the D-19 message (SEC-01)", () => {
+  const actions = readFileSync(new URL("../app/owner-login/actions.ts", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../app/owner-login/page.tsx", import.meta.url), "utf8");
+  assert.ok(actions.includes('"email_not_confirmed"'));
+  assert.ok(actions.split("error=unconfirmed").length - 1 >= 2);
+  assert.ok(page.includes("Почта не подтверждена. Откройте письмо от Supabase и войдите снова"));
+  assert.match(page, /\[[^\]]*"unconfirmed"[^\]]*\]\.includes\(error\)/);
+});
