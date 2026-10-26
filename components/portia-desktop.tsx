@@ -1168,7 +1168,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   const searchResults = useMemo(() => {
     const query = escapeSearch(globalQuery.trim());
-    const items: Array<{ id: string; type: "virus" | "info" | "broadcast" | "file"; title: string; meta: string; body: string }> = [
+    const items: Array<{ id: string; type: "virus" | "info" | "guide" | "broadcast" | "file"; title: string; meta: string; body: string; parts?: string[] }> = [
       ...content.viruses.map((virus) => ({ id: virus.id, type: "virus" as const, title: virus.name, meta: virus.code, body: `${virus.status} ${virus.external} ${virus.physiology} ${Object.values(virus.classification).join(" ")} ${virus.mutations.map((mutation) => `${mutation.name} ${mutation.description}`).join(" ")}` })),
       ...content.infoSections.flatMap((section) => [
         { id: section.id, type: "info" as const, title: section.title, meta: "ИНФОРМАЦИЯ", body: section.body },
@@ -1180,12 +1180,21 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           body: sub.blocks.map((block) => block.type === "text" ? block.text : block.type === "table" ? block.rows.map((row) => `${row.key} ${row.value}`).join(" ") : "").join(" "),
         })),
       ]),
+      // D-15: a card is found by its title, any block text and its section title; the section title sits in meta, so a section match lists every card of it.
+      ...content.guideSections.flatMap((section) => section.cards.map((card) => {
+        const parts = card.blocks.map((block) => block.type === "heading" || block.type === "text" ? block.text : block.type === "table" ? block.rows.map((row) => `${row.key} ${row.value}`).join(" ") : block.type === "photo" ? block.caption : block.type === "callout" ? `${block.label} ${block.text}` : "").filter(Boolean);
+        return { id: card.id, type: "guide" as const, title: card.title || "Без названия", meta: `СПРАВОЧНИК · ${section.title || "Без названия"}`, body: parts.join(" "), parts };
+      })),
       ...content.broadcasts.filter((item) => item.published).map((item) => ({ id: item.id, type: "broadcast" as const, title: item.title, meta: broadcastType(item.type), body: item.body })),
       ...content.recycleFiles.map((file) => ({ id: file.id, type: "file" as const, title: file.name, meta: recycleFileType(file.kind), body: recycleFileBody(file, [...content.viruses, ...recycledViruses]) })),
       ...recycledViruses.map((virus) => ({ id: `virus:${virus.id}`, type: "file" as const, title: virus.name, meta: "ВИРУС В КОРЗИНЕ", body: `${virus.code} ${virus.status} ${virus.external} ${virus.physiology}` })),
     ];
     if (!query) return items.slice(0, 8);
-    return items.filter((item) => escapeSearch(`${item.title} ${item.meta} ${item.body}`).includes(query));
+    // The 2-line preview of a card starts at the first block that holds the query; matching itself is unchanged.
+    return items.filter((item) => escapeSearch(`${item.title} ${item.meta} ${item.body}`).includes(query)).map((item) => {
+      const at = item.parts ? item.parts.findIndex((part) => escapeSearch(part).includes(query)) : -1;
+      return at > 0 && item.parts ? { ...item, body: [...item.parts.slice(at), ...item.parts.slice(0, at)].join(" ") } : item;
+    });
   }, [content, globalQuery, recycledViruses]);
 
   const openSearchResult = (result: (typeof searchResults)[number]) => {
@@ -1196,6 +1205,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     } else if (result.type === "info") {
       setSelectedInfoId(result.id);
       openApp("info");
+    } else if (result.type === "guide") {
+      setGuideCardId(result.id);
+      openApp("guide");
     } else if (result.type === "broadcast") {
       const found = content.broadcasts.find((item) => item.id === result.id);
       if (found) setBroadcastTab(broadcastTabOf(found.type));
@@ -1332,7 +1344,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 {!contentReady ? <LoadingState label="Загрузка архива…" /> : <>
                 {searchResults.map((result) => (
                   <button key={`${result.type}-${result.id}`} type="button" className="global-result" onClick={() => openSearchResult(result)}>
-                    <span className="global-result-mark">{result.type === "virus" ? "VIS" : result.type === "info" ? "INF" : result.type === "file" ? "FILE" : "MSG"}</span>
+                    <span className="global-result-mark">{result.type === "virus" ? "VIS" : result.type === "info" ? "INF" : result.type === "guide" ? "REF" : result.type === "file" ? "FILE" : "MSG"}</span>
                     <span className="global-result-main"><span className="global-result-heading"><strong>{result.title || "БЕЗ НАЗВАНИЯ"}</strong><small>{result.meta}</small></span><span className="global-result-preview">{result.body}</span></span>
                   </button>
                 ))}
@@ -1713,6 +1725,7 @@ function GuideApp({ sections, formattedText, openCardId, onOpenCard }: {
     backIntent.current = false;
     const saved = returnTo.current;
     root.scrollTop = back && saved && saved.cardId === previous && saved.sections === JSON.stringify(sections) ? saved.scrollTop : 0;
+    returnTo.current = null; // a card opened from search later must not inherit this position
     if (back) (root.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(previous)}"]`) ?? root).focus({ preventScroll: true });
   }, [shownId, sections]);
 

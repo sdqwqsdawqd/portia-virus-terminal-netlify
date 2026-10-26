@@ -272,6 +272,33 @@ const checks = {
     if (!(await waitFor(cdp, `!!document.querySelector(".guide-window .guide-grid") && !document.querySelector(".guide-page")`, 15000))) { reasons.push("the window did not fall back to the grid after the card was removed"); return; }
     if (/ошибк/i.test(String(await text(cdp, ".guide-window")))) reasons.push("the window shows error text after the poll");
   },
+
+  async search(cdp) {
+    serve(baseFixture(guideFixture()));
+    await load(cdp);
+    if (!(await click(cdp, '[data-shortcut="search"]'))) { reasons.push("the search shortcut is missing"); return; }
+    await waitFor(cdp, `!!document.querySelector(".global-search-box input")`, 5000);
+    const search = async (query) => {
+      await cdp.eval(`(() => { const i = document.querySelector(".global-search-box input"); i.focus(); i.select(); return true; })()`);
+      await cdp.send("Input.insertText", { text: query });
+      await sleep(400);
+      return cdp.eval(`[...document.querySelectorAll(".global-result")].map((r) => ({ mark: r.querySelector(".global-result-mark")?.textContent.trim(), title: r.querySelector(".global-result-heading strong")?.textContent.trim(), meta: r.querySelector(".global-result-heading small")?.textContent.trim(), preview: r.querySelector(".global-result-preview")?.textContent.trim() }))`);
+    };
+    const callout = await search("Не открывать без пропуска");
+    if (callout.length !== 1 || callout[0].mark !== "REF" || callout[0].meta !== "СПРАВОЧНИК · Справочный отдел") reasons.push(`callout search: ${JSON.stringify(callout)}`);
+    await click(cdp, ".global-result");
+    if (!(await waitFor(cdp, `!!document.querySelector(".guide-window .guide-page h1")`, 5000))) { reasons.push("the guide window did not open on the card"); return; }
+    if (await text(cdp, ".guide-page h1") !== "Все блоки") reasons.push(`the card page is ${await text(cdp, ".guide-page h1")}`);
+    await click(cdp, ".guide-window .guide-back-bar button");
+    if (!(await waitFor(cdp, `!!document.querySelector(".guide-window .guide-grid")`, 3000))) reasons.push("«← Назад» did not show the grid");
+    if (await cdp.eval(`document.querySelector(".guide-app").scrollTop`) !== 0) reasons.push("the grid is not at the top after «← Назад»");
+    const section = await search("Лаборатория");
+    const refs = section.filter((r) => r.mark === "REF").map((r) => r.title);
+    if (!refs.includes("Как пройти в лабораторию") || !refs.includes("Пропуск")) reasons.push(`section-title search: ${JSON.stringify(section)}`);
+    const caption = await search("Подпись к фото");
+    if (!caption.some((r) => r.mark === "REF" && r.title === "Все блоки")) reasons.push(`caption search: ${JSON.stringify(caption)}`);
+    else if (!caption.find((r) => r.title === "Все блоки").preview.startsWith("Подпись к фото")) reasons.push(`the preview does not start at the match: ${caption.find((r) => r.title === "Все блоки").preview}`);
+  },
 };
 
 let edge;
@@ -280,7 +307,7 @@ const cleanup = () => {
 };
 let code = 2;
 try {
-  const ALL = ["open-card", "grid", "card-blocks", "poll-gone"];
+  const ALL = ["open-card", "grid", "card-blocks", "poll-gone", "search"];
   if (CHECK !== "all" && !checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")}, all)`);
   edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, "--window-size=1920,1080", "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
   let up = false;
