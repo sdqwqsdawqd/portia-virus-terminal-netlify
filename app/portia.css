@@ -522,6 +522,8 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .editor-record-list button { width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 11px; border: 1px solid oklch(.358 calc(.031 * var(--accent-chroma)) var(--accent-hue)); background: rgba(255,255,255,.015); color: oklch(.777 calc(.021 * var(--accent-chroma)) var(--accent-hue)); text-align: left; cursor: pointer; }
 .editor-record-list button:hover, .editor-record-list button.active { border-color: var(--teal-dim); background: var(--teal-soft); }
 .editor-record-list strong { font: 700 12px var(--sans); }
+/* D-05: a long unbroken name stays one line inside the 210px column and ends in «…» (the full name is in title). */
+.editor-record-list strong, .editor-record-list small { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .editor-record-list small { color: oklch(.559 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); }
 .editor-record-list .add-record { align-items: center; margin-top: 5px; border-style: dashed; color: var(--teal); }
 /* «ВНЕ ТАБЛИЦЫ» marks manual employees (D-02). The compound selectors outrank the list/identity rules that style a bare <small>. */
@@ -578,6 +580,8 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 .nested-editor-toggle .nested-editor-chevron { flex: none; margin-left: auto; font: 700 17px/1 var(--sans); color: oklch(.741 calc(.02 * var(--accent-chroma)) var(--accent-hue)); }
 .nested-editor-head .nested-editor-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .nested-editor-body[hidden] { display: none; }
+/* D-04: the card being dragged is shown folded so the move stays within one screen. */
+.nested-editor-card:has(> .nested-editor-head .order-drag-handle[data-dragging="true"]) > .nested-editor-body { display: none; }
 @media (max-width: 900px) {
   .nested-editor-head .nested-editor-toggle { min-height: 44px; }
 }

@@ -60,6 +60,7 @@ const editorFixture = (overrides = {}) => fixture({
 });
 
 const LONG = "Оченьдлинноеназвание".repeat(10); // 200 unbroken characters
+const LONG_VIRUS = "Вирус".repeat(30); // 150 unbroken characters
 /** Info sections 1..count, each with one subsection and one text block; section 3 has the long name. */
 const sectionsFixture = (overrides = {}) => {
   const count = overrides.sections ?? 6;
@@ -67,7 +68,13 @@ const sectionsFixture = (overrides = {}) => {
     id: `s${i + 1}`, title: i === 2 ? LONG : `Раздел ${i + 1}`, body: `Текст раздела ${i + 1}`,
     subsections: (overrides.noSubsections ? [] : [{ id: `u${i + 1}`, title: `Подраздел ${i + 1}`, blocks: [{ id: `b${i + 1}`, type: "text", text: `Блок ${i + 1}` }] }]),
   }));
-  return fixture({ ...editorFixture(), infoSections });
+  const viruses = [
+    { id: "v1", name: "Альфа", code: "A-1", status: "ИЗУЧЕН", external: "", physiology: "" },
+    { id: "v2", name: LONG_VIRUS, code: "A-2", status: "ИЗУЧЕН", external: "", physiology: "" },
+    ...Array.from({ length: (overrides.viruses ?? 6) - 2 }, (_, i) => ({ id: `v${i + 3}`, name: `Вирус ${i + 3}`, code: `A-${i + 3}`, status: "ИЗУЧЕН", external: "", physiology: "" })),
+  ];
+  const broadcasts = Array.from({ length: overrides.news ?? 6 }, (_, i) => ({ id: `n${i + 1}`, type: "news", title: `Новость ${i + 1}`, body: "", published: true, important: false, startsAt: "", endsAt: "", conditions: "" }));
+  return fixture({ ...editorFixture(), viruses, infoSections, broadcasts });
 };
 
 const json = { "content-type": "application/json", "cache-control": "no-store" };
@@ -379,6 +386,58 @@ const checks = {
     if (await cdp.eval(body1)) reasons.push("(d) the first click did not show the body");
     await click(cdp, toggle(1));
     if (!(await cdp.eval(body1))) reasons.push("(d) the second click did not hide the body");
+    // (g) an expanded card is shown folded while it is dragged and the drag lands on the right row
+    const titles = () => cdp.eval(`[...document.querySelectorAll(${JSON.stringify(top + " > .nested-editor-head .nested-editor-title")})].map((e) => e.textContent)`);
+    await click(cdp, toggle(2));
+    await cdp.eval(`(() => { const h = document.querySelectorAll(${JSON.stringify(top)})[1].querySelector(":scope > .nested-editor-head .order-drag-handle"); h.scrollIntoView({ block: "center" }); const r = h.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await sleep(300);
+    const grab = await cdp.eval(`(() => { const h = document.querySelectorAll(${JSON.stringify(top)})[1].querySelector(":scope > .nested-editor-head .order-drag-handle"); const r = h.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    const at = (type, x, y, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x, y, button: "left", ...extra });
+    await at("mouseMoved", grab.x, grab.y, { button: "none" });
+    await at("mousePressed", grab.x, grab.y, { buttons: 1, clickCount: 1 });
+    await sleep(250);
+    const folded = await cdp.eval(`(() => { const c = document.querySelectorAll(${JSON.stringify(top)})[1]; return { display: getComputedStyle(c.querySelector(":scope > .nested-editor-body")).display, dragging: !!c.querySelector(':scope > .nested-editor-head .order-drag-handle[data-dragging="true"]') }; })()`);
+    if (!folded.dragging) reasons.push("(g) the drag did not start");
+    if (folded.display !== "none") reasons.push(`(g) the dragged card body is "${folded.display}" during the drag, expected none`);
+    const third = await cdp.eval(`(() => { const r = document.querySelectorAll(${JSON.stringify(top)})[2].getBoundingClientRect(); return { top: r.top, height: r.height }; })()`);
+    const to = { x: grab.x, y: third.top + third.height * 0.8 };
+    for (let step = 1; step <= 6; step += 1) await at("mouseMoved", grab.x, grab.y + ((to.y - grab.y) * step) / 6, { buttons: 1 });
+    await at("mouseReleased", to.x, to.y, { buttons: 0, clickCount: 1 });
+    await sleep(300);
+    const order = await titles();
+    if (order[2] !== "Раздел 2") reasons.push(`(g) the dragged section is not third: ${JSON.stringify(order.map((t) => t?.slice(0, 12)))}`);
+    // (f) a section made with the add button opens expanded with its title field in view
+    await clickText(cdp, ".flat-editor-form > button", "+ ДОБАВИТЬ РАЗДЕЛ");
+    await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(top)}).length === 7`, 2000);
+    const added = await cdp.eval(`(() => { const cards = document.querySelectorAll(${JSON.stringify(top)}); const c = cards[cards.length - 1]; const input = c?.querySelector(":scope > .nested-editor-body input"); const r = input?.getBoundingClientRect(); return { count: cards.length, expanded: c?.querySelector(":scope > .nested-editor-head .nested-editor-toggle")?.getAttribute("aria-expanded"), visible: !!r && r.width > 0 && r.height > 0 }; })()`);
+    if (added.count !== 7) reasons.push(`(f) ${added.count} section cards after the add, expected 7`);
+    if (added.expanded !== "true") reasons.push(`(f) the new section is aria-expanded ${added.expanded}`);
+    if (!added.visible) reasons.push("(f) the new section's title input is not visible");
+    // (i) a 150-character virus name stays inside the aside as one line with «…»
+    serve(sectionsFixture(), 21);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await waitFor(cdp, `document.querySelectorAll(".editor-record-row").length === 6`, 3000);
+    const v = await cdp.eval(`(() => { const s = [...document.querySelectorAll(".editor-record-list strong")].find((e) => e.textContent === ${JSON.stringify(LONG_VIRUS)}); if (!s) return null; const a = document.querySelector(".editor-record-list").getBoundingClientRect(); return { over: s.scrollWidth > s.clientWidth, title: s.title, right: s.getBoundingClientRect().right, asideRight: a.right }; })()`);
+    if (!v) reasons.push("(i) the long virus is not listed");
+    else {
+      if (!v.over) reasons.push("(i) the long virus name is not cut");
+      if (v.title !== LONG_VIRUS) reasons.push("(i) the virus name has no full-name title");
+      if (v.right > v.asideRight + 0.5) reasons.push(`(i) the name (${v.right}) sticks out of the aside (${v.asideRight})`);
+    }
+    // (m) Сводка cards are folded and keep «Удалить» in sight
+    await clickText(cdp, ".editor-tabs button", "Сводка");
+    await waitFor(cdp, `document.querySelectorAll("[data-broadcast-id]").length === 6`, 3000);
+    const m = await cdp.eval(`(() => { const cards = [...document.querySelectorAll("[data-broadcast-id]")]; const del = cards[0]?.querySelector(":scope > .nested-editor-head .nested-editor-actions button")?.getBoundingClientRect(); return { count: cards.length, folded: cards.every((c) => c.querySelector(":scope > .nested-editor-body").hidden), delVisible: !!del && del.width > 0 }; })()`);
+    if (m.count !== 6 || !m.folded) reasons.push(`(m) Сводка cards: ${m.count}, all folded ${m.folded}`);
+    if (!m.delVisible) reasons.push("(m) «Удалить» of the first card is not visible");
+    // (k) no sections: the empty line names the real button
+    serve(sectionsFixture({ sections: 0 }), 22);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    const empty = await cdp.eval(`(() => { const e = document.querySelector(".flat-editor-form .editor-empty"); return e ? e.textContent : null; })()`);
+    if (!empty || !empty.includes("Разделов пока нет") || !empty.includes("+ ДОБАВИТЬ РАЗДЕЛ")) reasons.push(`(k) empty line: ${JSON.stringify(empty)}`);
   },
   async panel(cdp) {
     serve(editorFixture(), 1);
