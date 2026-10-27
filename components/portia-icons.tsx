@@ -72,8 +72,9 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
     <circle className="icon-settings-knob icon-settings-knob-c" cx="17" cy="17" r="2" />
   </>,
   promotion: <>
-    <path d="M5 19.5h14" />
-    <path d="M7 16.5h10M8.5 13.5h7" opacity=".65" />
+    <path className="icon-promotion-base" d="M5 19.5h14" />
+    <path className="icon-promotion-level icon-promotion-level-low" d="M7 16.5h10" opacity=".65" />
+    <path className="icon-promotion-level icon-promotion-level-high" d="M8.5 13.5h7" opacity=".65" />
     <path className="icon-promotion-arrow" d="M12 13V4.5m0 0L8.8 7.7M12 4.5l3.2 3.2" />
   </>,
   charter: <>

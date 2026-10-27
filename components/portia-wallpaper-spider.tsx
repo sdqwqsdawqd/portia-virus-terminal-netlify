@@ -20,25 +20,25 @@ const legOrigin = (leg: LegId): CSSProperties => ({ transformOrigin: `${LEG_PIVO
 
 // Gait (D-06): alternating tetrapods. Group A (first and third legs of one side with second and fourth of the other)
 // plants while group B swings, then they swap. Each leg sweeps back slowly with its foot down (stance), then
-// tucks and snaps forward with a little overshoot (swing), which reads as springy rather than a stiff wiggle.
+// tucks and returns without a sharp snap. The background motion stays deliberate and quiet.
 const GAIT_A = ["L1", "R2", "L3", "R4"];
 // Positive rotate sweeps a left leg toward the abdomen (artwork top), a right leg toward the head, so the right side is mirrored.
 const legBack = (leg: string) => (leg.startsWith("R") ? -1 : 1);
 const legGroup = (leg: string) => (GAIT_A.includes(leg) ? 0 : 1);
 // Legs of one group do not land as one rigid block: each pair trails the one in front a little.
 const legLag = (leg: string) => (4 - Number(leg[1])) * 0.035;
-const LEG_SWING = 14; // degrees either side of neutral
-const LEG_TUCK = 0.12; // a swinging leg shortens by up to this much, as if lifted and bent
-const BODY_BOB = 0.025; // the body swells slightly at every footfall
-const STEP_CYCLE = 0.7; // seconds per full step cycle
-const GAIT_EASE = 0.3; // legs reach neutral this fast after a stop
-const TURN_TIME = 0.1; // body turn time constant: about 95% of a turn in 300 ms
-const FIRST_WALK = 3.0; // 1.8 s fade delay + 0.6 s fade + about 0.6 s: something moves within 3 s
+const LEG_SWING = 7; // restrained sweep: the spider walks without flailing
+const LEG_TUCK = 0.045; // a small lift keeps the feet readable without shrinking the legs
+const BODY_BOB = 0.006; // nearly still abdomen; no conspicuous pulsing in the background
+const STEP_CYCLE = 1.05; // slower, measured gait
+const GAIT_EASE = 0.45; // legs settle softly after a stop
+const TURN_TIME = 0.22; // smooth directional changes instead of abrupt pivots
+const FIRST_WALK = 4.5; // let the desktop settle before the first quiet walk
 const MAX_DT = 0.05; // a slow frame never makes a jump
 
 // Waves (D-05): only footfalls make waves, one pair of pulses each time a leg group plants; at most 8 alive.
 const PULSE_SLOTS = 8;
-const STEP_PEAK = 0.6;
+const STEP_PEAK = 0.34;
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
@@ -130,11 +130,11 @@ export function WallpaperSpider() {
           previous = path[path.length - 2];
           node = path[path.length - 1];
           path = null;
-          rest = 3 + rand() * 3;
+          rest = 6 + rand() * 4;
         }
       } else if ((rest -= dt) <= 0) {
         const next = planWalk(node, previous, visible, rand);
-        if (next.length > 1) { path = next; walked = 0; } else rest = 3 + rand() * 3;
+        if (next.length > 1) { path = next; walked = 0; } else rest = 6 + rand() * 4;
       }
       drawPulses();
       const walking = path !== null;

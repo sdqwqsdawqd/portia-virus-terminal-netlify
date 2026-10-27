@@ -143,6 +143,16 @@ test("the five refreshed shortcut icons animate semantic parts only in full moti
   for (const kept of ["icon-hop", "icon-lift", "icon-stamp", "icon-write-16", "icon-lid"]) assert.ok(styles.includes(`@keyframes ${kept}`), kept);
 });
 
+test("promotion shortcut builds momentum through its levels before the arrow launches", () => {
+  for (const part of ["icon-promotion-base", "icon-promotion-level-low", "icon-promotion-level-high", "icon-promotion-arrow"]) {
+    assert.ok(icons.includes(part), `missing semantic promotion part ${part}`);
+    const animationLine = styles.split("\n").find((line) => line.includes(`.${part}`) && line.includes("animation:")) ?? "";
+    assert.ok(animationLine.startsWith('  html[data-motion="full"]'), `${part} is not gated by full motion`);
+  }
+  assert.ok(styles.includes("@keyframes icon-promotion-launch"));
+  assert.ok(!styles.includes("@keyframes icon-promotion-rise"));
+});
+
 test("guide sections start folded and the compact back control does not cover card content", () => {
   assert.ok(source.includes('const guideCollapsedStorageKey = "portia-guide-collapsed-v2"'));
   assert.ok(source.includes("const initialCollapsed = useRef(sections.map((section) => section.id))"));

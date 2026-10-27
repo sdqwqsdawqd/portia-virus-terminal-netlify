@@ -1569,6 +1569,11 @@ html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg > * { 
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] .icon-settings-knob-a { animation: icon-settings-a 540ms var(--ease-out); }
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] .icon-settings-knob-b { animation: icon-settings-b 540ms 45ms var(--ease-out) backwards; }
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] .icon-settings-knob-c { animation: icon-settings-c 540ms 90ms var(--ease-out) backwards; }
+  /* Promotion: the foundation locks in, both levels rise, then the arrow clears them decisively. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="promotion"] .icon-promotion-base { animation: icon-promotion-base 520ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="promotion"] .icon-promotion-level-low { animation: icon-promotion-level 520ms 35ms var(--ease-out) backwards; }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="promotion"] .icon-promotion-level-high { animation: icon-promotion-level 520ms 80ms var(--ease-out) backwards; }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="promotion"] .icon-promotion-arrow { animation: icon-promotion-launch 520ms 105ms cubic-bezier(.2,.85,.25,1) backwards; }
   /* Charter: the clip lifts, the seal stamps down. */
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="charter"] svg > :nth-child(2) { animation: icon-lift 480ms var(--ease-out); }
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="charter"] svg > :nth-child(4) { animation: icon-stamp 480ms 140ms var(--ease-out) backwards; }
@@ -1597,6 +1602,9 @@ html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg > * { 
 @keyframes icon-settings-a { 42% { translate: -2.2px 0; } 72% { translate: .25px 0; } }
 @keyframes icon-settings-b { 42% { translate: 2.6px 0; } 72% { translate: -.25px 0; } }
 @keyframes icon-settings-c { 42% { translate: -2.8px 0; } 72% { translate: .3px 0; } }
+@keyframes icon-promotion-base { 35% { scale: 1.12 1; opacity: 1; } 70% { scale: .98 1; } }
+@keyframes icon-promotion-level { from { translate: 0 2px; opacity: .12; } 55% { translate: 0 -.45px; opacity: .9; } }
+@keyframes icon-promotion-launch { 0% { translate: 0 2.2px; opacity: .35; } 48% { translate: 0 -2.8px; opacity: 1; } 72% { translate: 0 .35px; } }
 @keyframes icon-write-10 { from { stroke-dashoffset: 10; } }
 @keyframes icon-write-16 { from { stroke-dashoffset: 16; } }
 @keyframes icon-lift { 40% { translate: 0 -2.2px; } }
@@ -1812,10 +1820,7 @@ html[data-motion="reduce"] :is(.boot-core > .portia-mark, .boot-thread) { animat
 .promotion-history li > span { color: var(--teal); font-size: 10px; letter-spacing: .05em; }
 .promotion-history time { color: oklch(.58 calc(.023 * var(--accent-chroma)) var(--accent-hue)); font: 400 10px var(--mono); }
 html[data-motion="full"] .promotion-card { animation: promotion-card-enter 160ms ease-out both; }
-html[data-motion="full"] .desktop-icon:hover [data-icon="promotion"] .icon-promotion-arrow,
-html[data-motion="full"] .desktop-icon:focus-visible [data-icon="promotion"] .icon-promotion-arrow { animation: icon-promotion-rise 480ms cubic-bezier(.2,.8,.2,1); }
 @keyframes promotion-card-enter { from { opacity: 0; transform: translateY(4px); } }
-@keyframes icon-promotion-rise { 50% { transform: translateY(-1.5px); } }
 
 @media (max-width: 520px) {
   .promotion-app { height: calc(100% - 42px); }

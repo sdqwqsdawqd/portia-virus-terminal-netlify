@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { REST_NODE, createPulsePool, edgesAt, emitPulse, legPose, planWalk, pointOnEdge, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
 
 const near = (a: Point, b: Point, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
@@ -18,6 +19,15 @@ const distanceToEdge = (point: Point, index: number) => {
   return best;
 };
 const edgeBetween = (u: number, v: number) => webEdges.findIndex((edge) => (edge.a === u && edge.b === v) || (edge.a === v && edge.b === u));
+
+test("the wallpaper spider uses a restrained gait with long rests", () => {
+  const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
+  assert.match(source, /const LEG_SWING = 7;/);
+  assert.match(source, /const BODY_BOB = 0\.006;/);
+  assert.match(source, /const STEP_CYCLE = 1\.05;/);
+  assert.match(source, /rest = 6 \+ rand\(\) \* 4/g);
+  assert.ok(source.includes('attributeFilter: ["data-motion", "data-spider"]'));
+});
 
 test("web geometry has 270 crossings and 522 threads between them", () => {
   assert.equal(webGeometry.nodes.length, 270);
