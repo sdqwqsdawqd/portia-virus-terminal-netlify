@@ -102,13 +102,23 @@ test("the editor imports rich-text-style once and ships no joke or empty labels 
 
 test("every desktop shortcut owns a default position and saved positions override only itself", () => {
   const layout = /const defaultShortcutLayout:[\s\S]*?\n};/.exec(source)?.[0] ?? "";
-  for (const id of ["search", "archive", "employees", "broadcasts", "info", "guide", "settings", "charter", "sheet", "trash"]) {
+  for (const id of ["search", "archive", "employees", "broadcasts", "info", "guide", "promotion", "settings", "charter", "sheet", "trash"]) {
     assert.match(layout, new RegExp(`\\n  ${id}: shortcutLayout\\(`), `missing independent layout for ${id}`);
   }
   assert.ok(source.includes("position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId]"));
   assert.ok(source.includes('"--shortcut-left": `max(0px, min(${position.x}px, calc(100% - 100px)))`'));
   assert.doesNotMatch(styles, /\.desktop-icon\[data-shortcut=/);
   assert.ok(source.includes('const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3"'));
+});
+
+test("promotion is a standalone desktop application with its own window geometry", () => {
+  assert.match(source, /type AppId = [^;]*"promotion"/);
+  assert.match(source, /promotion: \{ label: "Повышение", path: "PORTIA:\/\/PROMOTION", icon: "promotion" \}/);
+  assert.match(source, /promotion: \[760, 620\]/);
+  assert.match(source, /promotion: \{ width: 620, height: 480 \}/);
+  assert.ok(source.includes('<DesktopIcon app="promotion"'));
+  assert.ok(source.includes('<AppWindow app="promotion"'));
+  assert.ok(source.includes("visible={activeApp === \"promotion\" && !windows.promotion.minimized}"));
 });
 
 test("shortcut motion is uniform, opt-in, and the guide has its own animation", () => {
