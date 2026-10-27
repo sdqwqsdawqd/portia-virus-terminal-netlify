@@ -51,12 +51,12 @@ function expectedNextTitle(titleId: PromotionTitleId) {
 
 export function promotionRosterFromRows(rows: string[][]): PromotionRosterEntry[] {
   const headers = rows[0]?.map((value) => value.trim().replace(/^\uFEFF/, "")) ?? [];
-  if (headers.length !== expectedHeaders.length || expectedHeaders.some((header, index) => headers[index] !== header)) {
-    throw new Error("The promotion sheet headers have changed.");
-  }
+  const hasHeaders = headers.length === expectedHeaders.length
+    && expectedHeaders.every((header, index) => headers[index] === header);
+  const dataRows = hasHeaders ? rows.slice(1) : rows;
 
   const seen = new Set<string>();
-  return rows.slice(1, 26).flatMap((row) => {
+  return dataRows.slice(0, 25).flatMap((row) => {
     const nickname = cleanCell(row[0], 64);
     if (!nickname) return [];
     const nicknameKey = normalizedNickname(nickname);

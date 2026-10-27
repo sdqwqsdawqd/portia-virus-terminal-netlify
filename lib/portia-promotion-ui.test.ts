@@ -8,6 +8,11 @@ const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8
 test("participant gate explains binding and keeps the nickname in session state only", () => {
   assert.ok(source.includes("function PromotionIdentityGate"));
   assert.ok(source.includes("ПРОВЕРИТЬ ПОВЫШЕНИЕ"));
+  assert.ok(source.includes("PORTIA // ПОВЫШЕНИЕ"));
+  assert.ok(source.includes("Ник Roblox, указанный в таблице"));
+  assert.ok(source.includes('placeholder="Введите ник Roblox из таблицы"'));
+  assert.ok(!source.includes("КАДРОВЫЙ КОНТУР"));
+  assert.ok(!source.includes("Portia_User"));
   assert.ok(source.includes("ПРОВЕРИТЬ НИК"));
   assert.ok(source.includes("Первая заявка закрепит этот ник за устройством. Сменить его сможет проверяющий."));
   assert.ok(source.includes('autoComplete="off"'));

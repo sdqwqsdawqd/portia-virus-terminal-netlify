@@ -26,6 +26,15 @@ test("promotion sheet parses quoted CSV and preserves display spelling", async (
   assert.ok(request?.init?.signal instanceof AbortSignal);
 });
 
+test("the live A61:E85 range may start directly with its first participant", async () => {
+  const result = await loadPromotionRoster((async () => new Response(
+    'sadfg3214,Ассистент,Научный сотрудник,"Можно повысить ✅",17.09.2026\n"",N/A,N/A,"",""',
+  )) as typeof fetch);
+  assert.equal(result.status, "ok");
+  if (result.status !== "ok") return;
+  assert.deepEqual(result.roster.map((entry) => entry.nickname), ["sadfg3214"]);
+});
+
 test("promotion sheet treats changed headers and invalid dates as unavailable", async () => {
   for (const csv of [
     `Ник,Звание,След. звание,Анти-Спидран,Дата\nUser,Академик,Стажёр,Ожидание,01.10.2026`,
