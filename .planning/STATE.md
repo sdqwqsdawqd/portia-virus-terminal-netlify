@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Закрытие замечаний
-status: Awaiting next milestone
-stopped_at: Completed Phase PORTIA-13
-last_updated: "2026-10-27T04:45:28.390Z"
-last_activity: 2026-10-27 — Milestone v1.1 completed and archived
+milestone: v1.2
+milestone_name: Повышение
+status: planning
+last_updated: "2026-10-27T09:32:05.937Z"
+last_activity: 2026-10-27
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 49
-  completed_plans: 49
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-10-27)
 
 ## Current Position
 
-Phase: Milestone v1.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-10-27 — Milestone v1.1 completed and archived
+Status: Defining requirements
+Last activity: 2026-10-27 — Milestone v1.2 started
 
 ## Performance Metrics
 
