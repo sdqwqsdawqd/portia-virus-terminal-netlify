@@ -6,9 +6,9 @@ current_phase: 13
 current_phase_name: Приложение «Справочник»
 status: executing
 stopped_at: Completed PORTIA-13-04-PLAN.md
-last_updated: "2026-10-27T04:16:02.477Z"
+last_updated: "2026-10-27T04:23:14.997Z"
 last_activity: 2026-10-27
-last_activity_desc: "Completed quick task 261027-cu4: added spider visibility control and opaque body"
+last_activity_desc: "Completed quick task 261027-d0k: folded guide sections and compact back control"
 state_head: c4300024211af09a058bff8fa2503b69fdefe85c
 progress:
   total_phases: 8
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-10-26)
 Phase: PORTIA-13 (Приложение «Справочник») — EXECUTING
 Plan: 5 of 5
 Status: Executing Phase PORTIA-13
-Last activity: 2026-10-27 — Completed quick task 261027-cu4: added spider visibility control and opaque body
+Last activity: 2026-10-27 — Completed quick task 261027-d0k: folded guide sections and compact back control
 
 Progress: [█████████░] 88%
 
@@ -160,6 +160,7 @@ None.
 | 261027-cie | Независимая раскладка и единые анимации ярлыков рабочего стола | 2026-10-27 | 0b5f0a9 | [261027-cie-desktop-shortcut-animation](./quick/261027-cie-desktop-shortcut-animation/) |
 | 261027-coj | Качественные микровзаимодействия пяти ярлыков рабочего стола | 2026-10-27 | b9d7db1 | [261027-coj-refine-shortcut-animations](./quick/261027-coj-refine-shortcut-animations/) |
 | 261027-cu4 | Отдельное отключение паука и непрозрачное брюшко | 2026-10-27 | 267721b | [261027-cu4-spider-visibility-setting-and-opaque-abd](./quick/261027-cu4-spider-visibility-setting-and-opaque-abd/) |
+| 261027-d0k | Свёрнутые разделы и компактная кнопка возврата в справочнике | 2026-10-27 | d6909c6 | [261027-d0k-fix-guide-cards-auto-opening-and-detail-](./quick/261027-d0k-fix-guide-cards-auto-opening-and-detail-/) |
 
 ## Deferred Items
 
