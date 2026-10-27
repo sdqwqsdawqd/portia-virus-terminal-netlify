@@ -777,7 +777,20 @@ begin
   end if;
   if binding_state = 'denied' then return jsonb_build_object('binding', binding_state); end if;
 
-  select jsonb_build_object('status', r.status, 'targetTitleId', r.target_title_id),
+  select jsonb_build_object(
+      'status', r.status,
+      'targetTitleId', r.target_title_id,
+      'tasks', case when r.status = 'assigned' then coalesce((
+        select jsonb_agg(jsonb_build_object(
+          'id', ai.id,
+          'text', ai.snapshot_text,
+          'sortOrder', ai.sort_order
+        ) order by ai.sort_order)
+        from public.portia_promo_assignments assignment
+        join public.portia_promo_assignment_items ai on ai.assignment_id = assignment.id
+        where assignment.request_id = r.id
+      ), '[]'::jsonb) else '[]'::jsonb end
+    ),
     case when r.status = 'awaiting-sheet-change' then r.title_id else null end
     into ordinary_state, awaiting_title
     from public.portia_promo_requests r

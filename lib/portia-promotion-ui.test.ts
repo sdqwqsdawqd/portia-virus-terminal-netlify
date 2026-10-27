@@ -50,8 +50,8 @@ test("participant states cover cooldown, sheet wait, special task and compact hi
 
 test("promotion window is responsive and motion respects the desktop preference", () => {
   assert.match(styles, /\.promotion-app\s*\{/);
-  assert.match(styles, /\.promotion-action[^{]*\{[^}]*min-height:\s*4[04]px/s);
-  assert.match(styles, /html\[data-motion="full"\][^{]*\.promotion-card/s);
-  assert.match(styles, /@media \(max-width:\s*520px\)[\s\S]*\.promotion-app/s);
-  assert.match(styles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.promotion-card/s);
+  assert.match(styles, /\.promotion-action[^{]*\{[^}]*min-height:\s*4[04]px/);
+  assert.match(styles, /html\[data-motion="full"\][^{]*\.promotion-card/);
+  assert.match(styles, /@media \(max-width:\s*520px\)[\s\S]*\.promotion-app/);
+  assert.match(styles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.promotion-card/);
 });

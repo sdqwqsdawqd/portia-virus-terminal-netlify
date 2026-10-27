@@ -4,6 +4,7 @@ import test from "node:test";
 import type { PromotionRosterResult } from "./portia-promotion-sheet.ts";
 import {
   promotionStatus,
+  promotionProjectionFromRpc,
   submitPromotionRequest,
   type PromotionApiDependencies,
   type PromotionWorkflowProjection,
@@ -65,6 +66,24 @@ test("a nickname lookup never creates a binding cookie and returns only a safe p
   for (const forbidden of ["answerKey", "reviewerId", "internalNote", "riskBucket", "tokenHash", "ipBucket"]) {
     assert.ok(!serialized.includes(forbidden), forbidden);
   }
+});
+
+test("public projection admits only ordered immutable assignment text", () => {
+  const projection = promotionProjectionFromRpc({
+    binding: "allowed",
+    ordinary: { status: "assigned", targetTitleId: "trainee", tasks: [
+      { id: "task-2", text: "Второе", sortOrder: 2, answerKey: "private" },
+      { id: "bad", text: 42, sortOrder: 1 },
+      { id: "task-1", text: "Первое", sort_order: 1 },
+    ] },
+    qualification: null,
+    results: [],
+  });
+  assert.deepEqual(projection?.ordinary?.tasks, [
+    { id: "task-2", text: "Второе", sortOrder: 2 },
+    { id: "task-1", text: "Первое", sortOrder: 1 },
+  ]);
+  assert.ok(!JSON.stringify(projection).includes("answerKey"));
 });
 
 test("a bound-device conflict is neutral and progressive without revealing the other nickname", async () => {

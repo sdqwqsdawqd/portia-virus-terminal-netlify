@@ -17,6 +17,7 @@ export type PromotionPublicActive = {
   status: string;
   targetTitleId: PromotionTitleId | null;
   availableAt?: string;
+  tasks?: { id: string; text: string; sortOrder: number }[];
 };
 
 export type PromotionWorkflowProjection = {
@@ -89,10 +90,20 @@ function activeFrom(value: unknown): PromotionPublicActive | null {
   const row = value as Record<string, unknown>;
   if (typeof row.status !== "string" || !activeStatuses.has(row.status)) return null;
   const availableAt = safeDate(row.availableAt ?? row.available_at);
+  const tasks = Array.isArray(row.tasks) ? row.tasks.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const task = item as Record<string, unknown>;
+    const id = task.id;
+    const text = task.text;
+    const sortOrder = task.sortOrder ?? task.sort_order;
+    if (typeof id !== "string" || typeof text !== "string" || !Number.isInteger(sortOrder) || (sortOrder as number) < 1) return [];
+    return [{ id, text, sortOrder: sortOrder as number }];
+  }).slice(0, 50) : [];
   return {
     status: row.status,
     targetTitleId: titleId(row.targetTitleId ?? row.target_title_id),
     ...(availableAt ? { availableAt } : {}),
+    ...(tasks.length ? { tasks } : {}),
   };
 }
 

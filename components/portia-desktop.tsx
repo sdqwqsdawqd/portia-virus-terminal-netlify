@@ -13,13 +13,14 @@ import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type Window
 import { acceptFetchedContent } from "@/lib/content-sync";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
+import { PortiaPromotion } from "@/components/portia-promotion";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
   { ssr: false, loading: () => <div className="editor-empty">Загрузка редактора…</div> },
 );
 
-type AppId = "archive" | "employees" | "search" | "info" | "guide" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor";
+type AppId = "archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor";
 
 // Department documents that live elsewhere, shown inside PORTIA as app windows.
 const embeddedApps = {
@@ -44,7 +45,7 @@ const WINDOW_FADE_OUT_MS = 120;
 const contentSyncMs = 10_000;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string; spider: string; customAccent: string };
-type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "settings" | "charter" | "sheet" | "trash";
+type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "promotion" | "settings" | "charter" | "sheet" | "trash";
 type ShortcutPosition = { x: number; y: number };
 type ShortcutLayoutStyle = React.CSSProperties & {
   "--shortcut-left": string;
@@ -63,6 +64,7 @@ const defaultShortcutLayout: Record<DesktopShortcutId, ShortcutLayoutStyle> = {
   employees: shortcutLayout({ left: 14, top: 436 }),
   settings: shortcutLayout({ left: 124, top: 20 }),
   guide: shortcutLayout({ left: 124, top: 124 }),
+  promotion: shortcutLayout({ left: 124, top: 228 }),
   charter: shortcutLayout({ left: 14, bottom: 18 }),
   sheet: shortcutLayout({ left: 124, bottom: 18 }),
   trash: shortcutLayout({ right: 14, top: 20 }),
@@ -102,6 +104,7 @@ const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName
   search: { label: "Глобальный поиск", path: "PORTIA://GLOBAL_SEARCH", icon: "search" },
   info: { label: "Информация", path: "PORTIA://INFORMATION", icon: "info" },
   guide: { label: "Справочник", path: "PORTIA://GUIDE", icon: "guide" },
+  promotion: { label: "Повышение", path: "PORTIA://PROMOTION", icon: "promotion" },
   settings: { label: "Настройки", path: "PORTIA://DESKTOP_SETTINGS", icon: "settings" },
   broadcasts: { label: "Сводка", path: "PORTIA://NEWS", icon: "broadcasts" },
   trash: { label: "Корзина", path: "PORTIA://RECYCLE_BIN", icon: "trash" },
@@ -116,6 +119,7 @@ const initialWindows: Record<AppId, WindowState> = {
   search: { open: false, minimized: false, maximized: false, z: 10 },
   info: { open: false, minimized: false, maximized: false, z: 10 },
   guide: { open: false, minimized: false, maximized: false, z: 10 },
+  promotion: { open: false, minimized: false, maximized: false, z: 10 },
   settings: { open: false, minimized: false, maximized: false, z: 10 },
   broadcasts: { open: false, minimized: false, maximized: false, z: 10 },
   trash: { open: false, minimized: false, maximized: false, z: 10 },
@@ -134,6 +138,7 @@ function createWindowGeometry(appId: AppId, cascadeIndex: number): WindowGeometr
     search: [760, 590],
     info: [820, 650],
     guide: [820, 650],
+    promotion: [760, 620],
     settings: [820, 650],
     broadcasts: [820, 650],
     trash: [980, 680],
@@ -162,6 +167,7 @@ const windowMinimums: Record<AppId, { width: number; height: number }> = {
   search: { width: 520, height: 420 },
   info: { width: 560, height: 420 },
   guide: { width: 560, height: 420 },
+  promotion: { width: 620, height: 480 },
   settings: { width: 520, height: 420 },
   broadcasts: { width: 520, height: 420 },
   trash: { width: 640, height: 440 },
@@ -642,7 +648,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     try {
       const saved = window.localStorage.getItem(shortcutPositionsStorageKey);
       const parsed = saved ? JSON.parse(saved) as Record<string, ShortcutPosition> : {};
-      const allowed = new Set<DesktopShortcutId>(["search", "archive", "employees", "broadcasts", "info", "guide", "settings", "charter", "sheet", "trash"]);
+      const allowed = new Set<DesktopShortcutId>(["search", "archive", "employees", "broadcasts", "info", "guide", "promotion", "settings", "charter", "sheet", "trash"]);
       const restored = Object.fromEntries(Object.entries(parsed).filter(([key, value]) => allowed.has(key as DesktopShortcutId) && Number.isFinite(value?.x) && Number.isFinite(value?.y))) as Partial<Record<DesktopShortcutId, ShortcutPosition>>;
       restoreTimer = window.setTimeout(() => {
         setShortcutPositions(restored);
@@ -1312,6 +1318,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <DesktopIcon app="broadcasts" onOpen={openApp} position={shortcutPositions.broadcasts} onMove={moveDesktopShortcut} badge={broadcastUnread} />
             <DesktopIcon app="info" onOpen={openApp} position={shortcutPositions.info} onMove={moveDesktopShortcut} />
             <DesktopIcon app="guide" onOpen={openApp} position={shortcutPositions.guide} onMove={moveDesktopShortcut} />
+            <DesktopIcon app="promotion" onOpen={openApp} position={shortcutPositions.promotion} onMove={moveDesktopShortcut} />
             <DesktopIcon app="settings" onOpen={openApp} position={shortcutPositions.settings} onMove={moveDesktopShortcut} />
             <DesktopIcon app="charter" onOpen={openApp} position={shortcutPositions.charter} onMove={moveDesktopShortcut} />
             <DesktopIcon app="sheet" onOpen={openApp} position={shortcutPositions.sheet} onMove={moveDesktopShortcut} />
@@ -1427,6 +1434,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             {!contentReady ? <LoadingState label="Загрузка справочника…" /> : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={setGuideCardId} />}
           </AppWindow>
 
+          <AppWindow app="promotion" state={windows.promotion} active={activeApp === "promotion"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window promotion-window" meta="КАДРОВЫЙ КОНТУР">
+            <PortiaPromotion visible={activeApp === "promotion" && !windows.promotion.minimized} />
+          </AppWindow>
+
           <AppWindow app="broadcasts" state={windows.broadcasts} active={activeApp === "broadcasts"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window broadcasts-window" meta="КАНАЛ СТАНЦИИ">
             <div className="broadcasts-app">
               <header><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>
@@ -1536,6 +1547,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <button type="button" onClick={() => openApp("search")}><span className="start-panel-icon" data-icon="search"><PortiaIcon name="search" /></span>Глобальный поиск</button>
           <button type="button" onClick={() => openApp("archive")}><span className="start-panel-icon" data-icon="virus"><PortiaIcon name="virus" /></span>База вирусов</button>
           <button type="button" onClick={() => openApp("employees")}><span className="start-panel-icon" data-icon="employees"><PortiaIcon name="employees" /></span>Сотрудники</button>
+          <button type="button" onClick={() => openApp("promotion")}><span className="start-panel-icon" data-icon="promotion"><PortiaIcon name="promotion" /></span>Повышение</button>
           <button type="button" onClick={() => openApp("settings")}><span className="start-panel-icon" data-icon="settings"><PortiaIcon name="settings" /></span>Настройки</button>
         </div>}
 

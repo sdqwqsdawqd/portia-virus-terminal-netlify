@@ -2,7 +2,7 @@ import type { SVGProps } from "react";
 
 export type PortiaIconName =
   | "search" | "virus" | "employees" | "broadcasts" | "info" | "guide"
-  | "settings" | "charter" | "sheet" | "trash" | "editor"
+  | "settings" | "promotion" | "charter" | "sheet" | "trash" | "editor"
   | "class-hephaestus" | "class-proteus" | "class-apeiron"
   | "class-nomos" | "class-theseus" | "class-abraxas"
   | "class-warning" | "class-risk" | "class-esnov"
@@ -70,6 +70,11 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
     <circle className="icon-settings-knob icon-settings-knob-a" cx="15" cy="7" r="2" />
     <circle className="icon-settings-knob icon-settings-knob-b" cx="9" cy="12" r="2" />
     <circle className="icon-settings-knob icon-settings-knob-c" cx="17" cy="17" r="2" />
+  </>,
+  promotion: <>
+    <path d="M5 19.5h14" />
+    <path d="M7 16.5h10M8.5 13.5h7" opacity=".65" />
+    <path className="icon-promotion-arrow" d="M12 13V4.5m0 0L8.8 7.7M12 4.5l3.2 3.2" />
   </>,
   charter: <>
     <path d="M7 4.5H5.5v16h13v-16H17" />
