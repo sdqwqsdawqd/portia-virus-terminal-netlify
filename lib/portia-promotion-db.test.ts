@@ -52,6 +52,8 @@ test("promotion SQL keeps secrets private and bounds untrusted text", () => {
 const rpcNames = [
   "portia_promo_bind_device",
   "portia_promo_reset_device",
+  "portia_promo_reviewer_state",
+  "portia_promo_approve_assignment",
   "portia_promo_register_attempt",
   "portia_promo_submit_request",
   "portia_promo_public_status",
@@ -83,7 +85,7 @@ test("promotion SQL RPCs are security-definer functions with pinned search paths
 });
 
 test("promotion SQL reviewer transitions require promo and claim conditionally", () => {
-  const reviewerRpcs = ["claim_request", "release_request", "reject_request", "confirm_assignment", "confirm_test", "grade_answer", "finalize_attempt", "override_failure", "release_retake", "close"];
+  const reviewerRpcs = ["reset_device", "reviewer_state", "approve_assignment", "claim_request", "release_request", "reject_request", "confirm_assignment", "confirm_test", "grade_answer", "finalize_attempt", "override_failure", "release_retake", "close"];
   for (const suffix of reviewerRpcs) {
     const start = setup.toLowerCase().indexOf(`create or replace function public.portia_promo_${suffix}`);
     const body = setup.slice(start, setup.indexOf("$$;", start) + 3);

@@ -278,11 +278,55 @@ security definer
 set search_path = ''
 as $$
 begin
-  if not public.portia_is_owner() then raise exception 'forbidden'; end if;
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
   update public.portia_promo_device_bindings set reset_at = now()
     where nickname_key = lower(trim(p_nickname_key)) and reset_at is null;
   insert into public.portia_promo_audit_events (nickname_key, actor_id, event_type)
   values (lower(trim(p_nickname_key)), auth.uid(), 'device-reset');
+  return found;
+end $$;
+
+create or replace function public.portia_promo_reviewer_state()
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare ordinary_rows jsonb; qualification_rows jsonb;
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'requestId', r.id, 'nickname', r.nickname, 'nicknameKey', r.nickname_key,
+    'titleId', r.title_id, 'targetTitleId', r.target_title_id, 'status', r.status,
+    'claimed', r.reviewer_id is not null, 'assignedToMe', r.reviewer_id = auth.uid(), 'createdAt', r.created_at
+  ) order by r.created_at), '[]'::jsonb) into ordinary_rows
+  from public.portia_promo_requests r;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'requestId', q.id, 'nickname', q.nickname, 'nicknameKey', q.nickname_key,
+    'titleId', q.title_id, 'targetTitleId', q.transition_id, 'status', q.status,
+    'claimed', q.reviewer_id is not null, 'assignedToMe', q.reviewer_id = auth.uid(), 'createdAt', q.created_at,
+    'attemptId', a.id, 'attemptStatus', a.status, 'retakeAt', a.retake_at, 'technicalFailure', a.technical_failure
+  ) order by q.created_at), '[]'::jsonb) into qualification_rows
+  from public.portia_promo_qualification_requests q
+  left join public.portia_promo_attempts a on a.request_id = q.id;
+  return jsonb_build_object('ordinary', ordinary_rows, 'qualification', qualification_rows, 'serverNow', now());
+end $$;
+
+create or replace function public.portia_promo_approve_assignment(p_request_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  update public.portia_promo_assignments a set status = 'approved', approved_at = now(), updated_at = now()
+  from public.portia_promo_requests r
+  where r.id = p_request_id and a.request_id = r.id and a.status = 'active'
+    and r.status = 'assigned' and r.reviewer_id = auth.uid() and a.reviewer_id = auth.uid();
+  if found then
+    update public.portia_promo_requests set status = 'awaiting-sheet-change', updated_at = now() where id = p_request_id;
+  end if;
   return found;
 end $$;
 
@@ -739,6 +783,8 @@ end $$;
 
 revoke all on function public.portia_promo_bind_device(text, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_reset_device(text) from public, anon, authenticated;
+revoke all on function public.portia_promo_reviewer_state() from public, anon, authenticated;
+revoke all on function public.portia_promo_approve_assignment(uuid) from public, anon, authenticated;
 revoke all on function public.portia_promo_register_attempt(text, text, boolean) from public, anon, authenticated;
 revoke all on function public.portia_promo_submit_request(text, text, text, text, text, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_public_status(text, text, text) from public, anon, authenticated;
@@ -765,6 +811,8 @@ grant execute on function public.portia_promo_start_test(uuid, text) to anon, au
 grant execute on function public.portia_promo_answer_question(uuid, uuid, jsonb, text) to anon, authenticated;
 grant execute on function public.portia_promo_fail_attempt(uuid, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_reset_device(text) to authenticated;
+grant execute on function public.portia_promo_reviewer_state() to authenticated;
+grant execute on function public.portia_promo_approve_assignment(uuid) to authenticated;
 grant execute on function public.portia_promo_claim_request(text, uuid) to authenticated;
 grant execute on function public.portia_promo_release_request(text, uuid, boolean) to authenticated;
 grant execute on function public.portia_promo_reject_request(text, uuid, text) to authenticated;
