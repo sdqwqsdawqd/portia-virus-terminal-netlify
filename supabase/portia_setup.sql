@@ -344,6 +344,223 @@ with check ((select public.portia_can_edit_tab('employees')));
 -- PostgREST picks up the new table without a restart.
 notify pgrst, 'reload schema';
 
+-- Promotion application (Phase 14). Google Sheet remains the authority for current title;
+-- these tables store only workflow state, immutable snapshots and compact history.
+
+create table if not exists public.portia_promo_device_bindings (
+  id uuid primary key default gen_random_uuid(),
+  nickname_key text not null unique check (length(nickname_key) between 1 and 64),
+  token_hash text not null unique check (length(token_hash) between 32 and 128),
+  risk_bucket text not null default '' check (length(risk_bucket) <= 128),
+  bound_at timestamptz not null default now(),
+  reset_at timestamptz
+);
+
+create table if not exists public.portia_promo_attempt_buckets (
+  bucket_key text primary key check (length(bucket_key) between 1 and 160),
+  ip_bucket text not null default '' check (length(ip_bucket) <= 128),
+  failures integer not null default 0 check (failures between 0 and 1000),
+  blocked_until timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.portia_promo_task_banks (
+  id uuid primary key default gen_random_uuid(),
+  target_title_id text not null unique check (length(target_title_id) between 1 and 48),
+  required_count integer not null default 1 check (required_count between 1 and 50),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.portia_promo_task_items (
+  id uuid primary key default gen_random_uuid(),
+  bank_id uuid not null references public.portia_promo_task_banks(id) on delete cascade,
+  task_text text not null check (length(task_text) between 1 and 4000),
+  active boolean not null default true,
+  sort_order integer not null default 0 check (sort_order between 0 and 100000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.portia_promo_requests (
+  id uuid primary key default gen_random_uuid(),
+  nickname text not null check (length(nickname) between 1 and 64),
+  nickname_key text not null check (length(nickname_key) between 1 and 64),
+  title_id text not null check (length(title_id) between 1 and 48),
+  target_title_id text not null check (length(target_title_id) between 1 and 48),
+  status text not null default 'pending' check (status in ('pending', 'claimed', 'assigned', 'awaiting-sheet-change', 'rejected', 'closed')),
+  reviewer_id uuid references auth.users(id),
+  internal_note text not null default '' check (length(internal_note) <= 2000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists portia_promo_one_active_request
+  on public.portia_promo_requests (nickname_key)
+  where status in ('pending', 'claimed', 'assigned', 'awaiting-sheet-change');
+
+create table if not exists public.portia_promo_assignments (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null unique references public.portia_promo_requests(id) on delete cascade,
+  reviewer_id uuid not null references auth.users(id),
+  status text not null default 'active' check (status in ('active', 'approved', 'closed')),
+  issued_at timestamptz not null default now(),
+  approved_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.portia_promo_assignment_items (
+  id uuid primary key default gen_random_uuid(),
+  assignment_id uuid not null references public.portia_promo_assignments(id) on delete cascade,
+  source_item_id uuid references public.portia_promo_task_items(id) on delete set null,
+  snapshot_text text not null check (length(snapshot_text) between 1 and 4000),
+  sort_order integer not null check (sort_order between 0 and 100000),
+  unique (assignment_id, sort_order)
+);
+
+create table if not exists public.portia_promo_qualification_banks (
+  id uuid primary key default gen_random_uuid(),
+  transition_id text not null unique check (length(transition_id) between 1 and 48),
+  single_count integer not null default 0 check (single_count between 0 and 100),
+  multiple_count integer not null default 0 check (multiple_count between 0 and 100),
+  free_text_count integer not null default 0 check (free_text_count between 0 and 100),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.portia_promo_qualification_questions (
+  id uuid primary key default gen_random_uuid(),
+  bank_id uuid not null references public.portia_promo_qualification_banks(id) on delete cascade,
+  question_type text not null check (question_type in ('single', 'multiple', 'free-text')),
+  question_text text not null check (length(question_text) between 1 and 4000),
+  answer_key jsonb not null default '{}'::jsonb check (pg_column_size(answer_key) <= 16384),
+  active boolean not null default true,
+  sort_order integer not null default 0 check (sort_order between 0 and 100000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.portia_promo_qualification_options (
+  id uuid primary key default gen_random_uuid(),
+  question_id uuid not null references public.portia_promo_qualification_questions(id) on delete cascade,
+  option_text text not null check (length(option_text) between 1 and 1000),
+  is_correct boolean not null default false,
+  sort_order integer not null check (sort_order between 0 and 100000),
+  unique (question_id, sort_order)
+);
+
+create table if not exists public.portia_promo_qualification_requests (
+  id uuid primary key default gen_random_uuid(),
+  nickname text not null check (length(nickname) between 1 and 64),
+  nickname_key text not null check (length(nickname_key) between 1 and 64),
+  title_id text not null check (length(title_id) between 1 and 48),
+  transition_id text not null check (length(transition_id) between 1 and 48),
+  status text not null default 'pending' check (status in ('pending', 'claimed', 'approved', 'testing', 'grading', 'passed', 'failed', 'rejected', 'closed')),
+  reviewer_id uuid references auth.users(id),
+  internal_note text not null default '' check (length(internal_note) <= 2000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists portia_promo_one_active_qualification_request
+  on public.portia_promo_qualification_requests (nickname_key)
+  where status in ('pending', 'claimed', 'approved', 'testing', 'grading');
+
+create table if not exists public.portia_promo_attempts (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null unique references public.portia_promo_qualification_requests(id) on delete cascade,
+  reviewer_id uuid not null references auth.users(id),
+  status text not null default 'prepared' check (status in ('prepared', 'active', 'grading', 'passed', 'failed', 'closed')),
+  client_mode text not null default 'desktop' check (client_mode in ('desktop', 'phone')),
+  started_at timestamptz,
+  deadline_at timestamptz,
+  technical_failure text check (technical_failure is null or length(technical_failure) <= 64),
+  failure_overridden_at timestamptz,
+  retake_at timestamptz,
+  retake_released_at timestamptz,
+  final_percent integer check (final_percent between 0 and 100),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.portia_promo_attempt_questions (
+  id uuid primary key default gen_random_uuid(),
+  attempt_id uuid not null references public.portia_promo_attempts(id) on delete cascade,
+  source_question_id uuid references public.portia_promo_qualification_questions(id) on delete set null,
+  question_type text not null check (question_type in ('single', 'multiple', 'free-text')),
+  snapshot_text text not null check (length(snapshot_text) between 1 and 4000),
+  snapshot_options jsonb not null default '[]'::jsonb check (pg_column_size(snapshot_options) <= 32768),
+  answer_key jsonb not null check (pg_column_size(answer_key) <= 16384),
+  sort_order integer not null check (sort_order between 0 and 100000),
+  unique (attempt_id, sort_order)
+);
+
+create table if not exists public.portia_promo_answers (
+  id uuid primary key default gen_random_uuid(),
+  attempt_id uuid not null references public.portia_promo_attempts(id) on delete cascade,
+  question_id uuid not null references public.portia_promo_attempt_questions(id) on delete cascade,
+  answer jsonb not null check (pg_column_size(answer) <= 32768),
+  reviewer_correct boolean,
+  submitted_at timestamptz not null default now(),
+  graded_at timestamptz,
+  unique (attempt_id, question_id)
+);
+
+create table if not exists public.portia_promo_results (
+  id uuid primary key default gen_random_uuid(),
+  nickname_key text not null check (length(nickname_key) between 1 and 64),
+  result_kind text not null check (result_kind in ('ordinary', 'qualification')),
+  outcome text not null check (outcome in ('approved', 'passed', 'failed', 'rejected', 'technical-failure', 'retake-released')),
+  compact jsonb not null default '{}'::jsonb check (pg_column_size(compact) <= 16384),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists portia_promo_results_history
+  on public.portia_promo_results (nickname_key, created_at desc);
+
+create table if not exists public.portia_promo_audit_events (
+  id bigint generated always as identity primary key,
+  nickname_key text check (nickname_key is null or length(nickname_key) between 1 and 64),
+  actor_id uuid references auth.users(id),
+  event_type text not null check (length(event_type) between 1 and 80),
+  details jsonb not null default '{}'::jsonb check (pg_column_size(details) <= 16384),
+  created_at timestamptz not null default now()
+);
+
+alter table public.portia_promo_device_bindings enable row level security;
+alter table public.portia_promo_attempt_buckets enable row level security;
+alter table public.portia_promo_requests enable row level security;
+alter table public.portia_promo_task_banks enable row level security;
+alter table public.portia_promo_task_items enable row level security;
+alter table public.portia_promo_assignments enable row level security;
+alter table public.portia_promo_assignment_items enable row level security;
+alter table public.portia_promo_qualification_requests enable row level security;
+alter table public.portia_promo_qualification_banks enable row level security;
+alter table public.portia_promo_qualification_questions enable row level security;
+alter table public.portia_promo_qualification_options enable row level security;
+alter table public.portia_promo_attempts enable row level security;
+alter table public.portia_promo_attempt_questions enable row level security;
+alter table public.portia_promo_answers enable row level security;
+alter table public.portia_promo_results enable row level security;
+alter table public.portia_promo_audit_events enable row level security;
+
+revoke all on table public.portia_promo_device_bindings from public, anon, authenticated;
+revoke all on table public.portia_promo_attempt_buckets from public, anon, authenticated;
+revoke all on table public.portia_promo_requests from public, anon, authenticated;
+revoke all on table public.portia_promo_task_banks from public, anon, authenticated;
+revoke all on table public.portia_promo_task_items from public, anon, authenticated;
+revoke all on table public.portia_promo_assignments from public, anon, authenticated;
+revoke all on table public.portia_promo_assignment_items from public, anon, authenticated;
+revoke all on table public.portia_promo_qualification_requests from public, anon, authenticated;
+revoke all on table public.portia_promo_qualification_banks from public, anon, authenticated;
+revoke all on table public.portia_promo_qualification_questions from public, anon, authenticated;
+revoke all on table public.portia_promo_qualification_options from public, anon, authenticated;
+revoke all on table public.portia_promo_attempts from public, anon, authenticated;
+revoke all on table public.portia_promo_attempt_questions from public, anon, authenticated;
+revoke all on table public.portia_promo_answers from public, anon, authenticated;
+revoke all on table public.portia_promo_results from public, anon, authenticated;
+revoke all on table public.portia_promo_audit_events from public, anon, authenticated;
+
 -- Media
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
