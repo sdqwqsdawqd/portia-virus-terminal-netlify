@@ -6,9 +6,9 @@ current_phase: 13
 current_phase_name: Приложение «Справочник»
 status: executing
 stopped_at: Completed PORTIA-13-04-PLAN.md
-last_updated: "2026-10-27T04:00:28.215Z"
+last_updated: "2026-10-27T04:07:51.022Z"
 last_activity: 2026-10-27
-last_activity_desc: "Completed quick task 261027-cie: independent desktop shortcut layout and motion"
+last_activity_desc: "Completed quick task 261027-coj: refined five desktop icon animations"
 state_head: c4300024211af09a058bff8fa2503b69fdefe85c
 progress:
   total_phases: 8
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-10-26)
 Phase: PORTIA-13 (Приложение «Справочник») — EXECUTING
 Plan: 5 of 5
 Status: Executing Phase PORTIA-13
-Last activity: 2026-10-27 — Completed quick task 261027-cie: independent desktop shortcut layout and motion
+Last activity: 2026-10-27 — Completed quick task 261027-coj: refined five desktop icon animations
 
 Progress: [█████████░] 88%
 
@@ -158,6 +158,7 @@ None.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 261027-cie | Независимая раскладка и единые анимации ярлыков рабочего стола | 2026-10-27 | 0b5f0a9 | [261027-cie-desktop-shortcut-animation](./quick/261027-cie-desktop-shortcut-animation/) |
+| 261027-coj | Качественные микровзаимодействия пяти ярлыков рабочего стола | 2026-10-27 | b9d7db1 | [261027-coj-refine-shortcut-animations](./quick/261027-coj-refine-shortcut-animations/) |
 
 ## Deferred Items
 
