@@ -157,7 +157,7 @@ None.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 261027-cie | Независимая раскладка и единые анимации ярлыков рабочего стола | 2026-10-27 | 8373e4d | [261027-cie-desktop-shortcut-animation](./quick/261027-cie-desktop-shortcut-animation/) |
+| 261027-cie | Независимая раскладка и единые анимации ярлыков рабочего стола | 2026-10-27 | 0b5f0a9 | [261027-cie-desktop-shortcut-animation](./quick/261027-cie-desktop-shortcut-animation/) |
 
 ## Deferred Items
 
