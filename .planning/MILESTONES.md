@@ -1,5 +1,37 @@
 # Milestones
 
+## v1.1 Закрытие замечаний (Shipped: 2026-10-27)
+
+**Delivered:** Закрыты замечания v1.0 с упором на защиту данных, устойчивость рабочего стола и редактора, права доступа и новое приложение «Справочник».
+
+**Phases completed:** 6–13 (8 phases, 49 plans, 122 tasks)
+
+**Audit:** 49/49 требований, 8/8 фаз, 8/8 интеграций и 7/7 пользовательских сценариев; статус `tech_debt`, критических разрывов нет.
+
+**Known deferred items at close:** 7 (see STATE.md Deferred Items)
+
+**Key accomplishments:**
+
+- Сохранение сотрудников стало частичным и устойчивым: несвязанные поля, правки во время запроса и последние хорошие данные больше не теряются.
+- Контент нормализуется без обрезки; опрос не сбрасывает отмену, а удаление и смена типа не оставляют мусора.
+- Рабочий стол получил устойчивость к пустым данным, безопасные встроенные документы, доступный масштаб и корректный пользовательский акцент.
+- Редактор получил свободную панель оформления, сворачиваемую навигацию, мультивыделение и надёжную работу на телефоне.
+- Права редакторов ограничивают вкладки в интерфейсе и API, а вход требует подтверждённой почты.
+- Выпущен «Справочник» с разделами, карточками, шестью видами блоков, поиском, редактором и правами доступа.
+
+**Stats:**
+
+- 254 files changed across the milestone range
+- 14,416 current lines in `app/`, `components/` and `lib/`
+- 8 phases, 49 plans, 122 recorded tasks
+- 8 days (2026-10-19 → 2026-10-27)
+
+**Git range:** `b8ba5cf` → `afb2491`
+
+**What's next:** отдельный milestone для приложения «Повышение».
+
+---
+
 ## v1.0 Доработка (Shipped: 2026-10-19)
 
 **Phases completed:** 7 phases, 43 plans, 23 tasks (Phase 4 skipped by owner)
@@ -8,6 +40,7 @@
 **Git:** 5aa1105 → 96c582f (2026-10-06 → 2026-10-19)
 
 **Key accomplishments:**
+
 - User's zoom/Dark Reader WIP landed as its own commit, embedded documents pinned to an absolutely positioned viewport so they fill the window at any zoom, and the legacy serif replaced by next/font IBM Plex Serif behind a `--serif` token.
 - Drag handle reduced to a bare ≡ at the start of every sortable row, Корзина files and viruses open across the whole window (`is-viewing`), and the Roblox profile is reached only through the small portrait anchor.
 - `metadata.other["darkreader-lock"]` changed from `""` to `"true"` so Next 16.3.4 emits the meta tag; verified in the production build head.

@@ -2,13 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Закрытие замечаний
-current_phase: 13
-current_phase_name: Приложение «Справочник»
-status: complete
+status: Awaiting next milestone
 stopped_at: Completed Phase PORTIA-13
-last_updated: "2026-10-27T04:37:24.181Z"
-last_activity: 2026-10-27
-last_activity_desc: "Completed Phase PORTIA-13: Приложение «Справочник»"
+last_updated: "2026-10-27T04:45:28.390Z"
+last_activity: 2026-10-27 — Milestone v1.1 completed and archived
 progress:
   total_phases: 8
   completed_phases: 8
@@ -24,16 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-27)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Milestone v1.1 complete; ready for milestone close and the separate «Повышение» milestone
+**Current focus:** Planning the next milestone for the separate «Повышение» application
 
 ## Current Position
 
-Phase: PORTIA-13 (Приложение «Справочник») — COMPLETE
-Plan: 5 of 5
-Status: Phase complete; milestone v1.1 ready to close
-Last activity: 2026-10-27 — Completed Phase PORTIA-13: Приложение «Справочник»
-
-Progress: [██████████] 100%
+Phase: Milestone v1.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-10-27 — Milestone v1.1 completed and archived
 
 ## Performance Metrics
 
@@ -168,6 +163,13 @@ None.
 |----------|------|--------|-----------------|
 | debug_sessions | editor-field-font-wysiwyg | diagnosed | v1.0 close (2026-10-19) |
 | uat_gaps | PORTIA-05-oformlenie-teksta / 05-UAT.md | diagnosed, 0 pending | v1.0 close (2026-10-19) |
+| debug_sessions | custom-accent-black-turns-teal | diagnosed (fix verified later) | v1.1 close (2026-10-27) |
+| debug_sessions | editor-field-font-wysiwyg | diagnosed (fix verified later) | v1.1 close (2026-10-27) |
+| uat_gaps | PORTIA-10 / 10-UAT.md | diagnosed, 0 pending (closed by 10-08/10-09) | v1.1 close (2026-10-27) |
+| todos | app-povyshenie.md | future milestone | v1.1 close (2026-10-27) |
+| todos | app-spravochnik.md | shipped in Phase 13; artifact cleanup deferred | v1.1 close (2026-10-27) |
+| todos | spider-body-visible-and-toggle.md | shipped; artifact cleanup deferred | v1.1 close (2026-10-27) |
+| todos | unified-apps-system-discuss.md | future discussion | v1.1 close (2026-10-27) |
 
 ### Roadmap Evolution
 
@@ -183,4 +185,4 @@ Resume file: none
 
 ## Operator Next Steps
 
-- `/gsd-complete-milestone` для закрытия v1.1, затем `/gsd-new-milestone` для приложения «Повышение»
+- Start the next milestone with `/gsd-new-milestone` for «Повышение»
