@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { accentBootScript, accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes } from "./accent-boot.ts";
+import { accentBootScript, accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes, spiderModes } from "./accent-boot.ts";
 import { accentTokenNames, deriveAccentTokens } from "./accent-custom.ts";
 
 type Rgb = [number, number, number];
 
 const css = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 const desktopSource = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8");
+const spiderSource = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
 
 // Median opaque (alpha >= 200) pixels with RGB chroma >= 40; the assistant split at its median OKLCH lightness.
 const LOGO_TEAL = "#00b396";
@@ -216,7 +217,7 @@ test("no relative colour syntax", () => {
 });
 
 const runBoot = (getItem: (key: string) => string | null, systemReduce = false, sessionGetItem: (key: string) => string | null = () => null) => {
-  const dataset: { accent?: string; motion?: string; boot?: string } = {};
+  const dataset: { accent?: string; motion?: string; spider?: string; boot?: string } = {};
   const props: Record<string, string> = {};
   const style = { setProperty: (name: string, value: string) => { props[name] = value; } };
   const matchMedia = (query: string) => ({ matches: systemReduce && query === "(prefers-reduced-motion: reduce)" });
@@ -485,4 +486,17 @@ test("the format mark is an underline with no fill and keeps 3:1 on every previe
       }
     }
   }
+});
+
+test("the spider has an independent saved switch and disappears with animations", () => {
+  assert.equal(runBoot(() => null).spider, "on");
+  assert.equal(runBoot(() => JSON.stringify({ spider: "on" })).spider, "on");
+  assert.equal(runBoot(() => JSON.stringify({ spider: "off" })).spider, "off");
+  assert.equal(runBoot(() => JSON.stringify({ spider: "invalid" })).spider, "on");
+  const group = desktopSource.match(/title="Паук" values=\{(\[\[.*?\]\])\}/)?.[1];
+  assert.ok(group, "«Паук» SettingGroup not found");
+  assert.deepEqual([...spiderModes], [...group.matchAll(/\['(\w+)',/g)].map((m) => m[1]));
+  assert.match(css, /html\[data-motion="reduce"\] \.wallpaper-spider,\s*html\[data-spider="off"\] \.wallpaper-spider\s*\{\s*display:\s*none;/);
+  assert.match(css, /\.wallpaper-spider\s*\{[^}]*opacity:\s*1;/);
+  assert.match(spiderSource, /attributeFilter:\s*\["data-motion", "data-spider"\]/);
 });

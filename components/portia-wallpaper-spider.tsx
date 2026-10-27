@@ -158,18 +158,19 @@ export function WallpaperSpider() {
     };
 
     const motionOn = () => (root.dataset.motion ? root.dataset.motion === "full" : !reduceQuery.matches);
-    // The loop runs only with motion on and a visible tab (T-09-04); «Выключены» puts the spider back at rest.
+    const spiderOn = () => root.dataset.spider !== "off";
+    // The loop runs only with motion and the spider enabled in a visible tab; disabling either puts it back at rest.
     const sync = () => {
-      if (motionOn() && !document.hidden) {
+      if (motionOn() && spiderOn() && !document.hidden) {
         if (!frame) { last = performance.now(); frame = requestAnimationFrame(tick); }
         return;
       }
       cancelAnimationFrame(frame);
       frame = 0;
-      if (!motionOn()) resetToRest();
+      if (!motionOn() || !spiderOn()) resetToRest();
     };
     const watcher = new MutationObserver(sync);
-    watcher.observe(root, { attributes: true, attributeFilter: ["data-motion"] });
+    watcher.observe(root, { attributes: true, attributeFilter: ["data-motion", "data-spider"] });
     document.addEventListener("visibilitychange", sync);
     reduceQuery.addEventListener("change", sync);
     sync();

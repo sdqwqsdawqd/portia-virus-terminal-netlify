@@ -6,7 +6,7 @@ import { classificationOptions, findGuide, findInfo, portiaTextKey, type Broadca
 import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
-import { accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes } from "@/lib/accent-boot";
+import { accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes, spiderModes } from "@/lib/accent-boot";
 import { accentTokenNames, deriveAccentTokens } from "@/lib/accent-custom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
@@ -43,7 +43,7 @@ const WINDOW_FADE_OUT_MS = 120;
 // shortcut: a 10 s poll of the CDN-cached content, not a push channel; switch to Supabase Realtime if visitors need it within a second or the content grows large
 const contentSyncMs = 10_000;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
-type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string; customAccent: string };
+type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string; spider: string; customAccent: string };
 type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "settings" | "charter" | "sheet" | "trash";
 type ShortcutPosition = { x: number; y: number };
 type ShortcutLayoutStyle = React.CSSProperties & {
@@ -86,13 +86,14 @@ function savedShortcutLayout(position: ShortcutPosition): ShortcutLayoutStyle {
   };
 }
 
-const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "on", customAccent: "" };
+const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "on", spider: "on", customAccent: "" };
 // Every value a setting may hold; the same ids the «Настройки» groups offer.
 const settingValues: Record<Exclude<keyof DesktopSettings, "customAccent">, readonly string[]> = {
   accent: [...accentIds, "custom"],
   wallpaper: ["radar", "grid", "gel", "cells", "quiet"],
   iconSize: ["compact", "standard", "large"],
   motion: motionModes,
+  spider: spiderModes,
 };
 
 const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName }> = {
@@ -767,6 +768,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
     root.dataset.wallpaper = desktopSettings.wallpaper;
     root.dataset.iconSize = desktopSettings.iconSize;
+    root.dataset.spider = desktopSettings.spider === "off" ? "off" : "on";
   }, [desktopSettings, desktopSettingsLoaded, accentDraft, customTokens]);
 
   // Drafts recolour live but only committed values persist (D-08).
@@ -1497,6 +1499,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
               <SettingGroup title="Анимации" values={[['on','Включены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
+              <SettingGroup title="Паук" values={[['on','Показывать'],['off','Скрыть']]} current={desktopSettings.spider} onSelect={(value) => updateDesktopSetting("spider", value)} />
               <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сводку, поиск и советы помощника." : "Войдите в разрешённый аккаунт редактора."}</p></div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>
             </div>
