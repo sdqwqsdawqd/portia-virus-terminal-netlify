@@ -561,6 +561,472 @@ revoke all on table public.portia_promo_answers from public, anon, authenticated
 revoke all on table public.portia_promo_results from public, anon, authenticated;
 revoke all on table public.portia_promo_audit_events from public, anon, authenticated;
 
+create or replace function public.portia_promo_bind_device(
+  p_nickname_key text,
+  p_token_hash text,
+  p_risk_bucket text default ''
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  binding_id uuid;
+begin
+  if length(trim(p_nickname_key)) not between 1 and 64
+    or length(p_token_hash) not between 32 and 128
+    or length(p_risk_bucket) > 128 then
+    raise exception 'invalid-device-binding';
+  end if;
+  select id into binding_id from public.portia_promo_device_bindings
+    where token_hash = p_token_hash and reset_at is null;
+  if binding_id is not null then
+    if not exists (
+      select 1 from public.portia_promo_device_bindings
+      where id = binding_id and nickname_key = lower(trim(p_nickname_key))
+    ) then raise exception 'device-bound'; end if;
+    return binding_id;
+  end if;
+  if exists (
+    select 1 from public.portia_promo_device_bindings
+    where nickname_key = lower(trim(p_nickname_key)) and reset_at is null
+  ) then raise exception 'nickname-bound'; end if;
+  insert into public.portia_promo_device_bindings (nickname_key, token_hash, risk_bucket)
+  values (lower(trim(p_nickname_key)), p_token_hash, p_risk_bucket)
+  returning id into binding_id;
+  return binding_id;
+end $$;
+
+create or replace function public.portia_promo_reset_device(p_nickname_key text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.portia_is_owner() then raise exception 'forbidden'; end if;
+  update public.portia_promo_device_bindings set reset_at = now()
+    where nickname_key = lower(trim(p_nickname_key)) and reset_at is null;
+  insert into public.portia_promo_audit_events (nickname_key, actor_id, event_type)
+  values (lower(trim(p_nickname_key)), auth.uid(), 'device-reset');
+  return found;
+end $$;
+
+create or replace function public.portia_promo_register_attempt(
+  p_bucket_key text,
+  p_ip_bucket text,
+  p_success boolean default false
+)
+returns timestamptz
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_failures integer;
+  until_at timestamptz;
+begin
+  if length(p_bucket_key) not between 1 and 160 or length(p_ip_bucket) > 128 then
+    raise exception 'invalid-attempt-bucket';
+  end if;
+  insert into public.portia_promo_attempt_buckets (bucket_key, ip_bucket, failures, blocked_until)
+  values (p_bucket_key, p_ip_bucket, case when p_success then 0 else 1 end, null)
+  on conflict (bucket_key) do update set
+    failures = case when p_success then 0 else least(public.portia_promo_attempt_buckets.failures + 1, 1000) end,
+    ip_bucket = excluded.ip_bucket,
+    updated_at = now()
+  returning failures into current_failures;
+  if not p_success then
+    until_at := now() + case
+      when current_failures <= 1 then interval '5 minutes'
+      when current_failures = 2 then interval '15 minutes'
+      else interval '60 minutes'
+    end;
+    update public.portia_promo_attempt_buckets
+      set blocked_until = greatest(coalesce(blocked_until, '-infinity'::timestamptz), until_at)
+      where bucket_key = p_bucket_key
+      returning blocked_until into until_at;
+  else
+    update public.portia_promo_attempt_buckets set blocked_until = null where bucket_key = p_bucket_key;
+    until_at := null;
+  end if;
+  return until_at;
+end $$;
+
+create or replace function public.portia_promo_submit_request(
+  p_kind text,
+  p_nickname text,
+  p_nickname_key text,
+  p_title_id text,
+  p_target_id text,
+  p_token_hash text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  request_id uuid;
+begin
+  if not exists (
+    select 1 from public.portia_promo_device_bindings
+    where nickname_key = lower(trim(p_nickname_key)) and token_hash = p_token_hash and reset_at is null
+  ) then raise exception 'device-denied'; end if;
+  if p_kind = 'ordinary' then
+    insert into public.portia_promo_requests (nickname, nickname_key, title_id, target_title_id)
+    values (left(trim(p_nickname), 64), lower(trim(p_nickname_key)), p_title_id, p_target_id)
+    returning id into request_id;
+  elsif p_kind = 'qualification' then
+    insert into public.portia_promo_qualification_requests (nickname, nickname_key, title_id, transition_id)
+    values (left(trim(p_nickname), 64), lower(trim(p_nickname_key)), p_title_id, p_target_id)
+    returning id into request_id;
+  else raise exception 'invalid-request-kind'; end if;
+  return request_id;
+end $$;
+
+create or replace function public.portia_promo_claim_request(p_kind text, p_request_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  if p_kind = 'ordinary' then
+    update public.portia_promo_requests set status = 'claimed', reviewer_id = auth.uid(), updated_at = now()
+      where id = p_request_id and status = 'pending' and reviewer_id is null;
+  elsif p_kind = 'qualification' then
+    update public.portia_promo_qualification_requests set status = 'claimed', reviewer_id = auth.uid(), updated_at = now()
+      where id = p_request_id and status = 'pending' and reviewer_id is null;
+  else return false; end if;
+  return found;
+end $$;
+
+create or replace function public.portia_promo_release_request(p_kind text, p_request_id uuid, p_force boolean default false)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  if p_force and not public.portia_is_owner() then raise exception 'owner-required'; end if;
+  if p_kind = 'ordinary' then
+    update public.portia_promo_requests set status = 'pending', reviewer_id = null, updated_at = now()
+      where id = p_request_id and status = 'claimed' and (reviewer_id = auth.uid() or p_force);
+  elsif p_kind = 'qualification' then
+    update public.portia_promo_qualification_requests set status = 'pending', reviewer_id = null, updated_at = now()
+      where id = p_request_id and status = 'claimed' and (reviewer_id = auth.uid() or p_force);
+  else return false; end if;
+  return found;
+end $$;
+
+create or replace function public.portia_promo_reject_request(p_kind text, p_request_id uuid, p_internal_note text default '')
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  if length(p_internal_note) > 2000 then raise exception 'note-too-long'; end if;
+  if p_kind = 'ordinary' then
+    update public.portia_promo_requests set status = 'rejected', internal_note = p_internal_note, updated_at = now()
+      where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid();
+  elsif p_kind = 'qualification' then
+    update public.portia_promo_qualification_requests set status = 'rejected', internal_note = p_internal_note, updated_at = now()
+      where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid();
+  else return false; end if;
+  return found;
+end $$;
+
+create or replace function public.portia_promo_confirm_assignment(p_request_id uuid, p_items jsonb)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  created_assignment_id uuid;
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) not between 1 and 50 then
+    raise exception 'invalid-assignment';
+  end if;
+  insert into public.portia_promo_assignments (request_id, reviewer_id)
+  select id, auth.uid() from public.portia_promo_requests
+    where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid()
+  returning id into created_assignment_id;
+  if created_assignment_id is null then return null; end if;
+  insert into public.portia_promo_assignment_items (assignment_id, source_item_id, snapshot_text, sort_order)
+  select created_assignment_id, item.source_item_id, item.snapshot_text, item.sort_order
+  from jsonb_to_recordset(p_items) as item(source_item_id uuid, snapshot_text text, sort_order integer)
+  where length(item.snapshot_text) between 1 and 4000;
+  if (select count(*) from public.portia_promo_assignment_items ai where ai.assignment_id = created_assignment_id) <> jsonb_array_length(p_items) then
+    raise exception 'invalid-assignment-items';
+  end if;
+  update public.portia_promo_requests set status = 'assigned', updated_at = now() where id = p_request_id;
+  return created_assignment_id;
+end $$;
+
+create or replace function public.portia_promo_confirm_test(p_request_id uuid, p_questions jsonb, p_client_mode text)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  created_attempt_id uuid;
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  if p_client_mode not in ('desktop', 'phone') or jsonb_typeof(p_questions) <> 'array'
+    or jsonb_array_length(p_questions) not between 1 and 100 then raise exception 'invalid-test'; end if;
+  insert into public.portia_promo_attempts (request_id, reviewer_id, client_mode)
+  select id, auth.uid(), p_client_mode from public.portia_promo_qualification_requests
+    where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid()
+  returning id into created_attempt_id;
+  if created_attempt_id is null then return null; end if;
+  insert into public.portia_promo_attempt_questions (
+    attempt_id, source_question_id, question_type, snapshot_text, snapshot_options, answer_key, sort_order
+  )
+  select created_attempt_id, q.source_question_id, q.question_type, q.snapshot_text,
+    coalesce(q.snapshot_options, '[]'::jsonb), q.answer_key, q.sort_order
+  from jsonb_to_recordset(p_questions) as q(
+    source_question_id uuid, question_type text, snapshot_text text,
+    snapshot_options jsonb, answer_key jsonb, sort_order integer
+  )
+  where q.question_type in ('single', 'multiple', 'free-text') and length(q.snapshot_text) between 1 and 4000;
+  if (select count(*) from public.portia_promo_attempt_questions aq where aq.attempt_id = created_attempt_id) <> jsonb_array_length(p_questions) then
+    raise exception 'invalid-test-questions';
+  end if;
+  update public.portia_promo_qualification_requests set status = 'approved', updated_at = now() where id = p_request_id;
+  return created_attempt_id;
+end $$;
+
+create or replace function public.portia_promo_start_test(p_attempt_id uuid, p_token_hash text)
+returns timestamptz
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare deadline timestamptz;
+begin
+  update public.portia_promo_attempts a set
+    status = 'active', started_at = now(), deadline_at = now() + interval '15 minutes', updated_at = now()
+  from public.portia_promo_qualification_requests r
+  where a.id = p_attempt_id and a.request_id = r.id and a.status = 'prepared'
+    and exists (select 1 from public.portia_promo_device_bindings b where b.nickname_key = r.nickname_key and b.token_hash = p_token_hash and b.reset_at is null)
+  returning a.deadline_at into deadline;
+  return deadline;
+end $$;
+
+create or replace function public.portia_promo_answer_question(p_attempt_id uuid, p_question_id uuid, p_answer jsonb, p_token_hash text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare expected_order integer;
+begin
+  select count(*) into expected_order from public.portia_promo_answers where attempt_id = p_attempt_id;
+  insert into public.portia_promo_answers (attempt_id, question_id, answer)
+  select a.id, q.id, p_answer
+  from public.portia_promo_attempts a
+  join public.portia_promo_qualification_requests r on r.id = a.request_id
+  join public.portia_promo_attempt_questions q on q.attempt_id = a.id
+  where a.id = p_attempt_id and q.id = p_question_id and q.sort_order = expected_order
+    and a.status = 'active' and now() < a.deadline_at
+    and exists (select 1 from public.portia_promo_device_bindings b where b.nickname_key = r.nickname_key and b.token_hash = p_token_hash and b.reset_at is null)
+  on conflict (attempt_id, question_id) do nothing;
+  return found;
+end $$;
+
+create or replace function public.portia_promo_fail_attempt(p_attempt_id uuid, p_reason text, p_token_hash text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update public.portia_promo_attempts a set status = 'failed', technical_failure = left(p_reason, 64), updated_at = now()
+  from public.portia_promo_qualification_requests r
+  where a.id = p_attempt_id and a.request_id = r.id and a.status = 'active'
+    and exists (select 1 from public.portia_promo_device_bindings b where b.nickname_key = r.nickname_key and b.token_hash = p_token_hash and b.reset_at is null);
+  return found or exists (select 1 from public.portia_promo_attempts where id = p_attempt_id and status = 'failed');
+end $$;
+
+create or replace function public.portia_promo_grade_answer(p_answer_id uuid, p_correct boolean)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  update public.portia_promo_answers ans set reviewer_correct = p_correct, graded_at = now()
+  from public.portia_promo_attempts a
+  where ans.id = p_answer_id and ans.attempt_id = a.id and a.reviewer_id = auth.uid()
+    and a.status in ('active', 'grading', 'failed');
+  return found;
+end $$;
+
+create or replace function public.portia_promo_finalize_attempt(
+  p_attempt_id uuid,
+  p_passed boolean,
+  p_percent integer default null,
+  p_retake_days integer default 2
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  if p_percent is not null and p_percent not between 0 and 100 then raise exception 'invalid-percent'; end if;
+  if p_retake_days not between 0 and 365 then raise exception 'invalid-retake'; end if;
+  update public.portia_promo_attempts set
+    status = case when p_passed then 'passed' else 'failed' end,
+    final_percent = p_percent,
+    retake_at = case when p_passed then null else now() + make_interval(days => p_retake_days) end,
+    updated_at = now()
+  where id = p_attempt_id and reviewer_id = auth.uid() and status in ('active', 'grading', 'failed');
+  if found then
+    update public.portia_promo_qualification_requests r set
+      status = case when p_passed then 'passed' else 'failed' end, updated_at = now()
+    from public.portia_promo_attempts a where a.id = p_attempt_id and r.id = a.request_id;
+  end if;
+  return found;
+end $$;
+
+create or replace function public.portia_promo_override_failure(p_attempt_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  update public.portia_promo_attempts set status = 'grading', failure_overridden_at = now(), updated_at = now()
+    where id = p_attempt_id and status = 'failed' and technical_failure is not null;
+  return found;
+end $$;
+
+create or replace function public.portia_promo_release_retake(p_attempt_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  update public.portia_promo_attempts set retake_at = now(), retake_released_at = now(), updated_at = now()
+    where id = p_attempt_id and status = 'failed' and retake_at > now();
+  return found;
+end $$;
+
+create or replace function public.portia_promo_close(p_kind text, p_request_id uuid, p_outcome text, p_compact jsonb default '{}'::jsonb)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare key_value text;
+begin
+  if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  if pg_column_size(p_compact) > 16384 then raise exception 'result-too-large'; end if;
+  if p_kind = 'ordinary' then
+    select nickname_key into key_value from public.portia_promo_requests
+      where id = p_request_id and reviewer_id = auth.uid() for update;
+    if key_value is null then return false; end if;
+    insert into public.portia_promo_results (nickname_key, result_kind, outcome, compact)
+      values (key_value, 'ordinary', p_outcome, p_compact);
+    delete from public.portia_promo_requests where id = p_request_id;
+  elsif p_kind = 'qualification' then
+    select nickname_key into key_value from public.portia_promo_qualification_requests
+      where id = p_request_id and reviewer_id = auth.uid() for update;
+    if key_value is null then return false; end if;
+    insert into public.portia_promo_results (nickname_key, result_kind, outcome, compact)
+      values (key_value, 'qualification', p_outcome, p_compact);
+    delete from public.portia_promo_qualification_requests where id = p_request_id;
+  else return false; end if;
+  delete from public.portia_promo_results where id in (
+    select id from (
+      select id, row_number() over (partition by nickname_key order by created_at desc, id desc) as history_order
+      from public.portia_promo_results where nickname_key = key_value
+    ) ranked where history_order > 3
+  );
+  return true;
+end $$;
+
+create or replace function public.portia_promo_cleanup()
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare removed integer := 0; affected integer;
+begin
+  delete from public.portia_promo_requests
+    where status in ('pending', 'rejected') and updated_at < now() - interval '3 days';
+  get diagnostics affected = row_count; removed := removed + affected;
+  delete from public.portia_promo_qualification_requests
+    where status in ('pending', 'rejected', 'failed') and updated_at < now() - interval '3 days';
+  get diagnostics affected = row_count; removed := removed + affected;
+  delete from public.portia_promo_attempt_buckets where updated_at < now() - interval '3 days';
+  delete from cron.job_run_details where end_time < now() - interval '7 days';
+  return removed;
+end $$;
+
+revoke all on function public.portia_promo_bind_device(text, text, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_reset_device(text) from public, anon, authenticated;
+revoke all on function public.portia_promo_register_attempt(text, text, boolean) from public, anon, authenticated;
+revoke all on function public.portia_promo_submit_request(text, text, text, text, text, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_claim_request(text, uuid) from public, anon, authenticated;
+revoke all on function public.portia_promo_release_request(text, uuid, boolean) from public, anon, authenticated;
+revoke all on function public.portia_promo_reject_request(text, uuid, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_confirm_assignment(uuid, jsonb) from public, anon, authenticated;
+revoke all on function public.portia_promo_confirm_test(uuid, jsonb, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_start_test(uuid, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_answer_question(uuid, uuid, jsonb, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_fail_attempt(uuid, text, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_grade_answer(uuid, boolean) from public, anon, authenticated;
+revoke all on function public.portia_promo_finalize_attempt(uuid, boolean, integer, integer) from public, anon, authenticated;
+revoke all on function public.portia_promo_override_failure(uuid) from public, anon, authenticated;
+revoke all on function public.portia_promo_release_retake(uuid) from public, anon, authenticated;
+revoke all on function public.portia_promo_close(text, uuid, text, jsonb) from public, anon, authenticated;
+revoke all on function public.portia_promo_cleanup() from public, anon, authenticated;
+
+grant execute on function public.portia_promo_bind_device(text, text, text) to anon, authenticated;
+grant execute on function public.portia_promo_register_attempt(text, text, boolean) to anon, authenticated;
+grant execute on function public.portia_promo_submit_request(text, text, text, text, text, text) to anon, authenticated;
+grant execute on function public.portia_promo_start_test(uuid, text) to anon, authenticated;
+grant execute on function public.portia_promo_answer_question(uuid, uuid, jsonb, text) to anon, authenticated;
+grant execute on function public.portia_promo_fail_attempt(uuid, text, text) to anon, authenticated;
+grant execute on function public.portia_promo_reset_device(text) to authenticated;
+grant execute on function public.portia_promo_claim_request(text, uuid) to authenticated;
+grant execute on function public.portia_promo_release_request(text, uuid, boolean) to authenticated;
+grant execute on function public.portia_promo_reject_request(text, uuid, text) to authenticated;
+grant execute on function public.portia_promo_confirm_assignment(uuid, jsonb) to authenticated;
+grant execute on function public.portia_promo_confirm_test(uuid, jsonb, text) to authenticated;
+grant execute on function public.portia_promo_grade_answer(uuid, boolean) to authenticated;
+grant execute on function public.portia_promo_finalize_attempt(uuid, boolean, integer, integer) to authenticated;
+grant execute on function public.portia_promo_override_failure(uuid) to authenticated;
+grant execute on function public.portia_promo_release_retake(uuid) to authenticated;
+grant execute on function public.portia_promo_close(text, uuid, text, jsonb) to authenticated;
+
+create extension if not exists pg_cron;
+do $$
+declare existing_job bigint;
+begin
+  for existing_job in select jobid from cron.job where jobname = 'portia-promo-cleanup' loop
+    perform cron.unschedule(existing_job);
+  end loop;
+  perform cron.schedule('portia-promo-cleanup', '17 3 * * *', 'select public.portia_promo_cleanup()');
+end $$;
+
 -- Media
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

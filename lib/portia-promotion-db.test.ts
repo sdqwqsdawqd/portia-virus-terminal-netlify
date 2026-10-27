@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const setup = readFileSync(new URL("../supabase/portia_setup.sql", import.meta.url), "utf8");
+const apply = readFileSync(new URL("../supabase/phase14_apply.sql", import.meta.url), "utf8");
 
 const tables = [
   "portia_promo_device_bindings",
@@ -46,4 +47,65 @@ test("promotion SQL keeps secrets private and bounds untrusted text", () => {
   }
   assert.match(setup, /nickname_key text not null check \(length\(nickname_key\) between 1 and 64\)/i);
   assert.match(setup, /snapshot_text text not null check \(length\(snapshot_text\) between 1 and 4000\)/i);
+});
+
+const rpcNames = [
+  "portia_promo_bind_device",
+  "portia_promo_reset_device",
+  "portia_promo_register_attempt",
+  "portia_promo_submit_request",
+  "portia_promo_claim_request",
+  "portia_promo_release_request",
+  "portia_promo_reject_request",
+  "portia_promo_confirm_assignment",
+  "portia_promo_confirm_test",
+  "portia_promo_start_test",
+  "portia_promo_answer_question",
+  "portia_promo_fail_attempt",
+  "portia_promo_grade_answer",
+  "portia_promo_finalize_attempt",
+  "portia_promo_override_failure",
+  "portia_promo_release_retake",
+  "portia_promo_close",
+  "portia_promo_cleanup",
+];
+
+test("promotion SQL RPCs are security-definer functions with pinned search paths", () => {
+  for (const name of rpcNames) {
+    const start = setup.toLowerCase().indexOf(`create or replace function public.${name}`);
+    assert.ok(start >= 0, name);
+    const body = setup.slice(start, setup.indexOf("$$;", start) + 3);
+    assert.match(body, /security definer/i, `${name} security definer`);
+    assert.match(body, /set search_path = ''/i, `${name} search path`);
+    assert.match(setup, new RegExp(`revoke all on function public\\.${name}\\(`, "i"), `${name} revoke`);
+  }
+});
+
+test("promotion SQL reviewer transitions require promo and claim conditionally", () => {
+  const reviewerRpcs = ["claim_request", "release_request", "reject_request", "confirm_assignment", "confirm_test", "grade_answer", "finalize_attempt", "override_failure", "release_retake", "close"];
+  for (const suffix of reviewerRpcs) {
+    const start = setup.toLowerCase().indexOf(`create or replace function public.portia_promo_${suffix}`);
+    const body = setup.slice(start, setup.indexOf("$$;", start) + 3);
+    assert.match(body, /portia_has_tab_grant\('promo'\)/i, suffix);
+  }
+  assert.match(setup, /portia_promo_claim_request[\s\S]*status = 'claimed'[\s\S]*where id = p_request_id and status = 'pending' and reviewer_id is null/i);
+});
+
+test("promotion SQL closes transactionally, retains three results and schedules bounded cleanup", () => {
+  assert.match(setup, /portia_promo_close[\s\S]*insert into public\.portia_promo_results[\s\S]*delete from public\.portia_promo_(requests|qualification_requests)/i);
+  assert.match(setup, /row_number\(\) over \(partition by nickname_key order by created_at desc, id desc\)[\s\S]*where history_order > 3/i);
+  assert.match(setup, /portia_promo_cleanup[\s\S]*interval '3 days'/i);
+  assert.match(setup, /portia-promo-cleanup/i);
+  assert.match(setup, /cron\.job_run_details[\s\S]*interval '7 days'/i);
+});
+
+test("promotion SQL owner apply file mirrors contracts and is explicitly manual", () => {
+  assert.match(apply, /PHASE 14/i);
+  assert.match(apply, /OWNER-RUN ONLY/i);
+  assert.match(apply, /begin;/i);
+  assert.match(apply, /portia_is_owner\(\)/i);
+  for (const table of tables) assert.match(apply, new RegExp(`public\\.${table}\\b`, "i"), table);
+  for (const rpc of rpcNames) assert.match(apply, new RegExp(`public\\.${rpc}\\b`, "i"), rpc);
+  assert.match(apply, /POST-APPLY ASSERTIONS/i);
+  assert.match(apply, /ROLLBACK GUIDANCE/i);
 });
