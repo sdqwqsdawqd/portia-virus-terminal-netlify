@@ -94,17 +94,64 @@
 
 ## Traceability
 
-Заполняется при утверждении roadmap.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| PROM-01 | Phase 14 | Pending |
+| PROM-02 | Phase 14 | Pending |
+| PROM-03 | Phase 14 | Pending |
+| PROM-04 | Phase 14 | Pending |
+| PROM-05 | Phase 14 | Pending |
+| PROM-06 | Phase 14 | Pending |
+| TASK-01 | Phase 14 | Pending |
+| TASK-02 | Phase 14 | Pending |
+| TASK-03 | Phase 14 | Pending |
+| TASK-04 | Phase 14 | Pending |
+| TASK-05 | Phase 14 | Pending |
+| TASK-06 | Phase 14 | Pending |
+| TASK-07 | Phase 14 | Pending |
+| TASK-08 | Phase 14 | Pending |
+| COOL-01 | Phase 14 | Pending |
+| COOL-02 | Phase 14 | Pending |
+| COOL-03 | Phase 14 | Pending |
+| COOL-04 | Phase 14 | Pending |
+| COOL-05 | Phase 14 | Pending |
+| QUAL-01 | Phase 14 | Pending |
+| QUAL-02 | Phase 14 | Pending |
+| QUAL-03 | Phase 14 | Pending |
+| QUAL-04 | Phase 14 | Pending |
+| QUAL-05 | Phase 14 | Pending |
+| QUAL-06 | Phase 14 | Pending |
+| QUAL-07 | Phase 14 | Pending |
+| QUAL-08 | Phase 14 | Pending |
+| QUAL-09 | Phase 14 | Pending |
+| QUAL-10 | Phase 14 | Pending |
+| QUAL-11 | Phase 14 | Pending |
+| QUAL-12 | Phase 14 | Pending |
+| QUAL-13 | Phase 14 | Pending |
+| RETRY-01 | Phase 14 | Pending |
+| RETRY-02 | Phase 14 | Pending |
+| RETRY-03 | Phase 14 | Pending |
+| RETRY-04 | Phase 14 | Pending |
+| RETRY-05 | Phase 14 | Pending |
+| PERM-01 | Phase 14 | Pending |
+| PERM-02 | Phase 14 | Pending |
+| PERM-03 | Phase 14 | Pending |
+| EDIT-01 | Phase 14 | Pending |
+| EDIT-02 | Phase 14 | Pending |
+| EDIT-03 | Phase 14 | Pending |
+| DATA-01 | Phase 14 | Pending |
+| DATA-02 | Phase 14 | Pending |
+| DATA-03 | Phase 14 | Pending |
+| DATA-04 | Phase 14 | Pending |
+| DATA-05 | Phase 14 | Pending |
+| DATA-06 | Phase 14 | Pending |
 
 **Coverage:**
 
 - v1.2 requirements: 49 total
-- Mapped to phases: 0
-- Unmapped: 49
+- Mapped to phases: 49
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-27*
-*Last updated: 2026-10-27 after milestone requirements approval*
+*Last updated: 2026-10-27 after roadmap creation*

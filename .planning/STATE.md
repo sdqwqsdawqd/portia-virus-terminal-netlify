@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-10-27T09:32:05.937Z"
 last_activity: 2026-10-27
 progress:
-  total_phases: 0
+  total_phases: 1
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-27)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Planning the next milestone for the separate «Повышение» application
+**Current focus:** Phase 14 — отдельное приложение «Повышение»
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 14 of 14 (Приложение «Повышение»)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-10-27 — Milestone v1.2 started
+Status: Ready to discuss and plan
+Last activity: 2026-10-27 — Roadmap v1.2 approved; all 49 requirements assigned to Phase 14
 
 ## Performance Metrics
 
@@ -82,6 +82,8 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 ### Decisions
 
 Журнал решений — PROJECT.md Key Decisions. Пошаговые записи v1.0 остались в истории git (STATE.md до 2026-10-19). Для v1.1:
+
+- [v1.2 roadmap]: весь milestone «Повышение» выполняется одним Phase 14; обычные задания и квалификационные проверки остаются раздельными потоками внутри этапа
 
 - [v1.1 roadmap]: порядок фаз 6–12: учёт и выгрузки → контракт сервера сотрудников → клиент сотрудников → контент → рабочий стол и встроенные страницы → панель оформления → права редакторов и SQL
 - [v1.1 roadmap]: `components/portia-desktop.tsx` и `components/portia-editor.tsx` — горячие файлы, фазы 7–12 идут строго по очереди
@@ -184,4 +186,5 @@ Resume file: none
 
 ## Operator Next Steps
 
-- Start the next milestone with `/gsd-new-milestone` for «Повышение»
+- Discuss Phase 14 with `/gsd-discuss-phase 14`
+- Or plan directly with `/gsd-plan-phase 14`
