@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
+const icons = readFileSync(new URL("../components/portia-icons.tsx", import.meta.url), "utf8");
 
 // Index of the "}" that closes the "{" at `open`; braces inside strings or template literals are not special-cased.
 function closingBrace(text: string, open: number) {
@@ -113,8 +114,21 @@ test("every desktop shortcut owns a default position and saved positions overrid
 test("shortcut motion is uniform, opt-in, and the guide has its own animation", () => {
   assert.ok(styles.includes('html[data-motion="full"] .desktop-icon.is-dragging'));
   assert.ok(styles.includes('html[data-motion="full"] .desktop-icon.is-dropping'));
-  assert.ok(styles.includes('[data-icon="guide"] svg > :nth-child(1)'));
-  assert.ok(styles.includes('@keyframes icon-folder-lift'));
+  assert.ok(styles.includes('[data-icon="guide"] .icon-guide-front'));
+  assert.ok(styles.includes('@keyframes icon-guide-front'));
   const base = /\.desktop-icon \{[\s\S]*?\n}/.exec(styles)?.[0] ?? "";
   assert.doesNotMatch(base, /transition:/, "base shortcut must not move when animations are disabled");
+});
+
+test("the five refreshed shortcut icons animate semantic parts only in full motion", () => {
+  for (const part of ["icon-virus-core", "icon-broadcast-signal-inner", "icon-info-lines", "icon-guide-front", "icon-settings-knob-a"]) {
+    assert.ok(icons.includes(part), `missing semantic icon part ${part}`);
+    const animationLine = styles.split("\n").find((line) => line.includes(`.${part}`) && line.includes("animation:")) ?? "";
+    assert.ok(animationLine.startsWith('  html[data-motion="full"]'), `${part} is not gated by full motion`);
+  }
+  for (const retired of ["icon-turn", "icon-spike", "icon-ripple", "icon-blink", "icon-folder-index", "icon-slide-left", "icon-slide-right"]) {
+    assert.ok(!styles.includes(`@keyframes ${retired}`), `retired animation ${retired} is still shipped`);
+  }
+  // Explicitly excluded by the owner: employees, charter, sheet and trash retain their established gestures.
+  for (const kept of ["icon-hop", "icon-lift", "icon-stamp", "icon-write-16", "icon-lid"]) assert.ok(styles.includes(`@keyframes ${kept}`), kept);
 });

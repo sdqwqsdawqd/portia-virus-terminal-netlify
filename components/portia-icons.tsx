@@ -39,11 +39,10 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
     <path d="M7.6 8c1.9.6 3.9 2.4 5.8 5M13.4 8c-1.9.6-3.9 2.4-5.8 5" />
   </>,
   virus: <>
-    <circle cx="12" cy="12" r="5" />
-    <path d="M12 7V3.5M12 20.5V17M7 12H3.5M20.5 12H17M8.5 8.5 6 6M18 18l-2.5-2.5M8.5 15.5 6 18M18 6l-2.5 2.5" />
-    <circle cx="12" cy="3" r=".9" fill="currentColor" /><circle cx="12" cy="21" r=".9" fill="currentColor" />
-    <circle cx="3" cy="12" r=".9" fill="currentColor" /><circle cx="21" cy="12" r=".9" fill="currentColor" />
-    <circle cx="10.5" cy="11" r="1.1" /><path d="M13.6 13.2h.01" />
+    <circle className="icon-virus-core" cx="12" cy="12" r="5" />
+    <path className="icon-virus-spikes" d="M12 7V3.5M12 20.5V17M7 12H3.5M20.5 12H17M8.5 8.5 6 6M18 18l-2.5-2.5M8.5 15.5 6 18M18 6l-2.5 2.5" />
+    <g className="icon-virus-tips" fill="currentColor" stroke="none"><circle cx="12" cy="3" r=".9" /><circle cx="12" cy="21" r=".9" /><circle cx="3" cy="12" r=".9" /><circle cx="21" cy="12" r=".9" /></g>
+    <circle className="icon-virus-detail" cx="10.5" cy="11" r="1.1" /><path className="icon-virus-detail" d="M13.6 13.2h.01" />
   </>,
   employees: <>
     <circle cx="9" cy="8" r="3.2" />
@@ -52,22 +51,25 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
     <path d="M15.6 14.4c2.6-.4 4.5 1.3 5 4.6" />
   </>,
   broadcasts: <>
-    <circle cx="12" cy="11" r="1.6" />
-    <path d="M8.6 14.4a4.8 4.8 0 0 1 0-6.8M15.4 7.6a4.8 4.8 0 0 1 0 6.8M5.8 17.2a8.8 8.8 0 0 1 0-12.4M18.2 4.8a8.8 8.8 0 0 1 0 12.4" />
-    <path d="M12 12.6 9.5 21h5L12 12.6Z" />
+    <circle className="icon-broadcast-beacon" cx="12" cy="11" r="1.6" />
+    <path className="icon-broadcast-signal icon-broadcast-signal-inner" d="M8.6 14.4a4.8 4.8 0 0 1 0-6.8M15.4 7.6a4.8 4.8 0 0 1 0 6.8" />
+    <path className="icon-broadcast-signal icon-broadcast-signal-outer" d="M5.8 17.2a8.8 8.8 0 0 1 0-12.4M18.2 4.8a8.8 8.8 0 0 1 0 12.4" />
+    <path className="icon-broadcast-mast" d="M12 12.6 9.5 21h5L12 12.6Z" />
   </>,
   info: <>
-    <path d="M6 3.5h8.5L19 8v12.5H6Z" />
-    <path d="M14.5 3.5V8H19" />
-    <path d="M9 12h7M9 15h7M9 18h4.5" />
+    <path className="icon-info-page" d="M6 3.5h8.5L19 8v12.5H6Z" />
+    <path className="icon-info-fold" d="M14.5 3.5V8H19" />
+    <g className="icon-info-lines"><path d="M9 12h7" /><path d="M9 15h7" /><path d="M9 18h4.5" /></g>
   </>,
   guide: <>
-    <path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4.2l2 2.2H19a1.5 1.5 0 0 1 1.5 1.5V17.5A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5Z" />
-    <path d="M3.5 10.5h17" />
+    <path className="icon-guide-back" d="M3.5 17.5v-10A1.5 1.5 0 0 1 5 6h4.2l2 2.2H19a1.5 1.5 0 0 1 1.5 1.5v7.8" />
+    <path className="icon-guide-front" d="M3.5 10.5h17v7A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5Z" />
   </>,
   settings: <>
-    <path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1" />
-    <circle cx="15" cy="7" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="17" r="2" />
+    <path className="icon-settings-rails" d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1" />
+    <circle className="icon-settings-knob icon-settings-knob-a" cx="15" cy="7" r="2" />
+    <circle className="icon-settings-knob icon-settings-knob-b" cx="9" cy="12" r="2" />
+    <circle className="icon-settings-knob icon-settings-knob-c" cx="17" cy="17" r="2" />
   </>,
   charter: <>
     <path d="M7 4.5H5.5v16h13v-16H17" />

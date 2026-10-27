@@ -1538,25 +1538,32 @@ html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg > * { 
   /* Search: the lens sweeps the field, the crosshair turns into focus. */
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="search"] svg { animation: icon-scan 640ms var(--ease-out); }
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="search"] svg > :nth-child(3) { animation: icon-focus 640ms var(--ease-out); }
-  /* Virus: the body turns while spikes and tips push outward and pull back. */
-  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="virus"] svg { animation: icon-turn 600ms var(--ease-out); }
-  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="virus"] svg > :nth-child(n+2):nth-child(-n+6) { transform-box: view-box; transform-origin: 12px 12px; animation: icon-spike 600ms var(--ease-out); }
+  /* Virus: one quiet breath travels from the core through the membrane and tips. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="virus"] .icon-virus-core { animation: icon-virus-core 520ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="virus"] .icon-virus-spikes { transform-box: view-box; transform-origin: 12px 12px; animation: icon-virus-spikes 520ms 35ms var(--ease-out) backwards; }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="virus"] .icon-virus-tips { transform-box: view-box; transform-origin: 12px 12px; animation: icon-virus-tips 520ms 70ms var(--ease-out) backwards; }
   /* Employees: the two people hop one after the other. */
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="employees"] svg > :nth-child(-n+2) { animation: icon-hop 460ms var(--ease-out); }
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="employees"] svg > :nth-child(n+3) { animation: icon-hop 460ms 110ms var(--ease-out) backwards; }
-  /* Broadcasts: the signal arcs ripple out from the mast twice. */
-  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="broadcasts"] svg > :nth-child(2) { transform-box: view-box; transform-origin: 12px 11px; animation: icon-ripple 320ms ease-out 2; }
-  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="broadcasts"] svg > :nth-child(1) { animation: icon-blink 320ms ease-out 2; }
-  /* Information: the corner folds in and the lines write themselves. */
-  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="info"] svg > :nth-child(2) { transform-origin: right top; animation: icon-fold 520ms var(--ease-out); }
-  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="info"] svg > :nth-child(3) { stroke-dasharray: 10; animation: icon-write-10 520ms 80ms var(--ease-out) backwards; }
-  /* Guide: the folder rises and its index line slides into place. */
-  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="guide"] svg > :nth-child(1) { animation: icon-folder-lift 520ms var(--ease-out); }
-  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="guide"] svg > :nth-child(2) { animation: icon-folder-index 520ms 70ms var(--ease-out) backwards; }
-  /* Settings: the three knobs slide to new positions and back. */
-  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] svg > :nth-child(2) { animation: icon-slide-left 620ms var(--ease-out); }
-  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] svg > :nth-child(3) { animation: icon-slide-right 620ms 60ms var(--ease-out); }
-  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] svg > :nth-child(4) { animation: icon-slide-left 620ms 120ms var(--ease-out); }
+  /* Broadcasts: one transmission travels from the beacon through both signal rings. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-beacon { animation: icon-broadcast-beacon 540ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-signal { transform-box: view-box; transform-origin: 12px 11px; }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-signal-inner { animation: icon-broadcast-wave 460ms 55ms var(--ease-out) backwards; }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-signal-outer { animation: icon-broadcast-wave 460ms 135ms var(--ease-out) backwards; }
+  /* Information: the sheet settles, its corner flexes, then the rows resolve in sequence. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="info"] .icon-info-page { animation: icon-info-page 500ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="info"] .icon-info-fold { transform-origin: right top; animation: icon-info-fold 500ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(1) { animation: icon-info-line 420ms 45ms var(--ease-out) backwards; }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(2) { animation: icon-info-line 420ms 90ms var(--ease-out) backwards; }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(3) { animation: icon-info-line 420ms 135ms var(--ease-out) backwards; }
+  /* Guide: the folder opens — its back rises while the front flap tips down and returns. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="guide"] .icon-guide-back { animation: icon-guide-back 520ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="guide"] .icon-guide-front { transform-origin: center bottom; animation: icon-guide-front 520ms var(--ease-out); }
+  /* Settings: a short calibration pass moves each knob by a different amount. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] .icon-settings-rails { animation: icon-settings-rails 540ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] .icon-settings-knob-a { animation: icon-settings-a 540ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] .icon-settings-knob-b { animation: icon-settings-b 540ms 45ms var(--ease-out) backwards; }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] .icon-settings-knob-c { animation: icon-settings-c 540ms 90ms var(--ease-out) backwards; }
   /* Charter: the clip lifts, the seal stamps down. */
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="charter"] svg > :nth-child(2) { animation: icon-lift 480ms var(--ease-out); }
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="charter"] svg > :nth-child(4) { animation: icon-stamp 480ms 140ms var(--ease-out) backwards; }
@@ -1570,18 +1577,23 @@ html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg > * { 
 }
 @keyframes icon-scan { 30% { translate: -1.6px -1px; } 65% { translate: 1.6px .6px; } }
 @keyframes icon-focus { 50% { rotate: 45deg; scale: .7; } }
-@keyframes icon-turn { 45% { rotate: 22deg; } }
-@keyframes icon-spike { 40% { scale: 1.14; } 70% { scale: .97; } }
+@keyframes icon-virus-core { 42% { scale: 1.1; } 72% { scale: .98; } }
+@keyframes icon-virus-spikes { 42% { rotate: 5deg; scale: 1.045; } 72% { rotate: -1deg; scale: .995; } }
+@keyframes icon-virus-tips { 42% { scale: 1.08; } 72% { scale: .99; } }
 @keyframes icon-hop { 40% { translate: 0 -2.4px; } 75% { translate: 0 .4px; } }
-@keyframes icon-ripple { from { scale: .78; opacity: .35; } }
-@keyframes icon-blink { 50% { scale: 1.45; } }
-@keyframes icon-fold { 40% { scale: .2; } }
-@keyframes icon-folder-lift { 45% { translate: 0 -1.6px; } }
-@keyframes icon-folder-index { from { translate: -4px 0; opacity: .25; } }
+@keyframes icon-broadcast-beacon { 35% { scale: 1.22; } 68% { scale: .96; } }
+@keyframes icon-broadcast-wave { from { scale: .82; opacity: .2; } 58% { scale: 1.035; opacity: 1; } }
+@keyframes icon-info-page { 38% { translate: 0 -.7px; } 72% { translate: 0 .15px; } }
+@keyframes icon-info-fold { 42% { scale: .72; translate: -.35px .35px; } 72% { scale: 1.04; } }
+@keyframes icon-info-line { from { stroke-dasharray: 8; stroke-dashoffset: 8; opacity: .25; } }
+@keyframes icon-guide-back { 42% { translate: 0 -1.1px; } 72% { translate: 0 .15px; } }
+@keyframes icon-guide-front { 42% { translate: 0 1.1px; scale: 1 .82; } 72% { translate: 0 -.15px; scale: 1 1.02; } }
+@keyframes icon-settings-rails { 45% { opacity: .72; } }
+@keyframes icon-settings-a { 42% { translate: -2.2px 0; } 72% { translate: .25px 0; } }
+@keyframes icon-settings-b { 42% { translate: 2.6px 0; } 72% { translate: -.25px 0; } }
+@keyframes icon-settings-c { 42% { translate: -2.8px 0; } 72% { translate: .3px 0; } }
 @keyframes icon-write-10 { from { stroke-dashoffset: 10; } }
 @keyframes icon-write-16 { from { stroke-dashoffset: 16; } }
-@keyframes icon-slide-left { 45% { translate: -4.5px 0; } }
-@keyframes icon-slide-right { 45% { translate: 4.5px 0; } }
 @keyframes icon-lift { 40% { translate: 0 -2.2px; } }
 @keyframes icon-stamp { from { scale: 1.8; opacity: 0; } 60% { scale: .9; opacity: 1; } }
 @keyframes icon-lid { 40% { translate: 0 -1.6px; rotate: -16deg; } 75% { rotate: 2deg; translate: 0 0; } }
