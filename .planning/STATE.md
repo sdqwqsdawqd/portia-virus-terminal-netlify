@@ -1,40 +1,39 @@
 ---
-gsd_state_version: "1.0"
+gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Закрытие замечаний
 current_phase: 13
 current_phase_name: Приложение «Справочник»
-status: executing
-stopped_at: Completed PORTIA-13-04-PLAN.md
-last_updated: "2026-10-27T04:23:14.997Z"
+status: complete
+stopped_at: Completed Phase PORTIA-13
+last_updated: "2026-10-27T04:37:24.181Z"
 last_activity: 2026-10-27
-last_activity_desc: "Completed quick task 261027-d0k: folded guide sections and compact back control"
-state_head: c4300024211af09a058bff8fa2503b69fdefe85c
+last_activity_desc: "Completed Phase PORTIA-13: Приложение «Справочник»"
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 49
-  completed_plans: 48
-  percent: 88
+  completed_plans: 49
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-26)
+See: .planning/PROJECT.md (updated 2026-10-27)
 
 **Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase PORTIA-13 — Приложение «Справочник»
+**Current focus:** Milestone v1.1 complete; ready for milestone close and the separate «Повышение» milestone
 
 ## Current Position
 
-Phase: PORTIA-13 (Приложение «Справочник») — EXECUTING
+Phase: PORTIA-13 (Приложение «Справочник») — COMPLETE
 Plan: 5 of 5
-Status: Executing Phase PORTIA-13
-Last activity: 2026-10-27 — Completed quick task 261027-d0k: folded guide sections and compact back control
+Status: Phase complete; milestone v1.1 ready to close
+Last activity: 2026-10-27 — Completed Phase PORTIA-13: Приложение «Справочник»
 
-Progress: [█████████░] 88%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -82,6 +81,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 | Phase PORTIA-13 P02 | 10 min | 3 tasks | 4 files |
 | Phase 13 P03 | 30min | 2 tasks | 2 files |
 | Phase PORTIA-13 P04 | 35min | 2 tasks | 3 files |
+| Phase PORTIA-13 P05 | owner-paced | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -178,9 +178,9 @@ None.
 ## Session Continuity
 
 Last session: 2026-10-27
-Stopped at: Session resumed; PORTIA-13-05 Task 2 awaits owner verification
-Resume file: .planning/phases/PORTIA-13-prilozhenie-spravochnik/.continue-here.md
+Stopped at: Completed Phase PORTIA-13
+Resume file: none
 
 ## Operator Next Steps
 
-- `/gsd-discuss-phase 9` или `/gsd-plan-phase 9`
+- `/gsd-complete-milestone` для закрытия v1.1, затем `/gsd-new-milestone` для приложения «Повышение»

@@ -170,6 +170,7 @@
 | EDIT-07 | Phase 11 | Complete |
 
 **Coverage:**
+
 - v1.1 requirements: 49 total
 - Mapped to phases: 49 ✓
 - Unmapped: 0
