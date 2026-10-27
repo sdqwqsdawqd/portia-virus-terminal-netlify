@@ -54,6 +54,7 @@ const rpcNames = [
   "portia_promo_reset_device",
   "portia_promo_register_attempt",
   "portia_promo_submit_request",
+  "portia_promo_public_status",
   "portia_promo_claim_request",
   "portia_promo_release_request",
   "portia_promo_reject_request",
@@ -97,6 +98,13 @@ test("promotion SQL closes transactionally, retains three results and schedules 
   assert.match(setup, /portia_promo_cleanup[\s\S]*interval '3 days'/i);
   assert.match(setup, /portia-promo-cleanup/i);
   assert.match(setup, /cron\.job_run_details[\s\S]*interval '7 days'/i);
+});
+
+test("public promotion status is explicit and first accepted submit binds in the same transaction", () => {
+  assert.match(setup, /portia_promo_public_status[\s\S]*jsonb_build_object[\s\S]*qualificationPassed[\s\S]*recent_results/i);
+  assert.match(setup, /portia_promo_submit_request[\s\S]*insert into public\.portia_promo_device_bindings[\s\S]*insert into public\.portia_promo_(requests|qualification_requests)/i);
+  assert.match(setup, /portia_promo_register_attempt[\s\S]*until_at > now\(\)[\s\S]*return until_at/i);
+  assert.doesNotMatch(setup, /grant select on (table )?public\.portia_promo_/i);
 });
 
 test("promotion SQL owner apply file mirrors contracts and is explicitly manual", () => {

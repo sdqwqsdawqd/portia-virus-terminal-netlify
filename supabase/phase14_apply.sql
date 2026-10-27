@@ -299,31 +299,31 @@ as $$
 declare
   current_failures integer;
   until_at timestamptz;
+  bucket_exists boolean;
 begin
   if length(p_bucket_key) not between 1 and 160 or length(p_ip_bucket) > 128 then
     raise exception 'invalid-attempt-bucket';
   end if;
-  insert into public.portia_promo_attempt_buckets (bucket_key, ip_bucket, failures, blocked_until)
-  values (p_bucket_key, p_ip_bucket, case when p_success then 0 else 1 end, null)
-  on conflict (bucket_key) do update set
-    failures = case when p_success then 0 else least(public.portia_promo_attempt_buckets.failures + 1, 1000) end,
-    ip_bucket = excluded.ip_bucket,
-    updated_at = now()
-  returning failures into current_failures;
-  if not p_success then
-    until_at := now() + case
-      when current_failures <= 1 then interval '5 minutes'
-      when current_failures = 2 then interval '15 minutes'
-      else interval '60 minutes'
-    end;
-    update public.portia_promo_attempt_buckets
-      set blocked_until = greatest(coalesce(blocked_until, '-infinity'::timestamptz), until_at)
-      where bucket_key = p_bucket_key
-      returning blocked_until into until_at;
-  else
-    update public.portia_promo_attempt_buckets set blocked_until = null where bucket_key = p_bucket_key;
-    until_at := null;
+  select failures, blocked_until, true into current_failures, until_at, bucket_exists
+    from public.portia_promo_attempt_buckets where bucket_key = p_bucket_key for update;
+  if p_success then
+    insert into public.portia_promo_attempt_buckets (bucket_key, ip_bucket, failures, blocked_until)
+    values (p_bucket_key, p_ip_bucket, 0, null)
+    on conflict (bucket_key) do update set failures = 0, blocked_until = null, ip_bucket = excluded.ip_bucket, updated_at = now();
+    return null;
   end if;
+  if bucket_exists and until_at is not null and until_at > now() then return until_at; end if;
+  current_failures := least(coalesce(current_failures, 0) + 1, 1000);
+  until_at := now() + case
+    when current_failures = 1 then interval '5 minutes'
+    when current_failures = 2 then interval '15 minutes'
+    else interval '60 minutes'
+  end;
+  insert into public.portia_promo_attempt_buckets (bucket_key, ip_bucket, failures, blocked_until)
+  values (p_bucket_key, p_ip_bucket, current_failures, until_at)
+  on conflict (bucket_key) do update set
+    failures = excluded.failures, blocked_until = excluded.blocked_until,
+    ip_bucket = excluded.ip_bucket, updated_at = now();
   return until_at;
 end $$;
 
@@ -333,7 +333,8 @@ create or replace function public.portia_promo_submit_request(
   p_nickname_key text,
   p_title_id text,
   p_target_id text,
-  p_token_hash text
+  p_token_hash text,
+  p_risk_bucket text default ''
 )
 returns uuid
 language plpgsql
@@ -342,11 +343,23 @@ set search_path = ''
 as $$
 declare
   request_id uuid;
+  bound_nickname text;
 begin
-  if not exists (
-    select 1 from public.portia_promo_device_bindings
-    where nickname_key = lower(trim(p_nickname_key)) and token_hash = p_token_hash and reset_at is null
-  ) then raise exception 'device-denied'; end if;
+  if length(p_token_hash) not between 32 and 128 or length(p_risk_bucket) > 128 then
+    raise exception 'invalid-device-binding';
+  end if;
+  select nickname_key into bound_nickname from public.portia_promo_device_bindings
+    where token_hash = p_token_hash and reset_at is null for update;
+  if bound_nickname is not null and bound_nickname <> lower(trim(p_nickname_key)) then
+    raise exception 'device-denied';
+  end if;
+  if bound_nickname is null then
+    if exists (select 1 from public.portia_promo_device_bindings where nickname_key = lower(trim(p_nickname_key)) and reset_at is null) then
+      raise exception 'device-denied';
+    end if;
+    insert into public.portia_promo_device_bindings (nickname_key, token_hash, risk_bucket)
+    values (lower(trim(p_nickname_key)), p_token_hash, p_risk_bucket);
+  end if;
   if p_kind = 'ordinary' then
     insert into public.portia_promo_requests (nickname, nickname_key, title_id, target_title_id)
     values (left(trim(p_nickname), 64), lower(trim(p_nickname_key)), p_title_id, p_target_id)
@@ -357,6 +370,77 @@ begin
     returning id into request_id;
   else raise exception 'invalid-request-kind'; end if;
   return request_id;
+end $$;
+
+create or replace function public.portia_promo_public_status(
+  p_nickname_key text,
+  p_title_id text,
+  p_token_hash text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  normalized_key text := lower(trim(p_nickname_key));
+  binding_state text := 'unbound';
+  ordinary_state jsonb;
+  qualification_state jsonb;
+  recent_results jsonb;
+  qualification_passed boolean := false;
+  awaiting_title text;
+begin
+  if length(normalized_key) not between 1 and 64 or length(p_title_id) not between 1 and 48
+    or (p_token_hash is not null and length(p_token_hash) not between 32 and 128) then
+    raise exception 'invalid-public-status';
+  end if;
+  if exists (select 1 from public.portia_promo_device_bindings where nickname_key = normalized_key and reset_at is null) then
+    binding_state := case when p_token_hash is not null and exists (
+      select 1 from public.portia_promo_device_bindings
+      where nickname_key = normalized_key and token_hash = p_token_hash and reset_at is null
+    ) then 'allowed' else 'denied' end;
+  elsif p_token_hash is not null and exists (
+    select 1 from public.portia_promo_device_bindings where token_hash = p_token_hash and reset_at is null
+  ) then binding_state := 'denied';
+  end if;
+  if binding_state = 'denied' then return jsonb_build_object('binding', binding_state); end if;
+
+  select jsonb_build_object('status', r.status, 'targetTitleId', r.target_title_id),
+    case when r.status = 'awaiting-sheet-change' then r.title_id else null end
+    into ordinary_state, awaiting_title
+    from public.portia_promo_requests r
+    where r.nickname_key = normalized_key
+    order by r.created_at desc limit 1;
+  select jsonb_build_object(
+      'status', q.status,
+      'targetTitleId', q.transition_id,
+      'availableAt', a.retake_at
+    ) into qualification_state
+    from public.portia_promo_qualification_requests q
+    left join public.portia_promo_attempts a on a.request_id = q.id
+    where q.nickname_key = normalized_key
+    order by q.created_at desc limit 1;
+  select exists (
+    select 1 from public.portia_promo_results r
+    where r.nickname_key = normalized_key and r.result_kind = 'qualification' and r.outcome = 'passed'
+      and r.compact ->> 'titleId' = p_title_id
+  ) into qualification_passed;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'kind', history.result_kind, 'outcome', history.outcome, 'createdAt', history.created_at
+  ) order by history.created_at desc), '[]'::jsonb) into recent_results
+  from (
+    select result_kind, outcome, created_at from public.portia_promo_results
+    where nickname_key = normalized_key order by created_at desc, id desc limit 3
+  ) history;
+  return jsonb_build_object(
+    'binding', binding_state,
+    'ordinary', ordinary_state,
+    'qualification', qualification_state,
+    'qualificationPassed', qualification_passed,
+    'awaitingTitleId', awaiting_title,
+    'results', recent_results
+  );
 end $$;
 
 create or replace function public.portia_promo_claim_request(p_kind text, p_request_id uuid)
@@ -656,7 +740,8 @@ end $$;
 revoke all on function public.portia_promo_bind_device(text, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_reset_device(text) from public, anon, authenticated;
 revoke all on function public.portia_promo_register_attempt(text, text, boolean) from public, anon, authenticated;
-revoke all on function public.portia_promo_submit_request(text, text, text, text, text, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_submit_request(text, text, text, text, text, text, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_public_status(text, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_claim_request(text, uuid) from public, anon, authenticated;
 revoke all on function public.portia_promo_release_request(text, uuid, boolean) from public, anon, authenticated;
 revoke all on function public.portia_promo_reject_request(text, uuid, text) from public, anon, authenticated;
@@ -674,7 +759,8 @@ revoke all on function public.portia_promo_cleanup() from public, anon, authenti
 
 grant execute on function public.portia_promo_bind_device(text, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_register_attempt(text, text, boolean) to anon, authenticated;
-grant execute on function public.portia_promo_submit_request(text, text, text, text, text, text) to anon, authenticated;
+grant execute on function public.portia_promo_submit_request(text, text, text, text, text, text, text) to anon, authenticated;
+grant execute on function public.portia_promo_public_status(text, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_start_test(uuid, text) to anon, authenticated;
 grant execute on function public.portia_promo_answer_question(uuid, uuid, jsonb, text) to anon, authenticated;
 grant execute on function public.portia_promo_fail_attempt(uuid, text, text) to anon, authenticated;
@@ -753,4 +839,3 @@ commit;
 -- 3. Export compact results/audit rows if retention is required.
 -- 4. Drop Phase 14 functions, then tables in reverse foreign-key order.
 -- Do not use an automatic destructive rollback: owner review is required.
-

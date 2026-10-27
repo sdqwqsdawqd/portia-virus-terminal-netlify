@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { PromotionRosterResult } from "./portia-promotion-sheet.ts";
 import {
@@ -92,6 +93,28 @@ test("an ineligible or active request writes nothing", async () => {
   assert.equal(active.calls.submit, 0);
 });
 
+test("qualification retake waits until the server date and then permits a new request", async () => {
+  const entry = { ...roster.roster[0], title: "Стажёр", titleId: "trainee" as const, nextTitle: "Лаборант", nextTitleId: "laboratory-assistant" as const, promotedAt: "2026-10-01T00:00:00.000Z" };
+  const future = dependencies({
+    loadRoster: async () => ({ status: "ok", roster: [entry] }),
+    workflowStatus: async () => ({ status: "ok", projection: {
+      ...emptyProjection, qualification: { status: "failed", targetTitleId: "laboratory-assistant", availableAt: "2026-10-28T00:00:00.000Z" },
+    } }),
+  });
+  const waiting = await submitPromotionRequest({ nickname: "Alice", kind: "qualification", token: null, headers: new Headers() }, future.deps);
+  assert.equal(waiting.body.code, "retake-wait");
+  assert.equal(future.calls.submit, 0);
+
+  const ready = dependencies({
+    loadRoster: async () => ({ status: "ok", roster: [entry] }),
+    workflowStatus: async () => ({ status: "ok", projection: {
+      ...emptyProjection, qualification: { status: "failed", targetTitleId: "laboratory-assistant", availableAt: "2026-10-26T00:00:00.000Z" },
+    } }),
+  });
+  assert.equal((await submitPromotionRequest({ nickname: "Alice", kind: "qualification", token: null, headers: new Headers() }, ready.deps)).status, 201);
+  assert.equal(ready.calls.submit, 1);
+});
+
 test("the first accepted request binds atomically, resets its attempt bucket and sets the cookie", async () => {
   const { deps, calls } = dependencies();
   const result = await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: null, headers: new Headers() }, deps);
@@ -111,4 +134,14 @@ test("database absence becomes pending-database and never fakes success", async 
   const submitResult = await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: null, headers: new Headers() }, submit.deps);
   assert.equal(submitResult.status, 503);
   assert.equal(submitResult.setCookie, undefined);
+});
+
+test("public promotion routes are dynamic, no-store and never select wildcard rows", () => {
+  for (const path of ["status", "requests"]) {
+    const route = readFileSync(new URL(`../app/api/promotion/${path}/route.ts`, import.meta.url), "utf8");
+    assert.ok(route.includes('dynamic = "force-dynamic"'), path);
+    assert.ok(route.includes("noStoreHeaders"), path);
+    assert.ok(!route.includes('select("*")'), path);
+    if (path === "status") assert.ok(!route.includes("Set-Cookie"), "lookup must not bind");
+  }
 });
