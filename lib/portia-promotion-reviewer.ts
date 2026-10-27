@@ -32,6 +32,8 @@ export type PromotionReviewerCommand =
   | { action: "claim" | "release" | "force-release" | "approve-task"; kind: PromotionRequestKind; requestId: string }
   | { action: "reject"; kind: PromotionRequestKind; requestId: string; note: string }
   | { action: "override-failure" | "release-retake"; attemptId: string }
+  | { action: "grade-answer"; answerId: string; correct: boolean }
+  | { action: "finalize-attempt"; attemptId: string; passed: boolean; percent: number | null; retakeDays: number }
   | { action: "reset-device"; nicknameKey: string };
 
 export function parsePromotionReviewerCommand(value: unknown): PromotionReviewerCommand | null {
@@ -49,6 +51,20 @@ export function parsePromotionReviewerCommand(value: unknown): PromotionReviewer
   if (attemptActions.has(body.action)) {
     return typeof body.attemptId === "string" && uuidPattern.test(body.attemptId)
       ? { action: body.action as "override-failure" | "release-retake", attemptId: body.attemptId }
+      : null;
+  }
+  if (body.action === "grade-answer") {
+    return typeof body.answerId === "string" && uuidPattern.test(body.answerId) && typeof body.correct === "boolean"
+      ? { action: "grade-answer", answerId: body.answerId, correct: body.correct }
+      : null;
+  }
+  if (body.action === "finalize-attempt") {
+    const percent = body.percent === null ? null : body.percent;
+    const retakeDays = body.retakeDays ?? 2;
+    return typeof body.attemptId === "string" && uuidPattern.test(body.attemptId) && typeof body.passed === "boolean"
+      && (percent === null || (Number.isInteger(percent) && (percent as number) >= 0 && (percent as number) <= 100))
+      && Number.isInteger(retakeDays) && (retakeDays as number) >= 0 && (retakeDays as number) <= 365
+      ? { action: "finalize-attempt", attemptId: body.attemptId, passed: body.passed, percent: percent as number | null, retakeDays: retakeDays as number }
       : null;
   }
   if (body.action === "reset-device") {

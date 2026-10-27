@@ -64,7 +64,11 @@ export async function POST(request: Request) {
             ? ["portia_promo_override_failure", { p_attempt_id: command.attemptId }]
             : command.action === "release-retake"
               ? ["portia_promo_release_retake", { p_attempt_id: command.attemptId }]
-              : ["portia_promo_reset_device", { p_nickname_key: (command as { action: "reset-device"; nicknameKey: string }).nicknameKey }];
+              : command.action === "grade-answer"
+                ? ["portia_promo_grade_answer", { p_answer_id: command.answerId, p_correct: command.correct }]
+                : command.action === "finalize-attempt"
+                  ? ["portia_promo_finalize_attempt", { p_attempt_id: command.attemptId, p_passed: command.passed, p_percent: command.percent, p_retake_days: command.retakeDays }]
+                  : ["portia_promo_reset_device", { p_nickname_key: (command as { action: "reset-device"; nicknameKey: string }).nicknameKey }];
   const { data, error } = await supabase.rpc(rpc[0] as string, rpc[1] as Record<string, unknown>);
   if (error) return Response.json({ error: "Команда не выполнена.", code: error.code === "42883" ? "pending-database" : "command-failed" }, { status: error.code === "42883" ? 503 : 403, headers: noStoreHeaders });
   if (data !== true) return Response.json({ error: "Состояние уже изменилось другим проверяющим.", code: "claim-conflict", state: await reviewerState(supabase) }, { status: 409, headers: noStoreHeaders });

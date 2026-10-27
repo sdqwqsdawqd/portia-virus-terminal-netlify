@@ -173,11 +173,14 @@ create table if not exists public.portia_promo_answers (
   attempt_id uuid not null references public.portia_promo_attempts(id) on delete cascade,
   question_id uuid not null references public.portia_promo_attempt_questions(id) on delete cascade,
   answer jsonb not null check (pg_column_size(answer) <= 32768),
+  answer_nonce text check (answer_nonce is null or length(answer_nonce) between 16 and 80),
   reviewer_correct boolean,
   submitted_at timestamptz not null default now(),
   graded_at timestamptz,
   unique (attempt_id, question_id)
 );
+alter table public.portia_promo_answers add column if not exists answer_nonce text check (answer_nonce is null or length(answer_nonce) between 16 and 80);
+create unique index if not exists portia_promo_answer_nonce on public.portia_promo_answers (attempt_id, answer_nonce) where answer_nonce is not null;
 
 create table if not exists public.portia_promo_results (
   id uuid primary key default gen_random_uuid(),
@@ -305,7 +308,13 @@ begin
     'requestId', q.id, 'nickname', q.nickname, 'nicknameKey', q.nickname_key,
     'titleId', q.title_id, 'targetTitleId', q.transition_id, 'status', q.status,
     'claimed', q.reviewer_id is not null, 'assignedToMe', q.reviewer_id = auth.uid(), 'createdAt', q.created_at,
-    'attemptId', a.id, 'attemptStatus', a.status, 'retakeAt', a.retake_at, 'technicalFailure', a.technical_failure
+    'attemptId', a.id, 'attemptStatus', a.status, 'deadlineAt', a.deadline_at, 'retakeAt', a.retake_at, 'technicalFailure', a.technical_failure,
+    'answers', coalesce((select jsonb_agg(jsonb_build_object(
+      'answerId', ans.id, 'questionId', aq.id, 'questionText', aq.snapshot_text, 'questionType', aq.question_type,
+      'options', aq.snapshot_options, 'answerKey', aq.answer_key, 'answer', ans.answer, 'correct', ans.reviewer_correct
+    ) order by aq.sort_order) from public.portia_promo_attempt_questions aq
+      left join public.portia_promo_answers ans on ans.question_id = aq.id and ans.attempt_id = a.id
+      where aq.attempt_id = a.id and ans.id is not null), '[]'::jsonb)
   ) order by q.created_at), '[]'::jsonb) into qualification_rows
   from public.portia_promo_qualification_requests q
   left join public.portia_promo_attempts a on a.request_id = q.id;
@@ -597,8 +606,8 @@ begin
   if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
   if p_client_mode not in ('desktop', 'phone') or jsonb_typeof(p_questions) <> 'array'
     or jsonb_array_length(p_questions) not between 1 and 100 then raise exception 'invalid-test'; end if;
-  insert into public.portia_promo_attempts (request_id, reviewer_id, client_mode)
-  select id, auth.uid(), p_client_mode from public.portia_promo_qualification_requests
+  insert into public.portia_promo_attempts (request_id, reviewer_id, client_mode, status, started_at, deadline_at)
+  select id, auth.uid(), p_client_mode, 'active', now(), now() + interval '15 minutes' from public.portia_promo_qualification_requests
     where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid()
   returning id into created_attempt_id;
   if created_attempt_id is null then return null; end if;
@@ -615,7 +624,7 @@ begin
   if (select count(*) from public.portia_promo_attempt_questions aq where aq.attempt_id = created_attempt_id) <> jsonb_array_length(p_questions) then
     raise exception 'invalid-test-questions';
   end if;
-  update public.portia_promo_qualification_requests set status = 'approved', updated_at = now() where id = p_request_id;
+  update public.portia_promo_qualification_requests set status = 'testing', updated_at = now() where id = p_request_id;
   return created_attempt_id;
 end $$;
 
@@ -633,10 +642,58 @@ begin
   where a.id = p_attempt_id and a.request_id = r.id and a.status = 'prepared'
     and exists (select 1 from public.portia_promo_device_bindings b where b.nickname_key = r.nickname_key and b.token_hash = p_token_hash and b.reset_at is null)
   returning a.deadline_at into deadline;
+  if deadline is null then select a.deadline_at into deadline from public.portia_promo_attempts a
+    join public.portia_promo_qualification_requests r on r.id = a.request_id
+    where a.id = p_attempt_id and a.status = 'active' and exists (
+      select 1 from public.portia_promo_device_bindings b where b.nickname_key = r.nickname_key and b.token_hash = p_token_hash and b.reset_at is null
+    ); end if;
   return deadline;
 end $$;
 
-create or replace function public.portia_promo_answer_question(p_attempt_id uuid, p_question_id uuid, p_answer jsonb, p_token_hash text)
+create or replace function public.portia_promo_current_test(p_attempt_id uuid, p_token_hash text, p_client_mode text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare result jsonb; answer_count integer; question_count integer;
+begin
+  if p_client_mode not in ('desktop', 'phone') then return null; end if;
+  if not exists (
+    select 1 from public.portia_promo_attempts a
+    join public.portia_promo_qualification_requests r on r.id = a.request_id
+    join public.portia_promo_device_bindings b on b.nickname_key = r.nickname_key
+    where a.id = p_attempt_id and b.token_hash = p_token_hash and b.reset_at is null
+  ) then return null; end if;
+  update public.portia_promo_attempts set client_mode = p_client_mode, updated_at = now()
+    where id = p_attempt_id and status = 'active' and not exists (select 1 from public.portia_promo_answers where attempt_id = p_attempt_id);
+  update public.portia_promo_attempts set status = 'failed', technical_failure = coalesce(technical_failure, 'timeout'), updated_at = now()
+    where id = p_attempt_id and status = 'active' and deadline_at <= now();
+  select count(*) into answer_count from public.portia_promo_answers where attempt_id = p_attempt_id;
+  select count(*) into question_count from public.portia_promo_attempt_questions where attempt_id = p_attempt_id;
+  if answer_count = question_count and question_count > 0 then
+    update public.portia_promo_attempts set status = 'grading', updated_at = now() where id = p_attempt_id and status = 'active';
+    update public.portia_promo_qualification_requests r set status = 'grading', updated_at = now()
+      from public.portia_promo_attempts a where a.id = p_attempt_id and a.request_id = r.id and a.status = 'grading';
+  end if;
+  select jsonb_build_object(
+    'attemptId', a.id, 'nickname', r.nickname, 'titleId', r.title_id,
+    'status', case when a.status in ('failed','passed') then a.status when a.status = 'grading' then 'submitted' else a.status end,
+    'clientMode', a.client_mode, 'deadlineAt', a.deadline_at,
+    'result', case when a.status in ('passed','failed') and a.technical_failure is null then a.status else null end,
+    'percent', a.final_percent,
+    'question', case when a.status = 'active' then (
+      select jsonb_build_object('id', q.id, 'type', q.question_type, 'text', q.snapshot_text,
+        'options', q.snapshot_options, 'index', q.sort_order, 'total', question_count)
+      from public.portia_promo_attempt_questions q where q.attempt_id = a.id and q.sort_order = answer_count limit 1
+    ) else null end
+  ) into result
+  from public.portia_promo_attempts a join public.portia_promo_qualification_requests r on r.id = a.request_id
+  where a.id = p_attempt_id;
+  return result;
+end $$;
+
+create or replace function public.portia_promo_answer_question(p_attempt_id uuid, p_question_id uuid, p_answer jsonb, p_nonce text, p_token_hash text)
 returns boolean
 language plpgsql
 security definer
@@ -645,8 +702,10 @@ as $$
 declare expected_order integer;
 begin
   select count(*) into expected_order from public.portia_promo_answers where attempt_id = p_attempt_id;
-  insert into public.portia_promo_answers (attempt_id, question_id, answer)
-  select a.id, q.id, p_answer
+  if length(p_nonce) not between 16 and 80 then return false; end if;
+  if exists (select 1 from public.portia_promo_answers where attempt_id = p_attempt_id and answer_nonce = p_nonce) then return true; end if;
+  insert into public.portia_promo_answers (attempt_id, question_id, answer, answer_nonce)
+  select a.id, q.id, p_answer, p_nonce
   from public.portia_promo_attempts a
   join public.portia_promo_qualification_requests r on r.id = a.request_id
   join public.portia_promo_attempt_questions q on q.attempt_id = a.id
@@ -711,6 +770,13 @@ begin
     update public.portia_promo_qualification_requests r set
       status = case when p_passed then 'passed' else 'failed' end, updated_at = now()
     from public.portia_promo_attempts a where a.id = p_attempt_id and r.id = a.request_id;
+    insert into public.portia_promo_results (nickname_key, result_kind, outcome, compact)
+    select r.nickname_key, 'qualification', case when p_passed then 'passed' else 'failed' end,
+      jsonb_build_object('attemptId', a.id, 'titleId', r.title_id, 'percent', p_percent)
+    from public.portia_promo_attempts a join public.portia_promo_qualification_requests r on r.id = a.request_id
+    where a.id = p_attempt_id and not exists (
+      select 1 from public.portia_promo_results result where result.compact ->> 'attemptId' = p_attempt_id::text
+    );
   end if;
   return found;
 end $$;
@@ -949,7 +1015,8 @@ revoke all on function public.portia_promo_reject_request(text, uuid, text) from
 revoke all on function public.portia_promo_confirm_assignment(uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.portia_promo_confirm_test(uuid, jsonb, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_start_test(uuid, text) from public, anon, authenticated;
-revoke all on function public.portia_promo_answer_question(uuid, uuid, jsonb, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_current_test(uuid, text, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_answer_question(uuid, uuid, jsonb, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_fail_attempt(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_grade_answer(uuid, boolean) from public, anon, authenticated;
 revoke all on function public.portia_promo_finalize_attempt(uuid, boolean, integer, integer) from public, anon, authenticated;
@@ -963,7 +1030,8 @@ grant execute on function public.portia_promo_register_attempt(text, text, boole
 grant execute on function public.portia_promo_submit_request(text, text, text, text, text, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_public_status(text, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_start_test(uuid, text) to anon, authenticated;
-grant execute on function public.portia_promo_answer_question(uuid, uuid, jsonb, text) to anon, authenticated;
+grant execute on function public.portia_promo_current_test(uuid, text, text) to anon, authenticated;
+grant execute on function public.portia_promo_answer_question(uuid, uuid, jsonb, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_fail_attempt(uuid, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_reset_device(text) to authenticated;
 grant execute on function public.portia_promo_reviewer_state() to authenticated;
