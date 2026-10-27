@@ -183,7 +183,8 @@ const contentCacheStorageKey = "portia-content-last-success-v1";
 const employeesCacheStorageKey = "portia-employees-last-success-v1";
 // v3: every shortcut gained an explicit independent home; discard v2 coordinates that could preserve the overlapping guide.
 const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3";
-const guideCollapsedStorageKey = "portia-guide-collapsed-v1";
+// v2 starts every section folded; v1 stored the former open-by-default behaviour.
+const guideCollapsedStorageKey = "portia-guide-collapsed-v2";
 const taskbarOrderStorageKey = "portia-taskbar-order-v1";
 const TASKBAR_BOUNCE_MS = 520;
 const ASSISTANT_RECOVER_MS = 780;
@@ -1756,8 +1757,9 @@ function GuideApp({ sections, formattedText, openCardId, onOpenCard }: {
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const page = useRef<HTMLElement>(null);
-  // Folded sections live on this device only (D-08): read once on mount, never trusted (bad JSON leaves everything open).
-  const [collapsed, setCollapsed] = useState<string[]>([]);
+  // Folded sections live on this device only (D-08): first visit starts with compact section headers only.
+  const initialCollapsed = useRef(sections.map((section) => section.id));
+  const [collapsed, setCollapsed] = useState<string[]>(() => initialCollapsed.current);
   const [collapsedLoaded, setCollapsedLoaded] = useState(false);
   const returnTo = useRef<{ cardId: string; scrollTop: number; sections: string } | null>(null);
   const backIntent = useRef(false);
@@ -1785,9 +1787,10 @@ function GuideApp({ sections, formattedText, openCardId, onOpenCard }: {
   }, [shownId, sections]);
 
   useEffect(() => {
-    let ids: string[] = [];
+    let ids = initialCollapsed.current;
     try {
-      const saved: unknown = JSON.parse(window.localStorage.getItem(guideCollapsedStorageKey) ?? "[]");
+      const stored = window.localStorage.getItem(guideCollapsedStorageKey);
+      const saved: unknown = stored === null ? null : JSON.parse(stored);
       if (Array.isArray(saved)) ids = saved.filter((id): id is string => typeof id === "string");
     } catch {}
     const restoreTimer = window.setTimeout(() => {
@@ -1809,7 +1812,7 @@ function GuideApp({ sections, formattedText, openCardId, onOpenCard }: {
 
   return <div className="guide-app" ref={scroller} tabIndex={-1}>
     {found && card ? <>
-      <div className="guide-back-bar"><button type="button" aria-label="Назад к списку карточек" onClick={() => { backIntent.current = true; onOpenCard(""); }}><span aria-hidden="true">←</span> Назад</button></div>
+      <div className="guide-back-bar"><button type="button" aria-label="Назад к списку карточек" onClick={() => { backIntent.current = true; onOpenCard(""); }}><span aria-hidden="true">←</span><span className="guide-back-label">Назад</span></button></div>
       <article className="guide-page" tabIndex={-1} ref={page}>
         <span className="eyebrow">{found.section.title || "Без названия"}</span>
         <h1>{card.title || "Без названия"}</h1>

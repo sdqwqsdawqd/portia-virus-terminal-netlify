@@ -132,3 +132,14 @@ test("the five refreshed shortcut icons animate semantic parts only in full moti
   // Explicitly excluded by the owner: employees, charter, sheet and trash retain their established gestures.
   for (const kept of ["icon-hop", "icon-lift", "icon-stamp", "icon-write-16", "icon-lid"]) assert.ok(styles.includes(`@keyframes ${kept}`), kept);
 });
+
+test("guide sections start folded and the compact back control does not cover card content", () => {
+  assert.ok(source.includes('const guideCollapsedStorageKey = "portia-guide-collapsed-v2"'));
+  assert.ok(source.includes("const initialCollapsed = useRef(sections.map((section) => section.id))"));
+  assert.ok(source.includes("useState<string[]>(() => initialCollapsed.current)"));
+  const back = /\.guide-back-bar \{([^}]*)\}/.exec(styles)?.[1] ?? "";
+  assert.match(back, /height:\s*36px/);
+  assert.match(back, /margin:\s*0 0 16px/);
+  assert.doesNotMatch(back, /position:\s*(sticky|absolute|fixed)/);
+  assert.doesNotMatch(back, /margin:\s*-/);
+});
