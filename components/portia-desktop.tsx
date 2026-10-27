@@ -180,8 +180,8 @@ const broadcastReadStorageKey = "portia-broadcasts-read-signature-v1";
 const questSeenStorageKey = "portia-quests-seen-v1";
 const contentCacheStorageKey = "portia-content-last-success-v1";
 const employeesCacheStorageKey = "portia-employees-last-success-v1";
-// v2: the icon grid step grew with the new icon wells, so v1 positions would overlap.
-const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v2";
+// v3: every shortcut gained an explicit independent home; discard v2 coordinates that could preserve the overlapping guide.
+const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3";
 const guideCollapsedStorageKey = "portia-guide-collapsed-v1";
 const taskbarOrderStorageKey = "portia-taskbar-order-v1";
 const TASKBAR_BOUNCE_MS = 520;

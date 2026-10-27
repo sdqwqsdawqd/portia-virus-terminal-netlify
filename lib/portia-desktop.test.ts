@@ -107,6 +107,7 @@ test("every desktop shortcut owns a default position and saved positions overrid
   assert.ok(source.includes("position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId]"));
   assert.ok(source.includes('"--shortcut-left": `max(0px, min(${position.x}px, calc(100% - 100px)))`'));
   assert.doesNotMatch(styles, /\.desktop-icon\[data-shortcut=/);
+  assert.ok(source.includes('const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3"'));
 });
 
 test("shortcut motion is uniform, opt-in, and the guide has its own animation", () => {
