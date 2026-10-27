@@ -71,7 +71,7 @@
 - [x] `14-03-PLAN.md` — public status, device binding and request APIs
 - [x] `14-04-PLAN.md` — reviewer queues, claims, banks and snapshots
 - [x] `14-05-PLAN.md` — participant application and ordinary-task flow
-- [ ] `14-07-PLAN.md` — qualification engine and protected APIs
+- [x] `14-07-PLAN.md` — qualification engine and protected APIs
 - [x] `14-06-PLAN.md` — reviewer workspace and bank management
 - [ ] `14-08-PLAN.md` — participant/reviewer qualification interfaces
 - [ ] `14-09-PLAN.md` — retake notification and owner SQL rollout gate
