@@ -54,6 +54,8 @@ const rpcNames = [
   "portia_promo_reset_device",
   "portia_promo_reviewer_state",
   "portia_promo_approve_assignment",
+  "portia_promo_bank_state",
+  "portia_promo_bank_command",
   "portia_promo_register_attempt",
   "portia_promo_submit_request",
   "portia_promo_public_status",
@@ -85,7 +87,7 @@ test("promotion SQL RPCs are security-definer functions with pinned search paths
 });
 
 test("promotion SQL reviewer transitions require promo and claim conditionally", () => {
-  const reviewerRpcs = ["reset_device", "reviewer_state", "approve_assignment", "claim_request", "release_request", "reject_request", "confirm_assignment", "confirm_test", "grade_answer", "finalize_attempt", "override_failure", "release_retake", "close"];
+  const reviewerRpcs = ["reset_device", "reviewer_state", "approve_assignment", "bank_state", "bank_command", "claim_request", "release_request", "reject_request", "confirm_assignment", "confirm_test", "grade_answer", "finalize_attempt", "override_failure", "release_retake", "close"];
   for (const suffix of reviewerRpcs) {
     const start = setup.toLowerCase().indexOf(`create or replace function public.portia_promo_${suffix}`);
     const body = setup.slice(start, setup.indexOf("$$;", start) + 3);
@@ -107,6 +109,15 @@ test("public promotion status is explicit and first accepted submit binds in the
   assert.match(setup, /portia_promo_submit_request[\s\S]*insert into public\.portia_promo_device_bindings[\s\S]*insert into public\.portia_promo_(requests|qualification_requests)/i);
   assert.match(setup, /portia_promo_register_attempt[\s\S]*until_at > now\(\)[\s\S]*return until_at/i);
   assert.doesNotMatch(setup, /grant select on (table )?public\.portia_promo_/i);
+});
+
+test("reviewer bank RPCs expose versioned private configuration and immutable confirmation stays separate", () => {
+  const start = setup.indexOf("create or replace function public.portia_promo_bank_state");
+  const body = setup.slice(start, setup.indexOf("$$;", start) + 3);
+  for (const field of ["requiredCount", "quotas", "answerKey", "version"]) assert.ok(body.includes(`'${field}'`), field);
+  assert.match(setup, /portia_promo_bank_command[\s\S]*save-task-bank[\s\S]*save-task-item[\s\S]*save-qualification-bank[\s\S]*save-question/i);
+  assert.match(setup, /portia_promo_confirm_assignment[\s\S]*portia_promo_assignment_items/i);
+  assert.match(setup, /portia_promo_confirm_test[\s\S]*portia_promo_attempt_questions/i);
 });
 
 test("promotion SQL owner apply file mirrors contracts and is explicitly manual", () => {
