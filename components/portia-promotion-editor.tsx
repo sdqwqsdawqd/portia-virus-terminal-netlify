@@ -4,10 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 
 type Branch = "requests" | "tasks" | "qualification";
 type Kind = "ordinary" | "qualification";
+type ReviewerAnswer = {
+  answerId: string; questionId: string; questionText: string; questionType: "single" | "multiple" | "free-text";
+  options: string[]; answer: string | string[]; correct: boolean | null;
+};
 type ReviewerRequest = {
   requestId: string; nickname: string; nicknameKey: string; titleId: string; targetTitleId: string;
   status: string; claimed: boolean; assignedToMe: boolean; createdAt: string;
-  attemptId?: string | null; attemptStatus?: string | null; retakeAt?: string | null; technicalFailure?: boolean;
+  attemptId?: string | null; attemptStatus?: string | null; retakeAt?: string | null; technicalFailure?: string | null; answers?: ReviewerAnswer[];
 };
 type ReviewerState = { ordinary: ReviewerRequest[]; qualification: ReviewerRequest[]; serverNow?: string };
 type BankItem = { id: string; text: string; active: boolean; sortOrder: number; type?: "single" | "multiple" | "free-text"; options?: Array<{ text: string }> | string[]; answerKey?: unknown };
@@ -28,6 +32,48 @@ function errorText(body: Record<string, unknown>, fallback: string) {
 
 function PromotionConfirmDialog({ title, body, onCancel, onConfirm }: { title: string; body: string; onCancel: () => void; onConfirm: () => void }) {
   return <div className="promotion-confirm-backdrop" role="presentation"><section className="promotion-confirm" role="alertdialog" aria-modal="true" aria-labelledby="promotion-confirm-title"><h3 id="promotion-confirm-title">{title}</h3><p>{body}</p><div><button type="button" onClick={onCancel}>ОТМЕНИТЬ</button><button className="danger-control" type="button" onClick={onConfirm}>ПОДТВЕРДИТЬ</button></div></section></div>;
+}
+
+function answerText(answer: ReviewerAnswer) {
+  if (Array.isArray(answer.answer)) return answer.answer.join(", ");
+  return answer.answer || "Ответ отсутствует";
+}
+
+const technicalFailureLabels: Record<string, string> = {
+  timeout: "Истекло общее время теста", hidden: "Участник скрыл вкладку на ПК", blur: "Окно потеряло фокус на ПК",
+  "page-exit": "Участник покинул страницу", offline: "Прервано соединение",
+};
+
+function QualificationGrading({ row, busy, onCommand, onConfirm }: {
+  row: ReviewerRequest;
+  busy: boolean;
+  onCommand: (action: string, extra?: Record<string, unknown>) => Promise<void>;
+  onConfirm: (value: { title: string; body: string; run: () => void }) => void;
+}) {
+  const [retakeDays, setRetakeDays] = useState(2);
+  const answers = row.answers ?? [];
+  const graded = answers.filter((answer) => typeof answer.correct === "boolean");
+  const percent = graded.length === answers.length && answers.length > 0 ? Math.round(graded.filter((answer) => answer.correct).length / answers.length * 100) : null;
+  const technicalFailure = row.technicalFailure ? technicalFailureLabels[row.technicalFailure] ?? "Техническое завершение попытки" : "";
+  if (!row.attemptId) return <div className="promotion-test-warning"><strong>ТЕСТ ЕЩЁ НЕ СОБРАН</strong><p>Соберите и подтвердите неизменяемый набор во вкладке «Квалификация».</p></div>;
+
+  return <section className="promotion-grading-workspace">
+    <header><div><span>ПРОВЕРКА ОТВЕТОВ</span><h3>{row.attemptStatus === "grading" ? "Ожидает решения" : "Текущая попытка"}</h3></div>{percent !== null && <strong>{percent}%</strong>}</header>
+    {technicalFailure && <div className="promotion-technical-failure"><strong>АВТОМАТИЧЕСКИЙ ПРОВАЛ</strong><p>{technicalFailure}</p><button type="button" disabled={busy} onClick={() => void onCommand("override-failure", { attemptId: row.attemptId })}>ОТМЕНИТЬ АВТОПРОВАЛ</button></div>}
+    {answers.length > 0 ? <div className="promotion-grade-answers">{answers.map((answer, index) => <article key={answer.answerId}>
+      <div className="promotion-grade-copy"><span>ВОПРОС {index + 1}</span><h4>{answer.questionText}</h4><p>{answerText(answer)}</p></div>
+      <div className="promotion-grade-controls" role="group" aria-label={`Оценка ответа ${index + 1}`}>
+        <button className={answer.correct === true ? "active correct" : ""} type="button" disabled={busy} aria-pressed={answer.correct === true} onClick={() => void onCommand("grade-answer", { answerId: answer.answerId, correct: true })}>ВЕРНО</button>
+        <button className={answer.correct === false ? "active incorrect" : ""} type="button" disabled={busy} aria-pressed={answer.correct === false} onClick={() => void onCommand("grade-answer", { answerId: answer.answerId, correct: false })}>НЕВЕРНО</button>
+      </div>
+    </article>)}</div> : <p className="promotion-cleanup-hint">Ответы появятся после прохождения теста.</p>}
+    <div className="promotion-final-decision">
+      <div><span>РАСЧЁТНЫЙ ПРОЦЕНТ</span><strong>{percent === null ? "Оцените все ответы" : `${percent}%`}</strong><small>Процент не принимает решение автоматически.</small></div>
+      <label>Срок пересдачи, дней<input type="number" min={0} max={365} value={retakeDays} onChange={(event) => setRetakeDays(Math.max(0, Math.min(365, Number(event.target.value) || 0)))} /></label>
+      <div className="promotion-final-actions"><button className="primary-control" type="button" disabled={busy || percent === null} onClick={() => onConfirm({ title: `Засчитать проверку: ${row.nickname}`, body: `Итог будет сохранён отдельно от расчётных ${percent ?? 0}%.`, run: () => void onCommand("finalize-attempt", { attemptId: row.attemptId, passed: true, percent, retakeDays }) })}>ЗАСЧИТАТЬ ПРОВЕРКУ</button><button className="danger-control" type="button" disabled={busy || percent === null} onClick={() => onConfirm({ title: `Не засчитывать: ${row.nickname}`, body: `Предложенный срок пересдачи — ${retakeDays} дн. Его можно изменить до подтверждения.`, run: () => void onCommand("finalize-attempt", { attemptId: row.attemptId, passed: false, percent, retakeDays }) })}>НЕ ЗАСЧИТЫВАТЬ</button></div>
+    </div>
+    {row.retakeAt && <button className="promotion-release-retake" type="button" disabled={busy} onClick={() => onConfirm({ title: `Открыть пересдачу: ${row.nickname}`, body: "Срок ожидания будет снят досрочно.", run: () => void onCommand("release-retake", { attemptId: row.attemptId }) })}>ОТКРЫТЬ ПЕРЕСДАЧУ ДОСРОЧНО</button>}
+  </section>;
 }
 
 export function PromotionEditor({ visible, canManageEditors }: { visible: boolean; canManageEditors: boolean }) {
@@ -96,6 +142,10 @@ export function PromotionEditor({ visible, canManageEditors }: { visible: boolea
     } finally { setBusy(false); }
   };
 
+  const qualificationCommand = async (row: ReviewerRequest, action: string, extra: Record<string, unknown> = {}) => {
+    await reviewerCommand(action, row, extra);
+  };
+
   const bankCommand = async (payload: Record<string, unknown>) => {
     setBusy(true); setMessage("");
     try {
@@ -142,7 +192,7 @@ export function PromotionEditor({ visible, canManageEditors }: { visible: boolea
       <div className="promotion-queue-filters"><button type="button" className={kind === "ordinary" ? "active" : ""} onClick={() => setKind("ordinary")}>ОБЫЧНОЕ ПОВЫШЕНИЕ <span>{ordinaryCount}</span></button><button type="button" className={kind === "qualification" ? "active" : ""} onClick={() => setKind("qualification")}>КВАЛИФИКАЦИЯ <span>{qualificationCount}</span></button></div>
       <div className="promotion-editor-workbench">
         <aside className="promotion-request-list">{rows.map((row) => <button key={row.requestId} type="button" className={selectedRequestId === row.requestId ? "active" : ""} onClick={() => setSelectedRequestId(row.requestId)}><strong>{row.nickname}</strong><span>{row.titleId} → {row.targetTitleId}</span><em>{row.claimed ? "В РАБОТЕ" : row.status.toUpperCase()}</em></button>)}{rows.length === 0 && <div className="promotion-empty"><strong>НОВЫХ ЗАПРОСОВ НЕТ</strong><p>Оставьте вкладку открытой — список обновится автоматически.</p></div>}</aside>
-        <article className="promotion-request-detail">{selected ? <><header><div><span>{queue.ordinary.includes(selected) ? "ОБЫЧНОЕ ПОВЫШЕНИЕ" : "КВАЛИФИКАЦИЯ"}</span><h2>{selected.nickname}</h2></div><b>{selected.claimed ? selected.assignedToMe ? "В РАБОТЕ У ВАС" : "ЗАНЯТ" : "НОВЫЙ"}</b></header><dl><div><dt>ПЕРЕХОД</dt><dd>{selected.titleId} → {selected.targetTitleId}</dd></div><div><dt>СОСТОЯНИЕ</dt><dd>{selected.status}</dd></div></dl><p className="promotion-cleanup-hint">Незавершённые данные удаляются через 3 дня.</p><div className="promotion-request-actions">{!selected.claimed && <button className="primary-control" disabled={busy} type="button" onClick={() => void reviewerCommand("claim", selected)}>ВЗЯТЬ ЗАПРОС</button>}{selected.assignedToMe && <><button type="button" disabled={busy} onClick={() => void reviewerCommand("release", selected)}>ОСВОБОДИТЬ</button>{queue.ordinary.includes(selected) && selected.status === "assigned" && <button className="primary-control" type="button" onClick={() => setConfirm({ title: `Зачесть задания: ${selected.nickname}`, body: "После подтверждения участник будет ожидать изменения звания в таблице.", run: () => void reviewerCommand("approve-task", selected) })}>ЗАЧЕСТЬ ЗАДАНИЯ</button>}<button className="danger-control" type="button" onClick={() => setConfirm({ title: `Отклонить: ${selected.nickname}`, body: "Участник увидит нейтральное сообщение без внутренней причины.", run: () => void reviewerCommand("reject", selected, { note: "" }) })}>ОТКЛОНИТЬ</button></>}{canManageEditors && selected.claimed && !selected.assignedToMe && <button type="button" onClick={() => void reviewerCommand("force-release", selected)}>ПРИНУДИТЕЛЬНО ОСВОБОДИТЬ</button>}{canManageEditors && <button type="button" onClick={() => void reviewerCommand("reset-device", selected, { nicknameKey: selected.nicknameKey })}>СБРОСИТЬ ПРИВЯЗКУ</button>}</div></> : <div className="promotion-empty">Выберите запрос.</div>}</article>
+        <article className="promotion-request-detail">{selected ? <><header><div><span>{queue.ordinary.includes(selected) ? "ОБЫЧНОЕ ПОВЫШЕНИЕ" : "КВАЛИФИКАЦИЯ"}</span><h2>{selected.nickname}</h2></div><b>{selected.claimed ? selected.assignedToMe ? "В РАБОТЕ У ВАС" : "ЗАНЯТ" : "НОВЫЙ"}</b></header><dl><div><dt>ПЕРЕХОД</dt><dd>{selected.titleId} → {selected.targetTitleId}</dd></div><div><dt>СОСТОЯНИЕ</dt><dd>{selected.status}</dd></div></dl>{queue.qualification.includes(selected) && selected.claimed && <QualificationGrading row={selected} busy={busy} onCommand={(action, extra) => qualificationCommand(selected, action, extra)} onConfirm={setConfirm} />}<p className="promotion-cleanup-hint">Незавершённые данные удаляются через 3 дня.</p><div className="promotion-request-actions">{!selected.claimed && <button className="primary-control" disabled={busy} type="button" onClick={() => void reviewerCommand("claim", selected)}>ВЗЯТЬ ЗАПРОС</button>}{selected.assignedToMe && <><button type="button" disabled={busy} onClick={() => void reviewerCommand("release", selected)}>ОСВОБОДИТЬ</button>{queue.ordinary.includes(selected) && selected.status === "assigned" && <button className="primary-control" type="button" onClick={() => setConfirm({ title: `Зачесть задания: ${selected.nickname}`, body: "После подтверждения участник будет ожидать изменения звания в таблице.", run: () => void reviewerCommand("approve-task", selected) })}>ЗАЧЕСТЬ ЗАДАНИЯ</button>}<button className="danger-control" type="button" onClick={() => setConfirm({ title: `Отклонить: ${selected.nickname}`, body: "Участник увидит нейтральное сообщение без внутренней причины.", run: () => void reviewerCommand("reject", selected, { note: "" }) })}>ОТКЛОНИТЬ</button></>}{canManageEditors && selected.claimed && !selected.assignedToMe && <button type="button" onClick={() => void reviewerCommand("force-release", selected)}>ПРИНУДИТЕЛЬНО ОСВОБОДИТЬ</button>}{canManageEditors && <button type="button" onClick={() => void reviewerCommand("reset-device", selected, { nicknameKey: selected.nicknameKey })}>СБРОСИТЬ ПРИВЯЗКУ</button>}</div></> : <div className="promotion-empty">Выберите запрос.</div>}</article>
       </div>
     </> : <div className="promotion-bank-layout">
       <aside className="promotion-bank-list">{bankList.map((bank) => <button key={bank.id} type="button" className={selectedBank?.id === bank.id ? "active" : ""} onClick={() => { setSelectedBankId(bank.id); setPreview(null); setManualIds([]); }}><strong>{bank.targetTitleId ?? bank.transitionId ?? "Банк"}</strong><span>{bank.items.filter((item) => item.active).length} активных</span></button>)}</aside>

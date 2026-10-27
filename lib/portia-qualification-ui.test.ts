@@ -60,7 +60,7 @@ test("qualification UI keeps participant result private and reviewer retake cont
 });
 
 test("qualification runner and grading workspace have sticky responsive reduced-motion styles", () => {
-  assert.match(styles, /\.promotion-test-timer\s*\{[^}]*position:\s*sticky/s);
+  assert.match(styles, /\.promotion-test-timer\s*\{[^}]*position:\s*sticky/);
   assert.match(styles, /\.promotion-grading-workspace\s*\{/);
   assert.match(styles, /@media \(max-width:\s*520px\)[\s\S]*\.promotion-question/);
   assert.match(styles, /html\[data-motion="reduce"\][^\n]*\.promotion-qualification-runner/);

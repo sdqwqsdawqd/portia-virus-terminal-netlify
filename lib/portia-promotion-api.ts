@@ -16,7 +16,9 @@ export type PromotionPublicResult = {
 export type PromotionPublicActive = {
   status: string;
   targetTitleId: PromotionTitleId | null;
+  attemptId?: string;
   availableAt?: string;
+  percent?: number;
   tasks?: { id: string; text: string; sortOrder: number }[];
 };
 
@@ -90,6 +92,8 @@ function activeFrom(value: unknown): PromotionPublicActive | null {
   const row = value as Record<string, unknown>;
   if (typeof row.status !== "string" || !activeStatuses.has(row.status)) return null;
   const availableAt = safeDate(row.availableAt ?? row.available_at);
+  const attemptId = typeof (row.attemptId ?? row.attempt_id) === "string" ? String(row.attemptId ?? row.attempt_id) : null;
+  const percent = Number.isInteger(row.percent) && (row.percent as number) >= 0 && (row.percent as number) <= 100 ? row.percent as number : null;
   const tasks = Array.isArray(row.tasks) ? row.tasks.flatMap((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const task = item as Record<string, unknown>;
@@ -102,7 +106,9 @@ function activeFrom(value: unknown): PromotionPublicActive | null {
   return {
     status: row.status,
     targetTitleId: titleId(row.targetTitleId ?? row.target_title_id),
+    ...(attemptId ? { attemptId } : {}),
     ...(availableAt ? { availableAt } : {}),
+    ...(percent !== null ? { percent } : {}),
     ...(tasks.length ? { tasks } : {}),
   };
 }

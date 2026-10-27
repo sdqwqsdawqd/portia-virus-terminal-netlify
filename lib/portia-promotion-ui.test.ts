@@ -27,7 +27,7 @@ test("ordinary promotion and qualification remain visibly separate flows", () =>
 test("public participant surface has immutable tasks and no private reviewer fields", () => {
   assert.ok(source.includes("Назначенные задания"));
   assert.ok(source.includes("promotion-task-list"));
-  assert.doesNotMatch(source, /<input[^>]*(task|answer)|<textarea/i);
+  assert.doesNotMatch(source, /value=\{task\.text\}|onChange=[^>]*task\.text/i);
   for (const forbidden of ["answerKey", "reviewerId", "internalNote", "riskBucket", "tokenHash", "ipBucket"]) {
     assert.ok(!source.includes(forbidden), `private field ${forbidden} must not enter the participant component`);
   }

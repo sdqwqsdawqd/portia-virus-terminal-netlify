@@ -808,7 +808,9 @@ begin
   select jsonb_build_object(
       'status', q.status,
       'targetTitleId', q.transition_id,
-      'availableAt', a.retake_at
+      'attemptId', a.id,
+      'availableAt', a.retake_at,
+      'percent', a.final_percent
     ) into qualification_state
     from public.portia_promo_qualification_requests q
     left join public.portia_promo_attempts a on a.request_id = q.id
