@@ -1805,3 +1805,56 @@ html[data-motion="reduce"] .promotion-card, html[data-motion="reduce"] .icon-pro
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion]) .promotion-card, html:not([data-motion]) .icon-promotion-arrow { animation: none !important; transform: none !important; }
 }
+
+.promotion-editor { position: relative; flex: 1; min-height: 0; overflow: auto; padding: 16px; }
+.promotion-editor-branches, .promotion-queue-filters { display: flex; gap: 8px; margin-bottom: 14px; }
+.promotion-editor-branches button, .promotion-queue-filters button { min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.02); color: oklch(.66 calc(.024 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); cursor: pointer; }
+.promotion-editor-branches button.active, .promotion-queue-filters button.active { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
+.promotion-editor-branches button span, .promotion-queue-filters button span { min-width: 20px; padding: 2px 5px; border-radius: 9px; background: rgba(255,255,255,.06); text-align: center; font-family: var(--mono); }
+.promotion-editor-message { margin: 0 0 12px; padding: 10px 12px; border: 1px solid rgba(224,125,116,.45); border-radius: 7px; color: #efaaa3; font: 400 12px/1.45 var(--doc); }
+.promotion-editor-workbench { min-height: 430px; display: grid; grid-template-columns: 280px minmax(0, 1fr); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.promotion-request-list, .promotion-bank-list { min-width: 0; border-right: 1px solid var(--line); background: rgba(0,0,0,.1); }
+.promotion-request-list > button, .promotion-bank-list > button { width: 100%; display: grid; gap: 4px; padding: 13px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.promotion-request-list > button.active, .promotion-bank-list > button.active { background: var(--teal-soft); box-shadow: inset 3px 0 var(--teal); }
+.promotion-request-list strong, .promotion-bank-list strong { overflow: hidden; text-overflow: ellipsis; font: 600 13px var(--sans); }
+.promotion-request-list span, .promotion-bank-list span { color: oklch(.6 calc(.024 * var(--accent-chroma)) var(--accent-hue)); font: 400 10px var(--mono); }
+.promotion-request-list em { justify-self: start; color: var(--teal); font: 700 9px var(--sans); letter-spacing: .05em; }
+.promotion-request-detail { padding: 22px; }
+.promotion-request-detail > header, .promotion-bank-editor > header, .promotion-preview > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.promotion-request-detail h2, .promotion-bank-editor h2 { margin: 3px 0 0; font: 700 22px var(--sans); }
+.promotion-request-detail header span, .promotion-request-detail header b { color: var(--teal); font: 700 10px var(--sans); letter-spacing: .06em; }
+.promotion-request-detail dl { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 22px 0; }
+.promotion-request-detail dl div { padding: 12px; border: 1px solid var(--line); border-radius: 7px; }
+.promotion-request-detail dt { color: oklch(.58 calc(.022 * var(--accent-chroma)) var(--accent-hue)); font: 700 9px var(--sans); }
+.promotion-request-detail dd { margin: 5px 0 0; font: 500 12px var(--mono); }
+.promotion-cleanup-hint { color: oklch(.56 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.5 var(--doc); }
+.promotion-request-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.promotion-request-actions button, .promotion-bank-editor button, .promotion-preview button { min-height: 40px; padding: 0 12px; }
+.promotion-empty { padding: 32px 18px; color: oklch(.59 calc(.023 * var(--accent-chroma)) var(--accent-hue)); text-align: center; font: 400 12px/1.5 var(--doc); }
+.promotion-bank-layout { min-height: 470px; display: grid; grid-template-columns: 220px minmax(280px, 1fr) minmax(220px, .65fr); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.promotion-bank-editor, .promotion-preview { min-width: 0; padding: 18px; }
+.promotion-preview { border-left: 1px solid var(--line); background: rgba(0,0,0,.08); }
+.promotion-bank-editor > label, .promotion-preview > label { display: grid; gap: 6px; margin: 12px 0; font: 700 10px var(--sans); letter-spacing: .04em; }
+.promotion-bank-editor textarea, .promotion-bank-editor select, .promotion-preview select { width: 100%; box-sizing: border-box; min-height: 40px; border: 1px solid var(--line-bright); border-radius: 7px; background: rgba(0,0,0,.16); color: inherit; }
+.promotion-bank-editor textarea { min-height: 82px; padding: 10px; resize: vertical; }
+.promotion-bank-items { display: grid; gap: 7px; margin-top: 16px; }
+.promotion-bank-items article { padding: 10px; border: 1px solid var(--line); border-radius: 7px; }
+.promotion-bank-items article > label { display: flex; gap: 9px; font: 400 12px/1.45 var(--doc); }
+.promotion-bank-items article > div { display: flex; gap: 5px; justify-content: flex-end; margin-top: 8px; }
+.promotion-preview-actions, .promotion-preview > ol { display: grid; gap: 8px; margin-top: 14px; }
+.promotion-preview > ol { padding-left: 22px; }
+.promotion-preview li { padding: 9px; border: 1px solid var(--line); border-radius: 7px; font: 400 12px/1.45 var(--doc); }
+.promotion-preview li button { width: 100%; margin-top: 7px; }
+.promotion-confirm-backdrop { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.7); }
+.promotion-confirm { width: min(420px, 100%); padding: 22px; border: 1px solid var(--line-bright); border-radius: 10px; background: var(--panel); box-shadow: 0 20px 70px #000; }
+.promotion-confirm h3 { margin: 0 0 10px; }
+.promotion-confirm p { color: oklch(.68 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font: 400 13px/1.55 var(--doc); }
+.promotion-confirm > div { display: flex; justify-content: flex-end; gap: 8px; }
+
+@media (max-width: 900px) {
+  .promotion-editor-workbench, .promotion-bank-layout { display: block; min-height: 0; }
+  .promotion-request-list, .promotion-bank-list { max-height: 220px; overflow-y: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .promotion-preview { border-left: 0; border-top: 1px solid var(--line); }
+  .promotion-editor-branches { overflow-x: auto; }
+  .promotion-editor-branches button { flex: 0 0 auto; }
+}

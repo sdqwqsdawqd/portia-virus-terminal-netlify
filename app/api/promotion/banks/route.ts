@@ -54,9 +54,23 @@ export async function POST(request: Request) {
     if (body.action === "preview") {
       try {
         const manualIds = Array.isArray(body.manualIds) && body.manualIds.every((id) => typeof id === "string") ? body.manualIds : undefined;
-        const items = kind === "ordinary"
-          ? selectTaskPreview(bank.items as TaskPreviewItem[], bank.requiredCount ?? 0, { manualIds })
-          : selectQualificationPreview(bank.items as QualificationPreviewItem[], bank.quotas ?? { single: 0, multiple: 0, freeText: 0 }, { manualIds });
+        const replaceId = typeof body.replaceId === "string" ? body.replaceId : "";
+        const priorIds = replaceId && typeof body.preview === "string"
+          ? verifyPreviewToken(body.preview, { kind, bankId, version: bank.version, now: Date.now() }, secret)
+          : null;
+        let items: Array<TaskPreviewItem | QualificationPreviewItem>;
+        if (priorIds && priorIds.includes(replaceId)) {
+          const old = bank.items.find((item) => item.id === replaceId);
+          const candidates = bank.items.filter((item) => item.active && !priorIds.includes(item.id)
+            && (kind === "ordinary" || (item as QualificationPreviewItem).type === (old as QualificationPreviewItem | undefined)?.type));
+          if (!old || !candidates.length) throw new Error("insufficient-replacement");
+          const replacement = candidates[Math.floor(Math.random() * candidates.length)];
+          items = priorIds.map((id) => id === replaceId ? replacement : bank.items.find((item) => item.id === id)).filter(Boolean) as Array<TaskPreviewItem | QualificationPreviewItem>;
+        } else {
+          items = kind === "ordinary"
+            ? selectTaskPreview(bank.items as TaskPreviewItem[], bank.requiredCount ?? 0, { manualIds })
+            : selectQualificationPreview(bank.items as QualificationPreviewItem[], bank.quotas ?? { single: 0, multiple: 0, freeText: 0 }, { manualIds });
+        }
         const expiresAt = Date.now() + 10 * 60 * 1000;
         const preview = createPreviewToken({ kind, bankId, version: bank.version, ids: items.map((item) => item.id), expiresAt }, secret);
         return Response.json({ preview, expiresAt: new Date(expiresAt).toISOString(), items }, { headers: noStoreHeaders });

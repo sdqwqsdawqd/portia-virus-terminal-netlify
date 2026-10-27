@@ -38,6 +38,7 @@ test("bank workspace exposes preview replacement and immutable confirmation", ()
   assert.ok(source.includes("save-task-item"));
   assert.ok(source.includes("save-question"));
   assert.ok(source.includes("free-text"));
+  assert.ok(source.includes("replaceId"));
 });
 
 test("promotion reviewer layout has desktop workbench and phone sequential view", () => {
