@@ -73,6 +73,6 @@
 - [x] `14-05-PLAN.md` — participant application and ordinary-task flow
 - [x] `14-07-PLAN.md` — qualification engine and protected APIs
 - [x] `14-06-PLAN.md` — reviewer workspace and bank management
-- [ ] `14-08-PLAN.md` — participant/reviewer qualification interfaces
+- [x] `14-08-PLAN.md` — participant/reviewer qualification interfaces
 - [ ] `14-09-PLAN.md` — retake notification and owner SQL rollout gate
 - [ ] `14-10-PLAN.md` — security regression and owner PC/phone UAT
