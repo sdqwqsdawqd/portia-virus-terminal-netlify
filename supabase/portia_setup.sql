@@ -1189,7 +1189,6 @@ begin
   return removed;
 end $$;
 
-+
 create or replace function public.portia_promo_bank_state()
 returns jsonb
 language plpgsql
