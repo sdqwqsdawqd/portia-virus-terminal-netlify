@@ -11,6 +11,7 @@ export type TabDef = { id: string; label: string; kind: TabKind };
 export const tabRegistry: TabDef[] = [
   ...editorSections.map((id) => ({ id, label: sectionLabels[id], kind: "regular" as const })),
   { id: "employees", label: "Сотрудники", kind: "regular" },
+  { id: "promo", label: "Повышение", kind: "trusted" },
 ];
 
 export function openTabIds(closed: readonly string[], granted: readonly string[], registry: readonly TabDef[] = tabRegistry): string[] {

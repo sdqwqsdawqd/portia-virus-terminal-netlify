@@ -5,7 +5,8 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { getEditorAccess, noAccess } from "./editor-access.ts";
 import { tabRegistry } from "./editor-tabs.ts";
 
-const allSeven = tabRegistry.map((tab) => tab.id);
+const allRegistryTabs = tabRegistry.map((tab) => tab.id);
+const regularTabs = tabRegistry.filter((tab) => tab.kind === "regular").map((tab) => tab.id);
 
 type Reply = { data: unknown; error: { code?: string } | null };
 function fakeClient(opts: { canEdit?: Reply; isOwner?: Reply; row?: Reply }) {
@@ -36,15 +37,15 @@ test("confirmed editor with a closed_tabs row gets the remaining tabs, enforced"
   assert.equal(access.canEdit, true);
   assert.equal(access.canManageEditors, false);
   assert.equal(access.tabsEnforced, true);
-  assert.deepEqual(access.openTabs, allSeven.filter((id) => id !== "broadcasts"));
+  assert.deepEqual(access.openTabs, regularTabs.filter((id) => id !== "broadcasts"));
 });
 
-test("a missing column (42703 or PGRST204) opens all seven and tabs are not enforced", async () => {
+test("a missing column opens regular tabs only and tabs are not enforced", async () => {
   for (const code of ["42703", "PGRST204"]) {
     const { supabase } = fakeClient({ canEdit: ok(true), isOwner: ok(false), row: { data: null, error: { code } } });
     const access = await getEditorAccess(supabase, confirmed);
     assert.equal(access.canEdit, true);
-    assert.deepEqual(access.openTabs, allSeven);
+    assert.deepEqual(access.openTabs, regularTabs);
     assert.equal(access.tabsEnforced, false);
     assert.equal(access.unavailable, undefined);
   }
@@ -53,7 +54,7 @@ test("a missing column (42703 or PGRST204) opens all seven and tabs are not enfo
 test("owner before the SQL still gets every tab, not enforced", async () => {
   const { supabase } = fakeClient({ canEdit: ok(true), isOwner: ok(true), row: { data: null, error: { code: "42703" } } });
   const access = await getEditorAccess(supabase, confirmed);
-  assert.deepEqual(access, { canEdit: true, canManageEditors: true, openTabs: allSeven, tabsEnforced: false });
+  assert.deepEqual(access, { canEdit: true, canManageEditors: true, openTabs: allRegistryTabs, tabsEnforced: false });
 });
 
 test("any other row read error, or any rpc error, fails closed as unavailable", async () => {
@@ -67,8 +68,15 @@ test("owner (is_owner true, no row) gets every registry tab and canManageEditors
   const { supabase } = fakeClient({ canEdit: ok(true), isOwner: ok(true), row: ok(null) });
   const access = await getEditorAccess(supabase, confirmed);
   assert.equal(access.canManageEditors, true);
-  assert.deepEqual(access.openTabs, allSeven);
+  assert.deepEqual(access.openTabs, allRegistryTabs);
   assert.equal(access.tabsEnforced, true);
+});
+
+test("a non-owner receives Повышение only through granted_tabs", async () => {
+  const { supabase } = fakeClient({ canEdit: ok(true), isOwner: ok(false), row: ok({ closed_tabs: [], granted_tabs: ["promo"] }) });
+  const access = await getEditorAccess(supabase, confirmed);
+  assert.deepEqual(access.openTabs, allRegistryTabs);
+  assert.equal(access.canManageEditors, false);
 });
 
 test("canEdit true, not owner, no row (revoked between the calls) gives noAccess", async () => {

@@ -5,31 +5,33 @@ import { readFileSync } from "node:fs";
 import { defaultPortiaContent, type PortiaContent } from "./portia-content.ts";
 import { closedMessage, closedSectionsOf, contentRefusal, openTabIds, parseTabLists, tabRegistry, type TabDef } from "./editor-tabs.ts";
 
-const allTabs = ["viruses", "info", "guide", "broadcasts", "recycle", "search", "assistant", "employees"];
+const regularTabs = ["viruses", "info", "guide", "broadcasts", "recycle", "search", "assistant", "employees"];
+const allTabs = [...regularTabs, "promo"];
 
-test("registry holds the eight tabs in strip order with the section labels plus Сотрудники", () => {
+test("registry holds eight regular tabs followed by trusted Повышение", () => {
   assert.deepEqual(tabRegistry.map((tab) => tab.id), allTabs);
   assert.deepEqual(tabRegistry.slice(0, 7).map((tab) => tab.label), editorSections.map((id) => sectionLabels[id]));
   assert.equal(tabRegistry[7].label, "Сотрудники");
-  assert.ok(tabRegistry.every((tab) => tab.kind === "regular"));
+  assert.deepEqual(tabRegistry.slice(0, 8).map((tab) => tab.kind), Array(8).fill("regular"));
+  assert.deepEqual(tabRegistry[8], { id: "promo", label: "Повышение", kind: "trusted" });
   assert.ok(!tabRegistry.some((tab) => tab.id === "access"));
 });
 
-test("openTabIds: empty lists open all eight in tab order", () => {
-  assert.deepEqual(openTabIds([], []), allTabs);
+test("openTabIds: empty lists open regular tabs and keep Повышение closed", () => {
+  assert.deepEqual(openTabIds([], []), regularTabs);
 });
 
 test("openTabIds: a closed tab drops out, all eight closed gives an empty list (D-07)", () => {
-  assert.deepEqual(openTabIds(["broadcasts"], []), allTabs.filter((id) => id !== "broadcasts"));
-  assert.deepEqual(openTabIds(allTabs, []), []);
+  assert.deepEqual(openTabIds(["broadcasts"], []), regularTabs.filter((id) => id !== "broadcasts"));
+  assert.deepEqual(openTabIds(regularTabs, []), []);
 });
 
 test("openTabIds: a stored id the registry does not know is ignored", () => {
-  assert.deepEqual(openTabIds(["ghost"], ["ghost"]), allTabs);
+  assert.deepEqual(openTabIds(["ghost"], ["ghost"]), regularTabs);
 });
 
-test("openTabIds: a trusted tab is closed until granted, a closed list cannot change it, a future regular tab is open (D-24, D-25)", () => {
-  const registry: TabDef[] = [...tabRegistry, { id: "promo", label: "Повышение", kind: "trusted" }, { id: "future", label: "Будущая", kind: "regular" }];
+test("openTabIds: Повышение opens only by grant and closedTabs cannot close it (D-24, D-25)", () => {
+  const registry: TabDef[] = [...tabRegistry, { id: "future", label: "Будущая", kind: "regular" }];
   assert.ok(!openTabIds([], [], registry).includes("promo"));
   assert.ok(openTabIds([], ["promo"], registry).includes("promo"));
   assert.ok(openTabIds(["promo"], ["promo"], registry).includes("promo"));
@@ -45,9 +47,9 @@ test("closedMessage names one or several sections", () => {
   assert.equal(closedMessage(["broadcasts", "recycle"]), "Разделы «Сводка», «Корзина» для вас закрыты.");
 });
 
-test("parseTabLists accepts an empty closed list and all eight closed", () => {
+test("parseTabLists accepts an empty closed list and all eight regular tabs closed", () => {
   assert.deepEqual(parseTabLists({ closedTabs: [] }), { closedTabs: [] });
-  assert.deepEqual(parseTabLists({ closedTabs: allTabs }), { closedTabs: allTabs });
+  assert.deepEqual(parseTabLists({ closedTabs: regularTabs }), { closedTabs: regularTabs });
 });
 
 test("parseTabLists rejects bad bodies", () => {
@@ -56,17 +58,19 @@ test("parseTabLists rejects bad bodies", () => {
   assert.equal(parseTabLists({ closedTabs: [1] }), null);
   assert.equal(parseTabLists({ closedTabs: ["ghost"] }), null);
   assert.equal(parseTabLists({ closedTabs: ["access"] }), null);
+  assert.equal(parseTabLists({ closedTabs: ["promo"] }), null); // trusted id in closedTabs
   assert.equal(parseTabLists({ grantedTabs: ["viruses"] }), null); // regular id in grantedTabs
   assert.equal(parseTabLists({ closedTabs: ["viruses"], grantedTabs: "x" }), null);
 });
 
 test("parseTabLists removes duplicates and keeps registry order", () => {
   assert.deepEqual(parseTabLists({ closedTabs: ["recycle", "viruses", "recycle"] }), { closedTabs: ["viruses", "recycle"] });
+  assert.deepEqual(parseTabLists({ grantedTabs: ["promo", "promo"] }), { grantedTabs: ["promo"] });
 });
 
 const fixture = (): PortiaContent => structuredClone(defaultPortiaContent);
-const sevenSections = allTabs.slice(0, 7);
-const without = (...ids: string[]) => allTabs.filter((id) => !ids.includes(id));
+const sevenSections = regularTabs.slice(0, 7);
+const without = (...ids: string[]) => regularTabs.filter((id) => !ids.includes(id));
 const withBroadcast = (): PortiaContent => {
   const content = fixture();
   content.broadcasts.push({ id: "b1", type: "news", title: "a", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" });
@@ -78,7 +82,7 @@ test("contentRefusal: all eight open is null even when every section changed", (
   draft.viruses[0].name = "X";
   draft.broadcasts.push(withBroadcast().broadcasts[0]);
   draft.recycleFiles[0].name = "X";
-  assert.equal(contentRefusal(fixture(), draft, allTabs), null);
+  assert.equal(contentRefusal(fixture(), draft, regularTabs), null);
 });
 
 test("contentRefusal: a changed broadcast with «Сводка» closed gives 403 naming it", () => {
@@ -98,7 +102,7 @@ test("contentRefusal: a changed guide card with «Справочник» closed 
   assert.deepEqual(contentRefusal(baseline, draft, without("guide")), {
     status: 403, error: "Раздел «Справочник» для вас закрыт.", code: "section-closed", sections: ["guide"],
   });
-  assert.equal(contentRefusal(baseline, draft, allTabs), null);
+  assert.equal(contentRefusal(baseline, draft, regularTabs), null);
 });
 
 test("contentRefusal: two closed and changed sections are both named", () => {
