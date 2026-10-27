@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-10-27T03:51:33.277Z",
+  "phase": "13",
+  "phase_name": "Приложение «Справочник»",
+  "phase_dir": ".planning/phases/PORTIA-13-prilozhenie-spravochnik",
+  "plan": 5,
+  "task": 2,
+  "total_tasks": 2,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "measure the grid, the thin-row ratio, the backstops and motion-off on the production build", "status": "done", "commit": "8a57cf8"}
+  ],
+  "remaining_tasks": [
+    {"id": 2, "name": "owner check on a PC and a phone (checkpoint:human-verify, blocking)", "status": "awaiting_owner"}
+  ],
+  "blockers": [
+    {"description": "Plan 13-05 Task 2 is a blocking human-verify checkpoint; 13-05-SUMMARY.md cannot be written until the owner types approved or lists issues", "type": "human_action", "workaround": "none"}
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Run the 10-step owner check from 13-05-PLAN.md Task 2 <how-to-verify> on a PC (npm run build; npx next start -p 3124 -H 0.0.0.0) and a phone", "context": "Last gate of phase 13 before verification; editor saves write live content", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "Did not re-run Task 1 automated checks on resume; relied on commit 8a57cf8", "rationale": "Task 1 already committed by the previous executor", "phase": "13"}
+  ],
+  "uncommitted_files": [
+    " M .planning/milestone.lock",
+    " M .planning/state.json",
+    " M package-lock.json",
+    " M package.json",
+    "?? .planning/ui-reviews/"
+  ],
+  "next_action": "Ask the owner for the Task 2 result. On approved: write 13-05-SUMMARY.md (Task 1 results + approval), commit, then continue /gsd-execute-phase 13 at aggregate_results -> verify_phase_goal. On issues: record each with its step number in 13-05-SUMMARY.md and plan fixes.",
+  "context_notes": "Plans 13-01..13-04 have SUMMARY files. npm run lint has 2 pre-existing errors in phase-06 .cjs files (deferred-items.md), not phase-13. package.json/package-lock.json changes were present before this session and are not from phase 13 work; do not commit them blindly."
+}
