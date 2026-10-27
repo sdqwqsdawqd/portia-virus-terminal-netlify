@@ -6,9 +6,9 @@ current_phase: 13
 current_phase_name: Приложение «Справочник»
 status: executing
 stopped_at: Completed PORTIA-13-04-PLAN.md
-last_updated: "2026-10-26T20:29:36.525Z"
+last_updated: "2026-10-27T04:00:28.215Z"
 last_activity: 2026-10-27
-last_activity_desc: Phase PORTIA-13 execution started
+last_activity_desc: "Completed quick task 261027-cie: independent desktop shortcut layout and motion"
 state_head: c4300024211af09a058bff8fa2503b69fdefe85c
 progress:
   total_phases: 8
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-10-26)
 Phase: PORTIA-13 (Приложение «Справочник») — EXECUTING
 Plan: 5 of 5
 Status: Executing Phase PORTIA-13
-Last activity: 2026-10-27 — Phase PORTIA-13 execution started
+Last activity: 2026-10-27 — Completed quick task 261027-cie: independent desktop shortcut layout and motion
 
 Progress: [█████████░] 88%
 
@@ -153,6 +153,12 @@ None.
 - ⚠️ [Phase 11] Панель оформления проверяет владелец в браузере и на телефоне; тестами не закрыть (`sandbox` проверен владельцем в Phase 10).
 - ⚠️ [Phase 12] `email_confirmed_at` в SQL может заблокировать владельца: предпроверка `auth.users`, откат, «Confirm email» включено; SQL применяет владелец сам.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261027-cie | Независимая раскладка и единые анимации ярлыков рабочего стола | 2026-10-27 | 8373e4d | [261027-cie-desktop-shortcut-animation](./quick/261027-cie-desktop-shortcut-animation/) |
+
 ## Deferred Items
 
 | Category | Item | Status | Acknowledged at |
@@ -168,9 +174,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-10-26T20:29:36.291Z
-Stopped at: Completed PORTIA-13-04-PLAN.md
-Resume file: None
+Last session: 2026-10-27
+Stopped at: Session resumed; PORTIA-13-05 Task 2 awaits owner verification
+Resume file: .planning/phases/PORTIA-13-prilozhenie-spravochnik/.continue-here.md
 
 ## Operator Next Steps
 
