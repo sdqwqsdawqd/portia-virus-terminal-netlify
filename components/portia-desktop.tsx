@@ -46,6 +46,45 @@ type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string; customAccent: string };
 type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "settings" | "charter" | "sheet" | "trash";
 type ShortcutPosition = { x: number; y: number };
+type ShortcutLayoutStyle = React.CSSProperties & {
+  "--shortcut-left": string;
+  "--shortcut-top": string;
+  "--shortcut-right": string;
+  "--shortcut-bottom": string;
+};
+
+// One independent home for every shortcut. Saved drag coordinates override only that shortcut;
+// adding an app can no longer inherit another icon's static/absolute position by accident.
+const defaultShortcutLayout: Record<DesktopShortcutId, ShortcutLayoutStyle> = {
+  search: shortcutLayout({ left: 14, top: 20 }),
+  archive: shortcutLayout({ left: 14, top: 124 }),
+  broadcasts: shortcutLayout({ left: 14, top: 228 }),
+  info: shortcutLayout({ left: 14, top: 332 }),
+  employees: shortcutLayout({ left: 14, top: 436 }),
+  settings: shortcutLayout({ left: 124, top: 20 }),
+  guide: shortcutLayout({ left: 124, top: 124 }),
+  charter: shortcutLayout({ left: 14, bottom: 18 }),
+  sheet: shortcutLayout({ left: 124, bottom: 18 }),
+  trash: shortcutLayout({ right: 14, top: 20 }),
+};
+
+function shortcutLayout({ left, top, right, bottom }: { left?: number; top?: number; right?: number; bottom?: number }): ShortcutLayoutStyle {
+  return {
+    "--shortcut-left": left === undefined ? "auto" : `${left}px`,
+    "--shortcut-top": top === undefined ? "auto" : `${top}px`,
+    "--shortcut-right": right === undefined ? "auto" : `${right}px`,
+    "--shortcut-bottom": bottom === undefined ? "auto" : `${bottom}px`,
+  };
+}
+
+function savedShortcutLayout(position: ShortcutPosition): ShortcutLayoutStyle {
+  return {
+    "--shortcut-left": `max(0px, min(${position.x}px, calc(100% - 100px)))`,
+    "--shortcut-top": `max(0px, min(${position.y}px, calc(100% - 110px)))`,
+    "--shortcut-right": "auto",
+    "--shortcut-bottom": "auto",
+  };
+}
 
 const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "on", customAccent: "" };
 // Every value a setting may hold; the same ids the «Настройки» groups offer.
@@ -1553,10 +1592,18 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
 }) {
   const dragRef = useRef<null | { pointerId: number; startX: number; startY: number; originX: number; originY: number; workspace: HTMLElement; target: HTMLElement; moved: boolean }>(null);
   const suppressActivation = useRef(false);
+  const dropTimer = useRef<number | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [dropping, setDropping] = useState(false);
+
+  useEffect(() => () => {
+    if (dropTimer.current !== null) window.clearTimeout(dropTimer.current);
+  }, []);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {
     if (window.innerWidth <= 520 || event.button !== 0) return;
+    if (dropTimer.current !== null) window.clearTimeout(dropTimer.current);
+    setDropping(false);
     const workspace = event.currentTarget.closest<HTMLElement>(".workspace");
     if (!workspace) return;
     const iconRect = event.currentTarget.getBoundingClientRect();
@@ -1598,6 +1645,11 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
     if (operation.moved) {
       suppressActivation.current = true;
       window.setTimeout(() => { suppressActivation.current = false; }, 0);
+      setDropping(true);
+      dropTimer.current = window.setTimeout(() => {
+        setDropping(false);
+        dropTimer.current = null;
+      }, 180);
     }
     dragRef.current = null;
     setDragging(false);
@@ -1613,10 +1665,10 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
   };
 
   const sharedProps = {
-    className: `desktop-icon${className ? ` ${className}` : ""}${dragging ? " is-dragging" : ""}`,
+    className: `desktop-icon${className ? ` ${className}` : ""}${dragging ? " is-dragging" : ""}${dropping ? " is-dropping" : ""}`,
     "data-shortcut": shortcutId,
     // A position saved on a bigger screen is held inside the desktop so the icon never disappears.
-    style: position ? { left: `max(0px, min(${position.x}px, calc(100% - 100px)))`, top: `max(0px, min(${position.y}px, calc(100% - 110px)))`, right: "auto", bottom: "auto" } : undefined,
+    style: position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId],
     onPointerDown: handlePointerDown,
     onPointerMove: handlePointerMove,
     onPointerUp: finishDrag,

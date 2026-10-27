@@ -156,20 +156,14 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
   user-select: none;
   -webkit-user-select: none;
   pointer-events: auto;
-  transition: background-color 130ms ease, border-color 130ms ease, transform 130ms ease, opacity 130ms ease;
+  left: var(--shortcut-left);
+  top: var(--shortcut-top);
+  right: var(--shortcut-right);
+  bottom: var(--shortcut-bottom);
 }
 .desktop-icon:hover, .desktop-icon:focus-visible { background: rgba(var(--desktop-glow), 0.08); border-color: rgba(var(--desktop-glow), 0.28); }
 .desktop-icon:hover .desktop-icon-symbol, .desktop-icon:focus-visible .desktop-icon-symbol { border-color: var(--teal); color: oklch(.981 calc(.01 * var(--accent-chroma)) var(--accent-hue)); transform: translateY(-1px); }
 .desktop-icon.is-dragging { z-index: 6; border-color: var(--teal); background: var(--teal-soft); box-shadow: 0 12px 30px rgba(0,0,0,.32); opacity: .92; transform: scale(1.035); cursor: grabbing; }
-.desktop-icon[data-shortcut="search"] { top: 20px; left: 14px; }
-.desktop-icon[data-shortcut="archive"] { top: 124px; left: 14px; }
-.desktop-icon[data-shortcut="broadcasts"] { top: 228px; left: 14px; }
-.desktop-icon[data-shortcut="info"] { top: 332px; left: 14px; }
-.desktop-icon[data-shortcut="employees"] { top: 436px; left: 14px; }
-.desktop-icon[data-shortcut="settings"] { top: 20px; left: 124px; }
-.desktop-icon[data-shortcut="charter"] { bottom: 18px; left: 14px; }
-.desktop-icon[data-shortcut="sheet"] { bottom: 18px; left: 124px; }
-.desktop-icon[data-shortcut="trash"] { top: 20px; right: 14px; }
 .desktop-icon-symbol {
   position: relative;
   width: 52px;
@@ -1317,16 +1311,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
 @media (min-width: 521px) and (max-width: 900px) {
   .workspace { overflow: hidden; padding: 0 0 56px; }
   .desktop-icons { position: absolute; inset: 0; width: auto; margin: 0; display: block; padding: 0; }
-  .desktop-icon { position: absolute; inset: auto; width: 94px; min-height: 86px; padding: 7px 5px; font-size: 12px; touch-action: none; }
-  .desktop-icon[data-shortcut="search"] { top: 16px; left: 12px; }
-  .desktop-icon[data-shortcut="archive"] { top: 120px; left: 12px; }
-  .desktop-icon[data-shortcut="broadcasts"] { top: 224px; left: 12px; }
-  .desktop-icon[data-shortcut="info"] { top: 328px; left: 12px; }
-  .desktop-icon[data-shortcut="employees"] { top: 432px; left: 12px; }
-  .desktop-icon[data-shortcut="settings"] { top: 16px; left: 124px; }
-  .desktop-icon[data-shortcut="charter"] { top: auto; bottom: 14px; left: 12px; }
-  .desktop-icon[data-shortcut="sheet"] { top: auto; bottom: 14px; left: 124px; }
-  .desktop-icon[data-shortcut="trash"] { top: 16px; right: 12px; left: auto; }
+  .desktop-icon { position: absolute; left: var(--shortcut-left); top: var(--shortcut-top); right: var(--shortcut-right); bottom: var(--shortcut-bottom); width: 94px; min-height: 86px; padding: 7px 5px; font-size: 12px; touch-action: none; }
   .desktop-icon-trash { position: absolute; }
   .desktop-icon-symbol { width: 52px; height: 52px; }
   html[data-icon-size="compact"] .desktop-icon { width: 80px; min-height: 72px; padding: 5px 3px; font-size: 11px; }
@@ -1530,6 +1515,9 @@ html[data-motion="reduce"] .doc-open { animation: fade-in 160ms ease-out !import
 html[data-motion="reduce"] .content-fade { animation-duration: var(--motion-fast) !important; }
 
 /* Feedback. Icons press in and come back without overshoot; a window that appears makes its taskbar entry hop once. */
+html[data-motion="full"] .desktop-icon { transition: background-color 130ms ease, border-color 130ms ease, transform 130ms ease, opacity 130ms ease, box-shadow 130ms ease; }
+html[data-motion="full"] .desktop-icon.is-dragging { animation: shortcut-pickup 180ms var(--ease-out) both; }
+html[data-motion="full"] .desktop-icon.is-dropping { animation: shortcut-drop 180ms var(--ease-out); }
 html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon, .mini-app-icon) { transition: border-color 130ms ease, color 130ms ease, transform var(--motion-fast) var(--ease-out), scale var(--motion-fast) var(--ease-out); }
 html[data-motion="full"] :is(.desktop-icon:active .desktop-icon-symbol, .start-panel > button:active .start-panel-icon, .taskbar-app:active .mini-app-icon) { scale: .93; transition-duration: 130ms, 130ms, var(--motion-press), var(--motion-press); }
 html[data-motion="full"] .taskbar-app.is-bouncing .mini-app-icon { animation: taskbar-hop 380ms; }
@@ -1538,6 +1526,8 @@ html[data-motion="full"] .taskbar-app.is-bouncing .mini-app-icon { animation: ta
   42% { translate: 0 -6px; animation-timing-function: cubic-bezier(.55, 0, .8, .4); }
   100% { translate: 0 0; }
 }
+@keyframes shortcut-pickup { from { scale: .97; box-shadow: 0 2px 8px rgba(0,0,0,.16); } to { scale: 1.035; } }
+@keyframes shortcut-drop { from { scale: 1.035; } 70% { scale: .985; } to { scale: 1; } }
 
 /* Hover (and keyboard focus) on app icons: each icon acts out what it depicts, once per hover.
    Pointer devices only, full motion only. Parts are addressed by their order in components/portia-icons.tsx. */
@@ -1560,6 +1550,9 @@ html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg > * { 
   /* Information: the corner folds in and the lines write themselves. */
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="info"] svg > :nth-child(2) { transform-origin: right top; animation: icon-fold 520ms var(--ease-out); }
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="info"] svg > :nth-child(3) { stroke-dasharray: 10; animation: icon-write-10 520ms 80ms var(--ease-out) backwards; }
+  /* Guide: the folder rises and its index line slides into place. */
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="guide"] svg > :nth-child(1) { animation: icon-folder-lift 520ms var(--ease-out); }
+  html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="guide"] svg > :nth-child(2) { animation: icon-folder-index 520ms 70ms var(--ease-out) backwards; }
   /* Settings: the three knobs slide to new positions and back. */
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] svg > :nth-child(2) { animation: icon-slide-left 620ms var(--ease-out); }
   html[data-motion="full"] :is(.desktop-icon:is(:hover, :focus-visible) .desktop-icon-symbol, .start-panel > button:is(:hover, :focus-visible) .start-panel-icon)[data-icon="settings"] svg > :nth-child(3) { animation: icon-slide-right 620ms 60ms var(--ease-out); }
@@ -1583,6 +1576,8 @@ html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg > * { 
 @keyframes icon-ripple { from { scale: .78; opacity: .35; } }
 @keyframes icon-blink { 50% { scale: 1.45; } }
 @keyframes icon-fold { 40% { scale: .2; } }
+@keyframes icon-folder-lift { 45% { translate: 0 -1.6px; } }
+@keyframes icon-folder-index { from { translate: -4px 0; opacity: .25; } }
 @keyframes icon-write-10 { from { stroke-dashoffset: 10; } }
 @keyframes icon-write-16 { from { stroke-dashoffset: 16; } }
 @keyframes icon-slide-left { 45% { translate: -4.5px 0; } }

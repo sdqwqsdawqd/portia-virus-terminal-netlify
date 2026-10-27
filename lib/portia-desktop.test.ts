@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8");
+const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
 
 // Index of the "}" that closes the "{" at `open`; braces inside strings or template literals are not special-cased.
 function closingBrace(text: string, open: number) {
@@ -96,4 +97,23 @@ test("the editor imports rich-text-style once and ships no joke or empty labels 
   for (const word of ["\u0444\u0438\u0433\u043d\u0438", "\u0434\u0440\u0443\u0436\u043e\u043a", "\u043f\u0438\u0440\u043e\u0436\u043e\u043a"]) {
     assert.ok(!editor.includes(word), `joke word ${word} is back`);
   }
+});
+
+test("every desktop shortcut owns a default position and saved positions override only itself", () => {
+  const layout = /const defaultShortcutLayout:[\s\S]*?\n};/.exec(source)?.[0] ?? "";
+  for (const id of ["search", "archive", "employees", "broadcasts", "info", "guide", "settings", "charter", "sheet", "trash"]) {
+    assert.match(layout, new RegExp(`\\n  ${id}: shortcutLayout\\(`), `missing independent layout for ${id}`);
+  }
+  assert.ok(source.includes("position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId]"));
+  assert.ok(source.includes('"--shortcut-left": `max(0px, min(${position.x}px, calc(100% - 100px)))`'));
+  assert.doesNotMatch(styles, /\.desktop-icon\[data-shortcut=/);
+});
+
+test("shortcut motion is uniform, opt-in, and the guide has its own animation", () => {
+  assert.ok(styles.includes('html[data-motion="full"] .desktop-icon.is-dragging'));
+  assert.ok(styles.includes('html[data-motion="full"] .desktop-icon.is-dropping'));
+  assert.ok(styles.includes('[data-icon="guide"] svg > :nth-child(1)'));
+  assert.ok(styles.includes('@keyframes icon-folder-lift'));
+  const base = /\.desktop-icon \{[\s\S]*?\n}/.exec(styles)?.[0] ?? "";
+  assert.doesNotMatch(base, /transition:/, "base shortcut must not move when animations are disabled");
 });
