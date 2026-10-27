@@ -30,8 +30,9 @@ import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS, MAX_TABLE_ROWS, bodyTo
 import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
 import { clampPanelOffset, initialPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
+import { PromotionEditor } from "@/components/portia-promotion-editor";
 
-type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
+type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "promo" | "access";
 
 type Props = {
   content: PortiaContent;
@@ -1193,7 +1194,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   useEffect(() => {
     if (!active || dialog || closeAsked) return;
     // Сотрудники and Доступ are saved separately; their fields keep the browser's native undo.
-    const historyTab = tab !== "employees" && tab !== "access";
+    const historyTab = tab !== "employees" && tab !== "promo" && tab !== "access";
     const onKeyDown = (event: KeyboardEvent) => {
       const action = shortcutOf(event);
       if (!action) return;
@@ -1745,6 +1746,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       )}
 
       {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
+
+      {tab === "promo" && openTabs.includes("promo") && <PromotionEditor visible={active && !minimized} canManageEditors={canManageEditors} />}
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={runBatch} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
