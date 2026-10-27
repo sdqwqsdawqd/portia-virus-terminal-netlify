@@ -1,0 +1,87 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import {
+  createPreviewToken,
+  parsePromotionReviewerCommand,
+  promotionReviewerDecision,
+  selectQualificationPreview,
+  selectTaskPreview,
+  validateQuestionDraft,
+  verifyPreviewToken,
+} from "./portia-promotion-reviewer.ts";
+
+test("promotion reviewer boundary fails closed and requires the trusted promo tab", () => {
+  assert.equal(promotionReviewerDecision(false, null), "forbidden");
+  assert.equal(promotionReviewerDecision(true, { canEdit: false, canManageEditors: false, openTabs: [], tabsEnforced: true, unavailable: true }), "unavailable");
+  assert.equal(promotionReviewerDecision(true, { canEdit: true, canManageEditors: false, openTabs: ["employees"], tabsEnforced: true }), "forbidden");
+  assert.equal(promotionReviewerDecision(true, { canEdit: true, canManageEditors: false, openTabs: ["promo"], tabsEnforced: true }), "allowed");
+});
+
+test("promotion reviewer commands accept only typed bounded payloads", () => {
+  assert.deepEqual(parsePromotionReviewerCommand({ action: "claim", kind: "ordinary", requestId: "550e8400-e29b-41d4-a716-446655440000" }), {
+    action: "claim", kind: "ordinary", requestId: "550e8400-e29b-41d4-a716-446655440000",
+  });
+  assert.equal(parsePromotionReviewerCommand({ action: "claim", kind: "ordinary", requestId: "x" }), null);
+  assert.equal(parsePromotionReviewerCommand({ action: "release", kind: "other", requestId: "550e8400-e29b-41d4-a716-446655440000" }), null);
+  assert.equal(parsePromotionReviewerCommand({ action: "reject", kind: "ordinary", requestId: "550e8400-e29b-41d4-a716-446655440000", note: "x".repeat(2001) }), null);
+});
+
+const taskItems = [
+  { id: "a", text: "A", active: true, sortOrder: 0, updatedAt: "2026-10-27T00:00:00Z" },
+  { id: "b", text: "B", active: false, sortOrder: 1, updatedAt: "2026-10-27T00:00:00Z" },
+  { id: "c", text: "C", active: true, sortOrder: 2, updatedAt: "2026-10-27T00:00:00Z" },
+  { id: "d", text: "D", active: true, sortOrder: 3, updatedAt: "2026-10-27T00:00:00Z" },
+];
+
+test("task preview excludes inactive rows, has no duplicates and preserves manual order", () => {
+  assert.deepEqual(selectTaskPreview(taskItems, 2, { manualIds: ["d", "a"] }).map((item) => item.id), ["d", "a"]);
+  assert.deepEqual(selectTaskPreview(taskItems, 2, { random: () => 0 }).map((item) => item.id), ["a", "c"]);
+  assert.throws(() => selectTaskPreview(taskItems, 2, { manualIds: ["a", "a"] }), /duplicate/i);
+  assert.throws(() => selectTaskPreview(taskItems, 4, { random: () => 0 }), /insufficient/i);
+});
+
+const questions = [
+  { id: "s1", text: "S1", type: "single" as const, active: true, sortOrder: 0, updatedAt: "2026-10-27T00:00:00Z" },
+  { id: "s2", text: "S2", type: "single" as const, active: true, sortOrder: 1, updatedAt: "2026-10-27T00:00:00Z" },
+  { id: "m1", text: "M1", type: "multiple" as const, active: true, sortOrder: 2, updatedAt: "2026-10-27T00:00:00Z" },
+  { id: "f1", text: "F1", type: "free-text" as const, active: true, sortOrder: 3, updatedAt: "2026-10-27T00:00:00Z" },
+  { id: "f2", text: "F2", type: "free-text" as const, active: false, sortOrder: 4, updatedAt: "2026-10-27T00:00:00Z" },
+];
+
+test("qualification preview enforces per-type quotas and manual order", () => {
+  const quotas = { single: 1, multiple: 1, freeText: 1 };
+  assert.deepEqual(selectQualificationPreview(questions, quotas, { manualIds: ["f1", "m1", "s2"] }).map((item) => item.id), ["f1", "m1", "s2"]);
+  assert.deepEqual(selectQualificationPreview(questions, quotas, { random: () => 0 }).map((item) => item.id), ["s1", "m1", "f1"]);
+  assert.throws(() => selectQualificationPreview(questions, { single: 1, multiple: 1, freeText: 2 }, { random: () => 0 }), /insufficient/i);
+});
+
+test("question drafts keep answer shapes type-safe", () => {
+  assert.ok(validateQuestionDraft({ type: "single", text: "Q", options: ["A", "B"], answer: 1 }));
+  assert.ok(validateQuestionDraft({ type: "multiple", text: "Q", options: ["A", "B"], answer: [0, 1] }));
+  assert.ok(validateQuestionDraft({ type: "free-text", text: "Q", answer: "text" }));
+  assert.equal(validateQuestionDraft({ type: "single", text: "Q", options: ["A"], answer: [0] }), null);
+  assert.equal(validateQuestionDraft({ type: "multiple", text: "Q", options: ["A", "B"], answer: [0, 0] }), null);
+});
+
+test("preview tokens expire and reject stale or tampered bank versions", () => {
+  const secret = "reviewer-preview-secret-with-at-least-32-characters";
+  const token = createPreviewToken({ kind: "ordinary", bankId: "bank", version: "v1", ids: ["a", "c"], expiresAt: 1000 }, secret);
+  assert.deepEqual(verifyPreviewToken(token, { kind: "ordinary", bankId: "bank", version: "v1", now: 999 }, secret), ["a", "c"]);
+  assert.equal(verifyPreviewToken(token, { kind: "ordinary", bankId: "bank", version: "v2", now: 999 }, secret), null);
+  assert.equal(verifyPreviewToken(`${token}x`, { kind: "ordinary", bankId: "bank", version: "v1", now: 999 }, secret), null);
+  assert.equal(verifyPreviewToken(token, { kind: "ordinary", bankId: "bank", version: "v1", now: 1001 }, secret), null);
+});
+
+test("promotion reviewer routes use server access and RPCs, never browser openTabs or wildcard selects", () => {
+  for (const path of ["reviewer", "banks"]) {
+    const route = readFileSync(new URL(`../app/api/promotion/${path}/route.ts`, import.meta.url), "utf8");
+    assert.ok(route.includes("requirePromotionReviewer"), path);
+    assert.ok(route.includes(".rpc("), path);
+    assert.ok(!route.includes('select("*")'), path);
+    assert.ok(!route.includes("body.openTabs"), path);
+  }
+  const proxy = readFileSync(new URL("../proxy.ts", import.meta.url), "utf8");
+  assert.ok(proxy.includes('"/api/promotion/reviewer/:path*"'));
+  assert.ok(proxy.includes('"/api/promotion/banks/:path*"'));
+});
