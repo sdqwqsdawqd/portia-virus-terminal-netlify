@@ -138,6 +138,11 @@ async function openGuide(cdp, sections) {
   if (!(await waitFor(cdp, `!!document.querySelector(".guide-window .guide-app")`, 6000))) { reasons.push("the guide window did not open"); return false; }
   return true;
 }
+/** Opens every folded guide section explicitly; the visitor-facing default is folded. */
+async function expandGuideSections(cdp) {
+  await cdp.eval(`(() => { for (const head of document.querySelectorAll('.guide-window .guide-section-head[aria-expanded="false"]')) head.click(); return true; })()`);
+  await sleep(100);
+}
 /** An editor session (canEdit) with the tabs in `openTabs`. */
 const editorAccess = (openTabs = ALL_TABS) => ({ canEdit: true, canManageEditors: false, openTabs: [...openTabs], tabsEnforced: true });
 
@@ -234,6 +239,7 @@ const tileSelector = (id) => `.guide-window .guide-tile[data-card-id="${id}"]`;
 const checks = {
   async "open-card"(cdp) {
     if (!(await openGuide(cdp, guideFixture(["g1"])))) return;
+    await expandGuideSections(cdp);
     if (!(await waitFor(cdp, `document.querySelectorAll(".guide-window .guide-tile").length === 2`, 5000))) { reasons.push(`expected 2 tiles, found ${await count(cdp, ".guide-window .guide-tile")}; window text: ${await text(cdp, ".guide-window")}`); return; }
     if (!(await click(cdp, tileSelector("c1")))) { reasons.push("tile c1 missing"); return; }
     if (!(await waitFor(cdp, `!!document.querySelector(".guide-window .guide-page")`, 3000))) { reasons.push("the card page did not open"); return; }
@@ -251,6 +257,9 @@ const checks = {
 
   async grid(cdp) {
     if (!(await openGuide(cdp, guideFixture()))) return;
+    const initial = await cdp.eval(`[...document.querySelectorAll('.guide-window .guide-section-head')].map((head) => head.getAttribute('aria-expanded'))`);
+    if (initial.some((value) => value !== "false")) reasons.push(`sections are not folded initially: ${JSON.stringify(initial)}`);
+    await expandGuideSections(cdp);
     if (!(await waitFor(cdp, `!!document.querySelector(${JSON.stringify(tileSelector("c2"))})`, 5000))) { reasons.push("tiles did not render"); return; }
     const geometry = await cdp.eval(`(() => {
       const q = (s) => document.querySelector(s);
@@ -280,13 +289,13 @@ const checks = {
     await sleep(300);
     const again = await cdp.eval(`(() => { const e = (id) => document.querySelector('.guide-window [aria-controls="guide-grid-' + id + '"]')?.getAttribute("aria-expanded"); return { g1: e("g1"), g2: e("g2") }; })()`);
     if (again.g1 !== "false" || again.g2 !== "true") reasons.push(`after reload g1 should stay folded and g2 open: ${JSON.stringify(again)}`);
-    const stored = await cdp.eval(`localStorage.getItem("portia-guide-collapsed-v1")`);
+    const stored = await cdp.eval(`localStorage.getItem("portia-guide-collapsed-v2")`);
     if (stored !== '["g1"]') reasons.push(`localStorage holds ${stored}, expected ["g1"]`);
-    // A broken value must not break the window: everything opens.
-    await cdp.eval(`localStorage.setItem("portia-guide-collapsed-v1", "not json"); true`);
+    // A broken value must not break the window: the safe folded default remains.
+    await cdp.eval(`localStorage.setItem("portia-guide-collapsed-v2", "not json"); true`);
     if (!(await reopen())) { reasons.push("the guide window did not reopen after a broken stored value"); return; }
     await sleep(300);
-    if (await cdp.eval(`document.querySelector('.guide-window [aria-controls="guide-grid-g1"]')?.getAttribute("aria-expanded")`) !== "true") reasons.push("g1 is not open after a broken stored value");
+    if (await cdp.eval(`document.querySelector('.guide-window [aria-controls="guide-grid-g1"]')?.getAttribute("aria-expanded")`) !== "false") reasons.push("g1 is not safely folded after a broken stored value");
     // An empty guide says so (D-00d).
     if (!(await openGuide(cdp, []))) return;
     if (!(await waitFor(cdp, `!!document.querySelector(".guide-window .guide-empty")`, 4000))) { reasons.push("no empty state for an empty guide"); return; }
@@ -296,6 +305,7 @@ const checks = {
 
   async "card-blocks"(cdp) {
     if (!(await openGuide(cdp, guideFixture()))) return;
+    await expandGuideSections(cdp);
     if (!(await waitFor(cdp, `!!document.querySelector(${JSON.stringify(tileSelector("c3"))})`, 5000))) { reasons.push("tile c3 missing"); return; }
     await click(cdp, tileSelector("c3"));
     if (!(await waitFor(cdp, `!!document.querySelector(".guide-page")`, 3000))) { reasons.push("card c3 did not open"); return; }
@@ -354,6 +364,7 @@ const checks = {
 
   async "poll-gone"(cdp) {
     if (!(await openGuide(cdp, guideFixture(["g1"])))) return;
+    await expandGuideSections(cdp);
     await waitFor(cdp, `!!document.querySelector(${JSON.stringify(tileSelector("c1"))})`, 5000);
     await click(cdp, tileSelector("c1"));
     if (!(await waitFor(cdp, `!!document.querySelector(".guide-page")`, 3000))) { reasons.push("card c1 did not open"); return; }
@@ -611,6 +622,7 @@ const checks = {
     };
     const reopen = async () => {
       if (!(await openGuide(cdp, sections))) return false;
+      await expandGuideSections(cdp);
       if (!(await waitFor(cdp, `document.querySelectorAll("#guide-grid-m1 .guide-tile").length === 8`, 5000))) { reasons.push("the m1 tiles did not render"); return false; }
       await sleep(300); // images decode and the window finishes opening
       return true;
