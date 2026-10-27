@@ -168,13 +168,19 @@
 | EDIT-05 | Phase 11 | Complete |
 | EDIT-06 | Phase 11 | Complete |
 | EDIT-07 | Phase 11 | Complete |
+| MOTION-01 | Future | Deferred |
+| MOTION-02 | Future | Deferred |
+| MOTION-03 | Future | Deferred |
+| MOTION-04 | Future | Deferred |
+| MOTION-05 | Future | Deferred |
 
 **Coverage:**
 
-- v1.1 requirements: 49 total
+- v1.1 active requirements: 49 total
 - Mapped to phases: 49 ✓
 - Unmapped: 0
+- Future requirements tracked: 5
 
 ---
 *Requirements defined: 2026-10-19*
-*Last updated: 2026-10-19 after roadmap creation (traceability filled)*
+*Last updated: 2026-10-27 after Phase 13 completion (future traceability filled)*
