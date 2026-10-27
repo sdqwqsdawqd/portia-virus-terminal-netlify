@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { parseRetakeLedger, updateRetakeLedger, type RetakeLedger, type RetakeNotification } from "@/lib/portia-promotion-notifications";
 
 type RequestKind = "ordinary" | "qualification";
 type Eligibility =
@@ -25,6 +26,7 @@ type PromotionStatus = {
 };
 
 const statusPollMs = 15_000;
+const retakeLedgerStorageKey = "portia.promotion.retake-ledger.v1";
 const dateTime = new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeStyle: "short" });
 
 function formatDate(value?: string) {
@@ -226,7 +228,7 @@ const outcomeLabels: Record<string, string> = {
   rejected: "Заявка отклонена", "technical-failure": "Попытка завершена", "retake-released": "Повторная проверка открыта",
 };
 
-export function PortiaPromotion({ visible }: { visible: boolean }) {
+export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; onRetakeReady?: (notification: RetakeNotification) => void }) {
   const [nickname, setNickname] = useState("");
   const [checkedNickname, setCheckedNickname] = useState("");
   const [status, setStatus] = useState<PromotionStatus | null>(null);
@@ -234,6 +236,7 @@ export function PortiaPromotion({ visible }: { visible: boolean }) {
   const [error, setError] = useState("");
   const [stale, setStale] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const retakeLedgerRef = useRef<RetakeLedger>([]);
 
   const loadStatus = useCallback(async (value: string, explicit = false) => {
     if (!value) return;
@@ -267,6 +270,26 @@ export function PortiaPromotion({ visible }: { visible: boolean }) {
     document.addEventListener("visibilitychange", poll);
     return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", poll); };
   }, [checkedNickname, loadStatus, visible]);
+
+  useEffect(() => {
+    const active = status?.qualification.active;
+    if (!status || active?.status !== "failed" || !active.attemptId || !active.availableAt) return;
+    const evaluate = () => {
+      let stored: RetakeLedger = [];
+      try { stored = parseRetakeLedger(window.localStorage.getItem(retakeLedgerStorageKey)); } catch {}
+      const merged = [...stored, ...retakeLedgerRef.current.filter((entry) => !stored.some((saved) => saved.id === entry.id))];
+      const ready = Date.now() >= Date.parse(active.availableAt!);
+      const next = updateRetakeLedger(merged, { nickname: status.nickname, attemptId: active.attemptId!, availableAt: active.availableAt! }, new Date(), visible && ready);
+      retakeLedgerRef.current = next.ledger;
+      try { window.localStorage.setItem(retakeLedgerStorageKey, JSON.stringify(next.ledger)); } catch {}
+      if (next.notification) onRetakeReady?.(next.notification);
+    };
+    evaluate();
+    const remaining = Date.parse(active.availableAt) - Date.now();
+    if (remaining <= 0) return;
+    const timer = window.setTimeout(evaluate, Math.min(remaining + 50, 2_147_000_000));
+    return () => window.clearTimeout(timer);
+  }, [onRetakeReady, status, visible]);
 
   const checkNickname = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

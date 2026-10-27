@@ -500,6 +500,9 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 .quest-toast-body { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; color: oklch(.76 calc(.022 * var(--accent-chroma)) var(--accent-hue)); font: 14px/1.6 var(--doc); }
 .quest-toast .quest-toast-more { font: 12px var(--mono); }
 html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out); }
+.promotion-retake-toast { border-color: var(--teal-dim); }
+html[data-motion="full"] .promotion-retake-toast { animation: fade-in 220ms var(--ease-out); }
+html[data-motion="reduce"] .promotion-retake-toast { animation: none !important; transform: none !important; }
 @media (min-width: 901px) {
   /* The panel is a layer of the desktop and is dragged by its header anywhere on the screen (D-06, EDIT-04). */
   .floating-text-format > header { cursor: grab; touch-action: none; user-select: none; }

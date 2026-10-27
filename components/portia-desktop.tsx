@@ -14,6 +14,7 @@ import { acceptFetchedContent } from "@/lib/content-sync";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 import { PortiaPromotion } from "@/components/portia-promotion";
+import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -396,6 +397,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const seenQuestIds = useRef<string[]>([]);
   const questReadBlocked = useRef(false);
   const [questToastItem, setQuestToastItem] = useState<{ quest: Broadcast; more: number } | null>(null);
+  const [promotionRetakeToast, setPromotionRetakeToast] = useState<RetakeNotification | null>(null);
   const assistantTipTimer = useRef<number | null>(null);
   const assistantClickResetTimer = useRef<number | null>(null);
   const assistantCooldownTimer = useRef<number | null>(null);
@@ -978,6 +980,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
   };
 
+  const dismissPromotionRetakeToast = (openPromotion: boolean) => {
+    setPromotionRetakeToast(null);
+    if (openPromotion) openApp("promotion");
+  };
+
   // Functional update only: a late timer must never act on a stale render's windows.
   const finishExit = (appId: AppId, kind: "close" | "minimize") => {
     setWindows((state) => ({
@@ -1303,6 +1310,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     <>
       <BootScreen visible={booting} />
       {questToastItem && <QuestToast quest={questToastItem.quest} more={questToastItem.more} document={content.formattedText[portiaTextKey.broadcast(questToastItem.quest.id)]} onDismiss={dismissQuestToast} />}
+      {promotionRetakeToast && <PromotionRetakeToast onDismiss={dismissPromotionRetakeToast} />}
       <div className="desktop" id="desktop">
         {desktopSettingsLoaded && <DesktopWallpaper kind={desktopSettings.wallpaper} />}
         <header className="system-bar">
@@ -1435,7 +1443,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="promotion" state={windows.promotion} active={activeApp === "promotion"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window promotion-window" meta="КАДРОВЫЙ КОНТУР">
-            <PortiaPromotion visible={activeApp === "promotion" && !windows.promotion.minimized} />
+            <PortiaPromotion visible={activeApp === "promotion" && !windows.promotion.minimized} onRetakeReady={setPromotionRetakeToast} />
           </AppWindow>
 
           <AppWindow app="broadcasts" state={windows.broadcasts} active={activeApp === "broadcasts"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window broadcasts-window" meta="КАНАЛ СТАНЦИИ">
@@ -2136,6 +2144,25 @@ function QuestToast({ quest, more, document, onDismiss }: { quest: Broadcast; mo
       </div>
     </aside>
   );
+}
+
+function PromotionRetakeToast({ onDismiss }: { onDismiss: (openPromotion: boolean) => void }) {
+  const titleId = useId();
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select"))) return;
+      if (window.document.querySelector("dialog[open]")) return;
+      onDismiss(false);
+    };
+    window.document.addEventListener("keydown", onKeyDown);
+    return () => window.document.removeEventListener("keydown", onKeyDown);
+  }, [onDismiss]);
+  return <aside className="portia-dialog quest-toast promotion-retake-toast" aria-labelledby={titleId}>
+    <span role="status" className="sr-only">Повторная квалификационная проверка доступна.</span>
+    <div><div className="quest-toast-head"><span className="quest-toast-eyebrow">ПОВТОРНАЯ ПРОВЕРКА ДОСТУПНА</span><button type="button" className="quest-toast-close" aria-label="Закрыть уведомление" onClick={() => onDismiss(false)}>×</button></div><h2 id={titleId}>Можно подать новый запрос</h2><p className="quest-toast-body">Срок ожидания завершён. Откройте «Повышение», чтобы запросить квалификацию повторно.</p><div className="portia-dialog-actions"><button type="button" className="primary-control" onClick={() => onDismiss(true)}>ОТКРЫТЬ ПОВЫШЕНИЕ</button></div></div>
+  </aside>;
 }
 
 function FormattedText({ text, document, className = "" }: { text?: string; document?: RichTextDocument; className?: string }) {

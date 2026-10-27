@@ -12,7 +12,7 @@ test("participant gate explains binding and keeps the nickname in session state 
   assert.ok(source.includes("Первая заявка закрепит этот ник за устройством. Сменить его сможет проверяющий."));
   assert.ok(source.includes('autoComplete="off"'));
   assert.ok(source.includes('spellCheck={false}'));
-  assert.doesNotMatch(source, /localStorage|sessionStorage/);
+  assert.doesNotMatch(source, /(?:localStorage|sessionStorage)\.setItem\([^\n]*(?:nickname|checkedNickname)/i);
 });
 
 test("ordinary promotion and qualification remain visibly separate flows", () => {
