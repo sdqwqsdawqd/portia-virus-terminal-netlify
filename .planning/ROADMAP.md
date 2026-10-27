@@ -70,7 +70,7 @@
 - [x] `14-02-PLAN.md` — database contract, atomic RPCs and trusted tab
 - [x] `14-03-PLAN.md` — public status, device binding and request APIs
 - [x] `14-04-PLAN.md` — reviewer queues, claims, banks and snapshots
-- [ ] `14-05-PLAN.md` — participant application and ordinary-task flow
+- [x] `14-05-PLAN.md` — participant application and ordinary-task flow
 - [ ] `14-07-PLAN.md` — qualification engine and protected APIs
 - [ ] `14-06-PLAN.md` — reviewer workspace and bank management
 - [ ] `14-08-PLAN.md` — participant/reviewer qualification interfaces
