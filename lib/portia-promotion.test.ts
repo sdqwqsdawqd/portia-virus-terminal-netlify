@@ -14,7 +14,7 @@ function rosterEntry(title: string, promotedAt = "2026-10-01T00:00:00.000Z"): Pr
   assert.ok(normalized, `test title must normalize: ${title}`);
   const current = promotionTitles.find((item) => item.id === normalized);
   assert.ok(current);
-  const next = promotionTitles[current.level];
+  const next = promotionTitles.at(current.level);
   return {
     nickname: "PortiaUser",
     nicknameKey: "portiauser",
