@@ -64,12 +64,12 @@
 9. Закрытие процессов транзакционно удаляет подробные payload, сохраняет максимум три кратких результата и очищает брошенные либо просроченные данные через три дня.
 10. Весь поток успешно проходит автоматические проверки, production build и владельческую UAT на ПК и телефоне, включая прямые запросы к защищённым API.
 
-**Plans:** 3/10 plans executed
+**Plans:** 4/10 plans executed
 
 - [x] `14-01-PLAN.md` — rules and authoritative sheet loader
 - [x] `14-02-PLAN.md` — database contract, atomic RPCs and trusted tab
 - [x] `14-03-PLAN.md` — public status, device binding and request APIs
-- [ ] `14-04-PLAN.md` — reviewer queues, claims, banks and snapshots
+- [x] `14-04-PLAN.md` — reviewer queues, claims, banks and snapshots
 - [ ] `14-05-PLAN.md` — participant application and ordinary-task flow
 - [ ] `14-07-PLAN.md` — qualification engine and protected APIs
 - [ ] `14-06-PLAN.md` — reviewer workspace and bank management
