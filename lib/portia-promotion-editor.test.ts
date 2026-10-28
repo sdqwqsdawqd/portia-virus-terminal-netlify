@@ -63,6 +63,27 @@ test("request rejection and owner deletion use explicit irreversible confirmatio
   assert.match(main, /action === "reject" \|\| action === "delete-request"[\s\S]*setSelectedRequestId\(""\)/);
 });
 
+test("all destructive actions share one focus-managed confirmation dialog", () => {
+  const actualEditors = main + ordinary + qualification;
+  assert.doesNotMatch(actualEditors, /window\.confirm/);
+  assert.ok(main.includes("confirmButtonRef"));
+  assert.ok(main.includes("focusableElements"));
+  assert.ok(main.includes('event.key === "Escape"'));
+  assert.ok(main.includes("opener?.focus()"));
+  assert.ok(ordinary.includes("requestConfirm"));
+  assert.ok(qualification.includes("requestConfirm"));
+});
+
+test("actual branch and queue controls expose button-tab semantics and arrow navigation", () => {
+  assert.ok(main.includes('aria-label="Разделы повышения"'));
+  assert.ok(main.includes('aria-label="Типы запросов"'));
+  assert.ok(main.includes("aria-pressed={branch === id}"));
+  assert.ok(main.includes('aria-pressed={kind === "ordinary"}'));
+  assert.ok(main.includes("moveButtonTab"));
+  assert.ok(main.includes('event.key === "ArrowRight"'));
+  assert.ok(main.includes('event.key === "ArrowLeft"'));
+});
+
 test("promotion reviewer layout has desktop workbench and phone sequential view", () => {
   assert.match(styles, /\.promotion-editor-workbench\s*\{/);
   assert.match(styles, /grid-template-columns:\s*280px minmax\(0,\s*1fr\)/);
