@@ -136,7 +136,7 @@
 | PERM-01 | Phase 14 | Complete |
 | PERM-02 | Phase 14 | Complete |
 | PERM-03 | Phase 14 | Complete |
-| EDIT-01 | Phase 14 | Pending |
+| EDIT-01 | Phase 14 | Complete |
 | EDIT-02 | Phase 14 | Complete |
 | EDIT-03 | Phase 14 | Complete |
 | DATA-01 | Phase 14 | Complete |
