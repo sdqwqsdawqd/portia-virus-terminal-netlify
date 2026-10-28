@@ -46,7 +46,7 @@ test("promotion sheet parses quoted CSV and preserves display spelling", async (
 
 test("the live A61:E85 range may start directly with its first participant", async () => {
   const result = await loadPromotionRoster((async () => new Response(
-    'sadfg3214,Ассистент,Научный сотрудник,"Можно повысить ✅",17.09.2026\n"",N/A,N/A,"",""',
+    'sadfg3214,Ассистент,Научный сотрудник,"Можно повысить ✅",17.09.2026\n,,,,',
   )) as typeof fetch);
   assert.equal(result.status, "ok");
   if (result.status !== "ok") return;

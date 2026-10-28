@@ -76,6 +76,7 @@ export type PromotionApiResult = {
 const notListed = { error: "Ник не найден в списке PORTIA. Проверьте написание или обратитесь к руководителю.", code: "not-listed" };
 const sheetUnavailable = { error: "Список участников временно недоступен. Попробуйте позже — заявка не отправлена.", code: "sheet-unavailable" };
 const promotionSheetUnavailable = { error: "Данные повышения временно недоступны. Попробуйте позже.", code: "promotion-sheet-unavailable" };
+const promotionSourceInvalid = { error: "Данные повышения требуют проверки. Попробуйте позже.", code: "promotion-source-invalid" };
 const pendingDatabase = { error: "Система повышения пока недоступна. Попробуйте позже.", code: "pending-database" };
 const deviceDenied = { error: "Это устройство уже связано с другим участником. Обратитесь к проверяющему." };
 
@@ -190,7 +191,7 @@ export async function promotionStatus(
     nickname = resolved.nicknameKey;
   }
   const access = await deps.loadAccessRoster();
-  if (access.status !== "ok") return { status: 503, body: sheetUnavailable };
+  if (access.status !== "ok") return { status: 503, body: access.status === "invalid-source" ? promotionSourceInvalid : sheetUnavailable };
   const admitted = findPromotionAccessEntry(access.roster, nickname);
   if (!admitted) return { status: 404, body: notListed };
 
@@ -200,7 +201,7 @@ export async function promotionStatus(
   const cookie = existingHash ? {} : { setCookie: buildDeviceCookie(token) };
 
   const roster = await deps.loadRoster();
-  if (roster.status !== "ok") return { status: 503, body: promotionSheetUnavailable, ...cookie };
+  if (roster.status !== "ok") return { status: 503, body: roster.status === "invalid-source" ? promotionSourceInvalid : promotionSheetUnavailable, ...cookie };
   const entry = findPromotionRosterEntry(roster.roster, admitted.nickname);
   if (!entry) {
     return {
@@ -224,11 +225,11 @@ export async function submitPromotionRequest(
     return { status: 400, body: { error: "Некорректные данные.", code: "invalid-request" } };
   }
   const access = await deps.loadAccessRoster();
-  if (access.status !== "ok") return { status: 503, body: sheetUnavailable };
+  if (access.status !== "ok") return { status: 503, body: access.status === "invalid-source" ? promotionSourceInvalid : sheetUnavailable };
   const admitted = findPromotionAccessEntry(access.roster, nickname);
   if (!admitted) return { status: 404, body: notListed };
   const roster = await deps.loadRoster();
-  if (roster.status !== "ok") return { status: 503, body: promotionSheetUnavailable };
+  if (roster.status !== "ok") return { status: 503, body: roster.status === "invalid-source" ? promotionSourceInvalid : promotionSheetUnavailable };
   const entry = findPromotionRosterEntry(roster.roster, admitted.nickname);
   if (!entry) return { status: 409, body: { error: "Для участника ещё нет записи повышения.", code: "promotion-record-unavailable" } };
 

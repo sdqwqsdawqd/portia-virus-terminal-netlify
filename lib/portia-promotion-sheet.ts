@@ -14,15 +14,17 @@ const maxCsvLength = 128 * 1024;
 
 export type PromotionRosterResult =
   | { status: "ok"; roster: PromotionRosterEntry[] }
-  | { status: "unavailable"; reason: "network" | "http" | "invalid-data" };
+  | { status: "unavailable"; reason: "network" | "http" }
+  | { status: "invalid-source"; reason: "invalid-data" };
 
 export type PromotionAccessEntry = { nickname: string; nicknameKey: string };
 export type PromotionAccessResult =
   | { status: "ok"; roster: PromotionAccessEntry[] }
-  | { status: "unavailable"; reason: "network" | "http" | "invalid-data" };
+  | { status: "unavailable"; reason: "network" | "http" }
+  | { status: "invalid-source"; reason: "invalid-data" };
 
 function normalizedNickname(value: string) {
-  return value.trim().toLocaleLowerCase("en-US");
+  return value.trim().normalize("NFKC").toLocaleLowerCase("en-US");
 }
 
 function cleanCell(value: string | undefined, maxLength: number) {
@@ -84,7 +86,10 @@ export function promotionRosterFromRows(rows: string[][]): PromotionRosterEntry[
   const seen = new Set<string>();
   return dataRows.slice(0, 25).flatMap((row) => {
     const nickname = cleanCell(row[0], 64);
-    if (!nickname) return [];
+    if (!nickname) {
+      if (row.some((cell) => (cell ?? "").trim())) throw new Error("The promotion sheet contains a partial row.");
+      return [];
+    }
     const nicknameKey = normalizedNickname(nickname);
     if (seen.has(nicknameKey)) throw new Error("The promotion sheet contains duplicate nicknames.");
     seen.add(nicknameKey);
@@ -120,7 +125,7 @@ async function loadSheetRows(url: string, fetchImpl: typeof fetch) {
     if (!csv || csv.length > maxCsvLength) throw new Error("Promotion sheet response is empty or oversized.");
     return { status: "ok", rows: parseCsv(csv) } as const;
   } catch {
-    return { status: "unavailable", reason: "invalid-data" } as const;
+    return { status: "invalid-source", reason: "invalid-data" } as const;
   }
 }
 
@@ -130,7 +135,7 @@ export async function loadPromotionAccessRoster(fetchImpl: typeof fetch = fetch)
   try {
     return { status: "ok", roster: accessRosterFromRows(result.rows) };
   } catch {
-    return { status: "unavailable", reason: "invalid-data" };
+    return { status: "invalid-source", reason: "invalid-data" };
   }
 }
 
@@ -141,6 +146,6 @@ export async function loadPromotionRoster(fetchImpl: typeof fetch = fetch): Prom
   try {
     return { status: "ok", roster: promotionRosterFromRows(result.rows) };
   } catch {
-    return { status: "unavailable", reason: "invalid-data" };
+    return { status: "invalid-source", reason: "invalid-data" };
   }
 }
