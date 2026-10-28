@@ -26,23 +26,28 @@
     {
       "number": "10",
       "name": "Рабочий стол: устойчивость, встроенные документы, доступность",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "11",
       "name": "Редактор: панель оформления и тексты",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "12",
       "name": "Права редакторов и безопасность доступа",
-      "status": "pending"
+      "status": "complete"
+    },
+    {
+      "number": "13",
+      "name": "Приложение «Справочник»",
+      "status": "in_progress"
     }
   ],
   "next": {
     "command": "/gsd:progress --next",
     "label": "Advance to the next step",
-    "reason": "Phase 10 of 7 · 57% · executing"
+    "reason": "Phase 13 of 8 · 88% · executing"
   },
-  "updated_at": "2026-10-25T16:28:30.379Z"
+  "updated_at": "2026-10-26T20:29:33.101Z"
 }

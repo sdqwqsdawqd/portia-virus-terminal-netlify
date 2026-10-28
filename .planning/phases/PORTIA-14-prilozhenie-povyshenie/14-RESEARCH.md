@@ -256,20 +256,16 @@ Client reporting is best-effort; server reconciliation remains mandatory.
 </code_examples>
 
 <open_questions>
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Can Supabase Cron be enabled in the production project?**
-   - The platform supports SQL/function schedules, but project extension state is external.
-   - Plan an owner checkpoint to enable/apply and verify the cleanup job.
+   - **RESOLVED:** Keep cleanup idempotent and callable from the reviewer path; the owner-run SQL checkpoint verifies/enables the scheduled job where the production project supports it. A missing schedule never authorizes unsafe cleanup during a Sheet outage.
 
 2. **How should a test distinguish phone from desktop?**
-   - User-agent/touch checks are heuristic and spoofable.
-   - Treat the mode as a declared server-recorded start property informed by viewport/input signals; do not present it as security-grade device detection.
+   - **RESOLVED:** Derive mode once at attempt creation from viewport/input/user-agent signals, classify ambiguous devices as desktop, store the result in the server attempt snapshot and prohibit later mutation. Spoofing remains a documented residual risk rather than a promised security boundary.
 
 3. **How is IP obtained consistently on Netlify?**
-   - Forwarded headers depend on hosting behavior.
-   - Encapsulate extraction, normalize to a coarse keyed bucket, and test with representative Netlify headers; never store raw IP longer than needed.
-</open_questions>
+   - **RESOLVED:** Use the existing server-only trusted forwarded-header extractor, normalize the selected address into a coarse keyed risk bucket, reject malformed chains and never persist or return raw IP. Representative Netlify header fixtures remain required in the API tests.
 
 <sources>
 ## Sources
