@@ -153,7 +153,7 @@ v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в ис�
 
 ### Pending Todos
 
-None.
+- 5 файлов в `.planning/todos/pending/`. Текущий пакет регрессий Phase 14: [Стабилизировать Повышение и интерфейс рабочего стола](./todos/pending/2026-10-28-stabilize-promotion-and-desktop-ui.md).
 
 ### Blockers/Concerns
 
