@@ -1,7 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { getEditorAccess, type EditorAccess } from "./editor-access.ts";
-import type { PromotionRequestKind } from "./portia-promotion.ts";
+import {
+  ordinaryPromotionTransitions,
+  qualificationPromotionTransitions,
+  type PromotionRequestKind,
+} from "./portia-promotion.ts";
 
 export type PromotionReviewerAccess =
   | { status: "allowed"; supabase: SupabaseClient; user: User; access: EditorAccess }
@@ -171,6 +175,69 @@ export function validateQuestionDraft(value: unknown): QuestionDraft | null {
     && body.answer.every((index) => Number.isInteger(index) && index >= 0 && index < options.length)
     && new Set(body.answer).size === body.answer.length) {
     return { type: "multiple", text, options, answer: body.answer as number[] };
+  }
+  return null;
+}
+
+export type PromotionBankCommand =
+  | { action: "save-task-bank"; targetTitleId: string; requiredCount: number }
+  | { action: "save-qualification-bank"; transitionId: string; quotas: QualificationQuotas }
+  | { action: "save-task-item"; bankId: string; itemId?: string; text: string; active: boolean; sortOrder: number }
+  | { action: "delete-task-item"; bankId: string; itemId: string }
+  | { action: "save-question"; bankId: string; questionId?: string; question: QuestionDraft; active: boolean; sortOrder: number }
+  | { action: "delete-question"; bankId: string; questionId: string };
+
+const ordinaryTargetIds = new Set(ordinaryPromotionTransitions.map((transition) => transition.targetTitleId));
+const qualificationTransitionIds = new Set(qualificationPromotionTransitions.map((transition) => transition.transitionId));
+
+function boundedInteger(value: unknown, min: number, max: number): value is number {
+  return Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
+}
+
+function uuid(value: unknown): value is string {
+  return typeof value === "string" && uuidPattern.test(value);
+}
+
+export function parsePromotionBankCommand(value: unknown): PromotionBankCommand | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const body = value as Record<string, unknown>;
+  if (body.action === "save-task-bank") {
+    return typeof body.targetTitleId === "string" && ordinaryTargetIds.has(body.targetTitleId as never)
+      && boundedInteger(body.requiredCount, 1, 50)
+      ? { action: body.action, targetTitleId: body.targetTitleId, requiredCount: body.requiredCount }
+      : null;
+  }
+  if (body.action === "save-qualification-bank") {
+    const quotas = body.quotas && typeof body.quotas === "object" && !Array.isArray(body.quotas)
+      ? body.quotas as Record<string, unknown>
+      : null;
+    if (!quotas || typeof body.transitionId !== "string" || !qualificationTransitionIds.has(body.transitionId)
+      || !boundedInteger(quotas.single, 0, 100) || !boundedInteger(quotas.multiple, 0, 100)
+      || !boundedInteger(quotas.freeText, 0, 100)) return null;
+    const total = quotas.single + quotas.multiple + quotas.freeText;
+    return total >= 1 && total <= 100
+      ? { action: body.action, transitionId: body.transitionId, quotas: { single: quotas.single, multiple: quotas.multiple, freeText: quotas.freeText } }
+      : null;
+  }
+  if (body.action === "save-task-item") {
+    const text = validText(body.text);
+    return uuid(body.bankId) && (body.itemId === undefined || uuid(body.itemId)) && text
+      && typeof body.active === "boolean" && boundedInteger(body.sortOrder, 0, 10_000)
+      ? { action: body.action, bankId: body.bankId, ...(body.itemId ? { itemId: body.itemId as string } : {}), text, active: body.active, sortOrder: body.sortOrder }
+      : null;
+  }
+  if (body.action === "delete-task-item") {
+    return uuid(body.bankId) && uuid(body.itemId) ? { action: body.action, bankId: body.bankId, itemId: body.itemId } : null;
+  }
+  if (body.action === "save-question") {
+    const question = validateQuestionDraft(body.question);
+    return uuid(body.bankId) && (body.questionId === undefined || uuid(body.questionId)) && question
+      && typeof body.active === "boolean" && boundedInteger(body.sortOrder, 0, 10_000)
+      ? { action: body.action, bankId: body.bankId, ...(body.questionId ? { questionId: body.questionId as string } : {}), question, active: body.active, sortOrder: body.sortOrder }
+      : null;
+  }
+  if (body.action === "delete-question") {
+    return uuid(body.bankId) && uuid(body.questionId) ? { action: body.action, bankId: body.bankId, questionId: body.questionId } : null;
   }
   return null;
 }

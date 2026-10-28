@@ -13,6 +13,28 @@ export type PromotionTitle = (typeof promotionTitles)[number];
 export type PromotionTitleId = PromotionTitle["id"];
 export type PromotionRequestKind = "ordinary" | "qualification";
 
+export const ordinaryPromotionTransitions = promotionTitles.slice(0, -1).map((source, index) => {
+  const target = promotionTitles[index + 1];
+  return {
+    sourceTitleId: source.id,
+    targetTitleId: target.id,
+    sourceLevel: source.level,
+    label: `${source.label} → ${target.label}`,
+  };
+}) as ReadonlyArray<{
+  sourceTitleId: PromotionTitleId;
+  targetTitleId: PromotionTitleId;
+  sourceLevel: number;
+  label: string;
+}>;
+
+export const qualificationPromotionTransitions = ordinaryPromotionTransitions
+  .filter((transition) => [2, 4, 6].includes(transition.sourceLevel))
+  .map((transition) => ({
+    ...transition,
+    transitionId: transition.targetTitleId,
+  })) as ReadonlyArray<(typeof ordinaryPromotionTransitions)[number] & { transitionId: string }>;
+
 export type PromotionRosterEntry = {
   nickname: string;
   nicknameKey: string;

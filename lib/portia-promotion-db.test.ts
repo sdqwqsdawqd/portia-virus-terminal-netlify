@@ -124,6 +124,10 @@ test("reviewer bank RPCs expose versioned private configuration and immutable co
   assert.match(setup, /portia_promo_bank_command[\s\S]*save-task-bank[\s\S]*save-task-item[\s\S]*save-qualification-bank[\s\S]*save-question/i);
   assert.match(setup, /portia_promo_confirm_assignment[\s\S]*portia_promo_assignment_items/i);
   assert.match(setup, /portia_promo_confirm_test[\s\S]*portia_promo_attempt_questions/i);
+  assert.match(setup, /portia_promo_confirm_assignment\(p_request_id uuid, p_bank_id uuid, p_bank_version text, p_items jsonb\)/i);
+  assert.match(setup, /portia_promo_confirm_assignment[\s\S]*source\.bank_id = p_bank_id[\s\S]*bank\.target_title_id = request_target/i);
+  assert.match(setup, /portia_promo_confirm_test[\s\S]*source\.bank_id = p_bank_id[\s\S]*bank\.transition_id = request_transition/i);
+  assert.doesNotMatch(setup.slice(setup.indexOf("create or replace function public.portia_promo_confirm_assignment"), setup.indexOf("$$;", setup.indexOf("create or replace function public.portia_promo_confirm_assignment"))), /snapshot_text text/);
 });
 
 test("promotion SQL owner apply file mirrors contracts and is explicitly manual", () => {

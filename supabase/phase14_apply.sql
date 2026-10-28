@@ -576,7 +576,7 @@ begin
   return found;
 end $$;
 
-create or replace function public.portia_promo_confirm_assignment(p_request_id uuid, p_items jsonb)
+create or replace function public.portia_promo_confirm_assignment(p_request_id uuid, p_bank_id uuid, p_bank_version text, p_items jsonb)
 returns uuid
 language plpgsql
 security definer
@@ -584,20 +584,28 @@ set search_path = ''
 as $$
 declare
   created_assignment_id uuid;
+  request_target text;
+  required_count_value integer;
 begin
   if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
   if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) not between 1 and 50 then
     raise exception 'invalid-assignment';
   end if;
-  insert into public.portia_promo_assignments (request_id, reviewer_id)
-  select id, auth.uid() from public.portia_promo_requests
-    where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid()
-  returning id into created_assignment_id;
-  if created_assignment_id is null then return null; end if;
+  select target_title_id into request_target from public.portia_promo_requests
+    where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid() for update;
+  if request_target is null then return null; end if;
+  select b.required_count into required_count_value from public.portia_promo_task_banks b
+    where b.id = p_bank_id and b.target_title_id = request_target
+      and md5(b.updated_at::text || coalesce((select max(i.updated_at)::text from public.portia_promo_task_items i where i.bank_id = b.id), '')) = p_bank_version
+    for update;
+  if required_count_value is null or jsonb_array_length(p_items) <> required_count_value then raise exception 'stale-or-mismatched-bank'; end if;
+  insert into public.portia_promo_assignments (request_id, reviewer_id) values (p_request_id, auth.uid()) returning id into created_assignment_id;
   insert into public.portia_promo_assignment_items (assignment_id, source_item_id, snapshot_text, sort_order)
-  select created_assignment_id, item.source_item_id, item.snapshot_text, item.sort_order
-  from jsonb_to_recordset(p_items) as item(source_item_id uuid, snapshot_text text, sort_order integer)
-  where length(item.snapshot_text) between 1 and 4000;
+  select created_assignment_id, item.source_item_id, source.task_text, item.sort_order
+  from jsonb_to_recordset(p_items) as item(source_item_id uuid, sort_order integer)
+  join public.portia_promo_task_items source on source.id = item.source_item_id and source.bank_id = p_bank_id and source.active
+  join public.portia_promo_task_banks bank on bank.id = source.bank_id and bank.target_title_id = request_target
+  where item.sort_order between 0 and 49;
   if (select count(*) from public.portia_promo_assignment_items ai where ai.assignment_id = created_assignment_id) <> jsonb_array_length(p_items) then
     raise exception 'invalid-assignment-items';
   end if;
@@ -605,7 +613,7 @@ begin
   return created_assignment_id;
 end $$;
 
-create or replace function public.portia_promo_confirm_test(p_request_id uuid, p_questions jsonb, p_client_mode text)
+create or replace function public.portia_promo_confirm_test(p_request_id uuid, p_bank_id uuid, p_bank_version text, p_questions jsonb, p_client_mode text)
 returns uuid
 language plpgsql
 security definer
@@ -613,25 +621,34 @@ set search_path = ''
 as $$
 declare
   created_attempt_id uuid;
+  request_transition text;
+  quota_total integer;
 begin
   if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
   if p_client_mode not in ('desktop', 'phone') or jsonb_typeof(p_questions) <> 'array'
     or jsonb_array_length(p_questions) not between 1 and 100 then raise exception 'invalid-test'; end if;
+  select transition_id into request_transition from public.portia_promo_qualification_requests
+    where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid() for update;
+  if request_transition is null then return null; end if;
+  select b.single_count + b.multiple_count + b.free_text_count into quota_total
+    from public.portia_promo_qualification_banks b
+    where b.id = p_bank_id and b.transition_id = request_transition
+      and md5(b.updated_at::text || coalesce((select max(q.updated_at)::text from public.portia_promo_qualification_questions q where q.bank_id = b.id), '')) = p_bank_version
+    for update;
+  if quota_total is null or jsonb_array_length(p_questions) <> quota_total then raise exception 'stale-or-mismatched-bank'; end if;
   insert into public.portia_promo_attempts (request_id, reviewer_id, client_mode, status, started_at, deadline_at)
-  select id, auth.uid(), p_client_mode, 'active', now(), now() + interval '15 minutes' from public.portia_promo_qualification_requests
-    where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid()
-  returning id into created_attempt_id;
-  if created_attempt_id is null then return null; end if;
+    values (p_request_id, auth.uid(), p_client_mode, 'active', now(), now() + interval '15 minutes')
+    returning id into created_attempt_id;
   insert into public.portia_promo_attempt_questions (
     attempt_id, source_question_id, question_type, snapshot_text, snapshot_options, answer_key, sort_order
   )
-  select created_attempt_id, q.source_question_id, q.question_type, q.snapshot_text,
-    coalesce(q.snapshot_options, '[]'::jsonb), q.answer_key, q.sort_order
-  from jsonb_to_recordset(p_questions) as q(
-    source_question_id uuid, question_type text, snapshot_text text,
-    snapshot_options jsonb, answer_key jsonb, sort_order integer
-  )
-  where q.question_type in ('single', 'multiple', 'free-text') and length(q.snapshot_text) between 1 and 4000;
+  select created_attempt_id, item.source_question_id, source.question_type, source.question_text,
+    coalesce((select jsonb_agg(o.option_text order by o.sort_order) from public.portia_promo_qualification_options o where o.question_id = source.id), '[]'::jsonb),
+    source.answer_key, item.sort_order
+  from jsonb_to_recordset(p_questions) as item(source_question_id uuid, sort_order integer)
+  join public.portia_promo_qualification_questions source on source.id = item.source_question_id and source.bank_id = p_bank_id and source.active
+  join public.portia_promo_qualification_banks bank on bank.id = source.bank_id and bank.transition_id = request_transition
+  where item.sort_order between 0 and 99;
   if (select count(*) from public.portia_promo_attempt_questions aq where aq.attempt_id = created_attempt_id) <> jsonb_array_length(p_questions) then
     raise exception 'invalid-test-questions';
   end if;
@@ -921,7 +938,7 @@ begin
   if pg_column_size(p_payload) > 65536 then raise exception 'payload-too-large'; end if;
 
   if p_action = 'save-task-bank' then
-    if length(p_payload ->> 'targetTitleId') not between 1 and 48
+    if (p_payload ->> 'targetTitleId') not in ('trainee','laboratory-assistant','researcher','assistant','scientist','virologist-specialist','expert-virologist')
       or (p_payload ->> 'requiredCount')::integer not between 1 and 50 then raise exception 'invalid-bank'; end if;
     insert into public.portia_promo_task_banks (target_title_id, required_count)
     values (p_payload ->> 'targetTitleId', (p_payload ->> 'requiredCount')::integer)
@@ -930,7 +947,9 @@ begin
 
   elsif p_action = 'save-task-item' then
     bank_id_value := (p_payload ->> 'bankId')::uuid;
-    if length(trim(p_payload ->> 'text')) not between 1 and 4000 then raise exception 'invalid-item'; end if;
+    if not exists (select 1 from public.portia_promo_task_banks b where b.id = bank_id_value and b.target_title_id in ('trainee','laboratory-assistant','researcher','assistant','scientist','virologist-specialist','expert-virologist'))
+      or length(trim(p_payload ->> 'text')) not between 1 and 4000
+      or (p_payload ->> 'sortOrder')::integer not between 0 and 10000 then raise exception 'invalid-item'; end if;
     if nullif(p_payload ->> 'itemId', '') is null then
       insert into public.portia_promo_task_items (bank_id, task_text, active, sort_order)
       values (bank_id_value, trim(p_payload ->> 'text'), coalesce((p_payload ->> 'active')::boolean, true), coalesce((p_payload ->> 'sortOrder')::integer, 0))
@@ -944,12 +963,18 @@ begin
     update public.portia_promo_task_banks set updated_at = now() where id = bank_id_value;
 
   elsif p_action = 'delete-task-item' then
+    if not exists (select 1 from public.portia_promo_task_banks b where b.id = (p_payload ->> 'bankId')::uuid and b.target_title_id in ('trainee','laboratory-assistant','researcher','assistant','scientist','virologist-specialist','expert-virologist')) then raise exception 'invalid-bank'; end if;
     delete from public.portia_promo_task_items where id = (p_payload ->> 'itemId')::uuid
       and bank_id = (p_payload ->> 'bankId')::uuid returning id, bank_id into result_id, bank_id_value;
     update public.portia_promo_task_banks set updated_at = now() where id = bank_id_value;
 
   elsif p_action = 'save-qualification-bank' then
-    if length(p_payload ->> 'transitionId') not between 1 and 48 then raise exception 'invalid-bank'; end if;
+    if (p_payload ->> 'transitionId') not in ('laboratory-assistant','assistant','virologist-specialist')
+      or (p_payload #>> '{quotas,single}')::integer not between 0 and 100
+      or (p_payload #>> '{quotas,multiple}')::integer not between 0 and 100
+      or (p_payload #>> '{quotas,freeText}')::integer not between 0 and 100
+      or ((p_payload #>> '{quotas,single}')::integer + (p_payload #>> '{quotas,multiple}')::integer + (p_payload #>> '{quotas,freeText}')::integer) not between 1 and 100
+      then raise exception 'invalid-bank'; end if;
     insert into public.portia_promo_qualification_banks (transition_id, single_count, multiple_count, free_text_count)
     values (
       p_payload ->> 'transitionId',
@@ -967,8 +992,10 @@ begin
     question_value := p_payload -> 'question';
     question_type_value := question_value ->> 'type';
     answer_value := question_value -> 'answer';
-    if question_type_value not in ('single', 'multiple', 'free-text')
-      or length(trim(question_value ->> 'text')) not between 1 and 4000 then raise exception 'invalid-question'; end if;
+    if not exists (select 1 from public.portia_promo_qualification_banks b where b.id = bank_id_value and b.transition_id in ('laboratory-assistant','assistant','virologist-specialist'))
+      or question_type_value not in ('single', 'multiple', 'free-text')
+      or length(trim(question_value ->> 'text')) not between 1 and 4000
+      or (p_payload ->> 'sortOrder')::integer not between 0 and 10000 then raise exception 'invalid-question'; end if;
     if nullif(p_payload ->> 'questionId', '') is null then
       insert into public.portia_promo_qualification_questions (bank_id, question_type, question_text, answer_key, active, sort_order)
       values (bank_id_value, question_type_value, trim(question_value ->> 'text'), answer_value,
@@ -999,6 +1026,7 @@ begin
     update public.portia_promo_qualification_banks set updated_at = now() where id = bank_id_value;
 
   elsif p_action = 'delete-question' then
+    if not exists (select 1 from public.portia_promo_qualification_banks b where b.id = (p_payload ->> 'bankId')::uuid and b.transition_id in ('laboratory-assistant','assistant','virologist-specialist')) then raise exception 'invalid-bank'; end if;
     delete from public.portia_promo_qualification_questions where id = (p_payload ->> 'questionId')::uuid
       and bank_id = (p_payload ->> 'bankId')::uuid returning id, bank_id into result_id, bank_id_value;
     update public.portia_promo_qualification_banks set updated_at = now() where id = bank_id_value;
@@ -1023,8 +1051,8 @@ revoke all on function public.portia_promo_public_status(text, text, text) from 
 revoke all on function public.portia_promo_claim_request(text, uuid) from public, anon, authenticated;
 revoke all on function public.portia_promo_release_request(text, uuid, boolean) from public, anon, authenticated;
 revoke all on function public.portia_promo_reject_request(text, uuid, text) from public, anon, authenticated;
-revoke all on function public.portia_promo_confirm_assignment(uuid, jsonb) from public, anon, authenticated;
-revoke all on function public.portia_promo_confirm_test(uuid, jsonb, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_confirm_assignment(uuid, uuid, text, jsonb) from public, anon, authenticated;
+revoke all on function public.portia_promo_confirm_test(uuid, uuid, text, jsonb, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_start_test(uuid, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_current_test(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_answer_question(uuid, uuid, jsonb, text, text) from public, anon, authenticated;
@@ -1053,8 +1081,8 @@ grant execute on function public.portia_promo_bank_command(text, jsonb) to authe
 grant execute on function public.portia_promo_claim_request(text, uuid) to authenticated;
 grant execute on function public.portia_promo_release_request(text, uuid, boolean) to authenticated;
 grant execute on function public.portia_promo_reject_request(text, uuid, text) to authenticated;
-grant execute on function public.portia_promo_confirm_assignment(uuid, jsonb) to authenticated;
-grant execute on function public.portia_promo_confirm_test(uuid, jsonb, text) to authenticated;
+grant execute on function public.portia_promo_confirm_assignment(uuid, uuid, text, jsonb) to authenticated;
+grant execute on function public.portia_promo_confirm_test(uuid, uuid, text, jsonb, text) to authenticated;
 grant execute on function public.portia_promo_grade_answer(uuid, boolean) to authenticated;
 grant execute on function public.portia_promo_finalize_attempt(uuid, boolean, integer, integer) to authenticated;
 grant execute on function public.portia_promo_override_failure(uuid) to authenticated;

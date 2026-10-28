@@ -2,12 +2,23 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   normalizePromotionTitle,
+  ordinaryPromotionTransitions,
   promotionEligibility,
   promotionTitles,
+  qualificationPromotionTransitions,
   type PromotionRosterEntry,
 } from "./portia-promotion.ts";
 
 const day = 24 * 60 * 60 * 1_000;
+
+test("canonical promotion transitions are derived from the eight-rank ladder", () => {
+  assert.equal(ordinaryPromotionTransitions.length, 7);
+  assert.deepEqual(ordinaryPromotionTransitions.map((transition) => transition.targetTitleId), promotionTitles.slice(1).map((title) => title.id));
+  assert.deepEqual(qualificationPromotionTransitions.map((transition) => [transition.sourceLevel, transition.transitionId]), [
+    [2, "laboratory-assistant"], [4, "assistant"], [6, "virologist-specialist"],
+  ]);
+  assert.equal(ordinaryPromotionTransitions[0].label, "Академик → Стажёр");
+});
 
 function rosterEntry(title: string, promotedAt = "2026-10-01T00:00:00.000Z"): PromotionRosterEntry {
   const normalized = normalizePromotionTitle(title);

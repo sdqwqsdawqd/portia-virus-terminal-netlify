@@ -2,10 +2,10 @@ import { noStoreHeaders } from "@/lib/portia-cdn";
 import { promotionDeviceSecret } from "@/lib/portia-device-binding";
 import {
   createPreviewToken,
+  parsePromotionBankCommand,
   requirePromotionReviewer,
   selectQualificationPreview,
   selectTaskPreview,
-  validateQuestionDraft,
   verifyPreviewToken,
   type QualificationPreviewItem,
   type TaskPreviewItem,
@@ -15,9 +15,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-type Bank = { id: string; version: string; requiredCount?: number; quotas?: { single: number; multiple: number; freeText: number }; items: Array<TaskPreviewItem | QualificationPreviewItem> };
+type Bank = { id: string; targetTitleId?: string; transitionId?: string; version: string; requiredCount?: number; quotas?: { single: number; multiple: number; freeText: number }; items: Array<TaskPreviewItem | QualificationPreviewItem> };
 type BankState = { taskBanks: Bank[]; qualificationBanks: Bank[] };
-const mutationActions = new Set(["save-task-bank", "save-task-item", "delete-task-item", "save-qualification-bank", "save-question", "delete-question"]);
 
 const denied = (status: "forbidden" | "unavailable") => Response.json(
   { error: status === "forbidden" ? "Вкладка «Повышение» для вас закрыта." : "Проверка доступа временно недоступна." },
@@ -82,30 +81,31 @@ export async function POST(request: Request) {
     const ids = verifyPreviewToken(token, { kind, bankId, version: bank.version, now: Date.now() }, secret);
     if (!ids) return Response.json({ error: "Банк изменился. Соберите набор заново.", code: "stale-preview" }, { status: 409, headers: noStoreHeaders });
     const requestId = typeof body.requestId === "string" ? body.requestId : "";
-    const selected = ids.map((id) => bank.items.find((item) => item.id === id)).filter(Boolean);
+    if (new Set(ids).size !== ids.length) return Response.json({ error: "Набор содержит повторы.", code: "confirm-conflict" }, { status: 409, headers: noStoreHeaders });
+    const selected = ids.map((id) => bank.items.find((item) => item.id === id && item.active)).filter(Boolean);
+    if (selected.length !== ids.length) return Response.json({ error: "Банк изменился. Соберите набор заново.", code: "stale-preview" }, { status: 409, headers: noStoreHeaders });
     const rpc = kind === "ordinary"
-      ? ["portia_promo_confirm_assignment", { p_request_id: requestId, p_items: selected.map((item, sortOrder) => ({ source_item_id: item!.id, snapshot_text: item!.text, sort_order: sortOrder })) }]
-      : ["portia_promo_confirm_test", { p_request_id: requestId, p_questions: selected.map((item, sortOrder) => {
-        const question = item as QualificationPreviewItem & { options?: Array<{ text: string }>; answerKey?: unknown };
-        return {
-          source_question_id: question.id,
-          question_type: question.type,
-          snapshot_text: question.text,
-          snapshot_options: (question.options ?? []).map((option) => option.text),
-          answer_key: question.answerKey,
-          sort_order: sortOrder,
-        };
-      }), p_client_mode: "desktop" }];
+      ? ["portia_promo_confirm_assignment", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: bank.version, p_items: selected.map((item, sortOrder) => ({ source_item_id: item!.id, sort_order: sortOrder })) }]
+      : ["portia_promo_confirm_test", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: bank.version, p_questions: selected.map((item, sortOrder) => ({ source_question_id: item!.id, sort_order: sortOrder })), p_client_mode: "desktop" }];
     const { data, error } = await supabase.rpc(rpc[0] as string, rpc[1] as Record<string, unknown>);
     return error || !data
       ? Response.json({ error: "Не удалось подтвердить набор.", code: error?.code === "42883" ? "pending-database" : "confirm-conflict" }, { status: error?.code === "42883" ? 503 : 409, headers: noStoreHeaders })
       : Response.json({ id: data }, { status: 201, headers: noStoreHeaders });
   }
 
-  if (!mutationActions.has(body.action)) return Response.json({ error: "Неизвестная команда банка." }, { status: 400, headers: noStoreHeaders });
-  if (body.action === "save-question" && !validateQuestionDraft(body.question)) return Response.json({ error: "Некорректный вопрос или ответ." }, { status: 400, headers: noStoreHeaders });
   if (JSON.stringify(body).length > 64 * 1024) return Response.json({ error: "Данные слишком велики." }, { status: 413, headers: noStoreHeaders });
-  const { data, error } = await supabase.rpc("portia_promo_bank_command", { p_action: body.action, p_payload: body });
+  const command = parsePromotionBankCommand(body);
+  if (!command) return Response.json({ error: "Некорректная команда банка." }, { status: 400, headers: noStoreHeaders });
+  if ("bankId" in command) {
+    const state = await bankState(supabase);
+    const banks = command.action.includes("question") ? state?.qualificationBanks : state?.taskBanks;
+    const bank = banks?.find((item) => item.id === command.bankId);
+    const itemId = "itemId" in command ? command.itemId : "questionId" in command ? command.questionId : undefined;
+    if (!bank || (itemId && !bank.items.some((item) => item.id === itemId))) {
+      return Response.json({ error: "Банк или элемент банка не найден.", code: "bank-conflict" }, { status: 409, headers: noStoreHeaders });
+    }
+  }
+  const { data, error } = await supabase.rpc("portia_promo_bank_command", { p_action: command.action, p_payload: command });
   return error
     ? Response.json({ error: "Не удалось сохранить банк.", code: error.code === "42883" ? "pending-database" : "bank-write-failed" }, { status: error.code === "42883" ? 503 : 400, headers: noStoreHeaders })
     : Response.json({ id: data, state: await bankState(supabase) }, { headers: noStoreHeaders });

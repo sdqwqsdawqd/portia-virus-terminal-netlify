@@ -93,6 +93,9 @@ test("security regression: stale or tampered previews cannot be confirmed", () =
   assert.equal(verifyPreviewToken(token, { kind: "ordinary", bankId: "bank", version: "v1", now: 101 }, secret), null);
   assert.equal(verifyPreviewToken(`${token}x`, { kind: "ordinary", bankId: "bank", version: "v1", now: 100 }, secret), null);
   assert.match(route("banks"), /verifyPreviewToken[\s\S]*stale-preview[\s\S]*status: 409/);
+  assert.doesNotMatch(route("banks"), /snapshot_text|answer_key/);
+  assert.match(sqlFunction("portia_promo_confirm_assignment"), /p_bank_version[\s\S]*md5\([\s\S]*source\.task_text/i);
+  assert.match(sqlFunction("portia_promo_confirm_test"), /p_bank_version[\s\S]*source\.question_text[\s\S]*source\.answer_key/i);
 });
 
 test("security regression: only the current question is public and answer keys stay private", () => {

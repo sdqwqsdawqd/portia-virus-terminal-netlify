@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   createPreviewToken,
+  parsePromotionBankCommand,
   parsePromotionReviewerCommand,
   promotionReviewerDecision,
   selectQualificationPreview,
@@ -30,6 +31,18 @@ test("promotion reviewer commands accept only typed bounded payloads", () => {
   assert.equal(parsePromotionReviewerCommand({ action: "finalize-attempt", attemptId: "550e8400-e29b-41d4-a716-446655440000", passed: false, percent: 101 }), null);
   assert.deepEqual(parsePromotionReviewerCommand({ action: "reset-device", nicknameKey: " Alice_1 " }), { action: "reset-device", nicknameKey: "alice_1" });
   assert.equal(parsePromotionReviewerCommand({ action: "reset-device", nicknameKey: "x".repeat(65) }), null);
+});
+
+test("bank commands accept only canonical ranks, UUID-scoped items, and bounded quotas", () => {
+  const bankId = "550e8400-e29b-41d4-a716-446655440000";
+  const itemId = "550e8400-e29b-41d4-a716-446655440001";
+  assert.deepEqual(parsePromotionBankCommand({ action: "save-task-bank", targetTitleId: "trainee", requiredCount: 3 }), { action: "save-task-bank", targetTitleId: "trainee", requiredCount: 3 });
+  assert.equal(parsePromotionBankCommand({ action: "save-task-bank", targetTitleId: "Академик", requiredCount: 3 }), null);
+  assert.deepEqual(parsePromotionBankCommand({ action: "save-qualification-bank", transitionId: "assistant", quotas: { single: 1, multiple: 1, freeText: 1 } }), { action: "save-qualification-bank", transitionId: "assistant", quotas: { single: 1, multiple: 1, freeText: 1 } });
+  assert.equal(parsePromotionBankCommand({ action: "save-qualification-bank", transitionId: "researcher", quotas: { single: 0, multiple: 0, freeText: 0 } }), null);
+  assert.ok(parsePromotionBankCommand({ action: "save-task-item", bankId, itemId, text: "Задание", active: true, sortOrder: 2 }));
+  assert.equal(parsePromotionBankCommand({ action: "delete-task-item", bankId, itemId: "not-a-uuid" }), null);
+  assert.equal(parsePromotionBankCommand({ action: "save-task-item", bankId, text: "Задание", active: true, sortOrder: 10_001 }), null);
 });
 
 const taskItems = [
