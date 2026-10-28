@@ -472,6 +472,7 @@ create table if not exists public.portia_promo_attempts (
   reviewer_id uuid not null references auth.users(id),
   status text not null default 'prepared' check (status in ('prepared', 'active', 'grading', 'passed', 'failed', 'closed')),
   client_mode text not null default 'desktop' check (client_mode in ('desktop', 'phone')),
+  current_question_index integer not null default 0 check (current_question_index between 0 and 100000),
   started_at timestamptz,
   deadline_at timestamptz,
   technical_failure text check (technical_failure is null or length(technical_failure) <= 64),
@@ -482,6 +483,7 @@ create table if not exists public.portia_promo_attempts (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.portia_promo_attempts add column if not exists current_question_index integer not null default 0 check (current_question_index between 0 and 100000);
 
 create table if not exists public.portia_promo_attempt_questions (
   id uuid primary key default gen_random_uuid(),
@@ -730,35 +732,100 @@ create or replace function public.portia_promo_submit_request(
   p_title_id text,
   p_target_id text,
   p_token_hash text,
-  p_risk_bucket text default ''
+  p_risk_bucket text default '',
+  p_bucket_key text default '',
+  p_ip_bucket text default ''
 )
-returns uuid
+returns jsonb
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
   request_id uuid;
-  bound_nickname text;
+  normalized_key text := lower(trim(p_nickname_key));
+  bound_by_token text;
+  token_by_nickname text;
+  current_failures integer := 0;
+  until_at timestamptz;
 begin
-  if length(p_token_hash) not between 32 and 128 or length(p_risk_bucket) > 128 then
+  if length(normalized_key) not between 1 and 64
+    or length(p_token_hash) not between 32 and 128
+    or length(p_risk_bucket) > 128
+    or length(p_bucket_key) not between 1 and 160
+    or length(p_ip_bucket) > 128 then
     raise exception 'invalid-device-binding';
   end if;
-  select nickname_key into bound_nickname from public.portia_promo_device_bindings
-    where token_hash = p_token_hash and reset_at is null for update;
-  if bound_nickname is null or bound_nickname <> lower(trim(p_nickname_key)) then
-    raise exception 'device-denied';
+
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('promo:bucket:' || p_bucket_key, 0));
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('promo:nickname:' || normalized_key, 0));
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('promo:token:' || p_token_hash, 0));
+
+  insert into public.portia_promo_attempt_buckets (bucket_key, ip_bucket)
+  values (p_bucket_key, p_ip_bucket)
+  on conflict (bucket_key) do nothing;
+  select failures, blocked_until into current_failures, until_at
+    from public.portia_promo_attempt_buckets
+    where bucket_key = p_bucket_key
+    for update;
+  if until_at is not null and until_at > now() then
+    return jsonb_build_object('code', 'throttled', 'blockedUntil', until_at);
   end if;
+
+  select nickname_key into bound_by_token
+    from public.portia_promo_device_bindings
+    where token_hash = p_token_hash and reset_at is null
+    for update;
+  select token_hash into token_by_nickname
+    from public.portia_promo_device_bindings
+    where nickname_key = normalized_key and reset_at is null
+    for update;
+  if (bound_by_token is not null and bound_by_token <> normalized_key)
+    or (token_by_nickname is not null and token_by_nickname <> p_token_hash) then
+    current_failures := least(coalesce(current_failures, 0) + 1, 1000);
+    until_at := now() + case
+      when current_failures = 1 then interval '5 minutes'
+      when current_failures = 2 then interval '15 minutes'
+      else interval '60 minutes'
+    end;
+    update public.portia_promo_attempt_buckets
+      set failures = current_failures, blocked_until = until_at,
+          ip_bucket = p_ip_bucket, updated_at = now()
+      where bucket_key = p_bucket_key;
+    return jsonb_build_object('code', 'device-denied', 'blockedUntil', until_at);
+  end if;
+
+  delete from public.portia_promo_device_bindings
+    where reset_at is not null and (nickname_key = normalized_key or token_hash = p_token_hash);
+  insert into public.portia_promo_device_bindings (nickname_key, token_hash, risk_bucket)
+  values (normalized_key, p_token_hash, p_risk_bucket)
+  on conflict (nickname_key) do update set
+    token_hash = excluded.token_hash, risk_bucket = excluded.risk_bucket,
+    bound_at = now(), reset_at = null;
+
+  if (p_kind = 'ordinary' and exists (
+      select 1 from public.portia_promo_requests
+      where nickname_key = normalized_key and status in ('pending', 'claimed', 'assigned', 'awaiting-sheet-change')
+    )) or (p_kind = 'qualification' and exists (
+      select 1 from public.portia_promo_qualification_requests
+      where nickname_key = normalized_key and status in ('pending', 'claimed', 'approved', 'testing', 'grading')
+    )) then
+    return jsonb_build_object('code', 'active-request');
+  end if;
+
   if p_kind = 'ordinary' then
     insert into public.portia_promo_requests (nickname, nickname_key, title_id, target_title_id)
-    values (left(trim(p_nickname), 64), lower(trim(p_nickname_key)), p_title_id, p_target_id)
+    values (left(trim(p_nickname), 64), normalized_key, p_title_id, p_target_id)
     returning id into request_id;
   elsif p_kind = 'qualification' then
     insert into public.portia_promo_qualification_requests (nickname, nickname_key, title_id, transition_id)
-    values (left(trim(p_nickname), 64), lower(trim(p_nickname_key)), p_title_id, p_target_id)
+    values (left(trim(p_nickname), 64), normalized_key, p_title_id, p_target_id)
     returning id into request_id;
   else raise exception 'invalid-request-kind'; end if;
-  return request_id;
+  update public.portia_promo_attempt_buckets
+    set failures = 0, blocked_until = null, ip_bucket = p_ip_bucket, updated_at = now()
+    where bucket_key = p_bucket_key;
+  return jsonb_build_object('code', 'created', 'requestId', request_id);
 end; $$;
 
 create or replace function public.portia_promo_public_status(
@@ -1096,27 +1163,50 @@ begin
   return result;
 end; $$;
 
-create or replace function public.portia_promo_answer_question(p_attempt_id uuid, p_question_id uuid, p_answer jsonb, p_nonce text, p_token_hash text)
-returns boolean
+create or replace function public.portia_promo_answer_question(p_attempt_id uuid, p_question_id uuid, p_expected_question_index integer, p_answer jsonb, p_nonce text, p_token_hash text)
+returns jsonb
 language plpgsql
 security definer
 set search_path = ''
 as $$
-declare expected_order integer;
+declare
+  expected_order integer;
+  saved_answer uuid;
 begin
-  select count(*) into expected_order from public.portia_promo_answers where attempt_id = p_attempt_id;
-  if length(p_nonce) not between 16 and 80 then return false; end if;
-  if exists (select 1 from public.portia_promo_answers where attempt_id = p_attempt_id and answer_nonce = p_nonce) then return true; end if;
+  if length(p_nonce) not between 16 and 80 or p_expected_question_index < 0 then
+    return jsonb_build_object('code', 'invalid');
+  end if;
+  select a.current_question_index into expected_order
+    from public.portia_promo_attempts a
+    where a.id = p_attempt_id
+    for update;
+  if expected_order is null then return jsonb_build_object('code', 'not-found'); end if;
+  if exists (select 1 from public.portia_promo_answers where attempt_id = p_attempt_id and answer_nonce = p_nonce) then
+    return jsonb_build_object('code', 'accepted', 'idempotent', true, 'questionIndex', expected_order);
+  end if;
+  if expected_order <> p_expected_question_index then
+    return jsonb_build_object('code', 'conflict', 'questionIndex', expected_order);
+  end if;
   insert into public.portia_promo_answers (attempt_id, question_id, answer, answer_nonce)
   select a.id, q.id, p_answer, p_nonce
   from public.portia_promo_attempts a
   join public.portia_promo_qualification_requests r on r.id = a.request_id
   join public.portia_promo_attempt_questions q on q.attempt_id = a.id
-  where a.id = p_attempt_id and q.id = p_question_id and q.sort_order = expected_order
+  where a.id = p_attempt_id and q.id = p_question_id and q.sort_order = p_expected_question_index
     and a.status = 'active' and now() < a.deadline_at
     and exists (select 1 from public.portia_promo_device_bindings b where b.nickname_key = r.nickname_key and b.token_hash = p_token_hash and b.reset_at is null)
-  on conflict (attempt_id, question_id) do nothing;
-  return found;
+  on conflict do nothing
+  returning id into saved_answer;
+  if saved_answer is null then
+    return jsonb_build_object('code', 'conflict', 'questionIndex', expected_order);
+  end if;
+  update public.portia_promo_attempts
+    set current_question_index = current_question_index + 1, updated_at = now()
+    where id = p_attempt_id and current_question_index = p_expected_question_index;
+  if not found then
+    return jsonb_build_object('code', 'conflict', 'questionIndex', expected_order);
+  end if;
+  return jsonb_build_object('code', 'accepted', 'idempotent', false, 'questionIndex', expected_order + 1);
 end; $$;
 
 create or replace function public.portia_promo_fail_attempt(p_attempt_id uuid, p_reason text, p_token_hash text)
@@ -1421,7 +1511,7 @@ revoke all on function public.portia_promo_approve_assignment(uuid) from public,
 revoke all on function public.portia_promo_bank_state() from public, anon, authenticated;
 revoke all on function public.portia_promo_bank_command(text, jsonb) from public, anon, authenticated;
 revoke all on function public.portia_promo_register_attempt(text, text, boolean) from public, anon, authenticated;
-revoke all on function public.portia_promo_submit_request(text, text, text, text, text, text, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_submit_request(text, text, text, text, text, text, text, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_public_status(text, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_claim_request(text, uuid) from public, anon, authenticated;
 revoke all on function public.portia_promo_release_request(text, uuid, boolean) from public, anon, authenticated;
@@ -1431,7 +1521,7 @@ revoke all on function public.portia_promo_confirm_assignment(uuid, uuid, text, 
 revoke all on function public.portia_promo_confirm_test(uuid, uuid, text, jsonb, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_start_test(uuid, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_current_test(uuid, text, text) from public, anon, authenticated;
-revoke all on function public.portia_promo_answer_question(uuid, uuid, jsonb, text, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_answer_question(uuid, uuid, integer, jsonb, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_fail_attempt(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_grade_answer(uuid, boolean) from public, anon, authenticated;
 revoke all on function public.portia_promo_finalize_attempt(uuid, boolean, integer, integer) from public, anon, authenticated;
@@ -1443,11 +1533,11 @@ revoke all on function public.portia_promo_cleanup() from public, anon, authenti
 grant execute on function public.portia_promo_bind_device(text, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_resolve_device(text) to anon, authenticated;
 grant execute on function public.portia_promo_register_attempt(text, text, boolean) to anon, authenticated;
-grant execute on function public.portia_promo_submit_request(text, text, text, text, text, text, text) to anon, authenticated;
+grant execute on function public.portia_promo_submit_request(text, text, text, text, text, text, text, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_public_status(text, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_start_test(uuid, text) to anon, authenticated;
 grant execute on function public.portia_promo_current_test(uuid, text, text) to anon, authenticated;
-grant execute on function public.portia_promo_answer_question(uuid, uuid, jsonb, text, text) to anon, authenticated;
+grant execute on function public.portia_promo_answer_question(uuid, uuid, integer, jsonb, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_fail_attempt(uuid, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_reset_device(text) to authenticated;
 grant execute on function public.portia_promo_reviewer_state() to authenticated;

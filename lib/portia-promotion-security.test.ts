@@ -76,7 +76,7 @@ test("security regression: admission and answer advancement are serialized", () 
   assert.match(answer, /set current_question_index = current_question_index \+ 1/i);
 });
 
-test("security regression: lookup binding uses the RPC and submit cannot bind an arbitrary nickname", () => {
+test("security regression: lookup stays private and atomic admission owns binding", () => {
   const statusRoute = route("status");
   const api = readFileSync(new URL("./portia-promotion-api.ts", import.meta.url), "utf8");
   assert.match(statusRoute, /createPromotionApiDependencies/);
@@ -87,8 +87,8 @@ test("security regression: lookup binding uses the RPC and submit cannot bind an
   assert.match(resolve, /token_hash = p_token_hash and reset_at is null/i);
   assert.doesNotMatch(resolve, /jsonb_agg|select \*/i);
   const submit = sqlFunction("portia_promo_submit_request");
-  assert.match(submit, /token_hash = p_token_hash and reset_at is null for update/i);
-  assert.doesNotMatch(submit, /insert into public\.portia_promo_device_bindings/i);
+  assert.match(submit, /token_hash = p_token_hash and reset_at is null[\s\S]*for update/i);
+  assert.match(submit, /insert into public\.portia_promo_device_bindings/i);
   const reset = sqlFunction("portia_promo_reset_device");
   assert.match(reset, /portia_has_tab_grant\('promo'\)/i);
   assert.match(reset, /portia_is_owner\(\)/i);
@@ -114,8 +114,9 @@ test("security regression: only the current question is public and answer keys s
   assert.match(current, /'question'[\s\S]*'id'[\s\S]*'type'[\s\S]*'text'[\s\S]*'options'[\s\S]*'index'[\s\S]*'total'/i);
   assert.doesNotMatch(current, /'answerKey'|'answer_key'|'questions'/i);
   const answer = sqlFunction("portia_promo_answer_question");
-  assert.match(answer, /q\.sort_order = expected_order/i);
-  assert.match(answer, /on conflict \(attempt_id, question_id\) do nothing/i);
+  assert.match(answer, /q\.sort_order = p_expected_question_index/i);
+  assert.match(answer, /on conflict do nothing/i);
+  assert.match(answer, /current_question_index = current_question_index \+ 1/i);
 });
 
 test("security regression: deadline boundary and repeated failure events fail closed once", () => {
