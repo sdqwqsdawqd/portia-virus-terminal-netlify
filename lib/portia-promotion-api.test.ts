@@ -180,6 +180,13 @@ test("database absence becomes pending-database and never fakes success", async 
   assert.equal(submitResult.setCookie, undefined);
 });
 
+test("invalid sheet identity fails closed as source-unavailable, never not-found", async () => {
+  const invalid = dependencies({ loadRoster: async () => ({ status: "invalid-source", reason: "invalid-data" }) });
+  const result = await promotionStatus({ nickname: "Alice", token: null, headers: new Headers() }, invalid.deps);
+  assert.equal(result.status, 503);
+  assert.equal(result.body.code, "promotion-source-invalid");
+});
+
 test("public promotion routes are dynamic, no-store and never select wildcard rows", () => {
   for (const path of ["status", "requests"]) {
     const route = readFileSync(new URL(`../app/api/promotion/${path}/route.ts`, import.meta.url), "utf8");

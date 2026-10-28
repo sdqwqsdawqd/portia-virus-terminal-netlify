@@ -24,6 +24,7 @@ test("promotion access reads only Portia B2:B35 and rejects duplicate normalized
   assert.equal(findPromotionAccessEntry(result.roster, " alice ")?.nickname, "Alice");
   assert.deepEqual(result.roster.map((entry) => entry.nicknameKey), ["alice", "bob"]);
   assert.throws(() => accessRosterFromRows([["Alice"], [" alice "]]));
+  assert.throws(() => accessRosterFromRows([["Ａlice"], ["Alice"]]), /duplicate/i);
 });
 
 test("promotion sheet parses quoted CSV and preserves display spelling", async () => {
@@ -58,7 +59,17 @@ test("promotion sheet treats changed headers and invalid dates as unavailable", 
     `${header.join(",")}\nUser,Академик,Стажёр,Ожидание,31.02.2026`,
   ]) {
     const result = await loadPromotionRoster((async () => new Response(csv)) as typeof fetch);
-    assert.deepEqual(result, { status: "unavailable", reason: "invalid-data" });
+    assert.deepEqual(result, { status: "invalid-source", reason: "invalid-data" });
+  }
+});
+
+test("partial promotion rows and Unicode-equivalent identities invalidate the source", async () => {
+  for (const csv of [
+    `${header.join(",")}\n,Академик,Стажёр,Ожидание,01.10.2026`,
+    `${header.join(",")}\nUser,Академик,,Ожидание,01.10.2026`,
+    `${header.join(",")}\nＡlice,Академик,Стажёр,Ожидание,01.10.2026\nAlice,Академик,Стажёр,Ожидание,01.10.2026`,
+  ]) {
+    assert.deepEqual(await loadPromotionRoster((async () => new Response(csv)) as typeof fetch), { status: "invalid-source", reason: "invalid-data" });
   }
 });
 
