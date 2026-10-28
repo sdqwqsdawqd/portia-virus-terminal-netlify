@@ -4,6 +4,8 @@ title: Стабилизировать Повышение и интерфейс �
 area: ui-and-promotion
 phase: 14
 severity: high
+status: planned
+plans: [14-15, 14-16, 14-17, 14-18, 14-19, 14-14]
 files:
   - components/portia-promotion.tsx
   - components/portia-promotion-editor-main.tsx

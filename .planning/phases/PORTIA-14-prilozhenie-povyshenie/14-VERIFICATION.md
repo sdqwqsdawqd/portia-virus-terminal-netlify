@@ -1,8 +1,8 @@
 ---
 phase: 14-prilozhenie-povyshenie
-status: pending_owner_uat
+status: gaps_found
 verified_at: 2026-10-28
-automated_tests: 505
+automated_tests: 548
 requirements: 49
 decisions: 23
 ---
@@ -102,4 +102,16 @@ decisions: 23
 
 ## Outstanding gate
 
-The owner must run the 21 numbered checks in `14-UAT.md` on PC and phone using temporary safe data and then type `approved`, or report the exact failing test numbers. Phase 14 remains open until that evidence is recorded.
+Owner UAT found six gap groups across tests 22–30. Execute remediation plans 14-15 through 14-19, then rerun the full 31-test UAT through 14-14. Phase 14 remains open until the integrated regression pass and final PC/phone approval are recorded.
+
+## Gap closure routing
+
+| Gap | Plan | Closure evidence |
+|---|---|---|
+| GAP-14-01 live submit/binding | 14-15 | Deployed RPC inventory, opt-in live test and accepted request restoring the binding |
+| GAP-14-02 participant dates/actions | 14-16 | Exact UI/API state tests plus eligible/ineligible browser cases |
+| GAP-14-03 bank editor | 14-17 | Count and CRUD round trips, preview/confirm and responsive control states |
+| GAP-14-04 spider lifecycle | 14-18 | No automatic fade/relocation; explicit toggle selects a new spawn and pose |
+| GAP-14-05 window bounds | 14-18 | Symmetric fully-visible drag geometry tests |
+| GAP-14-06 shortcut handoff | 14-18 | Geometry/style contract and visual handoff check |
+| Integrated regression | 14-19 then 14-14 | Automated/browser preflight followed by owner PC/phone UAT |

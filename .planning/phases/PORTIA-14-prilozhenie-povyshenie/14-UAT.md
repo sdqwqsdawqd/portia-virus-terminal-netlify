@@ -1,5 +1,5 @@
 ---
-status: pending_owner
+status: gaps_found
 phase: PORTIA-14-prilozhenie-povyshenie
 source: [14-VERIFICATION.md]
 started: 2026-10-28
@@ -105,15 +105,62 @@ result: pending
 expected: The participant and reviewer views fit without horizontal overflow, sticky actions do not hide content, keyboard focus is visible, labels are understandable, and reduced-motion/disabled animations avoid distracting movement.
 result: pending
 
+### 22. Russian cooldown punctuation
+expected: A calendar cooldown is rendered without invented time and without `..` after the localized year abbreviation.
+result: failed — owner observed a doubled final period
+
+### 23. Eligible request controls
+expected: A participant whose server cooldown has elapsed sees the correct ordinary or qualification action, can press it once, and receives a specific success or failure state rather than a silently absent/disabled control.
+result: failed — owner cannot submit either request from the participant window
+
+### 24. Atomic first binding through accepted submit
+expected: Lookup alone stays read-only; the first accepted request sets the HttpOnly-backed binding, a reload restores the same nickname, and another nickname is refused neutrally.
+result: failed — request does not complete and the nickname is not restored as bound
+
+### 25. Ordinary bank required count
+expected: The reviewer can change the required task count within the bank limits, save it, reload the workspace and see the persisted value.
+result: failed — count cannot be selected reliably
+
+### 26. Task and qualification bank CRUD
+expected: The reviewer can add, edit, disable and remove ordinary tasks and all three qualification question types; save/error state is explicit and entered data is not lost.
+result: failed — adding tasks/questions and understanding save state do not work reliably
+
+### 27. Promotion editor control consistency
+expected: Bank actions use the established PORTIA control hierarchy and expose clear enabled, disabled, saving, saved and error states on PC and phone.
+result: failed — controls are inconsistent and the workflow is unclear
+
+### 28. Spider persistence and explicit relocation
+expected: While enabled, the spider never fades out or relocates after completing a route. A new visible spawn and non-identical initial pose are selected only after the user explicitly switches `Скрыть → Показать`.
+result: failed — spider repeatedly disappears, reappears and resets to the same pose
+
+### 29. Symmetric window bounds
+expected: A normal window remains fully inside the desktop workspace with the same left and right inset; neither side permits hiding most of the frame.
+result: failed — left movement is blocked while the right side permits most of the frame off-screen
+
+### 30. Shortcut animation handoff
+expected: The final animated frame and resting shortcut use identical geometry, viewBox, scale, filter and raster/vector quality; no visible snap occurs when motion settles.
+result: failed — quality and geometry visibly change at the animated-to-static handoff
+
+### 31. Integrated regression pass
+expected: Tests 22–30 pass together after reload on PC and phone, with no stale local state masking an API/database failure.
+result: blocked by 22–30
+
 ## Summary
 
-total: 21
+total: 31
 passed: 0
-issues: 0
+issues: 10
 pending: 21
 skipped: 0
-blocked: 0
+blocked: 1
+failed: 9
 
 ## Gaps
 
-None recorded yet.
+- GAP-14-01: participant request and first-binding path is not proven against the live deployed RPC contract (tests 23–24).
+- GAP-14-02: cooldown copy has Russian punctuation regression and action absence lacks a trustworthy reason (tests 22–23).
+- GAP-14-03: ordinary and qualification bank count/CRUD/control states fail owner use (tests 25–27).
+- GAP-14-04: spider lifecycle violates explicit-toggle-only relocation (test 28).
+- GAP-14-05: window clamping is asymmetric and permits excessive right overflow (test 29).
+- GAP-14-06: shortcut animation-to-resting handoff visibly snaps (test 30).
+- Source todo: `.planning/todos/pending/2026-10-28-stabilize-promotion-and-desktop-ui.md`.
