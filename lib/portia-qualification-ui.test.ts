@@ -33,6 +33,20 @@ test("qualification UI fails closed on desktop focus and every connection loss",
   assert.ok(participant.includes("Соединение прервано. Попытка завершена и передана проверяющему."));
 });
 
+test("qualification runner starts once, heartbeats within the lease and cleans every interval", () => {
+  assert.match(participant, /QUALIFICATION_HEARTBEAT_MS/);
+  assert.match(participant, /action:\s*"start"/);
+  assert.match(participant, /action:\s*"heartbeat"/);
+  assert.match(participant, /setInterval\([\s\S]*QUALIFICATION_HEARTBEAT_MS/);
+  assert.match(participant, /clearInterval/);
+  assert.match(participant, /terminalRecheckMs/);
+});
+
+test("qualification answers carry the expected index and conflicts replace local state", () => {
+  assert.match(participant, /expectedQuestionIndex:\s*test\.question\.index/);
+  assert.match(participant, /body\.code === "answer-conflict"[\s\S]*acceptProjection\(body\)/);
+});
+
 test("qualification UI supports every answer type without backward navigation", () => {
   assert.ok(participant.includes('type="radio"'));
   assert.ok(participant.includes('type="checkbox"'));
