@@ -272,7 +272,7 @@ begin
   values (lower(trim(p_nickname_key)), p_token_hash, p_risk_bucket)
   returning id into binding_id;
   return binding_id;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_resolve_device(p_token_hash text)
 returns text
@@ -286,7 +286,7 @@ begin
   select nickname_key into bound_nickname from public.portia_promo_device_bindings
     where token_hash = p_token_hash and reset_at is null;
   return bound_nickname;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_reset_device(p_nickname_key text)
 returns boolean
@@ -303,7 +303,7 @@ begin
   insert into public.portia_promo_audit_events (nickname_key, actor_id, event_type)
   values (lower(trim(p_nickname_key)), auth.uid(), 'device-reset');
   return found;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_reviewer_state()
 returns jsonb
@@ -335,7 +335,7 @@ begin
   from public.portia_promo_qualification_requests q
   left join public.portia_promo_attempts a on a.request_id = q.id;
   return jsonb_build_object('ordinary', ordinary_rows, 'qualification', qualification_rows, 'serverNow', now());
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_approve_assignment(p_request_id uuid)
 returns boolean
@@ -353,7 +353,7 @@ begin
     update public.portia_promo_requests set status = 'awaiting-sheet-change', updated_at = now() where id = p_request_id;
   end if;
   return found;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_register_attempt(
   p_bucket_key text,
@@ -394,7 +394,7 @@ begin
     failures = excluded.failures, blocked_until = excluded.blocked_until,
     ip_bucket = excluded.ip_bucket, updated_at = now();
   return until_at;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_submit_request(
   p_kind text,
@@ -432,7 +432,7 @@ begin
     returning id into request_id;
   else raise exception 'invalid-request-kind'; end if;
   return request_id;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_public_status(
   p_nickname_key text,
@@ -518,7 +518,7 @@ begin
     'awaitingTitleId', awaiting_title,
     'results', recent_results
   );
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_claim_request(p_kind text, p_request_id uuid)
 returns boolean
@@ -536,7 +536,7 @@ begin
       where id = p_request_id and status = 'pending' and reviewer_id is null;
   else return false; end if;
   return found;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_release_request(p_kind text, p_request_id uuid, p_force boolean default false)
 returns boolean
@@ -555,7 +555,7 @@ begin
       where id = p_request_id and status = 'claimed' and (reviewer_id = auth.uid() or p_force);
   else return false; end if;
   return found;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_reject_request(p_kind text, p_request_id uuid, p_internal_note text default '')
 returns boolean
@@ -590,7 +590,7 @@ begin
     ) ranked where history_order > 3
   );
   return true;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_delete_request(p_kind text, p_request_id uuid)
 returns boolean
@@ -622,7 +622,7 @@ begin
   if p_kind = 'ordinary' then delete from public.portia_promo_requests where id = p_request_id;
   else delete from public.portia_promo_qualification_requests where id = p_request_id; end if;
   return true;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_confirm_assignment(p_request_id uuid, p_bank_id uuid, p_bank_version text, p_items jsonb)
 returns uuid
@@ -659,7 +659,7 @@ begin
   end if;
   update public.portia_promo_requests set status = 'assigned', updated_at = now() where id = p_request_id;
   return created_assignment_id;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_confirm_test(p_request_id uuid, p_bank_id uuid, p_bank_version text, p_questions jsonb, p_client_mode text)
 returns uuid
@@ -702,7 +702,7 @@ begin
   end if;
   update public.portia_promo_qualification_requests set status = 'testing', updated_at = now() where id = p_request_id;
   return created_attempt_id;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_start_test(p_attempt_id uuid, p_token_hash text)
 returns timestamptz
@@ -724,7 +724,7 @@ begin
       select 1 from public.portia_promo_device_bindings b where b.nickname_key = r.nickname_key and b.token_hash = p_token_hash and b.reset_at is null
     ); end if;
   return deadline;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_current_test(p_attempt_id uuid, p_token_hash text, p_client_mode text)
 returns jsonb
@@ -767,7 +767,7 @@ begin
   from public.portia_promo_attempts a join public.portia_promo_qualification_requests r on r.id = a.request_id
   where a.id = p_attempt_id;
   return result;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_answer_question(p_attempt_id uuid, p_question_id uuid, p_answer jsonb, p_nonce text, p_token_hash text)
 returns boolean
@@ -790,7 +790,7 @@ begin
     and exists (select 1 from public.portia_promo_device_bindings b where b.nickname_key = r.nickname_key and b.token_hash = p_token_hash and b.reset_at is null)
   on conflict (attempt_id, question_id) do nothing;
   return found;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_fail_attempt(p_attempt_id uuid, p_reason text, p_token_hash text)
 returns boolean
@@ -804,7 +804,7 @@ begin
   where a.id = p_attempt_id and a.request_id = r.id and a.status = 'active'
     and exists (select 1 from public.portia_promo_device_bindings b where b.nickname_key = r.nickname_key and b.token_hash = p_token_hash and b.reset_at is null);
   return found or exists (select 1 from public.portia_promo_attempts where id = p_attempt_id and status = 'failed');
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_grade_answer(p_answer_id uuid, p_correct boolean)
 returns boolean
@@ -819,7 +819,7 @@ begin
   where ans.id = p_answer_id and ans.attempt_id = a.id and a.reviewer_id = auth.uid()
     and a.status in ('active', 'grading', 'failed');
   return found;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_finalize_attempt(
   p_attempt_id uuid,
@@ -855,7 +855,7 @@ begin
     );
   end if;
   return found;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_override_failure(p_attempt_id uuid)
 returns boolean
@@ -868,7 +868,7 @@ begin
   update public.portia_promo_attempts set status = 'grading', failure_overridden_at = now(), updated_at = now()
     where id = p_attempt_id and status = 'failed' and technical_failure is not null;
   return found;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_release_retake(p_attempt_id uuid)
 returns boolean
@@ -881,7 +881,7 @@ begin
   update public.portia_promo_attempts set retake_at = now(), retake_released_at = now(), updated_at = now()
     where id = p_attempt_id and status = 'failed' and retake_at > now();
   return found;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_close(p_kind text, p_request_id uuid, p_outcome text, p_compact jsonb default '{}'::jsonb)
 returns boolean
@@ -915,7 +915,7 @@ begin
     ) ranked where history_order > 3
   );
   return true;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_cleanup()
 returns integer
@@ -934,7 +934,7 @@ begin
   delete from public.portia_promo_attempt_buckets where updated_at < now() - interval '3 days';
   delete from cron.job_run_details where end_time < now() - interval '7 days';
   return removed;
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_bank_state()
 returns jsonb
@@ -966,7 +966,7 @@ begin
     ) order by q.sort_order, q.id) from public.portia_promo_qualification_questions q where q.bank_id = b.id), '[]'::jsonb)
   ) order by b.transition_id), '[]'::jsonb) into qualification_rows from public.portia_promo_qualification_banks b;
   return jsonb_build_object('taskBanks', task_rows, 'qualificationBanks', qualification_rows, 'serverNow', now());
-end $$;
+end; $$;
 
 create or replace function public.portia_promo_bank_command(p_action text, p_payload jsonb)
 returns uuid
@@ -1083,7 +1083,7 @@ begin
   end if;
   if result_id is null then raise exception 'bank-item-not-found'; end if;
   return result_id;
-end $$;
+end; $$;
 
 
 revoke all on function public.portia_promo_bind_device(text, text, text) from public, anon, authenticated;
@@ -1147,7 +1147,7 @@ begin
     perform cron.unschedule(existing_job);
   end loop;
   perform cron.schedule('portia-promo-cleanup', '17 3 * * *', 'select public.portia_promo_cleanup()');
-end $$;
+end; $$;
 
 
 

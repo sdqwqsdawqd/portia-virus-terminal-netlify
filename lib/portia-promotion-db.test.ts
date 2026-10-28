@@ -88,6 +88,18 @@ test("promotion SQL RPCs are security-definer functions with pinned search paths
   }
 });
 
+test("promotion PL/pgSQL bodies terminate their outer block before the dollar quote", () => {
+  for (const [label, source] of [["setup", setup], ["apply", apply]] as const) {
+    const bodies = source.match(/create or replace function public\.portia_promo_[\s\S]*?\$\$;/gi) ?? [];
+    assert.ok(bodies.length >= rpcNames.length, `${label} promotion function count`);
+    for (const body of bodies) {
+      const name = body.match(/function public\.([a-z0-9_]+)/i)?.[1] ?? label;
+      assert.match(body, /end;\s*\$\$;$/i, `${name} final END must be terminated inside the PL/pgSQL body`);
+      assert.doesNotMatch(body, /end\s+\$\$;$/i, `${name} cannot rely on the CREATE statement semicolon`);
+    }
+  }
+});
+
 test("promotion SQL reviewer transitions require promo and claim conditionally", () => {
   const reviewerRpcs = ["reset_device", "reviewer_state", "approve_assignment", "bank_state", "bank_command", "claim_request", "release_request", "reject_request", "delete_request", "confirm_assignment", "confirm_test", "grade_answer", "finalize_attempt", "override_failure", "release_retake", "close"];
   for (const suffix of reviewerRpcs) {
