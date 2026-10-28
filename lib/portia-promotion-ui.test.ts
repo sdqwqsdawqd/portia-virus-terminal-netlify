@@ -35,6 +35,25 @@ test("promotion calendar cooldowns avoid fake midnight precision while exact ret
   assert.ok(source.includes("formatCalendarDate"));
   assert.ok(source.includes("Доступно с ${formatCalendarDate(eligibility.availableAt)}"));
   assert.ok(source.includes("Повторная проверка доступна ${formatDate(active.availableAt)}"));
+  const localized = new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeZone: "Europe/Moscow" })
+    .format(new Date("2026-11-11T00:00:00.000Z"));
+  assert.equal(`${localized.replace(/\.$/, "")}.`, "11 ноября 2026 г.");
+  assert.match(source, /calendarDate\.format\(new Date\(value\)\)\.replace\(\/\\\.\$\//);
+});
+
+test("participant eligibility matrix always exposes either one action or one stable reason", () => {
+  const reasons = [
+    "Доступно с",
+    "Ожидается изменение звания в таблице",
+    "Особое задание для звания",
+    "Сначала необходимо пройти квалификацию",
+    "Для текущего звания квалификационная проверка не требуется",
+    "Повышение сейчас недоступно",
+  ];
+  for (const reason of reasons) assert.ok(source.includes(reason), reason);
+  assert.match(source, /const canRequest = !active && \(eligibility\.status === "eligible" \|\| \(ordinary && eligibility\.status === "special-task"\)\)/);
+  assert.match(source, /canRequest && <button[^>]*promotion-action/);
+  assert.doesNotMatch(source, /!canRequest && <button[^>]*disabled/);
 });
 
 test("ordinary promotion and qualification remain visibly separate flows", () => {
