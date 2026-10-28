@@ -5,7 +5,14 @@ import {
   promotionAttemptBucket,
 } from "./portia-device-binding.ts";
 import { promotionEligibility, promotionTitles, type PromotionRequestKind, type PromotionTitleId } from "./portia-promotion.ts";
-import { findPromotionRosterEntry, loadPromotionRoster, type PromotionRosterResult } from "./portia-promotion-sheet.ts";
+import {
+  findPromotionAccessEntry,
+  findPromotionRosterEntry,
+  loadPromotionAccessRoster,
+  loadPromotionRoster,
+  type PromotionAccessResult,
+  type PromotionRosterResult,
+} from "./portia-promotion-sheet.ts";
 
 export type PromotionPublicResult = {
   kind: PromotionRequestKind;
@@ -37,12 +44,15 @@ type SubmitResult =
   | { status: "active" }
   | { status: "device-denied" }
   | { status: "unavailable" };
+type BindResult = { status: "ok" | "denied" | "unavailable" };
 
 export type PromotionApiDependencies = {
   now: () => Date;
   secret: string;
   createToken?: () => string;
+  loadAccessRoster: () => Promise<PromotionAccessResult>;
   loadRoster: () => Promise<PromotionRosterResult>;
+  bindDevice: (input: { nicknameKey: string; tokenHash: string; riskBucket: string }) => Promise<BindResult>;
   workflowStatus: (input: { nicknameKey: string; titleId: PromotionTitleId; tokenHash: string | null }) => Promise<DependencyResult<PromotionWorkflowProjection>>;
   submitRequest: (input: {
     kind: PromotionRequestKind;
@@ -68,6 +78,7 @@ export type PromotionApiResult = {
 
 const notListed = { error: "Ник не найден в списке PORTIA. Проверьте написание или обратитесь к руководителю.", code: "not-listed" };
 const sheetUnavailable = { error: "Список участников временно недоступен. Попробуйте позже — заявка не отправлена.", code: "sheet-unavailable" };
+const promotionSheetUnavailable = { error: "Данные повышения временно недоступны. Попробуйте позже.", code: "promotion-sheet-unavailable" };
 const pendingDatabase = { error: "Система повышения пока недоступна. Попробуйте позже.", code: "pending-database" };
 const deviceDenied = { error: "Это устройство уже связано с другим участником. Обратитесь к проверяющему." };
 
@@ -140,6 +151,10 @@ export function promotionProjectionFromRpc(value: unknown): PromotionWorkflowPro
 function statusBody(entry: NonNullable<ReturnType<typeof findPromotionRosterEntry>>, projection: PromotionWorkflowProjection, now: Date) {
   return {
     nickname: entry.nickname,
+    promotionRecord: {
+      currentTitle: { id: entry.titleId, label: entry.title },
+      nextTitle: entry.nextTitleId ? { id: entry.nextTitleId, label: entry.nextTitle } : null,
+    },
     currentTitle: { id: entry.titleId, label: entry.title },
     nextTitle: entry.nextTitleId ? { id: entry.nextTitleId, label: entry.nextTitle } : null,
     ordinary: {
@@ -165,19 +180,39 @@ function hashToken(token: string | null, secret: string) {
 }
 
 export async function promotionStatus(
-  input: { nickname: string; token: string | null },
+  input: { nickname: string; token: string | null; headers?: Headers },
   deps: PromotionApiDependencies,
 ): Promise<PromotionApiResult> {
   const nickname = validNickname(input.nickname);
   if (!nickname) return { status: 400, body: { error: "Некорректный ник.", code: "invalid-nickname" } };
+  const access = await deps.loadAccessRoster();
+  if (access.status !== "ok") return { status: 503, body: sheetUnavailable };
+  const admitted = findPromotionAccessEntry(access.roster, nickname);
+  if (!admitted) return { status: 404, body: notListed };
+
+  const existingHash = hashToken(input.token, deps.secret);
+  const token = existingHash ? input.token! : (deps.createToken ?? createDeviceToken)();
+  const tokenHash = existingHash ?? deviceTokenDigest(token, deps.secret);
+  const buckets = promotionAttemptBucket(admitted.nicknameKey, input.headers ?? new Headers(), deps.secret);
+  const binding = await deps.bindDevice({ nicknameKey: admitted.nicknameKey, tokenHash, riskBucket: buckets.riskBucket });
+  if (binding.status === "unavailable") return { status: 503, body: pendingDatabase };
+  if (binding.status === "denied") return { status: 423, body: { ...deviceDenied, code: "device-denied" } };
+  const cookie = existingHash ? {} : { setCookie: buildDeviceCookie(token) };
+
   const roster = await deps.loadRoster();
-  if (roster.status !== "ok") return { status: 503, body: sheetUnavailable };
-  const entry = findPromotionRosterEntry(roster.roster, nickname);
-  if (!entry) return { status: 404, body: notListed };
-  const workflow = await deps.workflowStatus({ nicknameKey: entry.nicknameKey, titleId: entry.titleId, tokenHash: hashToken(input.token, deps.secret) });
-  if (workflow.status !== "ok") return { status: 503, body: pendingDatabase };
-  if (workflow.projection.binding === "denied") return { status: 423, body: { ...deviceDenied, code: "device-denied" } };
-  return { status: 200, body: statusBody(entry, workflow.projection, deps.now()) };
+  if (roster.status !== "ok") return { status: 503, body: promotionSheetUnavailable, ...cookie };
+  const entry = findPromotionRosterEntry(roster.roster, admitted.nickname);
+  if (!entry) {
+    return {
+      status: 200,
+      body: { nickname: admitted.nickname, promotionRecord: null, workflowAvailable: false },
+      ...cookie,
+    };
+  }
+  const workflow = await deps.workflowStatus({ nicknameKey: entry.nicknameKey, titleId: entry.titleId, tokenHash });
+  if (workflow.status !== "ok") return { status: 503, body: pendingDatabase, ...cookie };
+  if (workflow.projection.binding !== "allowed") return { status: 423, body: { ...deviceDenied, code: "device-denied" } };
+  return { status: 200, body: statusBody(entry, workflow.projection, deps.now()), ...cookie };
 }
 
 export async function submitPromotionRequest(
@@ -188,16 +223,21 @@ export async function submitPromotionRequest(
   if (!nickname || (input.kind !== "ordinary" && input.kind !== "qualification")) {
     return { status: 400, body: { error: "Некорректные данные.", code: "invalid-request" } };
   }
+  const access = await deps.loadAccessRoster();
+  if (access.status !== "ok") return { status: 503, body: sheetUnavailable };
+  const admitted = findPromotionAccessEntry(access.roster, nickname);
+  if (!admitted) return { status: 404, body: notListed };
   const roster = await deps.loadRoster();
-  if (roster.status !== "ok") return { status: 503, body: sheetUnavailable };
-  const entry = findPromotionRosterEntry(roster.roster, nickname);
-  if (!entry) return { status: 404, body: notListed };
+  if (roster.status !== "ok") return { status: 503, body: promotionSheetUnavailable };
+  const entry = findPromotionRosterEntry(roster.roster, admitted.nickname);
+  if (!entry) return { status: 409, body: { error: "Для участника ещё нет записи повышения.", code: "promotion-record-unavailable" } };
 
   const existingHash = hashToken(input.token, deps.secret);
+  if (!existingHash) return { status: 423, body: { ...deviceDenied, code: "device-denied" } };
   const workflow = await deps.workflowStatus({ nicknameKey: entry.nicknameKey, titleId: entry.titleId, tokenHash: existingHash });
   if (workflow.status !== "ok") return { status: 503, body: pendingDatabase };
   const buckets = promotionAttemptBucket(entry.nicknameKey, input.headers, deps.secret);
-  if (workflow.projection.binding === "denied") {
+  if (workflow.projection.binding !== "allowed") {
     const attempt = await deps.registerAttempt({ bucketKey: buckets.bucketKey, ipBucket: buckets.ipBucket, success: false });
     return {
       status: 423,
@@ -230,15 +270,13 @@ export async function submitPromotionRequest(
     return { status: 409, body: { error: "Заявка сейчас недоступна.", code: eligibility.status, eligibility } };
   }
 
-  const token = existingHash ? input.token! : (deps.createToken ?? createDeviceToken)();
-  const tokenHash = existingHash ?? deviceTokenDigest(token, deps.secret);
   const submitted = await deps.submitRequest({
     kind: input.kind,
     nickname: entry.nickname,
     nicknameKey: entry.nicknameKey,
     titleId: entry.titleId,
     targetId: entry.nextTitleId,
-    tokenHash,
+    tokenHash: existingHash,
     riskBucket: buckets.riskBucket,
   });
   if (submitted.status === "unavailable") return { status: 503, body: pendingDatabase };
@@ -251,7 +289,6 @@ export async function submitPromotionRequest(
   return {
     status: 201,
     body: { requestId: submitted.requestId, kind: input.kind, status: "pending" },
-    ...(existingHash ? {} : { setCookie: buildDeviceCookie(token) }),
   };
 }
 
@@ -263,7 +300,21 @@ export function createPromotionApiDependencies(supabase: SupabaseClient, secret:
   return {
     now: () => new Date(),
     secret,
+    loadAccessRoster: () => loadPromotionAccessRoster(),
     loadRoster: () => loadPromotionRoster(),
+    bindDevice: async (input) => {
+      const { data, error } = await supabase.rpc("portia_promo_bind_device", {
+        p_nickname_key: input.nicknameKey,
+        p_token_hash: input.tokenHash,
+        p_risk_bucket: input.riskBucket,
+      });
+      if (error) {
+        if (error.message?.includes("device-bound") || error.message?.includes("nickname-bound")) return { status: "denied" } as const;
+        if (!unavailableRpc(error)) console.error("PORTIA promotion binding RPC failed", { code: error.code });
+        return { status: "unavailable" } as const;
+      }
+      return typeof data === "string" ? { status: "ok" } as const : { status: "unavailable" } as const;
+    },
     workflowStatus: async ({ nicknameKey, titleId: currentTitleId, tokenHash }) => {
       const { data, error } = await supabase.rpc("portia_promo_public_status", {
         p_nickname_key: nicknameKey,

@@ -6,12 +6,19 @@ import {
   type PromotionTitleId,
 } from "./portia-promotion.ts";
 
-const promotionCsvUrl = "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/gviz/tq?tqx=out:csv&sheet=Portia&range=A61:E85";
+const sheetCsvUrl = "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/gviz/tq?tqx=out:csv&sheet=Portia";
+const accessCsvUrl = `${sheetCsvUrl}&range=B2:B35`;
+const promotionCsvUrl = `${sheetCsvUrl}&range=A61:E85`;
 const expectedHeaders = ["НИК", "Звание", "След. звание", "Анти-Спидран", "Дата"] as const;
 const maxCsvLength = 128 * 1024;
 
 export type PromotionRosterResult =
   | { status: "ok"; roster: PromotionRosterEntry[] }
+  | { status: "unavailable"; reason: "network" | "http" | "invalid-data" };
+
+export type PromotionAccessEntry = { nickname: string; nicknameKey: string };
+export type PromotionAccessResult =
+  | { status: "ok"; roster: PromotionAccessEntry[] }
   | { status: "unavailable"; reason: "network" | "http" | "invalid-data" };
 
 function normalizedNickname(value: string) {
@@ -33,15 +40,34 @@ function parseSheetDate(value: string) {
     : isoMatch
       ? [Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3])]
       : [NaN, NaN, NaN];
-  const timestamp = Date.UTC(year, month - 1, date);
-  const parsed = new Date(timestamp);
+  // The sheet value is a Moscow calendar date. Europe/Moscow is UTC+03:00
+  // throughout the supported promotion history, so midnight is 21:00 UTC.
+  const timestamp = Date.UTC(year, month - 1, date, -3);
+  const moscowDate = new Date(timestamp + 3 * 60 * 60 * 1_000);
   if (
     !Number.isFinite(timestamp)
-    || parsed.getUTCFullYear() !== year
-    || parsed.getUTCMonth() !== month - 1
-    || parsed.getUTCDate() !== date
+    || moscowDate.getUTCFullYear() !== year
+    || moscowDate.getUTCMonth() !== month - 1
+    || moscowDate.getUTCDate() !== date
   ) throw new Error("Promotion sheet date is invalid.");
-  return parsed.toISOString();
+  return new Date(timestamp).toISOString();
+}
+
+export function accessRosterFromRows(rows: string[][]): PromotionAccessEntry[] {
+  const seen = new Set<string>();
+  return rows.slice(0, 34).flatMap((row) => {
+    const nickname = cleanCell(row[0], 64);
+    if (!nickname) return [];
+    const nicknameKey = normalizedNickname(nickname);
+    if (seen.has(nicknameKey)) throw new Error("The access roster contains duplicate nicknames.");
+    seen.add(nicknameKey);
+    return [{ nickname, nicknameKey }];
+  });
+}
+
+export function findPromotionAccessEntry(roster: PromotionAccessEntry[], nickname: string) {
+  const key = normalizedNickname(nickname);
+  return key ? roster.find((entry) => entry.nicknameKey === key) : undefined;
 }
 
 function expectedNextTitle(titleId: PromotionTitleId) {
@@ -81,22 +107,39 @@ export function findPromotionRosterEntry(roster: PromotionRosterEntry[], nicknam
   return key ? roster.find((entry) => entry.nicknameKey === key) : undefined;
 }
 
-/** Reads only the promotion range. A failure is never represented as an empty healthy roster. */
-export async function loadPromotionRoster(fetchImpl: typeof fetch = fetch): Promise<PromotionRosterResult> {
+async function loadSheetRows(url: string, fetchImpl: typeof fetch) {
   let response: Response;
   try {
-    response = await fetchImpl(promotionCsvUrl, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(8_000),
-    });
+    response = await fetchImpl(url, { cache: "no-store", signal: AbortSignal.timeout(8_000) });
   } catch {
-    return { status: "unavailable", reason: "network" };
+    return { status: "unavailable", reason: "network" } as const;
   }
-  if (!response.ok) return { status: "unavailable", reason: "http" };
+  if (!response.ok) return { status: "unavailable", reason: "http" } as const;
   try {
     const csv = await response.text();
     if (!csv || csv.length > maxCsvLength) throw new Error("Promotion sheet response is empty or oversized.");
-    return { status: "ok", roster: promotionRosterFromRows(parseCsv(csv)) };
+    return { status: "ok", rows: parseCsv(csv) } as const;
+  } catch {
+    return { status: "unavailable", reason: "invalid-data" } as const;
+  }
+}
+
+export async function loadPromotionAccessRoster(fetchImpl: typeof fetch = fetch): Promise<PromotionAccessResult> {
+  const result = await loadSheetRows(accessCsvUrl, fetchImpl);
+  if (result.status !== "ok") return result;
+  try {
+    return { status: "ok", roster: accessRosterFromRows(result.rows) };
+  } catch {
+    return { status: "unavailable", reason: "invalid-data" };
+  }
+}
+
+/** Reads only the promotion range. A failure is never represented as an empty healthy roster. */
+export async function loadPromotionRoster(fetchImpl: typeof fetch = fetch): Promise<PromotionRosterResult> {
+  const result = await loadSheetRows(promotionCsvUrl, fetchImpl);
+  if (result.status !== "ok") return result;
+  try {
+    return { status: "ok", roster: promotionRosterFromRows(result.rows) };
   } catch {
     return { status: "unavailable", reason: "invalid-data" };
   }

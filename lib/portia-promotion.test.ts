@@ -46,7 +46,7 @@ test("promotion title ladder normalizes all eight titles and ё/е spelling", ()
   assert.equal(normalizePromotionTitle("неизвестное звание"), null);
 });
 
-test("promotion ordinary cooldowns use the supplied server time at every exact boundary", () => {
+test("promotion ordinary cooldowns use Moscow midnight and flip at every exact boundary", () => {
   const cases = [
     ["Академик", 7],
     ["Стажёр", 3],
@@ -68,6 +68,14 @@ test("promotion ordinary cooldowns use the supplied server time at every exact b
       title,
     );
   }
+});
+
+test("promotion cooldown flips immediately around the true Moscow deadline", () => {
+  const entry = rosterEntry("Академик", "2026-09-30T21:00:00.000Z");
+  const deadline = Date.parse("2026-10-07T21:00:00.000Z");
+  assert.equal(promotionEligibility(entry, { kind: "ordinary", now: new Date(deadline - 1), qualificationPassed: true }).status, "cooldown");
+  assert.equal(promotionEligibility(entry, { kind: "ordinary", now: new Date(deadline), qualificationPassed: true }).status, "eligible");
+  assert.equal(promotionEligibility(entry, { kind: "ordinary", now: new Date(deadline + 1), qualificationPassed: true }).status, "eligible");
 });
 
 test("promotion qualification is available only at titles 2, 4 and 6", () => {

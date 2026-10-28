@@ -104,9 +104,14 @@ test("promotion SQL closes transactionally, retains three results and schedules 
   assert.match(setup, /cron\.job_run_details[\s\S]*interval '7 days'/i);
 });
 
-test("public promotion status is explicit and first accepted submit binds in the same transaction", () => {
+test("public promotion status is explicit and submit requires an existing active binding", () => {
   assert.match(setup, /portia_promo_public_status[\s\S]*jsonb_build_object[\s\S]*qualificationPassed[\s\S]*recent_results/i);
-  assert.match(setup, /portia_promo_submit_request[\s\S]*insert into public\.portia_promo_device_bindings[\s\S]*insert into public\.portia_promo_(requests|qualification_requests)/i);
+  const submitStart = setup.indexOf("create or replace function public.portia_promo_submit_request");
+  const submit = setup.slice(submitStart, setup.indexOf("$$;", submitStart) + 3);
+  assert.match(submit, /select nickname_key[\s\S]*token_hash = p_token_hash and reset_at is null for update/i);
+  assert.match(submit, /bound_nickname is null or bound_nickname <> lower\(trim\(p_nickname_key\)\)[\s\S]*device-denied/i);
+  assert.doesNotMatch(submit, /insert into public\.portia_promo_device_bindings/i);
+  assert.match(submit, /insert into public\.portia_promo_(requests|qualification_requests)/i);
   assert.match(setup, /portia_promo_register_attempt[\s\S]*until_at > now\(\)[\s\S]*return until_at/i);
   assert.doesNotMatch(setup, /grant select on (table )?public\.portia_promo_/i);
 });
@@ -129,4 +134,10 @@ test("promotion SQL owner apply file mirrors contracts and is explicitly manual"
   for (const rpc of rpcNames) assert.match(apply, new RegExp(`public\\.${rpc}\\b`, "i"), rpc);
   assert.match(apply, /POST-APPLY ASSERTIONS/i);
   assert.match(apply, /ROLLBACK GUIDANCE/i);
+  const setupSubmit = setup.slice(setup.indexOf("create or replace function public.portia_promo_submit_request"), setup.indexOf("$$;", setup.indexOf("create or replace function public.portia_promo_submit_request")) + 3);
+  const applySubmit = apply.slice(apply.indexOf("create or replace function public.portia_promo_submit_request"), apply.indexOf("$$;", apply.indexOf("create or replace function public.portia_promo_submit_request")) + 3);
+  for (const contract of [/reset_at is null for update/i, /bound_nickname is null or bound_nickname <>/i, /raise exception 'device-denied'/i]) {
+    assert.match(setupSubmit, contract);
+    assert.match(applySubmit, contract);
+  }
 });

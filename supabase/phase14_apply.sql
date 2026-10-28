@@ -403,15 +403,8 @@ begin
   end if;
   select nickname_key into bound_nickname from public.portia_promo_device_bindings
     where token_hash = p_token_hash and reset_at is null for update;
-  if bound_nickname is not null and bound_nickname <> lower(trim(p_nickname_key)) then
+  if bound_nickname is null or bound_nickname <> lower(trim(p_nickname_key)) then
     raise exception 'device-denied';
-  end if;
-  if bound_nickname is null then
-    if exists (select 1 from public.portia_promo_device_bindings where nickname_key = lower(trim(p_nickname_key)) and reset_at is null) then
-      raise exception 'device-denied';
-    end if;
-    insert into public.portia_promo_device_bindings (nickname_key, token_hash, risk_bucket)
-    values (lower(trim(p_nickname_key)), p_token_hash, p_risk_bucket);
   end if;
   if p_kind = 'ordinary' then
     insert into public.portia_promo_requests (nickname, nickname_key, title_id, target_title_id)

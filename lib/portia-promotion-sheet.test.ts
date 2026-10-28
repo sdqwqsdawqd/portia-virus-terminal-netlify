@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  accessRosterFromRows,
+  findPromotionAccessEntry,
+  loadPromotionAccessRoster,
   findPromotionRosterEntry,
   loadPromotionRoster,
   promotionRosterFromRows,
@@ -8,6 +11,20 @@ import {
 import { promotionTitles } from "./portia-promotion.ts";
 
 const header = ["НИК", "Звание", "След. звание", "Анти-Спидран", "Дата"];
+
+test("promotion access reads only Portia B2:B35 and rejects duplicate normalized nicknames", async () => {
+  let requested = "";
+  const result = await loadPromotionAccessRoster((async (input: URL | RequestInfo) => {
+    requested = String(input);
+    return new Response("Alice\n\nBOB");
+  }) as typeof fetch);
+  assert.equal(result.status, "ok");
+  if (result.status !== "ok") return;
+  assert.match(requested, /range=B2:B35/);
+  assert.equal(findPromotionAccessEntry(result.roster, " alice ")?.nickname, "Alice");
+  assert.deepEqual(result.roster.map((entry) => entry.nicknameKey), ["alice", "bob"]);
+  assert.throws(() => accessRosterFromRows([["Alice"], [" alice "]]));
+});
 
 test("promotion sheet parses quoted CSV and preserves display spelling", async () => {
   let request: { url: string; init?: RequestInit } | undefined;
@@ -20,7 +37,7 @@ test("promotion sheet parses quoted CSV and preserves display spelling", async (
   if (result.status !== "ok") return;
   assert.equal(result.roster[0]?.nickname, "Portia,User");
   assert.equal(result.roster[0]?.nicknameKey, "portia,user");
-  assert.equal(result.roster[0]?.promotedAt, "2026-10-01T00:00:00.000Z");
+  assert.equal(result.roster[0]?.promotedAt, "2026-09-30T21:00:00.000Z");
   assert.match(request?.url ?? "", /range=A61:E85/);
   assert.equal(request?.init?.cache, "no-store");
   assert.ok(request?.init?.signal instanceof AbortSignal);

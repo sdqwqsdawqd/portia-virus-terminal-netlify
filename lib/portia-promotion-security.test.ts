@@ -66,6 +66,20 @@ test("security regression: duplicate active requests and two-reviewer claims are
   assert.match(reviewer, /data !== true[\s\S]*claim-conflict[\s\S]*status: 409/);
 });
 
+test("security regression: lookup binding uses the RPC and submit cannot bind an arbitrary nickname", () => {
+  const statusRoute = route("status");
+  const api = readFileSync(new URL("./portia-promotion-api.ts", import.meta.url), "utf8");
+  assert.match(statusRoute, /createPromotionApiDependencies/);
+  assert.doesNotMatch(statusRoute, /portia_promo_device_bindings/);
+  assert.match(api, /supabase\.rpc\("portia_promo_bind_device"/);
+  const submit = sqlFunction("portia_promo_submit_request");
+  assert.match(submit, /token_hash = p_token_hash and reset_at is null for update/i);
+  assert.doesNotMatch(submit, /insert into public\.portia_promo_device_bindings/i);
+  const reset = sqlFunction("portia_promo_reset_device");
+  assert.match(reset, /portia_has_tab_grant\('promo'\)/i);
+  assert.match(reset, /portia_promo_audit_events[\s\S]*device-reset/i);
+});
+
 test("security regression: stale or tampered previews cannot be confirmed", () => {
   const secret = "phase-14-security-regression-secret-value";
   const token = createPreviewToken({ kind: "ordinary", bankId: "bank", version: "v1", ids: ["one"], expiresAt: 100 }, secret);
