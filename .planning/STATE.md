@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-27)
 Phase: 14 (Приложение Повышение) — EXECUTING
 Plan: 10 of 10
 Status: Ready to execute
-Last activity: 2026-10-28 - Completed quick task 261028-paf: исправление «Повышения» и анимаций
+Last activity: 2026-10-28 - Completed quick task 261028-0z1: Исправить Portia Promotion, привязку устройства, сроки и анимации
 
 ## Performance Metrics
 
@@ -168,6 +168,7 @@ None.
 | 261027-cu4 | Отдельное отключение паука и непрозрачное брюшко | 2026-10-27 | 267721b | [261027-cu4-spider-visibility-setting-and-opaque-abd](./quick/261027-cu4-spider-visibility-setting-and-opaque-abd/) |
 | 261027-d0k | Свёрнутые разделы и компактная кнопка возврата в справочнике | 2026-10-27 | d6909c6 | [261027-d0k-fix-guide-cards-auto-opening-and-detail-](./quick/261027-d0k-fix-guide-cards-auto-opening-and-detail-/) |
 | 261028-paf | Исправление «Повышения», Roblox-ника и анимаций | 2026-10-28 | 3f03f8a | [261028-paf-fix-promotion-access-and-motion](./quick/261028-paf-fix-promotion-access-and-motion/) |
+| 261028-0z1 | Portia Promotion: roster admission, device binding, deadlines and animations | 2026-10-28 | 08343e3 | [261028-0z1-portia-promotion-portia-promotion-b2-b35](./quick/261028-0z1-portia-promotion-portia-promotion-b2-b35/) |
 
 ## Deferred Items
 
