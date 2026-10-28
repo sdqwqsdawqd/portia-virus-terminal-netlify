@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { parseRetakeLedger, updateRetakeLedger, type RetakeLedger, type RetakeNotification } from "@/lib/portia-promotion-notifications";
+import { QUALIFICATION_HEARTBEAT_MS } from "@/lib/portia-qualification";
 
 type RequestKind = "ordinary" | "qualification";
 type Eligibility =
@@ -27,6 +28,7 @@ type PromotionStatus = { nickname: string; promotionRecord: null; workflowAvaila
 };
 
 const statusPollMs = 15_000;
+const terminalRecheckMs = 5_000;
 const retakeLedgerStorageKey = "portia.promotion.retake-ledger.v1";
 const dateTime = new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Moscow" });
 
@@ -49,7 +51,7 @@ function minuteSecond(deadlineAt: string | null, now: number) {
 
 function QualificationRunner({ attemptId, visible }: { attemptId: string; visible: boolean }) {
   const [test, setTest] = useState<QualificationTest | null>(null);
-  const [answer, setAnswer] = useState<string | string[]>("");
+  const [answer, setAnswer] = useState<string | number | number[]>("");
   const [busy, setBusy] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [terminal, setTerminal] = useState<"timeout" | "offline" | "hidden" | "blur" | "page-exit" | null>(null);
@@ -76,13 +78,51 @@ function QualificationRunner({ attemptId, visible }: { attemptId: string; visibl
 
   useEffect(() => {
     let cancelled = false;
-    void fetch(`/api/promotion/test?attemptId=${encodeURIComponent(attemptId)}`, { cache: "no-store" }).then(async (response) => {
+    void fetch("/api/promotion/test", {
+      method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
+      body: JSON.stringify({ action: "start", attemptId }),
+    }).then(async (response) => {
       const body: unknown = await response.json();
       if (!cancelled && (!response.ok || !acceptProjection(body))) setTerminal("offline");
     }).catch(() => { if (!cancelled) setTerminal("offline"); })
       .finally(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
   }, [acceptProjection, attemptId]);
+
+  useEffect(() => {
+    if (test?.status !== "active" || terminal || !visible) return;
+    let cancelled = false;
+    const heartbeat = async () => {
+      try {
+        const response = await fetch("/api/promotion/test", {
+          method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
+          body: JSON.stringify({ action: "heartbeat", attemptId }),
+        });
+        const body: unknown = await response.json();
+        if (!response.ok) throw new Error("heartbeat-failed");
+        if (!cancelled && body && typeof body === "object" && !Array.isArray(body)
+          && (body as QualificationTest).status !== "active") acceptProjection(body);
+      } catch { if (!cancelled) reportFailure("offline"); }
+    };
+    const timer = window.setInterval(() => { void heartbeat(); }, QUALIFICATION_HEARTBEAT_MS);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [acceptProjection, attemptId, reportFailure, terminal, test?.status, visible]);
+
+  useEffect(() => {
+    if (!terminal) return;
+    let cancelled = false;
+    const reconcile = async () => {
+      try {
+        const response = await fetch(`/api/promotion/test?attemptId=${encodeURIComponent(attemptId)}`, { cache: "no-store" });
+        const body: unknown = await response.json();
+        if (!cancelled && response.ok && body && typeof body === "object" && !Array.isArray(body)
+          && (body as QualificationTest).status !== "active") acceptProjection(body);
+      } catch { /* The server lease remains authoritative while the device is offline. */ }
+    };
+    void reconcile();
+    const timer = window.setInterval(() => { void reconcile(); }, terminalRecheckMs);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [acceptProjection, attemptId, terminal]);
 
   useEffect(() => {
     if (test?.status !== "active" || terminal) return;
@@ -128,9 +168,10 @@ function QualificationRunner({ attemptId, visible }: { attemptId: string; visibl
     try {
       const response = await fetch("/api/promotion/test", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "answer", attemptId, questionId: test.question.id, answer, nonce: crypto.randomUUID() }),
+        body: JSON.stringify({ action: "answer", attemptId, questionId: test.question.id, expectedQuestionIndex: test.question.index, answer, nonce: crypto.randomUUID() }),
       });
-      const body: unknown = await response.json();
+      const body = await response.json() as Record<string, unknown>;
+      if (response.status === 409 && body.code === "answer-conflict" && acceptProjection(body)) return;
       if (!response.ok || !acceptProjection(body)) throw new Error("answer-rejected");
     } catch { reportFailure("offline"); } finally { setBusy(false); }
   };
@@ -144,15 +185,15 @@ function QualificationRunner({ attemptId, visible }: { attemptId: string; visibl
   const timer = minuteSecond(test.deadlineAt, now);
   const question = test.question;
   const selected = Array.isArray(answer) ? answer : [];
-  const valid = question.type === "free-text" ? typeof answer === "string" && answer.trim().length > 0 : question.type === "single" ? typeof answer === "string" && answer.length > 0 : selected.length > 0;
+  const valid = question.type === "free-text" ? typeof answer === "string" && answer.trim().length > 0 : question.type === "single" ? Number.isInteger(answer) : selected.length > 0;
   return <section className="promotion-qualification-runner">
     <div className={`promotion-test-timer ${timer.remaining <= 60_000 ? "danger" : timer.remaining <= 180_000 ? "warning" : ""}`}><span>ОСТАЛОСЬ</span><strong>{timer.label}</strong></div>
     <p className="sr-only" aria-live="polite">{announcement}</p>
     <div className="promotion-question-progress">ВОПРОС {question.index + 1} ИЗ {question.total}</div>
     <div className="promotion-question">
       <h3 ref={headingRef} tabIndex={-1}>{question.text}</h3>
-      {question.type === "single" && <fieldset><legend>Выберите один вариант</legend>{question.options.map((option) => <label key={option}><input type="radio" name={`question-${question.id}`} checked={answer === option} onChange={() => setAnswer(option)} /><span>{option}</span></label>)}</fieldset>}
-      {question.type === "multiple" && <fieldset><legend>Выберите один или несколько вариантов</legend>{question.options.map((option) => <label key={option}><input type="checkbox" checked={selected.includes(option)} onChange={(event) => setAnswer(event.target.checked ? [...selected, option] : selected.filter((item) => item !== option))} /><span>{option}</span></label>)}</fieldset>}
+      {question.type === "single" && <fieldset><legend>Выберите один вариант</legend>{question.options.map((option, index) => <label key={option}><input type="radio" name={`question-${question.id}`} checked={answer === index} onChange={() => setAnswer(index)} /><span>{option}</span></label>)}</fieldset>}
+      {question.type === "multiple" && <fieldset><legend>Выберите один или несколько вариантов</legend>{question.options.map((option, index) => <label key={option}><input type="checkbox" checked={selected.includes(index)} onChange={(event) => setAnswer(event.target.checked ? [...selected, index] : selected.filter((item) => item !== index))} /><span>{option}</span></label>)}</fieldset>}
       {question.type === "free-text" && <label className="promotion-free-answer">Ваш ответ<textarea value={typeof answer === "string" ? answer : ""} maxLength={4000} onChange={(event) => setAnswer(event.target.value)} /><span>{typeof answer === "string" ? answer.length : 0} / 4000</span></label>}
     </div>
     <button className="promotion-action" type="button" disabled={!valid || busy} onClick={() => void submit()}>{busy ? "ОТПРАВЛЯЕМ…" : "ОТПРАВИТЬ И ДАЛЬШЕ"}</button>
