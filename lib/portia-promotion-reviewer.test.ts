@@ -6,6 +6,8 @@ import {
   parsePromotionBankCommand,
   parsePromotionReviewerCommand,
   promotionReviewerDecision,
+  promotionReviewerSourcePolicy,
+  promotionCleanupPreview,
   selectQualificationPreview,
   selectTaskPreview,
   validateQuestionDraft,
@@ -17,6 +19,26 @@ test("promotion reviewer boundary fails closed and requires the trusted promo ta
   assert.equal(promotionReviewerDecision(true, { canEdit: false, canManageEditors: false, openTabs: [], tabsEnforced: true, unavailable: true }), "unavailable");
   assert.equal(promotionReviewerDecision(true, { canEdit: true, canManageEditors: false, openTabs: ["employees"], tabsEnforced: true }), "forbidden");
   assert.equal(promotionReviewerDecision(true, { canEdit: true, canManageEditors: false, openTabs: ["promo"], tabsEnforced: true }), "allowed");
+});
+
+test("sheet outage preserves claims and allows only reversible release", () => {
+  for (const action of ["release", "force-release"] as const) assert.equal(promotionReviewerSourcePolicy(action, "unavailable"), "allow");
+  for (const action of ["claim", "reject", "delete-request", "approve-task", "finalize-attempt"] as const) {
+    assert.equal(promotionReviewerSourcePolicy(action, "unavailable"), "block", action);
+    assert.equal(promotionReviewerSourcePolicy(action, "invalid-source"), "block", action);
+  }
+  assert.equal(promotionReviewerSourcePolicy("finalize-attempt", "ok"), "allow");
+});
+
+test("cleanup preview is bounded and uses server-derived three-day dates", () => {
+  const state = { ordinary: [{ requestId: "one", status: "rejected", updatedAt: "2026-10-20T00:00:00Z", nickname: "Alice" }], qualification: [
+    { requestId: "two", status: "failed", updatedAt: "2026-10-27T00:00:00Z", nickname: "Bob" },
+    { requestId: "active", status: "claimed", updatedAt: "2026-10-01T00:00:00Z", nickname: "Carol" },
+  ] };
+  assert.deepEqual(promotionCleanupPreview(state, new Date("2026-10-28T00:00:00Z")), [
+    { requestId: "one", kind: "ordinary", status: "rejected", nickname: "Alice", deleteAt: "2026-10-23T00:00:00.000Z", due: true },
+    { requestId: "two", kind: "qualification", status: "failed", nickname: "Bob", deleteAt: "2026-10-30T00:00:00.000Z", due: false },
+  ]);
 });
 
 test("promotion reviewer commands accept only typed bounded payloads", () => {
