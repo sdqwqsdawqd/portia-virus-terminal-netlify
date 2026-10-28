@@ -88,11 +88,22 @@ test("promotion sheet ignores blank nickname rows and lookup is case-insensitive
   const roster = promotionRosterFromRows([
     header,
     ["", "", "", "", ""],
+    ["", "N/A", "N/A", "", ""],
     ["Display_Name", "Лаборант", "Исследователь", "Можно повысить ✅", "2026-10-01"],
   ]);
   assert.equal(roster.length, 1);
   assert.equal(findPromotionRosterEntry(roster, " display_NAME ")?.nickname, "Display_Name");
   assert.equal(findPromotionRosterEntry(roster, "missing"), undefined);
+});
+
+test("promotion sheet accepts only the exact empty-slot placeholder", () => {
+  for (const row of [
+    ["", "N/A", "Стажёр", "", ""],
+    ["", "N/A", "N/A", "Ожидание", ""],
+    ["", "N/A", "N/A", "", "01.10.2026"],
+  ]) {
+    assert.throws(() => promotionRosterFromRows([header, row]), /partial row/i);
+  }
 });
 
 test("promotion sheet accepts every canonical title spelling and its exact successor", () => {

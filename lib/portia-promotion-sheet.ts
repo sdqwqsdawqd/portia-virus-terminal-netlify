@@ -77,6 +77,15 @@ function expectedNextTitle(titleId: PromotionTitleId) {
   return promotionTitles.at(title.level)?.id ?? null;
 }
 
+function isEmptyPromotionSlot(row: string[]) {
+  const cells = row.map((cell) => (cell ?? "").trim());
+  if (cells.every((cell) => !cell)) return true;
+  return cells[0] === ""
+    && cells[1] === "N/A"
+    && cells[2] === "N/A"
+    && cells.slice(3).every((cell) => !cell);
+}
+
 export function promotionRosterFromRows(rows: string[][]): PromotionRosterEntry[] {
   const headers = rows[0]?.map((value) => value.trim().replace(/^\uFEFF/, "")) ?? [];
   const hasHeaders = headers.length === expectedHeaders.length
@@ -87,8 +96,8 @@ export function promotionRosterFromRows(rows: string[][]): PromotionRosterEntry[
   return dataRows.slice(0, 25).flatMap((row) => {
     const nickname = cleanCell(row[0], 64);
     if (!nickname) {
-      if (row.some((cell) => (cell ?? "").trim())) throw new Error("The promotion sheet contains a partial row.");
-      return [];
+      if (isEmptyPromotionSlot(row)) return [];
+      throw new Error("The promotion sheet contains a partial row.");
     }
     const nicknameKey = normalizedNickname(nickname);
     if (seen.has(nicknameKey)) throw new Error("The promotion sheet contains duplicate nicknames.");
