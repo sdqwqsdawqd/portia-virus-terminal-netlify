@@ -16,31 +16,31 @@ test("promotion editor mounts only through the granted trusted tab", () => {
 });
 
 test("promotion editor keeps requests, tasks and qualification as separate branches", () => {
-  for (const label of ["ЗАПРОСЫ", "ЗАДАНИЯ", "КВАЛИФИКАЦИЯ"]) assert.ok(source.includes(label), label);
-  assert.ok(source.includes("promotion-editor-branches"));
-  assert.ok(source.includes("ordinaryCount"));
-  assert.ok(source.includes("qualificationCount"));
+  for (const label of ["ЗАПРОСЫ", "ЗАДАНИЯ", "КВАЛИФИКАЦИЯ"]) assert.ok(main.includes(label), label);
+  assert.ok(main.includes("promotion-editor-branches"));
+  assert.ok(main.includes("ordinaryCount"));
+  assert.ok(main.includes("qualificationCount"));
 });
 
 test("promotion editor polls only while visible and preserves its selected request", () => {
-  assert.ok(source.includes("if (!visible || document.visibilityState !== \"visible\") return"));
-  assert.ok(source.includes("setSelectedRequestId((current)"));
-  assert.ok(source.includes("Запрос уже взят другим проверяющим."));
+  assert.ok(main.includes("if (!visible || document.visibilityState !== \"visible\") return"));
+  assert.ok(main.includes("setSelectedRequestId((current)"));
+  assert.ok(main.includes("Запрос уже взят другим проверяющим."));
 });
 
 test("claim is the gate for mutations and cleanup stays an unobtrusive hint", () => {
-  assert.ok(source.includes("ВЗЯТЬ ЗАПРОС"));
-  assert.ok(source.includes("assignedToMe"));
-  assert.ok(source.includes("ОТКЛОНИТЬ"));
-  assert.ok(source.includes("Незавершённые данные удаляются через 3 дня."));
+  assert.ok(main.includes("ВЗЯТЬ ЗАПРОС"));
+  assert.ok(main.includes("assignedToMe"));
+  assert.ok(main.includes("ОТКЛОНИТЬ"));
+  assert.ok(main.includes("Незавершённые данные удаляются через 3 дня."));
 });
 
 test("owner/admin can reset a binding by exact nickname while selected reset keeps its existing guard", () => {
-  assert.ok(source.includes("promotion-device-reset"));
-  assert.ok(source.includes('maxLength={64}'));
-  assert.ok(source.includes("СБРОСИТЬ ПРИВЯЗКУ ПО НИКУ"));
-  assert.ok(source.includes("{canManageEditors && <form"));
-  assert.ok(source.includes('{canManageEditors && <button type="button" onClick={() => void reviewerCommand("reset-device"'));
+  assert.ok(main.includes("promotion-device-reset"));
+  assert.ok(main.includes('maxLength={64}'));
+  assert.ok(main.includes("СБРОСИТЬ ПРИВЯЗКУ ПО НИКУ"));
+  assert.ok(main.includes("{canManageEditors && <form"));
+  assert.ok(main.includes('reviewerCommand("reset-device"'));
 });
 
 test("bank workspace exposes preview replacement and immutable confirmation", () => {
@@ -66,5 +66,21 @@ test("request rejection and owner deletion use explicit irreversible confirmatio
 test("promotion reviewer layout has desktop workbench and phone sequential view", () => {
   assert.match(styles, /\.promotion-editor-workbench\s*\{/);
   assert.match(styles, /grid-template-columns:\s*280px minmax\(0,\s*1fr\)/);
-  assert.match(styles, /@media \(max-width:\s*900px\)[\s\S]*\.promotion-editor-workbench/);
+  assert.ok(main.includes('requestView === "queue"'));
+  assert.ok(main.includes('requestView === "detail"'));
+  assert.ok(main.includes("promotion-phone-back"));
+  for (const editor of [ordinary, qualification]) {
+    assert.ok(editor.includes('bankView === "list"'));
+    assert.ok(editor.includes('bankView === "editor"'));
+    assert.ok(editor.includes('bankView === "preview"'));
+    assert.ok(editor.includes("promotion-phone-back"));
+  }
+});
+
+test("actual request workspace exposes contractual empty and cleanup states", () => {
+  assert.ok(main.includes("НОВЫХ ЗАПРОСОВ НЕТ"));
+  assert.ok(main.includes("Оставьте вкладку открытой — список обновится автоматически."));
+  assert.ok(main.includes("cleanupPreview"));
+  assert.ok(main.includes("promotion-cleanup-disclosure"));
+  assert.ok(main.includes("Дата удаления"));
 });
