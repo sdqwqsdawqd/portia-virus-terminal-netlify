@@ -113,7 +113,7 @@ test("every desktop shortcut owns a default position and saved positions overrid
 
 test("promotion is a standalone desktop application with its own window geometry", () => {
   assert.match(source, /type AppId = [^;]*"promotion"/);
-  assert.match(source, /promotion: \{ label: "Повышение", path: "PORTIA:\/\/PROMOTION", icon: "promotion" \}/);
+  assert.match(source, /promotion: \{ label: "Повышение", path: "Повышение", icon: "promotion" \}/);
   assert.match(source, /promotion: \[760, 620\]/);
   assert.match(source, /promotion: \{ width: 620, height: 480 \}/);
   assert.ok(source.includes('<DesktopIcon app="promotion"'));

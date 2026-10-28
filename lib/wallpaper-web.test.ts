@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { REST_NODE, createPulsePool, edgesAt, emitPulse, gaitPhase, legPose, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
+import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, emitPulse, gaitPhase, legPose, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
 
 const near = (a: Point, b: Point, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
 // Distance from a point to the thread drawn as a 400-piece polyline.
@@ -28,7 +28,7 @@ test("the wallpaper spider uses distance-linked gait, front-leg probing and an e
   assert.match(source, /const PROBE_SWING =/);
   assert.match(source, /id === "L1" \|\| id === "R1"/);
   assert.match(source, /type TravelStage = "visible" \| "fading-out" \| "hidden" \| "fading-in"/);
-  assert.match(source, /selectSpawn\(visible, spawn, rand\)/);
+  assert.match(source, /selectSpawn\(visible, previousVisibleSpawn, rand\)/);
   assert.match(source, /element\.style\.opacity = "0"/);
   assert.match(source, /rest = 6 \+ rand\(\) \* 4/g);
   assert.ok(source.includes('attributeFilter: ["data-motion", "data-spider"]'));
@@ -77,14 +77,14 @@ test("walkPose stays on the threads and eases in and out", () => {
   const edges = [0, 1, 2].map((hop) => edgeBetween(path[hop], path[hop + 1]));
   assert.ok(edges.every((edge) => edge >= 0));
   const total = edges.reduce((sum, edge) => sum + webEdges[edge].length, 0);
-  const duration = total / 36 + 0.4;
+  const duration = total / SPIDER_WALK_SPEED + 0.4 / SPIDER_MOTION_RATE;
   assert.ok(near([walkPose(path, 0).x, walkPose(path, 0).y], webGeometry.nodes[REST_NODE], 1e-6));
   assert.equal(walkPose(path, 0).done, false);
   assert.equal(walkPose(path, duration - 0.01).done, false);
   const end = walkPose(path, duration + 0.01);
   assert.equal(end.done, true);
   assert.ok(near([end.x, end.y], webGeometry.nodes[path[3]], 0.01));
-  assert.ok(walkPose(path, 0.4).distance < 0.4 * 36);
+  assert.ok(walkPose(path, 0.4 / SPIDER_MOTION_RATE).distance < (0.4 / SPIDER_MOTION_RATE) * SPIDER_WALK_SPEED);
   let last = -1;
   for (let step = 0; step <= 100; step += 1) {
     const pose = walkPose(path, (duration * step) / 100);
@@ -95,10 +95,11 @@ test("walkPose stays on the threads and eases in and out", () => {
     assert.ok(best < 14, `step ${step} is ${best} off its thread`);
   }
   assert.ok(Math.abs(last - total) < 1e-6);
-  // 36 units/s is the top speed.
+  // The whole travel timeline is 1.8x faster while gait remains distance-linked.
+  assert.equal(SPIDER_MOTION_RATE, 1.8);
   for (let step = 0; step < 100; step += 1) {
     const a = walkPose(path, (duration * step) / 100), b = walkPose(path, (duration * (step + 1)) / 100);
-    assert.ok((b.distance - a.distance) / (duration / 100) <= 36 + 1e-6);
+    assert.ok((b.distance - a.distance) / (duration / 100) <= SPIDER_WALK_SPEED + 1e-6);
   }
 });
 
@@ -145,11 +146,11 @@ test("spawn selection is deterministic and excludes the previous visible spawn",
   assert.equal(selectSpawn([], 20, () => 0.5), REST_NODE);
 });
 
-test("gait phase is linked to distance with a roughly 0.56 second full-speed cycle", () => {
+test("gait phase is linked to distance and accelerates with the spider", () => {
   assert.equal(gaitPhase(0), 0);
   assert.ok(Math.abs(gaitPhase(10) - 0.5) < 1e-9);
   assert.equal(gaitPhase(20), 0);
-  assert.ok(20 / 36 >= 0.5 && 20 / 36 <= 0.65);
+  assert.ok(Math.abs(20 / SPIDER_WALK_SPEED - (20 / 36) / 1.8) < 1e-9);
   assert.equal(gaitPhase(20), gaitPhase(40));
 });
 

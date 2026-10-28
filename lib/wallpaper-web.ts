@@ -138,9 +138,11 @@ function roundedTurn(plan: { hops: Hop[] }, distance: number) {
   return null;
 }
 
-// 36 units/s is about one body length in 3 s; 0.4 s of easing at each end of a walk keeps starts and stops soft (D-05).
-const WALK_SPEED = 36;
-const WALK_EASE = 0.4;
+// One rate scales the whole walk timeline. Distance-linked gait then follows automatically without a second multiplier.
+export const SPIDER_MOTION_RATE = 1.8;
+export const SPIDER_WALK_SPEED = 36 * SPIDER_MOTION_RATE;
+const WALK_SPEED = SPIDER_WALK_SPEED;
+const WALK_EASE = 0.4 / SPIDER_MOTION_RATE;
 const WALK_ACCEL = WALK_SPEED / WALK_EASE;
 
 type Hop = { edge: number; forward: boolean; start: number };

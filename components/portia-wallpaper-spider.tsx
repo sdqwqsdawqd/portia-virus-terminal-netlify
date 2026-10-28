@@ -74,7 +74,7 @@ export function WallpaperSpider() {
     sizer.observe(layer);
 
     let frame = 0, last = 0, time = 0;
-    let node = REST_NODE, spawn = REST_NODE, previous = -1, path: number[] | null = null;
+    let node = REST_NODE, previousVisibleSpawn = REST_NODE, previous = -1, path: number[] | null = null;
     let walked = 0, rest = FIRST_WALK, x = restX, y = restY;
     // heading is where the body should face (travel direction); angle is how far the artwork is turned now.
     let heading = ARTWORK_HEADING, angle = 0, phase = 0, gait = 0, clean = true, legsNeutral = true;
@@ -90,14 +90,23 @@ export function WallpaperSpider() {
       });
     };
 
-    const resetToRest = () => {
-      node = REST_NODE; spawn = REST_NODE; previous = -1; path = null; walked = 0; rest = FIRST_WALK; x = restX; y = restY;
-      heading = ARTWORK_HEADING; angle = 0; phase = 0; gait = 0; clean = true; legsNeutral = true;
-      gaitDistance = 0; pathDistance = 0; tourWalks = 0; stage = "visible"; stageTime = 0;
-      element.style.transform = "";
-      element.style.opacity = "";
+    const hideForRelocation = () => {
+      path = null; walked = 0; gait = 0; clean = true; legsNeutral = true; stage = "hidden"; stageTime = 0;
+      element.style.opacity = "0";
       legs.forEach((leg) => { leg.style.rotate = ""; leg.style.scale = ""; });
       clearPulses();
+    };
+
+    const relocateWhileHidden = () => {
+      const nextSpawn = selectSpawn(visible, previousVisibleSpawn, rand);
+      if (nextSpawn === REST_NODE || nextSpawn === previousVisibleSpawn) return false;
+      previousVisibleSpawn = nextSpawn; node = nextSpawn; previous = -1; path = null; walked = 0; rest = 1.2 + rand() * 0.8;
+      [x, y] = webGeometry.nodes[nextSpawn];
+      heading = ARTWORK_HEADING; angle = 0; phase = 0; gait = 0; gaitDistance = 0; pathDistance = 0; tourWalks = 0;
+      clearPulses();
+      element.style.opacity = "0";
+      element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px)`;
+      return true;
     };
 
     const drawPulses = () => {
@@ -128,13 +137,7 @@ export function WallpaperSpider() {
         element.style.opacity = Math.max(0, 1 - stageTime / FADE_TIME).toFixed(3);
         if (stageTime >= FADE_TIME) { element.style.opacity = "0"; stage = "hidden"; stageTime = 0; }
       } else if (stage === "hidden") {
-        spawn = selectSpawn(visible, spawn, rand);
-        node = spawn; previous = -1; path = null; walked = 0; rest = 1.2 + rand() * 0.8;
-        [x, y] = webGeometry.nodes[spawn];
-        heading = ARTWORK_HEADING; angle = 0; phase = 0; gait = 0; gaitDistance = 0; pathDistance = 0; tourWalks = 0;
-        clearPulses();
-        element.style.opacity = "0";
-        stage = "fading-in"; stageTime = 0;
+        if (relocateWhileHidden()) { stage = "fading-in"; stageTime = 0; }
       } else if (stage === "fading-in") {
         stageTime += dt;
         element.style.opacity = Math.min(1, stageTime / FADE_TIME).toFixed(3);
@@ -196,15 +199,22 @@ export function WallpaperSpider() {
 
     const motionOn = () => (root.dataset.motion ? root.dataset.motion === "full" : !reduceQuery.matches);
     const spiderOn = () => root.dataset.spider !== "off";
-    // The loop runs only with motion and the spider enabled in a visible tab; disabling either puts it back at rest.
+    // Hide/show always relocates while opacity is zero; reduced motion skips travel/fade but keeps the distinct-point invariant.
     const sync = () => {
-      if (motionOn() && spiderOn() && !document.hidden) {
+      if (!spiderOn()) {
+        cancelAnimationFrame(frame); frame = 0; hideForRelocation(); return;
+      }
+      if (!motionOn()) {
+        cancelAnimationFrame(frame); frame = 0;
+        if (!document.hidden && stage === "hidden" && relocateWhileHidden()) { element.style.opacity = "1"; stage = "visible"; }
+        return;
+      }
+      if (!document.hidden) {
         if (!frame) { last = performance.now(); frame = requestAnimationFrame(tick); }
         return;
       }
       cancelAnimationFrame(frame);
       frame = 0;
-      if (!motionOn() || !spiderOn()) resetToRest();
     };
     const watcher = new MutationObserver(sync);
     watcher.observe(root, { attributes: true, attributeFilter: ["data-motion", "data-spider"] });

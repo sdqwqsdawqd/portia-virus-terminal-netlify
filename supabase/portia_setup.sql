@@ -892,30 +892,30 @@ set search_path = ''
 as $$
 declare
   nickname_key_value text;
-  assignment_ids uuid[] := '{}'::uuid[];
-  attempt_ids uuid[] := '{}'::uuid[];
 begin
   if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
   if length(p_internal_note) > 2000 then raise exception 'note-too-long'; end if;
   if p_kind = 'ordinary' then
     select nickname_key into nickname_key_value from public.portia_promo_requests
-      where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid() for update;
+      where id = p_request_id and status in ('claimed', 'assigned') and reviewer_id = auth.uid() for update;
     if nickname_key_value is null then return false; end if;
-    select coalesce(array_agg(id), '{}'::uuid[]) into assignment_ids from public.portia_promo_assignments where request_id = p_request_id;
   elsif p_kind = 'qualification' then
     select nickname_key into nickname_key_value from public.portia_promo_qualification_requests
-      where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid() for update;
+      where id = p_request_id and status in ('claimed', 'approved', 'testing', 'grading') and reviewer_id = auth.uid() for update;
     if nickname_key_value is null then return false; end if;
-    select coalesce(array_agg(id), '{}'::uuid[]) into attempt_ids from public.portia_promo_attempts where request_id = p_request_id;
   else return false; end if;
-  delete from public.portia_promo_results result
-    where result.compact ->> 'requestId' = p_request_id::text
-      or exists (select 1 from unnest(assignment_ids) assignment_id where result.compact ->> 'assignmentId' = assignment_id::text)
-      or exists (select 1 from unnest(attempt_ids) attempt_id where result.compact ->> 'attemptId' = attempt_id::text);
+  insert into public.portia_promo_results (nickname_key, result_kind, outcome, compact)
+    values (nickname_key_value, p_kind, 'rejected', jsonb_build_object('requestId', p_request_id));
   insert into public.portia_promo_audit_events (nickname_key, actor_id, event_type, details)
-    values (nickname_key_value, auth.uid(), 'request-rejected', jsonb_build_object('kind', p_kind, 'requestId', p_request_id));
+    values (nickname_key_value, auth.uid(), 'request-rejected', jsonb_build_object('kind', p_kind, 'requestId', p_request_id, 'note', p_internal_note));
   if p_kind = 'ordinary' then delete from public.portia_promo_requests where id = p_request_id;
   else delete from public.portia_promo_qualification_requests where id = p_request_id; end if;
+  delete from public.portia_promo_results where id in (
+    select id from (
+      select id, row_number() over (partition by nickname_key order by created_at desc, id desc) as history_order
+      from public.portia_promo_results where nickname_key = nickname_key_value
+    ) ranked where history_order > 3
+  );
   return true;
 end $$;
 

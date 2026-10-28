@@ -105,7 +105,7 @@ const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName
   search: { label: "Глобальный поиск", path: "PORTIA://GLOBAL_SEARCH", icon: "search" },
   info: { label: "Информация", path: "PORTIA://INFORMATION", icon: "info" },
   guide: { label: "Справочник", path: "PORTIA://GUIDE", icon: "guide" },
-  promotion: { label: "Повышение", path: "PORTIA://PROMOTION", icon: "promotion" },
+  promotion: { label: "Повышение", path: "Повышение", icon: "promotion" },
   settings: { label: "Настройки", path: "PORTIA://DESKTOP_SETTINGS", icon: "settings" },
   broadcasts: { label: "Сводка", path: "PORTIA://NEWS", icon: "broadcasts" },
   trash: { label: "Корзина", path: "PORTIA://RECYCLE_BIN", icon: "trash" },

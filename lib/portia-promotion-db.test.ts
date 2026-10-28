@@ -111,10 +111,18 @@ test("destructive request RPCs lock and remove only the selected request graph",
     const start = setup.indexOf(`create or replace function public.portia_promo_${name}`);
     const body = setup.slice(start, setup.indexOf("$$;", start) + 3);
     assert.match(body, /for update/i);
-    assert.match(body, /delete from public\.portia_promo_results result[\s\S]*requestId[\s\S]*assignmentId[\s\S]*attemptId/i);
     assert.match(body, /delete from public\.portia_promo_(?:requests|qualification_requests)/i);
     assert.doesNotMatch(body, /portia_promo_device_bindings|portia_promo_reset_device/i);
   }
+  const rejectStart = setup.indexOf("create or replace function public.portia_promo_reject_request");
+  const reject = setup.slice(rejectStart, setup.indexOf("$$;", rejectStart) + 3);
+  assert.match(reject, /status in \('claimed', 'assigned'\)/i);
+  assert.match(reject, /status in \('claimed', 'approved', 'testing', 'grading'\)/i);
+  assert.match(reject, /insert into public\.portia_promo_results[\s\S]*'rejected'/i);
+  assert.match(reject, /where history_order > 3/i);
+  const deleteStart = setup.indexOf("create or replace function public.portia_promo_delete_request");
+  const remove = setup.slice(deleteStart, setup.indexOf("$$;", deleteStart) + 3);
+  assert.match(remove, /delete from public\.portia_promo_results result[\s\S]*requestId[\s\S]*assignmentId[\s\S]*attemptId/i);
   assert.match(setup, /portia_promo_assignments[\s\S]*request_id uuid not null unique references public\.portia_promo_requests\(id\) on delete cascade/i);
   assert.match(setup, /portia_promo_assignment_items[\s\S]*assignment_id uuid not null references public\.portia_promo_assignments\(id\) on delete cascade/i);
   assert.match(setup, /portia_promo_attempt_questions[\s\S]*attempt_id uuid not null references public\.portia_promo_attempts\(id\) on delete cascade/i);
