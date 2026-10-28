@@ -42,9 +42,8 @@ type DependencyResult<T> = { status: "ok"; projection: T } | { status: "unavaila
 type SubmitResult =
   | { status: "created"; requestId: string }
   | { status: "active" }
-  | { status: "device-denied" }
+  | { status: "device-denied" | "throttled"; blockedUntil: string | null }
   | { status: "unavailable" };
-type BindResult = { status: "ok" | "denied" | "unavailable" };
 type ResolveResult = { status: "ok"; nicknameKey: string | null } | { status: "unavailable" };
 
 export type PromotionApiDependencies = {
@@ -53,7 +52,6 @@ export type PromotionApiDependencies = {
   createToken?: () => string;
   loadAccessRoster: () => Promise<PromotionAccessResult>;
   loadRoster: () => Promise<PromotionRosterResult>;
-  bindDevice: (input: { nicknameKey: string; tokenHash: string; riskBucket: string }) => Promise<BindResult>;
   resolveDevice: (tokenHash: string) => Promise<ResolveResult>;
   workflowStatus: (input: { nicknameKey: string; titleId: PromotionTitleId; tokenHash: string | null }) => Promise<DependencyResult<PromotionWorkflowProjection>>;
   submitRequest: (input: {
@@ -64,12 +62,9 @@ export type PromotionApiDependencies = {
     targetId: PromotionTitleId;
     tokenHash: string;
     riskBucket: string;
-  }) => Promise<SubmitResult>;
-  registerAttempt: (input: {
     bucketKey: string;
     ipBucket: string;
-    success: boolean;
-  }) => Promise<{ status: "ok"; blockedUntil: string | null } | { status: "unavailable" }>;
+  }) => Promise<SubmitResult>;
 };
 
 export type PromotionApiResult = {
@@ -202,10 +197,6 @@ export async function promotionStatus(
   const existingHash = presentedHash;
   const token = existingHash ? input.token! : (deps.createToken ?? createDeviceToken)();
   const tokenHash = existingHash ?? deviceTokenDigest(token, deps.secret);
-  const buckets = promotionAttemptBucket(admitted.nicknameKey, input.headers ?? new Headers(), deps.secret);
-  const binding = await deps.bindDevice({ nicknameKey: admitted.nicknameKey, tokenHash, riskBucket: buckets.riskBucket });
-  if (binding.status === "unavailable") return { status: 503, body: pendingDatabase };
-  if (binding.status === "denied") return { status: 423, body: { ...deviceDenied, code: "device-denied" } };
   const cookie = existingHash ? {} : { setCookie: buildDeviceCookie(token) };
 
   const roster = await deps.loadRoster();
@@ -220,7 +211,7 @@ export async function promotionStatus(
   }
   const workflow = await deps.workflowStatus({ nicknameKey: entry.nicknameKey, titleId: entry.titleId, tokenHash });
   if (workflow.status !== "ok") return { status: 503, body: pendingDatabase, ...cookie };
-  if (workflow.projection.binding !== "allowed") return { status: 423, body: { ...deviceDenied, code: "device-denied" } };
+  if (workflow.projection.binding === "denied") return { status: 423, body: { ...deviceDenied, code: "device-denied" } };
   return { status: 200, body: statusBody(entry, workflow.projection, deps.now()), ...cookie };
 }
 
@@ -246,13 +237,6 @@ export async function submitPromotionRequest(
   const workflow = await deps.workflowStatus({ nicknameKey: entry.nicknameKey, titleId: entry.titleId, tokenHash: existingHash });
   if (workflow.status !== "ok") return { status: 503, body: pendingDatabase };
   const buckets = promotionAttemptBucket(entry.nicknameKey, input.headers, deps.secret);
-  if (workflow.projection.binding !== "allowed") {
-    const attempt = await deps.registerAttempt({ bucketKey: buckets.bucketKey, ipBucket: buckets.ipBucket, success: false });
-    return {
-      status: 423,
-      body: { ...deviceDenied, code: "device-wait", blockedUntil: attempt.status === "ok" ? attempt.blockedUntil : null },
-    };
-  }
   const active = input.kind === "ordinary" ? workflow.projection.ordinary : workflow.projection.qualification;
   if (active) {
     const retakeReady = input.kind === "qualification" && active.status === "failed"
@@ -287,14 +271,15 @@ export async function submitPromotionRequest(
     targetId: entry.nextTitleId,
     tokenHash: existingHash,
     riskBucket: buckets.riskBucket,
+    bucketKey: buckets.bucketKey,
+    ipBucket: buckets.ipBucket,
   });
   if (submitted.status === "unavailable") return { status: 503, body: pendingDatabase };
-  if (submitted.status === "device-denied") {
-    const attempt = await deps.registerAttempt({ bucketKey: buckets.bucketKey, ipBucket: buckets.ipBucket, success: false });
-    return { status: 423, body: { ...deviceDenied, code: "device-wait", blockedUntil: attempt.status === "ok" ? attempt.blockedUntil : null } };
+  if (submitted.status === "device-denied" || submitted.status === "throttled") {
+    return { status: 423, body: { ...deviceDenied, code: "device-wait", blockedUntil: submitted.blockedUntil } };
   }
   if (submitted.status === "active") return { status: 409, body: { error: "Запрос этого вида уже активен.", code: "active-request" } };
-  await deps.registerAttempt({ bucketKey: buckets.bucketKey, ipBucket: buckets.ipBucket, success: true });
+  if (submitted.status !== "created") return { status: 503, body: pendingDatabase };
   return {
     status: 201,
     body: { requestId: submitted.requestId, kind: input.kind, status: "pending" },
@@ -311,19 +296,6 @@ export function createPromotionApiDependencies(supabase: SupabaseClient, secret:
     secret,
     loadAccessRoster: () => loadPromotionAccessRoster(),
     loadRoster: () => loadPromotionRoster(),
-    bindDevice: async (input) => {
-      const { data, error } = await supabase.rpc("portia_promo_bind_device", {
-        p_nickname_key: input.nicknameKey,
-        p_token_hash: input.tokenHash,
-        p_risk_bucket: input.riskBucket,
-      });
-      if (error) {
-        if (error.message?.includes("device-bound") || error.message?.includes("nickname-bound")) return { status: "denied" } as const;
-        if (!unavailableRpc(error)) console.error("PORTIA promotion binding RPC failed", { code: error.code });
-        return { status: "unavailable" } as const;
-      }
-      return typeof data === "string" ? { status: "ok" } as const : { status: "unavailable" } as const;
-    },
     resolveDevice: async (tokenHash) => {
       const { data, error } = await supabase.rpc("portia_promo_resolve_device", { p_token_hash: tokenHash });
       if (error) {
@@ -354,27 +326,21 @@ export function createPromotionApiDependencies(supabase: SupabaseClient, secret:
         p_target_id: input.targetId,
         p_token_hash: input.tokenHash,
         p_risk_bucket: input.riskBucket,
+        p_bucket_key: input.bucketKey,
+        p_ip_bucket: input.ipBucket,
       });
       if (error) {
         if (unavailableRpc(error)) return { status: "unavailable" } as const;
-        if (error.code === "23505") return { status: "active" } as const;
-        if (error.message?.includes("device-denied")) return { status: "device-denied" } as const;
         console.error("PORTIA promotion submit RPC failed", { code: error.code });
         return { status: "unavailable" } as const;
       }
-      return typeof data === "string" ? { status: "created", requestId: data } as const : { status: "unavailable" } as const;
-    },
-    registerAttempt: async (input) => {
-      const { data, error } = await supabase.rpc("portia_promo_register_attempt", {
-        p_bucket_key: input.bucketKey,
-        p_ip_bucket: input.ipBucket,
-        p_success: input.success,
-      });
-      if (error) {
-        if (!unavailableRpc(error)) console.error("PORTIA promotion throttle RPC failed", { code: error.code });
-        return { status: "unavailable" } as const;
+      if (!data || typeof data !== "object" || Array.isArray(data)) return { status: "unavailable" } as const;
+      if (data.code === "created" && typeof data.requestId === "string") return { status: "created", requestId: data.requestId } as const;
+      if (data.code === "active-request") return { status: "active" } as const;
+      if (data.code === "throttled" || data.code === "device-denied") {
+        return { status: data.code, blockedUntil: safeDate(data.blockedUntil) } as const;
       }
-      return { status: "ok", blockedUntil: safeDate(data) } as const;
+      return { status: "unavailable" } as const;
     },
   };
 }

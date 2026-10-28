@@ -181,7 +181,12 @@ test("qualification attempts use immutable mode and a server-side heartbeat leas
   assert.match(setup, /portia_promo_attempts[\s\S]*last_seen_at timestamptz[\s\S]*lease_expires_at timestamptz/i);
   const confirmStart = setup.indexOf("create or replace function public.portia_promo_confirm_test");
   const confirm = setup.slice(confirmStart, setup.indexOf("$$;", confirmStart) + 3);
-  assert.match(confirm, /insert into public\.portia_promo_attempts[\s\S]*client_mode[\s\S]*p_client_mode/i);
+  assert.match(confirm, /insert into public\.portia_promo_attempts[\s\S]*'prepared'/i);
+  assert.doesNotMatch(confirm, /p_client_mode/i);
+  const startStart = setup.indexOf("create or replace function public.portia_promo_start_test");
+  const start = setup.slice(startStart, setup.indexOf("$$;", startStart) + 3);
+  assert.match(start, /a\.status = 'prepared'/i);
+  assert.match(start, /client_mode = p_client_mode/i);
   const currentStart = setup.indexOf("create or replace function public.portia_promo_current_test");
   const current = setup.slice(currentStart, setup.indexOf("$$;", currentStart) + 3);
   assert.doesNotMatch(current, /set client_mode\s*=/i);

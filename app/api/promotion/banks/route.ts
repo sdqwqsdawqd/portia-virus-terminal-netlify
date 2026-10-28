@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     if (selected.length !== ids.length) return Response.json({ error: "Банк изменился. Соберите набор заново.", code: "stale-preview" }, { status: 409, headers: noStoreHeaders });
     const rpc = kind === "ordinary"
       ? ["portia_promo_confirm_assignment", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: bank.version, p_items: selected.map((item, sortOrder) => ({ source_item_id: item!.id, sort_order: sortOrder })) }]
-      : ["portia_promo_confirm_test", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: bank.version, p_questions: selected.map((item, sortOrder) => ({ source_question_id: item!.id, sort_order: sortOrder })), p_client_mode: "desktop" }];
+      : ["portia_promo_confirm_test", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: bank.version, p_questions: selected.map((item, sortOrder) => ({ source_question_id: item!.id, sort_order: sortOrder })) }];
     const { data, error } = await supabase.rpc(rpc[0] as string, rpc[1] as Record<string, unknown>);
     return error || !data
       ? Response.json({ error: "Не удалось подтвердить набор.", code: error?.code === "42883" ? "pending-database" : "confirm-conflict" }, { status: error?.code === "42883" ? 503 : 409, headers: noStoreHeaders })

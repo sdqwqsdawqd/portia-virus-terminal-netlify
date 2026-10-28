@@ -32,18 +32,16 @@ const emptyProjection: PromotionWorkflowProjection = {
 };
 
 function dependencies(overrides: Partial<PromotionApiDependencies> = {}) {
-  const calls = { bind: 0, resolve: 0, status: 0, submit: 0, attempts: [] as boolean[] };
+  const calls = { resolve: 0, status: 0, submit: 0, submitInputs: [] as unknown[] };
   const deps: PromotionApiDependencies = {
     now: () => new Date("2026-10-27T00:00:00.000Z"),
     secret,
     createToken: () => "B".repeat(43),
     loadAccessRoster: async () => accessRoster,
     loadRoster: async () => roster,
-    bindDevice: async () => { calls.bind += 1; return { status: "ok" }; },
     resolveDevice: async () => { calls.resolve += 1; return { status: "ok", nicknameKey: "alice" }; },
     workflowStatus: async () => { calls.status += 1; return { status: "ok", projection: emptyProjection }; },
-    submitRequest: async () => { calls.submit += 1; return { status: "created", requestId: "request-1" }; },
-    registerAttempt: async ({ success }) => { calls.attempts.push(success); return { status: "ok", blockedUntil: success ? null : "2026-10-27T00:05:00.000Z" }; },
+    submitRequest: async (input) => { calls.submit += 1; calls.submitInputs.push(input); return { status: "created", requestId: "request-1" }; },
     ...overrides,
   };
   return { deps, calls };
@@ -55,12 +53,10 @@ test("promotion status distinguishes access outage, nickname absence, and promot
   const missing = dependencies({ loadAccessRoster: async () => ({ status: "ok", roster: [] }) });
   assert.equal((await promotionStatus({ nickname: "Alice", token: null }, missing.deps)).status, 404);
   assert.equal(missing.calls.status, 0);
-  assert.equal(missing.calls.bind, 0);
   const promotionOutage = dependencies({ loadRoster: async () => ({ status: "unavailable", reason: "network" }) });
   const outage = await promotionStatus({ nickname: "Alice", token: null, headers: new Headers() }, promotionOutage.deps);
   assert.equal(outage.status, 503);
   assert.equal(outage.body.code, "promotion-sheet-unavailable");
-  assert.equal(promotionOutage.calls.bind, 1);
 });
 
 test("status restores the bound nickname from the exact HttpOnly device token", async () => {
@@ -72,7 +68,7 @@ test("status restores the bound nickname from the exact HttpOnly device token", 
   assert.equal(calls.resolve, 1);
 });
 
-test("the first valid access lookup binds and returns only a safe projection", async () => {
+test("the first valid access lookup issues a device token and returns only a safe projection", async () => {
   const { deps } = dependencies({ workflowStatus: async () => ({ status: "ok", projection: {
     ...emptyProjection,
     results: [{ kind: "ordinary", outcome: "approved", createdAt: "2026-10-20T00:00:00.000Z" }],
@@ -94,7 +90,6 @@ test("an admitted nickname without a promotion row gets a safe no-record status"
   assert.equal(result.body.nickname, "Alice");
   assert.equal(result.body.promotionRecord, null);
   assert.equal(calls.status, 0);
-  assert.equal(calls.bind, 1);
 });
 
 test("public projection admits only ordered immutable assignment text", () => {
@@ -118,14 +113,14 @@ test("public projection admits only ordered immutable assignment text", () => {
 test("a bound-device conflict is neutral and progressive without revealing the other nickname", async () => {
   const { deps, calls } = dependencies({
     workflowStatus: async () => ({ status: "ok", projection: { ...emptyProjection, binding: "denied" } }),
+    submitRequest: async () => { calls.submit += 1; return { status: "device-denied", blockedUntil: "2026-10-27T00:05:00.000Z" }; },
   });
   const result = await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: "A".repeat(43), headers: new Headers() }, deps);
   assert.equal(result.status, 423);
   assert.equal(result.body.code, "device-wait");
   assert.equal(result.body.blockedUntil, "2026-10-27T00:05:00.000Z");
   assert.ok(!JSON.stringify(result.body).toLocaleLowerCase("en-US").includes("alice"));
-  assert.deepEqual(calls.attempts, [false]);
-  assert.equal(calls.submit, 0);
+  assert.equal(calls.submit, 1);
 });
 
 test("an ineligible or active request writes nothing", async () => {
@@ -163,14 +158,15 @@ test("qualification retake waits until the server date and then permits a new re
   assert.equal(ready.calls.submit, 1);
 });
 
-test("an accepted request requires the lookup binding, resets its attempt bucket and never sets a cookie", async () => {
+test("an accepted request uses one atomic admission call and never sets a cookie", async () => {
   const { deps, calls } = dependencies();
   const result = await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: "B".repeat(43), headers: new Headers() }, deps);
   assert.equal(result.status, 201);
   assert.equal(result.body.requestId, "request-1");
   assert.equal(result.setCookie, undefined);
   assert.equal(calls.submit, 1);
-  assert.deepEqual(calls.attempts, [true]);
+  assert.equal(calls.submitInputs.length, 1);
+  assert.deepEqual(Object.keys(calls.submitInputs[0] as object).sort(), ["bucketKey", "ipBucket", "kind", "nickname", "nicknameKey", "riskBucket", "targetId", "titleId", "tokenHash"]);
 });
 
 test("database absence becomes pending-database and never fakes success", async () => {

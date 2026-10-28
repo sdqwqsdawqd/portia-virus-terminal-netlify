@@ -32,10 +32,12 @@ test("security regression: client timestamps cannot control cooldowns or the qua
     assert.doesNotMatch(source, /body\.(?:now|serverNow|startedAt|deadlineAt|availableAt|retakeAt)/);
   }
   const confirm = sqlFunction("portia_promo_confirm_test");
+  const start = sqlFunction("portia_promo_start_test");
   const answer = sqlFunction("portia_promo_answer_question");
-  assert.match(confirm, /started_at, deadline_at[\s\S]*now\(\), now\(\) \+ interval '15 minutes'/i);
+  assert.match(confirm, /status[\s\S]*'prepared'/i);
+  assert.match(start, /deadline_at = now\(\) \+ interval '15 minutes'/i);
   assert.match(answer, /a\.status = 'active' and now\(\) < a\.deadline_at/i);
-  assert.doesNotMatch(confirm + answer, /p_(?:now|deadline|started|client_time)/i);
+  assert.doesNotMatch(confirm + start + answer, /p_(?:now|deadline|started|client_time)/i);
 });
 
 test("security regression: public routes avoid wildcard reads and forbidden response fields", () => {
@@ -44,7 +46,7 @@ test("security regression: public routes avoid wildcard reads and forbidden resp
 
   const testRoute = route("test");
   const projectionStart = testRoute.indexOf("function safeProjection");
-  const projectionEnd = testRoute.indexOf("function clientMode", projectionStart);
+  const projectionEnd = testRoute.indexOf("async function current", projectionStart);
   const projection = testRoute.slice(projectionStart, projectionEnd);
   for (const forbidden of ["answerKey", "technicalFailure", "reviewerCorrect", "internalNote", "tokenHash", "riskBucket", "questions"]) {
     assert.ok(!projection.includes(forbidden), forbidden);
@@ -94,7 +96,7 @@ test("security regression: lookup stays private and atomic admission owns bindin
   const api = readFileSync(new URL("./portia-promotion-api.ts", import.meta.url), "utf8");
   assert.match(statusRoute, /createPromotionApiDependencies/);
   assert.doesNotMatch(statusRoute, /portia_promo_device_bindings/);
-  assert.match(api, /supabase\.rpc\("portia_promo_bind_device"/);
+  assert.doesNotMatch(api, /supabase\.rpc\("portia_promo_bind_device"/);
   assert.match(api, /supabase\.rpc\("portia_promo_resolve_device"/);
   const resolve = sqlFunction("portia_promo_resolve_device");
   assert.match(resolve, /token_hash = p_token_hash and reset_at is null/i);

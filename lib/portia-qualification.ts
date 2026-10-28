@@ -7,10 +7,18 @@ export type QualificationQuestion = {
 };
 
 export type QualificationAnswer = { questionId: string; nonce: string; value: unknown; reviewerCorrect?: boolean };
+export type QualificationClientMode = "desktop" | "phone";
+export const QUALIFICATION_HEARTBEAT_MS = 15_000;
+
+/** Only explicit mobile evidence enables the phone exception; unknown signals fail closed as desktop. */
+export function conservativeQualificationClientMode(headers: Headers): QualificationClientMode {
+  if (headers.get("sec-ch-ua-mobile") === "?1") return "phone";
+  return /Android|iPhone|iPad|iPod/i.test(headers.get("user-agent") ?? "") ? "phone" : "desktop";
+}
 export type QualificationAttempt = {
   id: string;
   status: "prepared" | "active" | "submitted" | "auto-failed" | "reviewed";
-  clientMode: "desktop" | "phone";
+  clientMode: QualificationClientMode;
   questions: QualificationQuestion[];
   answers: QualificationAnswer[];
   startedAt: string | null;
@@ -20,7 +28,7 @@ export type QualificationAttempt = {
 };
 
 export type QualificationEvent =
-  | { type: "start"; clientMode: "desktop" | "phone" }
+  | { type: "start"; clientMode: QualificationClientMode }
   | { type: "answer"; questionId: string; answer: unknown; nonce: string }
   | { type: "technical-failure"; reason: NonNullable<QualificationAttempt["technicalFailure"]> }
   | { type: "review"; decision: "passed" | "failed" };
