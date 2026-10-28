@@ -40,7 +40,7 @@ function formatDate(value?: string) {
 
 function formatCalendarDate(value?: string) {
   if (!value || !Number.isFinite(Date.parse(value))) return "после обновления таблицы";
-  return calendarDate.format(new Date(value));
+  return calendarDate.format(new Date(value)).replace(/\.$/, "");
 }
 
 function publicError(value: unknown, fallback: string) {
