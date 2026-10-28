@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { PromotionAccessResult, PromotionRosterResult } from "./portia-promotion-sheet.ts";
 import {
+  createPromotionApiDependencies,
   promotionStatus,
   promotionProjectionFromRpc,
   submitPromotionRequest,
@@ -68,14 +69,20 @@ test("status restores the bound nickname from the exact HttpOnly device token", 
   assert.equal(calls.resolve, 1);
 });
 
-test("the first valid access lookup issues a device token and returns only a safe projection", async () => {
-  const { deps } = dependencies({ workflowStatus: async () => ({ status: "ok", projection: {
-    ...emptyProjection,
-    results: [{ kind: "ordinary", outcome: "approved", createdAt: "2026-10-20T00:00:00.000Z" }],
-  } }) });
+test("the first valid access lookup stays read-only and returns only a safe projection", async () => {
+  let statusTokenHash: string | null | undefined;
+  const { deps } = dependencies({ workflowStatus: async (input) => {
+    statusTokenHash = input.tokenHash;
+    return { status: "ok", projection: {
+      ...emptyProjection,
+      binding: "unbound",
+      results: [{ kind: "ordinary", outcome: "approved", createdAt: "2026-10-20T00:00:00.000Z" }],
+    } };
+  } });
   const result = await promotionStatus({ nickname: "Alice", token: null, headers: new Headers() }, deps);
   assert.equal(result.status, 200);
-  assert.match(result.setCookie ?? "", /HttpOnly.*Secure.*SameSite=Lax/);
+  assert.equal(result.setCookie, undefined);
+  assert.equal(statusTokenHash, null);
   assert.equal(result.body.nickname, "Alice");
   const serialized = JSON.stringify(result.body);
   for (const forbidden of ["answerKey", "reviewerId", "internalNote", "riskBucket", "tokenHash", "ipBucket"]) {
@@ -158,26 +165,70 @@ test("qualification retake waits until the server date and then permits a new re
   assert.equal(ready.calls.submit, 1);
 });
 
-test("an accepted request uses one atomic admission call and never sets a cookie", async () => {
+test("an accepted first request creates the token once and sets its cookie only after admission", async () => {
   const { deps, calls } = dependencies();
-  const result = await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: "B".repeat(43), headers: new Headers() }, deps);
+  const result = await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: null, headers: new Headers() }, deps);
   assert.equal(result.status, 201);
   assert.equal(result.body.requestId, "request-1");
-  assert.equal(result.setCookie, undefined);
+  assert.match(result.setCookie ?? "", /HttpOnly.*Secure.*SameSite=Lax/);
   assert.equal(calls.submit, 1);
   assert.equal(calls.submitInputs.length, 1);
   assert.deepEqual(Object.keys(calls.submitInputs[0] as object).sort(), ["bucketKey", "ipBucket", "kind", "nickname", "nicknameKey", "riskBucket", "targetId", "titleId", "tokenHash"]);
+  assert.equal((calls.submitInputs[0] as { tokenHash: string }).tokenHash.length, 64);
 });
 
-test("database absence becomes pending-database and never fakes success", async () => {
+test("a rejected first submit never persists its generated token", async () => {
+  for (const submitRequest of [
+    async () => ({ status: "active" } as const),
+    async () => ({ status: "device-denied", blockedUntil: "2026-10-27T00:05:00.000Z" } as const),
+    async () => ({ status: "unavailable", reason: "database-error" } as const),
+  ]) {
+    const attempt = dependencies({ submitRequest });
+    const result = await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: null, headers: new Headers() }, attempt.deps);
+    assert.equal(result.setCookie, undefined);
+  }
+});
+
+test("database and rollout failures remain distinct safe API outcomes", async () => {
   const status = dependencies({ workflowStatus: async () => ({ status: "unavailable" }) });
   const statusResult = await promotionStatus({ nickname: "Alice", token: null, headers: new Headers() }, status.deps);
   assert.equal(statusResult.status, 503);
   assert.equal(statusResult.body.code, "pending-database");
-  const submit = dependencies({ submitRequest: async () => ({ status: "unavailable" }) });
-  const submitResult = await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: "B".repeat(43), headers: new Headers() }, submit.deps);
-  assert.equal(submitResult.status, 503);
-  assert.equal(submitResult.setCookie, undefined);
+  for (const [reason, code] of [
+    ["rpc-missing", "promotion-rollout-incomplete"],
+    ["database-error", "promotion-database-unavailable"],
+    ["invalid-response", "promotion-contract-invalid"],
+  ] as const) {
+    const submit = dependencies({ submitRequest: async () => ({ status: "unavailable", reason }) });
+    const submitResult = await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: null, headers: new Headers() }, submit.deps);
+    assert.equal(submitResult.status, 503);
+    assert.equal(submitResult.body.code, code);
+    assert.equal(submitResult.setCookie, undefined);
+  }
+});
+
+test("Supabase submit adapter classifies missing RPC, database failure and malformed projection", async () => {
+  const responses = [
+    { data: null, error: { code: "PGRST202" } },
+    { data: null, error: { code: "08006" } },
+    { data: { code: "mystery" }, error: null },
+  ];
+  const supabase = { rpc: async () => responses.shift()! };
+  const deps = createPromotionApiDependencies(supabase as never, secret);
+  const input = {
+    kind: "ordinary" as const,
+    nickname: "Alice",
+    nicknameKey: "alice",
+    titleId: "academic" as const,
+    targetId: "trainee" as const,
+    tokenHash: "d".repeat(64),
+    riskBucket: "risk",
+    bucketKey: "bucket",
+    ipBucket: "ip",
+  };
+  assert.deepEqual(await deps.submitRequest(input), { status: "unavailable", reason: "rpc-missing" });
+  assert.deepEqual(await deps.submitRequest(input), { status: "unavailable", reason: "database-error" });
+  assert.deepEqual(await deps.submitRequest(input), { status: "unavailable", reason: "invalid-response" });
 });
 
 test("invalid sheet identity fails closed as source-unavailable, never not-found", async () => {
@@ -193,7 +244,7 @@ test("public promotion routes are dynamic, no-store and never select wildcard ro
     assert.ok(route.includes('dynamic = "force-dynamic"'), path);
     assert.ok(route.includes("noStoreHeaders"), path);
     assert.ok(!route.includes('select("*")'), path);
-    if (path === "status") assert.ok(route.includes("Set-Cookie"), "lookup must persist the binding cookie");
+    if (path === "requests") assert.ok(route.includes("Set-Cookie"), "accepted submit must persist the binding cookie");
   }
 });
 
