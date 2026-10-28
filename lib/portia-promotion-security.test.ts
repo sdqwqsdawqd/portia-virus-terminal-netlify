@@ -82,7 +82,8 @@ test("security regression: stale test leases fail closed and device mode is immu
   assert.match(expire, /technical_failure = coalesce\(technical_failure, 'connection-lost'\)/i);
   const heartbeat = sqlFunction("portia_promo_heartbeat_test");
   assert.match(heartbeat, /portia_promo_expire_stale_attempt\(p_attempt_id\)/i);
-  assert.match(heartbeat, /status = 'active'[\s\S]*lease_expires_at = now\(\) \+ interval '45 seconds'/i);
+  assert.match(heartbeat, /a\.status = 'active'/i);
+  assert.match(heartbeat, /lease_expires_at = now\(\) \+ interval '45 seconds'/i);
   const current = sqlFunction("portia_promo_current_test");
   assert.doesNotMatch(current, /set client_mode\s*=/i);
   assert.match(current, /a\.client_mode = p_client_mode/i);
@@ -133,9 +134,11 @@ test("security regression: only the current question is public and answer keys s
 
 test("security regression: deadline boundary and repeated failure events fail closed once", () => {
   const current = sqlFunction("portia_promo_current_test");
+  const expire = sqlFunction("portia_promo_expire_stale_attempt");
   const answer = sqlFunction("portia_promo_answer_question");
   const fail = sqlFunction("portia_promo_fail_attempt");
-  assert.match(current, /deadline_at <= now\(\)/i);
+  assert.match(current, /portia_promo_expire_stale_attempt\(p_attempt_id\)/i);
+  assert.match(expire, /deadline_at <= now\(\)/i);
   assert.match(answer, /now\(\) < a\.deadline_at/i);
   assert.match(fail, /a\.status = 'active'/i);
   assert.match(fail, /return found or exists[\s\S]*status = 'failed'/i);

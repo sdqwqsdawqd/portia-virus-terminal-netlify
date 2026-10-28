@@ -473,6 +473,8 @@ create table if not exists public.portia_promo_attempts (
   status text not null default 'prepared' check (status in ('prepared', 'active', 'grading', 'passed', 'failed', 'closed')),
   client_mode text not null default 'desktop' check (client_mode in ('desktop', 'phone')),
   current_question_index integer not null default 0 check (current_question_index between 0 and 100000),
+  last_seen_at timestamptz,
+  lease_expires_at timestamptz,
   started_at timestamptz,
   deadline_at timestamptz,
   technical_failure text check (technical_failure is null or length(technical_failure) <= 64),
@@ -484,6 +486,8 @@ create table if not exists public.portia_promo_attempts (
   updated_at timestamptz not null default now()
 );
 alter table public.portia_promo_attempts add column if not exists current_question_index integer not null default 0 check (current_question_index between 0 and 100000);
+alter table public.portia_promo_attempts add column if not exists last_seen_at timestamptz;
+alter table public.portia_promo_attempts add column if not exists lease_expires_at timestamptz;
 
 create table if not exists public.portia_promo_attempt_questions (
   id uuid primary key default gen_random_uuid(),
@@ -725,6 +729,7 @@ begin
   return until_at;
 end; $$;
 
+drop function if exists public.portia_promo_submit_request(text, text, text, text, text, text, text);
 create or replace function public.portia_promo_submit_request(
   p_kind text,
   p_nickname text,
@@ -1078,8 +1083,11 @@ begin
       and md5(b.updated_at::text || coalesce((select max(q.updated_at)::text from public.portia_promo_qualification_questions q where q.bank_id = b.id), '')) = p_bank_version
     for update;
   if quota_total is null or jsonb_array_length(p_questions) <> quota_total then raise exception 'stale-or-mismatched-bank'; end if;
-  insert into public.portia_promo_attempts (request_id, reviewer_id, client_mode, status, started_at, deadline_at)
-    values (p_request_id, auth.uid(), p_client_mode, 'active', now(), now() + interval '15 minutes')
+  insert into public.portia_promo_attempts (
+    request_id, reviewer_id, client_mode, status, started_at, deadline_at, last_seen_at, lease_expires_at
+  ) values (
+    p_request_id, auth.uid(), p_client_mode, 'active', now(), now() + interval '15 minutes', now(), now() + interval '45 seconds'
+  )
     returning id into created_attempt_id;
   insert into public.portia_promo_attempt_questions (
     attempt_id, source_question_id, question_type, snapshot_text, snapshot_options, answer_key, sort_order
@@ -1098,6 +1106,59 @@ begin
   return created_attempt_id;
 end; $$;
 
+create or replace function public.portia_promo_expire_stale_attempt(p_attempt_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare changed boolean := false;
+begin
+  update public.portia_promo_attempts
+    set status = 'failed', technical_failure = coalesce(technical_failure, 'timeout'), updated_at = now()
+    where id = p_attempt_id and status = 'active' and deadline_at <= now();
+  changed := found;
+  if exists (
+    select 1 from public.portia_promo_attempts
+    where id = p_attempt_id and status = 'active' and lease_expires_at <= now()
+  ) then
+    update public.portia_promo_attempts
+      set status = 'failed', technical_failure = coalesce(technical_failure, 'connection-lost'), updated_at = now()
+      where id = p_attempt_id and status = 'active' and lease_expires_at <= now();
+    changed := changed or found;
+  end if;
+  if changed then
+    update public.portia_promo_qualification_requests r
+      set status = 'failed', updated_at = now()
+      from public.portia_promo_attempts a
+      where a.id = p_attempt_id and a.request_id = r.id and r.status in ('testing', 'grading');
+  end if;
+  return changed;
+end; $$;
+
+create or replace function public.portia_promo_heartbeat_test(p_attempt_id uuid, p_token_hash text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare lease_until timestamptz;
+begin
+  perform public.portia_promo_expire_stale_attempt(p_attempt_id);
+  update public.portia_promo_attempts a
+    set last_seen_at = now(), lease_expires_at = now() + interval '45 seconds', updated_at = now()
+  from public.portia_promo_qualification_requests r
+  where a.id = p_attempt_id and a.request_id = r.id and a.status = 'active'
+    and a.deadline_at > now()
+    and exists (
+      select 1 from public.portia_promo_device_bindings b
+      where b.nickname_key = r.nickname_key and b.token_hash = p_token_hash and b.reset_at is null
+    )
+  returning a.lease_expires_at into lease_until;
+  if lease_until is null then return jsonb_build_object('code', 'inactive'); end if;
+  return jsonb_build_object('code', 'active', 'leaseExpiresAt', lease_until);
+end; $$;
+
 create or replace function public.portia_promo_start_test(p_attempt_id uuid, p_token_hash text)
 returns timestamptz
 language plpgsql
@@ -1106,8 +1167,10 @@ set search_path = ''
 as $$
 declare deadline timestamptz;
 begin
+  perform public.portia_promo_expire_stale_attempt(p_attempt_id);
   update public.portia_promo_attempts a set
-    status = 'active', started_at = now(), deadline_at = now() + interval '15 minutes', updated_at = now()
+    status = 'active', started_at = now(), deadline_at = now() + interval '15 minutes',
+    last_seen_at = now(), lease_expires_at = now() + interval '45 seconds', updated_at = now()
   from public.portia_promo_qualification_requests r
   where a.id = p_attempt_id and a.request_id = r.id and a.status = 'prepared'
     and exists (select 1 from public.portia_promo_device_bindings b where b.nickname_key = r.nickname_key and b.token_hash = p_token_hash and b.reset_at is null)
@@ -1129,17 +1192,15 @@ as $$
 declare result jsonb; answer_count integer; question_count integer;
 begin
   if p_client_mode not in ('desktop', 'phone') then return null; end if;
+  perform public.portia_promo_expire_stale_attempt(p_attempt_id);
   if not exists (
     select 1 from public.portia_promo_attempts a
     join public.portia_promo_qualification_requests r on r.id = a.request_id
     join public.portia_promo_device_bindings b on b.nickname_key = r.nickname_key
-    where a.id = p_attempt_id and b.token_hash = p_token_hash and b.reset_at is null
+    where a.id = p_attempt_id and a.client_mode = p_client_mode
+      and b.token_hash = p_token_hash and b.reset_at is null
   ) then return null; end if;
-  update public.portia_promo_attempts set client_mode = p_client_mode, updated_at = now()
-    where id = p_attempt_id and status = 'active' and not exists (select 1 from public.portia_promo_answers where attempt_id = p_attempt_id);
-  update public.portia_promo_attempts set status = 'failed', technical_failure = coalesce(technical_failure, 'timeout'), updated_at = now()
-    where id = p_attempt_id and status = 'active' and deadline_at <= now();
-  select count(*) into answer_count from public.portia_promo_answers where attempt_id = p_attempt_id;
+  select current_question_index into answer_count from public.portia_promo_attempts where id = p_attempt_id;
   select count(*) into question_count from public.portia_promo_attempt_questions where attempt_id = p_attempt_id;
   if answer_count = question_count and question_count > 0 then
     update public.portia_promo_attempts set status = 'grading', updated_at = now() where id = p_attempt_id and status = 'active';
@@ -1163,6 +1224,7 @@ begin
   return result;
 end; $$;
 
+drop function if exists public.portia_promo_answer_question(uuid, uuid, jsonb, text, text);
 create or replace function public.portia_promo_answer_question(p_attempt_id uuid, p_question_id uuid, p_expected_question_index integer, p_answer jsonb, p_nonce text, p_token_hash text)
 returns jsonb
 language plpgsql
@@ -1173,6 +1235,7 @@ declare
   expected_order integer;
   saved_answer uuid;
 begin
+  perform public.portia_promo_expire_stale_attempt(p_attempt_id);
   if length(p_nonce) not between 16 and 80 or p_expected_question_index < 0 then
     return jsonb_build_object('code', 'invalid');
   end if;
@@ -1520,6 +1583,8 @@ revoke all on function public.portia_promo_delete_request(text, uuid) from publi
 revoke all on function public.portia_promo_confirm_assignment(uuid, uuid, text, jsonb) from public, anon, authenticated;
 revoke all on function public.portia_promo_confirm_test(uuid, uuid, text, jsonb, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_start_test(uuid, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_expire_stale_attempt(uuid) from public, anon, authenticated;
+revoke all on function public.portia_promo_heartbeat_test(uuid, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_current_test(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_answer_question(uuid, uuid, integer, jsonb, text, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_fail_attempt(uuid, text, text) from public, anon, authenticated;
@@ -1536,6 +1601,7 @@ grant execute on function public.portia_promo_register_attempt(text, text, boole
 grant execute on function public.portia_promo_submit_request(text, text, text, text, text, text, text, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_public_status(text, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_start_test(uuid, text) to anon, authenticated;
+grant execute on function public.portia_promo_heartbeat_test(uuid, text) to anon, authenticated;
 grant execute on function public.portia_promo_current_test(uuid, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_answer_question(uuid, uuid, integer, jsonb, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_fail_attempt(uuid, text, text) to anon, authenticated;
