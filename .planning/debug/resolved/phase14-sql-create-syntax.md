@@ -31,7 +31,7 @@ updated: 2026-10-28
 
 ## Resolution
 
-- root_cause: PL/pgSQL outer `END` was not terminated inside the function body, so PostgreSQL reported the next `CREATE FUNCTION` as the syntax location.
-- fix: terminate every affected outer block as `end; $$;` and enforce the form in the database contract test.
-- verification: 21/21 targeted tests and 526/526 full tests pass.
+- root_cause: Supabase did not receive the exact complete local file. The reported token sequence is what PostgreSQL sees when execution starts inside a dollar-quoted function body (for example, because an active SQL Editor selection omits the opening `AS $$`) or when copied text contains escaping such as `\_`.
+- fix: keep canonical `end; $$;` terminators, then run the entire raw `phase14_apply.sql` from a new blank SQL Editor tab with no active selection and no Markdown escaping.
+- verification: 21/21 targeted tests and 526/526 full tests pass; pglast parses all 137 statements; PGlite compiles the exact first `bind_device` function and its boundary before `resolve_device`.
 - files_changed: supabase/phase14_apply.sql, supabase/portia_setup.sql, lib/portia-promotion-db.test.ts
