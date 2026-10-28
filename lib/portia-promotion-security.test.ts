@@ -147,14 +147,14 @@ test("security regression: deadline boundary and repeated failure events fail cl
   assert.doesNotMatch(fail, /technical_failure\s*=\s*coalesce/i, "a repeated signal must not rewrite the first reason");
 });
 
-test("security regression: close prunes history and cleanup touches only eligible old rows", () => {
+test("security regression: close prunes history and scheduled cleanup never deletes unvalidated workflow rows", () => {
   const close = sqlFunction("portia_promo_close");
   assert.match(close, /insert into public\.portia_promo_results[\s\S]*delete from public\.portia_promo_(?:requests|qualification_requests)/i);
   assert.match(close, /row_number\(\) over \(partition by nickname_key order by created_at desc, id desc\)[\s\S]*history_order > 3/i);
 
   const cleanup = sqlFunction("portia_promo_cleanup");
-  assert.match(cleanup, /portia_promo_requests[\s\S]*status in \('pending', 'rejected'\)[\s\S]*interval '3 days'/i);
-  assert.match(cleanup, /portia_promo_qualification_requests[\s\S]*status in \('pending', 'rejected', 'failed'\)[\s\S]*interval '3 days'/i);
+  assert.match(cleanup, /portia_promo_attempt_buckets[\s\S]*interval '3 days'/i);
+  assert.doesNotMatch(cleanup, /delete from public\.portia_promo_(?:requests|qualification_requests)/i);
   assert.doesNotMatch(cleanup, /delete from public\.portia_promo_(?:results|assignments|assignment_items|attempts|attempt_questions|answers|device_bindings)/i);
 });
 

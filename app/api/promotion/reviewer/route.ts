@@ -1,6 +1,6 @@
 import { noStoreHeaders } from "@/lib/portia-cdn";
 import { findPromotionRosterEntry, loadPromotionRoster } from "@/lib/portia-promotion-sheet";
-import { parsePromotionReviewerCommand, requirePromotionReviewer } from "@/lib/portia-promotion-reviewer";
+import { parsePromotionReviewerCommand, promotionCleanupPreview, promotionReviewerSourcePolicy, requirePromotionReviewer } from "@/lib/portia-promotion-reviewer";
 import { parseJsonObject } from "@/lib/request-json";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -21,9 +21,10 @@ export async function GET() {
   const auth = await requirePromotionReviewer(supabase);
   if (auth.status !== "allowed") return denied(auth.status);
   const state = await reviewerState(supabase);
-  return state === null
-    ? Response.json({ error: "База повышения ещё не обновлена.", code: "pending-database" }, { status: 503, headers: noStoreHeaders })
-    : Response.json(state, { headers: noStoreHeaders });
+  if (state === null) return Response.json({ error: "База повышения ещё не обновлена.", code: "pending-database" }, { status: 503, headers: noStoreHeaders });
+  const source = await loadPromotionRoster();
+  const row = state && typeof state === "object" && !Array.isArray(state) ? state as Record<string, unknown> : {};
+  return Response.json({ ...row, sourceStatus: source.status, cleanup: source.status === "ok" ? promotionCleanupPreview(state, new Date()) : [] }, { headers: noStoreHeaders });
 }
 
 async function rosterStillMatches(state: unknown, kind: string, requestId: string) {
@@ -46,6 +47,11 @@ export async function POST(request: Request) {
   if (!command) return Response.json({ error: "Некорректная команда." }, { status: 400, headers: noStoreHeaders });
   if ((command.action === "reset-device" || command.action === "delete-request") && !auth.access.canManageEditors) {
     return Response.json({ error: command.action === "delete-request" ? "Удаление запроса доступно только владельцу." : "Сброс привязки доступен только владельцу.", code: command.action === "delete-request" ? "delete-forbidden" : "reset-forbidden" }, { status: 403, headers: noStoreHeaders });
+  }
+
+  const source = await loadPromotionRoster();
+  if (promotionReviewerSourcePolicy(command.action, source.status) === "block") {
+    return Response.json({ error: "Список участников временно недоступен. Состояние запроса сохранено.", code: "source-unavailable" }, { status: 503, headers: noStoreHeaders });
   }
 
   if (command.action === "approve-task") {

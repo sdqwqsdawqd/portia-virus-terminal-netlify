@@ -41,6 +41,42 @@ export type PromotionReviewerCommand =
   | { action: "finalize-attempt"; attemptId: string; passed: boolean; percent: number | null; retakeDays: number }
   | { action: "reset-device"; nicknameKey: string };
 
+export type PromotionSourceStatus = "ok" | "unavailable" | "invalid-source";
+
+export function promotionReviewerSourcePolicy(action: PromotionReviewerCommand["action"], source: PromotionSourceStatus) {
+  if (source === "ok" || action === "release" || action === "force-release") return "allow" as const;
+  return "block" as const;
+}
+
+export type PromotionCleanupRow = {
+  requestId: string;
+  kind: PromotionRequestKind;
+  status: string;
+  nickname: string;
+  deleteAt: string;
+  due: boolean;
+};
+
+export function promotionCleanupPreview(state: unknown, now: Date): PromotionCleanupRow[] {
+  if (!state || typeof state !== "object" || Array.isArray(state) || !Number.isFinite(now.getTime())) return [];
+  const source = state as Record<string, unknown>;
+  const eligible = { ordinary: new Set(["pending", "rejected"]), qualification: new Set(["pending", "rejected", "failed"]) };
+  return (["ordinary", "qualification"] as const).flatMap((kind): PromotionCleanupRow[] => {
+    const rows = source[kind];
+    if (!Array.isArray(rows)) return [];
+    return rows.flatMap((item): PromotionCleanupRow[] => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const row = item as Record<string, unknown>;
+      if (typeof row.requestId !== "string" || typeof row.nickname !== "string" || typeof row.status !== "string"
+        || !eligible[kind].has(row.status) || typeof row.updatedAt !== "string") return [];
+      const updated = Date.parse(row.updatedAt);
+      if (!Number.isFinite(updated)) return [];
+      const deleteAt = new Date(updated + 3 * 24 * 60 * 60 * 1_000).toISOString();
+      return [{ requestId: row.requestId, kind, status: row.status, nickname: row.nickname, deleteAt, due: now.getTime() >= Date.parse(deleteAt) }];
+    });
+  }).slice(0, 100);
+}
+
 export function parsePromotionReviewerCommand(value: unknown): PromotionReviewerCommand | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const body = value as Record<string, unknown>;

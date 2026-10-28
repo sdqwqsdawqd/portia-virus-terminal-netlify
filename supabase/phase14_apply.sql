@@ -323,13 +323,13 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object(
     'requestId', r.id, 'nickname', r.nickname, 'nicknameKey', r.nickname_key,
     'titleId', r.title_id, 'targetTitleId', r.target_title_id, 'status', r.status,
-    'claimed', r.reviewer_id is not null, 'assignedToMe', r.reviewer_id = auth.uid(), 'createdAt', r.created_at
+    'claimed', r.reviewer_id is not null, 'assignedToMe', r.reviewer_id = auth.uid(), 'createdAt', r.created_at, 'updatedAt', r.updated_at
   ) order by r.created_at), '[]'::jsonb) into ordinary_rows
   from public.portia_promo_requests r;
   select coalesce(jsonb_agg(jsonb_build_object(
     'requestId', q.id, 'nickname', q.nickname, 'nicknameKey', q.nickname_key,
     'titleId', q.title_id, 'targetTitleId', q.transition_id, 'status', q.status,
-    'claimed', q.reviewer_id is not null, 'assignedToMe', q.reviewer_id = auth.uid(), 'createdAt', q.created_at,
+    'claimed', q.reviewer_id is not null, 'assignedToMe', q.reviewer_id = auth.uid(), 'createdAt', q.created_at, 'updatedAt', q.updated_at,
     'attemptId', a.id, 'attemptStatus', a.status, 'deadlineAt', a.deadline_at, 'retakeAt', a.retake_at, 'technicalFailure', a.technical_failure,
     'answers', coalesce((select jsonb_agg(jsonb_build_object(
       'answerId', ans.id, 'questionId', aq.id, 'questionText', aq.snapshot_text, 'questionType', aq.question_type,
@@ -1077,17 +1077,12 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
-declare removed integer := 0; affected integer;
 begin
-  delete from public.portia_promo_requests
-    where status in ('pending', 'rejected') and updated_at < now() - interval '3 days';
-  get diagnostics affected = row_count; removed := removed + affected;
-  delete from public.portia_promo_qualification_requests
-    where status in ('pending', 'rejected', 'failed') and updated_at < now() - interval '3 days';
-  get diagnostics affected = row_count; removed := removed + affected;
+  -- Workflow rows require a fresh sheet validation and explicit reviewer/owner deletion.
+  -- The scheduled job only prunes non-workflow operational data.
   delete from public.portia_promo_attempt_buckets where updated_at < now() - interval '3 days';
   delete from cron.job_run_details where end_time < now() - interval '7 days';
-  return removed;
+  return 0;
 end; $$;
 
 create or replace function public.portia_promo_bank_state()
