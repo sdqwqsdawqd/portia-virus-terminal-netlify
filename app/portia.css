@@ -1870,6 +1870,12 @@ html[data-motion="reduce"] .promotion-card, html[data-motion="reduce"] .promotio
 .promotion-request-detail dt { color: oklch(.58 calc(.022 * var(--accent-chroma)) var(--accent-hue)); font: 700 9px var(--sans); }
 .promotion-request-detail dd { margin: 5px 0 0; font: 500 12px var(--mono); }
 .promotion-cleanup-hint { color: oklch(.56 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.5 var(--doc); }
+.promotion-cleanup-disclosure { margin: 0 0 16px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.02); }
+.promotion-cleanup-disclosure summary { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 16px; cursor: pointer; color: var(--muted); font: 700 11px/1.35 var(--sans); }
+.promotion-cleanup-disclosure summary span { font-family: var(--mono); }
+.promotion-cleanup-disclosure > div { display: grid; gap: 8px; padding: 0 16px 16px; }
+.promotion-cleanup-disclosure article { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; font: 400 12px/1.45 var(--doc); }
+.promotion-cleanup-disclosure article span, .promotion-cleanup-disclosure time { color: var(--muted); }
 .promotion-request-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
 .promotion-request-actions button, .promotion-bank-editor button, .promotion-preview button { min-height: 40px; padding: 0 12px; }
 .promotion-grading-workspace { display: grid; gap: 14px; margin: 20px 0; padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: rgba(0,0,0,.1); }
@@ -1923,6 +1929,7 @@ html[data-motion="reduce"] .promotion-card, html[data-motion="reduce"] .promotio
 .promotion-confirm h3 { margin: 0 0 10px; }
 .promotion-confirm p { color: oklch(.68 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font: 400 13px/1.55 var(--doc); }
 .promotion-confirm > div { display: flex; justify-content: flex-end; gap: 8px; }
+.promotion-phone-back { min-height: 40px; margin: 0 0 16px; padding: 0 8px; border: 0; background: transparent; color: var(--muted); font: 700 11px/1.35 var(--sans); }
 
 @media (max-width: 900px) {
   .promotion-editor-workbench, .promotion-bank-layout { display: block; min-height: 0; }
@@ -1930,6 +1937,7 @@ html[data-motion="reduce"] .promotion-card, html[data-motion="reduce"] .promotio
   .promotion-preview { border-left: 0; border-top: 1px solid var(--line); }
   .promotion-editor-branches { overflow-x: auto; }
   .promotion-editor-branches button { flex: 0 0 auto; }
+  .promotion-phone-back { display: inline-flex; align-items: center; }
 }
 
 @media (max-width: 520px) {
