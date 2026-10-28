@@ -213,7 +213,7 @@ export function PromotionIdentityGate({ nickname, busy, error, onNickname, onSub
     <form onSubmit={onSubmit}>
       <label htmlFor="promotion-nickname">Ник Roblox, указанный в таблице</label>
       <input id="promotion-nickname" value={nickname} onChange={(event) => onNickname(event.target.value)} maxLength={64} autoComplete="off" spellCheck={false} placeholder="Введите ник Roblox из таблицы" disabled={busy} />
-      <p className="promotion-binding-note">Первая успешная проверка закрепит этот ник за устройством. Сменить его сможет проверяющий.</p>
+      {!error && <p className="promotion-binding-note">Первая заявка закрепит этот ник за устройством. Сменить его сможет проверяющий.</p>}
       {error && <p className="promotion-error" role="alert">{error}</p>}
       <button className="promotion-action" type="submit" disabled={busy || !nickname.trim()}>{busy ? "ПРОВЕРЯЕМ…" : "ПРОВЕРИТЬ НИК"}</button>
     </form>
