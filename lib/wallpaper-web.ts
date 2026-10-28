@@ -97,6 +97,47 @@ function tangentAt(edge: Edge, t: number): Point {
   return [(1 - t) * (c[0] - p0[0]) + t * (p1[0] - c[0]), (1 - t) * (c[1] - p0[1]) + t * (p1[1] - c[1])];
 }
 
+const TURN_RADIUS = 12;
+
+function directedSample(hop: Hop, along: number) {
+  const thread = webEdges[hop.edge];
+  const at = hop.forward ? along : thread.length - along;
+  const t = parameterAt(hop.edge, at);
+  const point = pointOnEdge(thread, t);
+  const tangent = tangentAt(thread, t);
+  const direction: Point = hop.forward ? tangent : [-tangent[0], -tangent[1]];
+  const magnitude = Math.hypot(direction[0], direction[1]) || 1;
+  return { point, direction: [direction[0] / magnitude, direction[1] / magnitude] as Point, at };
+}
+
+function roundedTurn(plan: { hops: Hop[] }, distance: number) {
+  for (let index = 1; index < plan.hops.length; index += 1) {
+    const incoming = plan.hops[index - 1], outgoing = plan.hops[index];
+    const incomingLength = webEdges[incoming.edge].length;
+    const outgoingLength = webEdges[outgoing.edge].length;
+    const radius = Math.min(TURN_RADIUS, incomingLength * 0.25, outgoingLength * 0.25);
+    const boundary = outgoing.start;
+    if (distance < boundary - radius || distance > boundary + radius) continue;
+    const start = directedSample(incoming, incomingLength - radius);
+    const end = directedSample(outgoing, radius);
+    const control = radius * 0.6;
+    const c1: Point = [start.point[0] + start.direction[0] * control, start.point[1] + start.direction[1] * control];
+    const c2: Point = [end.point[0] - end.direction[0] * control, end.point[1] - end.direction[1] * control];
+    const t = (distance - (boundary - radius)) / (2 * radius);
+    const u = 1 - t;
+    const point: Point = [
+      u ** 3 * start.point[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t ** 3 * end.point[0],
+      u ** 3 * start.point[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t ** 3 * end.point[1],
+    ];
+    const derivative: Point = [
+      3 * u * u * (c1[0] - start.point[0]) + 6 * u * t * (c2[0] - c1[0]) + 3 * t * t * (end.point[0] - c2[0]),
+      3 * u * u * (c1[1] - start.point[1]) + 6 * u * t * (c2[1] - c1[1]) + 3 * t * t * (end.point[1] - c2[1]),
+    ];
+    return { point, heading: Math.atan2(derivative[1], derivative[0]) };
+  }
+  return null;
+}
+
 // 36 units/s is about one body length in 3 s; 0.4 s of easing at each end of a walk keeps starts and stops soft (D-05).
 const WALK_SPEED = 36;
 const WALK_EASE = 0.4;
@@ -148,9 +189,10 @@ export function walkPose(path: number[], elapsed: number): WalkPose {
   const along = Math.min(distance - start, thread.length);
   const at = forward ? along : thread.length - along;
   const t = parameterAt(edge, at);
-  const [x, y] = pointOnEdge(thread, t);
+  const rounded = roundedTurn(plan, distance);
+  const [x, y] = rounded?.point ?? pointOnEdge(thread, t);
   const [dx, dy] = tangentAt(thread, t);
-  return { x, y, heading: Math.atan2(forward ? dy : -dy, forward ? dx : -dx), done: elapsed >= plan.duration, edge, at, forward, distance };
+  return { x, y, heading: rounded?.heading ?? Math.atan2(forward ? dy : -dy, forward ? dx : -dx), done: elapsed >= plan.duration, edge, at, forward, distance };
 }
 
 // The crossings on screen. The wallpaper svg is «xMaxYMin slice»: scale = the larger of width/1440 and height/900,
@@ -161,6 +203,18 @@ export function visibleNodes(width: number, height: number, margin = 40): number
   const list: number[] = [];
   nodes.forEach(([x, y], id) => { if (x >= left && x <= right && y >= margin && y <= bottom) list.push(id); });
   return list;
+}
+
+export function selectSpawn(visible: number[], previous: number, rand: () => number): number {
+  const alternatives = visible.filter((node) => node !== previous);
+  const pool = alternatives.length ? alternatives : visible;
+  return pool.length ? pool[Math.min(pool.length - 1, Math.floor(rand() * pool.length))] : REST_NODE;
+}
+
+export const GAIT_STRIDE = 20;
+export function gaitPhase(distance: number) {
+  const phase = (Math.max(0, distance) / GAIT_STRIDE) % 1;
+  return phase < 0 ? phase + 1 : phase;
 }
 
 const WALK_MIN_HOPS = 2;

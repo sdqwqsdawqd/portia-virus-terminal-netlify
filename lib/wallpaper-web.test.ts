@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { REST_NODE, createPulsePool, edgesAt, emitPulse, legPose, planWalk, pointOnEdge, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
+import { REST_NODE, createPulsePool, edgesAt, emitPulse, gaitPhase, legPose, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
 
 const near = (a: Point, b: Point, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
 // Distance from a point to the thread drawn as a 400-piece polyline.
@@ -20,11 +20,16 @@ const distanceToEdge = (point: Point, index: number) => {
 };
 const edgeBetween = (u: number, v: number) => webEdges.findIndex((edge) => (edge.a === u && edge.b === v) || (edge.a === v && edge.b === u));
 
-test("the wallpaper spider uses a restrained gait with long rests", () => {
+test("the wallpaper spider uses distance-linked gait, front-leg probing and an explicit hidden relocation lifecycle", () => {
   const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
   assert.match(source, /const LEG_SWING = 7;/);
   assert.match(source, /const BODY_BOB = 0\.006;/);
-  assert.match(source, /const STEP_CYCLE = 1\.05;/);
+  assert.doesNotMatch(source, /STEP_CYCLE/);
+  assert.match(source, /const PROBE_SWING =/);
+  assert.match(source, /id === "L1" \|\| id === "R1"/);
+  assert.match(source, /type TravelStage = "visible" \| "fading-out" \| "hidden" \| "fading-in"/);
+  assert.match(source, /selectSpawn\(visible, spawn, rand\)/);
+  assert.match(source, /element\.style\.opacity = "0"/);
   assert.match(source, /rest = 6 \+ rand\(\) \* 4/g);
   assert.ok(source.includes('attributeFilter: ["data-motion", "data-spider"]'));
 });
@@ -85,9 +90,9 @@ test("walkPose stays on the threads and eases in and out", () => {
     const pose = walkPose(path, (duration * step) / 100);
     assert.ok(pose.distance >= last, "distance never goes back");
     last = pose.distance;
-    // The pose lies on the polyline of the edge it names.
+    // Rounded turns stay on or immediately adjacent to the named thread.
     const best = distanceToEdge([pose.x, pose.y], pose.edge);
-    assert.ok(best < 0.05, `step ${step} is ${best} off its thread`);
+    assert.ok(best < 14, `step ${step} is ${best} off its thread`);
   }
   assert.ok(Math.abs(last - total) < 1e-6);
   // 36 units/s is the top speed.
@@ -95,6 +100,23 @@ test("walkPose stays on the threads and eases in and out", () => {
     const a = walkPose(path, (duration * step) / 100), b = walkPose(path, (duration * (step + 1)) / 100);
     assert.ok((b.distance - a.distance) / (duration / 100) <= 36 + 1e-6);
   }
+});
+
+test("walkPose rounds a crossing with continuous position and heading", () => {
+  const path = [REST_NODE, REST_NODE + 1, REST_NODE + 19];
+  const boundary = webEdges[edgeBetween(path[0], path[1])].length;
+  let low = 0, high = 10;
+  while (walkPose(path, high).distance < boundary) high *= 2;
+  for (let step = 0; step < 60; step += 1) {
+    const mid = (low + high) / 2;
+    if (walkPose(path, mid).distance < boundary) low = mid; else high = mid;
+  }
+  const before = walkPose(path, low - 0.01), at = walkPose(path, (low + high) / 2), after = walkPose(path, high + 0.01);
+  assert.ok(Math.hypot(after.x - before.x, after.y - before.y) < 1.5);
+  const angleDelta = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  assert.ok(angleDelta(before.heading, at.heading) < 0.15, "incoming heading blends into the turn");
+  assert.ok(angleDelta(at.heading, after.heading) < 0.15, "turn blends into outgoing heading");
+  assert.ok(Math.hypot(at.x - webGeometry.nodes[path[1]][0], at.y - webGeometry.nodes[path[1]][1]) > 0.1, "turn does not pivot on the crossing");
 });
 
 test("seeded gives the same sequence for the same seed", () => {
@@ -113,6 +135,22 @@ test("visibleNodes maps the viewBox through xMaxYMin slice with a 40-unit margin
     assert.ok(y >= 40 - 1e-9 && y <= 844 / scale - 40 + 1e-9, `node ${node} y ${y}`);
   }
   assert.ok(visibleNodes(1920, 1080).length > phone.length);
+});
+
+test("spawn selection is deterministic and excludes the previous visible spawn", () => {
+  const visible = [10, 20, 30];
+  assert.equal(selectSpawn(visible, 20, () => 0), 10);
+  assert.equal(selectSpawn(visible, 20, () => 0.999), 30);
+  assert.equal(selectSpawn([20], 20, () => 0.5), 20);
+  assert.equal(selectSpawn([], 20, () => 0.5), REST_NODE);
+});
+
+test("gait phase is linked to distance with a roughly 0.56 second full-speed cycle", () => {
+  assert.equal(gaitPhase(0), 0);
+  assert.ok(Math.abs(gaitPhase(10) - 0.5) < 1e-9);
+  assert.equal(gaitPhase(20), 0);
+  assert.ok(20 / 36 >= 0.5 && 20 / 36 <= 0.65);
+  assert.equal(gaitPhase(20), gaitPhase(40));
 });
 
 test("planWalk goes 2-4 crossings over visible nodes and never back to the one just left", () => {
