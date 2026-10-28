@@ -105,3 +105,12 @@ test("actual request workspace exposes contractual empty and cleanup states", ()
   assert.ok(main.includes("promotion-cleanup-disclosure"));
   assert.ok(main.includes("Дата удаления"));
 });
+
+test("reviewer style contract keeps readable labels and forty-pixel controls", () => {
+  const promotionStyles = styles.slice(styles.indexOf("/* Promotion is a standalone"));
+  assert.match(promotionStyles, /\.promotion-device-reset label[^\{]*\{[^}]*font:\s*700 11px/);
+  assert.match(promotionStyles, /\.promotion-device-reset input[^\{]*\{[^}]*min-height:\s*40px/);
+  assert.match(promotionStyles, /\.promotion-bank-settings input[^\{]*\{[^}]*min-height:\s*40px/);
+  assert.match(promotionStyles, /\.promotion-request-list em[^\{]*\{[^}]*font:\s*700 11px/);
+  assert.match(promotionStyles, /\.promotion-grade-controls button[^\{]*\{[^}]*font:\s*700 11px/);
+});

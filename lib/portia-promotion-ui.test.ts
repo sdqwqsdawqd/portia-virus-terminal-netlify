@@ -14,7 +14,8 @@ test("participant gate explains lookup binding and restores only through the Htt
   assert.ok(!source.includes("КАДРОВЫЙ КОНТУР"));
   assert.ok(!source.includes("Portia_User"));
   assert.ok(source.includes("ПРОВЕРИТЬ НИК"));
-  assert.ok(source.includes("Первая успешная проверка закрепит этот ник за устройством. Сменить его сможет проверяющий."));
+  assert.ok(source.includes("Первая заявка закрепит этот ник за устройством. Сменить его сможет проверяющий."));
+  assert.ok(source.includes('!error && <p className="promotion-binding-note"'));
   assert.ok(source.includes('autoComplete="off"'));
   assert.ok(source.includes('spellCheck={false}'));
   assert.doesNotMatch(source, /(?:localStorage|sessionStorage)\.setItem\([^\n]*(?:nickname|checkedNickname)/i);
@@ -72,4 +73,13 @@ test("promotion window is responsive and motion respects the desktop preference"
   assert.match(styles, /html\[data-motion="full"\][^{]*\.promotion-card/);
   assert.match(styles, /@media \(max-width:\s*520px\)[\s\S]*\.promotion-app/);
   assert.match(styles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.promotion-card/);
+});
+
+test("promotion copy and visual tokens follow the reviewed accessibility contract", () => {
+  const promotionStyles = styles.slice(styles.indexOf("/* Promotion is a standalone"));
+  assert.match(promotionStyles, /\.promotion-question h3[^\{]*\{[^}]*font:\s*400 15px\/1\.65 var\(--doc\)/);
+  assert.doesNotMatch(promotionStyles, /oklch\(\.76 \.07 285\)/);
+  assert.doesNotMatch(promotionStyles, /font(?:-size)?:[^;\n}]*(?:9|10)px/);
+  assert.doesNotMatch(promotionStyles, /min-height:\s*38px/);
+  assert.match(promotionStyles, /@media \(max-width:\s*520px\)[\s\S]*\.promotion-(?:action|final-actions|preview)[^\{]*\{[^}]*min-height:\s*44px/);
 });
