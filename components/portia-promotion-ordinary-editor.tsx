@@ -8,9 +8,10 @@ type Item = { id: string; text: string; active: boolean; sortOrder: number };
 type Bank = { id: string; targetTitleId?: string; version: string; requiredCount?: number; items: Item[] };
 type Preview = { preview: string; items: Item[]; expiresAt: string; version: string };
 type Post = (payload: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
+type ConfirmIntent = { title: string; body: string; run: () => void; opener?: HTMLElement | null };
 
-export function PortiaPromotionOrdinaryEditor({ banks, requests, busy, post, refreshQueue }: {
-  banks: Bank[]; requests: RequestRow[]; busy: boolean; post: Post; refreshQueue: () => Promise<void>;
+export function PortiaPromotionOrdinaryEditor({ banks, requests, busy, post, refreshQueue, requestConfirm }: {
+  banks: Bank[]; requests: RequestRow[]; busy: boolean; post: Post; refreshQueue: () => Promise<void>; requestConfirm: (intent: ConfirmIntent) => void;
 }) {
   const [targetTitleId, setTargetTitleId] = useState(ordinaryPromotionTransitions[0].targetTitleId);
   const [requiredCounts, setRequiredCounts] = useState<Record<string, number>>({});
@@ -42,9 +43,9 @@ export function PortiaPromotionOrdinaryEditor({ banks, requests, busy, post, ref
     if (!bank) return; const other = bank.items[index + delta]; const item = bank.items[index]; if (!other) return;
     await mutateItem(item, { sortOrder: other.sortOrder }); await mutateItem(other, { sortOrder: item.sortOrder });
   };
-  const remove = async (item: Item) => {
-    if (!bank || !window.confirm(`Удалить задание «${item.text}» без возможности восстановления?`)) return;
-    await post({ action: "delete-task-item", bankId: bank.id, itemId: item.id });
+  const remove = (item: Item, opener: HTMLElement) => {
+    if (!bank) return;
+    requestConfirm({ title: "Удалить задание", body: `Задание «${item.text}» будет удалено без возможности восстановления.`, opener, run: () => void post({ action: "delete-task-item", bankId: bank.id, itemId: item.id }) });
   };
   const buildPreview = async (replaceId = "", random = false) => {
     if (!bank) return;
@@ -52,7 +53,7 @@ export function PortiaPromotionOrdinaryEditor({ banks, requests, busy, post, ref
     if (result?.preview && Array.isArray(result.items)) { setPreview({ ...(result as unknown as Omit<Preview, "version">), version: bank.version }); if (isPhone) setBankView("preview"); }
   };
   const confirmPreview = async () => {
-    if (!bank || !currentPreview || !selectedRequestId || !window.confirm("Подтвердить этот неизменяемый набор заданий для выбранного запроса?")) return;
+    if (!bank || !currentPreview || !selectedRequestId) return;
     const result = await post({ action: "confirm", kind: "ordinary", bankId: bank.id, requestId: selectedRequestId, preview: currentPreview.preview });
     if (result) { setPreview(null); setManualIds([]); await refreshQueue(); }
   };
@@ -64,9 +65,9 @@ export function PortiaPromotionOrdinaryEditor({ banks, requests, busy, post, ref
     {(!isPhone || bankView === "editor") && <section className="promotion-bank-editor">{isPhone && <button className="promotion-phone-back" type="button" onClick={() => setBankView("list")}>← НАЗАД К БАНКАМ</button>}<header><div><span>ОБЫЧНЫЕ ЗАДАНИЯ</span><h2>{transition.label}</h2></div><span>{bank ? `ВЕРСИЯ ${bank.version}` : "БАНК НЕ СОЗДАН"}</span></header>
       <div className="promotion-bank-settings"><label>Заданий в наборе<input type="number" min={1} max={50} value={requiredCount} onChange={(event) => setRequiredCounts((current) => ({ ...current, [transition.targetTitleId]: Math.max(1, Math.min(50, Number(event.target.value) || 1)) }))} /></label><button type="button" disabled={busy} onClick={() => void saveBank()}>СОХРАНИТЬ КОЛИЧЕСТВО</button></div>
       <label>{editingId ? "Редактировать задание" : "Новое задание"}<textarea value={draft} maxLength={4000} onChange={(event) => setDraft(event.target.value)} /></label><button type="button" disabled={busy || !bank || !draft.trim()} onClick={() => void saveItem()}>{editingId ? "СОХРАНИТЬ ЗАДАНИЕ" : "ДОБАВИТЬ ЗАДАНИЕ"}</button>
-      <div className="promotion-bank-items">{bank?.items.map((item, index) => <article key={item.id}><label><input type="checkbox" checked={manualIds.includes(item.id)} disabled={!item.active} onChange={(event) => setManualIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} /><span>{item.text}</span></label><div><button type="button" disabled={busy || index === 0} onClick={() => void reorder(index, -1)}>↑</button><button type="button" disabled={busy || index === bank.items.length - 1} onClick={() => void reorder(index, 1)}>↓</button><button type="button" onClick={() => { setEditingId(item.id); setDraft(item.text); }}>ИЗМЕНИТЬ</button><button type="button" disabled={busy} onClick={() => void mutateItem(item, { active: !item.active })}>{item.active ? "ВЫКЛЮЧИТЬ" : "ВКЛЮЧИТЬ"}</button><button className="danger-control" type="button" disabled={busy} onClick={() => void remove(item)}>УДАЛИТЬ</button></div></article>)}</div>
+      <div className="promotion-bank-items">{bank?.items.map((item, index) => <article key={item.id}><label><input type="checkbox" checked={manualIds.includes(item.id)} disabled={!item.active} onChange={(event) => setManualIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} /><span>{item.text}</span></label><div><button type="button" disabled={busy || index === 0} onClick={() => void reorder(index, -1)}>↑</button><button type="button" disabled={busy || index === bank.items.length - 1} onClick={() => void reorder(index, 1)}>↓</button><button type="button" onClick={() => { setEditingId(item.id); setDraft(item.text); }}>ИЗМЕНИТЬ</button><button type="button" disabled={busy} onClick={() => void mutateItem(item, { active: !item.active })}>{item.active ? "ВЫКЛЮЧИТЬ" : "ВКЛЮЧИТЬ"}</button><button className="danger-control" type="button" disabled={busy} onClick={(event) => remove(item, event.currentTarget)}>УДАЛИТЬ</button></div></article>)}</div>
       <div className="promotion-preview-actions"><button type="button" disabled={busy || Boolean(disabledReason)} title={disabledReason} onClick={() => void buildPreview()}>СОБРАТЬ ВРУЧНУЮ</button><button type="button" disabled={busy || Boolean(disabledReason)} title={disabledReason} onClick={() => void buildPreview("", true)}>СОБРАТЬ СЛУЧАЙНО</button>{currentPreview && <button type="button" onClick={() => void buildPreview("", true)}>ПЕРЕСОБРАТЬ</button>}</div>{disabledReason && <p className="promotion-disabled-reason">{disabledReason}</p>}
     </section>}
-    {(!isPhone || bankView === "preview") && <aside className="promotion-preview">{isPhone && <button className="promotion-phone-back" type="button" onClick={() => setBankView("editor")}>← НАЗАД К РЕДАКТОРУ</button>}{currentPreview ? <><header><h3>ТОЧНЫЙ НАБОР</h3><span>{currentPreview.items.length}</span></header><ol>{currentPreview.items.map((item) => <li key={item.id}>{item.text}<button type="button" onClick={() => void buildPreview(item.id)}>ЗАМЕНИТЬ</button></li>)}</ol><label>Подходящий запрос<select value={selectedRequestId} onChange={(event) => setRequestId(event.target.value)}><option value="">Выберите запрос</option>{matchingRequests.map((row) => <option key={row.requestId} value={row.requestId}>{row.nickname}</option>)}</select></label><button className="primary-control" type="button" disabled={busy || !selectedRequestId} onClick={() => void confirmPreview()}>ПОДТВЕРДИТЬ НАБОР</button></> : <div className="promotion-empty"><strong>ПРЕДПРОСМОТР НЕ СОБРАН</strong><p>{disabledReason || "Выберите задания вручную или соберите случайный набор."}</p></div>}</aside>}
+    {(!isPhone || bankView === "preview") && <aside className="promotion-preview">{isPhone && <button className="promotion-phone-back" type="button" onClick={() => setBankView("editor")}>← НАЗАД К РЕДАКТОРУ</button>}{currentPreview ? <><header><h3>ТОЧНЫЙ НАБОР</h3><span>{currentPreview.items.length}</span></header><ol>{currentPreview.items.map((item) => <li key={item.id}>{item.text}<button type="button" onClick={() => void buildPreview(item.id)}>ЗАМЕНИТЬ</button></li>)}</ol><label>Подходящий запрос<select value={selectedRequestId} onChange={(event) => setRequestId(event.target.value)}><option value="">Выберите запрос</option>{matchingRequests.map((row) => <option key={row.requestId} value={row.requestId}>{row.nickname}</option>)}</select></label><button className="primary-control" type="button" disabled={busy || !selectedRequestId} onClick={(event) => requestConfirm({ title: "Подтвердить неизменяемый набор", body: "Участник получит именно эти задания в указанном порядке.", opener: event.currentTarget, run: () => void confirmPreview() })}>ПОДТВЕРДИТЬ НАБОР</button></> : <div className="promotion-empty"><strong>ПРЕДПРОСМОТР НЕ СОБРАН</strong><p>{disabledReason || "Выберите задания вручную или соберите случайный набор."}</p></div>}</aside>}
   </div>;
 }

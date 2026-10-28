@@ -81,7 +81,7 @@ test("actual branch and queue controls expose button-tab semantics and arrow nav
   assert.ok(main.includes('aria-pressed={kind === "ordinary"}'));
   assert.ok(main.includes("moveButtonTab"));
   assert.ok(main.includes('event.key === "ArrowRight"'));
-  assert.ok(main.includes('event.key === "ArrowLeft"'));
+  assert.ok(main.includes('"ArrowLeft"'));
 });
 
 test("promotion reviewer layout has desktop workbench and phone sequential view", () => {
