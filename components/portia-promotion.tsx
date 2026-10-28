@@ -31,10 +31,16 @@ const statusPollMs = 15_000;
 const terminalRecheckMs = 5_000;
 const retakeLedgerStorageKey = "portia.promotion.retake-ledger.v1";
 const dateTime = new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Moscow" });
+const calendarDate = new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeZone: "Europe/Moscow" });
 
 function formatDate(value?: string) {
   if (!value || !Number.isFinite(Date.parse(value))) return "по решению проверяющего";
   return `${dateTime.format(new Date(value))} МСК`;
+}
+
+function formatCalendarDate(value?: string) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "после обновления таблицы";
+  return calendarDate.format(new Date(value));
 }
 
 function publicError(value: unknown, fallback: string) {
@@ -233,7 +239,7 @@ function activeCopy(kind: RequestKind, active: NonNullable<ActiveState>) {
 }
 
 function eligibilityCopy(kind: RequestKind, eligibility: Eligibility) {
-  if (eligibility.status === "cooldown") return `Доступно после ${formatDate(eligibility.availableAt)}.`;
+  if (eligibility.status === "cooldown") return `Доступно с ${formatCalendarDate(eligibility.availableAt)}.`;
   if (eligibility.status === "awaiting-sheet-change") return "Ожидается изменение звания в таблице.";
   if (eligibility.status === "special-task") return "Особое задание для звания «Эксперт вирусолог» выдаёт проверяющий.";
   if (eligibility.status === "qualification-required") return kind === "ordinary"

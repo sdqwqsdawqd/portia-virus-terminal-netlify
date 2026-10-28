@@ -29,9 +29,12 @@ test("admitted employees without a promotion row get a truthful disabled state",
   assert.ok(source.includes("Запись о повышении пока не заведена"));
 });
 
-test("promotion dates always render in Moscow time with an MSK label", () => {
+test("promotion calendar cooldowns avoid fake midnight precision while exact retakes stay in Moscow time", () => {
   assert.ok(source.includes('timeZone: "Europe/Moscow"'));
   assert.ok(source.includes("МСК"));
+  assert.ok(source.includes("formatCalendarDate"));
+  assert.ok(source.includes("Доступно с ${formatCalendarDate(eligibility.availableAt)}"));
+  assert.ok(source.includes("Повторная проверка доступна ${formatDate(active.availableAt)}"));
 });
 
 test("ordinary promotion and qualification remain visibly separate flows", () => {
@@ -60,7 +63,7 @@ test("polling runs only for a visible window and a stale response preserves safe
 });
 
 test("participant states cover cooldown, sheet wait, special task and compact history", () => {
-  for (const copy of ["Доступно после", "Ожидается изменение звания в таблице", "Особое задание", "Последние результаты"]) {
+  for (const copy of ["Доступно с", "Ожидается изменение звания в таблице", "Особое задание", "Последние результаты"]) {
     assert.ok(source.includes(copy), copy);
   }
   assert.ok(source.includes(".slice(0, 3)"));
