@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "test": "node --experimental-strip-types --test lib/*.test.ts",
+    "test:promotion-live": "node --experimental-strip-types --test lib/portia-promotion-live.test.ts",
     "check": "npm test && npm run build && npm run lint",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
