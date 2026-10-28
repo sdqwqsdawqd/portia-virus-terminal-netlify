@@ -44,6 +44,9 @@ export async function POST(request: Request) {
   if (auth.status !== "allowed") return denied(auth.status);
   const command = parsePromotionReviewerCommand(parseJsonObject(await request.text()));
   if (!command) return Response.json({ error: "Некорректная команда." }, { status: 400, headers: noStoreHeaders });
+  if (command.action === "reset-device" && !auth.access.canManageEditors) {
+    return Response.json({ error: "Сброс привязки доступен только владельцу.", code: "reset-forbidden" }, { status: 403, headers: noStoreHeaders });
+  }
 
   if (command.action === "approve-task") {
     const state = await reviewerState(supabase);
@@ -71,6 +74,8 @@ export async function POST(request: Request) {
                   : ["portia_promo_reset_device", { p_nickname_key: (command as { action: "reset-device"; nicknameKey: string }).nicknameKey }];
   const { data, error } = await supabase.rpc(rpc[0] as string, rpc[1] as Record<string, unknown>);
   if (error) return Response.json({ error: "Команда не выполнена.", code: error.code === "42883" ? "pending-database" : "command-failed" }, { status: error.code === "42883" ? 503 : 403, headers: noStoreHeaders });
-  if (data !== true) return Response.json({ error: "Состояние уже изменилось другим проверяющим.", code: "claim-conflict", state: await reviewerState(supabase) }, { status: 409, headers: noStoreHeaders });
+  if (data !== true) return command.action === "reset-device"
+    ? Response.json({ error: "Активная привязка для этого ника не найдена.", code: "binding-not-found", state: await reviewerState(supabase) }, { status: 409, headers: noStoreHeaders })
+    : Response.json({ error: "Состояние уже изменилось другим проверяющим.", code: "claim-conflict", state: await reviewerState(supabase) }, { status: 409, headers: noStoreHeaders });
   return Response.json({ ok: true, state: await reviewerState(supabase) }, { headers: noStoreHeaders });
 }

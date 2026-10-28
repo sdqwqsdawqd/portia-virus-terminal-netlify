@@ -162,7 +162,7 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
   bottom: var(--shortcut-bottom);
 }
 .desktop-icon:hover, .desktop-icon:focus-visible { background: rgba(var(--desktop-glow), 0.08); border-color: rgba(var(--desktop-glow), 0.28); }
-.desktop-icon:hover .desktop-icon-symbol, .desktop-icon:focus-visible .desktop-icon-symbol { border-color: var(--teal); color: oklch(.981 calc(.01 * var(--accent-chroma)) var(--accent-hue)); transform: translateY(-1px); }
+.desktop-icon:hover .desktop-icon-symbol, .desktop-icon:focus-visible .desktop-icon-symbol { border-color: var(--teal); color: oklch(.981 calc(.01 * var(--accent-chroma)) var(--accent-hue)); }
 .desktop-icon.is-dragging { z-index: 6; border-color: var(--teal); background: var(--teal-soft); box-shadow: 0 12px 30px rgba(0,0,0,.32); opacity: .92; transform: scale(1.035); cursor: grabbing; }
 .desktop-icon-symbol {
   position: relative;
@@ -1523,7 +1523,8 @@ html[data-motion="reduce"] .content-fade { animation-duration: var(--motion-fast
 html[data-motion="full"] .desktop-icon { transition: background-color 130ms ease, border-color 130ms ease, transform 130ms ease, opacity 130ms ease, box-shadow 130ms ease; }
 html[data-motion="full"] .desktop-icon.is-dragging { animation: shortcut-pickup 180ms var(--ease-out) both; }
 html[data-motion="full"] .desktop-icon.is-dropping { animation: shortcut-drop 180ms var(--ease-out); }
-html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon, .mini-app-icon) { transition: border-color 130ms ease, color 130ms ease, transform var(--motion-fast) var(--ease-out), scale var(--motion-fast) var(--ease-out); }
+html[data-motion="full"] .desktop-icon-symbol { transition: border-color 130ms ease, color 130ms ease, scale var(--motion-fast) var(--ease-out); }
+html[data-motion="full"] :is(.start-panel-icon, .mini-app-icon) { transition: border-color 130ms ease, color 130ms ease, transform var(--motion-fast) var(--ease-out), scale var(--motion-fast) var(--ease-out); }
 html[data-motion="full"] :is(.desktop-icon:active .desktop-icon-symbol, .start-panel > button:active .start-panel-icon, .taskbar-app:active .mini-app-icon) { scale: .93; transition-duration: 130ms, 130ms, var(--motion-press), var(--motion-press); }
 html[data-motion="full"] .taskbar-app.is-bouncing .mini-app-icon { animation: taskbar-hop 380ms; }
 @keyframes taskbar-hop {
@@ -1849,6 +1850,10 @@ html[data-motion="reduce"] .promotion-card, html[data-motion="reduce"] .promotio
 .promotion-editor-branches button.active, .promotion-queue-filters button.active { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
 .promotion-editor-branches button span, .promotion-queue-filters button span { min-width: 20px; padding: 2px 5px; border-radius: 9px; background: rgba(255,255,255,.06); text-align: center; font-family: var(--mono); }
 .promotion-editor-message { margin: 0 0 12px; padding: 10px 12px; border: 1px solid rgba(224,125,116,.45); border-radius: 7px; color: #efaaa3; font: 400 12px/1.45 var(--doc); }
+.promotion-device-reset { display: flex; align-items: end; gap: 10px; margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.02); }
+.promotion-device-reset label { flex: 1; display: grid; gap: 5px; color: var(--muted); font: 700 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.promotion-device-reset input { min-height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--field-bg); color: var(--field-ink); font: 500 13px var(--mono); }
+.promotion-device-reset button { min-height: 38px; padding: 0 12px; border: 1px solid rgba(224,125,116,.5); border-radius: 6px; background: rgba(224,125,116,.08); color: #efaaa3; font: 700 10px var(--mono); }
 .promotion-editor-workbench { min-height: 430px; display: grid; grid-template-columns: 280px minmax(0, 1fr); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
 .promotion-request-list, .promotion-bank-list { min-width: 0; border-right: 1px solid var(--line); background: rgba(0,0,0,.1); }
 .promotion-request-list > button, .promotion-bank-list > button { width: 100%; display: grid; gap: 4px; padding: 13px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; text-align: left; cursor: pointer; }

@@ -5,7 +5,7 @@ import test from "node:test";
 const source = readFileSync(new URL("../components/portia-promotion.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
 
-test("participant gate explains binding and keeps the nickname in session state only", () => {
+test("participant gate explains lookup binding and restores only through the HttpOnly-backed status flow", () => {
   assert.ok(source.includes("function PromotionIdentityGate"));
   assert.ok(source.includes("ПРОВЕРИТЬ ПОВЫШЕНИЕ"));
   assert.ok(source.includes("PORTIA // ПОВЫШЕНИЕ"));
@@ -14,10 +14,23 @@ test("participant gate explains binding and keeps the nickname in session state 
   assert.ok(!source.includes("КАДРОВЫЙ КОНТУР"));
   assert.ok(!source.includes("Portia_User"));
   assert.ok(source.includes("ПРОВЕРИТЬ НИК"));
-  assert.ok(source.includes("Первая заявка закрепит этот ник за устройством. Сменить его сможет проверяющий."));
+  assert.ok(source.includes("Первая успешная проверка закрепит этот ник за устройством. Сменить его сможет проверяющий."));
   assert.ok(source.includes('autoComplete="off"'));
   assert.ok(source.includes('spellCheck={false}'));
   assert.doesNotMatch(source, /(?:localStorage|sessionStorage)\.setItem\([^\n]*(?:nickname|checkedNickname)/i);
+  assert.ok(source.includes('loadStatus("", false, true)'));
+  assert.ok(source.includes("setNickname(next.nickname)"));
+});
+
+test("admitted employees without a promotion row get a truthful disabled state", () => {
+  assert.ok(source.includes("promotionRecord: null"));
+  assert.ok(source.includes("promotionRecord === null"));
+  assert.ok(source.includes("Запись о повышении пока не заведена"));
+});
+
+test("promotion dates always render in Moscow time with an MSK label", () => {
+  assert.ok(source.includes('timeZone: "Europe/Moscow"'));
+  assert.ok(source.includes("МСК"));
 });
 
 test("ordinary promotion and qualification remain visibly separate flows", () => {

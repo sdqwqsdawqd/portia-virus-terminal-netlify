@@ -601,6 +601,20 @@ begin
   return binding_id;
 end $$;
 
+create or replace function public.portia_promo_resolve_device(p_token_hash text)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare bound_nickname text;
+begin
+  if length(p_token_hash) not between 32 and 128 then raise exception 'invalid-device-token'; end if;
+  select nickname_key into bound_nickname from public.portia_promo_device_bindings
+    where token_hash = p_token_hash and reset_at is null;
+  return bound_nickname;
+end $$;
+
 create or replace function public.portia_promo_reset_device(p_nickname_key text)
 returns boolean
 language plpgsql
@@ -609,6 +623,8 @@ set search_path = ''
 as $$
 begin
   if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
+  if not public.portia_is_owner() then raise exception 'forbidden'; end if;
+  if length(trim(p_nickname_key)) not between 1 and 64 then raise exception 'invalid-nickname'; end if;
   update public.portia_promo_device_bindings set reset_at = now()
     where nickname_key = lower(trim(p_nickname_key)) and reset_at is null;
   insert into public.portia_promo_audit_events (nickname_key, actor_id, event_type)
@@ -1322,6 +1338,7 @@ end $$;
 
 
 revoke all on function public.portia_promo_bind_device(text, text, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_resolve_device(text) from public, anon, authenticated;
 revoke all on function public.portia_promo_reset_device(text) from public, anon, authenticated;
 revoke all on function public.portia_promo_reviewer_state() from public, anon, authenticated;
 revoke all on function public.portia_promo_approve_assignment(uuid) from public, anon, authenticated;
@@ -1347,6 +1364,7 @@ revoke all on function public.portia_promo_close(text, uuid, text, jsonb) from p
 revoke all on function public.portia_promo_cleanup() from public, anon, authenticated;
 
 grant execute on function public.portia_promo_bind_device(text, text, text) to anon, authenticated;
+grant execute on function public.portia_promo_resolve_device(text) to anon, authenticated;
 grant execute on function public.portia_promo_register_attempt(text, text, boolean) to anon, authenticated;
 grant execute on function public.portia_promo_submit_request(text, text, text, text, text, text, text) to anon, authenticated;
 grant execute on function public.portia_promo_public_status(text, text, text) to anon, authenticated;

@@ -32,7 +32,7 @@ const emptyProjection: PromotionWorkflowProjection = {
 };
 
 function dependencies(overrides: Partial<PromotionApiDependencies> = {}) {
-  const calls = { bind: 0, status: 0, submit: 0, attempts: [] as boolean[] };
+  const calls = { bind: 0, resolve: 0, status: 0, submit: 0, attempts: [] as boolean[] };
   const deps: PromotionApiDependencies = {
     now: () => new Date("2026-10-27T00:00:00.000Z"),
     secret,
@@ -40,6 +40,7 @@ function dependencies(overrides: Partial<PromotionApiDependencies> = {}) {
     loadAccessRoster: async () => accessRoster,
     loadRoster: async () => roster,
     bindDevice: async () => { calls.bind += 1; return { status: "ok" }; },
+    resolveDevice: async () => { calls.resolve += 1; return { status: "ok", nicknameKey: "alice" }; },
     workflowStatus: async () => { calls.status += 1; return { status: "ok", projection: emptyProjection }; },
     submitRequest: async () => { calls.submit += 1; return { status: "created", requestId: "request-1" }; },
     registerAttempt: async ({ success }) => { calls.attempts.push(success); return { status: "ok", blockedUntil: success ? null : "2026-10-27T00:05:00.000Z" }; },
@@ -60,6 +61,15 @@ test("promotion status distinguishes access outage, nickname absence, and promot
   assert.equal(outage.status, 503);
   assert.equal(outage.body.code, "promotion-sheet-unavailable");
   assert.equal(promotionOutage.calls.bind, 1);
+});
+
+test("status restores the bound nickname from the exact HttpOnly device token", async () => {
+  const { deps, calls } = dependencies();
+  const result = await promotionStatus({ nickname: "", token: "B".repeat(43), headers: new Headers() }, deps);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.nickname, "Alice");
+  assert.equal(result.setCookie, undefined);
+  assert.equal(calls.resolve, 1);
 });
 
 test("the first valid access lookup binds and returns only a safe projection", async () => {

@@ -16,8 +16,9 @@ type ActiveState = { status: string; targetTitleId: string | null; attemptId?: s
 type PublicResult = { kind: RequestKind; outcome: string; createdAt: string };
 type QualificationQuestion = { id: string; type: "single" | "multiple" | "free-text"; text: string; options: string[]; index: number; total: number };
 type QualificationTest = { attemptId: string; status: string; clientMode: "desktop" | "phone"; deadlineAt: string | null; question: QualificationQuestion | null; result?: "passed" | "failed"; percent?: number };
-type PromotionStatus = {
+type PromotionStatus = { nickname: string; promotionRecord: null; workflowAvailable: false } | {
   nickname: string;
+  promotionRecord: { currentTitle: { id: string; label: string }; nextTitle: { id: string; label: string } | null };
   currentTitle: { id: string; label: string };
   nextTitle: { id: string; label: string } | null;
   ordinary: { eligibility: Eligibility; active: ActiveState };
@@ -27,11 +28,11 @@ type PromotionStatus = {
 
 const statusPollMs = 15_000;
 const retakeLedgerStorageKey = "portia.promotion.retake-ledger.v1";
-const dateTime = new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeStyle: "short" });
+const dateTime = new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Moscow" });
 
 function formatDate(value?: string) {
   if (!value || !Number.isFinite(Date.parse(value))) return "по решению проверяющего";
-  return dateTime.format(new Date(value));
+  return `${dateTime.format(new Date(value))} МСК`;
 }
 
 function publicError(value: unknown, fallback: string) {
@@ -171,7 +172,7 @@ export function PromotionIdentityGate({ nickname, busy, error, onNickname, onSub
     <form onSubmit={onSubmit}>
       <label htmlFor="promotion-nickname">Ник Roblox, указанный в таблице</label>
       <input id="promotion-nickname" value={nickname} onChange={(event) => onNickname(event.target.value)} maxLength={64} autoComplete="off" spellCheck={false} placeholder="Введите ник Roblox из таблицы" disabled={busy} />
-      <p className="promotion-binding-note">Первая заявка закрепит этот ник за устройством. Сменить его сможет проверяющий.</p>
+      <p className="promotion-binding-note">Первая успешная проверка закрепит этот ник за устройством. Сменить его сможет проверяющий.</p>
       {error && <p className="promotion-error" role="alert">{error}</p>}
       <button className="promotion-action" type="submit" disabled={busy || !nickname.trim()}>{busy ? "ПРОВЕРЯЕМ…" : "ПРОВЕРИТЬ НИК"}</button>
     </form>
@@ -238,19 +239,22 @@ export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; 
   const headingRef = useRef<HTMLHeadingElement>(null);
   const retakeLedgerRef = useRef<RetakeLedger>([]);
 
-  const loadStatus = useCallback(async (value: string, explicit = false) => {
-    if (!value) return;
+  const loadStatus = useCallback(async (value: string, explicit = false, restore = false) => {
+    if (!value && !restore) return;
     if (explicit) setBusy(true);
     try {
-      const response = await fetch(`/api/promotion/status?nickname=${encodeURIComponent(value)}`, { cache: "no-store" });
+      const response = await fetch(value ? `/api/promotion/status?nickname=${encodeURIComponent(value)}` : "/api/promotion/status", { cache: "no-store" });
       const body: unknown = await response.json();
       if (!response.ok) {
         if (response.status === 503 && status) { setStale(true); setError(""); return; }
+        if (restore) return;
         setStatus(null);
         setError(publicError(body, "Не удалось проверить ник. Попробуйте позже."));
         return;
       }
-      setStatus(body as PromotionStatus);
+      const next = body as PromotionStatus;
+      setStatus(next);
+      if (restore && typeof next.nickname === "string") { setNickname(next.nickname); setCheckedNickname(next.nickname); }
       setError("");
       setStale(false);
       if (explicit) requestAnimationFrame(() => headingRef.current?.focus());
@@ -263,6 +267,11 @@ export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; 
   }, [status]);
 
   useEffect(() => {
+    if (!visible || checkedNickname || document.visibilityState !== "visible") return;
+    queueMicrotask(() => void loadStatus("", false, true));
+  }, [checkedNickname, loadStatus, visible]);
+
+  useEffect(() => {
     if (!visible || document.visibilityState !== "visible") return;
     if (!checkedNickname) return;
     const poll = () => { if (document.visibilityState === "visible") void loadStatus(checkedNickname); };
@@ -272,7 +281,7 @@ export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; 
   }, [checkedNickname, loadStatus, visible]);
 
   useEffect(() => {
-    const active = status?.qualification.active;
+    const active = status?.promotionRecord === null ? null : status?.qualification.active;
     if (!status || active?.status !== "failed" || !active.attemptId || !active.availableAt) return;
     const evaluate = () => {
       let stored: RetakeLedger = [];
@@ -300,7 +309,7 @@ export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; 
   };
 
   const requestPromotion = async (kind: RequestKind) => {
-    if (!status || stale) return;
+    if (!status || status.promotionRecord === null || stale) return;
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/promotion/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nickname: checkedNickname, kind }) });
@@ -312,6 +321,11 @@ export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; 
   };
 
   if (!status) return <div className="promotion-app"><PromotionIdentityGate nickname={nickname} busy={busy} error={error} onNickname={setNickname} onSubmit={checkNickname} /></div>;
+
+  if (status.promotionRecord === null) return <div className="promotion-app"><div className="promotion-shell" aria-live="polite">
+    <header className="promotion-identity"><div><span className="promotion-eyebrow">УЧАСТНИК</span><h1 ref={headingRef} tabIndex={-1}>{status.nickname}</h1></div></header>
+    <section className="promotion-empty promotion-no-record"><strong>Запись о повышении пока не заведена</strong><p>Ник найден в основном составе PORTIA. Данные звания и действия появятся после добавления отдельной строки повышения.</p></section>
+  </div></div>;
 
   return <div className="promotion-app">
     <div className="promotion-shell" aria-live="polite">

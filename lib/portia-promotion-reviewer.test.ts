@@ -28,6 +28,8 @@ test("promotion reviewer commands accept only typed bounded payloads", () => {
   assert.deepEqual(parsePromotionReviewerCommand({ action: "grade-answer", answerId: "550e8400-e29b-41d4-a716-446655440000", correct: true }), { action: "grade-answer", answerId: "550e8400-e29b-41d4-a716-446655440000", correct: true });
   assert.deepEqual(parsePromotionReviewerCommand({ action: "finalize-attempt", attemptId: "550e8400-e29b-41d4-a716-446655440000", passed: false, percent: 70 }), { action: "finalize-attempt", attemptId: "550e8400-e29b-41d4-a716-446655440000", passed: false, percent: 70, retakeDays: 2 });
   assert.equal(parsePromotionReviewerCommand({ action: "finalize-attempt", attemptId: "550e8400-e29b-41d4-a716-446655440000", passed: false, percent: 101 }), null);
+  assert.deepEqual(parsePromotionReviewerCommand({ action: "reset-device", nicknameKey: " Alice_1 " }), { action: "reset-device", nicknameKey: "alice_1" });
+  assert.equal(parsePromotionReviewerCommand({ action: "reset-device", nicknameKey: "x".repeat(65) }), null);
 });
 
 const taskItems = [
@@ -87,4 +89,7 @@ test("promotion reviewer routes use server access and RPCs, never browser openTa
   const proxy = readFileSync(new URL("../proxy.ts", import.meta.url), "utf8");
   assert.ok(proxy.includes('"/api/promotion/reviewer/:path*"'));
   assert.ok(proxy.includes('"/api/promotion/banks/:path*"'));
+  const reviewer = readFileSync(new URL("../app/api/promotion/reviewer/route.ts", import.meta.url), "utf8");
+  assert.ok(reviewer.includes('code: "binding-not-found"'));
+  assert.match(reviewer, /command\.action === "reset-device" && !auth\.access\.canManageEditors/);
 });

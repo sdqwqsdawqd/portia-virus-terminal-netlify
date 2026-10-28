@@ -119,6 +119,16 @@ test("promotion is a standalone desktop application with its own window geometry
   assert.ok(source.includes('<DesktopIcon app="promotion"'));
   assert.ok(source.includes('<AppWindow app="promotion"'));
   assert.ok(source.includes("visible={activeApp === \"promotion\" && !windows.promotion.minimized}"));
+  assert.ok(source.includes('meta="Portia Promotion"'));
+});
+
+test("shared shortcut hover feedback never translates the icon container", () => {
+  const hover = /\.desktop-icon:hover \.desktop-icon-symbol[^\{]*\{([^}]*)\}/.exec(styles)?.[1] ?? "";
+  assert.ok(hover);
+  assert.doesNotMatch(hover, /transform\s*:/);
+  const transition = /html\[data-motion="full"\][^{]*\.desktop-icon-symbol[^\{]*\{([^}]*)\}/.exec(styles)?.[1] ?? "";
+  assert.doesNotMatch(transition, /transform/);
+  assert.ok(styles.includes('[data-icon="promotion"] .icon-promotion-arrow'));
 });
 
 test("shortcut motion is uniform, opt-in, and the guide has its own animation", () => {

@@ -32,6 +32,14 @@ test("claim is the gate for mutations and cleanup stays an unobtrusive hint", ()
   assert.ok(source.includes("Незавершённые данные удаляются через 3 дня."));
 });
 
+test("owner/admin can reset a binding by exact nickname while selected reset keeps its existing guard", () => {
+  assert.ok(source.includes("promotion-device-reset"));
+  assert.ok(source.includes('maxLength={64}'));
+  assert.ok(source.includes("СБРОСИТЬ ПРИВЯЗКУ ПО НИКУ"));
+  assert.ok(source.includes("{canManageEditors && <form"));
+  assert.ok(source.includes('{canManageEditors && <button type="button" onClick={() => void reviewerCommand("reset-device"'));
+});
+
 test("bank workspace exposes preview replacement and immutable confirmation", () => {
   for (const label of ["ПЕРЕСОБРАТЬ", "ЗАМЕНИТЬ", "ПОДТВЕРДИТЬ НАБОР", "Недостаточно активных элементов"]) assert.ok(source.includes(label), label);
   assert.ok(source.includes("PromotionConfirmDialog"));

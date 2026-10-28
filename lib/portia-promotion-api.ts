@@ -45,6 +45,7 @@ type SubmitResult =
   | { status: "device-denied" }
   | { status: "unavailable" };
 type BindResult = { status: "ok" | "denied" | "unavailable" };
+type ResolveResult = { status: "ok"; nicknameKey: string | null } | { status: "unavailable" };
 
 export type PromotionApiDependencies = {
   now: () => Date;
@@ -53,6 +54,7 @@ export type PromotionApiDependencies = {
   loadAccessRoster: () => Promise<PromotionAccessResult>;
   loadRoster: () => Promise<PromotionRosterResult>;
   bindDevice: (input: { nicknameKey: string; tokenHash: string; riskBucket: string }) => Promise<BindResult>;
+  resolveDevice: (tokenHash: string) => Promise<ResolveResult>;
   workflowStatus: (input: { nicknameKey: string; titleId: PromotionTitleId; tokenHash: string | null }) => Promise<DependencyResult<PromotionWorkflowProjection>>;
   submitRequest: (input: {
     kind: PromotionRequestKind;
@@ -183,14 +185,21 @@ export async function promotionStatus(
   input: { nickname: string; token: string | null; headers?: Headers },
   deps: PromotionApiDependencies,
 ): Promise<PromotionApiResult> {
-  const nickname = validNickname(input.nickname);
-  if (!nickname) return { status: 400, body: { error: "Некорректный ник.", code: "invalid-nickname" } };
+  let nickname = validNickname(input.nickname);
+  const presentedHash = hashToken(input.token, deps.secret);
+  if (!nickname) {
+    if (input.nickname.trim() || !presentedHash) return { status: input.nickname.trim() ? 400 : 404, body: { error: "Некорректный ник.", code: input.nickname.trim() ? "invalid-nickname" : "unbound-device" } };
+    const resolved = await deps.resolveDevice(presentedHash);
+    if (resolved.status !== "ok") return { status: 503, body: pendingDatabase };
+    if (!resolved.nicknameKey) return { status: 404, body: { error: "Привязка устройства не найдена.", code: "unbound-device" } };
+    nickname = resolved.nicknameKey;
+  }
   const access = await deps.loadAccessRoster();
   if (access.status !== "ok") return { status: 503, body: sheetUnavailable };
   const admitted = findPromotionAccessEntry(access.roster, nickname);
   if (!admitted) return { status: 404, body: notListed };
 
-  const existingHash = hashToken(input.token, deps.secret);
+  const existingHash = presentedHash;
   const token = existingHash ? input.token! : (deps.createToken ?? createDeviceToken)();
   const tokenHash = existingHash ?? deviceTokenDigest(token, deps.secret);
   const buckets = promotionAttemptBucket(admitted.nicknameKey, input.headers ?? new Headers(), deps.secret);
@@ -314,6 +323,14 @@ export function createPromotionApiDependencies(supabase: SupabaseClient, secret:
         return { status: "unavailable" } as const;
       }
       return typeof data === "string" ? { status: "ok" } as const : { status: "unavailable" } as const;
+    },
+    resolveDevice: async (tokenHash) => {
+      const { data, error } = await supabase.rpc("portia_promo_resolve_device", { p_token_hash: tokenHash });
+      if (error) {
+        if (!unavailableRpc(error)) console.error("PORTIA promotion device restore RPC failed", { code: error.code });
+        return { status: "unavailable" } as const;
+      }
+      return { status: "ok", nicknameKey: typeof data === "string" ? data : null } as const;
     },
     workflowStatus: async ({ nicknameKey, titleId: currentTitleId, tokenHash }) => {
       const { data, error } = await supabase.rpc("portia_promo_public_status", {

@@ -51,6 +51,7 @@ test("promotion SQL keeps secrets private and bounds untrusted text", () => {
 
 const rpcNames = [
   "portia_promo_bind_device",
+  "portia_promo_resolve_device",
   "portia_promo_reset_device",
   "portia_promo_reviewer_state",
   "portia_promo_approve_assignment",

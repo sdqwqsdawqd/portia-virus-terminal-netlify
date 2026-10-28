@@ -89,6 +89,7 @@ export function PromotionEditor({ visible, canManageEditors }: { visible: boolea
   const [busy, setBusy] = useState(false);
   const [newText, setNewText] = useState("");
   const [questionType, setQuestionType] = useState<"single" | "multiple" | "free-text">("single");
+  const [resetNickname, setResetNickname] = useState("");
   const [confirm, setConfirm] = useState<{ title: string; body: string; run: () => void } | null>(null);
 
   const applyQueue = useCallback((next: ReviewerState) => {
@@ -142,6 +143,18 @@ export function PromotionEditor({ visible, canManageEditors }: { visible: boolea
     } finally { setBusy(false); }
   };
 
+  const resetDevice = async (nicknameKey: string) => {
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/promotion/reviewer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reset-device", nicknameKey }) });
+      const body = await responseBody(response);
+      if (body.state && typeof body.state === "object") applyQueue(body.state as unknown as ReviewerState);
+      if (!response.ok) { setMessage(errorText(body, response.status === 409 ? "Активная привязка для этого ника не найдена." : "Привязку не удалось сбросить.")); return; }
+      setResetNickname("");
+      setMessage(`Привязка ${nicknameKey} сброшена.`);
+    } finally { setBusy(false); }
+  };
+
   const qualificationCommand = async (row: ReviewerRequest, action: string, extra: Record<string, unknown> = {}) => {
     await reviewerCommand(action, row, extra);
   };
@@ -190,6 +203,7 @@ export function PromotionEditor({ visible, canManageEditors }: { visible: boolea
     {message && <p className="promotion-editor-message" role="status">{message}</p>}
     {branch === "requests" ? <>
       <div className="promotion-queue-filters"><button type="button" className={kind === "ordinary" ? "active" : ""} onClick={() => setKind("ordinary")}>ОБЫЧНОЕ ПОВЫШЕНИЕ <span>{ordinaryCount}</span></button><button type="button" className={kind === "qualification" ? "active" : ""} onClick={() => setKind("qualification")}>КВАЛИФИКАЦИЯ <span>{qualificationCount}</span></button></div>
+      {canManageEditors && <form className="promotion-device-reset" onSubmit={(event) => { event.preventDefault(); const nicknameKey = resetNickname.trim(); if (nicknameKey) setConfirm({ title: `Сбросить привязку: ${nicknameKey}`, body: "Участник сможет привязать новое устройство при следующей успешной проверке ника.", run: () => void resetDevice(nicknameKey) }); }}><label>Точный ник для отзыва привязки<input value={resetNickname} maxLength={64} autoComplete="off" spellCheck={false} onChange={(event) => setResetNickname(event.target.value)} /></label><button type="submit" disabled={busy || !resetNickname.trim()}>СБРОСИТЬ ПРИВЯЗКУ ПО НИКУ</button></form>}
       <div className="promotion-editor-workbench">
         <aside className="promotion-request-list">{rows.map((row) => <button key={row.requestId} type="button" className={selectedRequestId === row.requestId ? "active" : ""} onClick={() => setSelectedRequestId(row.requestId)}><strong>{row.nickname}</strong><span>{row.titleId} → {row.targetTitleId}</span><em>{row.claimed ? "В РАБОТЕ" : row.status.toUpperCase()}</em></button>)}{rows.length === 0 && <div className="promotion-empty"><strong>НОВЫХ ЗАПРОСОВ НЕТ</strong><p>Оставьте вкладку открытой — список обновится автоматически.</p></div>}</aside>
         <article className="promotion-request-detail">{selected ? <><header><div><span>{queue.ordinary.includes(selected) ? "ОБЫЧНОЕ ПОВЫШЕНИЕ" : "КВАЛИФИКАЦИЯ"}</span><h2>{selected.nickname}</h2></div><b>{selected.claimed ? selected.assignedToMe ? "В РАБОТЕ У ВАС" : "ЗАНЯТ" : "НОВЫЙ"}</b></header><dl><div><dt>ПЕРЕХОД</dt><dd>{selected.titleId} → {selected.targetTitleId}</dd></div><div><dt>СОСТОЯНИЕ</dt><dd>{selected.status}</dd></div></dl>{queue.qualification.includes(selected) && selected.claimed && <QualificationGrading row={selected} busy={busy} onCommand={(action, extra) => qualificationCommand(selected, action, extra)} onConfirm={setConfirm} />}<p className="promotion-cleanup-hint">Незавершённые данные удаляются через 3 дня.</p><div className="promotion-request-actions">{!selected.claimed && <button className="primary-control" disabled={busy} type="button" onClick={() => void reviewerCommand("claim", selected)}>ВЗЯТЬ ЗАПРОС</button>}{selected.assignedToMe && <><button type="button" disabled={busy} onClick={() => void reviewerCommand("release", selected)}>ОСВОБОДИТЬ</button>{queue.ordinary.includes(selected) && selected.status === "assigned" && <button className="primary-control" type="button" onClick={() => setConfirm({ title: `Зачесть задания: ${selected.nickname}`, body: "После подтверждения участник будет ожидать изменения звания в таблице.", run: () => void reviewerCommand("approve-task", selected) })}>ЗАЧЕСТЬ ЗАДАНИЯ</button>}<button className="danger-control" type="button" onClick={() => setConfirm({ title: `Отклонить: ${selected.nickname}`, body: "Участник увидит нейтральное сообщение без внутренней причины.", run: () => void reviewerCommand("reject", selected, { note: "" }) })}>ОТКЛОНИТЬ</button></>}{canManageEditors && selected.claimed && !selected.assignedToMe && <button type="button" onClick={() => void reviewerCommand("force-release", selected)}>ПРИНУДИТЕЛЬНО ОСВОБОДИТЬ</button>}{canManageEditors && <button type="button" onClick={() => void reviewerCommand("reset-device", selected, { nicknameKey: selected.nicknameKey })}>СБРОСИТЬ ПРИВЯЗКУ</button>}</div></> : <div className="promotion-empty">Выберите запрос.</div>}</article>

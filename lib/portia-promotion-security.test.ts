@@ -72,11 +72,16 @@ test("security regression: lookup binding uses the RPC and submit cannot bind an
   assert.match(statusRoute, /createPromotionApiDependencies/);
   assert.doesNotMatch(statusRoute, /portia_promo_device_bindings/);
   assert.match(api, /supabase\.rpc\("portia_promo_bind_device"/);
+  assert.match(api, /supabase\.rpc\("portia_promo_resolve_device"/);
+  const resolve = sqlFunction("portia_promo_resolve_device");
+  assert.match(resolve, /token_hash = p_token_hash and reset_at is null/i);
+  assert.doesNotMatch(resolve, /jsonb_agg|select \*/i);
   const submit = sqlFunction("portia_promo_submit_request");
   assert.match(submit, /token_hash = p_token_hash and reset_at is null for update/i);
   assert.doesNotMatch(submit, /insert into public\.portia_promo_device_bindings/i);
   const reset = sqlFunction("portia_promo_reset_device");
   assert.match(reset, /portia_has_tab_grant\('promo'\)/i);
+  assert.match(reset, /portia_is_owner\(\)/i);
   assert.match(reset, /portia_promo_audit_events[\s\S]*device-reset/i);
 });
 
