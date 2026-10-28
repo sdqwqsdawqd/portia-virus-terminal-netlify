@@ -193,3 +193,17 @@ test("public promotion routes are dynamic, no-store and never select wildcard ro
     if (path === "status") assert.ok(route.includes("Set-Cookie"), "lookup must persist the binding cookie");
   }
 });
+
+test("request admission has no preliminary binding or throttle mutation", () => {
+  const source = readFileSync(new URL("./portia-promotion-api.ts", import.meta.url), "utf8");
+  const submitStart = source.indexOf("export async function submitPromotionRequest");
+  const submitEnd = source.indexOf("type RpcError", submitStart);
+  const submit = source.slice(submitStart, submitEnd);
+  assert.doesNotMatch(submit, /bindDevice|registerAttempt/);
+  const adapterStart = source.indexOf("submitRequest: async");
+  const adapterEnd = source.indexOf("\n    },", adapterStart) + 7;
+  const adapter = source.slice(adapterStart, adapterEnd);
+  for (const field of ["p_bucket_key", "p_ip_bucket", "p_risk_bucket"]) assert.ok(adapter.includes(field), field);
+  assert.match(adapter, /data\.code === "throttled"/);
+  assert.match(adapter, /data\.code === "device-denied"/);
+});

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { qualificationGrade, qualificationPublicProjection, qualificationTransition, validateQualificationAnswer, type QualificationAttempt } from "./portia-qualification.ts";
+import { QUALIFICATION_HEARTBEAT_MS, conservativeQualificationClientMode, qualificationGrade, qualificationPublicProjection, qualificationTransition, validateQualificationAnswer, type QualificationAttempt } from "./portia-qualification.ts";
 
 const questions = [
   { id: "q1", type: "single" as const, text: "Один?", options: ["A", "B"], answerKey: 1 },
@@ -66,5 +66,16 @@ test("qualification API contracts never return keys or future snapshots", () => 
   assert.ok(route.includes("portia_promo_current_test"));
   assert.ok(route.includes("portia_promo_answer_question"));
   assert.ok(route.includes("portia_promo_fail_attempt"));
+  assert.ok(route.includes("portia_promo_heartbeat_test"));
+  assert.match(route, /p_expected_question_index:\s*expectedQuestionIndex/);
+  assert.match(route, /code:\s*"answer-conflict"/);
   assert.doesNotMatch(route, /select\("\*"\)/);
+});
+
+test("qualification mode is conservative and the heartbeat fits inside the server lease", () => {
+  assert.equal(conservativeQualificationClientMode(new Headers({ "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" })), "desktop");
+  assert.equal(conservativeQualificationClientMode(new Headers({ "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)" })), "phone");
+  assert.equal(conservativeQualificationClientMode(new Headers({ "sec-ch-ua-mobile": "?1" })), "phone");
+  assert.equal(conservativeQualificationClientMode(new Headers({ "user-agent": "Unknown Mobile Device" })), "desktop");
+  assert.ok(QUALIFICATION_HEARTBEAT_MS >= 5_000 && QUALIFICATION_HEARTBEAT_MS < 45_000);
 });
