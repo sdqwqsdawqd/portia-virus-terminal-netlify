@@ -39,10 +39,18 @@ export function updateRetakeLedger(ledger: RetakeLedger, wait: RetakeWait, now: 
   const existing = ledger.find((entry) => entry.id === normalized.id);
   const ready = now.getTime() >= Date.parse(normalized.availableAt);
   if (!existing) {
-    const next = [...ledger, { ...normalized, notified: ready }].slice(-maxLedgerEntries);
-    return { ledger: next, notification: null as RetakeNotification | null };
+    if (ready && viewingReadyState) {
+      return { ledger: ledger.slice(-maxLedgerEntries), notification: null as RetakeNotification | null };
+    }
+    const notified = ready;
+    const next = [...ledger, { ...normalized, notified }].slice(-maxLedgerEntries);
+    return {
+      ledger: next,
+      notification: ready ? { id: normalized.id, availableAt: normalized.availableAt } : null,
+    };
   }
   if (!ready || existing.notified) return { ledger: ledger.slice(-maxLedgerEntries), notification: null as RetakeNotification | null };
+  if (viewingReadyState) return { ledger: ledger.slice(-maxLedgerEntries), notification: null as RetakeNotification | null };
   const next = ledger.map((entry) => entry.id === normalized.id ? { ...entry, notified: true } : entry).slice(-maxLedgerEntries);
-  return { ledger: next, notification: viewingReadyState ? null : { id: normalized.id, availableAt: normalized.availableAt } };
+  return { ledger: next, notification: { id: normalized.id, availableAt: normalized.availableAt } };
 }
