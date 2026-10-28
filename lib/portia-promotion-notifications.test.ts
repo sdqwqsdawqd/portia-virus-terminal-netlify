@@ -13,7 +13,13 @@ const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8
 
 const wait = { nickname: "PORTIA_User", attemptId: "attempt-1", availableAt: "2026-10-30T12:00:00.000Z" };
 
-test("retake notification requires a previously observed wait and appears once when ready", () => {
+test("retake notification appears once on the first return after eligibility", () => {
+  const firstReady = updateRetakeLedger([], wait, new Date("2026-10-30T12:00:00.000Z"), false);
+  assert.equal(firstReady.notification?.availableAt, wait.availableAt);
+  assert.equal(updateRetakeLedger(firstReady.ledger, wait, new Date("2026-10-31T12:00:00.000Z"), false).notification, null);
+});
+
+test("retake notification still appears after a previously observed wait", () => {
   const first = updateRetakeLedger([], wait, new Date("2026-10-29T12:00:00.000Z"), false);
   assert.equal(first.notification, null);
   const ready = updateRetakeLedger(first.ledger, wait, new Date("2026-10-30T12:00:00.000Z"), false);
@@ -21,16 +27,18 @@ test("retake notification requires a previously observed wait and appears once w
   assert.equal(updateRetakeLedger(ready.ledger, wait, new Date("2026-10-31T12:00:00.000Z"), false).notification, null);
 });
 
-test("retake notification is suppressed and consumed while participant views the ready state", () => {
+test("retake notification is suppressed but not consumed while participant views the ready state", () => {
   const observed = updateRetakeLedger([], wait, new Date("2026-10-29T12:00:00.000Z"), false).ledger;
   const viewed = updateRetakeLedger(observed, wait, new Date("2026-10-30T12:00:00.000Z"), true);
   assert.equal(viewed.notification, null);
-  assert.equal(updateRetakeLedger(viewed.ledger, wait, new Date("2026-10-30T12:01:00.000Z"), false).notification, null);
+  assert.equal(updateRetakeLedger(viewed.ledger, wait, new Date("2026-10-30T12:01:00.000Z"), false).notification?.availableAt, wait.availableAt);
 });
 
 test("retake ledgers isolate nicknames, reject junk and stay bounded", () => {
   const other = updateRetakeLedger([], { ...wait, nickname: "Other" }, new Date("2026-10-29T12:00:00.000Z"), false).ledger;
-  assert.equal(updateRetakeLedger(other, wait, new Date("2026-10-31T12:00:00.000Z"), false).notification, null);
+  const isolated = updateRetakeLedger(other, wait, new Date("2026-10-31T12:00:00.000Z"), false);
+  assert.equal(isolated.notification?.availableAt, wait.availableAt);
+  assert.deepEqual(Object.keys(isolated.ledger.at(-1) ?? {}).sort(), ["availableAt", "id", "nicknameKey", "notified"]);
   assert.deepEqual(parseRetakeLedger("broken"), []);
   assert.deepEqual(parseRetakeLedger(JSON.stringify([{ id: 1 }])), []);
   let ledger: RetakeLedger = [];
