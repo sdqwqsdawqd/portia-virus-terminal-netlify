@@ -473,14 +473,6 @@ begin
     return jsonb_build_object('code', 'device-denied', 'blockedUntil', until_at);
   end if;
 
-  delete from public.portia_promo_device_bindings
-    where reset_at is not null and (nickname_key = normalized_key or token_hash = p_token_hash);
-  insert into public.portia_promo_device_bindings (nickname_key, token_hash, risk_bucket)
-  values (normalized_key, p_token_hash, p_risk_bucket)
-  on conflict (nickname_key) do update set
-    token_hash = excluded.token_hash, risk_bucket = excluded.risk_bucket,
-    bound_at = now(), reset_at = null;
-
   if (p_kind = 'ordinary' and exists (
       select 1 from public.portia_promo_requests
       where nickname_key = normalized_key and status in ('pending', 'claimed', 'assigned', 'awaiting-sheet-change')
@@ -490,6 +482,16 @@ begin
     )) then
     return jsonb_build_object('code', 'active-request');
   end if;
+
+  -- A rejected duplicate must not create or replace a device binding.
+  -- The request insert below shares this transaction, so any later failure also rolls this back.
+  delete from public.portia_promo_device_bindings
+    where reset_at is not null and (nickname_key = normalized_key or token_hash = p_token_hash);
+  insert into public.portia_promo_device_bindings (nickname_key, token_hash, risk_bucket)
+  values (normalized_key, p_token_hash, p_risk_bucket)
+  on conflict (nickname_key) do update set
+    token_hash = excluded.token_hash, risk_bucket = excluded.risk_bucket,
+    bound_at = now(), reset_at = null;
 
   if p_kind = 'ordinary' then
     insert into public.portia_promo_requests (nickname, nickname_key, title_id, target_title_id)

@@ -104,6 +104,11 @@ test("security regression: lookup stays private and atomic admission owns bindin
   const submit = sqlFunction("portia_promo_submit_request");
   assert.match(submit, /token_hash = p_token_hash and reset_at is null[\s\S]*for update/i);
   assert.match(submit, /insert into public\.portia_promo_device_bindings/i);
+  const activeGuard = submit.indexOf("return jsonb_build_object('code', 'active-request')");
+  const bindingInsert = submit.indexOf("insert into public.portia_promo_device_bindings");
+  const requestInsert = submit.indexOf("insert into public.portia_promo_requests");
+  assert.ok(activeGuard >= 0 && bindingInsert > activeGuard, "duplicate refusal happens before binding");
+  assert.ok(requestInsert > bindingInsert, "binding and request are committed in one transaction");
   const reset = sqlFunction("portia_promo_reset_device");
   assert.match(reset, /portia_has_tab_grant\('promo'\)/i);
   assert.match(reset, /portia_is_owner\(\)/i);
