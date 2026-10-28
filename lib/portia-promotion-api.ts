@@ -38,13 +38,14 @@ export type PromotionWorkflowProjection = {
   results: PromotionPublicResult[];
 };
 
-type DependencyResult<T> = { status: "ok"; projection: T } | { status: "unavailable" };
+type PromotionUnavailableReason = "rpc-missing" | "database-error" | "invalid-response";
+type DependencyResult<T> = { status: "ok"; projection: T } | { status: "unavailable"; reason?: PromotionUnavailableReason };
 type SubmitResult =
   | { status: "created"; requestId: string }
   | { status: "active" }
   | { status: "device-denied" | "throttled"; blockedUntil: string | null }
-  | { status: "unavailable" };
-type ResolveResult = { status: "ok"; nicknameKey: string | null } | { status: "unavailable" };
+  | { status: "unavailable"; reason: PromotionUnavailableReason };
+type ResolveResult = { status: "ok"; nicknameKey: string | null } | { status: "unavailable"; reason?: PromotionUnavailableReason };
 
 export type PromotionApiDependencies = {
   now: () => Date;
@@ -78,7 +79,17 @@ const sheetUnavailable = { error: "Список участников време�
 const promotionSheetUnavailable = { error: "Данные повышения временно недоступны. Попробуйте позже.", code: "promotion-sheet-unavailable" };
 const promotionSourceInvalid = { error: "Данные повышения требуют проверки. Попробуйте позже.", code: "promotion-source-invalid" };
 const pendingDatabase = { error: "Система повышения пока недоступна. Попробуйте позже.", code: "pending-database" };
+const rolloutIncomplete = { error: "Обновление системы повышения ещё не завершено. Обратитесь к владельцу сайта.", code: "promotion-rollout-incomplete" };
+const databaseUnavailable = { error: "База повышения временно недоступна. Попробуйте позже.", code: "promotion-database-unavailable" };
+const contractInvalid = { error: "Ответ системы повышения требует проверки. Обратитесь к владельцу сайта.", code: "promotion-contract-invalid" };
 const deviceDenied = { error: "Это устройство уже связано с другим участником. Обратитесь к проверяющему." };
+
+function unavailableBody(reason?: PromotionUnavailableReason) {
+  if (reason === "rpc-missing") return rolloutIncomplete;
+  if (reason === "database-error") return databaseUnavailable;
+  if (reason === "invalid-response") return contractInvalid;
+  return pendingDatabase;
+}
 
 function validNickname(value: string) {
   const nickname = value.trim();
@@ -186,7 +197,7 @@ export async function promotionStatus(
   if (!nickname) {
     if (input.nickname.trim() || !presentedHash) return { status: input.nickname.trim() ? 400 : 404, body: { error: "Некорректный ник.", code: input.nickname.trim() ? "invalid-nickname" : "unbound-device" } };
     const resolved = await deps.resolveDevice(presentedHash);
-    if (resolved.status !== "ok") return { status: 503, body: pendingDatabase };
+    if (resolved.status !== "ok") return { status: 503, body: unavailableBody(resolved.reason) };
     if (!resolved.nicknameKey) return { status: 404, body: { error: "Привязка устройства не найдена.", code: "unbound-device" } };
     nickname = resolved.nicknameKey;
   }
@@ -195,25 +206,19 @@ export async function promotionStatus(
   const admitted = findPromotionAccessEntry(access.roster, nickname);
   if (!admitted) return { status: 404, body: notListed };
 
-  const existingHash = presentedHash;
-  const token = existingHash ? input.token! : (deps.createToken ?? createDeviceToken)();
-  const tokenHash = existingHash ?? deviceTokenDigest(token, deps.secret);
-  const cookie = existingHash ? {} : { setCookie: buildDeviceCookie(token) };
-
   const roster = await deps.loadRoster();
-  if (roster.status !== "ok") return { status: 503, body: roster.status === "invalid-source" ? promotionSourceInvalid : promotionSheetUnavailable, ...cookie };
+  if (roster.status !== "ok") return { status: 503, body: roster.status === "invalid-source" ? promotionSourceInvalid : promotionSheetUnavailable };
   const entry = findPromotionRosterEntry(roster.roster, admitted.nickname);
   if (!entry) {
     return {
       status: 200,
       body: { nickname: admitted.nickname, promotionRecord: null, workflowAvailable: false },
-      ...cookie,
     };
   }
-  const workflow = await deps.workflowStatus({ nicknameKey: entry.nicknameKey, titleId: entry.titleId, tokenHash });
-  if (workflow.status !== "ok") return { status: 503, body: pendingDatabase, ...cookie };
+  const workflow = await deps.workflowStatus({ nicknameKey: entry.nicknameKey, titleId: entry.titleId, tokenHash: presentedHash });
+  if (workflow.status !== "ok") return { status: 503, body: unavailableBody(workflow.reason) };
   if (workflow.projection.binding === "denied") return { status: 423, body: { ...deviceDenied, code: "device-denied" } };
-  return { status: 200, body: statusBody(entry, workflow.projection, deps.now()), ...cookie };
+  return { status: 200, body: statusBody(entry, workflow.projection, deps.now()) };
 }
 
 export async function submitPromotionRequest(
@@ -234,9 +239,10 @@ export async function submitPromotionRequest(
   if (!entry) return { status: 409, body: { error: "Для участника ещё нет записи повышения.", code: "promotion-record-unavailable" } };
 
   const existingHash = hashToken(input.token, deps.secret);
-  if (!existingHash) return { status: 423, body: { ...deviceDenied, code: "device-denied" } };
-  const workflow = await deps.workflowStatus({ nicknameKey: entry.nicknameKey, titleId: entry.titleId, tokenHash: existingHash });
-  if (workflow.status !== "ok") return { status: 503, body: pendingDatabase };
+  const token = existingHash ? input.token! : (deps.createToken ?? createDeviceToken)();
+  const tokenHash = existingHash ?? deviceTokenDigest(token, deps.secret);
+  const workflow = await deps.workflowStatus({ nicknameKey: entry.nicknameKey, titleId: entry.titleId, tokenHash });
+  if (workflow.status !== "ok") return { status: 503, body: unavailableBody(workflow.reason) };
   const buckets = promotionAttemptBucket(entry.nicknameKey, input.headers, deps.secret);
   const active = input.kind === "ordinary" ? workflow.projection.ordinary : workflow.projection.qualification;
   if (active) {
@@ -270,12 +276,12 @@ export async function submitPromotionRequest(
     nicknameKey: entry.nicknameKey,
     titleId: entry.titleId,
     targetId: entry.nextTitleId,
-    tokenHash: existingHash,
+    tokenHash,
     riskBucket: buckets.riskBucket,
     bucketKey: buckets.bucketKey,
     ipBucket: buckets.ipBucket,
   });
-  if (submitted.status === "unavailable") return { status: 503, body: pendingDatabase };
+  if (submitted.status === "unavailable") return { status: 503, body: unavailableBody(submitted.reason) };
   if (submitted.status === "device-denied" || submitted.status === "throttled") {
     return { status: 423, body: { ...deviceDenied, code: "device-wait", blockedUntil: submitted.blockedUntil } };
   }
@@ -284,11 +290,13 @@ export async function submitPromotionRequest(
   return {
     status: 201,
     body: { requestId: submitted.requestId, kind: input.kind, status: "pending" },
+    ...(existingHash ? {} : { setCookie: buildDeviceCookie(token) }),
   };
 }
 
 type RpcError = { code?: string; message?: string } | null;
 const unavailableRpc = (error: RpcError) => error?.code === "PGRST202" || error?.code === "42883" || error?.code === "42P01";
+const rpcFailureReason = (error: RpcError): PromotionUnavailableReason => unavailableRpc(error) ? "rpc-missing" : "database-error";
 
 /** Server-route adapter. Public clients receive only security-definer RPC execution, never table access. */
 export function createPromotionApiDependencies(supabase: SupabaseClient, secret: string): PromotionApiDependencies {
@@ -301,7 +309,7 @@ export function createPromotionApiDependencies(supabase: SupabaseClient, secret:
       const { data, error } = await supabase.rpc("portia_promo_resolve_device", { p_token_hash: tokenHash });
       if (error) {
         if (!unavailableRpc(error)) console.error("PORTIA promotion device restore RPC failed", { code: error.code });
-        return { status: "unavailable" } as const;
+        return { status: "unavailable", reason: rpcFailureReason(error) } as const;
       }
       return { status: "ok", nicknameKey: typeof data === "string" ? data : null } as const;
     },
@@ -313,10 +321,10 @@ export function createPromotionApiDependencies(supabase: SupabaseClient, secret:
       });
       if (error || data === null) {
         if (!unavailableRpc(error)) console.error("PORTIA promotion status RPC failed", { code: error?.code });
-        return { status: "unavailable" } as const;
+        return { status: "unavailable", reason: error ? rpcFailureReason(error) : "invalid-response" } as const;
       }
       const projection = promotionProjectionFromRpc(data);
-      return projection ? { status: "ok", projection } as const : { status: "unavailable" } as const;
+      return projection ? { status: "ok", projection } as const : { status: "unavailable", reason: "invalid-response" } as const;
     },
     submitRequest: async (input) => {
       const { data, error } = await supabase.rpc("portia_promo_submit_request", {
@@ -331,17 +339,17 @@ export function createPromotionApiDependencies(supabase: SupabaseClient, secret:
         p_ip_bucket: input.ipBucket,
       });
       if (error) {
-        if (unavailableRpc(error)) return { status: "unavailable" } as const;
+        if (unavailableRpc(error)) return { status: "unavailable", reason: "rpc-missing" } as const;
         console.error("PORTIA promotion submit RPC failed", { code: error.code });
-        return { status: "unavailable" } as const;
+        return { status: "unavailable", reason: "database-error" } as const;
       }
-      if (!data || typeof data !== "object" || Array.isArray(data)) return { status: "unavailable" } as const;
+      if (!data || typeof data !== "object" || Array.isArray(data)) return { status: "unavailable", reason: "invalid-response" } as const;
       if (data.code === "created" && typeof data.requestId === "string") return { status: "created", requestId: data.requestId } as const;
       if (data.code === "active-request") return { status: "active" } as const;
       if (data.code === "throttled" || data.code === "device-denied") {
         return { status: data.code, blockedUntil: safeDate(data.blockedUntil) } as const;
       }
-      return { status: "unavailable" } as const;
+      return { status: "unavailable", reason: "invalid-response" } as const;
     },
   };
 }

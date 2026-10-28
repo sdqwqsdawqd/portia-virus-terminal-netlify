@@ -13,9 +13,7 @@ export async function GET(request: Request) {
       { nickname, token: readDeviceToken(request.headers), headers: request.headers },
       createPromotionApiDependencies(createPublicSupabaseClient(), secret),
     );
-    const headers = new Headers(noStoreHeaders);
-    if (result.setCookie) headers.set("Set-Cookie", result.setCookie);
-    return Response.json(result.body, { status: result.status, headers });
+    return Response.json(result.body, { status: result.status, headers: noStoreHeaders });
   } catch (error) {
     console.error("PORTIA promotion status failed", error instanceof Error ? error.message : "unknown");
     return Response.json(
