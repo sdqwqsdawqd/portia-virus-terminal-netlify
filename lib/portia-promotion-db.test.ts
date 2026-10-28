@@ -63,6 +63,7 @@ const rpcNames = [
   "portia_promo_claim_request",
   "portia_promo_release_request",
   "portia_promo_reject_request",
+  "portia_promo_delete_request",
   "portia_promo_confirm_assignment",
   "portia_promo_confirm_test",
   "portia_promo_start_test",
@@ -88,7 +89,7 @@ test("promotion SQL RPCs are security-definer functions with pinned search paths
 });
 
 test("promotion SQL reviewer transitions require promo and claim conditionally", () => {
-  const reviewerRpcs = ["reset_device", "reviewer_state", "approve_assignment", "bank_state", "bank_command", "claim_request", "release_request", "reject_request", "confirm_assignment", "confirm_test", "grade_answer", "finalize_attempt", "override_failure", "release_retake", "close"];
+  const reviewerRpcs = ["reset_device", "reviewer_state", "approve_assignment", "bank_state", "bank_command", "claim_request", "release_request", "reject_request", "delete_request", "confirm_assignment", "confirm_test", "grade_answer", "finalize_attempt", "override_failure", "release_retake", "close"];
   for (const suffix of reviewerRpcs) {
     const start = setup.toLowerCase().indexOf(`create or replace function public.portia_promo_${suffix}`);
     const body = setup.slice(start, setup.indexOf("$$;", start) + 3);
@@ -103,6 +104,21 @@ test("promotion SQL closes transactionally, retains three results and schedules 
   assert.match(setup, /portia_promo_cleanup[\s\S]*interval '3 days'/i);
   assert.match(setup, /portia-promo-cleanup/i);
   assert.match(setup, /cron\.job_run_details[\s\S]*interval '7 days'/i);
+});
+
+test("destructive request RPCs lock and remove only the selected request graph", () => {
+  for (const name of ["reject_request", "delete_request"]) {
+    const start = setup.indexOf(`create or replace function public.portia_promo_${name}`);
+    const body = setup.slice(start, setup.indexOf("$$;", start) + 3);
+    assert.match(body, /for update/i);
+    assert.match(body, /delete from public\.portia_promo_results result[\s\S]*requestId[\s\S]*assignmentId[\s\S]*attemptId/i);
+    assert.match(body, /delete from public\.portia_promo_(?:requests|qualification_requests)/i);
+    assert.doesNotMatch(body, /portia_promo_device_bindings|portia_promo_reset_device/i);
+  }
+  assert.match(setup, /portia_promo_assignments[\s\S]*request_id uuid not null unique references public\.portia_promo_requests\(id\) on delete cascade/i);
+  assert.match(setup, /portia_promo_assignment_items[\s\S]*assignment_id uuid not null references public\.portia_promo_assignments\(id\) on delete cascade/i);
+  assert.match(setup, /portia_promo_attempt_questions[\s\S]*attempt_id uuid not null references public\.portia_promo_attempts\(id\) on delete cascade/i);
+  assert.match(setup, /portia_promo_answers[\s\S]*attempt_id uuid not null references public\.portia_promo_attempts\(id\) on delete cascade/i);
 });
 
 test("public promotion status is explicit and submit requires an existing active binding", () => {

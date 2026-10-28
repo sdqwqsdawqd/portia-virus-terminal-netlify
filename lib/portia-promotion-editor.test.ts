@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync(new URL("../components/portia-promotion-editor.tsx", import.meta.url), "utf8");
+const main = readFileSync(new URL("../components/portia-promotion-editor-main.tsx", import.meta.url), "utf8");
+const ordinary = readFileSync(new URL("../components/portia-promotion-ordinary-editor.tsx", import.meta.url), "utf8");
+const qualification = readFileSync(new URL("../components/portia-promotion-qualification-editor.tsx", import.meta.url), "utf8");
 const shell = readFileSync(new URL("../components/portia-editor.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
 
@@ -41,12 +44,23 @@ test("owner/admin can reset a binding by exact nickname while selected reset kee
 });
 
 test("bank workspace exposes preview replacement and immutable confirmation", () => {
-  for (const label of ["ПЕРЕСОБРАТЬ", "ЗАМЕНИТЬ", "ПОДТВЕРДИТЬ НАБОР", "Недостаточно активных элементов"]) assert.ok(source.includes(label), label);
-  assert.ok(source.includes("PromotionConfirmDialog"));
-  assert.ok(source.includes("save-task-item"));
-  assert.ok(source.includes("save-question"));
-  assert.ok(source.includes("free-text"));
-  assert.ok(source.includes("replaceId"));
+  const editors = ordinary + qualification;
+  for (const label of ["ПЕРЕСОБРАТЬ", "ЗАМЕНИТЬ", "ПОДТВЕРДИТЬ НАБОР", "Недостаточно активных"]) assert.ok(editors.includes(label), label);
+  assert.ok(main.includes("PortiaPromotionOrdinaryEditor"));
+  assert.ok(main.includes("PortiaPromotionQualificationEditor"));
+  assert.ok(ordinary.includes("save-task-item"));
+  assert.ok(qualification.includes("save-question"));
+  assert.ok(qualification.includes("free-text"));
+  assert.ok(editors.includes("replaceId"));
+});
+
+test("request rejection and owner deletion use explicit irreversible confirmations", () => {
+  assert.ok(main.includes('reviewerCommand("reject"'));
+  assert.ok(main.includes('reviewerCommand("delete-request"'));
+  assert.ok(main.includes("УДАЛИТЬ ЗАЯВКУ"));
+  assert.ok(main.includes("без возможности восстановления"));
+  assert.ok(main.includes("Привязка устройства останется активной"));
+  assert.match(main, /action === "reject" \|\| action === "delete-request"[\s\S]*setSelectedRequestId\(""\)/);
 });
 
 test("promotion reviewer layout has desktop workbench and phone sequential view", () => {

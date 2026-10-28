@@ -76,7 +76,9 @@ function QualificationGrading({ row, busy, onCommand, onConfirm }: {
   </section>;
 }
 
-export function PromotionEditor({ visible, canManageEditors }: { visible: boolean; canManageEditors: boolean }) {
+export { PromotionEditorMain as PromotionEditor } from "./portia-promotion-editor-main";
+
+export function LegacyPromotionEditor({ visible, canManageEditors }: { visible: boolean; canManageEditors: boolean }) {
   const [branch, setBranch] = useState<Branch>("requests");
   const [kind, setKind] = useState<Kind>("ordinary");
   const [queue, setQueue] = useState<ReviewerState>(emptyQueue);

@@ -890,17 +890,65 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  nickname_key_value text;
+  assignment_ids uuid[] := '{}'::uuid[];
+  attempt_ids uuid[] := '{}'::uuid[];
 begin
   if not public.portia_has_tab_grant('promo') then raise exception 'forbidden'; end if;
   if length(p_internal_note) > 2000 then raise exception 'note-too-long'; end if;
   if p_kind = 'ordinary' then
-    update public.portia_promo_requests set status = 'rejected', internal_note = p_internal_note, updated_at = now()
-      where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid();
+    select nickname_key into nickname_key_value from public.portia_promo_requests
+      where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid() for update;
+    if nickname_key_value is null then return false; end if;
+    select coalesce(array_agg(id), '{}'::uuid[]) into assignment_ids from public.portia_promo_assignments where request_id = p_request_id;
   elsif p_kind = 'qualification' then
-    update public.portia_promo_qualification_requests set status = 'rejected', internal_note = p_internal_note, updated_at = now()
-      where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid();
+    select nickname_key into nickname_key_value from public.portia_promo_qualification_requests
+      where id = p_request_id and status = 'claimed' and reviewer_id = auth.uid() for update;
+    if nickname_key_value is null then return false; end if;
+    select coalesce(array_agg(id), '{}'::uuid[]) into attempt_ids from public.portia_promo_attempts where request_id = p_request_id;
   else return false; end if;
-  return found;
+  delete from public.portia_promo_results result
+    where result.compact ->> 'requestId' = p_request_id::text
+      or exists (select 1 from unnest(assignment_ids) assignment_id where result.compact ->> 'assignmentId' = assignment_id::text)
+      or exists (select 1 from unnest(attempt_ids) attempt_id where result.compact ->> 'attemptId' = attempt_id::text);
+  insert into public.portia_promo_audit_events (nickname_key, actor_id, event_type, details)
+    values (nickname_key_value, auth.uid(), 'request-rejected', jsonb_build_object('kind', p_kind, 'requestId', p_request_id));
+  if p_kind = 'ordinary' then delete from public.portia_promo_requests where id = p_request_id;
+  else delete from public.portia_promo_qualification_requests where id = p_request_id; end if;
+  return true;
+end $$;
+
+create or replace function public.portia_promo_delete_request(p_kind text, p_request_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  nickname_key_value text;
+  assignment_ids uuid[] := '{}'::uuid[];
+  attempt_ids uuid[] := '{}'::uuid[];
+begin
+  if not public.portia_has_tab_grant('promo') or not public.portia_is_owner() then raise exception 'owner-required'; end if;
+  if p_kind = 'ordinary' then
+    select nickname_key into nickname_key_value from public.portia_promo_requests where id = p_request_id for update;
+    if nickname_key_value is null then return false; end if;
+    select coalesce(array_agg(id), '{}'::uuid[]) into assignment_ids from public.portia_promo_assignments where request_id = p_request_id;
+  elsif p_kind = 'qualification' then
+    select nickname_key into nickname_key_value from public.portia_promo_qualification_requests where id = p_request_id for update;
+    if nickname_key_value is null then return false; end if;
+    select coalesce(array_agg(id), '{}'::uuid[]) into attempt_ids from public.portia_promo_attempts where request_id = p_request_id;
+  else return false; end if;
+  delete from public.portia_promo_results result
+    where result.compact ->> 'requestId' = p_request_id::text
+      or exists (select 1 from unnest(assignment_ids) assignment_id where result.compact ->> 'assignmentId' = assignment_id::text)
+      or exists (select 1 from unnest(attempt_ids) attempt_id where result.compact ->> 'attemptId' = attempt_id::text);
+  insert into public.portia_promo_audit_events (nickname_key, actor_id, event_type, details)
+    values (nickname_key_value, auth.uid(), 'request-deleted', jsonb_build_object('kind', p_kind, 'requestId', p_request_id));
+  if p_kind = 'ordinary' then delete from public.portia_promo_requests where id = p_request_id;
+  else delete from public.portia_promo_qualification_requests where id = p_request_id; end if;
+  return true;
 end $$;
 
 create or replace function public.portia_promo_confirm_assignment(p_request_id uuid, p_bank_id uuid, p_bank_version text, p_items jsonb)
@@ -1378,6 +1426,7 @@ revoke all on function public.portia_promo_public_status(text, text, text) from 
 revoke all on function public.portia_promo_claim_request(text, uuid) from public, anon, authenticated;
 revoke all on function public.portia_promo_release_request(text, uuid, boolean) from public, anon, authenticated;
 revoke all on function public.portia_promo_reject_request(text, uuid, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_delete_request(text, uuid) from public, anon, authenticated;
 revoke all on function public.portia_promo_confirm_assignment(uuid, uuid, text, jsonb) from public, anon, authenticated;
 revoke all on function public.portia_promo_confirm_test(uuid, uuid, text, jsonb, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_start_test(uuid, text) from public, anon, authenticated;
@@ -1408,6 +1457,7 @@ grant execute on function public.portia_promo_bank_command(text, jsonb) to authe
 grant execute on function public.portia_promo_claim_request(text, uuid) to authenticated;
 grant execute on function public.portia_promo_release_request(text, uuid, boolean) to authenticated;
 grant execute on function public.portia_promo_reject_request(text, uuid, text) to authenticated;
+grant execute on function public.portia_promo_delete_request(text, uuid) to authenticated;
 grant execute on function public.portia_promo_confirm_assignment(uuid, uuid, text, jsonb) to authenticated;
 grant execute on function public.portia_promo_confirm_test(uuid, uuid, text, jsonb, text) to authenticated;
 grant execute on function public.portia_promo_grade_answer(uuid, boolean) to authenticated;

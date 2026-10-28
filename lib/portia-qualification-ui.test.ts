@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const participant = readFileSync(new URL("../components/portia-promotion.tsx", import.meta.url), "utf8");
-const reviewer = readFileSync(new URL("../components/portia-promotion-editor.tsx", import.meta.url), "utf8");
+const reviewer = readFileSync(new URL("../components/portia-promotion-editor-main.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
 const api = readFileSync(new URL("./portia-promotion-api.ts", import.meta.url), "utf8");
 const setup = readFileSync(new URL("../supabase/portia_setup.sql", import.meta.url), "utf8");

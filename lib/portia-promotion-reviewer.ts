@@ -29,12 +29,13 @@ export async function requirePromotionReviewer(supabase: SupabaseClient): Promis
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const keyPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
-const requestActions = new Set(["claim", "release", "force-release", "reject", "approve-task"]);
+const requestActions = new Set(["claim", "release", "force-release", "reject", "delete-request", "approve-task"]);
 const attemptActions = new Set(["override-failure", "release-retake"]);
 
 export type PromotionReviewerCommand =
   | { action: "claim" | "release" | "force-release" | "approve-task"; kind: PromotionRequestKind; requestId: string }
   | { action: "reject"; kind: PromotionRequestKind; requestId: string; note: string }
+  | { action: "delete-request"; kind: PromotionRequestKind; requestId: string }
   | { action: "override-failure" | "release-retake"; attemptId: string }
   | { action: "grade-answer"; answerId: string; correct: boolean }
   | { action: "finalize-attempt"; attemptId: string; passed: boolean; percent: number | null; retakeDays: number }
@@ -50,7 +51,7 @@ export function parsePromotionReviewerCommand(value: unknown): PromotionReviewer
       const note = typeof body.note === "string" ? body.note.trim() : "";
       return note.length <= 2000 ? { action: "reject", kind: body.kind, requestId: body.requestId, note } : null;
     }
-    return { action: body.action as "claim" | "release" | "force-release" | "approve-task", kind: body.kind, requestId: body.requestId };
+    return { action: body.action as "claim" | "release" | "force-release" | "delete-request" | "approve-task", kind: body.kind, requestId: body.requestId };
   }
   if (attemptActions.has(body.action)) {
     return typeof body.attemptId === "string" && uuidPattern.test(body.attemptId)

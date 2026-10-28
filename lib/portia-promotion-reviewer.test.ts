@@ -26,6 +26,7 @@ test("promotion reviewer commands accept only typed bounded payloads", () => {
   assert.equal(parsePromotionReviewerCommand({ action: "claim", kind: "ordinary", requestId: "x" }), null);
   assert.equal(parsePromotionReviewerCommand({ action: "release", kind: "other", requestId: "550e8400-e29b-41d4-a716-446655440000" }), null);
   assert.equal(parsePromotionReviewerCommand({ action: "reject", kind: "ordinary", requestId: "550e8400-e29b-41d4-a716-446655440000", note: "x".repeat(2001) }), null);
+  assert.deepEqual(parsePromotionReviewerCommand({ action: "delete-request", kind: "qualification", requestId: "550e8400-e29b-41d4-a716-446655440000" }), { action: "delete-request", kind: "qualification", requestId: "550e8400-e29b-41d4-a716-446655440000" });
   assert.deepEqual(parsePromotionReviewerCommand({ action: "grade-answer", answerId: "550e8400-e29b-41d4-a716-446655440000", correct: true }), { action: "grade-answer", answerId: "550e8400-e29b-41d4-a716-446655440000", correct: true });
   assert.deepEqual(parsePromotionReviewerCommand({ action: "finalize-attempt", attemptId: "550e8400-e29b-41d4-a716-446655440000", passed: false, percent: 70 }), { action: "finalize-attempt", attemptId: "550e8400-e29b-41d4-a716-446655440000", passed: false, percent: 70, retakeDays: 2 });
   assert.equal(parsePromotionReviewerCommand({ action: "finalize-attempt", attemptId: "550e8400-e29b-41d4-a716-446655440000", passed: false, percent: 101 }), null);
@@ -104,5 +105,5 @@ test("promotion reviewer routes use server access and RPCs, never browser openTa
   assert.ok(proxy.includes('"/api/promotion/banks/:path*"'));
   const reviewer = readFileSync(new URL("../app/api/promotion/reviewer/route.ts", import.meta.url), "utf8");
   assert.ok(reviewer.includes('code: "binding-not-found"'));
-  assert.match(reviewer, /command\.action === "reset-device" && !auth\.access\.canManageEditors/);
+  assert.match(reviewer, /command\.action === "reset-device" \|\| command\.action === "delete-request"[\s\S]*!auth\.access\.canManageEditors/);
 });

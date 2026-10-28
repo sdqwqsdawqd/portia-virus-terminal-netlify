@@ -44,8 +44,8 @@ export async function POST(request: Request) {
   if (auth.status !== "allowed") return denied(auth.status);
   const command = parsePromotionReviewerCommand(parseJsonObject(await request.text()));
   if (!command) return Response.json({ error: "Некорректная команда." }, { status: 400, headers: noStoreHeaders });
-  if (command.action === "reset-device" && !auth.access.canManageEditors) {
-    return Response.json({ error: "Сброс привязки доступен только владельцу.", code: "reset-forbidden" }, { status: 403, headers: noStoreHeaders });
+  if ((command.action === "reset-device" || command.action === "delete-request") && !auth.access.canManageEditors) {
+    return Response.json({ error: command.action === "delete-request" ? "Удаление запроса доступно только владельцу." : "Сброс привязки доступен только владельцу.", code: command.action === "delete-request" ? "delete-forbidden" : "reset-forbidden" }, { status: 403, headers: noStoreHeaders });
   }
 
   if (command.action === "approve-task") {
@@ -61,6 +61,8 @@ export async function POST(request: Request) {
       ? ["portia_promo_release_request", { p_kind: command.kind, p_request_id: command.requestId, p_force: command.action === "force-release" }]
       : command.action === "reject"
         ? ["portia_promo_reject_request", { p_kind: command.kind, p_request_id: command.requestId, p_internal_note: command.note }]
+        : command.action === "delete-request"
+          ? ["portia_promo_delete_request", { p_kind: command.kind, p_request_id: command.requestId }]
         : command.action === "approve-task"
           ? ["portia_promo_approve_assignment", { p_request_id: command.requestId }]
           : command.action === "override-failure"

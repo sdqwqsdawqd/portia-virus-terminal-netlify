@@ -129,3 +129,15 @@ test("security regression: close prunes history and cleanup touches only eligibl
   assert.match(cleanup, /portia_promo_qualification_requests[\s\S]*status in \('pending', 'rejected', 'failed'\)[\s\S]*interval '3 days'/i);
   assert.doesNotMatch(cleanup, /delete from public\.portia_promo_(?:results|assignments|assignment_items|attempts|attempt_questions|answers|device_bindings)/i);
 });
+
+test("security regression: privileged deletion is owner-only and never resets bindings", () => {
+  const reject = sqlFunction("portia_promo_reject_request");
+  const remove = sqlFunction("portia_promo_delete_request");
+  assert.match(remove, /portia_is_owner\(\)/i);
+  assert.match(remove, /for update/i);
+  assert.match(remove, /request-deleted/i);
+  assert.doesNotMatch(reject + remove, /portia_promo_device_bindings|portia_promo_reset_device/i);
+  const reviewer = route("reviewer");
+  assert.match(reviewer, /command\.action === "reset-device" \|\| command\.action === "delete-request"/);
+  assert.match(reviewer, /portia_promo_reject_request[\s\S]*portia_promo_delete_request/);
+});

@@ -119,7 +119,8 @@ test("promotion is a standalone desktop application with its own window geometry
   assert.ok(source.includes('<DesktopIcon app="promotion"'));
   assert.ok(source.includes('<AppWindow app="promotion"'));
   assert.ok(source.includes("visible={activeApp === \"promotion\" && !windows.promotion.minimized}"));
-  assert.ok(source.includes('meta="Portia Promotion"'));
+  assert.ok(source.includes('meta="Повышение"'));
+  assert.ok(!source.includes('meta="Portia Promotion"'));
 });
 
 test("shared shortcut hover feedback never translates the icon container", () => {

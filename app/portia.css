@@ -1905,6 +1905,11 @@ html[data-motion="reduce"] .promotion-card, html[data-motion="reduce"] .promotio
 .promotion-bank-editor > label, .promotion-preview > label { display: grid; gap: 6px; margin: 12px 0; font: 700 10px var(--sans); letter-spacing: .04em; }
 .promotion-bank-editor textarea, .promotion-bank-editor select, .promotion-preview select { width: 100%; box-sizing: border-box; min-height: 40px; border: 1px solid var(--line-bright); border-radius: 7px; background: rgba(0,0,0,.16); color: inherit; }
 .promotion-bank-editor textarea { min-height: 82px; padding: 10px; resize: vertical; }
+.promotion-bank-settings { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin: 14px 0; padding: 10px; border: 1px solid var(--line); border-radius: 7px; }
+.promotion-bank-settings label { display: grid; gap: 5px; color: var(--muted); font: 700 9px var(--sans); }
+.promotion-bank-settings input, .promotion-bank-editor > label > input { min-height: 38px; box-sizing: border-box; padding: 0 9px; border: 1px solid var(--line-bright); border-radius: 6px; background: rgba(0,0,0,.16); color: inherit; }
+.promotion-quota-settings { display: grid; grid-template-columns: repeat(3, minmax(90px, 1fr)) auto; }
+.promotion-disabled-reason { margin: 9px 0 0; color: #efaaa3; font: 400 11px/1.45 var(--doc); }
 .promotion-bank-items { display: grid; gap: 7px; margin-top: 16px; }
 .promotion-bank-items article { padding: 10px; border: 1px solid var(--line); border-radius: 7px; }
 .promotion-bank-items article > label { display: flex; gap: 9px; font: 400 12px/1.45 var(--doc); }
