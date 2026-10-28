@@ -132,13 +132,13 @@
 | RETRY-02 | Phase 14 | Complete |
 | RETRY-03 | Phase 14 | Complete |
 | RETRY-04 | Phase 14 | Complete |
-| RETRY-05 | Phase 14 | Pending |
+| RETRY-05 | Phase 14 | Complete |
 | PERM-01 | Phase 14 | Complete |
 | PERM-02 | Phase 14 | Complete |
 | PERM-03 | Phase 14 | Complete |
 | EDIT-01 | Phase 14 | Pending |
 | EDIT-02 | Phase 14 | Complete |
-| EDIT-03 | Phase 14 | Pending |
+| EDIT-03 | Phase 14 | Complete |
 | DATA-01 | Phase 14 | Complete |
 | DATA-02 | Phase 14 | Complete |
 | DATA-03 | Phase 14 | Complete |
