@@ -4,19 +4,57 @@ import { after, before, describe, test } from "node:test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const invokedDirectly = process.env.npm_lifecycle_event === "test:promotion-live";
+const readOnlyPreflight = process.env.PORTIA_PROMO_LIVE_CONFIRM === "READ_ONLY_PREFLIGHT";
 const requiredEnvironment = [
   "PORTIA_PROMO_LIVE_URL",
   "PORTIA_PROMO_LIVE_ANON_KEY",
-  "PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY",
 ] as const;
-const missingEnvironment = requiredEnvironment.filter((name) => !process.env[name]);
+const mutationEnvironment = ["PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY"] as const;
+const missingEnvironment = [...requiredEnvironment, ...(readOnlyPreflight ? [] : mutationEnvironment)].filter((name) => !process.env[name]);
 const mutationGuard = "ISOLATED_TEST_PROJECT";
+
+const inertUuid = "00000000-0000-4000-8000-000000000000";
+const rpcInventory: Array<[string, Record<string, unknown> | undefined]> = [
+  ["portia_promo_resolve_device", { p_token_hash: "x".repeat(64) }],
+  ["portia_promo_public_status", { p_nickname_key: "__portia_rpc_probe", p_title_id: "academic", p_token_hash: null }],
+  ["portia_promo_submit_request", { p_kind: "ordinary", p_nickname: "__portia_rpc_probe", p_nickname_key: "__portia_rpc_probe", p_title_id: "academic", p_target_id: "trainee", p_token_hash: "short", p_risk_bucket: "", p_bucket_key: "__portia_rpc_probe", p_ip_bucket: "" }],
+  ["portia_promo_reviewer_state", undefined],
+  ["portia_promo_claim_request", { p_kind: "ordinary", p_request_id: inertUuid }],
+  ["portia_promo_release_request", { p_kind: "ordinary", p_request_id: inertUuid, p_force: false }],
+  ["portia_promo_reject_request", { p_kind: "ordinary", p_request_id: inertUuid, p_internal_note: "probe" }],
+  ["portia_promo_delete_request", { p_kind: "ordinary", p_request_id: inertUuid }],
+  ["portia_promo_approve_assignment", { p_request_id: inertUuid }],
+  ["portia_promo_override_failure", { p_attempt_id: inertUuid }],
+  ["portia_promo_release_retake", { p_attempt_id: inertUuid }],
+  ["portia_promo_grade_answer", { p_answer_id: inertUuid, p_correct: false }],
+  ["portia_promo_finalize_attempt", { p_attempt_id: inertUuid, p_passed: false, p_percent: 0, p_retake_days: 2 }],
+  ["portia_promo_reset_device", { p_nickname_key: "__portia_rpc_probe" }],
+  ["portia_promo_bank_state", undefined],
+  ["portia_promo_bank_command", { p_action: "probe", p_payload: {} }],
+  ["portia_promo_confirm_assignment", { p_request_id: inertUuid, p_bank_id: inertUuid, p_bank_version: "probe", p_items: [] }],
+  ["portia_promo_confirm_test", { p_request_id: inertUuid, p_bank_id: inertUuid, p_bank_version: "probe", p_questions: [] }],
+];
+
+async function verifyRpcInventory(client: SupabaseClient) {
+  for (const [name, args] of rpcInventory) {
+    const result = await client.rpc(name, args);
+    const code = result.error?.code ?? "";
+    assert.ok(code !== "PGRST202" && code !== "42883", `${name}: deployed signature is missing or mismatched (${code})`);
+    assert.notEqual(code, "42P01", `${name}: deployed function references a missing table`);
+  }
+}
 
 if (!invokedDirectly) {
   test("live Promotion database verification is opt-in", { skip: "run npm run test:promotion-live against an isolated Supabase test project" }, () => {});
-} else if (missingEnvironment.length || process.env.PORTIA_PROMO_LIVE_CONFIRM !== mutationGuard) {
+} else if (missingEnvironment.length || (!readOnlyPreflight && process.env.PORTIA_PROMO_LIVE_CONFIRM !== mutationGuard)) {
   test("live Promotion database verification requires an isolated-project guard", () => {
-    assert.fail(`Refusing live mutation. Set ${missingEnvironment.join(", ") || "the required credentials"} and PORTIA_PROMO_LIVE_CONFIRM=${mutationGuard}.`);
+    assert.fail(`Refusing live mutation. Set ${missingEnvironment.join(", ") || "the required credentials"} and PORTIA_PROMO_LIVE_CONFIRM=${mutationGuard}; use READ_ONLY_PREFLIGHT only for deployed RPC inventory.`);
+  });
+} else if (readOnlyPreflight) {
+  const client = createClient(process.env.PORTIA_PROMO_LIVE_URL!, process.env.PORTIA_PROMO_LIVE_ANON_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
+  test("deployed Promotion RPC inventory matches participant, reviewer and bank routes", async () => {
+    await verifyRpcInventory(client);
+    assert.equal(rpcInventory.length, 18);
   });
 } else {
   const url = process.env.PORTIA_PROMO_LIVE_URL!;
@@ -139,6 +177,7 @@ if (!invokedDirectly) {
 
   describe("live Promotion concurrency, lease and RLS", { concurrency: false }, () => {
     before(async () => {
+      await verifyRpcInventory(anonymous);
       const a = await createReviewer("reviewer-a", true); reviewerA = a.client; reviewerAId = a.id;
       reviewerB = (await createReviewer("reviewer-b", true)).client;
       noPromo = (await createReviewer("no-promo", false)).client;
@@ -175,6 +214,13 @@ if (!invokedDirectly) {
       assert.deepEqual(same.map((result) => result.data.code).sort(), ["active-request", "created"]);
       const sameRows = requireData<Array<{ id: string }>>(await service.from("portia_promo_requests").select("id").eq("nickname_key", sameKey), "same admission rows");
       assert.equal(sameRows.length, 1);
+      const resolved = await anonymous.rpc("portia_promo_resolve_device", { p_token_hash: sameToken });
+      assert.equal(resolved.error, null, resolved.error?.message);
+      assert.equal(resolved.data, sameKey);
+      const restored = await anonymous.rpc("portia_promo_public_status", { p_nickname_key: sameKey, p_title_id: "academic", p_token_hash: sameToken });
+      assert.equal(restored.error, null, restored.error?.message);
+      assert.equal(restored.data.binding, "allowed");
+      assert.equal(restored.data.ordinary?.status, "pending");
 
       const keyA = nickname("split-a"); const keyB = nickname("split-b"); const sharedToken = token("split-device");
       const split = await Promise.all([submitRequest("split-a", keyA, sharedToken), submitRequest("split-b", keyB, sharedToken)]);
