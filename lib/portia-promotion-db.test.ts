@@ -153,6 +153,28 @@ test("public promotion status is explicit and submit requires an existing active
   assert.doesNotMatch(setup, /grant select on (table )?public\.portia_promo_/i);
 });
 
+test("request admission binds, throttles and creates inside one transaction", () => {
+  const submitStart = setup.indexOf("create or replace function public.portia_promo_submit_request");
+  const submit = setup.slice(submitStart, setup.indexOf("$$;", submitStart) + 3);
+  assert.match(submit, /p_bucket_key text[\s\S]*p_ip_bucket text/i);
+  assert.match(submit, /pg_advisory_xact_lock[\s\S]*promo:bucket:[\s\S]*promo:nickname:[\s\S]*promo:token:/i);
+  assert.match(submit, /portia_promo_attempt_buckets[\s\S]*for update/i);
+  assert.match(submit, /insert into public\.portia_promo_device_bindings/i);
+  assert.match(submit, /insert into public\.portia_promo_(?:requests|qualification_requests)/i);
+  assert.match(submit, /jsonb_build_object\('code', '(?:created|throttled|device-denied|active-request)'/i);
+});
+
+test("qualification answers compare-and-set the expected question index", () => {
+  assert.match(setup, /portia_promo_attempts[\s\S]*current_question_index integer not null default 0/i);
+  const answerStart = setup.indexOf("create or replace function public.portia_promo_answer_question");
+  const answer = setup.slice(answerStart, setup.indexOf("$$;", answerStart) + 3);
+  assert.match(answer, /p_expected_question_index integer/i);
+  assert.match(answer, /current_question_index[\s\S]*for update/i);
+  assert.match(answer, /q\.sort_order = p_expected_question_index/i);
+  assert.match(answer, /set current_question_index = current_question_index \+ 1/i);
+  assert.match(answer, /'conflict'/i);
+});
+
 test("reviewer bank RPCs expose versioned private configuration and immutable confirmation stays separate", () => {
   const start = setup.indexOf("create or replace function public.portia_promo_bank_state");
   const body = setup.slice(start, setup.indexOf("$$;", start) + 3);

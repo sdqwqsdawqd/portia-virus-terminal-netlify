@@ -66,6 +66,16 @@ test("security regression: duplicate active requests and two-reviewer claims are
   assert.match(reviewer, /data !== true[\s\S]*claim-conflict[\s\S]*status: 409/);
 });
 
+test("security regression: admission and answer advancement are serialized", () => {
+  const submit = sqlFunction("portia_promo_submit_request");
+  assert.match(submit, /pg_advisory_xact_lock/);
+  assert.match(submit, /portia_promo_attempt_buckets[\s\S]*portia_promo_device_bindings[\s\S]*portia_promo_(?:requests|qualification_requests)/i);
+  const answer = sqlFunction("portia_promo_answer_question");
+  assert.match(answer, /p_expected_question_index integer/i);
+  assert.match(answer, /current_question_index[\s\S]*for update/i);
+  assert.match(answer, /set current_question_index = current_question_index \+ 1/i);
+});
+
 test("security regression: lookup binding uses the RPC and submit cannot bind an arbitrary nickname", () => {
   const statusRoute = route("status");
   const api = readFileSync(new URL("./portia-promotion-api.ts", import.meta.url), "utf8");
