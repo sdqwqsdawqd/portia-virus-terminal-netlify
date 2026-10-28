@@ -76,6 +76,18 @@ test("security regression: admission and answer advancement are serialized", () 
   assert.match(answer, /set current_question_index = current_question_index \+ 1/i);
 });
 
+test("security regression: stale test leases fail closed and device mode is immutable", () => {
+  const expire = sqlFunction("portia_promo_expire_stale_attempt");
+  assert.match(expire, /lease_expires_at <= now\(\)[\s\S]*status = 'failed'/i);
+  assert.match(expire, /technical_failure = coalesce\(technical_failure, 'connection-lost'\)/i);
+  const heartbeat = sqlFunction("portia_promo_heartbeat_test");
+  assert.match(heartbeat, /portia_promo_expire_stale_attempt\(p_attempt_id\)/i);
+  assert.match(heartbeat, /status = 'active'[\s\S]*lease_expires_at = now\(\) \+ interval '45 seconds'/i);
+  const current = sqlFunction("portia_promo_current_test");
+  assert.doesNotMatch(current, /set client_mode\s*=/i);
+  assert.match(current, /a\.client_mode = p_client_mode/i);
+});
+
 test("security regression: lookup stays private and atomic admission owns binding", () => {
   const statusRoute = route("status");
   const api = readFileSync(new URL("./portia-promotion-api.ts", import.meta.url), "utf8");

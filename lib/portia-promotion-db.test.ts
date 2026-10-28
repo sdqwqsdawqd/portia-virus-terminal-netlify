@@ -67,6 +67,8 @@ const rpcNames = [
   "portia_promo_confirm_assignment",
   "portia_promo_confirm_test",
   "portia_promo_start_test",
+  "portia_promo_expire_stale_attempt",
+  "portia_promo_heartbeat_test",
   "portia_promo_answer_question",
   "portia_promo_fail_attempt",
   "portia_promo_grade_answer",
@@ -173,6 +175,47 @@ test("qualification answers compare-and-set the expected question index", () => 
   assert.match(answer, /q\.sort_order = p_expected_question_index/i);
   assert.match(answer, /set current_question_index = current_question_index \+ 1/i);
   assert.match(answer, /'conflict'/i);
+});
+
+test("qualification attempts use immutable mode and a server-side heartbeat lease", () => {
+  assert.match(setup, /portia_promo_attempts[\s\S]*last_seen_at timestamptz[\s\S]*lease_expires_at timestamptz/i);
+  const confirmStart = setup.indexOf("create or replace function public.portia_promo_confirm_test");
+  const confirm = setup.slice(confirmStart, setup.indexOf("$$;", confirmStart) + 3);
+  assert.match(confirm, /insert into public\.portia_promo_attempts[\s\S]*client_mode[\s\S]*p_client_mode/i);
+  const currentStart = setup.indexOf("create or replace function public.portia_promo_current_test");
+  const current = setup.slice(currentStart, setup.indexOf("$$;", currentStart) + 3);
+  assert.doesNotMatch(current, /set client_mode\s*=/i);
+  const heartbeatStart = setup.indexOf("create or replace function public.portia_promo_heartbeat_test");
+  const heartbeat = setup.slice(heartbeatStart, setup.indexOf("$$;", heartbeatStart) + 3);
+  assert.match(heartbeat, /token_hash = p_token_hash[\s\S]*reset_at is null/i);
+  assert.match(heartbeat, /lease_expires_at = now\(\) \+ interval '45 seconds'/i);
+  for (const name of ["portia_promo_start_test", "portia_promo_current_test", "portia_promo_answer_question"]) {
+    const start = setup.indexOf(`create or replace function public.${name}`);
+    const body = setup.slice(start, setup.indexOf("$$;", start) + 3);
+    assert.match(body, /portia_promo_expire_stale_attempt\(p_attempt_id\)/i, name);
+  }
+});
+
+test("all Phase 14 table and function definitions stay normalized across both SQL sources", () => {
+  const normalize = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
+  const functionNames = [...apply.matchAll(/create or replace function public\.(portia_promo_[a-z_]+)/gi)].map((match) => match[1]);
+  const tableNames = [...apply.matchAll(/create table if not exists public\.(portia_promo_[a-z_]+)/gi)].map((match) => match[1]);
+  for (const name of functionNames) {
+    const extract = (source: string) => {
+      const start = source.toLowerCase().indexOf(`create or replace function public.${name}`);
+      assert.ok(start >= 0, `${name} mirrored`);
+      return source.slice(start, source.indexOf("$$;", start) + 3);
+    };
+    assert.equal(normalize(extract(setup)), normalize(extract(apply)), name);
+  }
+  for (const name of tableNames) {
+    const extract = (source: string) => {
+      const start = source.toLowerCase().indexOf(`create table if not exists public.${name}`);
+      assert.ok(start >= 0, `${name} mirrored`);
+      return source.slice(start, source.indexOf("\n);", start) + 3);
+    };
+    assert.equal(normalize(extract(setup)), normalize(extract(apply)), name);
+  }
 });
 
 test("reviewer bank RPCs expose versioned private configuration and immutable confirmation stays separate", () => {
