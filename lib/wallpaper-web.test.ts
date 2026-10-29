@@ -22,7 +22,10 @@ const edgeBetween = (u: number, v: number) => webEdges.findIndex((edge) => (edge
 
 test("the wallpaper spider stays visible and relocates only after an explicit off-to-on toggle", () => {
   const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
-  assert.match(source, /const LEG_SWING = 7;/);
+  assert.match(source, /const LEG_SWING_BY_PAIR = \[0, 3\.2, 5\.2, 7\.2, 10\.5\]/);
+  assert.match(source, /const LEG_TUCK_BY_PAIR = \[0, 0\.025, 0\.038, 0\.052, 0\.072\]/);
+  assert.match(source, /const PROBE_SWING = 4\.2;/);
+  assert.match(source, /LEG_SWING_BY_PAIR\[pair\]/);
   assert.match(source, /const BODY_BOB = 0\.006;/);
   assert.doesNotMatch(source, /STEP_CYCLE/);
   assert.match(source, /const PROBE_SWING =/);

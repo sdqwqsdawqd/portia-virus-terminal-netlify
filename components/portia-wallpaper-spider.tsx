@@ -27,12 +27,14 @@ const legBack = (leg: string) => (leg.startsWith("R") ? -1 : 1);
 const legGroup = (leg: string) => (GAIT_A.includes(leg) ? 0 : 1);
 // Legs of one group do not land as one rigid block: each pair trails the one in front a little.
 const legLag = (leg: string) => (4 - Number(leg[1])) * 0.035;
-const LEG_SWING = 7; // restrained sweep: the spider walks without flailing
-const LEG_TUCK = 0.045; // a small lift keeps the feet readable without shrinking the legs
+// Artwork pair 4 is anatomical front (beside the fangs); pair 1 is rear. The shorter front pair needs a
+// wider sweep to read at desktop scale, while the long rear pair is deliberately quiet.
+const LEG_SWING_BY_PAIR = [0, 3.2, 5.2, 7.2, 10.5] as const;
+const LEG_TUCK_BY_PAIR = [0, 0.025, 0.038, 0.052, 0.072] as const;
 const BODY_BOB = 0.006; // nearly still abdomen; no conspicuous pulsing in the background
 const GAIT_EASE = 0.45; // legs settle softly after a stop
 const TURN_TIME = 0.22; // smooth directional changes instead of abrupt pivots
-const PROBE_SWING = 1.8;
+const PROBE_SWING = 4.2;
 const PROBE_MIN_DELAY = 14;
 const PROBE_MAX_DELAY = 32;
 const PROBE_MIN_DURATION = 1.15;
@@ -182,9 +184,10 @@ export function WallpaperSpider() {
           leg.style.scale = "1";
           return;
         }
+        const pair = Number(id[1]) as 1 | 2 | 3 | 4;
         const pose = legPose((phase + legGroup(id) * 0.5 + legLag(id)) % 1);
-        leg.style.rotate = `${(LEG_SWING * pose.swing * gait * legBack(id)).toFixed(2)}deg`;
-        leg.style.scale = (1 - LEG_TUCK * pose.tuck * gait).toFixed(4);
+        leg.style.rotate = `${(LEG_SWING_BY_PAIR[pair] * pose.swing * gait * legBack(id)).toFixed(2)}deg`;
+        leg.style.scale = (1 - LEG_TUCK_BY_PAIR[pair] * pose.tuck * gait).toFixed(4);
       });
       legsNeutral = gait === 0 && !probing;
     };

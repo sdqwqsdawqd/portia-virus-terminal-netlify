@@ -1583,11 +1583,11 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
         {startOpen && <div className="start-panel">
           <div className="start-panel-brand"><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><div><strong>PORTIA OS</strong></div></div>
-          <button type="button" onClick={() => openApp("search")}><span className="start-panel-icon" data-icon="search"><PortiaIcon name="search" /></span>Глобальный поиск</button>
-          <button type="button" onClick={() => openApp("archive")}><span className="start-panel-icon" data-icon="virus"><PortiaIcon name="virus" /></span>База вирусов</button>
-          <button type="button" onClick={() => openApp("employees")}><span className="start-panel-icon" data-icon="employees"><PortiaIcon name="employees" /></span>Сотрудники</button>
-          <button type="button" onClick={() => openApp("promotion")}><span className="start-panel-icon" data-icon="promotion"><PortiaIcon name="promotion" /></span>Повышение</button>
-          <button type="button" onClick={() => openApp("settings")}><span className="start-panel-icon" data-icon="settings"><PortiaIcon name="settings" /></span>Настройки</button>
+          <StartPanelButton icon="search" label="Глобальный поиск" onClick={() => openApp("search")} />
+          <StartPanelButton icon="virus" label="База вирусов" onClick={() => openApp("archive")} />
+          <StartPanelButton icon="employees" label="Сотрудники" onClick={() => openApp("employees")} />
+          <StartPanelButton icon="promotion" label="Повышение" onClick={() => openApp("promotion")} />
+          <StartPanelButton icon="settings" label="Настройки" onClick={() => openApp("settings")} />
         </div>}
 
       </div>
@@ -1635,6 +1635,30 @@ function DesktopIcon({ app, onOpen, position, onMove, className = "", badge = fa
   return <DraggableDesktopIcon shortcutId={app} label={appMeta[app].label} icon={appMeta[app].icon} position={position} onMove={onMove} onActivate={(origin) => onOpen(app, origin)} className={className} badge={badge} />;
 }
 
+const shortcutAnimationMs = 760;
+
+function useShortcutAnimation() {
+  const [playing, setPlaying] = useState(false);
+  const timer = useRef<number | null>(null);
+  const play = useCallback(() => {
+    if (timer.current !== null) return;
+    setPlaying(true);
+    timer.current = window.setTimeout(() => {
+      setPlaying(false);
+      timer.current = null;
+    }, shortcutAnimationMs);
+  }, []);
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+  }, []);
+  return { playing, play };
+}
+
+function StartPanelButton({ icon, label, onClick }: { icon: PortiaIconName; label: string; onClick: () => void }) {
+  const animation = useShortcutAnimation();
+  return <button className={animation.playing ? "is-icon-animating" : undefined} type="button" onPointerEnter={animation.play} onFocus={animation.play} onClick={onClick}><span className="start-panel-icon" data-icon={icon}><PortiaIcon name={icon} /></span>{label}</button>;
+}
+
 function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onActivate, className = "", badge = false }: {
   shortcutId: DesktopShortcutId;
   label: string;
@@ -1650,12 +1674,14 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
   const dropTimer = useRef<number | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dropping, setDropping] = useState(false);
+  const iconAnimation = useShortcutAnimation();
 
   useEffect(() => () => {
     if (dropTimer.current !== null) window.clearTimeout(dropTimer.current);
   }, []);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    iconAnimation.play();
     if (window.innerWidth <= 520 || event.button !== 0) return;
     if (dropTimer.current !== null) window.clearTimeout(dropTimer.current);
     setDropping(false);
@@ -1720,7 +1746,7 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
   };
 
   const sharedProps = {
-    className: `desktop-icon${className ? ` ${className}` : ""}${dragging ? " is-dragging" : ""}${dropping ? " is-dropping" : ""}`,
+    className: `desktop-icon${className ? ` ${className}` : ""}${dragging ? " is-dragging" : ""}${dropping ? " is-dropping" : ""}${iconAnimation.playing ? " is-icon-animating" : ""}`,
     "data-shortcut": shortcutId,
     // A position saved on a bigger screen is held inside the desktop so the icon never disappears.
     style: position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId],
@@ -1729,6 +1755,8 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
     onPointerUp: finishDrag,
     onPointerCancel: finishDrag,
     onClick: handleClick,
+    onPointerEnter: iconAnimation.play,
+    onFocus: iconAnimation.play,
     onDragStart: (event: React.DragEvent<HTMLElement>) => event.preventDefault(),
   };
   const content = <><span data-icon={icon} className="desktop-icon-symbol"><PortiaIcon name={icon} />{badge && <i className="desktop-icon-badge" aria-label="Есть новая сводка" />}</span><span>{label}</span></>;
@@ -1809,8 +1837,7 @@ function GuideApp({ sections, formattedText, openCardId, onOpenCard }: {
   const scroller = useRef<HTMLDivElement>(null);
   const page = useRef<HTMLElement>(null);
   // Folded sections live on this device only (D-08): first visit starts with compact section headers only.
-  const initialCollapsed = useRef(sections.map((section) => section.id));
-  const [collapsed, setCollapsed] = useState<string[]>(() => initialCollapsed.current);
+  const [collapsed, setCollapsed] = useState<string[]>(() => sections.map((section) => section.id));
   const [collapsedLoaded, setCollapsedLoaded] = useState(false);
   const returnTo = useRef<{ cardId: string; scrollTop: number; sections: string } | null>(null);
   const backIntent = useRef(false);
@@ -1838,14 +1865,14 @@ function GuideApp({ sections, formattedText, openCardId, onOpenCard }: {
   }, [shownId, sections]);
 
   useEffect(() => {
-    let ids = initialCollapsed.current;
+    let ids: string[] | null = null;
     try {
       const stored = window.localStorage.getItem(guideCollapsedStorageKey);
       const saved: unknown = stored === null ? null : JSON.parse(stored);
       if (Array.isArray(saved)) ids = saved.filter((id): id is string => typeof id === "string");
     } catch {}
     const restoreTimer = window.setTimeout(() => {
-      setCollapsed(ids);
+      if (ids) setCollapsed(ids);
       setCollapsedLoaded(true);
     }, 0);
     return () => window.clearTimeout(restoreTimer);

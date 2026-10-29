@@ -135,9 +135,25 @@ test("global search covers applications, employees and every existing content co
 
 test("editor collections scroll inside bounded panes and the table of contents no longer follows the page", () => {
   assert.match(styles, /\.editor-record-list\s*\{[^}]*max-height:[^;}]+;[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.editor-record-list\s*\{[^}]*overflow-x:\s*hidden/);
+  assert.match(styles, /\.virus-editor-layout\s*\{[^}]*grid-template-columns:\s*clamp\(240px, 28vw, 300px\)/);
   assert.match(styles, /\.editor-toc\s*\{[^}]*position:\s*relative/);
   assert.match(styles, /\.promotion-request-list, \.promotion-bank-list\s*\{[^}]*overflow-y:\s*auto/);
   assert.match(styles, /\.promotion-bank-editor, \.promotion-preview\s*\{[^}]*overflow-y:\s*auto/);
+});
+
+test("Vivian lifts the source artwork to the interface brightness without greying the image itself", () => {
+  assert.match(styles, /\.assistant-button\s*\{[^}]*filter:\s*var\(--assistant-filter\) brightness\(1\.42\) saturate\(1\.35\)/);
+  assert.match(styles, /\.assistant-button img\s*\{[^}]*filter:\s*none/);
+});
+
+test("shortcut motion survives pointer exit until every delayed icon part reaches its terminal frame", () => {
+  assert.ok(source.includes("const shortcutAnimationMs = 760"));
+  assert.ok(source.includes("function useShortcutAnimation()"));
+  assert.ok(source.includes('iconAnimation.playing ? " is-icon-animating"'));
+  assert.ok(source.includes("<StartPanelButton"));
+  assert.match(styles, /\.desktop-icon:is\(:hover, :focus-visible, \.is-icon-animating\)/);
+  assert.match(styles, /\.start-panel > button:is\(:hover, :focus-visible, \.is-icon-animating\)/);
 });
 
 test("window drag uses the live frame width and symmetric workspace bounds", () => {
@@ -222,8 +238,8 @@ test("animated shortcuts keep one precise vector artwork through the resting han
 
 test("guide sections start folded and the compact back control does not cover card content", () => {
   assert.ok(source.includes('const guideCollapsedStorageKey = "portia-guide-collapsed-v2"'));
-  assert.ok(source.includes("const initialCollapsed = useRef(sections.map((section) => section.id))"));
-  assert.ok(source.includes("useState<string[]>(() => initialCollapsed.current)"));
+  assert.ok(source.includes("useState<string[]>(() => sections.map((section) => section.id))"));
+  assert.doesNotMatch(source, /initialCollapsed\.current/);
   const back = /\.guide-back-bar \{([^}]*)\}/.exec(styles)?.[1] ?? "";
   assert.match(back, /height:\s*36px/);
   assert.match(back, /margin:\s*0 0 16px/);

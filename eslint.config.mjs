@@ -11,6 +11,8 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "next-env.d.ts",
+    // GSD history contains standalone audit scripts, not application source.
+    ".planning/**",
   ]),
 ]);
 

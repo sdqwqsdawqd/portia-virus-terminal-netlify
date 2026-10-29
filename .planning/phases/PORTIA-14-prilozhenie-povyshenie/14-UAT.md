@@ -195,15 +195,21 @@ expected: Global search reaches applications and records from employees, guide, 
 result: failed — search coverage omitted major desktop surfaces and employee records
 remediation preflight: passed — source regressions cover all requested providers, and the local browser lists the requested applications without console/runtime errors; employee result interaction awaits a session with loaded roster data.
 
+### 40. Desktop motion and runtime diagnostics
+expected: The wallpaper spider's front pair visibly leads its gait, shortcut animations finish after the pointer leaves, Vivian remains readable at custom accents, the editor list has no horizontal crawl, and a reload produces no React script-rendering overlay.
+result: failed — rear legs dominated, shortcut motion stopped mid-cycle, Vivian was grey, the editor list overflowed horizontally, and the root raw script triggered the Next development overlay
+remediation preflight: passed — runtime sampling measured `L4/R4` at about 11.6 degrees versus about 3.5 degrees for `L1/R1`; shortcut playback persists for 760 ms; a fresh browser tab is console-clean and visually confirms the brighter assistant and bounded editor. Owner aesthetic confirmation remains pending.
+
 ## Remediation preflight — 2026-10-29
 
-- `npm test`: 574 passed, 1 opt-in isolated-live test skipped, 0 failed (575 total).
+- `npm test`: 577 passed, 1 opt-in isolated-live test skipped, 0 failed (578 total).
 - `npm run test:promotion-live` with `READ_ONLY_PREFLIGHT`: 1/1 passed; all 18 deployed Promotion RPC signatures are present.
 - `npx tsc --noEmit`: passed.
 - `npm run build`: passed.
 - Scoped lint for every remediation module changed in plans 14-15 through 14-18: passed.
-- Scoped lint for the newly changed modules passes. Full-file desktop lint still reports the pre-existing refs-during-render issue in `GuideApp` and existing `<img>` warnings; no newly changed surface reports an error.
+- Full lint passes with 0 errors; the remaining 18 warnings are existing image-performance and effect-dependency advisories.
 - Local in-app-browser smoke: no console/runtime errors; wallpaper spider and Vivian use the corrected palette; global search exposes the requested application surfaces.
+- Production dependency audit: 0 vulnerabilities. The development toolchain has five transitive findings whose automated lockfile update is kept separate from the user's existing dependency changes.
 - Production data and the employee sheet were not mutated during preflight.
 
 ### Required to finish test 31
@@ -214,15 +220,15 @@ remediation preflight: passed — source regressions cover all requested provide
 
 ## Summary
 
-total: 39
+total: 40
 passed: 0
-issues: 18
+issues: 19
 pending: 21
 skipped: 0
 blocked: 1
-failed: 17
+failed: 18
 
-remediation_preflight_passed: 3
+remediation_preflight_passed: 4
 remediation_preflight_partial: 14
 remediation_preflight_blocked: 1
 
@@ -236,4 +242,5 @@ remediation_preflight_blocked: 1
 - GAP-14-06: shortcut animation-to-resting handoff visibly snaps (test 30).
 - GAP-14-07: reviewer request badges, qualification answer-key UX, spider signal/colour and virus shortcut quality require the integrated fixes in tests 32–36.
 - GAP-14-08: qualification modal focus, bounded editor layout and expanded global search require owner/live confirmation in tests 37–39.
+- GAP-14-09: desktop motion, assistant brightness and the repaired runtime boot path require owner aesthetic confirmation in test 40.
 - Source todo: `.planning/todos/pending/2026-10-28-stabilize-promotion-and-desktop-ui.md`.
