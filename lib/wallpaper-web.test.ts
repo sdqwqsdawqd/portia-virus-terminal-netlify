@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, emitPulse, gaitPhase, legPose, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
+import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, emitPulse, gaitPhase, legPose, planSpawn, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
 
 const near = (a: Point, b: Point, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
 // Distance from a point to the thread drawn as a 400-piece polyline.
@@ -20,18 +20,34 @@ const distanceToEdge = (point: Point, index: number) => {
 };
 const edgeBetween = (u: number, v: number) => webEdges.findIndex((edge) => (edge.a === u && edge.b === v) || (edge.a === v && edge.b === u));
 
-test("the wallpaper spider uses distance-linked gait, front-leg probing and an explicit hidden relocation lifecycle", () => {
+test("the wallpaper spider stays visible and relocates only after an explicit off-to-on toggle", () => {
   const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
   assert.match(source, /const LEG_SWING = 7;/);
   assert.match(source, /const BODY_BOB = 0\.006;/);
   assert.doesNotMatch(source, /STEP_CYCLE/);
   assert.match(source, /const PROBE_SWING =/);
   assert.match(source, /id === "L1" \|\| id === "R1"/);
-  assert.match(source, /type TravelStage = "visible" \| "fading-out" \| "hidden" \| "fading-in"/);
-  assert.match(source, /selectSpawn\(visible, previousVisibleSpawn, rand\)/);
+  assert.doesNotMatch(source, /TravelStage|TOUR_WALKS|fading-out|relocateWhileHidden/);
+  assert.match(source, /let wasSpiderOn = spiderOn\(\)/);
+  assert.match(source, /const turnedOn = !wasSpiderOn && enabled/);
+  assert.match(source, /if \(turnedOn\).*planSpawn/s);
+  assert.match(source, /document\.hidden[\s\S]*cancelAnimationFrame\(frame\)/);
   assert.match(source, /element\.style\.opacity = "0"/);
   assert.match(source, /rest = 6 \+ rand\(\) \* 4/g);
   assert.ok(source.includes('attributeFilter: ["data-motion", "data-spider"]'));
+});
+
+test("explicit show plans a distinct spawn with a route-derived pose", () => {
+  const visible = Array.from({ length: 30 }, (_, index) => REST_NODE + index);
+  const planned = planSpawn(visible, REST_NODE, seeded(9));
+  assert.notEqual(planned.node, REST_NODE);
+  assert.equal(planned.path[0], planned.node);
+  assert.ok(planned.path.length > 1);
+  assert.ok(Number.isFinite(planned.heading));
+  assert.ok(planned.phase >= 0 && planned.phase < 1);
+  const next = planSpawn(visible, planned.node, seeded(10));
+  assert.notEqual(next.node, planned.node);
+  assert.notDeepEqual([next.heading, next.phase], [planned.heading, planned.phase]);
 });
 
 test("web geometry has 270 crossings and 522 threads between them", () => {
