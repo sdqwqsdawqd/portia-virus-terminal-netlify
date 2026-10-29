@@ -37,18 +37,26 @@ test("dragging the title bar moves the window and keeps its size", () => {
   assert.deepEqual(dragGeometry(at, 50, -30, desk), { x: 150, y: 50, width: 600, height: 400 });
 });
 
-test("dragging far right or down leaves the title bar grabbable", () => {
+test("dragging far right keeps the full window inside the same eight-pixel inset as the left", () => {
   const next = dragGeometry(at, 5000, 5000, desk);
-  assert.equal(next.x, desk.width - 160);
+  assert.equal(next.x, desk.width - at.width - 8);
   assert.equal(next.y, desk.height - 46);
 });
 
-test("dragging past the top or left stops at the edge", () => {
+test("dragging past the top or left stops at the symmetric inset", () => {
   const next = dragGeometry(at, -5000, -5000, desk);
-  assert.equal(next.x, 0);
+  assert.equal(next.x, 8);
   assert.equal(next.y, 0);
 });
 
-test("in a workspace narrower than 160 px the window sits at x 0", () => {
-  assert.equal(dragGeometry(at, 50, 0, { width: 120, height: 900 }).x, 0);
+test("a window wider than the workspace is fitted before horizontal dragging", () => {
+  assert.deepEqual(dragGeometry(at, 50, 0, { width: 120, height: 900 }), { x: 8, y: 80, width: 104, height: 400 });
+});
+
+test("resize then drag preserves the resized width and mirrored horizontal limits", () => {
+  const bounds = { width: 1000, height: 700 };
+  const resized = resizeGeometry({ x: 100, y: 80, width: 700, height: 400 }, "e", 120, 0, bounds, minimum);
+  assert.equal(resized.width, 820);
+  assert.equal(dragGeometry(resized, 5000, 0, bounds).x, 172);
+  assert.equal(dragGeometry(resized, -5000, 0, bounds).x, 8);
 });

@@ -123,6 +123,15 @@ test("promotion is a standalone desktop application with its own window geometry
   assert.ok(!source.includes('meta="Portia Promotion"'));
 });
 
+test("window drag uses the live frame width and symmetric workspace bounds", () => {
+  assert.ok(source.includes("width: rect.width"));
+  assert.ok(source.includes("width: operation.parentWidth"));
+  assert.ok(source.includes("dragGeometry(operation"));
+  const geometry = readFileSync(new URL("./window-geometry.ts", import.meta.url), "utf8");
+  assert.ok(geometry.includes("bounds.width - width - margin"));
+  assert.doesNotMatch(geometry, /bounds\.width - 160/);
+});
+
 test("shared shortcut hover feedback never translates the icon container", () => {
   const hover = /\.desktop-icon:hover \.desktop-icon-symbol[^\{]*\{([^}]*)\}/.exec(styles)?.[1] ?? "";
   assert.ok(hover);
