@@ -1,7 +1,7 @@
 // Why: «Свой» drives the same tokens as a preset (D-04) and is quietly made readable (D-23: lightness only).
 // deriveAccentTokens is self-contained because accentBootScript embeds its source with Function.prototype.toString,
 // so it may not reference imports or anything outside its own body (no module-level names, no spread/destructuring helpers).
-export const accentTokenNames = ["--teal", "--teal-dim", "--teal-soft", "--desktop-glow", "--desktop-grid", "--desktop-base", "--desktop-deep", "--accent-hue", "--accent-chroma", "--mark-filter", "--assistant-filter"] as const;
+export const accentTokenNames = ["--teal", "--teal-dim", "--teal-soft", "--spider-accent", "--desktop-glow", "--desktop-grid", "--desktop-base", "--desktop-deep", "--accent-hue", "--accent-chroma", "--mark-filter", "--assistant-filter"] as const;
 
 export function deriveAccentTokens(picked: unknown): Record<string, string> | null {
   if (typeof picked !== "string" || !/^#[0-9a-f]{6}$/i.test(picked)) return null;
@@ -104,6 +104,7 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
     "--teal": hex(teal),
     "--teal-dim": hex(dim),
     "--teal-soft": "rgba(" + teal.join(",") + ",.13)",
+    "--spider-accent": (picked as string).toLowerCase(),
     "--desktop-glow": teal.join(", "),
     "--desktop-grid": grid.join(", "),
     "--desktop-base": hex(base),

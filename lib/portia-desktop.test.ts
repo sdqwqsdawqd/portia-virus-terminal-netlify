@@ -163,6 +163,14 @@ test("the five refreshed shortcut icons animate semantic parts only in full moti
   for (const kept of ["icon-hop", "icon-lift", "icon-stamp", "icon-write-16", "icon-lid"]) assert.ok(styles.includes(`@keyframes ${kept}`), kept);
 });
 
+test("the virus shortcut uses a contained diagnostic scan and returns to its exact resting artwork", () => {
+  assert.ok(icons.includes('className="icon-virus-scan"'));
+  assert.ok(icons.includes('className="icon-virus-detail"'));
+  assert.ok(styles.includes("@keyframes icon-virus-scan"));
+  assert.ok(styles.includes("@keyframes icon-virus-detail"));
+  assert.match(styles, /@keyframes icon-virus-scan \{[\s\S]*100% \{[^}]*opacity:\s*0/);
+});
+
 test("promotion shortcut builds momentum through its levels before the arrow launches", () => {
   for (const part of ["icon-promotion-base", "icon-promotion-level-low", "icon-promotion-level-high", "icon-promotion-arrow"]) {
     assert.ok(icons.includes(part), `missing semantic promotion part ${part}`);

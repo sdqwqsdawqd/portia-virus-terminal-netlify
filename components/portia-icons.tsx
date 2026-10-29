@@ -39,6 +39,7 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
     <path d="M7.6 8c1.9.6 3.9 2.4 5.8 5M13.4 8c-1.9.6-3.9 2.4-5.8 5" />
   </>,
   virus: <>
+    <circle className="icon-virus-scan" cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" strokeDasharray="2 2.6" opacity="0" />
     <circle className="icon-virus-core" cx="12" cy="12" r="5" />
     <path className="icon-virus-spikes" d="M12 7V3.5M12 20.5V17M7 12H3.5M20.5 12H17M8.5 8.5 6 6M18 18l-2.5-2.5M8.5 15.5 6 18M18 6l-2.5 2.5" />
     <g className="icon-virus-tips" fill="currentColor" stroke="none"><circle cx="12" cy="3" r=".9" /><circle cx="12" cy="21" r=".9" /><circle cx="3" cy="12" r=".9" /><circle cx="21" cy="12" r=".9" /></g>

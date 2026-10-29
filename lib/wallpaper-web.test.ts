@@ -26,7 +26,11 @@ test("the wallpaper spider stays visible and relocates only after an explicit of
   assert.match(source, /const BODY_BOB = 0\.006;/);
   assert.doesNotMatch(source, /STEP_CYCLE/);
   assert.match(source, /const PROBE_SWING =/);
-  assert.match(source, /id === "L1" \|\| id === "R1"/);
+  assert.match(source, /const PROBE_MIN_DELAY = 14;/);
+  assert.match(source, /const PROBE_MAX_DELAY = 32;/);
+  assert.match(source, /id === "L4" \|\| id === "R4"/);
+  assert.doesNotMatch(source, /const probing = !walking/);
+  assert.match(source, /probeRemaining > 0/);
   assert.doesNotMatch(source, /TravelStage|TOUR_WALKS|fading-out|relocateWhileHidden/);
   assert.match(source, /let wasSpiderOn = spiderOn\(\)/);
   assert.match(source, /const turnedOn = !wasSpiderOn && enabled/);
@@ -36,6 +40,13 @@ test("the wallpaper spider stays visible and relocates only after an explicit of
   assert.match(source, /element\.style\.opacity = "0"/);
   assert.match(source, /rest = 6 \+ rand\(\) \* 4/g);
   assert.ok(source.includes('attributeFilter: ["data-motion", "data-spider"]'));
+});
+
+test("the spider palette keeps the chosen accent across its dark and pale artwork", () => {
+  const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
+  assert.match(styles, /\.wallpaper-spider\s*\{[^}]*color:\s*var\(--spider-accent\)/);
+  assert.match(styles, /\.wallpaper-spider-dark\s*\{[^}]*color-mix\(in oklab, var\(--spider-accent\)/);
+  assert.match(styles, /\.wallpaper-spider-pale\s*\{[^}]*color-mix\(in oklab, var\(--spider-accent\)/);
 });
 
 test("explicit show plans a distinct spawn with a route-derived pose", () => {

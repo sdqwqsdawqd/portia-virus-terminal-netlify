@@ -21,6 +21,12 @@ test("promotion editor keeps requests, tasks and qualification as separate branc
   assert.ok(main.includes("qualificationCount"));
 });
 
+test("request badges count every request visible in the queue, not pending rows only", () => {
+  assert.ok(main.includes("const ordinaryCount = queue.ordinary.length"));
+  assert.ok(main.includes("const qualificationCount = queue.qualification.length"));
+  assert.doesNotMatch(main, /\.filter\(\(row\) => row\.status === "pending"\)\.length/);
+});
+
 test("promotion editor polls only while visible and preserves its selected request", () => {
   assert.ok(main.includes("if (!visible || document.visibilityState !== \"visible\") return"));
   assert.ok(main.includes("setSelectedRequestId((current)"));
@@ -80,6 +86,13 @@ test("item editors prevent duplicate writes and preserve text typed during save"
   assert.ok(qualification.includes("current === submittedText"));
   assert.ok(qualification.includes("validateQuestionDraft"));
   assert.ok(qualification.includes("Проверьте варианты и правильный ответ"));
+});
+
+test("qualification questions select correct answers beside their options without zero-based index fields", () => {
+  assert.ok(qualification.includes('className="promotion-answer-options"'));
+  assert.ok(qualification.includes('type={type === "single" ? "radio" : "checkbox"}'));
+  assert.ok(qualification.includes("Правильный ответ"));
+  assert.doesNotMatch(qualification, /Индекс(?:ы)? правильн/);
 });
 
 test("bank actions use the established control hierarchy and announce results", () => {

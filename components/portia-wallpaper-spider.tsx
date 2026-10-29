@@ -33,7 +33,10 @@ const BODY_BOB = 0.006; // nearly still abdomen; no conspicuous pulsing in the b
 const GAIT_EASE = 0.45; // legs settle softly after a stop
 const TURN_TIME = 0.22; // smooth directional changes instead of abrupt pivots
 const PROBE_SWING = 1.8;
-const PROBE_CYCLE = 2.2;
+const PROBE_MIN_DELAY = 14;
+const PROBE_MAX_DELAY = 32;
+const PROBE_MIN_DURATION = 1.15;
+const PROBE_MAX_DURATION = 1.55;
 const FIRST_WALK = 4.5; // let the desktop settle before the first quiet walk
 const MAX_DT = 0.05; // a slow frame never makes a jump
 
@@ -76,6 +79,7 @@ export function WallpaperSpider() {
     // heading is where the body should face (travel direction); angle is how far the artwork is turned now.
     let heading = ARTWORK_HEADING, angle = 0, phase = 0, gait = 0, clean = true, legsNeutral = true;
     let gaitDistance = 0, pathDistance = 0;
+    let probeDelay = PROBE_MIN_DELAY + rand() * (PROBE_MAX_DELAY - PROBE_MIN_DELAY), probeRemaining = 0, probeDuration = 0;
 
     const clearPulses = () => {
       pool.slots.forEach((slot) => { slot.alive = false; });
@@ -93,6 +97,7 @@ export function WallpaperSpider() {
       previousVisibleSpawn = planned.node; node = planned.node; previous = -1; path = planned.path.length > 1 ? planned.path : null; walked = 0; rest = path ? 0 : 1.2 + rand() * 0.8;
       [x, y] = webGeometry.nodes[planned.node];
       heading = planned.heading; angle = heading - ARTWORK_HEADING; phase = planned.phase; gait = path ? 1 : 0; gaitDistance = phase * 20; pathDistance = 0;
+      probeRemaining = 0; probeDelay = PROBE_MIN_DELAY + rand() * (PROBE_MAX_DELAY - PROBE_MIN_DELAY);
       clearPulses();
       element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg)`;
       return true;
@@ -146,10 +151,18 @@ export function WallpaperSpider() {
       }
       drawPulses();
       const walking = path !== null;
+      let probing = false;
+      if (walking) probeRemaining = 0;
+      else if (probeRemaining > 0) { probeRemaining = Math.max(0, probeRemaining - dt); probing = probeRemaining > 0; }
+      else if ((probeDelay -= dt) <= 0) {
+        probeDuration = PROBE_MIN_DURATION + rand() * (PROBE_MAX_DURATION - PROBE_MIN_DURATION);
+        probeRemaining = probeDuration;
+        probeDelay = PROBE_MIN_DELAY + rand() * (PROBE_MAX_DELAY - PROBE_MIN_DELAY);
+        probing = true;
+      }
       const turn = Math.atan2(Math.sin(heading - ARTWORK_HEADING - angle), Math.cos(heading - ARTWORK_HEADING - angle));
       angle += turn * (1 - Math.exp(-dt / TURN_TIME));
       gait += Math.max(-dt / GAIT_EASE, Math.min(dt / GAIT_EASE, (walking ? 1 : 0) - gait));
-      const probing = !walking;
       // A resting spider that has finished turning and straightening its legs needs no writes at all.
       const settled = !walking && gait === 0 && !probing && Math.abs(turn) < 1e-3;
       if (settled && clean) return;
@@ -157,12 +170,14 @@ export function WallpaperSpider() {
       // The body swells a touch as each group lands (phase 0 and 0.5) and settles in between.
       const bob = 1 + BODY_BOB * gait * Math.max(0, Math.cos(4 * Math.PI * phase)) ** 3;
       element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg) scale(${bob.toFixed(4)})`;
+      const probeProgress = probeDuration > 0 ? 1 - probeRemaining / probeDuration : 1;
+      const probeEnvelope = Math.sin(Math.PI * probeProgress) ** 2;
+      const probeTap = Math.sin(probeProgress * Math.PI * 6) * probeEnvelope;
       if (gait > 0 || probing || !legsNeutral) legs.forEach((leg, index) => {
         const id = ids[index];
         if (gait === 0) {
-          const front = id === "L1" || id === "R1";
-          const probe = front ? Math.sin((time / PROBE_CYCLE) * Math.PI * 2 + (id === "R1" ? Math.PI : 0)) : 0;
-          leg.style.rotate = `${(PROBE_SWING * probe * legBack(id)).toFixed(2)}deg`;
+          const front = id === "L4" || id === "R4";
+          leg.style.rotate = `${(front && probing ? PROBE_SWING * probeTap * legBack(id) : 0).toFixed(2)}deg`;
           leg.style.scale = "1";
           return;
         }
