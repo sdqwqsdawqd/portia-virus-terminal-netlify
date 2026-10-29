@@ -173,6 +173,28 @@ test("promotion shortcut builds momentum through its levels before the arrow lau
   assert.ok(!styles.includes("@keyframes icon-promotion-rise"));
 });
 
+test("animated shortcuts keep one precise vector artwork through the resting handoff", () => {
+  assert.ok(icons.includes('<svg viewBox="0 0 24 24"'));
+  assert.match(styles, /\.desktop-icon-symbol svg[^{]*\{[^}]*shape-rendering:\s*geometricPrecision/);
+  assert.match(styles, /\.desktop-icon-symbol svg \*[^{]*\{[^}]*vector-effect:\s*non-scaling-stroke/);
+  assert.doesNotMatch(styles, /\[data-icon[^\n]*svg\s*\{[^}]*scale:/);
+  const refreshed = [
+    "icon-virus-core", "icon-virus-spikes", "icon-virus-tips",
+    "icon-broadcast-beacon", "icon-broadcast-wave",
+    "icon-info-page", "icon-info-fold", "icon-info-line",
+    "icon-guide-back", "icon-guide-front",
+    "icon-settings-rails", "icon-settings-a", "icon-settings-b", "icon-settings-c",
+    "icon-promotion-base", "icon-promotion-level", "icon-promotion-launch",
+  ];
+  for (const name of refreshed) {
+    const keyframes = new RegExp(`@keyframes ${name} \\{[\\s\\S]*?100% \\{`).exec(styles)?.[0] ?? "";
+    assert.ok(keyframes, `${name} has no explicit resting frame`);
+  }
+  const refreshedAnimationLines = styles.split("\n").filter((line) => refreshed.some((name) => line.includes(`animation: ${name} `)));
+  assert.ok(refreshedAnimationLines.length >= refreshed.length);
+  assert.ok(refreshedAnimationLines.every((line) => line.includes(" both;")), "refreshed icon animation must retain its exact terminal frame");
+});
+
 test("guide sections start folded and the compact back control does not cover card content", () => {
   assert.ok(source.includes('const guideCollapsedStorageKey = "portia-guide-collapsed-v2"'));
   assert.ok(source.includes("const initialCollapsed = useRef(sections.map((section) => section.id))"));
