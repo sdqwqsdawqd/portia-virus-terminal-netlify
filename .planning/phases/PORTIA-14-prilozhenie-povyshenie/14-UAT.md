@@ -155,9 +155,34 @@ expected: Tests 22–30 pass together after reload on PC and phone, with no stal
 result: blocked by 22–30
 remediation preflight: blocked by the live-write, authenticated reviewer, PC edge-drag and DPR 1.25 checks listed above; no automated failure remains.
 
+### 32. Request badge includes in-progress requests
+expected: The «Запросы» and type badges equal the rows visible in their queues, including a request already claimed or assigned rather than only `pending` rows.
+result: failed — owner observed 0 while requests already existed
+remediation preflight: automated pass; authenticated reviewer observation remains pending.
+
+### 33. Qualification answer-key editor
+expected: The reviewer writes the question normally and selects the correct visible answer with radio/checkbox controls; no zero-based indices are exposed.
+result: failed — the index fields made qualification question creation unusable
+remediation preflight: automated and responsive source pass; authenticated reviewer PC/phone interaction remains pending.
+
+### 34. Spider front-leg signal
+expected: Only the front pair beside the chelicerae performs a short hunting signal at irregular resting intervals; no pair twitches continuously.
+result: failed — the rear pair moved continuously while resting
+remediation preflight: front-pair mapping and bounded 14–32 second schedule regressions pass; owner visual timing confirmation remains pending.
+
+### 35. Virus archive shortcut motion
+expected: «База вирусов» performs one restrained diagnostic scan on hover/focus and returns to the identical resting vector without a quality snap.
+result: failed — owner rejected the previous generic pulse/rotation
+remediation preflight: exact terminal-frame tests and local scan-layer browser smoke pass; owner aesthetic confirmation remains pending.
+
+### 36. Spider custom colour fidelity
+expected: A custom colour is applied exactly to the spider while contrast correction remains limited to interface text and controls.
+result: failed — spider looked consistently darker than the selected colour
+remediation preflight: passed — saved custom mode supplies a dedicated exact `--spider-accent`; local browser confirmed that the custom token is applied without runtime errors.
+
 ## Remediation preflight — 2026-10-29
 
-- `npm test`: 566 passed, 1 opt-in isolated-live test skipped, 0 failed (567 total).
+- `npm test`: 571 passed, 1 opt-in isolated-live test skipped, 0 failed (572 total).
 - `npm run test:promotion-live` with `READ_ONLY_PREFLIGHT`: 1/1 passed; all 18 deployed Promotion RPC signatures are present.
 - `npx tsc --noEmit`: passed.
 - `npm run build`: passed.
@@ -173,16 +198,16 @@ remediation preflight: blocked by the live-write, authenticated reviewer, PC edg
 
 ## Summary
 
-total: 31
+total: 36
 passed: 0
-issues: 10
+issues: 15
 pending: 21
 skipped: 0
 blocked: 1
-failed: 9
+failed: 14
 
-remediation_preflight_passed: 2
-remediation_preflight_partial: 7
+remediation_preflight_passed: 3
+remediation_preflight_partial: 11
 remediation_preflight_blocked: 1
 
 ## Gaps
@@ -193,4 +218,5 @@ remediation_preflight_blocked: 1
 - GAP-14-04: spider lifecycle violates explicit-toggle-only relocation (test 28).
 - GAP-14-05: window clamping is asymmetric and permits excessive right overflow (test 29).
 - GAP-14-06: shortcut animation-to-resting handoff visibly snaps (test 30).
+- GAP-14-07: reviewer request badges, qualification answer-key UX, spider signal/colour and virus shortcut quality require the integrated fixes in tests 32–36.
 - Source todo: `.planning/todos/pending/2026-10-28-stabilize-promotion-and-desktop-ui.md`.

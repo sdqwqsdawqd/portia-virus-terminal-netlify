@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Повышение
 status: blocked
-stopped_at: Plan 14-19 automated/read-only preflight passed; waiting for safe live fixtures and owner PC/phone access
-last_updated: "2026-10-29T03:32:31.000Z"
+stopped_at: Plan 14-19 automated/read-only preflight and follow-up fixes passed; waiting for safe live fixtures and owner PC/phone access
+last_updated: "2026-10-29T03:50:23.000Z"
 last_activity: 2026-10-29
 progress:
   total_phases: 1

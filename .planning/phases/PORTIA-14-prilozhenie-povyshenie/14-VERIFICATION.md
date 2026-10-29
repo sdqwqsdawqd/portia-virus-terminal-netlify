@@ -2,7 +2,7 @@
 phase: 14-prilozhenie-povyshenie
 status: preflight_blocked
 verified_at: 2026-10-29
-automated_tests: 566
+automated_tests: 571
 requirements: 49
 decisions: 23
 ---
@@ -12,7 +12,7 @@ decisions: 23
 ## Automated evidence
 
 - Production SQL was applied manually by the owner on 2026-10-28; the transaction and embedded postflight assertions completed with `Success. No rows returned`.
-- `npm test`: 566 passed, 1 guarded isolated-live test skipped, 0 failed (567 total).
+- `npm test`: 571 passed, 1 guarded isolated-live test skipped, 0 failed (572 total).
 - `npm run test:promotion-live` with `READ_ONLY_PREFLIGHT`: 1/1 passed and verified all 18 deployed Promotion RPC signatures without a write.
 - `npx tsc --noEmit`: pass.
 - `npm run build`: pass.
@@ -29,8 +29,9 @@ decisions: 23
 | GAP-14-04 spider lifecycle | `c44f29c` | lifecycle tests plus local persistence observation pass | Preflight passed |
 | GAP-14-05 window bounds | `7fa9ad7` | mirrored edge, oversized-window and resize-then-drag tests pass | Physical PC drag pending |
 | GAP-14-06 shortcut handoff | `bfef47d` | persistent 24×24 SVG contract and computed style pass | Desktop DPR 1.25 visual check pending |
+| GAP-14-07 reviewer/motion follow-up | `6346786` | all-status badges, visible answer selection, front-pair schedule, exact spider colour and virus diagnostic scan regressions pass | Authenticated reviewer and owner aesthetic checks pending |
 
-The integrated branch passes 566 deterministic tests, TypeScript, the production build, scoped lint and the non-mutating deployed RPC preflight together. No product-code regression was found in Plan 14-19.
+The integrated branch passes 571 deterministic tests, TypeScript, the production build, scoped lint and the non-mutating deployed RPC preflight together. The follow-up browser smoke confirmed the exact custom spider token and virus scan layer without a runtime overlay.
 
 ## Requirement evidence (49/49 implemented; owner UAT pending)
 
