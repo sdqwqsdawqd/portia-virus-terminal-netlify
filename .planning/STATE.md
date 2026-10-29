@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Повышение
-status: executing
-stopped_at: Completed 14-18-PLAN.md; ready for 14-19
-last_updated: "2026-10-29T03:29:00.000Z"
+status: blocked
+stopped_at: Plan 14-19 automated/read-only preflight passed; waiting for safe live fixtures and owner PC/phone access
+last_updated: "2026-10-29T03:32:31.000Z"
 last_activity: 2026-10-29
 progress:
   total_phases: 1
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-10-27)
 
 Phase: 14 (prilozhenie-povyshenie) — EXECUTING
 Plan: 19 of 19
-Status: Ready to execute
+Status: Blocked on safe live/browser UAT inputs
 Last activity: 2026-10-29
 
 ## Performance Metrics

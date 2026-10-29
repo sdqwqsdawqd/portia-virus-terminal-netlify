@@ -1,8 +1,8 @@
 ---
 phase: 14-prilozhenie-povyshenie
-status: gaps_found
-verified_at: 2026-10-28
-automated_tests: 548
+status: preflight_blocked
+verified_at: 2026-10-29
+automated_tests: 566
 requirements: 49
 decisions: 23
 ---
@@ -12,11 +12,25 @@ decisions: 23
 ## Automated evidence
 
 - Production SQL was applied manually by the owner on 2026-10-28; the transaction and embedded postflight assertions completed with `Success. No rows returned`.
-- `npm test`: 505/505 pass, including eight consolidated abuse/privacy/concurrency regressions in `lib/portia-promotion-security.test.ts`.
+- `npm test`: 566 passed, 1 guarded isolated-live test skipped, 0 failed (567 total).
+- `npm run test:promotion-live` with `READ_ONLY_PREFLIGHT`: 1/1 passed and verified all 18 deployed Promotion RPC signatures without a write.
 - `npx tsc --noEmit`: pass.
 - `npm run build`: pass.
-- Scoped Phase 14 lint: pass. Full repository lint has three known pre-existing errors in two archived Phase 06 CommonJS scripts and the Guide ref initializer.
+- Scoped remediation lint: pass. Full repository lint still has three pre-existing errors in two archived Phase 06 CommonJS scripts and `components/portia-desktop.tsx:1782`.
 - No automated command mutated the production database or Google Sheet.
+
+## Remediation integration evidence
+
+| Gap | Implementation commits | Integrated evidence | State |
+|---|---|---|---|
+| GAP-14-01 live submit/binding | `08f0498`, `e037151` | API/database regressions and deployed 18-RPC read-only inventory pass | Live accepted-write and restore need isolated project or approved participant |
+| GAP-14-02 participant dates/actions | `2838756`, `3910044` | punctuation, eligibility matrix and independent-submit tests pass | Automated closed; eligible browser submit pending |
+| GAP-14-03 bank editor | `8fea76a`, `64ea8fb`, `b44dec8`, `980dac0` | count/quota, typed CRUD, versioned preview and control-state tests pass | Authenticated PC/phone round trip pending |
+| GAP-14-04 spider lifecycle | `c44f29c` | lifecycle tests plus local persistence observation pass | Preflight passed |
+| GAP-14-05 window bounds | `7fa9ad7` | mirrored edge, oversized-window and resize-then-drag tests pass | Physical PC drag pending |
+| GAP-14-06 shortcut handoff | `bfef47d` | persistent 24×24 SVG contract and computed style pass | Desktop DPR 1.25 visual check pending |
+
+The integrated branch passes 566 deterministic tests, TypeScript, the production build, scoped lint and the non-mutating deployed RPC preflight together. No product-code regression was found in Plan 14-19.
 
 ## Requirement evidence (49/49 implemented; owner UAT pending)
 
@@ -102,7 +116,7 @@ decisions: 23
 
 ## Outstanding gate
 
-Owner UAT found six gap groups across tests 22–30. Execute remediation plans 14-15 through 14-19, then rerun the full 31-test UAT through 14-14. Phase 14 remains open until the integrated regression pass and final PC/phone approval are recorded.
+Plans 14-15 through 14-18 remediate all six recorded gap groups in code and deterministic tests. Plan 14-19 cannot truthfully mark tests 23–27, 29–31 preflight-passed without an owner-approved temporary participant, authenticated `promo` reviewer/test bank, desktop DPR 1.25 observation and isolated Supabase credentials for the mutating live suite. Phase 14 remains open; after those inputs are available, finish Plan 14-19 and run the full 31-test owner checkpoint through 14-14.
 
 ## Gap closure routing
 
@@ -115,3 +129,10 @@ Owner UAT found six gap groups across tests 22–30. Execute remediation plans 1
 | GAP-14-05 window bounds | 14-18 | Symmetric fully-visible drag geometry tests |
 | GAP-14-06 shortcut handoff | 14-18 | Geometry/style contract and visual handoff check |
 | Integrated regression | 14-19 then 14-14 | Automated/browser preflight followed by owner PC/phone UAT |
+
+## Safe-data blocker details
+
+- The local environment exposes the deployed URL and public key, but no service-role credential for an isolated test project.
+- The guarded mutating live suite requires `PORTIA_PROMO_LIVE_CONFIRM=ISOLATED_TEST_PROJECT`; it was not pointed at production.
+- No eligible temporary roster nickname, second conflict nickname, reviewer credentials or disposable bank was provided.
+- Available in-app browser evidence is narrow-screen only; it cannot substitute for physical PC edge dragging or DPR 1.25 visual inspection.

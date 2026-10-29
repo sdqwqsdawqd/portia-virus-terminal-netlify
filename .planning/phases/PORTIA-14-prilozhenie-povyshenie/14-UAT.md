@@ -1,9 +1,9 @@
 ---
-status: gaps_found
+status: preflight_blocked
 phase: PORTIA-14-prilozhenie-povyshenie
 source: [14-VERIFICATION.md]
 started: 2026-10-28
-updated: 2026-10-28
+updated: 2026-10-29
 safe_data_only: true
 ---
 
@@ -108,42 +108,68 @@ result: pending
 ### 22. Russian cooldown punctuation
 expected: A calendar cooldown is rendered without invented time and without `..` after the localized year abbreviation.
 result: failed — owner observed a doubled final period
+remediation preflight: passed — formatter regression is covered by `lib/portia-promotion-ui.test.ts`; integrated suite passes.
 
 ### 23. Eligible request controls
 expected: A participant whose server cooldown has elapsed sees the correct ordinary or qualification action, can press it once, and receives a specific success or failure state rather than a silently absent/disabled control.
 result: failed — owner cannot submit either request from the participant window
+remediation preflight: automated pass; live browser submit blocked until an owner-approved eligible temporary roster nickname is available.
 
 ### 24. Atomic first binding through accepted submit
 expected: Lookup alone stays read-only; the first accepted request sets the HttpOnly-backed binding, a reload restores the same nickname, and another nickname is refused neutrally.
 result: failed — request does not complete and the nickname is not restored as bound
+remediation preflight: API/database regressions and the deployed 18-RPC read-only inventory pass; the accepted-write round trip is blocked without an isolated Supabase project or an owner-approved temporary participant.
 
 ### 25. Ordinary bank required count
 expected: The reviewer can change the required task count within the bank limits, save it, reload the workspace and see the persisted value.
 result: failed — count cannot be selected reliably
+remediation preflight: automated pass; authenticated reviewer browser round trip is blocked without temporary reviewer access and a safe test bank.
 
 ### 26. Task and qualification bank CRUD
 expected: The reviewer can add, edit, disable and remove ordinary tasks and all three qualification question types; save/error state is explicit and entered data is not lost.
 result: failed — adding tasks/questions and understanding save state do not work reliably
+remediation preflight: automated pass for ordinary and all three typed qualification flows; authenticated PC/phone CRUD remains blocked by the same safe-data gate.
 
 ### 27. Promotion editor control consistency
 expected: Bank actions use the established PORTIA control hierarchy and expose clear enabled, disabled, saving, saved and error states on PC and phone.
 result: failed — controls are inconsistent and the workflow is unclear
+remediation preflight: source/behavior tests, scoped lint and production build pass; owner visual confirmation on authenticated PC and phone remains pending.
 
 ### 28. Spider persistence and explicit relocation
 expected: While enabled, the spider never fades out or relocates after completing a route. A new visible spawn and non-identical initial pose are selected only after the user explicitly switches `Скрыть → Показать`.
 result: failed — spider repeatedly disappears, reappears and resets to the same pose
+remediation preflight: passed — lifecycle tests pass and the enabled spider stayed visible across the local browser observation while its route transform advanced.
 
 ### 29. Symmetric window bounds
 expected: A normal window remains fully inside the desktop workspace with the same left and right inset; neither side permits hiding most of the frame.
 result: failed — left movement is blocked while the right side permits most of the frame off-screen
+remediation preflight: mirrored drag, oversized-window and resize-then-drag tests pass; physical PC edge dragging remains pending because the available browser surface is phone-width.
 
 ### 30. Shortcut animation handoff
 expected: The final animated frame and resting shortcut use identical geometry, viewBox, scale, filter and raster/vector quality; no visible snap occurs when motion settles.
 result: failed — quality and geometry visibly change at the animated-to-static handoff
+remediation preflight: persistent-SVG geometry/style tests and local computed-style checks pass; owner visual confirmation at desktop DPR 1.25 remains pending.
 
 ### 31. Integrated regression pass
 expected: Tests 22–30 pass together after reload on PC and phone, with no stale local state masking an API/database failure.
 result: blocked by 22–30
+remediation preflight: blocked by the live-write, authenticated reviewer, PC edge-drag and DPR 1.25 checks listed above; no automated failure remains.
+
+## Remediation preflight — 2026-10-29
+
+- `npm test`: 566 passed, 1 opt-in isolated-live test skipped, 0 failed (567 total).
+- `npm run test:promotion-live` with `READ_ONLY_PREFLIGHT`: 1/1 passed; all 18 deployed Promotion RPC signatures are present.
+- `npx tsc --noEmit`: passed.
+- `npm run build`: passed.
+- Scoped lint for every remediation module changed in plans 14-15 through 14-18: passed.
+- Full repository lint remains blocked by three pre-existing errors in archived Phase 06 scripts and `components/portia-desktop.tsx:1782`; no remediation module reports an error.
+- Production data and the employee sheet were not mutated during preflight.
+
+### Required to finish test 31
+
+1. An owner-approved temporary eligible/cooldown nickname present in the roster, plus a second nickname for the neutral device-conflict check.
+2. Temporary `promo` reviewer access and a safe ordinary/qualification bank that may be edited from PC and phone.
+3. An isolated Supabase test-project URL, anon key and service-role key for the guarded mutating live suite; production credentials are intentionally rejected for this run.
 
 ## Summary
 
@@ -154,6 +180,10 @@ pending: 21
 skipped: 0
 blocked: 1
 failed: 9
+
+remediation_preflight_passed: 2
+remediation_preflight_partial: 7
+remediation_preflight_blocked: 1
 
 ## Gaps
 
