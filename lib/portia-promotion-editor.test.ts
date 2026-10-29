@@ -100,6 +100,17 @@ test("every successful item mutation invalidates the local preview", () => {
   assert.ok(qualification.includes("setPreview(null)"));
 });
 
+test("editors bind previews to the version returned by the server", () => {
+  for (const editor of [ordinary, qualification]) {
+    assert.ok(editor.includes('typeof result.version === "string"'));
+    assert.ok(editor.includes("version: result.version"));
+  }
+  const route = readFileSync(new URL("../app/api/promotion/banks/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes("replacePreviewItem"));
+  assert.ok(route.includes('code: "stale-preview"'));
+  assert.ok(route.includes("new Set(ids).size !== ids.length"));
+});
+
 test("request rejection and owner deletion use explicit irreversible confirmations", () => {
   assert.ok(main.includes('reviewerCommand("reject"'));
   assert.ok(main.includes('reviewerCommand("delete-request"'));

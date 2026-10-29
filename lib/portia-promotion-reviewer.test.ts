@@ -9,6 +9,7 @@ import {
   promotionReviewerSourcePolicy,
   promotionCleanupPreview,
   qualificationBankLimitError,
+  replacePreviewItem,
   selectQualificationPreview,
   selectTaskPreview,
   taskBankLimitError,
@@ -116,6 +117,13 @@ test("qualification preview enforces per-type quotas and manual order", () => {
   assert.deepEqual(selectQualificationPreview(questions, quotas, { manualIds: ["f1", "m1", "s2"] }).map((item) => item.id), ["f1", "m1", "s2"]);
   assert.deepEqual(selectQualificationPreview(questions, quotas, { random: () => 0 }).map((item) => item.id), ["s1", "m1", "f1"]);
   assert.throws(() => selectQualificationPreview(questions, { single: 1, multiple: 1, freeText: 2 }, { random: () => 0 }), /insufficient/i);
+});
+
+test("single preview replacement preserves order, uniqueness and qualification type", () => {
+  assert.deepEqual(replacePreviewItem(taskItems, ["a", "c"], "a", "ordinary", () => 0).map((item) => item.id), ["d", "c"]);
+  assert.deepEqual(replacePreviewItem(questions, ["s1", "m1", "f1"], "s1", "qualification", () => 0).map((item) => item.id), ["s2", "m1", "f1"]);
+  assert.throws(() => replacePreviewItem(questions, ["s1", "s2"], "s1", "qualification", () => 0), /insufficient-replacement/);
+  assert.throws(() => replacePreviewItem(taskItems, ["a", "missing"], "a", "ordinary", () => 0), /stale-preview/);
 });
 
 test("question drafts keep answer shapes type-safe", () => {
