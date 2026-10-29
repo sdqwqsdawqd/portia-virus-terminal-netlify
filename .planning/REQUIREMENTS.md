@@ -1,157 +1,139 @@
-# Requirements: PORTIA OS — v1.2 Повышение
+# Requirements: PORTIA OS — v1.3 «Стабилизация PORTIA OS»
 
-**Defined:** 2026-10-27
-**Core Value:** Участник открывает сайт и сразу находит нужную запись; редактор правит её без потерь и без путаницы — и всё это выглядит как цельная «PORTIA OS».
+**Defined:** 2026-10-30
+**Core value:** Сделать существующий PORTIA OS доказуемо устойчивым, безопасным и визуально последовательным, сохранив его текущую художественную основу.
 
-## v1.2 Requirements
+Все требования v1.3 считаются открытыми, даже если соответствующий код уже существует. Пункт закрывается только после указанного browser/live/visual/UAT-доказательства. Архивные отметки v1.2 подтверждают реализацию, но не заменяют приёмку v1.3.
 
-### Допуск и запросы
+## Baseline, тестирование и дизайн-контракт
 
-- [x] **PROM-01**: Участник может проверить состояние повышения, введя ник без регистрации.
-- [x] **PROM-02**: Система принимает запрос только для ника из `Portia!A61:E85`.
-- [x] **PROM-03**: Несуществующий ник отклоняется без записи в Supabase.
-- [x] **PROM-04**: Для одного ника одновременно существует не более одного активного запроса каждого вида.
-- [x] **PROM-05**: Повторные запросы ограничиваются по нику и IP.
-- [x] **PROM-06**: Перед необратимым действием система повторно проверяет актуальное звание в таблице.
+- [ ] **STAB-BASE-01**: До рефакторинга зафиксированы текущие экраны, русские тексты, состояния и переходы; внутренние изменения не меняют художественный язык и ключевые действия без отдельного утверждения владельца.
+- [ ] **STAB-BASE-02**: Committed Playwright-suite покрывает visitor, participant, editor, promo reviewer и owner на PC и phone, основные состояния данных и motion on/off, не изменяя production.
+- [ ] **STAB-BASE-03**: Утверждённые visual baselines покрывают desktop, окна, «Повышение», редактор, паука, паутину, Вивьян и phone layout при фиксированных данных, DPR, шрифтах и случайности.
+- [ ] **STAB-BASE-04**: Figma фиксирует текущий UI/motion-контракт для desktop и phone, включая controls, состояния, ключевые кадры, interruption и rest frame; изменения относительно текущего вида отмечены отдельно.
+- [ ] **STAB-BASE-05**: Uncaught exception, hydration warning, критический network failure, CSP violation или неожидаемая console error блокируют browser gate; ожидаемые отказы показаны безопасным русским состоянием.
+- [ ] **STAB-BASE-06**: Каждая фаза проходит GSD-цепочку requirements → contract → plan → implementation → deterministic tests → Playwright → visual/a11y/security evidence → owner UAT при необходимости → summary/verification.
 
-### Обычное повышение
+## Рабочий стол, окна и декомпозиция
 
-- [x] **TASK-01**: Проверяющий ведёт отдельный банк заданий для каждого целевого звания.
-- [x] **TASK-02**: Проверяющий задаёт необходимое количество заданий отдельно для каждого звания.
-- [x] **TASK-03**: Проверяющий может выбрать задания вручную.
-- [x] **TASK-04**: Проверяющий может получить случайный набор и увидеть его до подтверждения.
-- [x] **TASK-05**: После подтверждения участник видит неизменяемый выданный набор.
-- [x] **TASK-06**: Изменить или удалить выданное задание может только проверяющий.
-- [x] **TASK-07**: После выполнения проверяющий вручную разрешает повышение.
-- [x] **TASK-08**: Новые задания нельзя выдать до смены звания в Google-таблице после прошлого повышения.
+- [ ] **STAB-DESK-01**: Один app id открывает одну поверхность из ярлыка, start panel, taskbar или search; повторное открытие восстанавливает и фокусирует окно без дубликата и потери состояния.
+- [ ] **STAB-DESK-02**: Окно перетаскивается и изменяет размер за все края, не исчезает за workspace, имеет симметричные inset, сохраняет противоположный край и minimum и корректируется после смены viewport.
+- [ ] **STAB-DESK-03**: Minimize, maximize, close и taskbar не теряют состояние и не затрагивают другие окна; активная квалификация запрещает закрытие, сворачивание, перемещение и взаимодействие с фоном.
+- [ ] **STAB-DESK-04**: На phone приложения используют доступный экран, доступны touch, не перекрываются fixed/sticky controls и клавиатурой и не создают page-level horizontal overflow.
+- [ ] **STAB-DESK-05**: Accent, wallpaper, icon size/position, motion и spider сохраняются независимо; reload восстанавливает значения, повреждённое storage безопасно возвращается к default.
+- [ ] **STAB-DESK-06**: Drag изменяет только выбранный ярлык; позиция сохраняется, остаётся достижимой и не перекрывает критические controls; открытие доступно мышью, клавиатурой и touch.
+- [ ] **STAB-DESK-07**: Декомпозиция `portia-desktop.tsx` и `portia-editor.tsx` сохраняет app ids, DOM semantics, CSS hooks, storage keys, API shapes, порядок, данные и утверждённые snapshots, кроме отдельно согласованных fixes.
+- [ ] **STAB-DESK-08**: Каждая поверхность различает loading, empty, populated, stale/degraded и fatal error, не падает на пустых/частичных данных и не уничтожает last-good state при безопасном retry.
 
-### Сроки повышения
+## Motion, паук, паутина, ярлыки и Вивьян
 
-- [x] **COOL-01**: Первое повышение Академика доступно после 7 дней в отряде.
-- [x] **COOL-02**: Система применяет сроки 3/4/6/8/10/18 дней для последующих званий.
-- [x] **COOL-03**: Переход после Стажёра, Исследователя и Научного сотрудника дополнительно требует пройденной квалификации.
-- [x] **COOL-04**: Эксперт вирусолог достигается только через особое задание.
-- [x] **COOL-05**: Все сроки вычисляются сервером по данным столбцов D–E, а не по часам устройства.
+- [ ] **STAB-MOTION-01**: Владелец утверждает единый контракт «Анимации»; boot script, desktop, приложения, «Повышение» и редактор одинаково соблюдают on/off и выбранное решение для system preference.
+- [ ] **STAB-MOTION-02**: Boot animation показывается максимум один раз за tab session; reload не блокируется повторной заставкой, off/reduced приводит к утверждённому безопасному состоянию.
+- [ ] **STAB-MOTION-03**: Включённый PNG-паук не исчезает, не телепортируется и непрерывно идёт по утверждённой траектории; новая точка/поза выбирается при загрузке и после явного `Скрыть → Показать`, а выключение не оставляет следов.
+- [ ] **STAB-MOTION-04**: Передняя пара лап у лица ведёт шаг и выполняет редкий hunting signal; задние лапы не дёргаются постоянно, а волны появляются только от постановки лап и затухают.
+- [ ] **STAB-MOTION-05**: Hover/focus-анимация каждого ярлыка проигрывает полный semantic cycle без сдвига контейнера; уход pointer не обрывает цикл, последний кадр совпадает со статичным по geometry, viewBox, filter и качеству.
+- [ ] **STAB-MOTION-06**: Вивьян следует выбранному accent без неоновой или серой рассинхронизации, остаётся читаемой, детерминированно реагирует на click/idle/activity/offended и не зависит от motion для понимания ответа.
+- [ ] **STAB-MOTION-07**: Обои не создают заметный jank; при motion off они полностью статичны, а переключение не даёт flash или пустого слоя.
+- [ ] **STAB-MOTION-08**: Для spider/web/Vivian/shortcut/window motion до реализации утверждены start, key states, end/rest, duration, easing, interruption и reduced/off; после реализации проходят visual regression и owner review.
 
-### Квалификационная проверка
+## «Повышение»
 
-- [x] **QUAL-01**: Для переходов Кадет→C, C→B и B→A существуют независимые банки тестов.
-- [x] **QUAL-02**: Для каждого перехода отдельно задаётся количество вопросов.
-- [x] **QUAL-03**: Вопрос может иметь один вариант ответа, несколько вариантов или свободный текст.
-- [x] **QUAL-04**: Проверяющий может собрать тест вручную или случайно из нужного банка.
-- [x] **QUAL-05**: Тест начинается только после разрешения проверяющего.
-- [x] **QUAL-06**: Участник получает по одному вопросу, имеет общий серверный лимит 15 минут на весь тест и движется только вперёд.
-- [x] **QUAL-07**: Перезагрузка не сбрасывает текущий вопрос или его серверный срок.
-- [x] **QUAL-08**: На ПК уход со вкладки, потеря фокуса или выход со страницы завершает попытку провалом.
-- [x] **QUAL-09**: На телефоне защита от ухода не применяется.
-- [x] **QUAL-10**: Публичный интерфейс никогда не получает правильные ответы или будущие вопросы.
-- [x] **QUAL-11**: Проверяющий отмечает каждый ответ как верный или неверный.
-- [x] **QUAL-12**: Проверяющий вручную определяет итог независимо от процента.
-- [x] **QUAL-13**: Участник видит только итог и при необходимости процент, но не конкретные ошибки.
+- [ ] **STAB-PROM-01**: Участник без аккаунта получает по нику только safe projection; отсутствующий ник не создаёт записей, sheet outage не маскируется как «ник не найден», удаление строки немедленно закрывает доступ и действия.
+- [ ] **STAB-PROM-02**: Для каждого server state видна ровно допустимая ordinary/qualification action либо одна стабильная русская причина; cooldown показывает корректную дату/время без `..`, submit — authoritative success/refusal/error.
+- [ ] **STAB-PROM-03**: Lookup не привязывает устройство; первый успешно принятый запрос атомарно создаёт HttpOnly-backed binding, reload восстанавливает ник, другой ник получает нейтральный отказ, отклонённый submit не оставляет token/binding/request.
+- [ ] **STAB-PROM-04**: Одновременно существует не более одного активного запроса каждого вида на ник; ожидания 5/15/60 минут не продлеваются каждым retry и не раскрывают связанный ник; защита не называется hardware attestation.
+- [ ] **STAB-PROM-05**: Ordinary flow выдаёт manual/random active-only, duplicate-free, ordered set; недостаточный банк блокирует подтверждение, preview можно пересобрать, confirmed snapshot неизменяем, новый набор ждёт смены звания в таблице.
+- [ ] **STAB-PROM-06**: Qualification доступна только для переходов 2→3, 4→5 и 6→7; банки и quotas независимы, поддержаны single/multiple/free-text, участник видит по одному вопросу и не получает future questions или keys.
+- [ ] **STAB-PROM-07**: Один серверный 15-минутный deadline начинается после подтверждения reviewer, переживает reload, CAS отклоняет повторный/старый индекс, timeout/offline завершает попытку ровно один раз и сохраняет отправленные ответы.
+- [ ] **STAB-PROM-08**: После ясного предупреждения PC focus/visibility/navigation loss проваливает попытку; phone app/tab switch не проваливает, но offline/deadline проваливают; режим фиксируется сервером, риск spoofing документирован.
+- [ ] **STAB-PROM-09**: Editor без `promo` не видит workspace и получает 403; grant/revoke действует сразу; при двух claims ровно один reviewer становится owner; release/force-release и badges соответствуют ролям и видимой очереди.
+- [ ] **STAB-PROM-10**: На PC и phone сохраняются required counts; add/edit/disable/delete не теряют typed data; save/saved/error/disabled понятны; правильные ответы выбираются рядом с вариантами без zero-based indices; mutation инвалидирует preview.
+- [ ] **STAB-PROM-11**: Reviewer отмечает каждый ответ, процент вычисляется автоматически, но итог выбирается вручную; participant видит только результат и необязательный процент без ошибок, keys, notes и личности reviewer.
+- [ ] **STAB-PROM-12**: После провала предлагаются 2 дня с возможностью изменить, продлить или снять срок; попытки не ограничены; после реально наблюдавшегося ожидания показывается одно тихое quest-style уведомление, открывающее «Повышение».
+- [ ] **STAB-PROM-13**: Закрытие транзакционно удаляет подробные payload, хранит не более трёх компактных результатов; просроченные данные очищаются после трёх дней без удаления активного непроверенного flow; UI показывает ненавязчивую подсказку.
+- [ ] **STAB-PROM-14**: Missing migration/RPC, database/sheet outage, stale response и validation refusal дают разные безопасные состояния; UI не пишет «заявка принята» до authoritative success, retry не дублирует запись.
+- [ ] **STAB-PROM-15**: Participant/reviewer, bank CRUD, ordinary, qualification, retake, cleanup и direct denial приняты владельцем подряд после clean reload на PC и phone с временными данными и без unresolved failures.
 
-### Пересдачи и уведомления
+## Остальные приложения и редактор
 
-- [x] **RETRY-01**: После провала новый запрос заблокирован до даты пересдачи.
-- [x] **RETRY-02**: Система предлагает срок 2 дня, а проверяющий может изменить его.
-- [x] **RETRY-03**: Проверяющий может увеличить срок за списывание.
-- [x] **RETRY-04**: Количество попыток не ограничено.
-- [x] **RETRY-05**: После окончания срока участник получает уведомление по образцу уведомления о квесте.
+- [ ] **STAB-APP-01**: «База вирусов» сохраняет поиск, выбор dossier, classification, mutations, logs и locked levels; normal/empty/loading/error различимы, background poll без причины не сбрасывает выбранную запись.
+- [ ] **STAB-APP-02**: «Сотрудники» сохраняют 34 места, last-good roster при upstream failure, manual details/ratings и phone usability; portrait открывает Roblox только при валидной ссылке.
+- [ ] **STAB-APP-03**: «Сводка» сохраняет published/important ordering, разделение новостей и квестов, active/upcoming/finished ordering и одно неблокирующее уведомление при live poll.
+- [ ] **STAB-APP-04**: «Информация» и «Справочник» сохраняют порядок sections/cards/blocks и шесть block types; guide начинает свёрнутым, back не перекрывает card, старые данные нормализуются без потерь.
+- [ ] **STAB-APP-05**: «Корзина» показывает записи на рабочей области, восстанавливает только в editor с правами и удаляет необратимо только после ясного подтверждения без порчи соседних records.
+- [ ] **STAB-APP-06**: «Таблица» и «Устав» сохраняют fullscreen, sandbox и +/- zoom; ограничение Ctrl+wheel внутри focused cross-origin iframe остаётся документированной accepted limitation.
+- [ ] **STAB-APP-07**: Редактор сохраняет undo/redo, drafts during save, revision conflict, poll suppression, save-all, permissions и per-field errors; success только authoritative, длинные списки прокручиваются внутри и заголовки не закрывают content.
+- [ ] **STAB-APP-08**: WYSIWYG на PC/phone использует typography редактируемой области, применяет формат к selection, сохраняет range при panel drag/touch и сохраняет документ с открытой панелью.
+- [ ] **STAB-APP-09**: Regular tabs соблюдают grants/closed tabs, trusted Promotion закрыта по умолчанию, revoked section нельзя изменить через UI/API, access outage fail-closed с русским сообщением.
+- [ ] **STAB-APP-10**: Для каждого приложения проверены loading, empty, populated, stale/degraded, permission denied и fatal error; disabled action объяснён, retry не уничтожает last-good data и не требует нового generic shell.
 
-### Права и редактор
+## Глобальный поиск
 
-- [x] **PERM-01**: «Повышение» является отдельной trusted-вкладкой, закрытой по умолчанию.
-- [x] **PERM-02**: Только владелец выдаёт и отзывает доступ к вкладке.
-- [x] **PERM-03**: Все проверяющие API отклоняют запрос пользователя без доступа к `promo`.
-- [x] **EDIT-01**: В редакторе отдельно представлены «Запросы», «Задания» и «Квалификационные проверки».
-- [x] **EDIT-02**: Новые запросы видны проверяющему при открытой вкладке без внешних уведомлений.
-- [x] **EDIT-03**: Рядом с данными, удаляемыми через три дня, отображается ненавязчивая подсказка.
+- [ ] **STAB-SEARCH-01**: Поиск охватывает apps, employees, viruses, info/subsections, guide cards/blocks, published broadcasts и recycle records по title/code/body/meta с нормализацией регистра и `е/ё`, не индексируя unpublished content.
+- [ ] **STAB-SEARCH-02**: Каждый тип результата открывает точную сущность в приложении-владельце, а search window не остаётся modal blocker.
+- [ ] **STAB-SEARCH-03**: Ctrl/Cmd+K, Tab, arrows, Enter и Escape имеют утверждённое keyboard-first поведение; focus видим, результаты читаемы на phone, loading и zero results различаются.
+- [ ] **STAB-SEARCH-04**: Удалённые records исчезают после poll; private editor data, answer keys и reviewer fields никогда не индексируются; degraded roster показывает safe last-good или явное состояние.
 
-### Хранение
+## Медиа и производительность
 
-- [x] **DATA-01**: Google-таблица используется только для чтения и не изменяет приложение «Сотрудники».
-- [x] **DATA-02**: В Supabase хранятся только активные запросы, незакрытые задания и текущие либо непроверенные тесты.
-- [x] **DATA-03**: При закрытии подробные ответы удаляются, а краткий результат сохраняется транзакционно.
-- [x] **DATA-04**: Для одного ника хранится не более трёх последних попыток.
-- [x] **DATA-05**: Брошенные запросы и просроченные незавершённые задания очищаются через три дня.
-- [x] **DATA-06**: Публичный запрос по нику не раскрывает банки, ответы, заметки или личность проверяющего.
+- [ ] **STAB-MEDIA-01**: Upload проверяет реальные bytes, размер и поддерживаемый формат; отказ не стирает URL/draft, успех возвращает безопасный UUID URL.
+- [ ] **STAB-MEDIA-02**: Normalization, SQL constraint и rendering используют один URL-contract; unsafe scheme/path отклоняется, invalid legacy value даёт fallback.
+- [ ] **STAB-MEDIA-03**: Активное hero/media имеет приоритет, offscreen collections lazy, initial request storm отсутствует, при смене записи старое изображение не показывается как новое.
+- [ ] **STAB-MEDIA-04**: Immutable UUID media кэшируется повторно без скачивания, новый upload получает новый URL, content revision invalidation не ломает media cache.
+- [ ] **STAB-MEDIA-05**: Broken, slow или blocked external media сохраняет читаемый текст/caption и стабильный layout без app crash или infinite spinner.
+- [ ] **STAB-MEDIA-06**: До оптимизации записаны воспроизводимые owner PC/phone traces; после изменений interaction, drag, wallpaper и app-open не хуже утверждённого baseline и проходят согласованные budgets.
+- [ ] **STAB-MEDIA-07**: Внешние media hosts инвентаризированы; CSP проходит report-only до enforcement, approved images/YouTube продолжают работать, rejected host показывает fallback.
 
-## Future Requirements
+## Accessibility и security
 
-- Внешние уведомления проверяющим через Discord, email или push.
-- Аналитика сложности вопросов и статистика прохождения.
-- Общая система приложений и унификация всех очередей рабочего стола.
+- [ ] **STAB-A11Y-01**: PC controls имеют name/role/state, видимый focus, корректный trap/restore в dialogs и keyboard alternative для действия, доступного только drag.
+- [ ] **STAB-A11Y-02**: Phone actions доступны touch без hover, не перекрываются keyboard/sticky bars, имеют практичную tap area и не создают page-level horizontal overflow.
+- [ ] **STAB-A11Y-03**: Русские labels, success/error/disabled reason понятны и объявляются; нет пустых, шуточных, удвоенных или непереведённых technical labels; alt соответствует назначению изображения.
+- [ ] **STAB-A11Y-04**: Итоговая motion-настройка применяется ко всем поверхностям; off/reduced прекращает looping movement, но сохраняет content и feedback.
+- [ ] **STAB-SEC-01**: Anon, authenticated, editor, reviewer и owner видят и изменяют только разрешённые данные; запрещённые UI/API/table/RPC действия fail-closed, revoke действует без rebuild.
+- [ ] **STAB-SEC-02**: Participant network/UI не получает answer keys, future questions, internal notes, bank payload и reviewer identity; sensitive responses используют no-store.
+- [ ] **STAB-SEC-03**: CSP, frame, nosniff, referrer, permissions, COOP и HSTS присутствуют, не ломая approved charter/sheet/video; CSP ужесточается только через report-only.
+- [ ] **STAB-SEC-04**: Staging и production schema fingerprints, functions, grants и RLS соответствуют canonical migrations; ручной production step имеет записанный postflight.
+- [ ] **STAB-SEC-05**: Codex Security выполняется в поддерживаемом managed profile; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, lockfile меняется отдельно.
+- [ ] **STAB-SEC-06**: Release notes честно фиксируют, что device binding не hardware attestation, initial mode spoofable, и перечисляют остальные accepted risks/waivers без расширения риска.
+
+## Release readiness
+
+- [ ] **STAB-REL-01**: На release commit проходят tests, typecheck, production build, full lint и production dependency audit; skipped live test допустим только вместе с успешным staging-run.
+- [ ] **STAB-REL-02**: Playwright-suite проходит с documented setup на clean checkout, не мутирует production, не маскирует flaky retry и сохраняет artifacts.
+- [ ] **STAB-REL-03**: На release commit проходят утверждённые visual baselines, axe, keyboard journeys и zero-unexpected-console policy.
+- [ ] **STAB-REL-04**: Fresh isolated Supabase строится canonical migrations; role/RLS/RPC и concurrent claim/admission/CAS/cleanup tests проходят на disposable fixtures.
+- [ ] **STAB-REL-05**: Owner принимает Promotion на PC/phone с временными данными и без destructive production testing.
+- [ ] **STAB-REL-06**: Owner после clean reload принимает window bounds, spider lifecycle/gait/palette, shortcut handoff, Vivian accent, qualification lock, search coverage и bounded editor layout на PC/phone.
+- [ ] **STAB-REL-07**: Roadmap, requirements, summaries, verification и UAT описывают один commit/state; carried risks перечислены, blocked verification не помечен complete.
+- [ ] **STAB-REL-08**: Финальный review подтверждает сохранение PORTIA OS; новый SVG, motion-язык или font допускается только отдельным owner approval, PNG-паук и принятый out-of-scope сохранены.
 
 ## Out of Scope
 
-| Feature | Reason |
-|---------|--------|
-| Запись в Google Sheets | Таблица остаётся внешним источником текущего звания и меняется вручную |
-| Загрузка доказательств на сайт | Доказательства передаются во внешнем мессенджере |
-| Автоматический проходной процент | Итог всегда определяет проверяющий |
-| Показ конкретных ошибок участнику | Защита банка вопросов; показывается только итог и опциональный процент |
-| Полная защита от сворачивания браузера | Веб-сайт может только обнаруживать потерю видимости/фокуса |
-| Неограниченная история | Для уменьшения мусора хранятся только три последних кратких результата |
+- Полный редизайн или смена художественной основы PORTIA OS.
+- Новый generic/schema-driven app shell или переписывание modular monolith на другую архитектуру.
+- Motion/Framer Motion, другой test runner, package manager, BaaS, database или hosting platform.
+- SVG-паук, новый font/icon system или массовая замена SVG без отдельного решения владельца.
+- Desktop-виджет «Сводка» и свободная общая расстановка ярлыков.
+- Загрузка доказательств повышения на сайт и автоматический pass/fail по проценту.
+- Показ участнику конкретных ошибок, правильных ответов, notes или личности reviewer.
+- Обещание аппаратной идентификации устройства или неуязвимости к spoofing/VPN/cookie cleaning.
+- Мутационные проверки на production и `npm audit fix --force`.
+- Исправление принятого ограничения Ctrl+wheel внутри focused cross-origin iframe.
 
 ## Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| PROM-01 | Phase 14 | Complete |
-| PROM-02 | Phase 14 | Complete |
-| PROM-03 | Phase 14 | Complete |
-| PROM-04 | Phase 14 | Complete |
-| PROM-05 | Phase 14 | Complete |
-| PROM-06 | Phase 14 | Complete |
-| TASK-01 | Phase 14 | Complete |
-| TASK-02 | Phase 14 | Complete |
-| TASK-03 | Phase 14 | Complete |
-| TASK-04 | Phase 14 | Complete |
-| TASK-05 | Phase 14 | Complete |
-| TASK-06 | Phase 14 | Complete |
-| TASK-07 | Phase 14 | Complete |
-| TASK-08 | Phase 14 | Complete |
-| COOL-01 | Phase 14 | Complete |
-| COOL-02 | Phase 14 | Complete |
-| COOL-03 | Phase 14 | Complete |
-| COOL-04 | Phase 14 | Complete |
-| COOL-05 | Phase 14 | Complete |
-| QUAL-01 | Phase 14 | Complete |
-| QUAL-02 | Phase 14 | Complete |
-| QUAL-03 | Phase 14 | Complete |
-| QUAL-04 | Phase 14 | Complete |
-| QUAL-05 | Phase 14 | Complete |
-| QUAL-06 | Phase 14 | Complete |
-| QUAL-07 | Phase 14 | Complete |
-| QUAL-08 | Phase 14 | Complete |
-| QUAL-09 | Phase 14 | Complete |
-| QUAL-10 | Phase 14 | Complete |
-| QUAL-11 | Phase 14 | Complete |
-| QUAL-12 | Phase 14 | Complete |
-| QUAL-13 | Phase 14 | Complete |
-| RETRY-01 | Phase 14 | Complete |
-| RETRY-02 | Phase 14 | Complete |
-| RETRY-03 | Phase 14 | Complete |
-| RETRY-04 | Phase 14 | Complete |
-| RETRY-05 | Phase 14 | Complete |
-| PERM-01 | Phase 14 | Complete |
-| PERM-02 | Phase 14 | Complete |
-| PERM-03 | Phase 14 | Complete |
-| EDIT-01 | Phase 14 | Complete |
-| EDIT-02 | Phase 14 | Complete |
-| EDIT-03 | Phase 14 | Complete |
-| DATA-01 | Phase 14 | Complete |
-| DATA-02 | Phase 14 | Complete |
-| DATA-03 | Phase 14 | Complete |
-| DATA-04 | Phase 14 | Complete |
-| DATA-05 | Phase 14 | Complete |
-| DATA-06 | Phase 14 | Complete |
-
-**Coverage:**
-
-- v1.2 requirements: 49 total
-- Mapped to phases: 49
-- Unmapped: 0 ✓
+| Requirement group | Roadmap phase |
+|---|---|
+| STAB-BASE-* | Pending roadmap |
+| STAB-DESK-* | Pending roadmap |
+| STAB-MOTION-* | Pending roadmap |
+| STAB-PROM-* | Pending roadmap |
+| STAB-APP-* | Pending roadmap |
+| STAB-SEARCH-* | Pending roadmap |
+| STAB-MEDIA-* | Pending roadmap |
+| STAB-A11Y-* / STAB-SEC-* | Pending roadmap |
+| STAB-REL-* | Pending roadmap |
 
 ---
-*Requirements defined: 2026-10-27*
-*Last updated: 2026-10-27 after roadmap creation*
+*Last updated: 2026-10-30 after v1.3 milestone research*
