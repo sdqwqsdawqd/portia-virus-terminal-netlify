@@ -1,5 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
+import { imageExtensionFromSignature } from "@/lib/image-upload";
+import { noStoreHeaders } from "@/lib/portia-cdn";
 
 export const dynamic = "force-dynamic";
 
@@ -26,24 +28,30 @@ export async function POST(request: Request) {
       return Response.json({ error: "Файл не выбран." }, { status: 400 });
     }
 
-    const extension = allowedTypes.get(file.type);
-    if (!extension) {
+    const declaredExtension = allowedTypes.get(file.type);
+    if (!declaredExtension) {
       return Response.json({ error: "Поддерживаются PNG, JPG, WEBP и GIF." }, { status: 415 });
     }
     if (file.size > 4 * 1024 * 1024) {
       return Response.json({ error: "Файл должен быть меньше 4 МБ." }, { status: 413 });
     }
 
-    const path = `recycle/${crypto.randomUUID()}.${extension}`;
+    const detectedExtension = imageExtensionFromSignature(new Uint8Array(await file.slice(0, 16).arrayBuffer()));
+    if (!detectedExtension || detectedExtension !== declaredExtension) {
+      return Response.json({ error: "Содержимое файла не соответствует формату изображения." }, { status: 415, headers: noStoreHeaders });
+    }
+
+    const path = `recycle/${crypto.randomUUID()}.${detectedExtension}`;
     const { error } = await supabase.storage.from("portia-media").upload(path, file, {
-      cacheControl: "3600",
+      // UUID paths are immutable. A year-long edge/browser cache makes repeat opens instant.
+      cacheControl: "31536000",
       contentType: file.type,
       upsert: false,
     });
     if (error) throw error;
 
     const { data } = supabase.storage.from("portia-media").getPublicUrl(path);
-    return Response.json({ url: data.publicUrl });
+    return Response.json({ url: data.publicUrl }, { headers: noStoreHeaders });
   } catch (error) {
     console.error("PORTIA media upload failed", error);
     return Response.json({ error: "Не удалось загрузить изображение." }, { status: 500 });

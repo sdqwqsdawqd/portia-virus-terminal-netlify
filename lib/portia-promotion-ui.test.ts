@@ -63,6 +63,10 @@ test("ordinary promotion and qualification remain visibly separate flows", () =>
   assert.ok(source.includes("ЗАПРОСИТЬ КВАЛИФИКАЦИЮ"));
   assert.ok(source.includes("promotion-ordinary-card"));
   assert.ok(source.includes("promotion-qualification-card"));
+  assert.ok(source.includes("Квалификация пройдена. Теперь отдельно запросите задания на повышение."));
+  assert.ok(source.includes('status.ordinary.eligibility.status === "qualification-required"'));
+  assert.ok(source.includes("ещё не взят проверяющим"));
+  assert.ok(!source.includes("Заявка принята. Обновляем состояние"));
 });
 
 test("public participant surface has immutable tasks and no private reviewer fields", () => {

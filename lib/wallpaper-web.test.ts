@@ -20,17 +20,19 @@ const distanceToEdge = (point: Point, index: number) => {
 };
 const edgeBetween = (u: number, v: number) => webEdges.findIndex((edge) => (edge.a === u && edge.b === v) || (edge.a === v && edge.b === u));
 
-test("the wallpaper spider stays visible and relocates only after an explicit off-to-on toggle", () => {
+test("the wallpaper spider starts randomly beside threads and relocates after an explicit off-to-on toggle", () => {
   const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
-  assert.match(source, /const LEG_SWING_BY_PAIR = \[0, 3\.2, 5\.2, 7\.2, 10\.5\]/);
-  assert.match(source, /const LEG_TUCK_BY_PAIR = \[0, 0\.025, 0\.038, 0\.052, 0\.072\]/);
-  assert.match(source, /const PROBE_SWING = 4\.2;/);
+  assert.match(source, /const LEG_SWING_BY_PAIR = \[0, 2\.4, 4\.8, 7\.4, 14\]/);
+  assert.match(source, /const LEG_TUCK_BY_PAIR = \[0, 0\.02, 0\.035, 0\.052, 0\.09\]/);
+  assert.match(source, /const PROBE_SWING = 8\.5;/);
+  assert.match(source, /const FIRST_PROBE_MIN_DELAY = 3;/);
+  assert.match(source, /const FIRST_PROBE_MAX_DELAY = 7;/);
   assert.match(source, /LEG_SWING_BY_PAIR\[pair\]/);
   assert.match(source, /const BODY_BOB = 0\.006;/);
   assert.doesNotMatch(source, /STEP_CYCLE/);
   assert.match(source, /const PROBE_SWING =/);
-  assert.match(source, /const PROBE_MIN_DELAY = 14;/);
-  assert.match(source, /const PROBE_MAX_DELAY = 32;/);
+  assert.match(source, /const PROBE_MIN_DELAY = 12;/);
+  assert.match(source, /const PROBE_MAX_DELAY = 24;/);
   assert.match(source, /id === "L4" \|\| id === "R4"/);
   assert.doesNotMatch(source, /const front = id === "L1" \|\| id === "R1"/);
   assert.doesNotMatch(source, /const probing = !walking/);
@@ -38,8 +40,14 @@ test("the wallpaper spider stays visible and relocates only after an explicit of
   assert.doesNotMatch(source, /TravelStage|TOUR_WALKS|fading-out|relocateWhileHidden/);
   assert.match(source, /let wasSpiderOn = spiderOn\(\)/);
   assert.match(source, /const turnedOn = !wasSpiderOn && enabled/);
-  assert.match(source, /const relocateAfterExplicitShow[\s\S]*planSpawn/);
-  assert.match(source, /if \(turnedOn\) \{[\s\S]*relocateAfterExplicitShow\(\)/);
+  assert.match(source, /window\.crypto\.getRandomValues\(seedWords\)/);
+  assert.doesNotMatch(source, /seeded\(41\)/);
+  assert.match(source, /const THREAD_LANE_OFFSET = 30/);
+  assert.match(source, /visibleNodes\(layer\.clientWidth, layer\.clientHeight, 90\)/);
+  assert.match(source, /visibleNodes\(width, height, 90\)/);
+  assert.match(source, /const relocateVisible[\s\S]*planSpawn/);
+  assert.match(source, /if \(wasSpiderOn\) \{[\s\S]*relocateVisible\(\)/);
+  assert.match(source, /if \(turnedOn\) \{[\s\S]*relocateVisible\(\)/);
   assert.match(source, /document\.hidden[\s\S]*cancelAnimationFrame\(frame\)/);
   assert.match(source, /element\.style\.opacity = "0"/);
   assert.match(source, /rest = 6 \+ rand\(\) \* 4/g);
@@ -51,6 +59,14 @@ test("the spider palette follows the readable interface accent with logo-like bl
   assert.match(styles, /\.wallpaper-spider\s*\{[^}]*color:\s*var\(--teal\)/);
   assert.match(styles, /\.wallpaper-spider-dark\s*\{[^}]*color-mix\(in oklab, var\(--teal\)[^}]*#020706/);
   assert.match(styles, /\.wallpaper-spider-pale\s*\{[^}]*color-mix\(in oklab, var\(--teal\)/);
+});
+
+test("hiding the spider leaves only a subtle dot-free web drift", () => {
+  const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
+  assert.match(styles, /html\[data-spider="off"\] \.wallpaper-web-dew\s*\{[^}]*animation:\s*none !important;[^}]*opacity:\s*0 !important/);
+  assert.match(styles, /html\[data-spider="off"\] \.wallpaper-web-pulses\s*\{[^}]*opacity:\s*0/);
+  assert.match(styles, /html\[data-motion="full"\]\[data-spider="off"\] \.wallpaper-web\s*\{[^}]*animation:\s*web-idle-drift/);
+  assert.match(styles, /@keyframes web-idle-drift/);
 });
 
 test("explicit show plans a distinct spawn with a route-derived pose", () => {

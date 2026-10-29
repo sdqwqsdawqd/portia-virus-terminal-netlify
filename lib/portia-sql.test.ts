@@ -93,6 +93,11 @@ test("STEP 4 is one transaction", () => {
 // Setup file: the same end state for a fresh install (D-20).
 const setup = readFileSync(new URL("../supabase/portia_setup.sql", import.meta.url), "utf8");
 
+test("security-definer helpers never resolve objects through the writable public search path", () => {
+  assert.doesNotMatch(apply, /set search_path\s*=\s*public/i);
+  assert.doesNotMatch(setup, /set search_path\s*=\s*public/i);
+});
+
 function functionBlock(sql: string, name: string) {
   const match = sql.match(new RegExp(`create or replace function public\\.${name}\\([\\s\\S]*?\\$\\$;`));
   assert.ok(match, `function ${name} is missing`);

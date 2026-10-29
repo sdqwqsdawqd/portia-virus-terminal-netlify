@@ -44,7 +44,9 @@ export type PromotionReviewerCommand =
 export type PromotionSourceStatus = "ok" | "unavailable" | "invalid-source";
 
 export function promotionReviewerSourcePolicy(action: PromotionReviewerCommand["action"], source: PromotionSourceStatus) {
-  if (source === "ok" || action === "release" || action === "force-release") return "allow" as const;
+  // Releasing or removing an already stored request does not depend on the current
+  // roster row. Keep those recovery actions available while the sheet is offline.
+  if (source === "ok" || action === "release" || action === "force-release" || action === "reject" || action === "delete-request") return "allow" as const;
   return "block" as const;
 }
 

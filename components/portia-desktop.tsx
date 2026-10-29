@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { preconnect, preload } from "react-dom";
 import { classificationOptions, findGuide, findInfo, portiaTextKey, type Broadcast, type GuideBlock, type GuideSection, type PortiaContent, type RecycleFile, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
 import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIconName } from "@/components/portia-icons";
@@ -1620,14 +1621,23 @@ function EmployeeImage(props: { src: string; alt: string; fallbackClassName?: st
   return <EmployeeImageInner key={props.src} {...props} />;
 }
 
+function prioritizeImage(src: string) {
+  if (!src.startsWith("https://")) return;
+  try {
+    preconnect(new URL(src).origin);
+    preload(src, { as: "image", fetchPriority: "high", referrerPolicy: "no-referrer" });
+  } catch { /* Normalization rejects malformed URLs before they reach this surface. */ }
+}
+
 function EmployeeImageInner({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   // A failed URL shows the PORTIA fallback, never a broken image; if the fallback fails too, the skeleton still stops (D-09 #7).
   const fallback = !src || failed;
+  if (!fallback) prioritizeImage(src);
   return <div className={`personnel-image-loader${loaded ? " is-loaded" : ""}`}>
     <span className="personnel-image-skeleton" aria-hidden="true" />
-    <img src={fallback ? "/assets/portia-logo.png" : src} alt={alt} className={fallback ? fallbackClassName : ""} referrerPolicy="no-referrer" onLoad={() => setLoaded(true)} onError={() => fallback ? setLoaded(true) : setFailed(true)} />
+    <img src={fallback ? "/assets/portia-logo.png" : src} alt={alt} className={fallback ? fallbackClassName : ""} loading="eager" decoding="async" fetchPriority="high" referrerPolicy="no-referrer" onLoad={() => setLoaded(true)} onError={() => fallback ? setLoaded(true) : setFailed(true)} />
   </div>;
 }
 
@@ -2274,10 +2284,11 @@ function FormattedText({ text, document, className = "" }: { text?: string; docu
 function LoadingMedia({ src, alt, label }: { src: string; alt: string; label: string }) {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  prioritizeImage(src);
   // A failed URL shows the «ОЖИДАЕТ ЗАГРУЗКИ» placeholder, never a broken image (D-09 #7).
   if (failed) return <MediaBlock src="" alt={alt} label={label} />;
   return <figure className={`subject-media${loading ? " is-loading" : ""}`}>
-    <img src={src} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" onLoad={() => setLoading(false)} onError={() => setFailed(true)} />
+    <img src={src} alt={alt} loading="eager" decoding="async" fetchPriority="high" referrerPolicy="no-referrer" onLoad={() => setLoading(false)} onError={() => setFailed(true)} />
     {loading && <LoadingState label="Загрузка изображения…" />}
     <figcaption>{label}</figcaption>
   </figure>;

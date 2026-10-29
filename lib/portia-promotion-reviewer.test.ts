@@ -24,9 +24,12 @@ test("promotion reviewer boundary fails closed and requires the trusted promo ta
   assert.equal(promotionReviewerDecision(true, { canEdit: true, canManageEditors: false, openTabs: ["promo"], tabsEnforced: true }), "allowed");
 });
 
-test("sheet outage preserves claims and allows only reversible release", () => {
-  for (const action of ["release", "force-release"] as const) assert.equal(promotionReviewerSourcePolicy(action, "unavailable"), "allow");
-  for (const action of ["claim", "reject", "delete-request", "approve-task", "finalize-attempt"] as const) {
+test("sheet outage preserves claims while still allowing request recovery and removal", () => {
+  for (const action of ["release", "force-release", "reject", "delete-request"] as const) {
+    assert.equal(promotionReviewerSourcePolicy(action, "unavailable"), "allow", action);
+    assert.equal(promotionReviewerSourcePolicy(action, "invalid-source"), "allow", action);
+  }
+  for (const action of ["claim", "approve-task", "finalize-attempt"] as const) {
     assert.equal(promotionReviewerSourcePolicy(action, "unavailable"), "block", action);
     assert.equal(promotionReviewerSourcePolicy(action, "invalid-source"), "block", action);
   }

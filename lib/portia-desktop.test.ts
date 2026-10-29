@@ -142,8 +142,8 @@ test("editor collections scroll inside bounded panes and the table of contents n
   assert.match(styles, /\.promotion-bank-editor, \.promotion-preview\s*\{[^}]*overflow-y:\s*auto/);
 });
 
-test("Vivian lifts the source artwork to the interface brightness without greying the image itself", () => {
-  assert.match(styles, /\.assistant-button\s*\{[^}]*filter:\s*var\(--assistant-filter\) brightness\(1\.42\) saturate\(1\.35\)/);
+test("Vivian follows the interface accent without painful overexposure or greying the image itself", () => {
+  assert.match(styles, /\.assistant-button\s*\{[^}]*filter:\s*var\(--assistant-filter\) brightness\(1\.1\) saturate\(1\.08\)/);
   assert.match(styles, /\.assistant-button img\s*\{[^}]*filter:\s*none/);
 });
 
@@ -152,8 +152,15 @@ test("shortcut motion survives pointer exit until every delayed icon part reache
   assert.ok(source.includes("function useShortcutAnimation()"));
   assert.ok(source.includes('iconAnimation.playing ? " is-icon-animating"'));
   assert.ok(source.includes("<StartPanelButton"));
-  assert.match(styles, /\.desktop-icon:is\(:hover, :focus-visible, \.is-icon-animating\)/);
-  assert.match(styles, /\.start-panel > button:is\(:hover, :focus-visible, \.is-icon-animating\)/);
+  assert.match(styles, /\.desktop-icon\.is-icon-animating/);
+  assert.match(styles, /\.start-panel > button\.is-icon-animating/);
+  assert.doesNotMatch(styles, /\.desktop-icon:is\(:hover, :focus-visible, \.is-icon-animating\)/);
+});
+
+test("active remote media receives connection and fetch priority while background collections stay lazy", () => {
+  assert.match(source, /import \{ preconnect, preload \} from "react-dom"/);
+  assert.match(source, /preload\(src, \{ as: "image", fetchPriority: "high", referrerPolicy: "no-referrer" \}\)/);
+  assert.match(source, /function LoadingMedia[\s\S]*loading="eager"[\s\S]*fetchPriority="high"/);
 });
 
 test("window drag uses the live frame width and symmetric workspace bounds", () => {

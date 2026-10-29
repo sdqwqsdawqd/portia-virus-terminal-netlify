@@ -110,7 +110,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
   select exists (select 1 from auth.users where id = auth.uid() and email_confirmed_at is not null);
 $$;
@@ -120,7 +120,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
   select lower(coalesce(auth.jwt() ->> 'email', '')) = public.portia_owner_email()
     and public.portia_email_confirmed();
@@ -131,7 +131,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
   select public.portia_email_confirmed() and (
     public.portia_is_owner() or exists (
@@ -146,7 +146,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
   select tab_id is not null and (
     public.portia_is_owner() or (
@@ -164,7 +164,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
   select tab_id is not null and (
     public.portia_is_owner() or (
@@ -181,7 +181,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
   select
     lower(trim(candidate_email)) = public.portia_owner_email()

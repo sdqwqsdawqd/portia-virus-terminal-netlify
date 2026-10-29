@@ -4,7 +4,7 @@
 // 09-spider.svg (no runtime markup). One requestAnimationFrame loop moves it and draws the waves along the threads:
 // it reads no layout and sets no React state.
 
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import { REST_NODE, createPulsePool, emitPulse, gaitPhase, legPose, planSpawn, planWalk, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
 
 type LegId = "L1" | "L2" | "L3" | "L4" | "R1" | "R2" | "R3" | "R4";
@@ -29,18 +29,22 @@ const legGroup = (leg: string) => (GAIT_A.includes(leg) ? 0 : 1);
 const legLag = (leg: string) => (4 - Number(leg[1])) * 0.035;
 // Artwork pair 4 is anatomical front (beside the fangs); pair 1 is rear. The shorter front pair needs a
 // wider sweep to read at desktop scale, while the long rear pair is deliberately quiet.
-const LEG_SWING_BY_PAIR = [0, 3.2, 5.2, 7.2, 10.5] as const;
-const LEG_TUCK_BY_PAIR = [0, 0.025, 0.038, 0.052, 0.072] as const;
+const LEG_SWING_BY_PAIR = [0, 2.4, 4.8, 7.4, 14] as const;
+const LEG_TUCK_BY_PAIR = [0, 0.02, 0.035, 0.052, 0.09] as const;
 const BODY_BOB = 0.006; // nearly still abdomen; no conspicuous pulsing in the background
 const GAIT_EASE = 0.45; // legs settle softly after a stop
 const TURN_TIME = 0.22; // smooth directional changes instead of abrupt pivots
-const PROBE_SWING = 4.2;
-const PROBE_MIN_DELAY = 14;
-const PROBE_MAX_DELAY = 32;
+const PROBE_SWING = 8.5;
+const FIRST_PROBE_MIN_DELAY = 3;
+const FIRST_PROBE_MAX_DELAY = 7;
+const PROBE_MIN_DELAY = 12;
+const PROBE_MAX_DELAY = 24;
 const PROBE_MIN_DURATION = 1.15;
 const PROBE_MAX_DURATION = 1.55;
 const FIRST_WALK = 4.5; // let the desktop settle before the first quiet walk
 const MAX_DT = 0.05; // a slow frame never makes a jump
+const THREAD_LANE_OFFSET = 30; // travel beside the silk, visually through the cells rather than over a thread
+const LANE_SETTLE_TIME = 0.16;
 
 // Waves (D-05): only footfalls make waves, one pair of pulses each time a leg group plants; at most 8 alive.
 const PULSE_SLOTS = 8;
@@ -52,7 +56,7 @@ export function WallpaperSpider() {
   const wrapper = useRef<HTMLDivElement>(null);
   const waves = useRef<SVGSVGElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = wrapper.current, overlay = waves.current, layer = element?.parentElement;
     if (!element || !overlay || !layer) return;
     const root = document.documentElement;
@@ -62,16 +66,22 @@ export function WallpaperSpider() {
     const pulsePaths = Array.from(overlay.querySelectorAll("path"));
     const pool = createPulsePool(PULSE_SLOTS);
     const drawn = pulsePaths.map(() => false);
-    const rand = seeded(41);
+    const seedWords = new Uint32Array(1);
+    window.crypto.getRandomValues(seedWords);
+    const rand = seeded(seedWords[0] || (Date.now() >>> 0));
     const [restX, restY] = webGeometry.nodes[REST_NODE];
+    const besideThread = (px: number, py: number, direction: number, side: number): [number, number] => [
+      px + Math.cos(direction + Math.PI / 2) * THREAD_LANE_OFFSET * side,
+      py + Math.sin(direction + Math.PI / 2) * THREAD_LANE_OFFSET * side,
+    ];
 
     // Size is cached here (a layout read outside the loop); the observer keeps it current.
     let scale = Math.max(layer.clientWidth / 1440, layer.clientHeight / 900);
-    let visible = visibleNodes(layer.clientWidth, layer.clientHeight);
+    let visible = visibleNodes(layer.clientWidth, layer.clientHeight, 90);
     const sizer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       scale = Math.max(width / 1440, height / 900);
-      visible = visibleNodes(width, height);
+      visible = visibleNodes(width, height, 90);
     });
     sizer.observe(layer);
 
@@ -80,8 +90,8 @@ export function WallpaperSpider() {
     let walked = 0, rest = FIRST_WALK, x = restX, y = restY;
     // heading is where the body should face (travel direction); angle is how far the artwork is turned now.
     let heading = ARTWORK_HEADING, angle = 0, phase = 0, gait = 0, clean = true, legsNeutral = true;
-    let gaitDistance = 0, pathDistance = 0;
-    let probeDelay = PROBE_MIN_DELAY + rand() * (PROBE_MAX_DELAY - PROBE_MIN_DELAY), probeRemaining = 0, probeDuration = 0;
+    let gaitDistance = 0, pathDistance = 0, laneSide = rand() < 0.5 ? -1 : 1;
+    let probeDelay = FIRST_PROBE_MIN_DELAY + rand() * (FIRST_PROBE_MAX_DELAY - FIRST_PROBE_MIN_DELAY), probeRemaining = 0, probeDuration = 0;
 
     const clearPulses = () => {
       pool.slots.forEach((slot) => { slot.alive = false; });
@@ -93,13 +103,14 @@ export function WallpaperSpider() {
       });
     };
 
-    const relocateAfterExplicitShow = () => {
+    const relocateVisible = () => {
       const planned = planSpawn(visible, previousVisibleSpawn, rand);
       if (planned.node === previousVisibleSpawn) return false;
       previousVisibleSpawn = planned.node; node = planned.node; previous = -1; path = planned.path.length > 1 ? planned.path : null; walked = 0; rest = path ? 0 : 1.2 + rand() * 0.8;
-      [x, y] = webGeometry.nodes[planned.node];
+      laneSide = rand() < 0.5 ? -1 : 1;
       heading = planned.heading; angle = heading - ARTWORK_HEADING; phase = planned.phase; gait = path ? 1 : 0; gaitDistance = phase * 20; pathDistance = 0;
-      probeRemaining = 0; probeDelay = PROBE_MIN_DELAY + rand() * (PROBE_MAX_DELAY - PROBE_MIN_DELAY);
+      [x, y] = besideThread(...webGeometry.nodes[planned.node], heading, laneSide);
+      probeRemaining = 0; probeDelay = FIRST_PROBE_MIN_DELAY + rand() * (FIRST_PROBE_MAX_DELAY - FIRST_PROBE_MIN_DELAY);
       clearPulses();
       element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg)`;
       return true;
@@ -131,7 +142,11 @@ export function WallpaperSpider() {
       if (path) {
         walked += dt;
         const pose = walkPose(path, walked);
-        x = pose.x; y = pose.y; heading = pose.heading;
+        heading = pose.heading;
+        const [targetX, targetY] = besideThread(pose.x, pose.y, heading, laneSide);
+        const laneFollow = 1 - Math.exp(-dt / LANE_SETTLE_TIME);
+        x += (targetX - x) * laneFollow;
+        y += (targetY - y) * laneFollow;
         gaitDistance += Math.max(0, pose.distance - pathDistance);
         pathDistance = pose.distance;
         // A group plants its feet when the gait phase passes 0 (group A) or 0.5 (group B): a pulse runs both ways from the spider.
@@ -141,6 +156,8 @@ export function WallpaperSpider() {
           emitPulse(pool, pose.edge, pose.at, -1, STEP_PEAK, time);
         }
         if (pose.done) {
+          x = targetX;
+          y = targetY;
           previous = path[path.length - 2];
           node = path[path.length - 1];
           path = null;
@@ -149,7 +166,7 @@ export function WallpaperSpider() {
         phase = after;
       } else if ((rest -= dt) <= 0) {
         const next = planWalk(node, previous, visible, rand);
-        if (next.length > 1) { path = next; walked = 0; pathDistance = 0; } else rest = 6 + rand() * 4;
+        if (next.length > 1) { path = next; walked = 0; pathDistance = 0; laneSide = rand() < 0.5 ? -1 : 1; } else rest = 6 + rand() * 4;
       }
       drawPulses();
       const walking = path !== null;
@@ -195,8 +212,11 @@ export function WallpaperSpider() {
     const motionOn = () => (root.dataset.motion ? root.dataset.motion === "full" : !reduceQuery.matches);
     const spiderOn = () => root.dataset.spider !== "off";
     let wasSpiderOn = spiderOn();
-    if (!wasSpiderOn) element.style.opacity = "0";
-    // Pausing motion or hiding the page only suspends the current route. A user off-to-on transition alone relocates.
+    if (wasSpiderOn) {
+      relocateVisible();
+      element.style.opacity = "1";
+    } else element.style.opacity = "0";
+    // Pausing motion or hiding the page only suspends the current route. A fresh page load and an off-to-on transition relocate.
     const sync = () => {
       const enabled = spiderOn();
       const turnedOn = !wasSpiderOn && enabled;
@@ -206,7 +226,7 @@ export function WallpaperSpider() {
         cancelAnimationFrame(frame); frame = 0; element.style.opacity = "0"; clearPulses(); return;
       }
       if (turnedOn) {
-        relocateAfterExplicitShow();
+        relocateVisible();
         element.style.opacity = "1";
       }
       if (!motionOn()) {
@@ -239,7 +259,7 @@ export function WallpaperSpider() {
     <svg className="desktop-wallpaper wallpaper-web-pulses" viewBox="0 0 1440 900" preserveAspectRatio="xMaxYMin slice" aria-hidden="true" ref={waves}>
       {Array.from({ length: PULSE_SLOTS }, (_, index) => <path key={index} d="" style={{ opacity: 0 }} />)}
     </svg>
-    <div className="wallpaper-spider" ref={wrapper} style={{ "--rest-x": round(restX), "--rest-y": round(restY) } as CSSProperties}>
+    <div className="wallpaper-spider" ref={wrapper} style={{ "--rest-x": round(restX), "--rest-y": round(restY), opacity: 0 } as CSSProperties}>
       <svg viewBox="0 0 649.5 768" aria-hidden="true">
         <g className="wallpaper-spider-leg" data-leg="R4" style={legOrigin("R4")}>
           <path className="wallpaper-spider-dark" d="M508.75,561.48c-2.79,3.63-4.55,9.33-5.88,13.68-1.07,3.5-1.56,8.15-.4,12.22l40.02-.67c1.17,6.17-1.23,8.84-4.02,13.46-10.23-.89-19.66-.96-32.04-.28l23.32,37.32c7.09,11.35,6.63,25.24-.91,36.39l-63.79,94.39c-4.05-5.56-9.24-14.64-7.79-21.73l7.77-38.02c5.09-5.24,13.65-29.06,23.11-32.49l-6.66,32.29,26.96-38.42c15.15-21.59-3.67-28.77-20.49-62.02-9.78-19.33-8.65-41.38,4.7-58.43l24.92-31.8c7.29-9.3,7.46-22.36-1.18-30.78l-24.66,21.99c-4.84-.71-10.28-2.08-11.19-7.52l28.18-23.85-13.03-6.82c-3.43-1.8-7.84-5.85-11.73-7.42l-27.99-11.31-9.72-26.08c17.52,7.12,34.96,14.35,52.85,22.78,13.52,6.37,25.68,15.46,34.79,27.09,12.43,15.87,12.37,37.15.16,53.04l-25.31,32.96Z" />
