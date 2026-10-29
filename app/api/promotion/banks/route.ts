@@ -4,6 +4,7 @@ import {
   createPreviewToken,
   parsePromotionBankCommand,
   qualificationBankLimitError,
+  replacePreviewItem,
   requirePromotionReviewer,
   selectQualificationPreview,
   selectTaskPreview,
@@ -61,12 +62,7 @@ export async function POST(request: Request) {
           : null;
         let items: Array<TaskPreviewItem | QualificationPreviewItem>;
         if (priorIds && priorIds.includes(replaceId)) {
-          const old = bank.items.find((item) => item.id === replaceId);
-          const candidates = bank.items.filter((item) => item.active && !priorIds.includes(item.id)
-            && (kind === "ordinary" || (item as QualificationPreviewItem).type === (old as QualificationPreviewItem | undefined)?.type));
-          if (!old || !candidates.length) throw new Error("insufficient-replacement");
-          const replacement = candidates[Math.floor(Math.random() * candidates.length)];
-          items = priorIds.map((id) => id === replaceId ? replacement : bank.items.find((item) => item.id === id)).filter(Boolean) as Array<TaskPreviewItem | QualificationPreviewItem>;
+          items = replacePreviewItem(bank.items, priorIds, replaceId, kind);
         } else {
           items = kind === "ordinary"
             ? selectTaskPreview(bank.items as TaskPreviewItem[], bank.requiredCount ?? 0, { manualIds })
@@ -76,7 +72,9 @@ export async function POST(request: Request) {
         const preview = createPreviewToken({ kind, bankId, version: bank.version, ids: items.map((item) => item.id), expiresAt }, secret);
         return Response.json({ preview, expiresAt: new Date(expiresAt).toISOString(), version: bank.version, items }, { headers: noStoreHeaders });
       } catch (error) {
-        return Response.json({ error: error instanceof Error && error.message.includes("insufficient") ? "Недостаточно активных элементов." : "Набор не соответствует настройкам банка." }, { status: 409, headers: noStoreHeaders });
+        const reason = error instanceof Error ? error.message : "";
+        if (reason === "stale-preview") return Response.json({ error: "Банк изменился. Соберите набор заново.", code: "stale-preview" }, { status: 409, headers: noStoreHeaders });
+        return Response.json({ error: reason.includes("insufficient") ? "Недостаточно активных элементов." : "Набор не соответствует настройкам банка." }, { status: 409, headers: noStoreHeaders });
       }
     }
     const token = typeof body.preview === "string" ? body.preview : "";

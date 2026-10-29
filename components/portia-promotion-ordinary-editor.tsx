@@ -81,7 +81,7 @@ export function PortiaPromotionOrdinaryEditor({ banks, requests, busy, post, ref
   const buildPreview = async (replaceId = "", random = false) => {
     if (!bank) return;
     const result = await post({ action: "preview", kind: "ordinary", bankId: bank.id, ...(!random && !replaceId && manualIds.length ? { manualIds } : {}), ...(replaceId && currentPreview ? { replaceId, preview: currentPreview.preview } : {}) });
-    if (result?.preview && Array.isArray(result.items)) { setPreview({ ...(result as unknown as Omit<Preview, "version">), version: bank.version }); if (isPhone) setBankView("preview"); }
+    if (result?.preview && Array.isArray(result.items) && typeof result.version === "string") { setPreview({ ...(result as unknown as Preview), version: result.version }); if (isPhone) setBankView("preview"); }
   };
   const confirmPreview = async () => {
     if (!bank || !currentPreview || !selectedRequestId) return;

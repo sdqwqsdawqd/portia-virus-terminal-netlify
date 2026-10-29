@@ -198,6 +198,27 @@ export function selectQualificationPreview(items: readonly QualificationPreviewI
   });
 }
 
+export function replacePreviewItem<T extends TaskPreviewItem | QualificationPreviewItem>(
+  items: readonly T[],
+  priorIds: readonly string[],
+  replaceId: string,
+  kind: PromotionRequestKind,
+  random: () => number = Math.random,
+) {
+  if (new Set(priorIds).size !== priorIds.length) throw new Error("stale-preview");
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const prior = priorIds.map((id) => byId.get(id));
+  if (prior.some((item) => !item?.active)) throw new Error("stale-preview");
+  const old = byId.get(replaceId);
+  if (!old || !priorIds.includes(replaceId)) throw new Error("stale-preview");
+  const candidates = items.filter((item) => item.active && !priorIds.includes(item.id)
+    && (kind === "ordinary" || (item as QualificationPreviewItem).type === (old as QualificationPreviewItem).type));
+  if (!candidates.length) throw new Error("insufficient-replacement");
+  const index = Math.min(candidates.length - 1, Math.max(0, Math.floor(random() * candidates.length)));
+  const replacement = candidates[index];
+  return priorIds.map((id) => id === replaceId ? replacement : byId.get(id)!) as T[];
+}
+
 export type QuestionDraft =
   | { type: "single"; text: string; options: string[]; answer: number }
   | { type: "multiple"; text: string; options: string[]; answer: number[] }
