@@ -123,6 +123,23 @@ test("promotion is a standalone desktop application with its own window geometry
   assert.ok(!source.includes('meta="Portia Promotion"'));
 });
 
+test("global search covers applications, employees and every existing content collection", () => {
+  assert.ok(source.includes("globalSearchAppIds.map"));
+  assert.ok(source.includes('type: "employee" as const'));
+  assert.ok(source.includes('type: "app" as const'));
+  assert.ok(source.includes('openApp("employees")'));
+  for (const collection of ["content.viruses", "content.infoSections", "content.guideSections", "content.broadcasts", "content.recycleFiles", "recycledViruses"]) {
+    assert.ok(source.includes(collection), collection);
+  }
+});
+
+test("editor collections scroll inside bounded panes and the table of contents no longer follows the page", () => {
+  assert.match(styles, /\.editor-record-list\s*\{[^}]*max-height:[^;}]+;[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.editor-toc\s*\{[^}]*position:\s*relative/);
+  assert.match(styles, /\.promotion-request-list, \.promotion-bank-list\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.promotion-bank-editor, \.promotion-preview\s*\{[^}]*overflow-y:\s*auto/);
+});
+
 test("window drag uses the live frame width and symmetric workspace bounds", () => {
   assert.ok(source.includes("width: rect.width"));
   assert.ok(source.includes("width: operation.parentWidth"));

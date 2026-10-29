@@ -113,6 +113,7 @@ const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName
   charter: { label: "Устав", path: "PORTIA://CHARTER", icon: "charter" },
   editor: { label: "Редактор", path: "PORTIA://CONTENT_CONTROL", icon: "editor" },
 };
+const globalSearchAppIds: AppId[] = ["archive", "employees", "info", "guide", "broadcasts", "trash", "promotion", "settings", "sheet", "charter"];
 
 const initialWindows: Record<AppId, WindowState> = {
   archive: { open: false, minimized: false, maximized: false, z: 11 },
@@ -342,6 +343,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [startOpen, setStartOpen] = useState(false);
   const [windows, setWindows] = useState<Record<AppId, WindowState>>(initialWindows);
   const [activeApp, setActiveApp] = useState<AppId>("archive");
+  const [qualificationLocked, setQualificationLocked] = useState(false);
+  const qualificationLockedRef = useRef(false);
   // A ref, not state: computing z inside a state updater made setWindows a side effect of it, and Strict Mode replays updaters (ROB-03).
   const topZ = useRef(20);
   const [activeVirusId, setActiveVirusId] = useState(initialContent.viruses[0]?.id ?? "");
@@ -861,6 +864,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   };
 
   const focusApp = (appId: AppId) => {
+    if (qualificationLocked && appId !== "promotion") return;
     // Every click in a window calls this, so a window already on top keeps its z and z stays far below the format panel's 950 (EDIT-04).
     // shortcut: windows still climb by one per switch between windows; after about 930 switches in one page session they pass the panel — renumber z here if that is ever seen
     if (windows[appId].z !== topZ.current) {
@@ -870,6 +874,21 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
     setActiveApp(appId);
   };
+
+  const updateQualificationLock = useCallback((locked: boolean) => {
+    if (qualificationLockedRef.current === locked) return;
+    qualificationLockedRef.current = locked;
+    setQualificationLocked(locked);
+    if (!locked) return;
+    topZ.current += 1;
+    const z = topZ.current;
+    setStartOpen(false);
+    setWindows((state) => ({
+      ...state,
+      promotion: { ...state.promotion, open: true, minimized: false, exiting: undefined, z },
+    }));
+    setActiveApp("promotion");
+  }, []);
 
   // Taskbar entries are dragged with a mouse or pen; touch keeps scrolling the phone taskbar.
   // The entry follows the pointer and the order changes on release, so pointer capture is never lost to a DOM move.
@@ -938,6 +957,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   };
 
   const openApp = (appId: AppId, origin?: OpenOrigin) => {
+    if (qualificationLocked && appId !== "promotion") return;
     if (!windows[appId].open || windows[appId].minimized || windows[appId].exiting) bounceTaskbarEntry(appId);
     // Re-opening a window while it closes or minimises cancels the exit and keeps it.
     const pendingExit = exitTimers.current[appId];
@@ -997,6 +1017,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   // `force` is the editor's own dialog approving the close; minimize is never guarded (the window stays mounted).
   const requestExit = (appId: AppId, kind: "close" | "minimize", force = false) => {
+    if (qualificationLocked && appId === "promotion") return;
     // A repeat is ignored, but a close may overtake a minimise that is still playing.
     const exiting = windows[appId].exiting;
     if (exiting === kind || exiting === "close") return;
@@ -1042,6 +1063,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   }, []);
 
   const toggleMaximize = (appId: AppId) => {
+    if (qualificationLocked && appId === "promotion") return;
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], maximized: !state[appId].maximized } }));
     focusApp(appId);
   };
@@ -1223,8 +1245,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   const searchResults = useMemo(() => {
     const query = escapeSearch(globalQuery.trim());
-    const items: Array<{ id: string; type: "virus" | "info" | "guide" | "broadcast" | "file"; title: string; meta: string; body: string; parts?: string[] }> = [
+    const items: Array<{ id: string; type: "virus" | "employee" | "info" | "guide" | "broadcast" | "file" | "app"; title: string; meta: string; body: string; parts?: string[] }> = [
+      ...globalSearchAppIds.map((id) => ({ id, type: "app" as const, title: appMeta[id].label, meta: "ПРИЛОЖЕНИЕ", body: `${appMeta[id].path} ${id}` })),
       ...content.viruses.map((virus) => ({ id: virus.id, type: "virus" as const, title: virus.name, meta: virus.code, body: `${virus.status} ${virus.external} ${virus.physiology} ${Object.values(virus.classification).join(" ")} ${virus.mutations.map((mutation) => `${mutation.name} ${mutation.description}`).join(" ")}` })),
+      ...employees.map((employee) => ({ id: employee.id, type: "employee" as const, title: employee.nickname, meta: "СОТРУДНИКИ", body: `${employee.callsign} ${employee.title} ${employee.rank} ${employee.biography}` })),
       ...content.infoSections.flatMap((section) => [
         { id: section.id, type: "info" as const, title: section.title, meta: "ИНФОРМАЦИЯ", body: section.body },
         ...section.subsections.map((sub) => ({
@@ -1250,13 +1274,16 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       const at = item.parts ? item.parts.findIndex((part) => escapeSearch(part).includes(query)) : -1;
       return at > 0 && item.parts ? { ...item, body: [...item.parts.slice(at), ...item.parts.slice(0, at)].join(" ") } : item;
     });
-  }, [content, globalQuery, recycledViruses]);
+  }, [content, employees, globalQuery, recycledViruses]);
 
   const openSearchResult = (result: (typeof searchResults)[number]) => {
     if (result.type === "virus") {
       setActiveVirusId(result.id);
       setOpenLog(null);
       openApp("archive");
+    } else if (result.type === "employee") {
+      setSelectedEmployeeId(result.id);
+      openApp("employees");
     } else if (result.type === "info") {
       setSelectedInfoId(result.id);
       openApp("info");
@@ -1267,6 +1294,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       const found = content.broadcasts.find((item) => item.id === result.id);
       if (found) setBroadcastTab(broadcastTabOf(found.type));
       openApp("broadcasts");
+    } else if (result.type === "app") {
+      openApp(result.id as AppId);
     } else {
       setActiveTrashFileId(result.id);
       openApp("trash");
@@ -1311,7 +1340,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       <BootScreen visible={booting} />
       {questToastItem && <QuestToast quest={questToastItem.quest} more={questToastItem.more} document={content.formattedText[portiaTextKey.broadcast(questToastItem.quest.id)]} onDismiss={dismissQuestToast} />}
       {promotionRetakeToast && <PromotionRetakeToast onDismiss={dismissPromotionRetakeToast} />}
-      <div className="desktop" id="desktop">
+      <div className={`desktop${qualificationLocked ? " is-qualification-locked" : ""}`} id="desktop">
         {desktopSettingsLoaded && <DesktopWallpaper kind={desktopSettings.wallpaper} />}
         <header className="system-bar">
           <div className="system-brand"><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span><span className="system-division">PORTIA OS</span></div>
@@ -1332,6 +1361,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <DesktopIcon app="sheet" onOpen={openApp} position={shortcutPositions.sheet} onMove={moveDesktopShortcut} />
             <DesktopIcon app="trash" onOpen={openApp} position={shortcutPositions.trash} onMove={moveDesktopShortcut} className="desktop-icon-trash" />
           </nav>
+
+          {qualificationLocked && <div className="qualification-focus-backdrop" aria-hidden="true"><span>ИДЁТ КВАЛИФИКАЦИОННАЯ ПРОВЕРКА</span></div>}
 
 
           <AppWindow app="archive" state={windows.archive} active={activeApp === "archive"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="archive-window" meta="ДОПУСК II">
@@ -1393,7 +1424,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
           <AppWindow app="search" state={windows.search} active={activeApp === "search"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="global-search-window" meta="ГЛОБАЛЬНЫЙ ПОИСК">
             <div className="global-search-app">
-              <header className="global-search-header"><h1>Глобальный поиск</h1><p>Поиск по вирусам, характеристикам, информации.</p></header>
+              <header className="global-search-header"><h1>Глобальный поиск</h1><p>Поиск по приложениям, сотрудникам и материалам PORTIA.</p></header>
               <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input value={globalQuery} onChange={(event) => setGlobalQuery(event.target.value)} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
               <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{content.searchRecommendations.slice(0, 6).map((item, index) => <button key={`${item}-${index}`} type="button" onClick={() => setGlobalQuery(item)}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>)}</div></div>
               <div className="global-search-summary"><span>{globalQuery ? `Результаты для «${globalQuery}»` : "Доступные записи"}</span><strong>{String(searchResults.length).padStart(2, "0")}</strong></div>
@@ -1401,7 +1432,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 {!contentReady ? <LoadingState label="Загрузка архива…" /> : <>
                 {searchResults.map((result) => (
                   <button key={`${result.type}-${result.id}`} type="button" className="global-result" onClick={() => openSearchResult(result)}>
-                    <span className="global-result-mark">{result.type === "virus" ? "VIS" : result.type === "info" ? "INF" : result.type === "guide" ? "REF" : result.type === "file" ? "FILE" : "MSG"}</span>
+                    <span className="global-result-mark">{result.type === "virus" ? "VIS" : result.type === "employee" ? "EMP" : result.type === "info" ? "INF" : result.type === "guide" ? "REF" : result.type === "file" ? "FILE" : result.type === "app" ? "APP" : "MSG"}</span>
                     <span className="global-result-main"><span className="global-result-heading"><strong>{result.title || "БЕЗ НАЗВАНИЯ"}</strong><small>{result.meta}</small></span><span className="global-result-preview">{result.body}</span></span>
                   </button>
                 ))}
@@ -1442,8 +1473,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             {!contentReady ? <LoadingState label="Загрузка справочника…" /> : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={setGuideCardId} />}
           </AppWindow>
 
-          <AppWindow app="promotion" state={windows.promotion} active={activeApp === "promotion"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window promotion-window" meta="Повышение">
-            <PortiaPromotion visible={activeApp === "promotion" && !windows.promotion.minimized} onRetakeReady={setPromotionRetakeToast} />
+          <AppWindow app="promotion" state={windows.promotion} active={activeApp === "promotion"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window promotion-window" meta="Повышение" locked={qualificationLocked}>
+            <PortiaPromotion visible={activeApp === "promotion" && !windows.promotion.minimized} onRetakeReady={setPromotionRetakeToast} onQualificationLockChange={updateQualificationLock} />
           </AppWindow>
 
           <AppWindow app="broadcasts" state={windows.broadcasts} active={activeApp === "broadcasts"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window broadcasts-window" meta="КАНАЛ СТАНЦИИ">
@@ -1507,7 +1538,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <div className="settings-app">
               <header><h1>Настройки рабочего стола</h1><p>Оформление и расположение ярлыков сохраняются на этом устройстве.</p></header>
               <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => { closeAccentPicker(); updateDesktopSetting("accent", value); }}>
-                <button type="button" ref={customAccentButton} className={desktopSettings.accent === "custom" ? "selected" : ""} aria-pressed={desktopSettings.accent === "custom"} onClick={chooseCustomAccent}><i className="swatch custom" style={customTokens ? { background: customTokens["--spider-accent"] } : undefined} /><span>Свой</span></button>
+                <button type="button" ref={customAccentButton} className={desktopSettings.accent === "custom" ? "selected" : ""} aria-pressed={desktopSettings.accent === "custom"} onClick={chooseCustomAccent}><i className="swatch custom" style={customTokens ? { background: customTokens["--teal"] } : undefined} /><span>Свой</span></button>
                 {accentPickerOpen && <div className="accent-picker" onKeyDown={(event) => {
                   if (event.key !== "Escape") return;
                   // preventDefault marks Escape as handled so the document-level quest-notice listener skips it; focus returns to «Свой» because the picker unmounts.
@@ -1889,7 +1920,7 @@ function YoutubeFigure({ videoId, title }: { videoId: string; title: string }) {
   return <figure className="info-block-video"><iframe title={`Видео YouTube: ${title}`} loading="lazy" sandbox={embedSandbox} allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" src={`https://www.youtube-nocookie.com/embed/${videoId}`} /><figcaption><a href={`https://www.youtube.com/watch?v=${videoId}`} target="_blank" rel="noopener noreferrer">Открыть на YouTube ↗</a></figcaption></figure>;
 }
 
-function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClose, onGeometry, className, meta, children }: {
+function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClose, onGeometry, className, meta, locked = false, children }: {
   app: AppId;
   state: WindowState;
   active: boolean;
@@ -1900,6 +1931,7 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   onGeometry: (app: AppId, geometry: WindowGeometry) => void;
   className: string;
   meta: string;
+  locked?: boolean;
   children: React.ReactNode;
 }) {
   const windowRef = useRef<HTMLElement>(null);
@@ -1935,7 +1967,7 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   };
 
   const beginDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (state.maximized || window.matchMedia("(max-width: 900px)").matches) return;
+    if (locked || state.maximized || window.matchMedia("(max-width: 900px)").matches) return;
     if ((event.target as HTMLElement).closest("button")) return;
     const geometry = readGeometry();
     if (!geometry) return;
@@ -1958,7 +1990,7 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
   };
 
   const beginResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLSpanElement>) => {
-    if (state.maximized || window.matchMedia("(max-width: 900px)").matches) return;
+    if (locked || state.maximized || window.matchMedia("(max-width: 900px)").matches) return;
     const geometry = readGeometry();
     if (!geometry) return;
     event.stopPropagation();
@@ -2014,10 +2046,10 @@ function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize, onClos
     transform: "none",
   } : {};
 
-  return <section ref={windowRef} className={`app-window ${className}${active ? " is-active" : ""}${state.maximized ? " is-maximized" : ""}${state.exiting === "close" ? " is-closing" : ""}${state.exiting === "minimize" ? " is-minimizing" : ""}${state.openOrigin?.kind === "icon" ? " from-icon" : state.openOrigin?.kind === "taskbar" ? " from-taskbar" : ""}`} style={{ zIndex: state.z, display: state.minimized ? "none" : undefined, ...geometryStyle }} onPointerDown={() => onFocus(app)} aria-label={appMeta[app].label}>
-    <div className="window-titlebar" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest("button")) onMaximize(app); }}><div className="window-identity"><span className="window-app-mark"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].path}</span></div><div className="window-meta">{meta}</div><div className="window-controls"><button type="button" data-window-action="minimize" onClick={(event) => { event.stopPropagation(); onMinimize(app); }} aria-label={`Свернуть ${appMeta[app].label}`}>―</button><button type="button" data-window-action="maximize" onClick={(event) => { event.stopPropagation(); onMaximize(app); }} aria-label={`Развернуть ${appMeta[app].label}`}>□</button><button type="button" data-window-action="close" onClick={(event) => { event.stopPropagation(); onClose(app); }} aria-label={`Закрыть ${appMeta[app].label}`}>×</button></div></div>
+  return <section ref={windowRef} className={`app-window ${className}${active ? " is-active" : ""}${state.maximized ? " is-maximized" : ""}${locked ? " is-modal-locked" : ""}${state.exiting === "close" ? " is-closing" : ""}${state.exiting === "minimize" ? " is-minimizing" : ""}${state.openOrigin?.kind === "icon" ? " from-icon" : state.openOrigin?.kind === "taskbar" ? " from-taskbar" : ""}`} style={{ zIndex: state.z, display: state.minimized ? "none" : undefined, ...geometryStyle }} onPointerDown={() => onFocus(app)} aria-label={appMeta[app].label} role={locked ? "dialog" : undefined} aria-modal={locked || undefined}>
+    <div className="window-titlebar" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onDoubleClick={(event) => { if (!locked && !(event.target as HTMLElement).closest("button")) onMaximize(app); }}><div className="window-identity"><span className="window-app-mark"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].path}</span></div><div className="window-meta">{locked ? "ПРОВЕРКА АКТИВНА" : meta}</div>{!locked && <div className="window-controls"><button type="button" data-window-action="minimize" onClick={(event) => { event.stopPropagation(); onMinimize(app); }} aria-label={`Свернуть ${appMeta[app].label}`}>―</button><button type="button" data-window-action="maximize" onClick={(event) => { event.stopPropagation(); onMaximize(app); }} aria-label={`Развернуть ${appMeta[app].label}`}>□</button><button type="button" data-window-action="close" onClick={(event) => { event.stopPropagation(); onClose(app); }} aria-label={`Закрыть ${appMeta[app].label}`}>×</button></div>}</div>
     {children}
-    {resizeEdges.map((edge) => <span key={edge} className={`window-edge window-edge-${edge}`} aria-hidden="true" onPointerDown={beginResize(edge)} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} />)}
+    {!locked && resizeEdges.map((edge) => <span key={edge} className={`window-edge window-edge-${edge}`} aria-hidden="true" onPointerDown={beginResize(edge)} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} />)}
   </section>;
 }
 

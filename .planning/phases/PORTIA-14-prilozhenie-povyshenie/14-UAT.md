@@ -168,7 +168,7 @@ remediation preflight: automated and responsive source pass; authenticated revie
 ### 34. Spider front-leg signal
 expected: Only the front pair beside the chelicerae performs a short hunting signal at irregular resting intervals; no pair twitches continuously.
 result: failed — the rear pair moved continuously while resting
-remediation preflight: front-pair mapping and bounded 14–32 second schedule regressions pass; owner visual timing confirmation remains pending.
+remediation preflight: passed — artwork geometry confirms that the face-side pair is `L4/R4` despite the misleading source numbering; it now owns the bounded 14–32 second signal and `L1/R1` remains neutral at rest. Owner visual timing confirmation remains pending.
 
 ### 35. Virus archive shortcut motion
 expected: «База вирусов» performs one restrained diagnostic scan on hover/focus and returns to the identical resting vector without a quality snap.
@@ -176,18 +176,34 @@ result: failed — owner rejected the previous generic pulse/rotation
 remediation preflight: exact terminal-frame tests and local scan-layer browser smoke pass; owner aesthetic confirmation remains pending.
 
 ### 36. Spider custom colour fidelity
-expected: A custom colour is applied exactly to the spider while contrast correction remains limited to interface text and controls.
-result: failed — spider looked consistently darker than the selected colour
-remediation preflight: passed — saved custom mode supplies a dedicated exact `--spider-accent`; local browser confirmed that the custom token is applied without runtime errors.
+expected: The wallpaper spider keeps the calm PORTIA logo-like black/pale/accent palette, while Vivian uses the readable interface accent and no longer looks substantially darker than the surrounding controls.
+result: failed — the wallpaper spider became neon and Vivian remained noticeably darker than the selected interface colour
+remediation preflight: passed — the raw `--spider-accent` override was removed, wallpaper fills are derived from the readable system accent, and the local browser confirmed Vivian's brighter accent filter without runtime errors.
+
+### 37. Qualification focus lock and status freshness
+expected: Loading or active qualification makes «Повышение» the only interactive window, darkens the rest of the desktop, prevents moving/minimising/closing that window, and refreshes status immediately when the attempt ends.
+result: failed — other windows and desktop controls remained available, while qualification information could lag behind the attempt state
+remediation preflight: automated pass — modal lock, guarded desktop actions, 5-second fallback polling and immediate terminal refresh are covered; a real active qualification still requires the safe authenticated fixture listed below.
+
+### 38. Bounded editor lists and non-sticky contents
+expected: Editor headings and contents remain at their natural top position, while long record lists use a bounded internal scrollbar instead of extending the entire window indefinitely.
+result: failed — sticky editor chrome consumed useful space and record columns grew without a practical limit
+remediation preflight: source and production-build pass — content editors, Promotion banks and record lists now use bounded internal scrolling; authenticated PC/phone visual confirmation remains pending.
+
+### 39. Global search surface coverage
+expected: Global search reaches applications and records from employees, guide, information, virus archive, broadcasts and recycle bin, and opens the owning surface for a selected result.
+result: failed — search coverage omitted major desktop surfaces and employee records
+remediation preflight: passed — source regressions cover all requested providers, and the local browser lists the requested applications without console/runtime errors; employee result interaction awaits a session with loaded roster data.
 
 ## Remediation preflight — 2026-10-29
 
-- `npm test`: 571 passed, 1 opt-in isolated-live test skipped, 0 failed (572 total).
+- `npm test`: 574 passed, 1 opt-in isolated-live test skipped, 0 failed (575 total).
 - `npm run test:promotion-live` with `READ_ONLY_PREFLIGHT`: 1/1 passed; all 18 deployed Promotion RPC signatures are present.
 - `npx tsc --noEmit`: passed.
 - `npm run build`: passed.
 - Scoped lint for every remediation module changed in plans 14-15 through 14-18: passed.
-- Full repository lint remains blocked by three pre-existing errors in archived Phase 06 scripts and `components/portia-desktop.tsx:1782`; no remediation module reports an error.
+- Scoped lint for the newly changed modules passes. Full-file desktop lint still reports the pre-existing refs-during-render issue in `GuideApp` and existing `<img>` warnings; no newly changed surface reports an error.
+- Local in-app-browser smoke: no console/runtime errors; wallpaper spider and Vivian use the corrected palette; global search exposes the requested application surfaces.
 - Production data and the employee sheet were not mutated during preflight.
 
 ### Required to finish test 31
@@ -198,16 +214,16 @@ remediation preflight: passed — saved custom mode supplies a dedicated exact `
 
 ## Summary
 
-total: 36
+total: 39
 passed: 0
-issues: 15
+issues: 18
 pending: 21
 skipped: 0
 blocked: 1
-failed: 14
+failed: 17
 
 remediation_preflight_passed: 3
-remediation_preflight_partial: 11
+remediation_preflight_partial: 14
 remediation_preflight_blocked: 1
 
 ## Gaps
@@ -219,4 +235,5 @@ remediation_preflight_blocked: 1
 - GAP-14-05: window clamping is asymmetric and permits excessive right overflow (test 29).
 - GAP-14-06: shortcut animation-to-resting handoff visibly snaps (test 30).
 - GAP-14-07: reviewer request badges, qualification answer-key UX, spider signal/colour and virus shortcut quality require the integrated fixes in tests 32–36.
+- GAP-14-08: qualification modal focus, bounded editor layout and expanded global search require owner/live confirmation in tests 37–39.
 - Source todo: `.planning/todos/pending/2026-10-28-stabilize-promotion-and-desktop-ui.md`.

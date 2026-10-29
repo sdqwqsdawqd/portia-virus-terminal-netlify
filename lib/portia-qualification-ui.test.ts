@@ -79,3 +79,14 @@ test("qualification runner and grading workspace have sticky responsive reduced-
   assert.match(styles, /@media \(max-width:\s*520px\)[\s\S]*\.promotion-question/);
   assert.match(styles, /html\[data-motion="reduce"\][^\n]*\.promotion-qualification-runner/);
 });
+
+test("an active qualification locks the desktop to one immovable promotion window and refreshes immediately after completion", () => {
+  const desktop = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8");
+  assert.ok(participant.includes("onQualificationLockChange"));
+  assert.ok(participant.includes("onQualificationFinished"));
+  assert.ok(desktop.includes("qualification-focus-backdrop"));
+  assert.ok(desktop.includes('locked={qualificationLocked}'));
+  assert.ok(desktop.includes('if (qualificationLocked && appId !== "promotion") return;'));
+  assert.match(styles, /\.app-window\.promotion-window\.is-modal-locked\s*\{[^}]*z-index:\s*990\s*!important/);
+  assert.match(styles, /\.qualification-focus-backdrop\s*\{[^}]*pointer-events:\s*auto/);
+});

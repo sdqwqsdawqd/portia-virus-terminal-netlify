@@ -29,7 +29,7 @@ type PromotionStatus = { nickname: string; promotionRecord: null; workflowAvaila
   results: PublicResult[];
 };
 
-const statusPollMs = 15_000;
+const statusPollMs = 5_000;
 const terminalRecheckMs = 5_000;
 const retakeLedgerStorageKey = "portia.promotion.retake-ledger.v1";
 const dateTime = new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Moscow" });
@@ -57,7 +57,7 @@ function minuteSecond(deadlineAt: string | null, now: number) {
   return { remaining, label: `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}` };
 }
 
-function QualificationRunner({ attemptId, visible }: { attemptId: string; visible: boolean }) {
+function QualificationRunner({ attemptId, visible, onLockChange, onFinished }: { attemptId: string; visible: boolean; onLockChange: (locked: boolean) => void; onFinished: () => void }) {
   const [test, setTest] = useState<QualificationTest | null>(null);
   const [answer, setAnswer] = useState<string | number | number[]>("");
   const [busy, setBusy] = useState(true);
@@ -65,7 +65,20 @@ function QualificationRunner({ attemptId, visible }: { attemptId: string; visibl
   const [terminal, setTerminal] = useState<"timeout" | "offline" | "hidden" | "blur" | "page-exit" | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const announcedRef = useRef(new Set<number>());
+  const finishedRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+
+  const qualificationLocked = !terminal && (test === null || test.status === "active");
+  useEffect(() => {
+    onLockChange(qualificationLocked);
+    return () => onLockChange(false);
+  }, [onLockChange, qualificationLocked]);
+
+  useEffect(() => {
+    if (!test || test.status === "active" || finishedRef.current) return;
+    finishedRef.current = true;
+    onFinished();
+  }, [onFinished, test]);
 
   const acceptProjection = useCallback((value: unknown) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -251,7 +264,7 @@ function eligibilityCopy(kind: RequestKind, eligibility: Eligibility) {
   return "Повышение сейчас недоступно.";
 }
 
-function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback, feedbackRef, onRequest, visible }: {
+function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback, feedbackRef, onRequest, visible, onQualificationLockChange, onQualificationFinished }: {
   kind: RequestKind;
   active: ActiveState;
   eligibility: Eligibility;
@@ -261,6 +274,8 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback,
   feedbackRef: (node: HTMLParagraphElement | null) => void;
   onRequest: (kind: RequestKind) => void;
   visible?: boolean;
+  onQualificationLockChange?: (locked: boolean) => void;
+  onQualificationFinished?: () => void;
 }) {
   const ordinary = kind === "ordinary";
   const canRequest = !active && (eligibility.status === "eligible" || (ordinary && eligibility.status === "special-task"));
@@ -270,7 +285,7 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback,
     <p className="promotion-status-copy">{active ? activeCopy(kind, active) : eligibilityCopy(kind, eligibility)}</p>
     {feedback.phase !== "idle" && <p ref={feedbackRef} tabIndex={-1} role={feedback.phase === "error" ? "alert" : "status"} className={`promotion-submit-feedback ${feedback.phase}`}>{feedback.message}</p>}
     {!ordinary && active && !active.attemptId && (active.status === "claimed" || active.status === "approved") && <div className="promotion-test-warning"><strong>15 МИНУТ ПОСЛЕ РАЗРЕШЕНИЯ</strong><p>После разрешения проверяющего начнутся 15 минут. На ПК уход со вкладки, потеря фокуса или соединения завершат попытку.</p></div>}
-    {!ordinary && active?.attemptId && <QualificationRunner attemptId={active.attemptId} visible={visible !== false} />}
+    {!ordinary && active?.attemptId && <QualificationRunner attemptId={active.attemptId} visible={visible !== false} onLockChange={onQualificationLockChange ?? (() => undefined)} onFinished={onQualificationFinished ?? (() => undefined)} />}
     {tasks.length > 0 && <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task) => <li key={task.id}><span>{String(task.sortOrder).padStart(2, "0")}</span><p>{task.text}</p></li>)}</ol></div>}
     {canRequest && <button className="promotion-action" type="button" disabled={busy || stale} onClick={() => onRequest(kind)}>{busy ? "ОТПРАВЛЯЕМ…" : ordinary ? "ПОДАТЬ ЗАЯВКУ НА ЗАДАНИЯ" : "ЗАПРОСИТЬ КВАЛИФИКАЦИЮ"}</button>}
   </section>;
@@ -281,7 +296,7 @@ const outcomeLabels: Record<string, string> = {
   rejected: "Заявка отклонена", "technical-failure": "Попытка завершена", "retake-released": "Повторная проверка открыта",
 };
 
-export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; onRetakeReady?: (notification: RetakeNotification) => void }) {
+export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockChange }: { visible: boolean; onRetakeReady?: (notification: RetakeNotification) => void; onQualificationLockChange?: (locked: boolean) => void }) {
   const [nickname, setNickname] = useState("");
   const [checkedNickname, setCheckedNickname] = useState("");
   const [status, setStatus] = useState<PromotionStatus | null>(null);
@@ -389,6 +404,10 @@ export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; 
     } finally { submittingRef.current.delete(kind); }
   };
 
+  const refreshAfterQualification = useCallback(() => {
+    if (checkedNickname) void loadStatus(checkedNickname);
+  }, [checkedNickname, loadStatus]);
+
   if (!status) return <div className="promotion-app"><PromotionIdentityGate nickname={nickname} busy={busy} error={error} onNickname={setNickname} onSubmit={checkNickname} /></div>;
 
   if (status.promotionRecord === null) return <div className="promotion-app"><div className="promotion-shell" aria-live="polite">
@@ -406,7 +425,7 @@ export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; 
       {error && <p className="promotion-error" role="alert">{error}</p>}
       <div className="promotion-flow-list">
         <PromotionStatusCard kind="ordinary" active={status.ordinary.active} eligibility={status.ordinary.eligibility} busy={submitState.ordinary.phase === "submitting"} stale={stale} feedback={submitState.ordinary} feedbackRef={(node) => { submitFeedbackRefs.current.ordinary = node; }} onRequest={requestPromotion} />
-        <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} />
+        <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />
       </div>
       {status.results.length > 0 && <details className="promotion-history"><summary>Последние результаты <span>{Math.min(status.results.length, 3)}</span></summary><ul>{status.results.slice(0, 3).map((result, index) => <li key={`${result.createdAt}-${index}`}><span>{result.kind === "ordinary" ? "ЗАДАНИЯ" : "КВАЛИФИКАЦИЯ"}</span><strong>{outcomeLabels[result.outcome] ?? "Результат обновлён"}</strong><time dateTime={result.createdAt}>{formatDate(result.createdAt)}</time></li>)}</ul></details>}
     </div>

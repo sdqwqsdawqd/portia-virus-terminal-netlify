@@ -176,6 +176,7 @@ export function WallpaperSpider() {
       if (gait > 0 || probing || !legsNeutral) legs.forEach((leg, index) => {
         const id = ids[index];
         if (gait === 0) {
+          // SVG numbering follows drawing order, not anatomy: pair 4 sits beside the face/fangs.
           const front = id === "L4" || id === "R4";
           leg.style.rotate = `${(front && probing ? PROBE_SWING * probeTap * legBack(id) : 0).toFixed(2)}deg`;
           leg.style.scale = "1";

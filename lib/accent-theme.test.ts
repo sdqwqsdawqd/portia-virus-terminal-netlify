@@ -87,7 +87,7 @@ const swatch = (id: string) => css.match(new RegExp(`\\.swatch\\.${id}\\s*\\{[^}
 const MIN_CHROMA = 6;
 const LITERAL = /#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b|rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/g;
 // Tokens, theme blocks, swatches, canon classification colours, the success message and the rainbow picker keep their literals.
-const ROOT_KEEP = new Set(["--teal", "--teal-dim", "--teal-soft", "--spider-accent", "--desktop-glow", "--desktop-grid", "--desktop-base", "--desktop-deep", "--accent-hue", "--mark-filter", "--assistant-filter"]);
+const ROOT_KEEP = new Set(["--teal", "--teal-dim", "--teal-soft", "--desktop-glow", "--desktop-grid", "--desktop-base", "--desktop-deep", "--accent-hue", "--mark-filter", "--assistant-filter"]);
 const SKIP_SELECTORS = ["html[data-accent=", ".swatch.", ".class-cell.level-", ".class-cell.transmission strong", ".classification-select-wrap > strong", ".classification-select-wrap.level-", ".owner-login-success", ".custom-hue input"];
 
 function hslHue([r, g, b]: Rgb) {
@@ -108,7 +108,7 @@ function turquoiseLiterals(text: string, minChroma = MIN_CHROMA) {
 
 test("every theme defines the accent tokens and both PNG filters", () => {
   for (const [id, tokens] of Object.entries(themes)) {
-    for (const name of ["--teal", "--teal-dim", "--teal-soft", "--spider-accent", "--desktop-glow", "--desktop-grid", "--accent-hue", "--mark-filter", "--assistant-filter"]) {
+    for (const name of ["--teal", "--teal-dim", "--teal-soft", "--desktop-glow", "--desktop-grid", "--accent-hue", "--mark-filter", "--assistant-filter"]) {
       assert.ok(tokens.has(name), `${id} lacks ${name}`);
     }
   }
@@ -488,10 +488,11 @@ test("the format mark is an underline with no fill and keeps 3:1 on every previe
   }
 });
 
-test("the spider keeps the exact picked custom colour while interface tokens stay contrast-corrected", () => {
+test("the background spider uses the same readable interface accent instead of the raw picked colour", () => {
   for (const pick of ["#101820", "#ff3366", "#3366ff"]) {
     const tokens = deriveAccentTokens(pick)!;
-    assert.equal(tokens["--spider-accent"], pick);
+    assert.equal(tokens["--spider-accent"], undefined);
+    assert.match(tokens["--teal"], /^#[0-9a-f]{6}$/);
   }
 });
 
