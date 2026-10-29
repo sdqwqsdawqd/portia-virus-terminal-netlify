@@ -2,6 +2,7 @@
 created: 2026-10-26
 source: owner, during /gsd-verify-work PORTIA-10
 area: desktop background «Паутина» (components/WallpaperSpider, DesktopWallpaper)
+resolves_phase: 18
 ---
 
 # Паук на фоне «Паутина»: видимое тело и возможность выключить

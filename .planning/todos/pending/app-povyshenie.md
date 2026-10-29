@@ -4,7 +4,7 @@ updated: 2026-10-26 (/gsd-explore)
 source: owner, during /gsd-discuss-phase 12 and /gsd-explore
 area: new app «Повышение» (promotions + qualification tests)
 status: to-plan as a separate milestone (/gsd-new-milestone); owner will add details on retakes
-resolves_phase: 14
+resolves_phase: 19
 ---
 
 # Новое приложение «Повышение» — отдельный milestone
