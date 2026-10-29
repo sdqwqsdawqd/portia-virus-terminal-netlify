@@ -5,6 +5,8 @@ import { parseRetakeLedger, updateRetakeLedger, type RetakeLedger, type RetakeNo
 import { QUALIFICATION_HEARTBEAT_MS } from "@/lib/portia-qualification";
 
 type RequestKind = "ordinary" | "qualification";
+type SubmitPhase = "idle" | "submitting" | "error" | "success";
+type SubmitFeedback = { phase: SubmitPhase; message: string };
 type Eligibility =
   | { status: "eligible"; targetTitleId: string | null }
   | { status: "cooldown"; availableAt: string; remainingMs: number }
@@ -249,12 +251,14 @@ function eligibilityCopy(kind: RequestKind, eligibility: Eligibility) {
   return "Повышение сейчас недоступно.";
 }
 
-function PromotionStatusCard({ kind, active, eligibility, busy, stale, onRequest, visible }: {
+function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback, feedbackRef, onRequest, visible }: {
   kind: RequestKind;
   active: ActiveState;
   eligibility: Eligibility;
   busy: boolean;
   stale: boolean;
+  feedback: SubmitFeedback;
+  feedbackRef: (node: HTMLParagraphElement | null) => void;
   onRequest: (kind: RequestKind) => void;
   visible?: boolean;
 }) {
@@ -264,10 +268,11 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, onRequest
   return <section className={`promotion-card ${ordinary ? "promotion-ordinary-card" : "promotion-qualification-card"}`}>
     <header><span className="promotion-flow-icon" aria-hidden="true">{ordinary ? "▤" : "◇"}</span><div><span className="promotion-eyebrow">{ordinary ? "ОБЫЧНОЕ ПОВЫШЕНИЕ" : "КВАЛИФИКАЦИЯ"}</span><h2>{ordinary ? "Задания на повышение" : "Проверка знаний"}</h2></div></header>
     <p className="promotion-status-copy">{active ? activeCopy(kind, active) : eligibilityCopy(kind, eligibility)}</p>
+    {feedback.phase !== "idle" && <p ref={feedbackRef} tabIndex={-1} role={feedback.phase === "error" ? "alert" : "status"} className={`promotion-submit-feedback ${feedback.phase}`}>{feedback.message}</p>}
     {!ordinary && active && !active.attemptId && (active.status === "claimed" || active.status === "approved") && <div className="promotion-test-warning"><strong>15 МИНУТ ПОСЛЕ РАЗРЕШЕНИЯ</strong><p>После разрешения проверяющего начнутся 15 минут. На ПК уход со вкладки, потеря фокуса или соединения завершат попытку.</p></div>}
     {!ordinary && active?.attemptId && <QualificationRunner attemptId={active.attemptId} visible={visible !== false} />}
     {tasks.length > 0 && <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task) => <li key={task.id}><span>{String(task.sortOrder).padStart(2, "0")}</span><p>{task.text}</p></li>)}</ol></div>}
-    {canRequest && <button className="promotion-action" type="button" disabled={busy || stale} onClick={() => onRequest(kind)}>{ordinary ? "ПОДАТЬ ЗАЯВКУ НА ЗАДАНИЯ" : "ЗАПРОСИТЬ КВАЛИФИКАЦИЮ"}</button>}
+    {canRequest && <button className="promotion-action" type="button" disabled={busy || stale} onClick={() => onRequest(kind)}>{busy ? "ОТПРАВЛЯЕМ…" : ordinary ? "ПОДАТЬ ЗАЯВКУ НА ЗАДАНИЯ" : "ЗАПРОСИТЬ КВАЛИФИКАЦИЮ"}</button>}
   </section>;
 }
 
@@ -283,7 +288,13 @@ export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [stale, setStale] = useState(false);
+  const [submitState, setSubmitState] = useState<Record<RequestKind, SubmitFeedback>>({
+    ordinary: { phase: "idle", message: "" },
+    qualification: { phase: "idle", message: "" },
+  });
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const submittingRef = useRef(new Set<RequestKind>());
+  const submitFeedbackRefs = useRef<Record<RequestKind, HTMLParagraphElement | null>>({ ordinary: null, qualification: null });
   const retakeLedgerRef = useRef<RetakeLedger>([]);
 
   const loadStatus = useCallback(async (value: string, explicit = false, restore = false) => {
@@ -351,20 +362,31 @@ export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; 
     event.preventDefault();
     const value = nickname.trim();
     if (!value) return;
+    setSubmitState({ ordinary: { phase: "idle", message: "" }, qualification: { phase: "idle", message: "" } });
     setCheckedNickname(value);
     void loadStatus(value, true);
   };
 
   const requestPromotion = async (kind: RequestKind) => {
-    if (!status || status.promotionRecord === null || stale) return;
-    setBusy(true); setError("");
+    if (!status || status.promotionRecord === null || stale || submittingRef.current.has(kind)) return;
+    submittingRef.current.add(kind);
+    setSubmitState((current) => ({ ...current, [kind]: { phase: "submitting", message: "Отправляем заявку…" } }));
     try {
       const response = await fetch("/api/promotion/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nickname: checkedNickname, kind }) });
       const body: unknown = await response.json();
-      if (!response.ok) { setError(publicError(body, "Заявку не удалось отправить.")); return; }
+      if (!response.ok) {
+        setSubmitState((current) => ({ ...current, [kind]: { phase: "error", message: publicError(body, "Заявку не удалось отправить.") } }));
+        requestAnimationFrame(() => submitFeedbackRefs.current[kind]?.focus());
+        return;
+      }
+      setSubmitState((current) => ({ ...current, [kind]: { phase: "success", message: "Заявка принята. Обновляем состояние…" } }));
+      requestAnimationFrame(() => submitFeedbackRefs.current[kind]?.focus());
       await loadStatus(checkedNickname);
-    } catch { setStale(true); setError("Заявку не удалось отправить. Проверьте соединение и повторите позже."); }
-    finally { setBusy(false); }
+    } catch {
+      setStale(true);
+      setSubmitState((current) => ({ ...current, [kind]: { phase: "error", message: "Заявку не удалось отправить. Проверьте соединение и повторите позже." } }));
+      requestAnimationFrame(() => submitFeedbackRefs.current[kind]?.focus());
+    } finally { submittingRef.current.delete(kind); }
   };
 
   if (!status) return <div className="promotion-app"><PromotionIdentityGate nickname={nickname} busy={busy} error={error} onNickname={setNickname} onSubmit={checkNickname} /></div>;
@@ -383,8 +405,8 @@ export function PortiaPromotion({ visible, onRetakeReady }: { visible: boolean; 
       {stale && <div className="promotion-stale"><strong>Состояние временно не обновляется</strong><span>Показаны последние безопасные данные. Действия отключены до восстановления связи.</span></div>}
       {error && <p className="promotion-error" role="alert">{error}</p>}
       <div className="promotion-flow-list">
-        <PromotionStatusCard kind="ordinary" active={status.ordinary.active} eligibility={status.ordinary.eligibility} busy={busy} stale={stale} onRequest={requestPromotion} />
-        <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={busy} stale={stale} onRequest={requestPromotion} visible={visible} />
+        <PromotionStatusCard kind="ordinary" active={status.ordinary.active} eligibility={status.ordinary.eligibility} busy={submitState.ordinary.phase === "submitting"} stale={stale} feedback={submitState.ordinary} feedbackRef={(node) => { submitFeedbackRefs.current.ordinary = node; }} onRequest={requestPromotion} />
+        <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} />
       </div>
       {status.results.length > 0 && <details className="promotion-history"><summary>Последние результаты <span>{Math.min(status.results.length, 3)}</span></summary><ul>{status.results.slice(0, 3).map((result, index) => <li key={`${result.createdAt}-${index}`}><span>{result.kind === "ordinary" ? "ЗАДАНИЯ" : "КВАЛИФИКАЦИЯ"}</span><strong>{outcomeLabels[result.outcome] ?? "Результат обновлён"}</strong><time dateTime={result.createdAt}>{formatDate(result.createdAt)}</time></li>)}</ul></details>}
     </div>
