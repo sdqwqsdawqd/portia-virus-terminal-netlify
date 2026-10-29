@@ -89,6 +89,27 @@ test("participant states cover cooldown, sheet wait, special task and compact hi
   assert.ok(source.includes('aria-live="polite"'));
 });
 
+test("ordinary and qualification submits have independent visible feedback", () => {
+  assert.ok(source.includes('type SubmitPhase = "idle" | "submitting" | "error" | "success"'));
+  assert.ok(source.includes("const [submitState, setSubmitState]"));
+  assert.ok(source.includes("submittingRef.current.has(kind)"));
+  assert.ok(source.includes("busy={submitState.ordinary.phase === \"submitting\"}"));
+  assert.ok(source.includes("busy={submitState.qualification.phase === \"submitting\"}"));
+  assert.ok(source.includes('className={`promotion-submit-feedback ${feedback.phase}`}'));
+  assert.match(source, /feedback\.phase === "error" \? "alert" : "status"/);
+  assert.ok(!source.includes('setError(publicError(body, "Заявку не удалось отправить."))'));
+});
+
+test("typed submit refusal stays local while transport failure alone marks the projection stale", () => {
+  const submitStart = source.indexOf("const requestPromotion = async");
+  const submitEnd = source.indexOf("\n  };", submitStart);
+  const submit = source.slice(submitStart, submitEnd);
+  assert.match(submit, /if \(!response\.ok\)[\s\S]*phase: "error"[\s\S]*publicError/);
+  assert.match(submit, /catch[\s\S]*setStale\(true\)/);
+  assert.match(submit, /phase: "success"[\s\S]*await loadStatus\(checkedNickname\)/);
+  assert.match(submit, /requestAnimationFrame[\s\S]*submitFeedbackRefs\.current\[kind\]\?\.focus/);
+});
+
 test("promotion window is responsive and motion respects the desktop preference", () => {
   assert.match(styles, /\.promotion-app\s*\{/);
   assert.match(styles, /\.promotion-action[^{]*\{[^}]*min-height:\s*4[04]px/);
