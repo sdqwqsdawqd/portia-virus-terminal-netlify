@@ -5,10 +5,9 @@
 // it reads no layout and sets no React state.
 
 import { useEffect, useRef, type CSSProperties } from "react";
-import { REST_NODE, createPulsePool, emitPulse, gaitPhase, legPose, planWalk, pulseShape, seeded, selectSpawn, stepPulses, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
+import { REST_NODE, createPulsePool, emitPulse, gaitPhase, legPose, planSpawn, planWalk, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
 
 type LegId = "L1" | "L2" | "L3" | "L4" | "R1" | "R2" | "R3" | "R4";
-type TravelStage = "visible" | "fading-out" | "hidden" | "fading-in";
 
 // Measured once from 09-spider.svg: for each leg group, the path vertex nearest the body centre (325, 360), in artwork units.
 const LEG_PIVOTS: Record<LegId, [number, number]> = {
@@ -35,8 +34,6 @@ const GAIT_EASE = 0.45; // legs settle softly after a stop
 const TURN_TIME = 0.22; // smooth directional changes instead of abrupt pivots
 const PROBE_SWING = 1.8;
 const PROBE_CYCLE = 2.2;
-const FADE_TIME = 0.55;
-const TOUR_WALKS = 3;
 const FIRST_WALK = 4.5; // let the desktop settle before the first quiet walk
 const MAX_DT = 0.05; // a slow frame never makes a jump
 
@@ -78,7 +75,7 @@ export function WallpaperSpider() {
     let walked = 0, rest = FIRST_WALK, x = restX, y = restY;
     // heading is where the body should face (travel direction); angle is how far the artwork is turned now.
     let heading = ARTWORK_HEADING, angle = 0, phase = 0, gait = 0, clean = true, legsNeutral = true;
-    let gaitDistance = 0, pathDistance = 0, tourWalks = 0, stage: TravelStage = "visible", stageTime = 0;
+    let gaitDistance = 0, pathDistance = 0;
 
     const clearPulses = () => {
       pool.slots.forEach((slot) => { slot.alive = false; });
@@ -90,22 +87,14 @@ export function WallpaperSpider() {
       });
     };
 
-    const hideForRelocation = () => {
-      path = null; walked = 0; gait = 0; clean = true; legsNeutral = true; stage = "hidden"; stageTime = 0;
-      element.style.opacity = "0";
-      legs.forEach((leg) => { leg.style.rotate = ""; leg.style.scale = ""; });
+    const relocateAfterExplicitShow = () => {
+      const planned = planSpawn(visible, previousVisibleSpawn, rand);
+      if (planned.node === previousVisibleSpawn) return false;
+      previousVisibleSpawn = planned.node; node = planned.node; previous = -1; path = planned.path.length > 1 ? planned.path : null; walked = 0; rest = path ? 0 : 1.2 + rand() * 0.8;
+      [x, y] = webGeometry.nodes[planned.node];
+      heading = planned.heading; angle = heading - ARTWORK_HEADING; phase = planned.phase; gait = path ? 1 : 0; gaitDistance = phase * 20; pathDistance = 0;
       clearPulses();
-    };
-
-    const relocateWhileHidden = () => {
-      const nextSpawn = selectSpawn(visible, previousVisibleSpawn, rand);
-      if (nextSpawn === REST_NODE || nextSpawn === previousVisibleSpawn) return false;
-      previousVisibleSpawn = nextSpawn; node = nextSpawn; previous = -1; path = null; walked = 0; rest = 1.2 + rand() * 0.8;
-      [x, y] = webGeometry.nodes[nextSpawn];
-      heading = ARTWORK_HEADING; angle = 0; phase = 0; gait = 0; gaitDistance = 0; pathDistance = 0; tourWalks = 0;
-      clearPulses();
-      element.style.opacity = "0";
-      element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px)`;
+      element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg)`;
       return true;
     };
 
@@ -132,18 +121,7 @@ export function WallpaperSpider() {
       const dt = Math.min((now - last) / 1000, MAX_DT);
       last = now;
       time += dt;
-      if (stage === "fading-out") {
-        stageTime += dt;
-        element.style.opacity = Math.max(0, 1 - stageTime / FADE_TIME).toFixed(3);
-        if (stageTime >= FADE_TIME) { element.style.opacity = "0"; stage = "hidden"; stageTime = 0; }
-      } else if (stage === "hidden") {
-        if (relocateWhileHidden()) { stage = "fading-in"; stageTime = 0; }
-      } else if (stage === "fading-in") {
-        stageTime += dt;
-        element.style.opacity = Math.min(1, stageTime / FADE_TIME).toFixed(3);
-        if (stageTime >= FADE_TIME) { element.style.opacity = "1"; stage = "visible"; stageTime = 0; }
-      }
-      if (stage === "visible" && path) {
+      if (path) {
         walked += dt;
         const pose = walkPose(path, walked);
         x = pose.x; y = pose.y; heading = pose.heading;
@@ -160,11 +138,9 @@ export function WallpaperSpider() {
           node = path[path.length - 1];
           path = null;
           rest = 6 + rand() * 4;
-          tourWalks += 1;
-          if (tourWalks >= TOUR_WALKS) { stage = "fading-out"; stageTime = 0; }
         }
         phase = after;
-      } else if (stage === "visible" && (rest -= dt) <= 0) {
+      } else if ((rest -= dt) <= 0) {
         const next = planWalk(node, previous, visible, rand);
         if (next.length > 1) { path = next; walked = 0; pathDistance = 0; } else rest = 6 + rand() * 4;
       }
@@ -173,7 +149,7 @@ export function WallpaperSpider() {
       const turn = Math.atan2(Math.sin(heading - ARTWORK_HEADING - angle), Math.cos(heading - ARTWORK_HEADING - angle));
       angle += turn * (1 - Math.exp(-dt / TURN_TIME));
       gait += Math.max(-dt / GAIT_EASE, Math.min(dt / GAIT_EASE, (walking ? 1 : 0) - gait));
-      const probing = stage === "visible" && !walking;
+      const probing = !walking;
       // A resting spider that has finished turning and straightening its legs needs no writes at all.
       const settled = !walking && gait === 0 && !probing && Math.abs(turn) < 1e-3;
       if (settled && clean) return;
@@ -199,14 +175,23 @@ export function WallpaperSpider() {
 
     const motionOn = () => (root.dataset.motion ? root.dataset.motion === "full" : !reduceQuery.matches);
     const spiderOn = () => root.dataset.spider !== "off";
-    // Hide/show always relocates while opacity is zero; reduced motion skips travel/fade but keeps the distinct-point invariant.
+    let wasSpiderOn = spiderOn();
+    if (!wasSpiderOn) element.style.opacity = "0";
+    // Pausing motion or hiding the page only suspends the current route. A user off-to-on transition alone relocates.
     const sync = () => {
-      if (!spiderOn()) {
-        cancelAnimationFrame(frame); frame = 0; hideForRelocation(); return;
+      const enabled = spiderOn();
+      const turnedOn = !wasSpiderOn && enabled;
+      const turnedOff = wasSpiderOn && !enabled;
+      wasSpiderOn = enabled;
+      if (turnedOff || !enabled) {
+        cancelAnimationFrame(frame); frame = 0; element.style.opacity = "0"; clearPulses(); return;
+      }
+      if (turnedOn) {
+        relocateAfterExplicitShow();
+        element.style.opacity = "1";
       }
       if (!motionOn()) {
         cancelAnimationFrame(frame); frame = 0;
-        if (!document.hidden && stage === "hidden" && relocateWhileHidden()) { element.style.opacity = "1"; stage = "visible"; }
         return;
       }
       if (!document.hidden) {

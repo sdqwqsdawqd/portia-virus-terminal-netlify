@@ -30,7 +30,8 @@ test("the wallpaper spider stays visible and relocates only after an explicit of
   assert.doesNotMatch(source, /TravelStage|TOUR_WALKS|fading-out|relocateWhileHidden/);
   assert.match(source, /let wasSpiderOn = spiderOn\(\)/);
   assert.match(source, /const turnedOn = !wasSpiderOn && enabled/);
-  assert.match(source, /if \(turnedOn\).*planSpawn/s);
+  assert.match(source, /const relocateAfterExplicitShow[\s\S]*planSpawn/);
+  assert.match(source, /if \(turnedOn\) \{[\s\S]*relocateAfterExplicitShow\(\)/);
   assert.match(source, /document\.hidden[\s\S]*cancelAnimationFrame\(frame\)/);
   assert.match(source, /element\.style\.opacity = "0"/);
   assert.match(source, /rest = 6 \+ rand\(\) \* 4/g);

@@ -250,6 +250,15 @@ export function planWalk(from: number, previous: number, visible: number[], rand
   return path;
 }
 
+export function planSpawn(visible: number[], previous: number, rand: () => number) {
+  const node = selectSpawn(visible, previous, rand);
+  const path = planWalk(node, -1, visible, rand);
+  const heading = path.length > 1 ? walkPose(path, 0).heading : Math.PI / 2;
+  const routeKey = path.reduce((total, routeNode, index) => total + routeNode * (index + 3), 0);
+  const phase = ((routeKey % 20) + 20) % 20 / 20;
+  return { node, path, heading, phase };
+}
+
 // Waves along the threads (D-05): a pulse is a 120-unit stretch of one thread that runs away from its start at 260 units/s
 // and fades over 1.2 s. The pool has a fixed number of slots, so a step allocates nothing and the cost has a ceiling.
 const PULSE_SPEED = 260;
