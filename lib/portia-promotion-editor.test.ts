@@ -53,6 +53,23 @@ test("bank workspace exposes preview replacement and immutable confirmation", ()
   assert.ok(editors.includes("replaceId"));
 });
 
+test("bank settings keep drafts until an authoritative save settles", () => {
+  assert.ok(ordinary.includes('setCommandState({ phase: "saving"'));
+  assert.ok(qualification.includes('setCommandState({ phase: "saving"'));
+  assert.ok(ordinary.includes("delete next[transition.targetTitleId]"));
+  assert.ok(qualification.includes("delete next[transition.transitionId]"));
+  assert.ok(ordinary.includes("result?.state"));
+  assert.ok(qualification.includes("result?.state"));
+  assert.ok((ordinary + qualification).includes('role="status"'));
+});
+
+test("preview blockers explain exact active pool shortages", () => {
+  assert.ok(ordinary.includes("taskBankLimitError"));
+  assert.ok(qualification.includes("qualificationBankLimitError"));
+  assert.ok(ordinary.includes("bank?.requiredCount"));
+  assert.ok(qualification.includes("bank?.quotas"));
+});
+
 test("request rejection and owner deletion use explicit irreversible confirmations", () => {
   assert.ok(main.includes('reviewerCommand("reject"'));
   assert.ok(main.includes('reviewerCommand("delete-request"'));

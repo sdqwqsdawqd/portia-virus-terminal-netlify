@@ -8,8 +8,10 @@ import {
   promotionReviewerDecision,
   promotionReviewerSourcePolicy,
   promotionCleanupPreview,
+  qualificationBankLimitError,
   selectQualificationPreview,
   selectTaskPreview,
+  taskBankLimitError,
   validateQuestionDraft,
   verifyPreviewToken,
 } from "./portia-promotion-reviewer.ts";
@@ -60,12 +62,31 @@ test("bank commands accept only canonical ranks, UUID-scoped items, and bounded 
   const bankId = "550e8400-e29b-41d4-a716-446655440000";
   const itemId = "550e8400-e29b-41d4-a716-446655440001";
   assert.deepEqual(parsePromotionBankCommand({ action: "save-task-bank", targetTitleId: "trainee", requiredCount: 3 }), { action: "save-task-bank", targetTitleId: "trainee", requiredCount: 3 });
+  assert.equal(parsePromotionBankCommand({ action: "save-task-bank", targetTitleId: "trainee", requiredCount: 0 }), null);
+  assert.ok(parsePromotionBankCommand({ action: "save-task-bank", targetTitleId: "trainee", requiredCount: 50 }));
+  assert.equal(parsePromotionBankCommand({ action: "save-task-bank", targetTitleId: "trainee", requiredCount: 51 }), null);
   assert.equal(parsePromotionBankCommand({ action: "save-task-bank", targetTitleId: "Академик", requiredCount: 3 }), null);
   assert.deepEqual(parsePromotionBankCommand({ action: "save-qualification-bank", transitionId: "assistant", quotas: { single: 1, multiple: 1, freeText: 1 } }), { action: "save-qualification-bank", transitionId: "assistant", quotas: { single: 1, multiple: 1, freeText: 1 } });
+  assert.ok(parsePromotionBankCommand({ action: "save-qualification-bank", transitionId: "assistant", quotas: { single: 100, multiple: 0, freeText: 0 } }));
+  assert.equal(parsePromotionBankCommand({ action: "save-qualification-bank", transitionId: "assistant", quotas: { single: 101, multiple: 0, freeText: 0 } }), null);
   assert.equal(parsePromotionBankCommand({ action: "save-qualification-bank", transitionId: "researcher", quotas: { single: 0, multiple: 0, freeText: 0 } }), null);
   assert.ok(parsePromotionBankCommand({ action: "save-task-item", bankId, itemId, text: "Задание", active: true, sortOrder: 2 }));
   assert.equal(parsePromotionBankCommand({ action: "delete-task-item", bankId, itemId: "not-a-uuid" }), null);
   assert.equal(parsePromotionBankCommand({ action: "save-task-item", bankId, text: "Задание", active: true, sortOrder: 10_001 }), null);
+});
+
+test("bank count limits report the exact authoritative pool shortage", () => {
+  assert.equal(taskBankLimitError(2, 2, true), null);
+  assert.equal(taskBankLimitError(3, 2, true), "Нужно 3, активно 2.");
+  assert.equal(taskBankLimitError(1, 0, false), null, "initial bank creation must remain possible");
+
+  const pools = { single: 2, multiple: 1, freeText: 0 };
+  assert.equal(qualificationBankLimitError({ single: 2, multiple: 1, freeText: 0 }, pools, true), null);
+  assert.equal(
+    qualificationBankLimitError({ single: 2, multiple: 2, freeText: 1 }, pools, true),
+    "Не хватает вопросов: несколько вариантов — нужно 2, активно 1; свободный ответ — нужно 1, активно 0.",
+  );
+  assert.equal(qualificationBankLimitError({ single: 1, multiple: 0, freeText: 0 }, pools, false), null);
 });
 
 const taskItems = [
@@ -128,4 +149,12 @@ test("promotion reviewer routes use server access and RPCs, never browser openTa
   const reviewer = readFileSync(new URL("../app/api/promotion/reviewer/route.ts", import.meta.url), "utf8");
   assert.ok(reviewer.includes('code: "binding-not-found"'));
   assert.match(reviewer, /command\.action === "reset-device" \|\| command\.action === "delete-request"[\s\S]*!auth\.access\.canManageEditors/);
+});
+
+test("bank route settles commands only with an authoritative state and returns preview version", () => {
+  const route = readFileSync(new URL("../app/api/promotion/banks/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes("authoritative-state-unavailable"));
+  assert.match(route, /Response\.json\(\{ preview, expiresAt: new Date\(expiresAt\)\.toISOString\(\), version: bank\.version, items \}/);
+  assert.ok(route.includes("taskBankLimitError"));
+  assert.ok(route.includes("qualificationBankLimitError"));
 });
