@@ -3,9 +3,11 @@ import { promotionDeviceSecret } from "@/lib/portia-device-binding";
 import {
   createPreviewToken,
   parsePromotionBankCommand,
+  qualificationBankLimitError,
   requirePromotionReviewer,
   selectQualificationPreview,
   selectTaskPreview,
+  taskBankLimitError,
   verifyPreviewToken,
   type QualificationPreviewItem,
   type TaskPreviewItem,
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
         }
         const expiresAt = Date.now() + 10 * 60 * 1000;
         const preview = createPreviewToken({ kind, bankId, version: bank.version, ids: items.map((item) => item.id), expiresAt }, secret);
-        return Response.json({ preview, expiresAt: new Date(expiresAt).toISOString(), items }, { headers: noStoreHeaders });
+        return Response.json({ preview, expiresAt: new Date(expiresAt).toISOString(), version: bank.version, items }, { headers: noStoreHeaders });
       } catch (error) {
         return Response.json({ error: error instanceof Error && error.message.includes("insufficient") ? "Недостаточно активных элементов." : "Набор не соответствует настройкам банка." }, { status: 409, headers: noStoreHeaders });
       }
@@ -96,8 +98,28 @@ export async function POST(request: Request) {
   if (JSON.stringify(body).length > 64 * 1024) return Response.json({ error: "Данные слишком велики." }, { status: 413, headers: noStoreHeaders });
   const command = parsePromotionBankCommand(body);
   if (!command) return Response.json({ error: "Некорректная команда банка." }, { status: 400, headers: noStoreHeaders });
+  let state: BankState | null = null;
+  if (command.action === "save-task-bank" || command.action === "save-qualification-bank" || "bankId" in command) {
+    state = await bankState(supabase);
+    if (!state) return Response.json({ error: "Не удалось проверить текущее состояние банка.", code: "authoritative-state-unavailable" }, { status: 503, headers: noStoreHeaders });
+  }
+  if (command.action === "save-task-bank") {
+    const bank = state!.taskBanks.find((item) => item.targetTitleId === command.targetTitleId);
+    const activePool = bank?.items.filter((item) => item.active).length ?? 0;
+    const limitError = taskBankLimitError(command.requiredCount, activePool, Boolean(bank));
+    if (limitError) return Response.json({ error: `Количество не сохранено. ${limitError}`, code: "insufficient-pool" }, { status: 409, headers: noStoreHeaders });
+  }
+  if (command.action === "save-qualification-bank") {
+    const bank = state!.qualificationBanks.find((item) => item.transitionId === command.transitionId);
+    const activePools = {
+      single: bank?.items.filter((item) => item.active && "type" in item && item.type === "single").length ?? 0,
+      multiple: bank?.items.filter((item) => item.active && "type" in item && item.type === "multiple").length ?? 0,
+      freeText: bank?.items.filter((item) => item.active && "type" in item && item.type === "free-text").length ?? 0,
+    };
+    const limitError = qualificationBankLimitError(command.quotas, activePools, Boolean(bank));
+    if (limitError) return Response.json({ error: `Квоты не сохранены. ${limitError}`, code: "insufficient-pool" }, { status: 409, headers: noStoreHeaders });
+  }
   if ("bankId" in command) {
-    const state = await bankState(supabase);
     const banks = command.action.includes("question") ? state?.qualificationBanks : state?.taskBanks;
     const bank = banks?.find((item) => item.id === command.bankId);
     const itemId = "itemId" in command ? command.itemId : "questionId" in command ? command.questionId : undefined;
@@ -106,7 +128,9 @@ export async function POST(request: Request) {
     }
   }
   const { data, error } = await supabase.rpc("portia_promo_bank_command", { p_action: command.action, p_payload: command });
-  return error
-    ? Response.json({ error: "Не удалось сохранить банк.", code: error.code === "42883" ? "pending-database" : "bank-write-failed" }, { status: error.code === "42883" ? 503 : 400, headers: noStoreHeaders })
-    : Response.json({ id: data, state: await bankState(supabase) }, { headers: noStoreHeaders });
+  if (error) return Response.json({ error: "Не удалось сохранить банк.", code: error.code === "42883" ? "pending-database" : "bank-write-failed" }, { status: error.code === "42883" ? 503 : 400, headers: noStoreHeaders });
+  const authoritativeState = await bankState(supabase);
+  return authoritativeState
+    ? Response.json({ id: data, state: authoritativeState }, { headers: noStoreHeaders })
+    : Response.json({ error: "Изменение принято, но подтверждённое состояние пока недоступно. Обновите банки.", code: "authoritative-state-unavailable" }, { status: 503, headers: noStoreHeaders });
 }

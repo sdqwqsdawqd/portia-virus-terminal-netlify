@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { qualificationPromotionTransitions } from "@/lib/portia-promotion";
+import { qualificationBankLimitError } from "@/lib/portia-promotion-reviewer";
 
 type QuestionType = "single" | "multiple" | "free-text";
 type RequestRow = { requestId: string; nickname: string; targetTitleId: string; status: string; assignedToMe: boolean };
@@ -11,6 +12,7 @@ type Bank = { id: string; transitionId?: string; version: string; quotas?: Quota
 type Preview = { preview: string; items: Item[]; expiresAt: string; version: string };
 type Post = (payload: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
 type ConfirmIntent = { title: string; body: string; run: () => void; opener?: HTMLElement | null };
+type CommandState = { phase: "idle" | "saving" | "saved" | "error"; message: string };
 const emptyQuotas: Quotas = { single: 1, multiple: 0, freeText: 0 };
 const questionTypeLabels: Record<QuestionType, string> = {
   single: "Один вариант",
@@ -38,6 +40,7 @@ export function PortiaPromotionQualificationEditor({ banks, requests, busy, post
   const [preview, setPreview] = useState<Preview | null>(null);
   const [isPhone, setIsPhone] = useState(false);
   const [bankView, setBankView] = useState<"list" | "editor" | "preview">("list");
+  const [commandState, setCommandState] = useState<CommandState>({ phase: "idle", message: "" });
   const transition = qualificationPromotionTransitions.find((item) => item.transitionId === transitionId) ?? qualificationPromotionTransitions[0];
   const bank = banks.find((item) => item.transitionId === transition.transitionId) ?? null;
   const matchingRequests = useMemo(() => requests.filter((row) => row.assignedToMe && row.status === "claimed" && row.targetTitleId === transition.transitionId), [requests, transition.transitionId]);
@@ -45,9 +48,23 @@ export function PortiaPromotionQualificationEditor({ banks, requests, busy, post
   const quotas = quotaDrafts[transition.transitionId] ?? bank?.quotas ?? emptyQuotas;
   const currentPreview = preview?.version === bank?.version ? preview : null;
   const selectedRequestId = matchingRequests.some((row) => row.requestId === requestId) ? requestId : matchingRequests[0]?.requestId ?? "";
+  const activePools: Quotas = {
+    single: bank?.items.filter((item) => item.active && item.type === "single").length ?? 0,
+    multiple: bank?.items.filter((item) => item.active && item.type === "multiple").length ?? 0,
+    freeText: bank?.items.filter((item) => item.active && item.type === "free-text").length ?? 0,
+  };
+  const quotaError = qualificationBankLimitError(quotas, activePools, Boolean(bank));
   useEffect(() => { const query = window.matchMedia("(max-width: 900px)"); const update = () => setIsPhone(query.matches); update(); query.addEventListener("change", update); return () => query.removeEventListener("change", update); }, []);
 
-  const saveBank = async () => { await post({ action: "save-qualification-bank", transitionId: transition.transitionId, quotas }); };
+  const saveBank = async () => {
+    if (quotaError) { setCommandState({ phase: "error", message: `Квоты не сохранены. ${quotaError}` }); return; }
+    setCommandState({ phase: "saving", message: "Сохраняем квоты…" });
+    const result = await post({ action: "save-qualification-bank", transitionId: transition.transitionId, quotas });
+    if (!result?.state) { setCommandState({ phase: "error", message: "Квоты не сохранены. Значения остались в полях." }); return; }
+    setQuotaDrafts((current) => { const next = { ...current }; delete next[transition.transitionId]; return next; });
+    setPreview(null);
+    setCommandState({ phase: "saved", message: "Квоты сохранены и подтверждены сервером." });
+  };
   const questionPayload = () => {
     if (type === "free-text") return { type, text, answer };
     const values = options.split("\n").map((value) => value.trim()).filter(Boolean);
@@ -72,13 +89,14 @@ export function PortiaPromotionQualificationEditor({ banks, requests, busy, post
     const result = await post({ action: "confirm", kind: "qualification", bankId: bank.id, requestId: selectedRequestId, preview: currentPreview.preview });
     if (result) { setPreview(null); setManualIds([]); await refreshQueue(); }
   };
-  const shortages = (["single", "multiple", "freeText"] as const).filter((quotaType) => (bank?.items.filter((item) => item.active && item.type === (quotaType === "freeText" ? "free-text" : quotaType)).length ?? 0) < (bank?.quotas?.[quotaType] ?? quotas[quotaType]));
-  const disabledReason = !bank ? "Сначала сохраните квоты для этого перехода." : shortages.length ? `Недостаточно активных вопросов для квот: ${shortages.join(", ")}.` : !matchingRequests.length ? "Нет взятого вами квалификационного запроса для этого перехода." : "";
+  const previewPoolError = bank ? qualificationBankLimitError(bank?.quotas ?? emptyQuotas, activePools, true) : null;
+  const disabledReason = !bank ? "Сначала сохраните квоты для этого перехода." : previewPoolError ? previewPoolError : !matchingRequests.length ? "Нет взятого вами квалификационного запроса для этого перехода." : "";
 
   return <div className="promotion-bank-layout promotion-qualification-editor">
     {(!isPhone || bankView === "list") && <aside className="promotion-bank-list">{qualificationPromotionTransitions.map((item) => <button key={item.transitionId} type="button" className={item.transitionId === transition.transitionId ? "active" : ""} onClick={() => { setTransitionId(item.transitionId); setPreview(null); setManualIds([]); if (isPhone) setBankView("editor"); }}><strong>{item.label}</strong><span>{banks.find((candidate) => candidate.transitionId === item.transitionId)?.items.filter((entry) => entry.active).length ?? 0} активных</span></button>)}</aside>}
     {(!isPhone || bankView === "editor") && <section className="promotion-bank-editor">{isPhone && <button className="promotion-phone-back" type="button" onClick={() => setBankView("list")}>← НАЗАД К БАНКАМ</button>}<header><div><span>КВАЛИФИКАЦИОННЫЕ ВОПРОСЫ</span><h2>{transition.label}</h2></div><span>{bank ? `ВЕРСИЯ ${bank.version}` : "БАНК НЕ СОЗДАН"}</span></header>
-      <div className="promotion-bank-settings promotion-quota-settings">{([['single','Один ответ'],['multiple','Несколько'],['freeText','Свободный текст']] as const).map(([key,label]) => <label key={key}>{label}<input type="number" min={0} max={100} value={quotas[key]} onChange={(event) => setQuotaDrafts((current) => ({ ...current, [transition.transitionId]: { ...quotas, [key]: Math.max(0, Math.min(100, Number(event.target.value) || 0)) } }))} /></label>)}<button type="button" disabled={busy || Object.values(quotas).reduce((sum, value) => sum + value, 0) < 1} onClick={() => void saveBank()}>СОХРАНИТЬ КВОТЫ</button></div>
+      <div className="promotion-bank-settings promotion-quota-settings">{([['single','Один ответ'],['multiple','Несколько'],['freeText','Свободный текст']] as const).map(([key,label]) => <label key={key}>{label}<input type="number" min={0} max={100} value={quotas[key]} onChange={(event) => setQuotaDrafts((current) => ({ ...current, [transition.transitionId]: { ...quotas, [key]: Math.max(0, Math.min(100, Number(event.target.value) || 0)) } }))} /></label>)}<button className="primary-control" type="button" disabled={busy || Boolean(quotaError) || Object.values(quotas).reduce((sum, value) => sum + value, 0) < 1} title={quotaError ?? undefined} onClick={() => void saveBank()}>СОХРАНИТЬ КВОТЫ</button></div>
+      {commandState.message && <p className={`promotion-command-state ${commandState.phase}`} role="status">{commandState.message}</p>}
       <label>Тип вопроса<select value={type} onChange={(event) => setType(event.target.value as QuestionType)}><option value="single">Один вариант</option><option value="multiple">Несколько вариантов</option><option value="free-text">Свободный ответ</option></select></label><label>Текст вопроса<textarea value={text} maxLength={4000} onChange={(event) => setText(event.target.value)} /></label>{type !== "free-text" && <label>Варианты, по одному в строке<textarea value={options} onChange={(event) => setOptions(event.target.value)} /></label>}<label>{type === "free-text" ? "Ключ ответа" : type === "single" ? "Индекс правильного варианта (с 0)" : "Индексы правильных вариантов через запятую"}<input value={answer} onChange={(event) => setAnswer(event.target.value)} /></label><button type="button" disabled={busy || !bank || !text.trim()} onClick={() => void saveQuestion()}>{editingId ? "СОХРАНИТЬ ВОПРОС" : "ДОБАВИТЬ ВОПРОС"}</button>
       <div className="promotion-bank-items">{bank?.items.map((item, index) => <article key={item.id}><label><input type="checkbox" checked={manualIds.includes(item.id)} disabled={!item.active} onChange={(event) => setManualIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} /><span><b>{questionTypeLabels[item.type ?? "free-text"]}</b> {item.text}</span></label><div><button type="button" disabled={busy || index === 0} onClick={() => void reorder(index, -1)}>↑</button><button type="button" disabled={busy || index === bank.items.length - 1} onClick={() => void reorder(index, 1)}>↓</button><button type="button" onClick={() => edit(item)}>ИЗМЕНИТЬ</button><button type="button" disabled={busy} onClick={() => void mutate(item, { active: !item.active })}>{item.active ? "ВЫКЛЮЧИТЬ" : "ВКЛЮЧИТЬ"}</button><button className="danger-control" type="button" disabled={busy} onClick={(event) => remove(item, event.currentTarget)}>УДАЛИТЬ</button></div></article>)}</div>
       <div className="promotion-preview-actions"><button type="button" disabled={busy || Boolean(disabledReason)} title={disabledReason} onClick={() => void buildPreview()}>СОБРАТЬ ВРУЧНУЮ</button><button type="button" disabled={busy || Boolean(disabledReason)} title={disabledReason} onClick={() => void buildPreview("", true)}>СОБРАТЬ СЛУЧАЙНО</button>{currentPreview && <button type="button" onClick={() => void buildPreview("", true)}>ПЕРЕСОБРАТЬ</button>}</div>{disabledReason && <p className="promotion-disabled-reason">{disabledReason}</p>}

@@ -151,6 +151,28 @@ export function selectTaskPreview(items: readonly TaskPreviewItem[], required: n
 
 export type QualificationQuotas = { single: number; multiple: number; freeText: number };
 
+export function taskBankLimitError(required: number, activePool: number, bankExists: boolean) {
+  if (!bankExists || required <= activePool) return null;
+  return `Нужно ${required}, активно ${activePool}.`;
+}
+
+export function qualificationBankLimitError(
+  quotas: QualificationQuotas,
+  activePools: QualificationQuotas,
+  bankExists: boolean,
+) {
+  if (!bankExists) return null;
+  const labels: Record<keyof QualificationQuotas, string> = {
+    single: "один вариант",
+    multiple: "несколько вариантов",
+    freeText: "свободный ответ",
+  };
+  const shortages = (Object.keys(quotas) as Array<keyof QualificationQuotas>)
+    .filter((type) => quotas[type] > activePools[type])
+    .map((type) => `${labels[type]} — нужно ${quotas[type]}, активно ${activePools[type]}`);
+  return shortages.length ? `Не хватает вопросов: ${shortages.join("; ")}.` : null;
+}
+
 export function selectQualificationPreview(items: readonly QualificationPreviewItem[], quotas: QualificationQuotas, choice: PreviewChoice = {}) {
   for (const value of Object.values(quotas)) assertCount(value);
   const expected = quotas.single + quotas.multiple + quotas.freeText;
