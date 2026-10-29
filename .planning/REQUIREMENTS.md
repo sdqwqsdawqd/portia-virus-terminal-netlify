@@ -123,17 +123,84 @@
 
 ## Traceability
 
-| Requirement group | Roadmap phase |
-|---|---|
-| STAB-BASE-* | Pending roadmap |
-| STAB-DESK-* | Pending roadmap |
-| STAB-MOTION-* | Pending roadmap |
-| STAB-PROM-* | Pending roadmap |
-| STAB-APP-* | Pending roadmap |
-| STAB-SEARCH-* | Pending roadmap |
-| STAB-MEDIA-* | Pending roadmap |
-| STAB-A11Y-* / STAB-SEC-* | Pending roadmap |
-| STAB-REL-* | Pending roadmap |
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| STAB-BASE-01 | Phase 15 | Pending |
+| STAB-BASE-02 | Phase 15 | Pending |
+| STAB-BASE-03 | Phase 15 | Pending |
+| STAB-BASE-04 | Phase 15 | Pending |
+| STAB-BASE-05 | Phase 15 | Pending |
+| STAB-BASE-06 | Phase 15 | Pending |
+| STAB-DESK-01 | Phase 17 | Pending |
+| STAB-DESK-02 | Phase 18 | Pending |
+| STAB-DESK-03 | Phase 18 | Pending |
+| STAB-DESK-04 | Phase 18 | Pending |
+| STAB-DESK-05 | Phase 18 | Pending |
+| STAB-DESK-06 | Phase 18 | Pending |
+| STAB-DESK-07 | Phase 17 | Pending |
+| STAB-DESK-08 | Phase 20 | Pending |
+| STAB-MOTION-01 | Phase 18 | Pending |
+| STAB-MOTION-02 | Phase 18 | Pending |
+| STAB-MOTION-03 | Phase 18 | Pending |
+| STAB-MOTION-04 | Phase 18 | Pending |
+| STAB-MOTION-05 | Phase 18 | Pending |
+| STAB-MOTION-06 | Phase 18 | Pending |
+| STAB-MOTION-07 | Phase 18 | Pending |
+| STAB-MOTION-08 | Phase 18 | Pending |
+| STAB-PROM-01 | Phase 19 | Pending |
+| STAB-PROM-02 | Phase 19 | Pending |
+| STAB-PROM-03 | Phase 19 | Pending |
+| STAB-PROM-04 | Phase 19 | Pending |
+| STAB-PROM-05 | Phase 19 | Pending |
+| STAB-PROM-06 | Phase 19 | Pending |
+| STAB-PROM-07 | Phase 19 | Pending |
+| STAB-PROM-08 | Phase 19 | Pending |
+| STAB-PROM-09 | Phase 19 | Pending |
+| STAB-PROM-10 | Phase 19 | Pending |
+| STAB-PROM-11 | Phase 19 | Pending |
+| STAB-PROM-12 | Phase 19 | Pending |
+| STAB-PROM-13 | Phase 19 | Pending |
+| STAB-PROM-14 | Phase 19 | Pending |
+| STAB-PROM-15 | Phase 19 | Pending |
+| STAB-APP-01 | Phase 20 | Pending |
+| STAB-APP-02 | Phase 20 | Pending |
+| STAB-APP-03 | Phase 20 | Pending |
+| STAB-APP-04 | Phase 20 | Pending |
+| STAB-APP-05 | Phase 20 | Pending |
+| STAB-APP-06 | Phase 20 | Pending |
+| STAB-APP-07 | Phase 20 | Pending |
+| STAB-APP-08 | Phase 20 | Pending |
+| STAB-APP-09 | Phase 20 | Pending |
+| STAB-APP-10 | Phase 20 | Pending |
+| STAB-SEARCH-01 | Phase 20 | Pending |
+| STAB-SEARCH-02 | Phase 20 | Pending |
+| STAB-SEARCH-03 | Phase 20 | Pending |
+| STAB-SEARCH-04 | Phase 20 | Pending |
+| STAB-MEDIA-01 | Phase 20 | Pending |
+| STAB-MEDIA-02 | Phase 20 | Pending |
+| STAB-MEDIA-03 | Phase 20 | Pending |
+| STAB-MEDIA-04 | Phase 20 | Pending |
+| STAB-MEDIA-05 | Phase 20 | Pending |
+| STAB-MEDIA-06 | Phase 18 | Pending |
+| STAB-MEDIA-07 | Phase 21 | Pending |
+| STAB-A11Y-01 | Phase 21 | Pending |
+| STAB-A11Y-02 | Phase 21 | Pending |
+| STAB-A11Y-03 | Phase 21 | Pending |
+| STAB-A11Y-04 | Phase 21 | Pending |
+| STAB-SEC-01 | Phase 16 | Pending |
+| STAB-SEC-02 | Phase 21 | Pending |
+| STAB-SEC-03 | Phase 21 | Pending |
+| STAB-SEC-04 | Phase 16 | Pending |
+| STAB-SEC-05 | Phase 21 | Pending |
+| STAB-SEC-06 | Phase 22 | Pending |
+| STAB-REL-01 | Phase 22 | Pending |
+| STAB-REL-02 | Phase 22 | Pending |
+| STAB-REL-03 | Phase 22 | Pending |
+| STAB-REL-04 | Phase 16 | Pending |
+| STAB-REL-05 | Phase 22 | Pending |
+| STAB-REL-06 | Phase 22 | Pending |
+| STAB-REL-07 | Phase 22 | Pending |
+| STAB-REL-08 | Phase 22 | Pending |
 
 ---
-*Last updated: 2026-10-30 after v1.3 milestone research*
+*Last updated: 2026-10-30 after v1.3 roadmap creation (76/76 uniquely mapped)*

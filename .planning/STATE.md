@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Стабилизация PORTIA OS
-status: planning
-last_updated: "2026-10-29T14:39:17.516Z"
-last_activity: 2026-10-29
+status: ready_to_plan
+last_updated: "2026-10-30"
+last_activity: 2026-10-30
 progress:
-  total_phases: 0
+  total_phases: 8
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,192 +17,72 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-27)
+See: .planning/PROJECT.md (updated 2026-10-29)
 
-**Core value:** Участник сразу находит нужную запись; редактор правит её без потерь — в цельной «PORTIA OS».
-**Current focus:** Phase 14 — prilozhenie-povyshenie
+**Core value:** Сделать существующий PORTIA OS доказуемо устойчивым, безопасным и визуально последовательным, сохранив его текущую художественную основу.
+**Current focus:** Phase 15 — Восстановление контроля, контракты и браузерный baseline
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-10-29 — Milestone v1.3 started
+Phase: 15 of 22 (v1.3 phase 1 of 8)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-10-30 — Создан roadmap v1.3 с уникальным покрытием 76/76 требований
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
-v1.1: Phase 6 — 4 плана. Метрики v1.0 (43 плана) — в истории git и `.planning/milestones/v1.0-ROADMAP.md`.
-**Per-Plan Metrics:**
+**Current milestone:**
+- Total plans completed: 0
+- Average duration: —
+- Total execution time: 0 hours
 
-| Plan | Duration | Tasks | Files |
-|------|----------|-------|-------|
-| Phase PORTIA-06 P01 | 10min | 3 tasks | 2 files |
-| Phase PORTIA-06 P02 | 10min | 2 tasks | 3 files |
-| Phase PORTIA-06 P03 | 10min | 2 tasks | 3 files |
-| Phase PORTIA-06 P04 | n/a | 3 tasks | 1 files |
-| Phase PORTIA-07 P01 | 15min | 2 tasks | 6 files |
-| Phase PORTIA-07 P07-02 | 10min | 3 tasks | 3 files |
-| Phase PORTIA-07 P07-03 | 20min | 3 tasks | 4 files |
-| Phase PORTIA-07 P07-04 | 15min | 3 tasks | 3 files |
-| Phase PORTIA-08 P01 | 3 min | 3 tasks | 4 files |
-| Phase PORTIA-08 P02 | 10 min | 3 tasks | 4 files |
-| Phase PORTIA-08 P03 | 15min | 2 tasks | 3 files |
-| Phase PORTIA-08 P04 | 30min | 3 tasks | 3 files |
-| Phase PORTIA-09 P01 | 100 min | 3 tasks | 3 files |
-| Phase PORTIA-09 P03 | 25 min | 3 tasks | 9 files |
-| Phase PORTIA-09 P04 | 2 min | 2 tasks | 1 files |
-| Phase PORTIA-09 P05 | 5 min | 3 tasks | 6 files |
-| Phase PORTIA-09 P06 | 8min | 2 tasks | 4 files |
-| Phase PORTIA-09 P07 | owner-paced | 3 tasks | 8 files |
-| Phase PORTIA-10 P01 | 25min | 2 tasks | 4 files |
-| Phase PORTIA-10 P02 | 20min | 2 tasks | 3 files |
-| Phase PORTIA-10 P03 | 35 min | 2 tasks | 6 files |
-| Phase PORTIA-10 P04 | 30min | 2 tasks | 3 files |
-| Phase PORTIA-10 P05 | 25min | 2 tasks | 5 files |
-| Phase PORTIA-10 P06 | 30min | 2 tasks | 5 files |
-| Phase PORTIA-10 P07 | 40 min | 3 tasks | 4 files |
-| Phase PORTIA-10 P08 | 35 min | 3 tasks | 9 files |
-| Phase PORTIA-10 P10-09 | 40min | 3 tasks | 3 files |
-| Phase PORTIA-11 P01 | 40min | 2 tasks | 8 files |
-| Phase PORTIA-11 P02 | 55min | 3 tasks | 7 files |
-| Phase PORTIA-11 P03 | 35min | 2 tasks | 4 files |
-| Phase PORTIA-11 P04 | 45min | 3 tasks | 4 files |
-| Phase PORTIA-11 P05 | 35min | 2 tasks | 7 files |
-| Phase PORTIA-11 P06 | 15min | 2 tasks | 7 files |
-| Phase PORTIA-11 P07 | owner-paced | 3 tasks | 7 files |
-| Phase 11 P08 | 12 min | 3 tasks | 5 files |
-| Phase PORTIA-13 P01 | 25min | 2 tasks | 10 files |
-| Phase PORTIA-13 P02 | 10 min | 3 tasks | 4 files |
-| Phase 13 P03 | 30min | 2 tasks | 2 files |
-| Phase PORTIA-13 P04 | 35min | 2 tasks | 3 files |
-| Phase PORTIA-13 P05 | owner-paced | 2 tasks | 2 files |
-| Phase 14 P01 | 12 min | 2 tasks | 4 files |
-| Phase 14 P02 | 3h 42min | 3 tasks | 6 files |
-| Phase 14 P03 | 10 min | 2 tasks | 10 files |
-| Phase 14 P04 | 6 min | 2 tasks | 8 files |
-| Phase 14 P05 | 15 min | 2 tasks | 9 files |
-| Phase 14 P06 | 18 min | 2 tasks | 5 files |
-| Phase 14 P07 | 20 min | 2 tasks | 7 files |
-| Phase 14 P08 | 20 min | 2 tasks | 8 files |
-| Phase 14 P09 | owner-paced | 2 tasks | 7 files |
-| Phase 14 P10 | 25 min | 2 tasks | 4 files |
-| Phase 14 P11 | 30 min | 2 tasks | 11 files |
-| Phase 14 P12 | 24 min | 3 tasks | 10 files |
-| Phase 14 P13 | 38 min | 3 tasks | 8 files |
-| Phase 14 P15 | 9 min | 3 tasks | 7 files |
-| Phase 14 P16 | 10 min active | 2 tasks | 3 files |
-| Phase 14 P17 | 25 min active | 3 tasks | 8 files |
-| Phase 14 P18 | 20 min active | 3 tasks | 7 files |
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| 15–22 | 0 | TBD | — |
+
+*Plan counts and velocity begin after Phase 15 planning.*
 
 ## Accumulated Context
 
 ### Decisions
 
-Журнал решений — PROJECT.md Key Decisions. Пошаговые записи v1.0 остались в истории git (STATE.md до 2026-10-19). Для v1.1:
+Full decision history: `.planning/PROJECT.md`.
 
-- [v1.2 roadmap]: весь milestone «Повышение» выполняется одним Phase 14; обычные задания и квалификационные проверки остаются раздельными потоками внутри этапа
-
-- [v1.1 roadmap]: порядок фаз 6–12: учёт и выгрузки → контракт сервера сотрудников → клиент сотрудников → контент → рабочий стол и встроенные страницы → панель оформления → права редакторов и SQL
-- [v1.1 roadmap]: `components/portia-desktop.tsx` и `components/portia-editor.tsx` — горячие файлы, фазы 7–12 идут строго по очереди
-- [v1.1 roadmap]: контракт PATCH сотрудника — нет поля = не менять, `null` очищает только оценку, неверный тип = 400, старый формат целого профиля принимается
-- [v1.1 roadmap]: лимиты контента поднимаются и общие для редактора и сервера, «+» неактивна у лимита; сервер сверх лимита не отклоняет (решение владельца)
-- [v1.1 roadmap]: PERM + SQL подтверждённой почты — один последний блок владельца (Phase 12); код работает до и после SQL, без нового столбца у всех редакторов все вкладки
-- [v1.1 roadmap]: CONT-09 (`//host`) целиком в Phase 12 вместе с SQL-половиной; SEC-03 (`sandbox`) в Phase 10 с проверкой в браузере
-- [v1.0 → v1.1]: одновременные правки одного сотрудника — последняя запись побеждает (AR-03.2-01); опрос контента — раз в 10 с при видимой вкладке (03.2-07)
-- [Phase PORTIA-06]: 05-IN-04 fixed by its own commit (D-07) before closing; 01-WR-01 Source now points at PROJECT.md Known Limitations (added in 06-02)
-- [Phase PORTIA-06]: 03.1-IN-10 storage listing stays open as IN-10-storage (owner decision needed)
-- [Phase PORTIA-06]: D-07 used in 06-03: previous-pass 03.2 WR-03 was not fixed; markQuestsSeen now keeps unknown ids, capped at 200
-- [Phase PORTIA-07]: 07-01: one string-level parseJsonObject helper; editor branches on payload.code sheet-employee, not Russian text
-- [Phase PORTIA-07]: 07-02: manual employees stored/shown in Roblox spelling; old rows corrected at read time only; EMP-10 closed by owner's 34-slot rule (D-13)
-- [Phase PORTIA-07]: 07-03: PATCH saves only sent fields; newcomer ids checked against the sheet by nickname, Roblox never called; manual details written first and restored on profile failure
-- [Phase PORTIA-07]: 07-04: 03.1 IN-03 closed by owner rule D-13 (sheet has exactly 34 places); 03.2 WR-04 and 03.3 IN-04 stay open with progress notes
-- [Phase PORTIA-07]: review fixes WR-01..03 (364404d, a63990d, 4a21aa2); residual WR-01 first-write gap accepted as AR-07-03; upsert partial row confirmed on live DB (07-04)
-- [Phase PORTIA-08]: 08-01: employee merge decides per flag (profilesRead, manualRead, Roblox fields), trusted only when === true; only degraded === false answers reach the device cache; editor callbacks patch the cache and never create one
-- [Phase PORTIA-08]: The editor accepts a list only when profilesRead === true and reads it from the never-cached /api/employees/editor route
-- [Phase PORTIA-08]: A save sends only changed fields; a clean save sends nothing and a missing rating is never sent as null
-- [Phase PORTIA-08]: Load error and save error are separate states; the empty list keeps the list column and add form
-- [Phase PORTIA-08]: 08-03: text typed during a save stays (settleDraft) and keeps the draft dirty; no automatic second save
-- [Phase PORTIA-08]: 08-03: a switch clicked during a save is queued by id and resolved after the answer (open when clean, dialog otherwise)
-- [Phase PORTIA-08]: 08-04: visitor-step ledger rows (03.1-WR-01, 03.3-WR-02) record owner browser verification; 03.2-WR-04 names both halves d3bfdd9 and 8bce191
-- [Phase 09]: 09-01: helix-scroll moves with transform (translate3d), not translate: Edge keeps translate on an outer svg off the compositor (traced)
-- [Phase 09]: 09-01: cell sharp-zone factor stays 0.8; gel and cells repaint on the main thread (SVG children), phone check in 09-07
-- [Phase PORTIA-09]: 09-03: derived ids index the list after non-object entries are dropped; broadcast conditions stay string-only; backup check caps scientist logs at 5 per virus (D-25)
-- [Phase PORTIA-09]: 09-04: desktop cache and poll share normalizePortiaContent (revision gate first); ВАЖНО on news only; today is a lazy useState init (passes React Compiler lint)
-- [Phase PORTIA-09]: 09-05: bin file delete reuses the virus delete ConfirmDialog (dialog state delete-file); format panel closes before both permanent deletes; body-size check uses the longest possible revision so it blocks slightly early
-- [Phase PORTIA-09]: 09-06: editor blocks save on a reversed quest and never rewrites dates; undo/redo follows the first card whose category changed
-- [Phase PORTIA-09]: 09-07: gel bands move on a composited HTML strip (lanes in unison); spider smaller with a tetrapod gait and footfall waves; owner accepted BG-01 on PC and phone
-- [Phase PORTIA-10]: 10-01: custom accent filters found by fixed-size hue search; deriveAccentTokens self-contained and embedded in head script
-- [Phase PORTIA-10]: Assistant bubble visibility is derived (assistantSpeaking) so a tip removed by the poll closes the bubble without an effect
-- [Phase PORTIA-10]: 10-03: restore keeps customAccent only via deriveAccentTokens; accent custom without a valid colour is dropped
-- [Phase PORTIA-10]: 10-04: colour row buttons stack swatch over a 13px label so five fit a 520px window
-- [Phase PORTIA-10]: D-21 recorded: zoom reacts to Ctrl everywhere and Cmd on a Mac, never the Windows key
-- [Phase PORTIA-10]: D-18: the ≡ handle gets no tooltip; recorded in A11Y-02 and ROADMAP criterion 4
-- [Phase PORTIA-10]: 10-07: no sandbox flag added; owner check found no failing frame
-- [Phase PORTIA-10]: D-23 (owner): custom accent follows the pick; neutral picks give a neutral grey theme via --accent-chroma; only lightness is corrected (supersedes D-05)
-- [Phase PORTIA-11]: 11-01: format mark colour is oklch(.57 calc(.1 * var(--accent-chroma)) var(--accent-hue) / .95), keeping 3:1 on every preview field under any accent (replaces fixed rgba)
-- [Phase PORTIA-11]: 11-01: TEST-02 own-input boundary is the 400 ms window of fieldSelectionStep; the panel clamp is tested in 11-02
-- [Phase PORTIA-11]: 11-02: format panel at z-index 950 with a focusApp on-top guard, hidden while the editor is minimized, phone sheet of fixed height min(34svh, 270px)
-- [Phase PORTIA-11]: 11-03: a failed or conflicting save also turns the save chip red with !; saved check mark lasts the desktop's 1.8 s; chip at right 54px on phones up to 520px
-- [Phase PORTIA-11]: 11-04: collapse state is a component-only Set, never stored; TOC list closed by default, fold buttons only on card lists
-- [Phase PORTIA-11]: 11-05: column swap swaps key and value in every row; table rows carry a normalizer-backed id (positional fallback)
-- [Phase PORTIA-11]: 11-06: multi-selection state lives in FormatTarget (gesture, fragments, peers); a Ctrl/Cmd press adds a fragment, any plain press, editing key, Esc or СБРОСИТЬ clears; one panel application is one batch:<id> undo step
-- [Phase PORTIA-11]: 11-07: real-engine checks (Firefox, iPhone WebKit via 11-engines-check.mjs) sit beside the Edge harness; Edge alone missed Gecko/WebKit bugs
-- [Phase 11]: 11-08: WR-01 is fixed at the commitEditorValue funnel (startGesture(false)), not with a key list, so Ctrl+X/V, context-menu cut/paste and non-Latin layouts are all covered
-- [Phase 11]: 11-08: a gone field leaves the multi-selection through dropFields/dropFormatFields (functional setFormatTarget updater); the section delete names its block keys
-- [Phase PORTIA-13]: 13-01: guide starts empty; oversize warning checks text and callout bodies only; photo-heavy size covered by existing body-size check
-- [Phase PORTIA-13]: 13-02: guide view is derived from guideCardId (vanished card means grid); tile hover lift gated by data-motion=full; search preview rotated to first matching block
-- [Phase 13]: 13-03: every guide editor write finds its block by card id and block id (findGuideBlock), so late uploads and reorders write the right block
-- [Phase PORTIA-13]: 13-04: cross-list card drags are opt-in (data-sort-group + onMoveAcross); dragHandoff carries one drag over the remount and is cleared only on release/blur
+- [v1.3 roadmap]: Continue numbering after incomplete Phase 14; v1.3 uses Phases 15–22.
+- [v1.3 roadmap]: Stabilization preserves current PORTIA OS identity and validated behavior; it is not a redesign.
+- [v1.3 roadmap]: Every requirement belongs to exactly one phase; browser/live/visual/UAT evidence is required even where code already exists.
+- [v1.3 roadmap]: Decomposition follows approved characterization; Promotion proof follows isolated Supabase staging.
+- [v1.3 roadmap]: Figma approval, managed security scan and physical owner PC/phone UAT remain honest open gates until performed.
 
 ### Pending Todos
 
-- 5 файлов в `.planning/todos/pending/`. Текущий пакет регрессий Phase 14: [Стабилизировать Повышение и интерфейс рабочего стола](./todos/pending/2026-10-28-stabilize-promotion-and-desktop-ui.md).
+- Five legacy pending todo artifacts remain under `.planning/todos/pending/`; classify them during Phase 15 without silently folding them into scope.
 
 ### Blockers/Concerns
 
-- ⚠️ [Данные] Сохранения проверять только на временном сотруднике вне таблицы; `PUT /api/content` скриптами не вызывать.
-- [Данные] Выгрузка владельца 2026-10-19: `portia_employee_profiles_2026-10-19.json` (18 строк) и `portia_content_2026-10-19.json` (1 строка) в `C:\Users\User\backups\portia\`, вне git.
-- ⚠️ [Phase 9] Перед подъёмом лимитов сверить размер рабочего `portia_content` и прогнать нормализатор по выгрузке: нормализатор чинит, не удаляет.
-- ⚠️ [Phase 11] Панель оформления проверяет владелец в браузере и на телефоне; тестами не закрыть (`sandbox` проверен владельцем в Phase 10).
-- ⚠️ [Phase 12] `email_confirmed_at` в SQL может заблокировать владельца: предпроверка `auth.users`, откат, «Confirm email» включено; SQL применяет владелец сам.
-
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 261027-cie | Независимая раскладка и единые анимации ярлыков рабочего стола | 2026-10-27 | 0b5f0a9 | [261027-cie-desktop-shortcut-animation](./quick/261027-cie-desktop-shortcut-animation/) |
-| 261027-coj | Качественные микровзаимодействия пяти ярлыков рабочего стола | 2026-10-27 | b9d7db1 | [261027-coj-refine-shortcut-animations](./quick/261027-coj-refine-shortcut-animations/) |
-| 261027-cu4 | Отдельное отключение паука и непрозрачное брюшко | 2026-10-27 | 267721b | [261027-cu4-spider-visibility-setting-and-opaque-abd](./quick/261027-cu4-spider-visibility-setting-and-opaque-abd/) |
-| 261027-d0k | Свёрнутые разделы и компактная кнопка возврата в справочнике | 2026-10-27 | d6909c6 | [261027-d0k-fix-guide-cards-auto-opening-and-detail-](./quick/261027-d0k-fix-guide-cards-auto-opening-and-detail-/) |
-| 261028-paf | Исправление «Повышения», Roblox-ника и анимаций | 2026-10-28 | 3f03f8a | [261028-paf-fix-promotion-access-and-motion](./quick/261028-paf-fix-promotion-access-and-motion/) |
-| 261028-0z1 | Portia Promotion: roster admission, device binding, deadlines and animations | 2026-10-28 | 08343e3 | [261028-0z1-portia-promotion-portia-promotion-b2-b35](./quick/261028-0z1-portia-promotion-portia-promotion-b2-b35/) |
+- [Phase 15] Existing dirty package/planning and quick/UI-review artifacts need an ownership ledger; preserve them and do not reset or absorb them automatically.
+- [Phase 15] Figma authority, owner device/browser matrix and final motion preference contract require owner confirmation.
+- [Phase 16] Dedicated isolated Supabase project/branch, credentials and disposable fixtures are not yet proven available.
+- [Phase 21] The previous deep security scan never started; a supported managed profile is still required.
+- [Phase 22] Physical owner PC (including DPR 1.25) and phone UAT has not occurred and blocks milestone completion.
 
 ## Deferred Items
 
-| Category | Item | Status | Acknowledged at |
-|----------|------|--------|-----------------|
-| debug_sessions | editor-field-font-wysiwyg | diagnosed | v1.0 close (2026-10-19) |
-| uat_gaps | PORTIA-05-oformlenie-teksta / 05-UAT.md | diagnosed, 0 pending | v1.0 close (2026-10-19) |
-| debug_sessions | custom-accent-black-turns-teal | diagnosed (fix verified later) | v1.1 close (2026-10-27) |
-| debug_sessions | editor-field-font-wysiwyg | diagnosed (fix verified later) | v1.1 close (2026-10-27) |
-| uat_gaps | PORTIA-10 / 10-UAT.md | diagnosed, 0 pending (closed by 10-08/10-09) | v1.1 close (2026-10-27) |
-| todos | app-povyshenie.md | future milestone | v1.1 close (2026-10-27) |
-| todos | app-spravochnik.md | shipped in Phase 13; artifact cleanup deferred | v1.1 close (2026-10-27) |
-| todos | spider-body-visible-and-toggle.md | shipped; artifact cleanup deferred | v1.1 close (2026-10-27) |
-| todos | unified-apps-system-discuss.md | future discussion | v1.1 close (2026-10-27) |
-
-### Roadmap Evolution
-
-- Phases 03.1, 03.2, 03.3 вставлены в v1.0 (стабилизация, оценки и Сводка, сотрудники вне таблицы); Phase 4 пропущена
-- v1.1: фазы 6–12 добавлены для закрытия замечаний ревью v1.0 и прав редакторов по вкладкам (PERM)
-- Phase 13 added: Приложение «Справочник» (после /gsd-explore 2026-10-26; «Повышение» — отдельный milestone, модель в .planning/notes/povyshenie-model.md)
+| Category | Item | Status | Deferred At |
+|----------|------|--------|-------------|
+| live_proof | Promotion RLS/RPC/concurrency and authenticated reviewer flows | Open gate in Phase 16/19 | v1.2 incomplete close |
+| owner_uat | Promotion plus desktop/motion PC/phone acceptance | Open gate in Phase 19/22 | v1.2 incomplete close |
+| security | Managed deep security scan and finding disposition | Open gate in Phase 21 | v1.2 incomplete close |
+| architecture | Oversized desktop/editor composition roots | Planned for reversible extraction in Phase 17 | v1.2 incomplete close |
 
 ## Session Continuity
 
-Last session: 2026-10-29T14:24:01.342Z
-Stopped at: Follow-up fixes through UAT tests 32–39 pass automated/browser preflight; live qualification and authenticated editor checks remain blocked on safe fixtures
+Last session: 2026-10-30
+Stopped at: Roadmap and state initialized; Phase 15 is ready for planning after owner approval
 Resume file: None
 
-## Operator Next Steps
+## Operator Next Step
 
-- Provide an owner-approved temporary participant/reviewer fixture and isolated Supabase test project, then run the remaining authenticated PC/phone qualification and editor UAT from `14-UAT.md` before the final rollout in `14-14`.
+Review and approve the v1.3 roadmap, then run `$gsd-plan-phase 15`.
