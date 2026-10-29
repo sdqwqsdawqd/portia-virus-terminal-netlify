@@ -35,12 +35,17 @@ export function resizeGeometry(start: WindowGeometry, edge: ResizeEdge, dx: numb
   return { x, y, width, height };
 }
 
-/** Moves a window by its title bar; it may leave the workspace except for 160 px of its title bar. */
+/** Moves a window by its title bar; horizontal bounds keep the full fitted frame inside equal insets. */
 export function dragGeometry(start: WindowGeometry, dx: number, dy: number, bounds: Bounds): WindowGeometry {
+  const availableWidth = Math.max(0, bounds.width - margin * 2);
+  const width = Math.min(start.width, availableWidth);
+  const horizontalRoom = bounds.width >= margin * 2;
+  const left = horizontalRoom ? margin : 0;
+  const right = horizontalRoom ? bounds.width - width - margin : 0;
   return {
-    x: Math.min(Math.max(0, start.x + dx), Math.max(0, bounds.width - 160)),
+    x: Math.min(Math.max(left, start.x + dx), Math.max(left, right)),
     y: Math.min(Math.max(0, start.y + dy), Math.max(0, bounds.height - 46)),
-    width: start.width,
+    width,
     height: start.height,
   };
 }
