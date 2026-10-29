@@ -70,6 +70,36 @@ test("preview blockers explain exact active pool shortages", () => {
   assert.ok(qualification.includes("bank?.quotas"));
 });
 
+test("item editors prevent duplicate writes and preserve text typed during save", () => {
+  for (const editor of [ordinary, qualification]) {
+    assert.ok(editor.includes("useRef"));
+    assert.ok(editor.includes("savingRef.current"));
+    assert.ok(editor.includes("setCommandState"));
+  }
+  assert.ok(ordinary.includes("current === submittedDraft"));
+  assert.ok(qualification.includes("current === submittedText"));
+  assert.ok(qualification.includes("validateQuestionDraft"));
+  assert.ok(qualification.includes("Проверьте варианты и правильный ответ"));
+});
+
+test("bank actions use the established control hierarchy and announce results", () => {
+  const editors = ordinary + qualification;
+  assert.ok(editors.includes('className="primary-control"'));
+  assert.ok(editors.includes('className="secondary-control"'));
+  assert.ok(editors.includes('className="danger-control"'));
+  assert.ok(editors.includes('role="status"'));
+  assert.ok(main.includes('<p className="promotion-editor-message" role="status">'));
+  assert.match(styles, /\.promotion-command-state\s*\{/);
+  assert.match(styles, /\.promotion-command-state\.error\s*\{/);
+});
+
+test("every successful item mutation invalidates the local preview", () => {
+  assert.ok(ordinary.includes("settleMutation"));
+  assert.ok(qualification.includes("settleMutation"));
+  assert.ok(ordinary.includes("setPreview(null)"));
+  assert.ok(qualification.includes("setPreview(null)"));
+});
+
 test("request rejection and owner deletion use explicit irreversible confirmations", () => {
   assert.ok(main.includes('reviewerCommand("reject"'));
   assert.ok(main.includes('reviewerCommand("delete-request"'));
