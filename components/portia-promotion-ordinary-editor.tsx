@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ordinaryPromotionTransitions } from "@/lib/portia-promotion";
 import { taskBankLimitError } from "@/lib/portia-promotion-reviewer";
 
@@ -25,6 +25,7 @@ export function PortiaPromotionOrdinaryEditor({ banks, requests, busy, post, ref
   const [isPhone, setIsPhone] = useState(false);
   const [bankView, setBankView] = useState<"list" | "editor" | "preview">("list");
   const [commandState, setCommandState] = useState<CommandState>({ phase: "idle", message: "" });
+  const savingRef = useRef(false);
   const transition = ordinaryPromotionTransitions.find((item) => item.targetTitleId === targetTitleId) ?? ordinaryPromotionTransitions[0];
   const bank = banks.find((item) => item.targetTitleId === transition.targetTitleId) ?? null;
   const matchingRequests = useMemo(() => requests.filter((row) => row.assignedToMe && (row.status === "claimed" || row.status === "assigned") && row.targetTitleId === transition.targetTitleId), [requests, transition.targetTitleId]);
@@ -36,29 +37,46 @@ export function PortiaPromotionOrdinaryEditor({ banks, requests, busy, post, ref
   const countError = taskBankLimitError(requiredCount, activeCount, Boolean(bank));
   useEffect(() => { const query = window.matchMedia("(max-width: 900px)"); const update = () => setIsPhone(query.matches); update(); query.addEventListener("change", update); return () => query.removeEventListener("change", update); }, []);
 
+  const settleMutation = async (payload: Record<string, unknown>, savedMessage: string) => {
+    if (savingRef.current) return null;
+    savingRef.current = true;
+    setCommandState({ phase: "saving", message: "Сохраняем изменения…" });
+    try {
+      const result = await post(payload);
+      if (!result?.state) { setCommandState({ phase: "error", message: "Изменения не сохранены. Проверьте данные и повторите попытку." }); return null; }
+      setPreview(null);
+      setCommandState({ phase: "saved", message: savedMessage });
+      return result;
+    } finally {
+      savingRef.current = false;
+    }
+  };
+
   const saveBank = async () => {
     if (countError) { setCommandState({ phase: "error", message: `Количество не сохранено. ${countError}` }); return; }
-    setCommandState({ phase: "saving", message: "Сохраняем количество…" });
-    const result = await post({ action: "save-task-bank", targetTitleId: transition.targetTitleId, requiredCount });
-    if (!result?.state) { setCommandState({ phase: "error", message: "Количество не сохранено. Значение осталось в поле." }); return; }
+    const result = await settleMutation({ action: "save-task-bank", targetTitleId: transition.targetTitleId, requiredCount }, "Количество сохранено и подтверждено сервером.");
+    if (!result?.state) return;
     setRequiredCounts((current) => { const next = { ...current }; delete next[transition.targetTitleId]; return next; });
-    setPreview(null);
-    setCommandState({ phase: "saved", message: "Количество сохранено и подтверждено сервером." });
   };
   const saveItem = async () => {
     if (!bank || !draft.trim()) return;
     const current = bank.items.find((item) => item.id === editingId);
-    const result = await post({ action: "save-task-item", bankId: bank.id, ...(current ? { itemId: current.id } : {}), text: draft, active: current?.active ?? true, sortOrder: current?.sortOrder ?? bank.items.length });
-    if (result) { setDraft(""); setEditingId(""); }
+    const submittedDraft = draft;
+    const submittedEditingId = editingId;
+    const result = await settleMutation({ action: "save-task-item", bankId: bank.id, ...(current ? { itemId: current.id } : {}), text: submittedDraft, active: current?.active ?? true, sortOrder: current?.sortOrder ?? bank.items.length }, current ? "Задание обновлено." : "Задание добавлено.");
+    if (result) {
+      setDraft((current) => current === submittedDraft ? "" : current);
+      setEditingId((currentId) => currentId === submittedEditingId ? "" : currentId);
+    }
   };
-  const mutateItem = async (item: Item, patch: Partial<Item>) => post({ action: "save-task-item", bankId: bank!.id, itemId: item.id, text: patch.text ?? item.text, active: patch.active ?? item.active, sortOrder: patch.sortOrder ?? item.sortOrder });
+  const mutateItem = async (item: Item, patch: Partial<Item>) => settleMutation({ action: "save-task-item", bankId: bank!.id, itemId: item.id, text: patch.text ?? item.text, active: patch.active ?? item.active, sortOrder: patch.sortOrder ?? item.sortOrder }, "Задание обновлено.");
   const reorder = async (index: number, delta: -1 | 1) => {
     if (!bank) return; const other = bank.items[index + delta]; const item = bank.items[index]; if (!other) return;
     await mutateItem(item, { sortOrder: other.sortOrder }); await mutateItem(other, { sortOrder: item.sortOrder });
   };
   const remove = (item: Item, opener: HTMLElement) => {
     if (!bank) return;
-    requestConfirm({ title: "Удалить задание", body: `Задание «${item.text}» будет удалено без возможности восстановления.`, opener, run: () => void post({ action: "delete-task-item", bankId: bank.id, itemId: item.id }) });
+    requestConfirm({ title: "Удалить задание", body: `Задание «${item.text}» будет удалено без возможности восстановления.`, opener, run: () => void settleMutation({ action: "delete-task-item", bankId: bank.id, itemId: item.id }, "Задание удалено.") });
   };
   const buildPreview = async (replaceId = "", random = false) => {
     if (!bank) return;
@@ -78,9 +96,9 @@ export function PortiaPromotionOrdinaryEditor({ banks, requests, busy, post, ref
     {(!isPhone || bankView === "editor") && <section className="promotion-bank-editor">{isPhone && <button className="promotion-phone-back" type="button" onClick={() => setBankView("list")}>← НАЗАД К БАНКАМ</button>}<header><div><span>ОБЫЧНЫЕ ЗАДАНИЯ</span><h2>{transition.label}</h2></div><span>{bank ? `ВЕРСИЯ ${bank.version}` : "БАНК НЕ СОЗДАН"}</span></header>
       <div className="promotion-bank-settings"><label>Заданий в наборе<input type="number" min={1} max={50} value={requiredCount} onChange={(event) => setRequiredCounts((current) => ({ ...current, [transition.targetTitleId]: Math.max(1, Math.min(50, Number(event.target.value) || 1)) }))} /></label><button className="primary-control" type="button" disabled={busy || Boolean(countError)} title={countError ?? undefined} onClick={() => void saveBank()}>СОХРАНИТЬ КОЛИЧЕСТВО</button></div>
       {commandState.message && <p className={`promotion-command-state ${commandState.phase}`} role="status">{commandState.message}</p>}
-      <label>{editingId ? "Редактировать задание" : "Новое задание"}<textarea value={draft} maxLength={4000} onChange={(event) => setDraft(event.target.value)} /></label><button type="button" disabled={busy || !bank || !draft.trim()} onClick={() => void saveItem()}>{editingId ? "СОХРАНИТЬ ЗАДАНИЕ" : "ДОБАВИТЬ ЗАДАНИЕ"}</button>
-      <div className="promotion-bank-items">{bank?.items.map((item, index) => <article key={item.id}><label><input type="checkbox" checked={manualIds.includes(item.id)} disabled={!item.active} onChange={(event) => setManualIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} /><span>{item.text}</span></label><div><button type="button" disabled={busy || index === 0} onClick={() => void reorder(index, -1)}>↑</button><button type="button" disabled={busy || index === bank.items.length - 1} onClick={() => void reorder(index, 1)}>↓</button><button type="button" onClick={() => { setEditingId(item.id); setDraft(item.text); }}>ИЗМЕНИТЬ</button><button type="button" disabled={busy} onClick={() => void mutateItem(item, { active: !item.active })}>{item.active ? "ВЫКЛЮЧИТЬ" : "ВКЛЮЧИТЬ"}</button><button className="danger-control" type="button" disabled={busy} onClick={(event) => remove(item, event.currentTarget)}>УДАЛИТЬ</button></div></article>)}</div>
-      <div className="promotion-preview-actions"><button type="button" disabled={busy || Boolean(disabledReason)} title={disabledReason} onClick={() => void buildPreview()}>СОБРАТЬ ВРУЧНУЮ</button><button type="button" disabled={busy || Boolean(disabledReason)} title={disabledReason} onClick={() => void buildPreview("", true)}>СОБРАТЬ СЛУЧАЙНО</button>{currentPreview && <button type="button" onClick={() => void buildPreview("", true)}>ПЕРЕСОБРАТЬ</button>}</div>{disabledReason && <p className="promotion-disabled-reason">{disabledReason}</p>}
+      <label>{editingId ? "Редактировать задание" : "Новое задание"}<textarea value={draft} maxLength={4000} onChange={(event) => setDraft(event.target.value)} /></label><button className="primary-control" type="button" disabled={busy || !bank || !draft.trim()} onClick={() => void saveItem()}>{editingId ? "СОХРАНИТЬ ЗАДАНИЕ" : "ДОБАВИТЬ ЗАДАНИЕ"}</button>
+      <div className="promotion-bank-items">{bank?.items.map((item, index) => <article key={item.id}><label><input type="checkbox" checked={manualIds.includes(item.id)} disabled={!item.active} onChange={(event) => setManualIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} /><span>{item.text}</span></label><div><button className="secondary-control" aria-label="Переместить выше" type="button" disabled={busy || index === 0} onClick={() => void reorder(index, -1)}>↑</button><button className="secondary-control" aria-label="Переместить ниже" type="button" disabled={busy || index === bank.items.length - 1} onClick={() => void reorder(index, 1)}>↓</button><button className="secondary-control" type="button" onClick={() => { setEditingId(item.id); setDraft(item.text); }}>ИЗМЕНИТЬ</button><button className="secondary-control" type="button" disabled={busy} onClick={() => void mutateItem(item, { active: !item.active })}>{item.active ? "ВЫКЛЮЧИТЬ" : "ВКЛЮЧИТЬ"}</button><button className="danger-control" type="button" disabled={busy} onClick={(event) => remove(item, event.currentTarget)}>УДАЛИТЬ</button></div></article>)}</div>
+      <div className="promotion-preview-actions"><button className="secondary-control" type="button" disabled={busy || Boolean(disabledReason)} title={disabledReason} onClick={() => void buildPreview()}>СОБРАТЬ ВРУЧНУЮ</button><button className="primary-control" type="button" disabled={busy || Boolean(disabledReason)} title={disabledReason} onClick={() => void buildPreview("", true)}>СОБРАТЬ СЛУЧАЙНО</button>{currentPreview && <button className="secondary-control" type="button" onClick={() => void buildPreview("", true)}>ПЕРЕСОБРАТЬ</button>}</div>{disabledReason && <p className="promotion-disabled-reason">{disabledReason}</p>}
     </section>}
     {(!isPhone || bankView === "preview") && <aside className="promotion-preview">{isPhone && <button className="promotion-phone-back" type="button" onClick={() => setBankView("editor")}>← НАЗАД К РЕДАКТОРУ</button>}{currentPreview ? <><header><h3>ТОЧНЫЙ НАБОР</h3><span>{currentPreview.items.length}</span></header><ol>{currentPreview.items.map((item) => <li key={item.id}>{item.text}<button type="button" onClick={() => void buildPreview(item.id)}>ЗАМЕНИТЬ</button></li>)}</ol><label>Подходящий запрос<select value={selectedRequestId} onChange={(event) => setRequestId(event.target.value)}><option value="">Выберите запрос</option>{matchingRequests.map((row) => <option key={row.requestId} value={row.requestId}>{row.nickname}</option>)}</select></label><button className="primary-control" type="button" disabled={busy || !selectedRequestId} onClick={(event) => requestConfirm({ title: "Подтвердить неизменяемый набор", body: "Участник получит именно эти задания в указанном порядке.", opener: event.currentTarget, run: () => void confirmPreview() })}>ПОДТВЕРДИТЬ НАБОР</button></> : <div className="promotion-empty"><strong>ПРЕДПРОСМОТР НЕ СОБРАН</strong><p>{disabledReason || "Выберите задания вручную или соберите случайный набор."}</p></div>}</aside>}
   </div>;

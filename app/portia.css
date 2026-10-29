@@ -1920,6 +1920,9 @@ html[data-motion="reduce"] .promotion-card, html[data-motion="reduce"] .promotio
 .promotion-bank-settings input, .promotion-bank-editor > label > input { min-height: 40px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--line-bright); border-radius: 6px; background: rgba(0,0,0,.16); color: inherit; }
 .promotion-quota-settings { display: grid; grid-template-columns: repeat(3, minmax(90px, 1fr)) auto; }
 .promotion-disabled-reason { margin: 8px 0 0; color: #efaaa3; font: 400 12px/1.45 var(--doc); }
+.promotion-command-state { margin: 8px 0 16px; padding: 9px 12px; border: 1px solid rgba(42,211,190,.35); border-radius: 7px; background: rgba(42,211,190,.05); color: var(--teal); font: 600 12px/1.45 var(--doc); }
+.promotion-command-state.saving { color: var(--muted); border-color: var(--line-bright); background: rgba(255,255,255,.02); }
+.promotion-command-state.error { color: #efaaa3; border-color: rgba(224,125,116,.45); background: rgba(224,125,116,.05); }
 .promotion-bank-items { display: grid; gap: 8px; margin-top: 16px; }
 .promotion-bank-items article { padding: 8px; border: 1px solid var(--line); border-radius: 7px; }
 .promotion-bank-items article > label { display: flex; gap: 8px; font: 400 12px/1.45 var(--doc); }
