@@ -4,9 +4,13 @@ const localBaseURL = "http://127.0.0.1:3000";
 const externalBaseURL = process.env.PORTIA_E2E_BASE_URL;
 const baseURL = externalBaseURL ?? localBaseURL;
 const isCI = Boolean(process.env.CI);
+const visualCandidatesRequested = process.argv.some((argument) =>
+  argument.replaceAll("\\", "/").includes("visual-candidates"),
+);
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testIgnore: visualCandidatesRequested ? [] : ["**/visual-candidates/**"],
   outputDir: "test-results/playwright",
   expect: {
     toHaveScreenshot: {
