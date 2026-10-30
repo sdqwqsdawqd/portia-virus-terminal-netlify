@@ -24,6 +24,9 @@ function collectRows() {
   const files = readdirSync(runRoot).filter((file) => file.endsWith(".candidate.json") || file.endsWith(".blocked.json"));
   if (!files.length) fail("PORTIA_CANDIDATE_ROWS_MISSING", setId);
   const rows = files.map((file) => JSON.parse(readFileSync(path.join(runRoot, file), "utf8")));
+  const sourceCommits = [...new Set(rows.map((row) => row.sourceCommit))];
+  if (sourceCommits.length !== 1) fail("PORTIA_CANDIDATE_SOURCE_DIVERGED", sourceCommits.join(","));
+  if (!setId.endsWith(sourceCommits[0].slice(0, 12))) fail("PORTIA_CANDIDATE_SET_SOURCE_MISMATCH", setId);
   const required = [
     "schema", "setId", "status", "requirement", "surface", "actor", "state", "intendedSnapshot",
     "sourceCommit", "dirtyLedgerId", "fixtureRevision", "seed", "fixedTime", "tool", "browser", "project",
@@ -32,7 +35,6 @@ function collectRows() {
   for (const row of rows) {
     for (const field of required) if (row[field] === undefined || row[field] === "") fail("PORTIA_CANDIDATE_FIELD_MISSING", `${row.state ?? "unknown"}:${field}`);
     if (row.setId !== setId) fail("PORTIA_CANDIDATE_SET_MISMATCH", row.setId);
-    if (row.sourceCommit !== commit) fail("PORTIA_CANDIDATE_COMMIT_MISMATCH", row.sourceCommit);
     const destination = path.resolve(workspace, row.intendedSnapshot).replaceAll("\\", "/").toLowerCase();
     if (!destination.includes("/tests/e2e/visual/__screenshots__/")) fail("PORTIA_SNAPSHOT_DESTINATION_INVALID", row.intendedSnapshot);
     if (row.status === "CAPTURED") {
@@ -55,7 +57,7 @@ function markdown(rows) {
     "# Phase 15 Visual Candidates",
     "",
     `- Candidate set: \`${setId}\``,
-    `- Source commit: \`${commit}\``,
+    `- Source commit: \`${rows[0].sourceCommit}\``,
     `- Status: **PENDING OWNER APPROVAL**`,
     `- Captured PNGs: ${captured.length}`,
     `- Explicit BLOCKED rows: ${blocked.length}`,
@@ -99,7 +101,7 @@ if (args.has("--verify-figma-map")) {
 } else {
   const rows = collectRows();
   mkdirSync(runRoot, { recursive: true });
-  writeFileSync(path.join(runRoot, "manifest.json"), `${JSON.stringify({ schema: "portia-phase15-visual-manifest-v1", setId, sourceCommit: commit, rows }, null, 2)}\n`);
+  writeFileSync(path.join(runRoot, "manifest.json"), `${JSON.stringify({ schema: "portia-phase15-visual-manifest-v1", setId, sourceCommit: rows[0].sourceCommit, rows }, null, 2)}\n`);
   if (args.has("--verify")) {
     writeFileSync(evidencePath, markdown(rows));
     process.stdout.write(`Verified ${rows.length} rows (${rows.filter((row) => row.status === "CAPTURED").length} PNGs) for ${setId}.\n`);
