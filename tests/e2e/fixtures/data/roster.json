@@ -1,0 +1,40 @@
+{
+  "schema": "portia-phase15-actor-roster-v1",
+  "revision": "phase15-actors-2026-10-30",
+  "target": {
+    "status": "BLOCKED",
+    "safeMarker": "non-production-target-not-provisioned"
+  },
+  "actors": [
+    {
+      "id": "visitor",
+      "role": "visitor",
+      "lifecycleOwner": "test-runner",
+      "cleanup": "isolated browser context only"
+    },
+    {
+      "id": "participant-fixture",
+      "role": "participant",
+      "lifecycleOwner": "staging-fixture-owner",
+      "cleanup": "delete namespaced Promotion rows and device binding"
+    },
+    {
+      "id": "editor-fixture",
+      "role": "editor",
+      "lifecycleOwner": "staging-fixture-owner",
+      "cleanup": "revoke editor grant, delete disposable auth user"
+    },
+    {
+      "id": "promo-reviewer-fixture",
+      "role": "promo-reviewer",
+      "lifecycleOwner": "staging-fixture-owner",
+      "cleanup": "release claims, revoke promo grant, delete disposable auth user"
+    },
+    {
+      "id": "owner-fixture",
+      "role": "owner",
+      "lifecycleOwner": "repository-owner",
+      "cleanup": "delete disposable owner identity after approval run"
+    }
+  ]
+}
