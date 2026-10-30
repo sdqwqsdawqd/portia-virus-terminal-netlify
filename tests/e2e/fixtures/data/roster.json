@@ -15,26 +15,26 @@
     {
       "id": "participant-fixture",
       "role": "participant",
-      "lifecycleOwner": "staging-fixture-owner",
-      "cleanup": "delete namespaced Promotion rows and device binding"
+      "lifecycleOwner": "phase-16-isolated-fixture",
+      "cleanup": "Phase 16 only: delete namespaced Promotion rows and device binding"
     },
     {
       "id": "editor-fixture",
       "role": "editor",
-      "lifecycleOwner": "staging-fixture-owner",
-      "cleanup": "revoke editor grant, delete disposable auth user"
+      "lifecycleOwner": "phase-16-isolated-fixture",
+      "cleanup": "Phase 16 only: revoke editor grant and delete disposable auth user"
     },
     {
       "id": "promo-reviewer-fixture",
       "role": "promo-reviewer",
-      "lifecycleOwner": "staging-fixture-owner",
-      "cleanup": "release claims, revoke promo grant, delete disposable auth user"
+      "lifecycleOwner": "phase-16-isolated-fixture",
+      "cleanup": "Phase 16 only: release claims, revoke promo grant and delete disposable auth user"
     },
     {
       "id": "owner-fixture",
       "role": "owner",
       "lifecycleOwner": "repository-owner",
-      "cleanup": "delete disposable owner identity after approval run"
+      "cleanup": "pre-existing owner account; never delete or modify"
     }
   ]
 }

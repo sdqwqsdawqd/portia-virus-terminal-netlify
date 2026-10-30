@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   actorAvailability,
   actorRoster,
+  type ActorSessionProof,
   type ActorRole,
 } from "../tests/e2e/fixtures/actors.ts";
 
@@ -22,6 +23,11 @@ const safeEnvironment = {
   PORTIA_E2E_PRODUCTION_PROJECT_IDS: "productionproject000",
   PORTIA_E2E_ISOLATED_PROJECT_IDS: projectId,
 };
+const editorProof: ActorSessionProof = Object.freeze({
+  role: "editor",
+  status: "VERIFIED",
+  source: "server-probe",
+});
 
 describe("Phase 15 actor roster", () => {
   test("declares visitor, participant, editor, reviewer and owner cleanup ownership", () => {
@@ -52,19 +58,54 @@ describe("Phase 15 actor roster", () => {
     }
   });
 
-  test("safe staging releases role declarations without sharing authority", () => {
+  test("safe target strings alone never release privileged role declarations", () => {
     for (const role of fixtureRoles) {
       const result = actorAvailability(role, safeEnvironment);
-      assert.equal(result.status, "READY");
-      if (result.status === "READY") assert.equal(result.actor.role, role);
+      assert.equal(result.status, "BLOCKED");
+      if (result.status === "BLOCKED") {
+        assert.equal(result.code, "AUTHENTICATED_SESSION_UNPROVEN");
+      }
+    }
+  });
+
+  test("a matching server proof releases only its isolated role lane", () => {
+    const editor = actorAvailability("editor", safeEnvironment, editorProof);
+    assert.equal(editor.status, "READY");
+    if (editor.status === "READY") {
+      assert.equal(editor.actor.role, "editor");
+      assert.equal(editor.sessionProof, editorProof);
+    }
+
+    const reviewer = actorAvailability("promo-reviewer", safeEnvironment, editorProof);
+    assert.equal(reviewer.status, "BLOCKED");
+    if (reviewer.status === "BLOCKED") {
+      assert.equal(reviewer.code, "AUTHENTICATED_SESSION_UNPROVEN");
     }
   });
 
   test("a production-listed project remains blocked before role setup", () => {
-    const result = actorAvailability("editor", {
-      ...safeEnvironment,
-      PORTIA_E2E_PRODUCTION_PROJECT_IDS: projectId,
-    });
+    const result = actorAvailability(
+      "editor",
+      { ...safeEnvironment, PORTIA_E2E_PRODUCTION_PROJECT_IDS: projectId },
+      editorProof,
+    );
     assert.equal(result.status, "BLOCKED");
+    if (result.status === "BLOCKED") assert.equal(result.code, "TARGET_NOT_ISOLATED");
+  });
+
+  test("unknown and overlapping target inventories remain blocked before session proof", () => {
+    const unknown = actorAvailability("editor", {
+      ...safeEnvironment,
+      PORTIA_E2E_ISOLATED_PROJECT_IDS: "uvwxyzabcdefghijklmn",
+    }, editorProof);
+    assert.equal(unknown.status, "BLOCKED");
+    if (unknown.status === "BLOCKED") assert.equal(unknown.code, "TARGET_NOT_ISOLATED");
+
+    const overlap = actorAvailability("editor", {
+      ...safeEnvironment,
+      PORTIA_E2E_PRODUCTION_PROJECT_IDS: `uvwxyzabcdefghijklmn,${projectId}`,
+    }, editorProof);
+    assert.equal(overlap.status, "BLOCKED");
+    if (overlap.status === "BLOCKED") assert.equal(overlap.code, "TARGET_NOT_ISOLATED");
   });
 });

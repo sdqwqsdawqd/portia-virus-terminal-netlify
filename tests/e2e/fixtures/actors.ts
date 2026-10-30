@@ -19,6 +19,16 @@ export type ActorDeclaration = Readonly<{
   cleanup: string;
 }>;
 
+export type ActorSessionProof = Readonly<{
+  role: Exclude<ActorRole, "visitor">;
+  status: "VERIFIED";
+  source: "server-probe";
+}>;
+
+export type ActorBlockCode =
+  | "TARGET_NOT_ISOLATED"
+  | "AUTHENTICATED_SESSION_UNPROVEN";
+
 type RosterFile = {
   schema: "portia-phase15-actor-roster-v1";
   revision: string;
@@ -36,23 +46,36 @@ export const actorRoster = Object.freeze({
 
 export class ActorLaneBlockedError extends Error {
   readonly role: ActorRole;
+  readonly code: ActorBlockCode;
   readonly reason: string;
 
-  constructor(role: ActorRole, reason: string) {
-    super(`[PORTIA_E2E_ROLE_BLOCKED:${role}] ${reason}`);
+  constructor(role: ActorRole, code: ActorBlockCode, reason: string) {
+    super(`[PORTIA_E2E_ROLE_BLOCKED:${role}:${code}] ${reason}`);
     this.name = "ActorLaneBlockedError";
     this.role = role;
+    this.code = code;
     this.reason = reason;
   }
 }
 
 export type ActorAvailability =
-  | Readonly<{ status: "READY"; actor: ActorDeclaration; target?: SafeMutationTarget }>
-  | Readonly<{ status: "BLOCKED"; actor: ActorDeclaration; reason: string }>;
+  | Readonly<{
+      status: "READY";
+      actor: ActorDeclaration;
+      target?: SafeMutationTarget;
+      sessionProof?: ActorSessionProof;
+    }>
+  | Readonly<{
+      status: "BLOCKED";
+      actor: ActorDeclaration;
+      code: ActorBlockCode;
+      reason: string;
+    }>;
 
 export function actorAvailability(
   role: ActorRole,
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  sessionProof?: ActorSessionProof,
 ): ActorAvailability {
   const actor = actorRoster.actors.find((candidate) => candidate.role === role);
   if (!actor) throw new Error(`[PORTIA_E2E_ROSTER_INVALID:${role}]`);
@@ -60,12 +83,26 @@ export function actorAvailability(
 
   try {
     const target = requireSafeMutationTargetFromEnvironment(environment);
-    return Object.freeze({ status: "READY", actor, target });
+    if (
+      !sessionProof ||
+      sessionProof.status !== "VERIFIED" ||
+      sessionProof.source !== "server-probe" ||
+      sessionProof.role !== role
+    ) {
+      return Object.freeze({
+        status: "BLOCKED",
+        actor,
+        code: "AUTHENTICATED_SESSION_UNPROVEN",
+        reason: "a matching immutable server-derived session proof is required",
+      });
+    }
+    return Object.freeze({ status: "READY", actor, target, sessionProof });
   } catch (error) {
     if (!(error instanceof MutationTargetBlockedError)) throw error;
     return Object.freeze({
       status: "BLOCKED",
       actor,
+      code: "TARGET_NOT_ISOLATED",
       reason: `safe target unavailable (${error.code})`,
     });
   }
@@ -74,10 +111,11 @@ export function actorAvailability(
 export function requireActor(
   role: ActorRole,
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  sessionProof?: ActorSessionProof,
 ) {
-  const availability = actorAvailability(role, environment);
+  const availability = actorAvailability(role, environment, sessionProof);
   if (availability.status === "BLOCKED") {
-    throw new ActorLaneBlockedError(role, availability.reason);
+    throw new ActorLaneBlockedError(role, availability.code, availability.reason);
   }
   return availability;
 }
