@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const development = process.env.NODE_ENV !== "production";
+const upgradeInsecureRequests = !development && process.env.PORTIA_E2E_ALLOW_HTTP !== "1";
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -15,7 +16,7 @@ const contentSecurityPolicy = [
   "media-src 'self' data: blob: https:",
   "worker-src 'self' blob:",
   "frame-src https://docs.google.com https://sdqwqsdawqd.github.io https://www.youtube.com https://www.youtube-nocookie.com",
-  ...(development ? [] : ["upgrade-insecure-requests"]),
+  ...(upgradeInsecureRequests ? ["upgrade-insecure-requests"] : []),
 ].join("; ");
 
 const nextConfig: NextConfig = {

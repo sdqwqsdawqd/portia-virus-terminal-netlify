@@ -1570,7 +1570,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
         <footer className="taskbar">
           <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
-          <div className="taskbar-apps" aria-label="Открытые программы">
+          <div className="taskbar-apps" role="toolbar" aria-label="Открытые программы">
             {taskbarOrder.filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
               if (suppressTaskbarClick.current) { suppressTaskbarClick.current = false; return; }
               // A window on its way out comes back, like a minimised one.

@@ -32,6 +32,7 @@ export default defineConfig({
         command:
           "npm run build && npm run start -- --hostname 127.0.0.1 --port 3000",
         url: localBaseURL,
+        env: { PORTIA_E2E_ALLOW_HTTP: "1" },
         reuseExistingServer: false,
         timeout: 180_000,
       },

@@ -29,10 +29,12 @@ export async function installDeterminism(page: Page) {
       state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
       return state / 0x1_0000_0000;
     };
-    window.localStorage.setItem(
-      "portia-desktop-settings-v1",
-      JSON.stringify(contract.settings),
-    );
+    if (!window.localStorage.getItem("portia-desktop-settings-v1")) {
+      window.localStorage.setItem(
+        "portia-desktop-settings-v1",
+        JSON.stringify(contract.settings),
+      );
+    }
     window.sessionStorage.setItem("portia-boot-seen-v1", "1");
     window.sessionStorage.setItem("portia-e2e-fixture-revision", contract.revision);
     window.sessionStorage.setItem("portia-e2e-random-probe", JSON.stringify(randomProbe));

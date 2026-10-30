@@ -26,7 +26,38 @@ export type DiagnosticAllowlistRow = Readonly<{
   expires: string;
 }>;
 
-export const diagnosticAllowlist: readonly DiagnosticAllowlistRow[] = [];
+const promotionUnboundProjects = [
+  "chromium-desktop",
+  "chromium-dpr125",
+  "firefox-desktop",
+  "webkit-phone",
+  "chromium-phone",
+] as const;
+
+export const diagnosticAllowlist: readonly DiagnosticAllowlistRow[] = promotionUnboundProjects.flatMap(
+  (project) => [
+    {
+      kind: "response" as const,
+      source: "fetch",
+      text: "GET /api/promotion/status -> 404",
+      project,
+      requirement: "STAB-BASE-02",
+      reason: "An unbound device is the expected first-visit Promotion state.",
+      owner: "promotion-api-contract",
+      expires: "2027-01-31T00:00:00.000Z",
+    },
+    {
+      kind: "console" as const,
+      source: "browser:/api/promotion/status",
+      text: "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      project,
+      requirement: "STAB-BASE-02",
+      reason: "The browser mirrors the expected unbound-device 404 to its console.",
+      owner: "promotion-api-contract",
+      expires: "2027-01-31T00:00:00.000Z",
+    },
+  ],
+);
 
 const hydrationPattern = /hydration|server rendered html|did not match|react error #418/i;
 const secretPattern =
@@ -102,10 +133,18 @@ const deterministicDiagnosticNow = "2026-10-30T06:00:00.000Z";
 export async function installDiagnostics(page: Page, ledger: DiagnosticLedger) {
   page.on("console", (message) => {
     const text = message.text();
+    const locationUrl = message.location().url;
+    let source = "browser";
+    try {
+      const location = new URL(locationUrl);
+      source = location.origin === new URL(page.url()).origin
+        ? `browser:${location.pathname}`
+        : `browser:${location.hostname}`;
+    } catch {}
     if (hydrationPattern.test(text)) {
       ledger.record({ kind: "hydration", source: "console", text });
     } else if (message.type() === "error") {
-      ledger.record({ kind: "console", source: "browser", text });
+      ledger.record({ kind: "console", source, text });
     }
   });
   page.on("pageerror", (error) => {
@@ -120,10 +159,15 @@ export async function installDiagnostics(page: Page, ledger: DiagnosticLedger) {
   });
   page.on("response", (response) => {
     if (response.status() < 400) return;
+    const responseUrl = new URL(response.url());
+    let target = responseUrl.hostname;
+    try {
+      if (responseUrl.origin === new URL(page.url()).origin) target = responseUrl.pathname;
+    } catch {}
     ledger.record({
       kind: "response",
       source: response.request().resourceType(),
-      text: `${response.request().method()} ${response.url()}`,
+      text: `${response.request().method()} ${target} -> ${response.status()}`,
       status: response.status(),
     });
   });

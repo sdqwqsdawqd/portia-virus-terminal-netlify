@@ -26,13 +26,13 @@ type PortiaFixtures = {
 
 export const test = base.extend<PortiaFixtures>({
   actorRole: ["visitor", { option: true }],
-  actor: async ({ actorRole }, use, testInfo) => {
+  actor: async ({ actorRole }, fixtureUse, testInfo) => {
     const actor = actorAvailability(actorRole);
     testInfo.skip(
       actor.status === "BLOCKED",
       actor.status === "BLOCKED" ? `BLOCKED: ${actor.reason}` : undefined,
     );
-    await use(actor);
+    await fixtureUse(actor);
   },
   determinism: [
     async ({ page }, use) => {
