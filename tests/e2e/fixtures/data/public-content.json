@@ -1,0 +1,11 @@
+{
+  "schema": "portia-phase15-public-fixtures-v1",
+  "revision": "phase15-public-2026-10-30",
+  "google": {
+    "sheetHtml": "<!doctype html><html lang=\"ru\"><body><p>Таблица недоступна в deterministic iframe fixture.</p></body></html>"
+  },
+  "roblox": {
+    "users": { "data": [] },
+    "thumbnails": { "data": [] }
+  }
+}

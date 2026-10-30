@@ -52,7 +52,7 @@ export type ActorAvailability =
 
 export function actorAvailability(
   role: ActorRole,
-  environment: NodeJS.ProcessEnv = process.env,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ): ActorAvailability {
   const actor = actorRoster.actors.find((candidate) => candidate.role === role);
   if (!actor) throw new Error(`[PORTIA_E2E_ROSTER_INVALID:${role}]`);
@@ -73,7 +73,7 @@ export function actorAvailability(
 
 export function requireActor(
   role: ActorRole,
-  environment: NodeJS.ProcessEnv = process.env,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   const availability = actorAvailability(role, environment);
   if (availability.status === "BLOCKED") {

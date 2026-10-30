@@ -88,7 +88,7 @@ export function requireSafeMutationTarget(
 }
 
 export function requireSafeMutationTargetFromEnvironment(
-  environment: NodeJS.ProcessEnv = process.env,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   return requireSafeMutationTarget({
     confirmation: environment.PORTIA_E2E_MUTATION_CONFIRM,
