@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const workspace = process.cwd();
@@ -9,6 +9,8 @@ const setId = process.env.PORTIA_VISUAL_SET_ID?.trim() || `phase15-current-${com
 const runRoot = path.resolve(workspace, "tests/e2e/visual-candidates/.runs", setId);
 const evidencePath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-VISUAL-CANDIDATES.md");
 const frameMapPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-FRAME-TEST-MAP.md");
+const approvalPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-VISUAL-APPROVAL.md");
+const snapshotRoot = path.resolve(workspace, "tests/e2e/visual/__screenshots__");
 const args = new Set(process.argv.slice(2));
 
 function fail(code, detail = "") {
@@ -17,6 +19,87 @@ function fail(code, detail = "") {
 
 function sha256(file) {
   return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+function approvalRows() {
+  if (!existsSync(approvalPath)) fail("PORTIA_APPROVAL_LEDGER_MISSING");
+  const rows = readFileSync(approvalPath, "utf8")
+    .split(/\r?\n/)
+    .filter((line) => /^\| \*\*(APPROVED|REJECTED|PENDING)\*\* \|/.test(line))
+    .map((line) => {
+      const columns = line.split("|").map((column) => column.trim());
+      const verdict = columns[1]?.replaceAll("*", "");
+      const hash = columns[5]?.match(/[a-f0-9]{64}/)?.[0];
+      const intendedSnapshot = columns[7]?.match(/`([^`]+)`/)?.[1];
+      if (!verdict || !hash || !intendedSnapshot) fail("PORTIA_APPROVAL_ROW_INVALID", line);
+      return { verdict, hash, intendedSnapshot };
+    });
+  if (!rows.length) fail("PORTIA_APPROVAL_ROWS_MISSING");
+  return rows;
+}
+
+function snapshotFiles(directory) {
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const absolute = path.join(directory, entry.name);
+    return entry.isDirectory() ? snapshotFiles(absolute) : [absolute];
+  });
+}
+
+function validateApprovalRows(rows) {
+  const pending = rows.filter((row) => row.verdict === "PENDING");
+  if (pending.length) fail("PORTIA_APPROVAL_PENDING", String(pending.length));
+  const approved = rows.filter((row) => row.verdict === "APPROVED");
+  const approvedHashes = new Set(approved.map((row) => row.hash));
+  const approvedDestinations = new Set(approved.map((row) => row.intendedSnapshot));
+  if (approved.length !== approvedHashes.size) fail("PORTIA_APPROVAL_HASH_DUPLICATE");
+  if (approved.length !== approvedDestinations.size) fail("PORTIA_APPROVAL_DESTINATION_DUPLICATE");
+  return approved;
+}
+
+function promoteApproved() {
+  const approved = validateApprovalRows(approvalRows());
+  const candidates = collectRows().filter((row) => row.status === "CAPTURED");
+  const byHash = new Map(candidates.map((row) => [row.sha256, row]));
+  for (const approval of approved) {
+    const candidate = byHash.get(approval.hash);
+    if (!candidate) fail("PORTIA_APPROVED_CANDIDATE_MISSING", approval.hash);
+    if (candidate.intendedSnapshot !== approval.intendedSnapshot) {
+      fail("PORTIA_APPROVED_DESTINATION_MISMATCH", approval.intendedSnapshot);
+    }
+    const source = path.resolve(workspace, candidate.candidateFile);
+    const destination = path.resolve(workspace, approval.intendedSnapshot);
+    if (!destination.startsWith(`${snapshotRoot}${path.sep}`)) fail("PORTIA_PROMOTION_DESTINATION_REFUSED", destination);
+    if (existsSync(destination) && sha256(destination) !== approval.hash) {
+      fail("PORTIA_PROMOTION_WOULD_OVERWRITE", approval.intendedSnapshot);
+    }
+    mkdirSync(path.dirname(destination), { recursive: true });
+    copyFileSync(source, destination);
+    if (sha256(destination) !== approval.hash) fail("PORTIA_PROMOTION_COPY_MISMATCH", approval.intendedSnapshot);
+  }
+  process.stdout.write(`Promoted ${approved.length} owner-approved snapshots without transformation.\n`);
+}
+
+function verifyPromotion() {
+  const rows = approvalRows();
+  const approved = validateApprovalRows(rows);
+  const approvedByDestination = new Map(approved.map((row) => [path.resolve(workspace, row.intendedSnapshot), row]));
+  for (const row of approved) {
+    const destination = path.resolve(workspace, row.intendedSnapshot);
+    if (!destination.startsWith(`${snapshotRoot}${path.sep}`)) fail("PORTIA_PROMOTION_DESTINATION_REFUSED", destination);
+    if (!existsSync(destination) || !statSync(destination).isFile()) fail("PORTIA_APPROVED_SNAPSHOT_MISSING", row.intendedSnapshot);
+    if (sha256(destination) !== row.hash) fail("PORTIA_APPROVED_SNAPSHOT_HASH_MISMATCH", row.intendedSnapshot);
+  }
+  const trackedSnapshots = snapshotFiles(snapshotRoot).filter((file) => file.toLowerCase().endsWith(".png"));
+  for (const snapshot of trackedSnapshots) {
+    const approval = approvedByDestination.get(snapshot);
+    if (!approval) fail("PORTIA_UNAPPROVED_SNAPSHOT_PRESENT", path.relative(workspace, snapshot));
+    if (sha256(snapshot) !== approval.hash) fail("PORTIA_UNAPPROVED_SNAPSHOT_HASH", path.relative(workspace, snapshot));
+  }
+  if (trackedSnapshots.length !== approved.length) {
+    fail("PORTIA_PROMOTION_COUNT_MISMATCH", `${trackedSnapshots.length}/${approved.length}`);
+  }
+  process.stdout.write(`Verified ${approved.length} exact owner-approved snapshot bytes; ${rows.length - approved.length} non-approved rows excluded.\n`);
 }
 
 function collectRows() {
@@ -96,7 +179,12 @@ function verifyFigmaMap() {
   process.stdout.write(`Verified Figma map for ${rows.length} candidate rows.\n`);
 }
 
-if (args.has("--verify-figma-map")) {
+if (args.has("--promote-approved")) {
+  promoteApproved();
+  verifyPromotion();
+} else if (args.has("--verify-promotion")) {
+  verifyPromotion();
+} else if (args.has("--verify-figma-map")) {
   verifyFigmaMap();
 } else {
   const rows = collectRows();
