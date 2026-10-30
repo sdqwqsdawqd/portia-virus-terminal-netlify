@@ -11,6 +11,10 @@
     "start": "next start",
     "test": "node --experimental-strip-types --test lib/*.test.ts",
     "test:promotion-live": "node --experimental-strip-types --test lib/portia-promotion-live.test.ts",
+    "test:e2e:smoke": "playwright test --project=chromium-desktop --grep @smoke",
+    "test:e2e": "playwright test",
+    "test:e2e:candidates": "playwright test tests/e2e/visual-candidates",
+    "test:e2e:visual": "playwright test tests/e2e/visual --project=chromium-desktop --project=chromium-dpr125",
     "check": "npm test && npm run build && npm run lint",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
@@ -23,6 +27,8 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
