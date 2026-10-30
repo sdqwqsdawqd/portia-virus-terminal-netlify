@@ -1,48 +1,52 @@
 # Phase 15 Figma Authority Contract
 
-**Status:** BLOCKED — OWNER DECISION REQUIRED  
-**Preflight date:** 2026-10-30  
+**Status:** CURRENT/PROPOSED EVIDENCE CREATED — BASELINE APPROVAL PENDING
+
+**Owner confirmation:** 2026-10-30 (`да`)
+
 **Candidate set:** `phase15-current-4ec66b7d693c`
 
-## Capability Preflight
+## Authority
 
-| Field | Evidence |
+| Field | Recorded value |
 |---|---|
-| Authenticated Figma handle | `Qloxz` |
-| Available plan | `Qloxz's team` (`team::1697638745533759229`) |
-| Seat / role | View seat / admin role |
-| Plan `specs_enabled` | `true` |
-| Code Layers | enabled |
+| Figma file | [PORTIA OS — Phase 15 Baseline](https://www.figma.com/design/GEf7NB9v2GZN80cMzRvUVQ) |
+| File key | `GEf7NB9v2GZN80cMzRvUVQ` |
+| Figma work revision | Initial file state created and validated on 2026-10-30 in MCP session `77cd90e1-9022-4a59-8906-de90227ad904`; the Starter connector exposes no immutable version ID, so node IDs plus this session are the exact reproducible revision locator |
+| Named signer | `Qloxz` |
+| Representative phone | Playwright `iPhone 13`, viewport `390×844`, DPR `3`; physical-device UAT remains a later gate |
+| Repository authority | [`15-UI-SPEC.md`](../15-UI-SPEC.md) |
 | Native `figma.spec` Plugin API | Not exposed by the current `use_figma` Plugin API surface |
-| Standalone Figspec creation | Exposed by the connector, but not selected or created before owner confirmation |
+| Plan `specs_enabled` | `true` |
+| Baseline approval | **PENDING** — no frame has been promoted |
 
-The repository contract [15-UI-SPEC.md](../15-UI-SPEC.md) remains authoritative unless a native spec is explicitly selected and proven writable. A Design-file fallback may store CURRENT/PROPOSED evidence frames and a portable link to the committed repository contract.
+The Figma file is the editable visual evidence surface. The committed UI-SPEC remains normative because the current Plugin API cannot author or verify a native spec revision.
 
-## Pending Owner Authority
+## Starter Plan Layout Variance
 
-| Required value | Proposed default | Status |
-|---|---|---|
-| Authoritative file | Create a new Figma Design file named `PORTIA OS — Phase 15 Baseline` in `Qloxz's team` | PENDING |
-| File URL / key | Created only after confirmation | PENDING |
-| Exact Figma revision | Recorded after page creation | PENDING |
-| Named signer | `Qloxz` | PENDING CONFIRMATION |
-| Representative phone | Playwright `iPhone 13`, viewport `390×844`, DPR `3`; physical device remains a later UAT gate | PENDING CONFIRMATION |
+Figma Starter rejected the requested nine pages with a hard three-page limit. The same authority structure is preserved without merging CURRENT and PROPOSED:
+
+| Page | Contained authority areas |
+|---|---|
+| `00 CURRENT BASELINE` | Sections `00 Evidence`, `01 Foundations CURRENT`, `02 Desktop CURRENT`, `03 Applications CURRENT`, `04 Editor CURRENT`, `05 Promotion CURRENT`, `06 Motion CURRENT` |
+| `01 PROPOSED` | Typography hierarchy, three-mode motion and deterministic-evidence proposals; visibly marked **NOT APPROVED** |
+| `02 APPROVED FOR BASELINE` | Empty; zero child nodes at post-build validation |
+
+This is the closest lossless representation available on Starter. Creating nine top-level pages requires a Figma plan upgrade.
+
+## Validation Record
+
+- CURRENT contains 58 editable `Evidence/Card` instances: 23 captured candidates and 35 explicit BLOCKED states.
+- CURRENT and PROPOSED contain no image-filled node or flattened full-UI screenshot.
+- Text uses only the product families `IBM Plex Mono` and `Golos Text`.
+- The representative CURRENT composition and the complete PROPOSED composition were visually inspected after layout correction.
+- All 35 BLOCKED status labels use the dedicated amber semantic token; CAPTURED remains green.
+- `02 APPROVED FOR BASELINE` was read back with `childCount: 0`.
+- The Starter MCP tool-call quota was reached only after the validated file state had been written; no later Figma mutation was attempted.
 
 ## Privacy and Portability Rules
 
-- Store no local filesystem path, localhost URL, cookie, credential, employee row, nickname, reviewer note, private question or answer key.
-- CURRENT frames map only to exact candidate hashes from `15-VISUAL-CANDIDATES.md`.
+- No local filesystem path, localhost URL, cookie, credential, employee row, nickname, reviewer note, private question or answer key is stored in Figma.
+- CURRENT cards reference exact candidate hashes from `15-VISUAL-CANDIDATES.md`; candidate PNGs remain repository evidence and are not embedded as flattened deliverables.
 - PROPOSED remains visibly separate from CURRENT.
-- `08 APPROVED FOR BASELINE` remains empty until Plan 15-05 receives a named approval for exact hashes.
-
-## Required Pages After Confirmation
-
-1. `00 Evidence`
-2. `01 Foundations CURRENT`
-3. `02 Desktop CURRENT`
-4. `03 Applications CURRENT`
-5. `04 Editor CURRENT`
-6. `05 Promotion CURRENT`
-7. `06 Motion CURRENT`
-8. `07 PROPOSED`
-9. `08 APPROVED FOR BASELINE`
+- `02 APPROVED FOR BASELINE` remains empty until Plan 15-05 records named approval for exact hashes.
