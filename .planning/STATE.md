@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Стабилизация PORTIA OS
 status: executing
-stopped_at: Completed 15-03-PLAN.md
-last_updated: "2026-10-30T10:48:25.216Z"
+stopped_at: Completed 15-04-PLAN.md
+last_updated: "2026-10-30T11:06:11.068Z"
 last_activity: 2026-10-30
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
-Plan: 4 of 5
-Status: Ready to execute
+Plan: 5 of 5
+Status: Awaiting named owner visual verdicts
 Last activity: 2026-10-30
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Progress: [██████░░░░] 60%
 | Phase 15 P01 | 8 min | 3 tasks | 5 files |
 | Phase 15 P02 | 8 min | 3 tasks | 9 files |
 | Phase 15 P03 | 47 min | 3 tasks | 20 files |
+| Phase 15 P04 | 38 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -60,6 +61,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [v1.3 roadmap]: Every requirement belongs to exactly one phase; browser/live/visual/UAT evidence is required even where code already exists.
 - [v1.3 roadmap]: Decomposition follows approved characterization; Promotion proof follows isolated Supabase staging.
 - [v1.3 roadmap]: Figma approval, managed security scan and physical owner PC/phone UAT remain honest open gates until performed.
+- [Phase 15]: Figma Starter preserves the nine authority areas as seven CURRENT sections plus separate PROPOSED and empty APPROVED pages because the plan permits only three pages.
+- [Phase 15]: Persisted candidate evidence remains bound to source commit `4ec66b7d693c`; later evidence commits do not change its byte identity.
 
 ### Pending Todos
 
@@ -68,7 +71,7 @@ Full decision history: `.planning/PROJECT.md`.
 ### Blockers/Concerns
 
 - [Phase 15] Existing dirty package/planning and quick/UI-review artifacts need an ownership ledger; preserve them and do not reset or absorb them automatically.
-- [Phase 15] Figma authority, owner device/browser matrix and final motion preference contract require owner confirmation.
+- [Phase 15] Figma destination, signer and representative emulated phone are selected; 23 candidate hashes still require explicit APPROVED/REJECTED owner verdicts.
 - [Phase 16] Dedicated isolated Supabase project/branch, credentials and disposable fixtures are not yet proven available.
 - [Phase 21] The previous deep security scan never started; a supported managed profile is still required.
 - [Phase 22] Physical owner PC (including DPR 1.25) and phone UAT has not occurred and blocks milestone completion.
@@ -84,10 +87,10 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-10-30T10:48:25.216Z
-Stopped at: Completed 15-03-PLAN.md
-Resume file: .planning/phases/PORTIA-15-baseline/15-04-PLAN.md
+Last session: 2026-10-30T11:06:11.068Z
+Stopped at: Completed 15-04-PLAN.md
+Resume file: .planning/phases/PORTIA-15-baseline/15-05-PLAN.md
 
 ## Operator Next Step
 
-Review and approve the v1.3 roadmap, then run `$gsd-plan-phase 15`.
+Review CURRENT and PROPOSED in the Phase 15 Figma file, then execute the 15-05 named-owner per-hash approval gate.

@@ -47,11 +47,11 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 15-03-PLAN.md — deterministic actor fixtures, browser diagnostics, semantic page objects and representative flows (STAB-BASE-02, STAB-BASE-05)
+- [x] 15-03-PLAN.md — deterministic actor fixtures, browser diagnostics, semantic page objects and representative flows (STAB-BASE-02, STAB-BASE-05)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 15-04-PLAN.md — candidate-only visual/motion captures and authoritative CURRENT/PROPOSED Figma mapping (STAB-BASE-03, STAB-BASE-04)
+- [x] 15-04-PLAN.md — candidate-only visual/motion captures and authoritative CURRENT/PROPOSED Figma mapping (STAB-BASE-03, STAB-BASE-04)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
