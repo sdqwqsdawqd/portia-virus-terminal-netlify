@@ -1,4 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+
+execFileSync(
+  process.execPath,
+  ["--experimental-strip-types", "scripts/phase15-e2e-preflight.mjs", "visitor"],
+  { cwd: process.cwd(), env: process.env, stdio: "inherit" },
+);
 
 const localBaseURL = "http://127.0.0.1:3000";
 const externalBaseURL = process.env.PORTIA_E2E_BASE_URL;

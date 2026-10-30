@@ -11,6 +11,16 @@ This directory contains the Phase 15 Playwright contract. It preserves the curre
 
 Run `node --version` before package or browser commands. A different major version is not accepted as baseline evidence.
 
+The tracked preflight runs before Playwright discovery. It loads the same ignored local environment files as Next.js and checks only variable presence and shape. Errors print variable names and stable reason codes, never supplied values.
+
+Clean-checkout PowerShell sequence:
+
+```powershell
+npm.cmd ci
+npm.cmd run test:e2e:preflight
+npm.cmd run test:e2e -- --retries=0
+```
+
 ## Commands
 
 ```text
@@ -18,6 +28,7 @@ npm run test:e2e:smoke
 npm run test:e2e
 npm run test:e2e:candidates
 npm run test:e2e:visual
+npm run test:e2e:mutation
 ```
 
 Candidate capture and approved visual comparison are deliberately separate. None of these commands updates snapshots. Candidate images belong under `tests/e2e/visual-candidates/.runs/`; only owner-approved exact bytes may be copied to tracked snapshot locations.
@@ -49,5 +60,8 @@ Mutation-capable setup requires all of the following:
 - `PORTIA_E2E_TARGET_ID` containing the 20-character Supabase project ref.
 - `PORTIA_E2E_SUPABASE_URL` equal to the HTTPS root URL for that ref.
 - `PORTIA_E2E_PRODUCTION_PROJECT_IDS` listing every known production ref; equality blocks setup.
+- `PORTIA_E2E_ISOLATED_PROJECT_IDS` listing the explicitly authorized isolated refs; the target must be in this list.
+
+Public visitor preflight also requires `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and a 32+ character `PORTIA_PROMOTION_DEVICE_SECRET`. `.env.example` documents formats only. Keep actual values in ignored operator-local environment files.
 
 Call `requireSafeMutationTargetFromEnvironment()` before browser navigation, authentication-state creation or database fixtures. Guard failures expose only a reason code and variable names. They never reflect a supplied URL, project ref, credential, token or cookie.
