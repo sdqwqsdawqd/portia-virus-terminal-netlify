@@ -5,7 +5,7 @@ milestone_name: Стабилизация PORTIA OS
 status: executing
 stopped_at: Completed 15-06-PLAN.md
 last_updated: "2026-10-31"
-last_activity: 2026-10-31 -- Completed 15-06; awaiting 15-07 target attestation
+last_activity: 2026-10-31 -- Replanned 15-07..15-15 for local/read-only execution
 progress:
   total_phases: 8
   completed_phases: 0
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 Phase: 15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
 Plan: 6 of 15
-Status: Awaiting 15-07 isolated-target attestation
-Last activity: 2026-10-31 -- Completed 15-06
+Status: Ready to execute read-only gap plans; remote role proof deferred
+Last activity: 2026-10-31 -- Replanned remaining Phase 15 gaps without production mutation
 
 Progress: [████░░░░░░] 40%
 
@@ -76,7 +76,7 @@ Full decision history: `.planning/PROJECT.md`.
 
 - [Phase 15] Existing dirty package/planning and quick/UI-review artifacts need an ownership ledger; preserve them and do not reset or absorb them automatically.
 - [Phase 15] All 23 captured hashes are owner-approved and promoted; 35 role/device/spider/web/Vivian rows remain BLOCKED, so STAB-BASE-03/04 are partial.
-- [Phase 15] Participant/editor/reviewer/owner browser lanes remain BLOCKED until an isolated non-production Supabase target and disposable identities exist.
+- [Phase 15] Participant/editor/reviewer/owner browser lanes remain explicit BLOCKED evidence; owner declined isolated staging, so real role proof is handed to Phase 16 and no production mutation is authorized.
 - [Phase 16] Dedicated isolated Supabase project/branch, credentials and disposable fixtures are not yet proven available.
 - [Phase 21] The previous deep security scan never started; a supported managed profile is still required.
 - [Phase 22] Physical owner PC (including DPR 1.25) and phone UAT has not occurred and blocks milestone completion.
@@ -98,4 +98,4 @@ Resume file: .planning/phases/PORTIA-15-baseline/15-07-PLAN.md
 
 ## Operator Next Step
 
-Run `/gsd-execute-phase 15 --gaps-only`. Do not advance to Phase 16 until plans 15-06 through 15-15 and the final verification gate complete.
+Run `/gsd-execute-phase 15 --gaps-only`. Plans 15-07 through 15-15 execute only local/read-only work and must preserve an honest gaps_found verdict for unresolved remote/security/device evidence.

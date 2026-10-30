@@ -63,7 +63,7 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 15-07-PLAN.md — isolated-target attestation and real server-derived actor sessions (STAB-BASE-02, STAB-BASE-06)
+- [ ] 15-07-PLAN.md — read-only actor gate, explicit privileged blockers and Phase 16 handoff (STAB-BASE-02, STAB-BASE-06)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
@@ -71,19 +71,19 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
-- [ ] 15-09-PLAN.md — public, device, spider, web, Vivian and shortcut candidate coverage (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+- [ ] 15-09-PLAN.md — read-only public/device/spider/web/Vivian/shortcut candidate coverage (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
 
 **Wave 10** *(blocked on Wave 9 completion)*
 
-- [ ] 15-10-PLAN.md — authenticated editor, owner, participant and Promotion reviewer candidate coverage (STAB-BASE-02, STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+- [ ] 15-10-PLAN.md — machine-verified privileged BLOCKED ledger and Phase 16/19 recovery ownership (STAB-BASE-02, STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
 
 **Wave 11** *(blocked on Wave 10 completion)*
 
-- [ ] 15-11-PLAN.md — complete Figma CURRENT synchronization and explicit Qloxz verdict for every new hash (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+- [ ] 15-11-PLAN.md — Figma CURRENT capture/blocker synchronization and Qloxz verdict for every available new hash (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
 
 **Wave 12** *(blocked on Wave 11 completion)*
 
-- [ ] 15-12-PLAN.md — exact-byte owner-approved baseline promotion and comparison execution (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+- [ ] 15-12-PLAN.md — exact-byte promotion/comparison for available approved hashes with separate blocked accounting (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
 
 **Wave 13** *(blocked on Wave 12 completion)*
 
@@ -95,14 +95,14 @@ Plans:
 
 **Wave 15** *(blocked on Wave 14 completion)*
 
-- [ ] 15-15-PLAN.md — final clean-checkout run, traceability refresh and goal-backward lifecycle verification (STAB-BASE-01..06)
+- [ ] 15-15-PLAN.md — safe local clean-checkout, traceability refresh and honest gaps_found lifecycle verification (STAB-BASE-01..06)
 
 **Cross-cutting constraints:**
 
 - Do not modify product source in Phase 15; this phase establishes evidence and executable contracts only.
 - Preserve all pre-existing dirty files until the owner records per-path disposition and touch permission.
 - Never treat a skipped staging, Figma, device or owner gate as a pass; report it as BLOCKED or PENDING.
-- Run package/browser work only from Node 22.13.x and never mutate a production-like Supabase target.
+- Run package/browser work only from Node 22.13.x; the owner declined isolated staging, so Phase 15 must never use service-role authority or mutate the configured Supabase project.
 - Do not call or require Daybreak; the managed Codex Security evidence gate remains mandatory and an unavailable managed profile remains an explicit blocker.
 **UI hint**: yes
 
