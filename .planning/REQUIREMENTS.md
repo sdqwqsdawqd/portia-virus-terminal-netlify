@@ -11,7 +11,7 @@
 - [ ] **STAB-BASE-02**: Committed Playwright-suite покрывает visitor, participant, editor, promo reviewer и owner на PC и phone, основные состояния данных и motion on/off, не изменяя production.
 - [ ] **STAB-BASE-03**: Утверждённые visual baselines покрывают desktop, окна, «Повышение», редактор, паука, паутину, Вивьян и phone layout при фиксированных данных, DPR, шрифтах и случайности.
 - [ ] **STAB-BASE-04**: Figma фиксирует текущий UI/motion-контракт для desktop и phone, включая controls, состояния, ключевые кадры, interruption и rest frame; изменения относительно текущего вида отмечены отдельно.
-- [ ] **STAB-BASE-05**: Uncaught exception, hydration warning, критический network failure, CSP violation или неожидаемая console error блокируют browser gate; ожидаемые отказы показаны безопасным русским состоянием.
+- [x] **STAB-BASE-05**: Uncaught exception, hydration warning, критический network failure, CSP violation или неожидаемая console error блокируют browser gate; ожидаемые отказы показаны безопасным русским состоянием.
 - [ ] **STAB-BASE-06**: Каждая фаза проходит GSD-цепочку requirements → contract → plan → implementation → deterministic tests → Playwright → visual/a11y/security evidence → owner UAT при необходимости → summary/verification.
 
 ## Рабочий стол, окна и декомпозиция
@@ -129,7 +129,7 @@
 | STAB-BASE-02 | Phase 15 | Pending |
 | STAB-BASE-03 | Phase 15 | Pending |
 | STAB-BASE-04 | Phase 15 | Pending |
-| STAB-BASE-05 | Phase 15 | Pending |
+| STAB-BASE-05 | Phase 15 | Complete |
 | STAB-BASE-06 | Phase 15 | Pending |
 | STAB-DESK-01 | Phase 17 | Pending |
 | STAB-DESK-02 | Phase 18 | Pending |
