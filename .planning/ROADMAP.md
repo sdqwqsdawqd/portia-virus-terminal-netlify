@@ -59,7 +59,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 15-06-PLAN.md — tracked clean-checkout preflight and fail-closed isolated-target guard (STAB-BASE-02, STAB-BASE-06)
+- [x] 15-06-PLAN.md — tracked clean-checkout preflight and fail-closed isolated-target guard (STAB-BASE-02, STAB-BASE-06)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
@@ -204,7 +204,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 15. Восстановление контроля, контракты и браузерный baseline | 2/5 | In Progress|  |
+| 15. Восстановление контроля, контракты и браузерный baseline | 6/15 | In Progress|  |
 | 16. Канонический Supabase staging и SQL-истина | 0/TBD | Not started | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 0/TBD | Not started | - |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
