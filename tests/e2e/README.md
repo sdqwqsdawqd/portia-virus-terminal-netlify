@@ -41,3 +41,13 @@ Authentication state, reports, traces, videos, screenshots on failure and run-sp
 ## Target safety
 
 Visitor lanes are read-only and may use the local production server without staging credentials. Role lanes and any mutation-capable setup must call the fail-closed target guard in `fixtures/target-guard.ts` before navigation or fixture creation. Without a dedicated non-production project identity and explicit confirmation marker, those lanes are **BLOCKED**, not silently skipped as proof.
+
+Mutation-capable setup requires all of the following:
+
+- `PORTIA_E2E_MUTATION_CONFIRM=ISOLATED_TEST_PROJECT`.
+- `PORTIA_E2E_TARGET_ENVIRONMENT=isolated-test`.
+- `PORTIA_E2E_TARGET_ID` containing the 20-character Supabase project ref.
+- `PORTIA_E2E_SUPABASE_URL` equal to the HTTPS root URL for that ref.
+- `PORTIA_E2E_PRODUCTION_PROJECT_IDS` listing every known production ref; equality blocks setup.
+
+Call `requireSafeMutationTargetFromEnvironment()` before browser navigation, authentication-state creation or database fixtures. Guard failures expose only a reason code and variable names. They never reflect a supplied URL, project ref, credential, token or cookie.

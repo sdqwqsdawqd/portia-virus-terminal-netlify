@@ -8,7 +8,6 @@ const isCI = Boolean(process.env.CI);
 export default defineConfig({
   testDir: "./tests/e2e",
   outputDir: "test-results/playwright",
-  passWithNoTests: true,
   fullyParallel: false,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
