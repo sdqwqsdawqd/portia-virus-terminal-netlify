@@ -34,7 +34,7 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
   3. Одобренные visual baselines воспроизводят desktop, окна, «Повышение», редактор, паука, паутину, Вивьян и phone layout; снимки не становятся эталоном до владельческого одобрения.
   4. Неожиданная browser/console/network/CSP ошибка блокирует gate, а ожидаемый отказ виден как безопасное русское состояние; для каждой следующей фазы задана полная цепочка доказательств GSD.
 **Acceptance gate**: Figma approval и продвижение candidate captures в baseline остаются открытыми до явного решения владельца.
-**Plans**: 5 plans
+**Plans**: 15 plans
 
 Plans:
 **Wave 1**
@@ -57,12 +57,53 @@ Plans:
 
 - [x] 15-05-PLAN.md — named-owner approval, exact-byte baseline promotion and clean-checkout traceability (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06); plan complete, phase closure remains blocked by the recorded actor/device/security gates
 
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 15-06-PLAN.md — tracked clean-checkout preflight and fail-closed isolated-target guard (STAB-BASE-02, STAB-BASE-06)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 15-07-PLAN.md — isolated-target attestation and real server-derived actor sessions (STAB-BASE-02, STAB-BASE-06)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 15-08-PLAN.md — real-clock diagnostic expiry and centralized strict visual policy (STAB-BASE-03, STAB-BASE-05, STAB-BASE-06)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [ ] 15-09-PLAN.md — public, device, spider, web, Vivian and shortcut candidate coverage (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [ ] 15-10-PLAN.md — authenticated editor, owner, participant and Promotion reviewer candidate coverage (STAB-BASE-02, STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
+- [ ] 15-11-PLAN.md — complete Figma CURRENT synchronization and explicit Qloxz verdict for every new hash (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
+- [ ] 15-12-PLAN.md — exact-byte owner-approved baseline promotion and comparison execution (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+
+**Wave 13** *(blocked on Wave 12 completion)*
+
+- [ ] 15-13-PLAN.md — signed top-level metadata verification and canonical snapshot-path correction (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+
+**Wave 14** *(blocked on Wave 13 completion)*
+
+- [ ] 15-14-PLAN.md — managed Codex Security gate and high/critical finding disposition without Daybreak (STAB-BASE-02, STAB-BASE-05, STAB-BASE-06)
+
+**Wave 15** *(blocked on Wave 14 completion)*
+
+- [ ] 15-15-PLAN.md — final clean-checkout run, traceability refresh and goal-backward lifecycle verification (STAB-BASE-01..06)
+
 **Cross-cutting constraints:**
 
 - Do not modify product source in Phase 15; this phase establishes evidence and executable contracts only.
 - Preserve all pre-existing dirty files until the owner records per-path disposition and touch permission.
 - Never treat a skipped staging, Figma, device or owner gate as a pass; report it as BLOCKED or PENDING.
 - Run package/browser work only from Node 22.13.x and never mutate a production-like Supabase target.
+- Do not call or require Daybreak; the managed Codex Security evidence gate remains mandatory and an unavailable managed profile remains an explicit blocker.
 **UI hint**: yes
 
 ### Phase 16: Канонический Supabase staging и SQL-истина

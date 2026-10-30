@@ -504,22 +504,22 @@ const fingerprint = results.violations.flatMap(v =>
 | A3 | The representative phone should be a Playwright WebKit device descriptor chosen by the owner. `[ASSUMED]` | Browser projects | Wrong descriptor makes phone baseline non-representative; owner decision blocks promotion. |
 | A4 | Exact current axe fingerprints are not yet known and should be baselined rather than assumed zero. `[ASSUMED]` | Accessibility | If critical violations appear, they remain evidence and must be scheduled, not fixed silently in Phase 15. |
 
-## Open Questions / Required Owner Inputs
+## Open Questions / Required Owner Inputs (RESOLVED)
 
 1. **Who owns and what is the disposition of the existing `motion` patch?**
    - Known: it changes both package files, is unused by source and conflicts with locked Phase 15 stack. `[VERIFIED: git diff; .planning/research/SUMMARY.md:78]`
-   - Required decision: owner removes/commits/delegates it outside Phase 15; test tooling cannot touch those files first.
+   - **RESOLVED:** Qloxz authorized removal of only the unused Motion dependency experiment; `15-DIRTY-OWNERSHIP.md` records the decision and the released package hashes.
 2. **Which dedicated Supabase fixture target and test accounts are authorized?**
    - Known: Docker and Supabase CLI are missing locally; authenticated roles depend on real RPC/RLS. `[VERIFIED: environment audit; lib/editor-access.ts]`
-   - Required decision: provide a dedicated hosted project or authorize separate local-tooling provisioning; never reuse production.
+   - **RESOLVED:** use a dedicated hosted isolated project, never production. The exact project/credentials remain runtime-only and are accepted only through the blocking attestation/preflight in `15-07-PLAN.md`.
 3. **Which physical/representative phone is authoritative?**
    - Known: no device choice is locked in repository evidence. `[VERIFIED: repository research review]`
-   - Required decision: device model/viewport/DPR/browser and whether owner UAT also runs on a physical phone.
+   - **RESOLVED:** Playwright iPhone 13 (`390×844`, DPR 3, WebKit) is the representative Phase 15 phone contract; Pixel 7 is Chromium phone smoke. Physical PC/phone UAT remains Phase 22.
 4. **Who is the signing owner and what Figma file is authoritative?**
    - Known: no repository Figma file/link or signed revision exists. `[VERIFIED: .planning/research/FEATURES.md:53]`
-   - Required decision: named signer, Figma URL/file key and approval date.
+   - **RESOLVED:** signer `Qloxz`, Figma file `GEf7NB9v2GZN80cMzRvUVQ`, revision/session and validation date are recorded in `15-FIGMA-CONTRACT.md` and `15-VISUAL-APPROVAL.md`.
 5. **Which accepted diagnostic/a11y findings, if any, may be allowlisted temporarily?**
-   - Required decision: each needs exact fingerprint, rationale, owner and expiry; default is fail.
+   - **RESOLVED:** only exact per-project Promotion first-visit rows are allowlisted with requirement, reason, owner and expiry; 15-08 switches expiry enforcement to the real runner wall clock. Every other event fails.
 
 ## Environment Availability
 
