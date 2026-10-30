@@ -73,3 +73,22 @@ test("unknown modes fail before mutation imports", async () => {
     (error: unknown) => error instanceof PreflightError && error.code === "mode",
   );
 });
+
+test("mutation mode composes visitor checks with the isolated target guard", async () => {
+  const projectId = "isolatedproject00001";
+  await assert.doesNotReject(
+    runPreflight("mutation", {
+      nodeVersion: "22.13.1",
+      environment: {
+        ...validEnvironment,
+        PORTIA_E2E_MUTATION_CONFIRM: "ISOLATED_TEST_PROJECT",
+        PORTIA_E2E_TARGET_ENVIRONMENT: "isolated-test",
+        PORTIA_E2E_TARGET_ID: projectId,
+        PORTIA_E2E_SUPABASE_URL: `https://${projectId}.supabase.co`,
+        PORTIA_E2E_PRODUCTION_PROJECT_IDS: "productionproject000",
+        PORTIA_E2E_ISOLATED_PROJECT_IDS: projectId,
+      },
+      loadEnvironment: false,
+    }),
+  );
+});

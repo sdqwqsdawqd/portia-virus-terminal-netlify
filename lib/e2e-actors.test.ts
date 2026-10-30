@@ -20,6 +20,7 @@ const safeEnvironment = {
   PORTIA_E2E_TARGET_ID: projectId,
   PORTIA_E2E_SUPABASE_URL: `https://${projectId}.supabase.co/`,
   PORTIA_E2E_PRODUCTION_PROJECT_IDS: "productionproject000",
+  PORTIA_E2E_ISOLATED_PROJECT_IDS: projectId,
 };
 
 describe("Phase 15 actor roster", () => {

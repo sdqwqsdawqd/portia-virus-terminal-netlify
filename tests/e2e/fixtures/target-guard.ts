@@ -7,6 +7,7 @@ export type MutationTargetInput = {
   projectId?: string;
   supabaseUrl?: string;
   productionProjectIds?: string;
+  isolatedProjectIds?: string;
 };
 
 export type SafeMutationTarget = Readonly<{
@@ -30,13 +31,26 @@ function blocked(code: string, ...required: string[]): never {
   throw new MutationTargetBlockedError(code, required);
 }
 
-function parseProductionProjectIds(value: string | undefined) {
-  return new Set(
-    (value ?? "")
-      .split(",")
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean),
-  );
+function parseProjectIds(
+  value: string | undefined,
+  kind: "production" | "isolated",
+) {
+  const variable = kind === "production"
+    ? "PORTIA_E2E_PRODUCTION_PROJECT_IDS"
+    : "PORTIA_E2E_ISOLATED_PROJECT_IDS";
+  const items = (value ?? "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (items.length === 0) blocked(`${kind}-list-missing`, variable);
+  if (items.some((item) => !/^[a-z0-9]{20}$/u.test(item))) {
+    blocked(`${kind}-list-malformed`, variable);
+  }
+  if (new Set(items).size !== items.length) {
+    blocked(`${kind}-list-duplicate`, variable);
+  }
+  return new Set(items);
 }
 
 export function requireSafeMutationTarget(
@@ -53,8 +67,20 @@ export function requireSafeMutationTarget(
   if (!projectId || !/^[a-z0-9]{20}$/.test(projectId)) {
     blocked("project-id", "PORTIA_E2E_TARGET_ID");
   }
-  if (parseProductionProjectIds(input.productionProjectIds).has(projectId)) {
+  const productionProjectIds = parseProjectIds(input.productionProjectIds, "production");
+  const isolatedProjectIds = parseProjectIds(input.isolatedProjectIds, "isolated");
+  if ([...productionProjectIds].some((item) => isolatedProjectIds.has(item))) {
+    blocked(
+      "list-overlap",
+      "PORTIA_E2E_PRODUCTION_PROJECT_IDS",
+      "PORTIA_E2E_ISOLATED_PROJECT_IDS",
+    );
+  }
+  if (productionProjectIds.has(projectId)) {
     blocked("production-project", "PORTIA_E2E_PRODUCTION_PROJECT_IDS");
+  }
+  if (!isolatedProjectIds.has(projectId)) {
+    blocked("unknown-target", "PORTIA_E2E_ISOLATED_PROJECT_IDS");
   }
 
   let endpoint: URL;
@@ -96,5 +122,6 @@ export function requireSafeMutationTargetFromEnvironment(
     projectId: environment.PORTIA_E2E_TARGET_ID,
     supabaseUrl: environment.PORTIA_E2E_SUPABASE_URL,
     productionProjectIds: environment.PORTIA_E2E_PRODUCTION_PROJECT_IDS,
+    isolatedProjectIds: environment.PORTIA_E2E_ISOLATED_PROJECT_IDS,
   });
 }

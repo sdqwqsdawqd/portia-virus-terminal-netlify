@@ -11,6 +11,8 @@ const safeTarget = {
   environment: "isolated-test",
   projectId: testProjectId,
   supabaseUrl: `https://${testProjectId}.supabase.co/`,
+  productionProjectIds: "productionproject000",
+  isolatedProjectIds: testProjectId,
 };
 
 function expectBlocked(
@@ -46,9 +48,54 @@ describe("Phase 15 mutation target guard", () => {
   test("rejects a known production project", () => {
     expectBlocked(
       "production-project",
-      { ...safeTarget, productionProjectIds: `otherprojectref00000,${testProjectId}` },
+      {
+        ...safeTarget,
+        productionProjectIds: `otherprojectref00000,${testProjectId}`,
+        isolatedProjectIds: "isolatedproject00001",
+      },
       [testProjectId, safeTarget.supabaseUrl],
     );
+  });
+
+  test("requires both project lists", () => {
+    expectBlocked("production-list-missing", {
+      ...safeTarget,
+      productionProjectIds: undefined,
+    });
+    expectBlocked("isolated-list-missing", {
+      ...safeTarget,
+      isolatedProjectIds: undefined,
+    });
+  });
+
+  test("rejects malformed and duplicate project lists", () => {
+    expectBlocked("production-list-malformed", {
+      ...safeTarget,
+      productionProjectIds: "not-a-ref",
+    });
+    expectBlocked("isolated-list-malformed", {
+      ...safeTarget,
+      isolatedProjectIds: "not-a-ref",
+    });
+    expectBlocked("production-list-duplicate", {
+      ...safeTarget,
+      productionProjectIds: "productionproject000,productionproject000",
+    });
+    expectBlocked("isolated-list-duplicate", {
+      ...safeTarget,
+      isolatedProjectIds: `${testProjectId},${testProjectId}`,
+    });
+  });
+
+  test("rejects overlap and unknown targets", () => {
+    expectBlocked("list-overlap", {
+      ...safeTarget,
+      productionProjectIds: testProjectId,
+    });
+    expectBlocked("unknown-target", {
+      ...safeTarget,
+      isolatedProjectIds: "isolatedproject00001",
+    });
   });
 
   test("rejects a project identity mismatch", () => {
