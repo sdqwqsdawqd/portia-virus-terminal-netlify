@@ -4,14 +4,14 @@ milestone: v1.3
 milestone_name: Стабилизация PORTIA OS
 status: executing
 stopped_at: Completed 15-06-PLAN.md
-last_updated: "2026-10-30T21:31:08.804Z"
-last_activity: 2026-10-30
+last_updated: "2026-10-31"
+last_activity: 2026-10-31 -- Completed 15-06; awaiting 15-07 target attestation
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
   completed_plans: 6
-  percent: 0
+  percent: 40
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
-Plan: 2 of 15
-Status: Ready to execute
-Last activity: 2026-10-30
+Plan: 6 of 15
+Status: Awaiting 15-07 isolated-target attestation
+Last activity: 2026-10-31 -- Completed 15-06
 
 Progress: [████░░░░░░] 40%
 
