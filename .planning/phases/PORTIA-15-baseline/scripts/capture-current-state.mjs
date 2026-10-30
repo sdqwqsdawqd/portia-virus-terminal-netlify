@@ -322,7 +322,7 @@ function writeEvidence(path, content) {
   writeFileSync(path, content.replaceAll("\r\n", "\n"), "utf8");
 }
 
-function ownershipKeys(snapshot) {
+function ownershipKeysFromPaths(paths) {
   const knownGroups = [
     ".planning/forensics/",
     ".planning/milestones/v1.2-incomplete-research/",
@@ -332,16 +332,32 @@ function ownershipKeys(snapshot) {
   const keys = [];
   const grouped = new Set();
   for (const group of knownGroups) {
-    const members = snapshot.files.filter((file) => file.path.startsWith(group));
+    const members = paths.filter((path) => path.startsWith(group));
     if (members.length) {
       keys.push(group);
-      members.forEach((file) => grouped.add(file.path));
+      members.forEach((path) => grouped.add(path));
     }
   }
-  for (const file of snapshot.files) {
-    if (!grouped.has(file.path)) keys.push(file.path);
+  for (const path of paths) {
+    if (!grouped.has(path)) keys.push(path);
   }
   return keys.sort((a, b) => a.localeCompare(b, "en"));
+}
+
+function capturedInventoryPaths() {
+  if (!existsSync(CURRENT_LEDGER)) {
+    throw new Error("Missing 15-CURRENT-STATE-LEDGER.md");
+  }
+  const current = readFileSync(CURRENT_LEDGER, "utf8");
+  const inventory = current.match(
+    /## Stable Dirty Inventory\n\n[\s\S]*?\n\n## Porcelain v2/,
+  );
+  if (!inventory) {
+    throw new Error("Current-state ledger has no stable dirty inventory");
+  }
+  return [...inventory[0].matchAll(/^\| `([^`]+)` \|/gm)].map(
+    (match) => match[1],
+  );
 }
 
 function capturedSourceCommit() {
@@ -354,7 +370,7 @@ function capturedSourceCommit() {
   return match[1];
 }
 
-function verifyLedgers(snapshot) {
+function verifyLedgers() {
   if (!existsSync(OWNERSHIP_LEDGER)) {
     throw new Error("Missing 15-DIRTY-OWNERSHIP.md");
   }
@@ -363,7 +379,7 @@ function verifyLedgers(snapshot) {
   }
   const ownership = readFileSync(OWNERSHIP_LEDGER, "utf8");
   const limitations = readFileSync(LIMITATIONS_LEDGER, "utf8");
-  const expected = ownershipKeys(snapshot);
+  const expected = ownershipKeysFromPaths(capturedInventoryPaths());
   const found = [...ownership.matchAll(/<!-- inventory-key: (.+?) -->/g)].map(
     (match) => match[1],
   );
@@ -404,7 +420,7 @@ function main() {
   const mode = process.argv[2] || "--check";
   const first = capture();
   if (mode === "--verify-ledgers") {
-    verifyLedgers(first);
+    verifyLedgers();
     return;
   }
   if (mode !== "--check") {
@@ -413,6 +429,20 @@ function main() {
   const second = capture();
   if (JSON.stringify(first) !== JSON.stringify(second)) {
     throw new Error("Current-state capture is not deterministic across consecutive reads");
+  }
+  if (existsSync(CURRENT_LEDGER) && existsSync(ENVIRONMENT_LEDGER)) {
+    const current = readFileSync(CURRENT_LEDGER, "utf8");
+    const environment = readFileSync(ENVIRONMENT_LEDGER, "utf8");
+    if (!current.includes("**Status:** CAPTURED") || !current.includes("**Snapshot SHA-256:**")) {
+      throw new Error("Existing immutable current-state ledger is incomplete");
+    }
+    if (!environment.includes("# Phase 15 Environment")) {
+      throw new Error("Existing immutable environment ledger is incomplete");
+    }
+    process.stdout.write(
+      `Capture verification OK: immutable evidence preserved; live capture remains deterministic across ${first.files.length} dirty paths.\n`,
+    );
+    return;
   }
   writeEvidence(CURRENT_LEDGER, renderCurrentLedger(first));
   writeEvidence(ENVIRONMENT_LEDGER, renderEnvironment(first));
