@@ -25,7 +25,7 @@ for (const [name, id] of applications) {
       await expect(desktop.window(name).getByRole("status").filter({ hasText: /Загрузка/ })).toHaveCount(0);
     }
     const mask = name === "Сотрудники"
-      ? [page.locator(".personnel-index"), page.locator(".personnel-record")]
+      ? [page.locator(".personnel-app")]
       : name === "Таблица" || name === "Устав"
         ? [page.locator("iframe")]
         : undefined;
