@@ -43,7 +43,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 15-02-PLAN.md — exact Playwright/axe bootstrap, bounded browser projects and fail-closed target guard (STAB-BASE-02)
+- [x] 15-02-PLAN.md — exact Playwright/axe bootstrap, bounded browser projects and fail-closed target guard (STAB-BASE-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -163,7 +163,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 15. Восстановление контроля, контракты и браузерный baseline | 1/5 | In Progress|  |
+| 15. Восстановление контроля, контракты и браузерный baseline | 2/5 | In Progress|  |
 | 16. Канонический Supabase staging и SQL-истина | 0/TBD | Not started | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 0/TBD | Not started | - |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
