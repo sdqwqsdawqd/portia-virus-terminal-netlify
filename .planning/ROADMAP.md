@@ -39,7 +39,7 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
 Plans:
 **Wave 1**
 
-- [ ] 15-01-PLAN.md — read-only current-state capture, dirty ownership ledger and explicit owner disposition (STAB-BASE-01, STAB-BASE-06)
+- [x] 15-01-PLAN.md — read-only current-state capture, dirty ownership ledger and explicit owner disposition (STAB-BASE-01, STAB-BASE-06)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -163,7 +163,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 15. Восстановление контроля, контракты и браузерный baseline | 0/TBD | Not started | - |
+| 15. Восстановление контроля, контракты и браузерный baseline | 1/5 | In Progress|  |
 | 16. Канонический Supabase staging и SQL-истина | 0/TBD | Not started | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 0/TBD | Not started | - |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
