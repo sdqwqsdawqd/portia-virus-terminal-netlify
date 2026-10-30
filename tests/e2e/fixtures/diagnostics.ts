@@ -119,7 +119,7 @@ export async function assertDiagnosticsClean(
   const unexpected = unexpectedDiagnostics(
     normalized,
     testInfo.project.name,
-    new Date(deterministicDiagnosticNow),
+    new Date(),
   );
   if (unexpected.length) {
     throw new Error(
@@ -127,8 +127,6 @@ export async function assertDiagnosticsClean(
     );
   }
 }
-
-const deterministicDiagnosticNow = "2026-10-30T06:00:00.000Z";
 
 export async function installDiagnostics(page: Page, ledger: DiagnosticLedger) {
   page.on("console", (message) => {
