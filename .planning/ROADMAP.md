@@ -34,7 +34,35 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
   3. Одобренные visual baselines воспроизводят desktop, окна, «Повышение», редактор, паука, паутину, Вивьян и phone layout; снимки не становятся эталоном до владельческого одобрения.
   4. Неожиданная browser/console/network/CSP ошибка блокирует gate, а ожидаемый отказ виден как безопасное русское состояние; для каждой следующей фазы задана полная цепочка доказательств GSD.
 **Acceptance gate**: Figma approval и продвижение candidate captures в baseline остаются открытыми до явного решения владельца.
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 15-01-PLAN.md — read-only current-state capture, dirty ownership ledger and explicit owner disposition (STAB-BASE-01, STAB-BASE-06)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 15-02-PLAN.md — exact Playwright/axe bootstrap, bounded browser projects and fail-closed target guard (STAB-BASE-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 15-03-PLAN.md — deterministic actor fixtures, browser diagnostics, semantic page objects and representative flows (STAB-BASE-02, STAB-BASE-05)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 15-04-PLAN.md — candidate-only visual/motion captures and authoritative CURRENT/PROPOSED Figma mapping (STAB-BASE-03, STAB-BASE-04)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 15-05-PLAN.md — named-owner approval, exact-byte baseline promotion and clean-checkout traceability (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+
+**Cross-cutting constraints:**
+
+- Do not modify product source in Phase 15; this phase establishes evidence and executable contracts only.
+- Preserve all pre-existing dirty files until the owner records per-path disposition and touch permission.
+- Never treat a skipped staging, Figma, device or owner gate as a pass; report it as BLOCKED or PENDING.
+- Run package/browser work only from Node 22.13.x and never mutate a production-like Supabase target.
 **UI hint**: yes
 
 ### Phase 16: Канонический Supabase staging и SQL-истина
