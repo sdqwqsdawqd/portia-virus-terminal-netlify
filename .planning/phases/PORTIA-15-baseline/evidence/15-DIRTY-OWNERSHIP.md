@@ -32,6 +32,14 @@ This table records the repository owner's explicit Task 3 disposition. Only the 
 - Owner response, verbatim: `разрешаю`.
 - Authorized agent action: remove exactly the captured Motion-only additions from the two package files. No reset, checkout, stash, clean, or alteration of any other classified path is authorized.
 
+## Released Package Baseline
+
+- Verified at: `2026-10-30T10:54:00+05:00` before any Phase 15 package installation.
+- Runtime: official portable Node.js `v22.13.1` with npm `10.9.2`; archive SHA-256 `398a61e250a5584a62a5959e2f69f5d597fc83f1a5ebe3ed8fff29ba39d55f14` matched the official `SHASUMS256.txt`.
+- `package.json` released SHA-256: `c1b588eb97333b3b65a71ec39285bc3284a4ce2ba11240e04e45b9efe415ad85`.
+- `package-lock.json` released SHA-256: `aa6648c66a330fde8700c99f34acc7ee006f52668721793ae66baa6e8df837f2`.
+- `git diff --exit-code -- package.json package-lock.json` exited `0`; the released baseline contains no Motion/Framer Motion patch.
+
 ## Owner Decision Vocabulary
 
 - `KEEP`: preserve the current worktree state; still requires an explicit touch permission.
