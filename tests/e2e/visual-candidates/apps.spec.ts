@@ -1,5 +1,5 @@
 import { DesktopPage } from "../pages/desktop.page";
-import { test } from "../fixtures/test";
+import { expect, test } from "../fixtures/test";
 import { captureCandidate, recordBlockedCandidate } from "./support";
 
 const applications = [
@@ -21,6 +21,9 @@ for (const [name, id] of applications) {
     const desktop = new DesktopPage(page);
     await desktop.goto();
     await desktop.openApp(name);
+    if (name !== "Таблица" && name !== "Устав") {
+      await expect(desktop.window(name).getByRole("status").filter({ hasText: /Загрузка/ })).toHaveCount(0);
+    }
     const mask = name === "Сотрудники"
       ? [page.locator(".personnel-index"), page.locator(".personnel-record")]
       : name === "Таблица" || name === "Устав"

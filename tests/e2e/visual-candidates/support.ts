@@ -105,6 +105,7 @@ export async function captureCandidate(context: CandidateContext, spec: Candidat
     animations: spec.animations ?? "disabled",
     caret: "hide",
     mask: spec.mask,
+    maskColor: "#0c1715",
   });
   const sha256 = createHash("sha256").update(readFileSync(pngPath)).digest("hex");
   const row = {
