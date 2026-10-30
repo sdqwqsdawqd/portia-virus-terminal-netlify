@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Стабилизация PORTIA OS
-status: executing
-stopped_at: Completed 15-04-PLAN.md
-last_updated: "2026-10-30T11:06:11.068Z"
+status: blocked
+stopped_at: Completed 15-05-PLAN.md; Phase 15 closure blocked
+last_updated: "2026-10-30T16:03:18.576Z"
 last_activity: 2026-10-30
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -25,30 +25,31 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 ## Current Position
 
-Phase: 15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
+Phase: 15 (Восстановление контроля, контракты и браузерный baseline) — BLOCKED
 Plan: 5 of 5
-Status: Awaiting named owner visual verdicts
+Status: All plans executed; phase verification blocked by actor, device, remaining visual and security gates
 Last activity: 2026-10-30
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100% of planned Phase 15 work; 0 phases closed
 
 ## Performance Metrics
 
 **Current milestone:**
 
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 5
+- Average duration: 1h18m
+- Total execution time: 6h32m
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 15–22 | 0 | 5 planned so far | — |
+| 15 | 5 | 6h32m | 1h18m |
 
 *Plan counts and velocity begin after Phase 15 planning.*
 | Phase 15 P01 | 8 min | 3 tasks | 5 files |
 | Phase 15 P02 | 8 min | 3 tasks | 9 files |
 | Phase 15 P03 | 47 min | 3 tasks | 20 files |
 | Phase 15 P04 | 38 min | 3 tasks | 9 files |
+| Phase 15 P05 | 4h51m | 3 tasks | 34 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [v1.3 roadmap]: Figma approval, managed security scan and physical owner PC/phone UAT remain honest open gates until performed.
 - [Phase 15]: Figma Starter preserves the nine authority areas as seven CURRENT sections plus separate PROPOSED and empty APPROVED pages because the plan permits only three pages.
 - [Phase 15]: Persisted candidate evidence remains bound to source commit `4ec66b7d693c`; later evidence commits do not change its byte identity.
+- [Phase 15]: Signer `Qloxz` approved exactly 23 CURRENT hashes and Figma session `77cd90e1-9022-4a59-8906-de90227ad904`; 35 BLOCKED rows remain outside baseline authority.
+- [Phase 15]: Candidate-generation specs are opt-in and excluded from default Playwright regression discovery.
 
 ### Pending Todos
 
@@ -71,7 +74,8 @@ Full decision history: `.planning/PROJECT.md`.
 ### Blockers/Concerns
 
 - [Phase 15] Existing dirty package/planning and quick/UI-review artifacts need an ownership ledger; preserve them and do not reset or absorb them automatically.
-- [Phase 15] Figma destination, signer and representative emulated phone are selected; 23 candidate hashes still require explicit APPROVED/REJECTED owner verdicts.
+- [Phase 15] All 23 captured hashes are owner-approved and promoted; 35 role/device/spider/web/Vivian rows remain BLOCKED, so STAB-BASE-03/04 are partial.
+- [Phase 15] Participant/editor/reviewer/owner browser lanes remain BLOCKED until an isolated non-production Supabase target and disposable identities exist.
 - [Phase 16] Dedicated isolated Supabase project/branch, credentials and disposable fixtures are not yet proven available.
 - [Phase 21] The previous deep security scan never started; a supported managed profile is still required.
 - [Phase 22] Physical owner PC (including DPR 1.25) and phone UAT has not occurred and blocks milestone completion.
@@ -87,10 +91,10 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-10-30T11:06:11.068Z
-Stopped at: Completed 15-04-PLAN.md
-Resume file: .planning/phases/PORTIA-15-baseline/15-05-PLAN.md
+Last session: 2026-10-30T16:03:18.576Z
+Stopped at: Completed 15-05-PLAN.md; Phase 15 closure blocked
+Resume file: .planning/phases/PORTIA-15-baseline/evidence/15-BASELINE-RESULTS.md
 
 ## Operator Next Step
 
-Review CURRENT and PROPOSED in the Phase 15 Figma file, then execute the 15-05 named-owner per-hash approval gate.
+Run Phase 15 verification/security disposition. Do not advance to Phase 16 until the blocker policy is explicitly resolved.

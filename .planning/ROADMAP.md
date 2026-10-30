@@ -55,7 +55,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 15-05-PLAN.md — named-owner approval, exact-byte baseline promotion and clean-checkout traceability (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+- [x] 15-05-PLAN.md — named-owner approval, exact-byte baseline promotion and clean-checkout traceability (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06); plan complete, phase closure remains blocked by the recorded actor/device/security gates
 
 **Cross-cutting constraints:**
 
