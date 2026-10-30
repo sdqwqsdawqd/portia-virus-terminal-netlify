@@ -344,6 +344,16 @@ function ownershipKeys(snapshot) {
   return keys.sort((a, b) => a.localeCompare(b, "en"));
 }
 
+function capturedSourceCommit() {
+  if (!existsSync(CURRENT_LEDGER)) {
+    throw new Error("Missing 15-CURRENT-STATE-LEDGER.md");
+  }
+  const current = readFileSync(CURRENT_LEDGER, "utf8");
+  const match = current.match(/\*\*Source commit:\*\* `([0-9a-f]{40})`/);
+  if (!match) throw new Error("Current-state ledger has no immutable source commit");
+  return match[1];
+}
+
 function verifyLedgers(snapshot) {
   if (!existsSync(OWNERSHIP_LEDGER)) {
     throw new Error("Missing 15-DIRTY-OWNERSHIP.md");
@@ -376,7 +386,8 @@ function verifyLedgers(snapshot) {
       `Ownership verification failed: missing=${missing.join(",") || "none"}; duplicates=${duplicates.join(",") || "none"}; unexpected=${unexpected.join(",") || "none"}; headers=${missingHeaders.join(",") || "none"}`,
     );
   }
-  if (!limitations.includes(`SOURCE-COMMIT: ${snapshot.source.head}`)) {
+  const sourceCommit = capturedSourceCommit();
+  if (!limitations.includes(`SOURCE-COMMIT: ${sourceCommit}`)) {
     throw new Error("Accepted limitations ledger has no matching SOURCE-COMMIT");
   }
   for (const requiredRef of [".planning/PROJECT.md", ".planning/REQUIREMENTS.md"]) {
