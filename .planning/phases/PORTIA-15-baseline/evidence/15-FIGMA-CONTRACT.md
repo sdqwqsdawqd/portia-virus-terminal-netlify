@@ -1,8 +1,8 @@
 # Phase 15 Figma Authority Contract
 
-**Status:** CURRENT/PROPOSED EVIDENCE CREATED — BASELINE APPROVAL PENDING
+**Status:** EXACT CURRENT REVISION OWNER-APPROVED
 
-**Owner confirmation:** 2026-10-30 (`да`)
+**Owner signature:** `Qloxz`, 2026-10-30T16:12:03.2978944+05:00
 
 **Candidate set:** `phase15-current-4ec66b7d693c`
 
@@ -18,9 +18,9 @@
 | Repository authority | [`15-UI-SPEC.md`](../15-UI-SPEC.md) |
 | Native `figma.spec` Plugin API | Not exposed by the current `use_figma` Plugin API surface |
 | Plan `specs_enabled` | `true` |
-| Baseline approval | **PENDING** — no frame has been promoted |
+| Baseline approval | **APPROVED** — all 23 captured CURRENT hashes were signed by `Qloxz`; exact-byte repository promotion is authorized |
 
-The Figma file is the editable visual evidence surface. The committed UI-SPEC remains normative because the current Plugin API cannot author or verify a native spec revision.
+The Figma file is the editable visual evidence surface. The committed UI-SPEC remains normative because the current Plugin API cannot author or verify a native spec revision. The owner signed the already validated revision locator above; no post-signature Figma mutation is implied.
 
 ## Starter Plan Layout Variance
 
@@ -49,4 +49,4 @@ This is the closest lossless representation available on Starter. Creating nine 
 - No local filesystem path, localhost URL, cookie, credential, employee row, nickname, reviewer note, private question or answer key is stored in Figma.
 - CURRENT cards reference exact candidate hashes from `15-VISUAL-CANDIDATES.md`; candidate PNGs remain repository evidence and are not embedded as flattened deliverables.
 - PROPOSED remains visibly separate from CURRENT.
-- `02 APPROVED FOR BASELINE` remains empty until Plan 15-05 records named approval for exact hashes.
+- `02 APPROVED FOR BASELINE` was empty in the signed Figma revision. Named per-hash authority is recorded in `15-VISUAL-APPROVAL.md`; the page was not mutated after validation or after the Starter MCP quota was exhausted.
