@@ -53,6 +53,10 @@ test("[STAB-BASE-03] inventory public application system states not safely const
       actor: "visitor",
       state: `applicable applications: ${state}`,
       intendedSnapshot: `tests/e2e/visual/__screenshots__/applications-${state.replace("/", "-")}--${testInfo.project.name}.png`,
-    }, "No approved deterministic first-party fixture currently exposes this system state without mocking PORTIA APIs.");
+    }, {
+      reasonCode: "PUBLIC_STATE_FIXTURE_REQUIRED",
+      recoveryPhase: 20,
+      reason: "No approved deterministic first-party fixture currently exposes this system state without mocking PORTIA APIs.",
+    });
   }
 });

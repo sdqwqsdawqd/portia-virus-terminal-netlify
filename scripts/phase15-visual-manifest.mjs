@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const workspace = process.cwd();
 const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace, encoding: "utf8" }).trim();
@@ -10,11 +11,89 @@ const runRoot = path.resolve(workspace, "tests/e2e/visual-candidates/.runs", set
 const evidencePath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-VISUAL-CANDIDATES.md");
 const frameMapPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-FRAME-TEST-MAP.md");
 const approvalPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-VISUAL-APPROVAL.md");
+const inventoryPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-STABLE-ROW-INVENTORY.json");
 const snapshotRoot = path.resolve(workspace, "tests/e2e/visual/__screenshots__");
 const args = new Set(process.argv.slice(2));
 
 function fail(code, detail = "") {
   throw new Error(`[${code}]${detail ? ` ${detail}` : ""}`);
+}
+
+export const blockedRecoveryMatrix = Object.freeze({
+  ISOLATED_AUTH_REQUIRED: 16,
+  MOTION_CAPTURE_BOUNDARY_REQUIRED: 18,
+  PHONE_WINDOW_CONTRACT: 18,
+  ISOLATED_PROMOTION_DATA_REQUIRED: 19,
+  PUBLIC_STATE_FIXTURE_REQUIRED: 20,
+  PIXEL_AUTHORITY_NOT_SIGNED: 22,
+});
+
+function rowIdentity(row) {
+  return `${row.project}:${row.id}`;
+}
+
+export function validateCandidateRows(rows, expectedInventory) {
+  const identities = new Map();
+  for (const row of rows) {
+    if (!row.id) fail("PORTIA_CANDIDATE_FIELD_MISSING", `${row.state ?? "unknown"}:id`);
+    const identity = rowIdentity(row);
+    if (identities.has(identity)) fail("PORTIA_CANDIDATE_ROW_DUPLICATE", identity);
+    identities.set(identity, row);
+
+    if (row.status === "CAPTURED") {
+      if (!row.candidateFile || !/^[a-f0-9]{64}$/.test(row.sha256 ?? "")) {
+        fail("PORTIA_CAPTURED_EVIDENCE_MISSING", identity);
+      }
+      if (row.reason !== undefined || row.reasonCode !== undefined || row.recoveryPhase !== undefined) {
+        fail("PORTIA_CAPTURED_BLOCKER_METADATA", identity);
+      }
+    } else if (row.status === "BLOCKED") {
+      if (Object.hasOwn(row, "candidateFile") || Object.hasOwn(row, "sha256")) {
+        fail("PORTIA_BLOCKED_HAS_EVIDENCE", identity);
+      }
+      if (!row.reason) fail("PORTIA_BLOCKED_REASON_MISSING", identity);
+      const recoveryPhase = blockedRecoveryMatrix[row.reasonCode];
+      if (recoveryPhase === undefined) fail("PORTIA_BLOCKED_REASON_CODE_INVALID", `${identity}:${row.reasonCode ?? "missing"}`);
+      if (row.recoveryPhase !== recoveryPhase) {
+        fail("PORTIA_BLOCKED_RECOVERY_INVALID", `${identity}:${row.recoveryPhase ?? "missing"}`);
+      }
+    } else {
+      fail("PORTIA_CANDIDATE_STATUS_INVALID", `${identity}:${row.status}`);
+    }
+  }
+
+  if (expectedInventory) {
+    const expected = new Map();
+    for (const entry of expectedInventory) {
+      const identity = `${entry.project}:${entry.id}`;
+      if (expected.has(identity)) fail("PORTIA_INVENTORY_ROW_DUPLICATE", identity);
+      expected.set(identity, entry.status);
+    }
+    for (const [identity, status] of expected) {
+      const row = identities.get(identity);
+      if (!row) fail("PORTIA_CANDIDATE_ROW_MISSING", identity);
+      if (row.status !== status) fail("PORTIA_CANDIDATE_STATUS_CHANGED", `${identity}:${status}->${row.status}`);
+    }
+    for (const identity of identities.keys()) {
+      if (!expected.has(identity)) fail("PORTIA_CANDIDATE_ROW_UNEXPECTED", identity);
+    }
+  }
+  return rows;
+}
+
+function stableInventory(rows) {
+  return rows
+    .map(({ project, id, status }) => ({ project, id, status }))
+    .sort((left, right) => `${left.project}:${left.id}`.localeCompare(`${right.project}:${right.id}`));
+}
+
+function readStableInventory() {
+  if (!existsSync(inventoryPath)) fail("PORTIA_STABLE_INVENTORY_MISSING");
+  const parsed = JSON.parse(readFileSync(inventoryPath, "utf8"));
+  if (parsed.schema !== "portia-phase15-stable-row-inventory-v1" || !Array.isArray(parsed.rows)) {
+    fail("PORTIA_STABLE_INVENTORY_INVALID");
+  }
+  return parsed.rows;
 }
 
 function sha256(file) {
@@ -102,7 +181,7 @@ function verifyPromotion() {
   process.stdout.write(`Verified ${approved.length} exact owner-approved snapshot bytes; ${rows.length - approved.length} non-approved rows excluded.\n`);
 }
 
-function collectRows() {
+function collectRows({ enforceInventory = false } = {}) {
   if (!existsSync(runRoot)) fail("PORTIA_CANDIDATE_SET_MISSING", setId);
   const files = readdirSync(runRoot).filter((file) => file.endsWith(".candidate.json") || file.endsWith(".blocked.json"));
   if (!files.length) fail("PORTIA_CANDIDATE_ROWS_MISSING", setId);
@@ -124,12 +203,9 @@ function collectRows() {
       const candidate = path.resolve(workspace, row.candidateFile);
       if (!existsSync(candidate) || !statSync(candidate).isFile()) fail("PORTIA_CANDIDATE_PNG_MISSING", row.candidateFile);
       if (sha256(candidate) !== row.sha256) fail("PORTIA_CANDIDATE_HASH_MISMATCH", row.candidateFile);
-    } else if (row.status === "BLOCKED") {
-      if (!row.reason) fail("PORTIA_BLOCKED_REASON_MISSING", row.state);
-    } else {
-      fail("PORTIA_CANDIDATE_STATUS_INVALID", row.status);
     }
   }
+  validateCandidateRows(rows, enforceInventory ? readStableInventory() : undefined);
   return rows.sort((left, right) => `${left.surface}:${left.state}`.localeCompare(`${right.surface}:${right.state}`));
 }
 
@@ -171,7 +247,7 @@ function markdown(rows) {
 function verifyFigmaMap() {
   if (!existsSync(frameMapPath)) fail("PORTIA_FIGMA_MAP_MISSING", "Task 3 has not created the map.");
   const map = readFileSync(frameMapPath, "utf8");
-  const rows = collectRows();
+  const rows = collectRows({ enforceInventory: true });
   for (const row of rows) {
     const identity = row.status === "CAPTURED" ? row.sha256 : `BLOCKED:${row.id ?? row.state}`;
     if (!map.includes(identity)) fail("PORTIA_FIGMA_MAP_ROW_MISSING", row.state);
@@ -179,6 +255,7 @@ function verifyFigmaMap() {
   process.stdout.write(`Verified Figma map for ${rows.length} candidate rows.\n`);
 }
 
+function runCli() {
 if (args.has("--promote-approved")) {
   promoteApproved();
   verifyPromotion();
@@ -186,8 +263,18 @@ if (args.has("--promote-approved")) {
   verifyPromotion();
 } else if (args.has("--verify-figma-map")) {
   verifyFigmaMap();
-} else {
+} else if (args.has("--write-inventory")) {
+  if (existsSync(inventoryPath)) fail("PORTIA_STABLE_INVENTORY_EXISTS");
   const rows = collectRows();
+  writeFileSync(inventoryPath, `${JSON.stringify({
+    schema: "portia-phase15-stable-row-inventory-v1",
+    setId,
+    sourceCommit: rows[0].sourceCommit,
+    rows: stableInventory(rows),
+  }, null, 2)}\n`);
+  process.stdout.write(`Wrote stable inventory for ${rows.length} rows.\n`);
+} else {
+  const rows = collectRows({ enforceInventory: args.has("--verify") });
   mkdirSync(runRoot, { recursive: true });
   writeFileSync(path.join(runRoot, "manifest.json"), `${JSON.stringify({ schema: "portia-phase15-visual-manifest-v1", setId, sourceCommit: rows[0].sourceCommit, rows }, null, 2)}\n`);
   if (args.has("--verify")) {
@@ -196,4 +283,9 @@ if (args.has("--promote-approved")) {
   } else {
     process.stdout.write(`Wrote manifest for ${setId}.\n`);
   }
+}
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  runCli();
 }

@@ -58,7 +58,11 @@ test("[STAB-BASE-03] capture desktop rest, start and window geometry candidates"
         actor: "visitor",
         state: `${state}; ${testInfo.project.name}`,
         intendedSnapshot: `tests/e2e/visual/__screenshots__/${id}--${testInfo.project.name}.png`,
-      }, "Phone windows use the full-screen phone contract and do not expose this desktop window control.");
+      }, {
+        reasonCode: "PHONE_WINDOW_CONTRACT",
+        recoveryPhase: 18,
+        reason: "Phone windows use the full-screen phone contract and do not expose this desktop window control.",
+      });
     }
     return;
   }
@@ -113,6 +117,10 @@ test("[STAB-BASE-03] capture the declared device project candidate", async ({ pa
       actor: "visitor",
       state: "Firefox behavior/accessibility smoke; no pixel authority",
       intendedSnapshot: "tests/e2e/visual/__screenshots__/desktop-firefox--firefox-desktop.png",
-    }, "Firefox remains behavior/a11y evidence until an explicit cross-browser pixel row is owner-signed.");
+    }, {
+      reasonCode: "PIXEL_AUTHORITY_NOT_SIGNED",
+      recoveryPhase: 22,
+      reason: "Firefox remains behavior/a11y evidence until an explicit cross-browser pixel row is owner-signed.",
+    });
   }
 });

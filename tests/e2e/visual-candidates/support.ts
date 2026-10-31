@@ -32,8 +32,11 @@ export type CandidateBlocker = Readonly<{
   reasonCode:
     | "ISOLATED_AUTH_REQUIRED"
     | "ISOLATED_PROMOTION_DATA_REQUIRED"
-    | "UNCLASSIFIED_BLOCKER";
-  recoveryPhase: 16 | 19 | 15;
+    | "PUBLIC_STATE_FIXTURE_REQUIRED"
+    | "PHONE_WINDOW_CONTRACT"
+    | "PIXEL_AUTHORITY_NOT_SIGNED"
+    | "MOTION_CAPTURE_BOUNDARY_REQUIRED";
+  recoveryPhase: 16 | 18 | 19 | 20 | 22;
   reason: string;
 }>;
 
@@ -141,7 +144,7 @@ export async function captureCandidate(context: CandidateContext, spec: Candidat
 export async function recordBlockedCandidate(
   context: CandidateContext,
   spec: Omit<CandidateSpec, "mask" | "animations">,
-  blocker: CandidateBlocker | string,
+  blocker: CandidateBlocker,
 ) {
   mkdirSync(runRoot, { recursive: true });
   const stem = `${safeId(spec.id)}--${safeId(context.testInfo.project.name)}`;
@@ -155,9 +158,9 @@ export async function recordBlockedCandidate(
     actor: spec.actor,
     state: spec.state,
     intendedSnapshot: spec.intendedSnapshot,
-    reasonCode: typeof blocker === "string" ? "UNCLASSIFIED_BLOCKER" : blocker.reasonCode,
-    recoveryPhase: typeof blocker === "string" ? 15 : blocker.recoveryPhase,
-    reason: typeof blocker === "string" ? blocker : blocker.reason,
+    reasonCode: blocker.reasonCode,
+    recoveryPhase: blocker.recoveryPhase,
+    reason: blocker.reason,
     ...(await browserEnvironment(context)),
   };
   writeFileSync(path.join(runRoot, `${stem}.blocked.json`), `${JSON.stringify(row, null, 2)}\n`);

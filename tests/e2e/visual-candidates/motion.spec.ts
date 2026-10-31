@@ -121,10 +121,22 @@ test("[STAB-BASE-03] inventory motion surfaces that need dedicated actor/device 
   const context = { page, browser, determinism, testInfo };
   const desktop = new DesktopPage(page);
   await desktop.goto();
-  for (const [id, state, reason] of [
-    ["motion-boot", "boot start, transition and complete", "Current deterministic fixture intentionally skips the once-per-session boot; a dedicated isolated context is still required."],
-    ["motion-wallpapers", "wallpaper movement and switching", "Each wallpaper requires a separately mapped clock state; no blanket timer capture."],
-    ["motion-window-lock", "window drag/resize and qualification lock", "Qualification lock requires isolated participant fixtures."],
+  for (const [id, state, blocker] of [
+    ["motion-boot", "boot start, transition and complete", {
+      reasonCode: "MOTION_CAPTURE_BOUNDARY_REQUIRED",
+      recoveryPhase: 18,
+      reason: "Current deterministic fixture intentionally skips the once-per-session boot; a dedicated isolated context is still required.",
+    }],
+    ["motion-wallpapers", "wallpaper movement and switching", {
+      reasonCode: "MOTION_CAPTURE_BOUNDARY_REQUIRED",
+      recoveryPhase: 18,
+      reason: "Each wallpaper requires a separately mapped clock state; no blanket timer capture.",
+    }],
+    ["motion-window-lock", "window drag/resize and qualification lock", {
+      reasonCode: "ISOLATED_PROMOTION_DATA_REQUIRED",
+      recoveryPhase: 19,
+      reason: "Qualification lock requires isolated participant fixtures.",
+    }],
   ] as const) {
     await recordBlockedCandidate(context, {
       id,
@@ -133,6 +145,6 @@ test("[STAB-BASE-03] inventory motion surfaces that need dedicated actor/device 
       actor: id === "motion-window-lock" ? "participant" : "visitor",
       state,
       intendedSnapshot: `tests/e2e/visual/__screenshots__/${id}--${testInfo.project.name}.png`,
-    }, reason);
+    }, blocker);
   }
 });
