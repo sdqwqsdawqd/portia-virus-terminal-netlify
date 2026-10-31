@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 15
 current_phase_name: Восстановление контроля, контракты и браузерный baseline
 status: executing
-stopped_at: Completed 15-15-PLAN.md
-last_updated: "2026-10-31T22:31:34.103Z"
+stopped_at: Completed 15-16-PLAN.md
+last_updated: "2026-10-31T23:04:36.192Z"
 last_activity: 2026-11-01
-last_activity_desc: Repeated clean-checkout verification; Phase 15 stays gaps_found
-state_head: 02ed12c6bf2162407bcdc2c42e0ddecb67aa0df6
+last_activity_desc: Plan 15-16 closed G6 (tracked candidate index); Phase 15 stays gaps_found
+state_head: c8ccfe340d7ec56df518455449bb08e8d1b7d71d
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 16
+  completed_plans: 16
   percent: 100
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-29)
 
 **Core value:** Сделать существующий PORTIA OS доказуемо устойчивым, безопасным и визуально последовательным, сохранив его текущую художественную основу.
-**Current focus:** Phase 15 — Восстановление контроля, контракты и браузерный baseline
+**Current focus:** Phase PORTIA-15 — Восстановление контроля, контракты и браузерный baseline
 
 ## Current Position
 
-Phase: 15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
-Plan: 15 of 15
-Status: All 15 plans executed; Phase 15 verification = gaps_found (role/data/visual/device gaps open) — awaiting orchestrator verification gates
-Last activity: 2026-11-01 -- Repeated clean-checkout verification (Plan 15-15); lifecycle decision gaps_found
+Phase: PORTIA-15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
+Plan: 16 of 16
+Status: All 16 plans executed; Phase 15 verification = gaps_found (G1-G5 open: role/data/visual/device; G6 resolved by Plan 15-16) — awaiting orchestrator verification gates
+Last activity: 2026-11-01 -- Plan 15-16 closed G6 (tracked candidate index, clean-checkout proof)
 
 Progress: [██████████] 100% of Phase 15 plans (phase gaps_found, not complete)
 
@@ -68,6 +68,7 @@ Progress: [██████████] 100% of Phase 15 plans (phase gaps_fo
 | Phase 15 P13 | 20min | 2 tasks | 2 files |
 | Phase 15 P14 | 45min | 2 tasks | 3 files |
 | Phase 15 P15 | 35min | 1 tasks | 5 files |
+| Phase 15 P16 | 40 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 15]: Candidate-generation specs are opt-in and excluded from default Playwright regression discovery.
 - [Phase 15]: 15-14: Local security gate PASS (repo-local scope only); authenticated/RLS-runtime/staging lanes stay BLOCKED; 0 unresolved critical/high; dev-tooling highs fixed via lockfile-only audit fix
 - [Phase 15]: 15-15: Phase 15 stays gaps_found after clean-checkout verification; only STAB-BASE-01 and -05 complete; 15 data-backed Playwright tests recorded BLOCKED (DATA) because no real read backing was supplied
+- [Phase 15]: 15-16: tracked 15-CANDIDATE-INDEX.json is the clean-checkout source for --verify-ui-map/--verify-approval; raw capture stays preferred and index==capture is enforced (PORTIA_CANDIDATE_INDEX_DRIFT). G6 resolved, G1-G5 and all STAB-BASE statuses unchanged.
 
 ### Pending Todos
 
@@ -112,8 +114,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-10-31T22:31:34.057Z
-Stopped at: Completed 15-15-PLAN.md
+Last session: 2026-10-31T23:04:36.145Z
+Stopped at: Completed 15-16-PLAN.md
 Resume file: None
 
 ## Operator Next Step

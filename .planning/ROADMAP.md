@@ -36,7 +36,7 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
   4. Неожиданная browser/console/network/CSP ошибка блокирует gate, а ожидаемый отказ виден как безопасное русское состояние; для каждой следующей фазы задана полная цепочка доказательств GSD.
 
 **Acceptance gate**: Локальный UI-review, per-hash approval и продвижение candidate captures в baseline остаются открытыми до явного решения владельца.
-**Plans**: 15/16 plans executed
+**Plans**: 16/16 plans executed
 
 Plans:
 **Wave 1**
@@ -101,7 +101,7 @@ Plans:
 
 **Wave 16** *(gap closure G6 only; blocked on Wave 15 completion)*
 
-- [ ] 15-16-PLAN.md — tracked candidate index so `--verify-ui-map` / `--verify-approval` pass in a clean checkout and still fail closed; G1-G5 untouched, no requirement status change (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+- [x] 15-16-PLAN.md — tracked candidate index so `--verify-ui-map` / `--verify-approval` pass in a clean checkout and still fail closed; G1-G5 untouched, no requirement status change (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
 
 **Cross-cutting constraints:**
 
@@ -227,7 +227,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 15. Восстановление контроля, контракты и браузерный baseline | 14/15 | In Progress|  |
+| 15. Восстановление контроля, контракты и браузерный baseline | 16/16 | In Progress|  |
 | 16. Канонический Supabase staging и SQL-истина | 0/TBD | Not started | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 0/TBD | Not started | - |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
