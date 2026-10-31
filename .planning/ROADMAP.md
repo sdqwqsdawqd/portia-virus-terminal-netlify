@@ -13,7 +13,7 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
 
 ## Phases
 
-- [ ] **Phase 15: Восстановление контроля, контракты и браузерный baseline** — зафиксировать текущий PORTIA OS, получить Figma-одобрение и ввести воспроизводимый Playwright/visual/a11y/console gate
+- [ ] **Phase 15: Восстановление контроля, контракты и браузерный baseline** — зафиксировать текущий PORTIA OS через локальный UI-review и ввести воспроизводимый Playwright/visual/a11y/console/security gate
 - [ ] **Phase 16: Канонический Supabase staging и SQL-истина** — доказать миграции, роли, RLS/RPC и конкурентные операции на изолированной базе
 - [ ] **Phase 17: Обратимая декомпозиция рабочего стола и редактора** — выделить безопасные seams без изменения поведения, данных и визуального контракта
 - [ ] **Phase 18: Рабочий стол, окна и живые анимации** — стабилизировать геометрию, настройки, ярлыки, PNG-паука, паутину и Вивьян по утверждённым эталонам
@@ -29,11 +29,11 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
 **Depends on**: Nothing (milestone start; Phase 14 remains an incomplete archive)
 **Requirements**: STAB-BASE-01, STAB-BASE-02, STAB-BASE-03, STAB-BASE-04, STAB-BASE-05, STAB-BASE-06
 **Success Criteria** (what must be TRUE):
-  1. Владелец может сравнить desktop и phone в Figma с текущим сайтом и явно одобрить UI/motion-контракт; все предлагаемые изменения отмечены отдельно.
+  1. Владелец может сравнить repository-owned desktop и phone captures с текущим сайтом и явно одобрить UI/motion-контракт; все предлагаемые изменения отмечены отдельно.
   2. Из чистого checkout запускается committed Playwright/axe suite для visitor, participant, editor, promo reviewer и owner на PC/phone, с фиксированными данными, временем, DPR, шрифтами и случайностью и без мутаций production.
   3. Одобренные visual baselines воспроизводят desktop, окна, «Повышение», редактор, паука, паутину, Вивьян и phone layout; снимки не становятся эталоном до владельческого одобрения.
   4. Неожиданная browser/console/network/CSP ошибка блокирует gate, а ожидаемый отказ виден как безопасное русское состояние; для каждой следующей фазы задана полная цепочка доказательств GSD.
-**Acceptance gate**: Figma approval и продвижение candidate captures в baseline остаются открытыми до явного решения владельца.
+**Acceptance gate**: Локальный UI-review, per-hash approval и продвижение candidate captures в baseline остаются открытыми до явного решения владельца.
 **Plans**: 15 plans
 
 Plans:
@@ -51,7 +51,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [x] 15-04-PLAN.md — candidate-only visual/motion captures and authoritative CURRENT/PROPOSED Figma mapping (STAB-BASE-03, STAB-BASE-04)
+- [x] 15-04-PLAN.md — candidate-only visual/motion captures and CURRENT/PROPOSED state mapping (STAB-BASE-03, STAB-BASE-04)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -79,7 +79,7 @@ Plans:
 
 **Wave 11** *(blocked on Wave 10 completion)*
 
-- [ ] 15-11-PLAN.md — Figma CURRENT capture/blocker synchronization and Qloxz verdict for every available new hash (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+- [ ] 15-11-PLAN.md — repository-native GSD/Impeccable UI review, capture/blocker synchronization and Qloxz verdict for every available hash (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
 
 **Wave 12** *(blocked on Wave 11 completion)*
 
@@ -91,7 +91,7 @@ Plans:
 
 **Wave 14** *(blocked on Wave 13 completion)*
 
-- [ ] 15-14-PLAN.md — managed Codex Security gate and high/critical finding disposition without Daybreak (STAB-BASE-02, STAB-BASE-05, STAB-BASE-06)
+- [ ] 15-14-PLAN.md — deep GSD code review plus local auth/API/RLS/header/CSP/dependency/secret security matrix and finding disposition (STAB-BASE-02, STAB-BASE-05, STAB-BASE-06)
 
 **Wave 15** *(blocked on Wave 14 completion)*
 
@@ -101,9 +101,9 @@ Plans:
 
 - Do not modify product source in Phase 15; this phase establishes evidence and executable contracts only.
 - Preserve all pre-existing dirty files until the owner records per-path disposition and touch permission.
-- Never treat a skipped staging, Figma, device or owner gate as a pass; report it as BLOCKED or PENDING.
+- Never treat a skipped staging, local visual, device or owner gate as a pass; report it as BLOCKED or PENDING.
 - Run package/browser work only from Node 22.13.x; the owner declined isolated staging, so Phase 15 must never use service-role authority or mutate the configured Supabase project.
-- Do not call or require Daybreak; the managed Codex Security evidence gate remains mandatory and an unavailable managed profile remains an explicit blocker.
+- Security evidence is repository-local and reproducible: deep GSD review, tests, dependency audit, secret scan and explicit finding disposition. No external scanner is required.
 **UI hint**: yes
 
 ### Phase 16: Канонический Supabase staging и SQL-истина
@@ -180,8 +180,8 @@ Plans:
   2. Русские labels и объявляемые success/error/disabled reasons понятны, alt соответствует назначению, а off/reduced прекращает looping movement на всех поверхностях без потери content и feedback.
   3. Participant network/UI не получает answer keys, future questions, internal notes, bank payload или reviewer identity, а sensitive responses используют no-store.
   4. Инвентаризированные media hosts проходят CSP report-only до enforcement; security headers не ломают approved charter/sheet/video, а rejected host показывает устойчивый fallback без необъяснённых CSP/console errors.
-  5. Managed Codex Security scan даёт реальный артефакт; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, а lockfile меняется отдельным проверяемым increment.
-**Acceptance gate**: Отсутствие запущенного managed scan не считается pass; незакрытый high finding блокирует релиз согласно config.
+  5. Локальная security matrix даёт проверяемый отчёт; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, а lockfile меняется отдельным проверяемым increment.
+**Acceptance gate**: Неполное локальное покрытие отмечается явно; незакрытый high finding блокирует релиз согласно config.
 **Plans**: TBD
 **UI hint**: yes
 
@@ -204,7 +204,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 15. Восстановление контроля, контракты и браузерный baseline | 9/15 | In Progress|  |
+| 15. Восстановление контроля, контракты и браузерный baseline | 10/15 | In Progress|  |
 | 16. Канонический Supabase staging и SQL-истина | 0/TBD | Not started | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 0/TBD | Not started | - |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |

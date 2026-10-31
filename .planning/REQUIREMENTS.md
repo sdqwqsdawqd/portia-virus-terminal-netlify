@@ -10,7 +10,7 @@
 - [x] **STAB-BASE-01**: До рефакторинга зафиксированы текущие экраны, русские тексты, состояния и переходы; внутренние изменения не меняют художественный язык и ключевые действия без отдельного утверждения владельца.
 - [ ] **STAB-BASE-02**: Committed Playwright-suite покрывает visitor, participant, editor, promo reviewer и owner на PC и phone, основные состояния данных и motion on/off, не изменяя production.
 - [ ] **STAB-BASE-03**: Утверждённые visual baselines покрывают desktop, окна, «Повышение», редактор, паука, паутину, Вивьян и phone layout при фиксированных данных, DPR, шрифтах и случайности.
-- [ ] **STAB-BASE-04**: Figma фиксирует текущий UI/motion-контракт для desktop и phone, включая controls, состояния, ключевые кадры, interruption и rest frame; изменения относительно текущего вида отмечены отдельно.
+- [ ] **STAB-BASE-04**: Repository-owned UI review и immutable captures фиксируют текущий UI/motion-контракт для desktop и phone, включая controls, состояния, ключевые кадры, interruption и rest frame; изменения относительно текущего вида отмечены отдельно.
 - [x] **STAB-BASE-05**: Uncaught exception, hydration warning, критический network failure, CSP violation или неожидаемая console error блокируют browser gate; ожидаемые отказы показаны безопасным русским состоянием.
 - [ ] **STAB-BASE-06**: Каждая фаза проходит GSD-цепочку requirements → contract → plan → implementation → deterministic tests → Playwright → visual/a11y/security evidence → owner UAT при необходимости → summary/verification.
 
@@ -94,7 +94,7 @@
 - [ ] **STAB-SEC-02**: Participant network/UI не получает answer keys, future questions, internal notes, bank payload и reviewer identity; sensitive responses используют no-store.
 - [ ] **STAB-SEC-03**: CSP, frame, nosniff, referrer, permissions, COOP и HSTS присутствуют, не ломая approved charter/sheet/video; CSP ужесточается только через report-only.
 - [ ] **STAB-SEC-04**: Staging и production schema fingerprints, functions, grants и RLS соответствуют canonical migrations; ручной production step имеет записанный postflight.
-- [ ] **STAB-SEC-05**: Codex Security выполняется в поддерживаемом managed profile; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, lockfile меняется отдельно.
+- [ ] **STAB-SEC-05**: Глубокий GSD code review и локальная security matrix покрывают auth/API/RLS/headers/CSP/uploads/secrets/dependencies; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, lockfile меняется отдельно.
 - [ ] **STAB-SEC-06**: Release notes честно фиксируют, что device binding не hardware attestation, initial mode spoofable, и перечисляют остальные accepted risks/waivers без расширения риска.
 
 ## Release readiness

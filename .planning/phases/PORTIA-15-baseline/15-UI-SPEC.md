@@ -17,7 +17,7 @@ source_commit: 640aba9437f5c3e81a87e2a3f887ac1d3bd530a3
 | Gate | Status | Authority |
 |---|---|---|
 | Contract completeness | VERIFIED | GSD UI six-dimension review |
-| Current-state Figma frames | PENDING | Owner-selected Figma file and revision |
+| Repository-native CURRENT review | PENDING | GSD/Impeccable review plus immutable capture map |
 | Visual candidate set | PENDING | Deterministic Playwright capture |
 | Baseline promotion | BLOCKED | Named owner approval of exact hashes |
 | Motion `system` mode | UNRESOLVED / PROPOSED ONLY | Separate owner product decision |
@@ -29,7 +29,7 @@ source_commit: 640aba9437f5c3e81a87e2a3f887ac1d3bd530a3
 
 1. PORTIA OS remains the same Russian desktop-metaphor product. Phase 15 records current behavior and identity; it does not fix known bugs.
 2. Preserve app IDs, Russian labels, data shapes, storage keys, window chrome, current fonts, accent model, PNG spider, web, Vivian and accepted iframe limitations.
-3. Every Figma frame is labelled `CURRENT`, `PROPOSED` or `REJECTED`. Only owner-signed `CURRENT` frames may map to approved snapshots.
+3. Every local review row is labelled `CURRENT`, `PROPOSED` or `REJECTED`. Only owner-signed `CURRENT` hashes may map to approved snapshots.
 4. The repository and running product are authoritative for current behavior. Older Impeccable proposals are historical when they conflict with validated project decisions.
 5. Visual snapshots are produced in a candidate lane first. Bulk `--update-snapshots` is prohibited.
 
@@ -179,11 +179,11 @@ The current product contract is `on|off`. A three-state `system|on|off` model ma
 - Motion-off evidence proves that information and feedback do not depend on movement.
 - Axe output is stored as a fingerprint inventory. Existing findings are not silently fixed or declared compliant; new/unapproved fingerprints fail the gate.
 
-## Figma Artifact Contract
+## Repository-native UI Artifact Contract
 
-The repository records the portable Figma URL/file key, revision/version date, named signer and verdict in `evidence/15-FIGMA-CONTRACT.md`. Local paths and localhost links are prohibited in the shared Figma spec.
+The repository records the source commit, candidate-set ID, local-contract digest, named signer and verdict in `evidence/15-LOCAL-UI-CONTRACT.md` and `evidence/15-VISUAL-APPROVAL.md`. Immutable PNG hashes and tracked Markdown form the portable authority; no external mutable design file is required.
 
-Required pages/sections:
+Required sections:
 
 1. `00 Evidence` — source commit, dirty-ledger ID, candidate hashes and environment.
 2. `01 Foundations CURRENT` — colors, typography, spacing exceptions, icons and raster assets.
@@ -195,14 +195,14 @@ Required pages/sections:
 8. `07 PROPOSED` — optional future ideas, excluded from current baseline.
 9. `08 APPROVED FOR BASELINE` — owner-signed frames linked to exact candidate hashes.
 
-If a Figma plan supports native Specs, this Markdown may be copied into a `SPEC_BLOCK`. Before any write, `figma.spec` support and `specs_enabled` must be verified. If unsupported, the repository UI-SPEC remains authoritative and the Design file stores frames plus a link to the committed spec.
+The local contract is reviewed with `gsd-ui-review` and Impeccable, then bound to Playwright captures by SHA-256. Proposed content stays separate from CURRENT and cannot become approved through a bulk snapshot update.
 
 ## Candidate Capture and Promotion Protocol
 
 1. Capture with `page.screenshot()` into `evidence/visual-candidates/<candidate-set-id>/`, never directly into the golden directory.
 2. Wait through semantic/web-first conditions for fonts, local images, fixture completion and the requested state; `waitForTimeout` is forbidden.
 3. Manifest each PNG with requirement, commit, dirty-ledger ID, actor/state, fixture revision, seed/time, tool/browser/OS, viewport/DPR, locale/timezone, settings and SHA-256.
-4. Record `APPROVED`, `REJECTED` or `PENDING` per exact hash in `evidence/15-VISUAL-APPROVAL.md`, including signer, timestamp and Figma frame/node.
+4. Record `APPROVED`, `REJECTED` or `PENDING` per exact hash in `evidence/15-VISUAL-APPROVAL.md`, including signer, timestamp and local review row.
 5. Copy only approved bytes to snapshot destinations. Do not recapture during promotion.
 6. Run `toHaveScreenshot` from the pinned clean environment and verify that approved bytes remain unchanged.
 
@@ -210,10 +210,10 @@ If a Figma plan supports native Specs, this Markdown may be copied into a `SPEC_
 
 | Requirement | Contract evidence | Browser evidence |
 |---|---|---|
-| STAB-BASE-01 | Surface inventory, locked identity, current-state Figma pages | Before/current-state behavior and candidate set |
+| STAB-BASE-01 | Surface inventory, locked identity, local CURRENT sections | Before/current-state behavior and candidate set |
 | STAB-BASE-02 | Device/actor/state matrix | Committed project, fixture and page-object suite |
 | STAB-BASE-03 | Candidate/promotion protocol | Approved Chromium desktop/DPR1.25/phone snapshots |
-| STAB-BASE-04 | Figma artifact and motion contract | Frame-to-test mapping and signed revision |
+| STAB-BASE-04 | Repository UI artifact and motion contract | Row-to-test mapping and signed contract digest |
 | STAB-BASE-05 | Copy/error and accessibility contracts | Automatic console/network/hydration/CSP fixture |
 | STAB-BASE-06 | Gate/status definitions | `15-TRACEABILITY.md`, summaries and verification |
 
@@ -232,7 +232,7 @@ The following remain deliberately unresolved and block Phase 15 completion, not 
 1. Disposition and owner of the existing uncommitted `motion` package patch.
 2. Dedicated non-production Supabase target and role accounts.
 3. Representative phone/device descriptor and physical phone UAT target.
-4. Authoritative Figma file/spec, named signing owner and revision.
+4. Authoritative local UI contract digest and named signing owner.
 5. Exact disposition/expiry for any diagnostic or accessibility allowlist entry.
 6. Approval or rejection of every candidate-set hash before baseline promotion.
 
@@ -246,5 +246,4 @@ The following remain deliberately unresolved and block Phase 15 completion, not 
 - [x] Dimension 6 Registry Safety: PASS — no registry/library addition is permitted.
 
 **Contract verification:** PASS, 2026-10-30.  
-**Owner/Figma/baseline approval:** PENDING; execution plans must preserve terminal checkpoints.
-
+**Owner/local-baseline approval:** PENDING; execution plans must preserve terminal checkpoints.
