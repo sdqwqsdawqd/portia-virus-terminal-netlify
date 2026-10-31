@@ -110,11 +110,101 @@ function approvalRows() {
       const verdict = columns[1]?.replaceAll("*", "");
       const hash = columns[5]?.match(/[a-f0-9]{64}/)?.[0];
       const intendedSnapshot = columns[7]?.match(/`([^`]+)`/)?.[1];
+      const reason = columns[8] ?? "";
       if (!verdict || !hash || !intendedSnapshot) fail("PORTIA_APPROVAL_ROW_INVALID", line);
-      return { verdict, hash, intendedSnapshot };
+      return { verdict, hash, intendedSnapshot, reason };
     });
   if (!rows.length) fail("PORTIA_APPROVAL_ROWS_MISSING");
   return rows;
+}
+
+function extractExactlyOne(text, pattern, missingCode, duplicateCode) {
+  const matches = [...text.matchAll(pattern)].map((match) => match[1]);
+  if (!matches.length) fail(missingCode);
+  if (matches.length !== 1) fail(duplicateCode, String(matches.length));
+  return matches[0];
+}
+
+export function parseAuthorityMetadata(text, artifact) {
+  return {
+    candidateSet: extractExactlyOne(
+      text,
+      /Candidate set:\*{0,2}\s*`([^`]+)`/gi,
+      `PORTIA_${artifact}_CANDIDATE_SET_MISSING`,
+      `PORTIA_${artifact}_CANDIDATE_SET_DUPLICATE`,
+    ),
+    sourceCommit: extractExactlyOne(
+      text,
+      /Source commit:\*{0,2}\s*`([a-f0-9]{40})`/gi,
+      `PORTIA_${artifact}_SOURCE_COMMIT_MISSING`,
+      `PORTIA_${artifact}_SOURCE_COMMIT_DUPLICATE`,
+    ),
+    figmaRevision: extractExactlyOne(
+      text,
+      /MCP session\s*`([a-f0-9-]+)`/gi,
+      `PORTIA_${artifact}_FIGMA_REVISION_MISSING`,
+      `PORTIA_${artifact}_FIGMA_REVISION_DUPLICATE`,
+    ),
+  };
+}
+
+export function validateAuthorityMetadata(artifacts) {
+  const parsed = Object.entries(artifacts).map(([artifact, text]) => ({
+    artifact,
+    ...parseAuthorityMetadata(text, artifact.toUpperCase()),
+  }));
+  for (const field of ["candidateSet", "sourceCommit", "figmaRevision"]) {
+    const values = new Set(parsed.map((entry) => entry[field]));
+    if (values.size !== 1) {
+      fail(`PORTIA_AUTHORITY_${field.replace(/[A-Z]/g, (letter) => `_${letter}`).toUpperCase()}_MISMATCH`,
+        parsed.map((entry) => `${entry.artifact}=${entry[field]}`).join(","));
+    }
+  }
+  return parsed[0];
+}
+
+export function validateApprovalCoverage(candidateRows, verdictRows, isHistoricalVerdict = (_row) => false) {
+  const captured = candidateRows.filter((row) => row.status === "CAPTURED");
+  const blockedDestinations = new Set(candidateRows
+    .filter((row) => row.status === "BLOCKED")
+    .map((row) => row.intendedSnapshot));
+  const verdicts = new Map();
+
+  for (const row of verdictRows) {
+    if (row.verdict === "PENDING") fail("PORTIA_APPROVAL_PENDING");
+    if (!(["APPROVED", "REJECTED"].includes(row.verdict))) fail("PORTIA_APPROVAL_VERDICT_INVALID", row.verdict);
+    if (blockedDestinations.has(row.intendedSnapshot)) fail("PORTIA_BLOCKED_VERDICT_REFUSED", row.intendedSnapshot);
+    if (row.verdict === "REJECTED" && (!row.reason || row.reason === "—")) {
+      fail("PORTIA_REJECTION_REASON_MISSING", row.intendedSnapshot);
+    }
+    const identity = `${row.hash}:${row.intendedSnapshot}`;
+    if (verdicts.has(identity)) fail("PORTIA_APPROVAL_VERDICT_DUPLICATE", identity);
+    verdicts.set(identity, row);
+  }
+
+  for (const row of captured) {
+    const identity = `${row.sha256}:${row.intendedSnapshot}`;
+    if (!verdicts.has(identity)) fail("PORTIA_APPROVAL_VERDICT_MISSING", identity);
+  }
+  for (const [identity, row] of verdicts) {
+    const current = captured.some((candidate) =>
+      candidate.sha256 === row.hash && candidate.intendedSnapshot === row.intendedSnapshot);
+    if (!current && !isHistoricalVerdict(row)) fail("PORTIA_APPROVAL_VERDICT_UNKNOWN", identity);
+  }
+  return verdictRows;
+}
+
+function verifyApproval() {
+  const candidates = collectRows({ enforceInventory: true });
+  const verdicts = approvalRows();
+  validateApprovalCoverage(candidates, verdicts, (row) => {
+    const destination = path.resolve(workspace, row.intendedSnapshot);
+    return destination.startsWith(`${snapshotRoot}${path.sep}`)
+      && existsSync(destination)
+      && statSync(destination).isFile()
+      && sha256(destination) === row.hash;
+  });
+  process.stdout.write(`Verified owner verdict coverage for ${candidates.filter((row) => row.status === "CAPTURED").length} captured rows; ${candidates.filter((row) => row.status === "BLOCKED").length} blocked rows excluded.\n`);
 }
 
 function snapshotFiles(directory) {
@@ -256,34 +346,36 @@ function verifyFigmaMap() {
 }
 
 function runCli() {
-if (args.has("--promote-approved")) {
-  promoteApproved();
-  verifyPromotion();
-} else if (args.has("--verify-promotion")) {
-  verifyPromotion();
-} else if (args.has("--verify-figma-map")) {
-  verifyFigmaMap();
-} else if (args.has("--write-inventory")) {
-  if (existsSync(inventoryPath)) fail("PORTIA_STABLE_INVENTORY_EXISTS");
-  const rows = collectRows();
-  writeFileSync(inventoryPath, `${JSON.stringify({
-    schema: "portia-phase15-stable-row-inventory-v1",
-    setId,
-    sourceCommit: rows[0].sourceCommit,
-    rows: stableInventory(rows),
-  }, null, 2)}\n`);
-  process.stdout.write(`Wrote stable inventory for ${rows.length} rows.\n`);
-} else {
-  const rows = collectRows({ enforceInventory: args.has("--verify") });
-  mkdirSync(runRoot, { recursive: true });
-  writeFileSync(path.join(runRoot, "manifest.json"), `${JSON.stringify({ schema: "portia-phase15-visual-manifest-v1", setId, sourceCommit: rows[0].sourceCommit, rows }, null, 2)}\n`);
-  if (args.has("--verify")) {
-    writeFileSync(evidencePath, markdown(rows));
-    process.stdout.write(`Verified ${rows.length} rows (${rows.filter((row) => row.status === "CAPTURED").length} PNGs) for ${setId}.\n`);
+  if (args.has("--promote-approved")) {
+    promoteApproved();
+    verifyPromotion();
+  } else if (args.has("--verify-promotion")) {
+    verifyPromotion();
+  } else if (args.has("--verify-approval")) {
+    verifyApproval();
+  } else if (args.has("--verify-figma-map")) {
+    verifyFigmaMap();
+  } else if (args.has("--write-inventory")) {
+    if (existsSync(inventoryPath)) fail("PORTIA_STABLE_INVENTORY_EXISTS");
+    const rows = collectRows();
+    writeFileSync(inventoryPath, `${JSON.stringify({
+      schema: "portia-phase15-stable-row-inventory-v1",
+      setId,
+      sourceCommit: rows[0].sourceCommit,
+      rows: stableInventory(rows),
+    }, null, 2)}\n`);
+    process.stdout.write(`Wrote stable inventory for ${rows.length} rows.\n`);
   } else {
-    process.stdout.write(`Wrote manifest for ${setId}.\n`);
+    const rows = collectRows({ enforceInventory: args.has("--verify") });
+    mkdirSync(runRoot, { recursive: true });
+    writeFileSync(path.join(runRoot, "manifest.json"), `${JSON.stringify({ schema: "portia-phase15-visual-manifest-v1", setId, sourceCommit: rows[0].sourceCommit, rows }, null, 2)}\n`);
+    if (args.has("--verify")) {
+      writeFileSync(evidencePath, markdown(rows));
+      process.stdout.write(`Verified ${rows.length} rows (${rows.filter((row) => row.status === "CAPTURED").length} PNGs) for ${setId}.\n`);
+    } else {
+      process.stdout.write(`Wrote manifest for ${setId}.\n`);
+    }
   }
-}
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
