@@ -5,17 +5,17 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 15
 current_phase_name: Восстановление контроля, контракты и браузерный baseline
 status: executing
-stopped_at: Completed 15-14-PLAN.md
-last_updated: "2026-10-31T22:20:34.953Z"
-last_activity: 2026-10-31
-last_activity_desc: Bound visual verification to signed candidate-set, source-commit and contract-digest authority
-state_head: dfa77aca0f77b7faec8f36ff2476866451f8f107
+stopped_at: Completed 15-15-PLAN.md
+last_updated: "2026-10-31T22:31:34.103Z"
+last_activity: 2026-11-01
+last_activity_desc: Repeated clean-checkout verification; Phase 15 stays gaps_found
+state_head: 02ed12c6bf2162407bcdc2c42e0ddecb67aa0df6
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
-  completed_plans: 14
-  percent: 93
+  completed_plans: 15
+  percent: 100
 ---
 
 # Project State
@@ -30,11 +30,11 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
-Plan: 14 of 15
-Status: Plan 15-13 complete (signed authority binding); plans 15-14 and 15-15 remain
-Last activity: 2026-10-31 -- Promoted and executed the owner-approved exact-byte visual baseline
+Plan: 15 of 15
+Status: All 15 plans executed; Phase 15 verification = gaps_found (role/data/visual/device gaps open) — awaiting orchestrator verification gates
+Last activity: 2026-11-01 -- Repeated clean-checkout verification (Plan 15-15); lifecycle decision gaps_found
 
-Progress: [█████████░] 93%
+Progress: [██████████] 100% of Phase 15 plans (phase gaps_found, not complete)
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [█████████░] 93%
 |------|----------|-------|-------|
 | Phase 15 P13 | 20min | 2 tasks | 2 files |
 | Phase 15 P14 | 45min | 2 tasks | 3 files |
+| Phase 15 P15 | 35min | 1 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 15]: Firefox is the Search-window pixel authority; other projects retain shell/device coverage.
 - [Phase 15]: Candidate-generation specs are opt-in and excluded from default Playwright regression discovery.
 - [Phase 15]: 15-14: Local security gate PASS (repo-local scope only); authenticated/RLS-runtime/staging lanes stay BLOCKED; 0 unresolved critical/high; dev-tooling highs fixed via lockfile-only audit fix
+- [Phase 15]: 15-15: Phase 15 stays gaps_found after clean-checkout verification; only STAB-BASE-01 and -05 complete; 15 data-backed Playwright tests recorded BLOCKED (DATA) because no real read backing was supplied
 
 ### Pending Todos
 
@@ -110,10 +112,10 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-10-31T22:20:34.907Z
-Stopped at: Completed 15-14-PLAN.md
+Last session: 2026-10-31T22:31:34.057Z
+Stopped at: Completed 15-15-PLAN.md
 Resume file: None
 
 ## Operator Next Step
 
-Run `/gsd-resume-work`. Plans 15-13 through 15-15 remain: signed metadata/path verification, local security evidence, then clean-checkout terminal verification.
+Plan 15-15 is complete. Run the Phase 15 verification gates; phase stays `gaps_found` until Phase 16/18/19/22 close the owned gaps.

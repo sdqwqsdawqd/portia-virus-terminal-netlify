@@ -36,7 +36,7 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
   4. Неожиданная browser/console/network/CSP ошибка блокирует gate, а ожидаемый отказ виден как безопасное русское состояние; для каждой следующей фазы задана полная цепочка доказательств GSD.
 
 **Acceptance gate**: Локальный UI-review, per-hash approval и продвижение candidate captures в baseline остаются открытыми до явного решения владельца.
-**Plans**: 14/15 plans executed
+**Plans**: 15/15 plans executed
 
 Plans:
 **Wave 1**
@@ -97,7 +97,7 @@ Plans:
 
 **Wave 15** *(blocked on Wave 14 completion)*
 
-- [ ] 15-15-PLAN.md — safe local clean-checkout, traceability refresh and honest gaps_found lifecycle verification (STAB-BASE-01..06)
+- [x] 15-15-PLAN.md — safe local clean-checkout, traceability refresh and honest gaps_found lifecycle verification (STAB-BASE-01..06); executed, phase remains gaps_found (concrete role/data/visual/device gaps owned by Phases 16/18/19/22)
 
 **Cross-cutting constraints:**
 
