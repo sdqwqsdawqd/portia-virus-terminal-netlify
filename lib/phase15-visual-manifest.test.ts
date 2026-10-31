@@ -11,6 +11,7 @@ import {
   validateAuthorityMetadata,
   validateCandidateRows,
   validateUiMapRows,
+  assertCandidateIndexMatches,
 } from "../scripts/phase15-visual-manifest.mjs";
 
 const base = {
@@ -144,13 +145,13 @@ describe("Phase 15 CLI authority binding (disposable fixtures)", () => {
   const evidenceDir = ".planning/phases/PORTIA-15-baseline/evidence";
   const files = ["15-VISUAL-APPROVAL.md", "15-LOCAL-UI-CONTRACT.md", "15-FRAME-TEST-MAP.md", "15-STABLE-ROW-INVENTORY.json", "15-CANDIDATE-INDEX.json"];
 
-  function fixture(mutate: (name: string, text: string) => string = (_, text) => text) {
+  function fixture(mutate: (name: string, text: string) => string = (_, text) => text, omit: string[] = []) {
     const dir = mkdtempSync(path.join(tmpdir(), "portia-authority-"));
     const git = (...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: dir });
     git("init", "-q");
     git("commit", "-q", "--allow-empty", "-m", "fixture");
     mkdirSync(path.join(dir, evidenceDir), { recursive: true });
-    for (const name of files) {
+    for (const name of files.filter((file) => !omit.includes(file))) {
       const text = readFileSync(path.resolve(evidenceDir, name), "utf8");
       writeFileSync(path.join(dir, evidenceDir, name), mutate(name, text));
     }
@@ -189,10 +190,68 @@ describe("Phase 15 CLI authority binding (disposable fixtures)", () => {
     assert.match(out, /Source: tracked index/);
   });
 
+  const indexFile = "15-CANDIDATE-INDEX.json";
+  const tamperIndex = (change: (index: { rows: Array<Record<string, unknown>> }) => void) => (name: string, text: string) => {
+    if (name !== indexFile) return text;
+    const index = JSON.parse(text);
+    change(index);
+    return JSON.stringify(index);
+  };
+  const indexCases: Array<[string, (name: string, text: string) => string, string, RegExp]> = [
+    ["a changed row hash", tamperIndex((i) => { i.rows.find((r) => r.status === "CAPTURED")!.sha256 = "0".repeat(64); }), "--verify-ui-map", /PORTIA_UI_MAP_HASH_MISMATCH/],
+    ["a changed row hash (approval)", tamperIndex((i) => { i.rows.find((r) => r.status === "CAPTURED")!.sha256 = "0".repeat(64); }), "--verify-approval", /PORTIA_APPROVAL_VERDICT_MISSING/],
+    ["a replaced candidate set", (n, t) => (n === indexFile ? t.replaceAll(real, "phase15-current-000000000000") : t), "--verify-ui-map", /PORTIA_CANDIDATE_INDEX_INVALID/],
+    ["a replaced source commit", (n, t) => (n === indexFile ? t.replaceAll("efbc1401080d6b65ba1f4916ad0343b783c62bb8", "0".repeat(40)) : t), "--verify-ui-map", /PORTIA_CANDIDATE_SET_SOURCE_MISMATCH/],
+    ["a removed row", tamperIndex((i) => { i.rows.pop(); }), "--verify-ui-map", /PORTIA_CANDIDATE_ROW_MISSING/],
+    ["drifted contract bytes", (n, t) => (n === "15-LOCAL-UI-CONTRACT.md" ? `${t}
+extra byte drift
+` : t), "--verify-ui-map", /PORTIA_AUTHORITY_LOCAL_CONTRACT_DIGEST_MISMATCH/],
+    ["drifted contract bytes (approval)", (n, t) => (n === "15-LOCAL-UI-CONTRACT.md" ? `${t}
+extra byte drift
+` : t), "--verify-approval", /PORTIA_AUTHORITY_LOCAL_CONTRACT_DIGEST_MISMATCH/],
+  ];
+  for (const [name, mutate, flag, expected] of indexCases) {
+    test(`${flag} rejects index with ${name}`, () => {
+      const out = run(fixture(mutate), flag);
+      assert.match(out, expected);
+      assert.match(out, /^1:/);
+    });
+  }
+
+  test("--verify-approval passes from the tracked index when no raw capture exists", () => {
+    const out = run(fixture(), "--verify-approval");
+    assert.match(out, /^0:/);
+    assert.match(out, /Verified owner verdict coverage for 51 captured rows; 33 blocked rows excluded./);
+    assert.match(out, /Source: tracked index/);
+  });
+
+  for (const flag of ["--verify-ui-map", "--verify-approval"]) {
+    test(`${flag} fails closed with neither raw capture nor index`, () => {
+      const out = run(fixture(undefined, [indexFile]), flag);
+      assert.match(out, /PORTIA_CANDIDATE_SET_MISSING/);
+      assert.match(out, /^1:/);
+    });
+  }
+
   test("untouched fixture passes authority and fails only later on missing snapshots", () => {
     const out = run(fixture(), "--verify-promotion");
     assert.doesNotMatch(out, /PORTIA_(AUTHORITY|APPROVAL_(CANDIDATE|SOURCE|LOCAL)|CONTRACT|FRAME_MAP)/);
     assert.match(out, /PORTIA_APPROVED_SNAPSHOT_MISSING/);
+  });
+});
+
+describe("Phase 15 candidate index drift guard", () => {
+  const row = (id: string) => ({ ...captured(), id, viewport: { width: 1280, height: 800 } });
+
+  test("accepts the same rows in a different order", () => {
+    assert.doesNotThrow(() => assertCandidateIndexMatches([row("a"), row("b")], [row("b"), row("a")]));
+  });
+
+  test("rejects a changed field, a missing row and an extra row", () => {
+    const changed = { ...row("a"), viewport: { width: 1, height: 800 } };
+    assert.throws(() => assertCandidateIndexMatches([changed], [row("a")]), /PORTIA_CANDIDATE_INDEX_DRIFT/);
+    assert.throws(() => assertCandidateIndexMatches([row("a")], [row("a"), row("b")]), /PORTIA_CANDIDATE_INDEX_DRIFT/);
+    assert.throws(() => assertCandidateIndexMatches([row("a"), row("b")], [row("a")]), /PORTIA_CANDIDATE_INDEX_DRIFT/);
   });
 });
 
