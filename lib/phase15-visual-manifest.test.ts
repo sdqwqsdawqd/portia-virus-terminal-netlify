@@ -62,7 +62,7 @@ describe("Phase 15 visual manifest integrity", () => {
   });
 
   test("rejects reasonless blocked rows", () => {
-    const { reason: _reason, ...row } = blocked();
+    const row = { ...blocked(), reason: "" };
     assert.throws(() => validateCandidateRows([row]), /PORTIA_BLOCKED_REASON_MISSING/);
   });
 

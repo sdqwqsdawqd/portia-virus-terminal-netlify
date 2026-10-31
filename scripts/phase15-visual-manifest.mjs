@@ -163,7 +163,13 @@ export function validateAuthorityMetadata(artifacts) {
   return parsed[0];
 }
 
-export function validateApprovalCoverage(candidateRows, verdictRows, isHistoricalVerdict = (_row) => false) {
+/**
+ * @param {Array<Record<string, unknown>>} candidateRows
+ * @param {Array<Record<string, unknown>>} verdictRows
+ * @param {(row: Record<string, unknown>) => boolean} [isHistoricalVerdict]
+ */
+export function validateApprovalCoverage(candidateRows, verdictRows, isHistoricalVerdict) {
+  const historicalVerdict = isHistoricalVerdict ?? (() => false);
   const captured = candidateRows.filter((row) => row.status === "CAPTURED");
   const blockedDestinations = new Set(candidateRows
     .filter((row) => row.status === "BLOCKED")
@@ -189,7 +195,7 @@ export function validateApprovalCoverage(candidateRows, verdictRows, isHistorica
   for (const [identity, row] of verdicts) {
     const current = captured.some((candidate) =>
       candidate.sha256 === row.hash && candidate.intendedSnapshot === row.intendedSnapshot);
-    if (!current && !isHistoricalVerdict(row)) fail("PORTIA_APPROVAL_VERDICT_UNKNOWN", identity);
+    if (!current && !historicalVerdict(row)) fail("PORTIA_APPROVAL_VERDICT_UNKNOWN", identity);
   }
   return verdictRows;
 }
