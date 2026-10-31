@@ -75,7 +75,7 @@ Plans:
 
 **Wave 10** *(blocked on Wave 9 completion)*
 
-- [ ] 15-10-PLAN.md — machine-verified privileged BLOCKED ledger and Phase 16/19 recovery ownership (STAB-BASE-02, STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+- [x] 15-10-PLAN.md — machine-verified privileged BLOCKED ledger and Phase 16/19 recovery ownership (STAB-BASE-02, STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
 
 **Wave 11** *(blocked on Wave 10 completion)*
 

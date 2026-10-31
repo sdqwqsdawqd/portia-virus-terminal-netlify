@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Стабилизация PORTIA OS
 status: executing
-stopped_at: Completed 15-09-PLAN.md
+stopped_at: Completed 15-10-PLAN.md
 last_updated: "2026-10-31"
 last_activity: 2026-10-31 -- Replanned 15-07..15-15 for local/read-only execution
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
-  completed_plans: 9
-  percent: 60
+  completed_plans: 10
+  percent: 67
 ---
 
 # Project State
@@ -26,23 +26,23 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
-Plan: 9 of 15
+Plan: 10 of 15
 Status: Executing local/read-only gap plans; remote role proof deferred
-Last activity: 2026-10-31 -- Captured read-only device candidates and semantic motion evidence
+Last activity: 2026-10-31 -- Sealed the 84-row captured/BLOCKED visual inventory
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
 **Current milestone:**
 
-- Total plans completed: 9
-- Average duration: 52m
-- Total execution time: 7h44m
+- Total plans completed: 10
+- Average duration: 49m
+- Total execution time: 8h09m
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 15 | 9 | 7h44m | 52m |
+| 15 | 10 | 8h09m | 49m |
 
 *Plan counts and velocity begin after Phase 15 planning.*
 | Phase 15 P01 | 8 min | 3 tasks | 5 files |
@@ -54,6 +54,7 @@ Progress: [██████░░░░] 60%
 | Phase 15 P07 | 12min | 2 tasks | 5 files |
 | Phase 15 P08 | 18min | 2 tasks | 10 files |
 | Phase 15 P09 | 30min | 2 tasks | 8 files |
+| Phase 15 P10 | 25min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -78,7 +79,7 @@ Full decision history: `.planning/PROJECT.md`.
 ### Blockers/Concerns
 
 - [Phase 15] Existing dirty package/planning and quick/UI-review artifacts need an ownership ledger; preserve them and do not reset or absorb them automatically.
-- [Phase 15] All 23 captured hashes are owner-approved and promoted; 35 role/device/spider/web/Vivian rows remain BLOCKED, so STAB-BASE-03/04 are partial.
+- [Phase 15] All 23 approved hashes remain exact; the current strict ledger has 51 unapproved candidate PNGs and 33 typed BLOCKED rows, so STAB-BASE-03/04 remain partial.
 - [Phase 15] Participant/editor/reviewer/owner browser lanes remain explicit BLOCKED evidence; owner declined isolated staging, so real role proof is handed to Phase 16 and no production mutation is authorized.
 - [Phase 16] Dedicated isolated Supabase project/branch, credentials and disposable fixtures are not yet proven available.
 - [Phase 21] The previous deep security scan never started; a supported managed profile is still required.
@@ -96,8 +97,8 @@ Full decision history: `.planning/PROJECT.md`.
 ## Session Continuity
 
 Last session: 2026-10-30T21:31:08.794Z
-Stopped at: Completed 15-09-PLAN.md
-Resume file: .planning/phases/PORTIA-15-baseline/15-10-PLAN.md
+Stopped at: Completed 15-10-PLAN.md
+Resume file: .planning/phases/PORTIA-15-baseline/15-11-PLAN.md
 
 ## Operator Next Step
 
