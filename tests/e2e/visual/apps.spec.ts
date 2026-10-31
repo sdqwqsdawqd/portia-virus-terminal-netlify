@@ -1,5 +1,6 @@
 import { DesktopPage } from "../pages/desktop.page";
 import { expect, test } from "../fixtures/test";
+import { visualPolicy } from "../fixtures/visual-policy";
 
 const applications = [
   ["База вирусов", "virus-archive"],
@@ -26,15 +27,9 @@ for (const [name, id] of applications) {
     if (name !== "Таблица" && name !== "Устав") {
       await expect(desktop.window(name).getByRole("status").filter({ hasText: /Загрузка/ })).toHaveCount(0);
     }
-    const mask = name === "Сотрудники"
-      ? [page.locator(".personnel-app")]
-      : name === "Таблица" || name === "Устав"
-        ? [page.locator("iframe")]
-        : undefined;
-    await expect(page).toHaveScreenshot(`application-${id}--${testInfo.project.name}.png`, {
-      mask,
-      maskColor: "#0c1715",
-      maxDiffPixels: 2_500,
-    });
+    await expect(page).toHaveScreenshot(
+      `application-${id}--${testInfo.project.name}.png`,
+      visualPolicy(page, `application:${id}`),
+    );
   });
 }
