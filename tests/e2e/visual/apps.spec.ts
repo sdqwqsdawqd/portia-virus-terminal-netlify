@@ -24,6 +24,7 @@ for (const [name, id] of applications) {
     const desktop = new DesktopPage(page);
     await desktop.goto();
     await desktop.openApp(name);
+    await expect(desktop.window(name)).toBeVisible();
     if (name !== "Таблица" && name !== "Устав") {
       await expect(desktop.window(name).getByRole("status").filter({ hasText: /Загрузка/ })).toHaveCount(0);
     }

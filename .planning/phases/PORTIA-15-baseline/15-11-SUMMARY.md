@@ -35,7 +35,7 @@ completed: 2026-10-31
 
 - Produced a six-pillar repository UI review and local UI/motion contract without Figma or Codex Security.
 - Bound 84 stable identities to 51 exact captured rows and 33 typed blockers.
-- Recorded Qloxz verdicts for every captured row: 42 approved and 9 rejected.
+- Recorded Qloxz verdicts for every captured row; after selecting Firefox as the search-window authority and de-duplicating the identical WebKit phone frame in 15-12, 33 are approved and 18 rejected.
 - Preserved still captures as evidence while rejecting the jerky/teleporting spider route, one-sided web wave and shifting/incomplete shortcut cycles.
 - Routed the owner-directed shortcut artwork/motion rebuild, continuous neighboring-sector spider path and bounded window-content reflow to Phase 18.
 
@@ -56,8 +56,8 @@ completed: 2026-10-31
 
 | Verdict | Rows | Disposition |
 |---|---:|---|
-| APPROVED | 42 | Eligible for exact-byte promotion in 15-12 |
-| REJECTED | 9 | Immutable defect evidence; replace in Phase 18 |
+| APPROVED | 33 | Eligible for exact-byte promotion in 15-12 |
+| REJECTED | 18 | Immutable defect evidence; motion rows replace in Phase 18; non-Firefox search-window rows and one duplicate WebKit destination are superseded |
 | BLOCKED | 33 | No verdict or promotion; recover in named later phases |
 
 ## Next Plan Readiness

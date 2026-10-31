@@ -13,11 +13,11 @@
 |---|---|---|---|---|---|
 | STAB-BASE-03 | Desktop and window shell | visitor — active maximized window; motion off | chromium-desktop | `583c0ebe01eac2fc10d3852da1b754b504e27ef21b09c64f1e2b8e24999e4049` | `tests/e2e/visual/__screenshots__/window-search-maximized--chromium-desktop.png` |
 | STAB-BASE-03 | Desktop and window shell | visitor — active maximized window; motion off | chromium-dpr125 | `c5ff585e39b1b7dbb7909a1d2bcddf7cb7841e8e58becc25593ac78fb0533c47` | `tests/e2e/visual/__screenshots__/window-search-maximized--chromium-dpr125.png` |
-| STAB-BASE-03 | Desktop and window shell | visitor — active maximized window; motion off | firefox-desktop | `bfdaa1f95ee71db0285c15605b3fe998eff7d8c887de6d16b5cd866e74d1e209` | `tests/e2e/visual/__screenshots__/window-search-maximized--firefox-desktop.png` |
+| STAB-BASE-03 | Desktop and window shell | visitor — active maximized window; motion off; archive content settled | firefox-desktop | `1c1c8c700b388aab1d045633a1aa61e4c5e648c691bcebcf66c9eb1473e90a1c` | `tests/e2e/visual/__screenshots__/window-search-maximized--firefox-desktop.png` |
 | STAB-BASE-03 | Desktop and window shell | visitor — active restored window; motion off | chromium-desktop | `a93e855594b058a22aa664513104c41eb9ea5db1f4664df60acba219bdb98bee` | `tests/e2e/visual/__screenshots__/window-search-restored--chromium-desktop.png` |
 | STAB-BASE-03 | Desktop and window shell | visitor — active restored window; motion off | chromium-dpr125 | `b4c04244175e8085087af30c3ea619c8b9aec4cf79c1c27b7c0e76c1dbd86c17` | `tests/e2e/visual/__screenshots__/window-search-restored--chromium-dpr125.png` |
 | STAB-BASE-03 | Desktop and window shell | visitor — active restored window; motion off | chromium-phone | `f7120d4f6deb9379b46a9db429571e3c7752e5a6baa5b2452d67ba32822098c5` | `tests/e2e/visual/__screenshots__/window-search-restored--chromium-phone.png` |
-| STAB-BASE-03 | Desktop and window shell | visitor — active restored window; motion off | firefox-desktop | `b46ff7eb8bab242bdca1e133abf4710440f2ca6a4c50a0bd8c57051f2730ecad` | `tests/e2e/visual/__screenshots__/window-search-restored--firefox-desktop.png` |
+| STAB-BASE-03 | Desktop and window shell | visitor — active restored window; motion off; archive content settled | firefox-desktop | `3242f0969b6ec36fb2fc1a1f62c27a7f2a49655cff79cc8d5cc2d3075469c17c` | `tests/e2e/visual/__screenshots__/window-search-restored--firefox-desktop.png` |
 | STAB-BASE-03 | Desktop and window shell | visitor — active restored window; motion off | webkit-phone | `6eefc48de3a0a237f15d9e7fe6a07691a2872fd2f6f5ec509f75152189369a24` | `tests/e2e/visual/__screenshots__/window-search-restored--webkit-phone.png` |
 | STAB-BASE-03 | Desktop and window shell | visitor — clean desktop; boot complete; taskbar and start closed; motion off | chromium-desktop | `3b10ee74ca67423b452afb17290fe54525b1f7c36f7890573895b1755d42d72b` | `tests/e2e/visual/__screenshots__/desktop-clean--chromium-desktop.png` |
 | STAB-BASE-03 | Desktop and window shell | visitor — clean desktop; boot complete; taskbar and start closed; motion off | chromium-dpr125 | `392929a3b606fe9a278a84f11ffc850c995a457f50ae2196f0aa5ccc51f36c02` | `tests/e2e/visual/__screenshots__/desktop-clean--chromium-dpr125.png` |
@@ -106,4 +106,3 @@
 All rows carry dirty ledger `sha256:35fa36301ad4d75b3eb6d28d09880adf1a84b6618cec110b4b738f56d6431912`, fixture `phase15-public-2026-10-30`, seed `15103013`, fixed time `2026-10-30T09:00:00+03:00`, exact browser/OS, viewport/DPR, locale/timezone and effective desktop settings in the run manifest.
 
 Ignored run manifest: `tests/e2e/visual-candidates/.runs/phase15-current-efbc1401080d/manifest.json`.
-
