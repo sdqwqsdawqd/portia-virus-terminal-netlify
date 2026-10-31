@@ -17,7 +17,16 @@ test("[STAB-BASE-02] @smoke visitor opens desktop applications through Russian c
 
 test("[STAB-BASE-02] visitor settings persist across a real reload", async ({ page }) => {
   const desktop = new DesktopPage(page);
+  const initialDataReady = Promise.all(
+    ["/api/content", "/api/access", "/api/employees"].map((pathname) =>
+      page.waitForResponse((response) => new URL(response.url()).pathname === pathname),
+    ),
+  );
   await desktop.goto();
+  // Firefox reports in-flight fetches as NS_BINDING_ABORTED when reload replaces
+  // the document. Let the desktop's initial reads settle so this test measures
+  // persisted settings instead of a navigation cancellation.
+  await initialDataReady;
   await desktop.openApp("Настройки");
 
   await desktop.chooseSetting("Анимации", "Выключены");
