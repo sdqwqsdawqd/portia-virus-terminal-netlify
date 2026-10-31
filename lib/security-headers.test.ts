@@ -13,7 +13,7 @@ test("every response receives baseline browser hardening without blocking approv
   assert.match(source, /object-src 'none'/);
   assert.match(source, /img-src 'self' data: blob: https:/);
   assert.match(source, /frame-src https:\/\/docs\.google\.com https:\/\/sdqwqsdawqd\.github\.io/);
-  assert.match(source, /process\.env\.PORTIA_E2E_ALLOW_HTTP !== "1"/);
+  assert.match(source, /process\.env\.PORTIA_E2E_ALLOW_HTTP === "1" && process\.env\.NETLIFY !== "true"/);
   assert.match(source, /upgradeInsecureRequests \? \["upgrade-insecure-requests"\] : \[\]/);
 });
 
