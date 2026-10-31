@@ -71,7 +71,7 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
-- [ ] 15-09-PLAN.md — read-only public/device/spider/web/Vivian/shortcut candidate coverage (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+- [x] 15-09-PLAN.md — read-only public/device/spider/web/Vivian/shortcut candidate coverage (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
 
 **Wave 10** *(blocked on Wave 9 completion)*
 
@@ -204,7 +204,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 15. Восстановление контроля, контракты и браузерный baseline | 8/15 | In Progress|  |
+| 15. Восстановление контроля, контракты и браузерный baseline | 9/15 | In Progress|  |
 | 16. Канонический Supabase staging и SQL-истина | 0/TBD | Not started | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 0/TBD | Not started | - |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
