@@ -271,9 +271,7 @@ function validateApprovalRows(rows) {
   const pending = rows.filter((row) => row.verdict === "PENDING");
   if (pending.length) fail("PORTIA_APPROVAL_PENDING", String(pending.length));
   const approved = rows.filter((row) => row.verdict === "APPROVED");
-  const approvedHashes = new Set(approved.map((row) => row.hash));
   const approvedDestinations = new Set(approved.map((row) => row.intendedSnapshot));
-  if (approved.length !== approvedHashes.size) fail("PORTIA_APPROVAL_HASH_DUPLICATE");
   if (approved.length !== approvedDestinations.size) fail("PORTIA_APPROVAL_DESTINATION_DUPLICATE");
   return approved;
 }
@@ -281,13 +279,13 @@ function validateApprovalRows(rows) {
 function promoteApproved() {
   const approved = validateApprovalRows(approvalRows());
   const candidates = collectRows().filter((row) => row.status === "CAPTURED");
-  const byHash = new Map(candidates.map((row) => [row.sha256, row]));
+  const byHashAndDestination = new Map(candidates.map((row) => [
+    `${row.sha256}:${row.intendedSnapshot}`,
+    row,
+  ]));
   for (const approval of approved) {
-    const candidate = byHash.get(approval.hash);
-    if (!candidate) fail("PORTIA_APPROVED_CANDIDATE_MISSING", approval.hash);
-    if (candidate.intendedSnapshot !== approval.intendedSnapshot) {
-      fail("PORTIA_APPROVED_DESTINATION_MISMATCH", approval.intendedSnapshot);
-    }
+    const candidate = byHashAndDestination.get(`${approval.hash}:${approval.intendedSnapshot}`);
+    if (!candidate) fail("PORTIA_APPROVED_CANDIDATE_MISSING", `${approval.hash}:${approval.intendedSnapshot}`);
     const source = path.resolve(workspace, candidate.candidateFile);
     const destination = path.resolve(workspace, approval.intendedSnapshot);
     if (!destination.startsWith(`${snapshotRoot}${path.sep}`)) fail("PORTIA_PROMOTION_DESTINATION_REFUSED", destination);
