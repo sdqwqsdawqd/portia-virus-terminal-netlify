@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   parseAuthorityMetadata,
+  parseUiMapRows,
   validateApprovalCoverage,
   validateAuthorityMetadata,
   validateCandidateRows,
+  validateUiMapRows,
 } from "../scripts/phase15-visual-manifest.mjs";
 
 const base = {
@@ -89,10 +91,10 @@ describe("Phase 15 visual manifest integrity", () => {
   });
 });
 
-const authority = (overrides: Partial<Record<"candidateSet" | "sourceCommit" | "figmaRevision", string>> = {}) => [
+const authority = (overrides: Partial<Record<"candidateSet" | "sourceCommit" | "localContractDigest", string>> = {}) => [
   `- Candidate set: \`${overrides.candidateSet ?? "phase15-current-abc123"}\``,
   `- Source commit: \`${overrides.sourceCommit ?? "a".repeat(40)}\``,
-  `- Figma revision locator: MCP session \`${overrides.figmaRevision ?? "11111111-1111-1111-1111-111111111111"}\``,
+  `- Local contract SHA-256: \`${overrides.localContractDigest ?? "b".repeat(64)}\``,
 ].join("\n");
 
 describe("Phase 15 signed authority metadata", () => {
@@ -105,7 +107,7 @@ describe("Phase 15 signed authority metadata", () => {
       artifact: "approval",
       candidateSet: "phase15-current-abc123",
       sourceCommit: "a".repeat(40),
-      figmaRevision: "11111111-1111-1111-1111-111111111111",
+      localContractDigest: "b".repeat(64),
     });
   });
 
@@ -128,8 +130,45 @@ describe("Phase 15 signed authority metadata", () => {
       approval: authority(), contract: authority({ sourceCommit: "b".repeat(40) }), frameMap: authority(),
     }), /PORTIA_AUTHORITY_SOURCE_COMMIT_MISMATCH/);
     assert.throws(() => validateAuthorityMetadata({
-      approval: authority(), contract: authority({ figmaRevision: "22222222-2222-2222-2222-222222222222" }), frameMap: authority(),
-    }), /PORTIA_AUTHORITY_FIGMA_REVISION_MISMATCH/);
+      approval: authority(), contract: authority({ localContractDigest: "c".repeat(64) }), frameMap: authority(),
+    }), /PORTIA_AUTHORITY_LOCAL_CONTRACT_DIGEST_MISMATCH/);
+  });
+});
+
+describe("Phase 15 repository UI map", () => {
+  const mappedCaptured = () => ({
+    project: base.project,
+    id: base.id,
+    status: "CAPTURED",
+    section: "04 Editor CURRENT",
+    sha256: "a".repeat(64),
+    candidateFile: "tests/e2e/visual-candidates/.runs/set/editor.png",
+    intendedSnapshot: "tests/e2e/visual/__screenshots__/editor.png",
+  });
+  const mappedBlocked = () => ({
+    project: base.project,
+    id: base.id,
+    status: "BLOCKED",
+    section: "04 Editor CURRENT",
+    reasonCode: "ISOLATED_AUTH_REQUIRED",
+    recoveryPhase: 16,
+    intendedSnapshot: "tests/e2e/visual/__screenshots__/editor.png",
+  });
+  const capturedCandidate = () => ({ ...captured(), intendedSnapshot: "tests/e2e/visual/__screenshots__/editor.png" });
+  const blockedCandidate = () => ({ ...blocked(), intendedSnapshot: "tests/e2e/visual/__screenshots__/editor.png" });
+
+  test("parses JSONL and accepts exact captured and blocked mappings", () => {
+    const text = `<!-- UI-MAP:START -->\n\`\`\`jsonl\n${JSON.stringify(mappedCaptured())}\n\`\`\`\n<!-- UI-MAP:END -->`;
+    assert.deepEqual(parseUiMapRows(text), [mappedCaptured()]);
+    assert.doesNotThrow(() => validateUiMapRows([capturedCandidate()], [mappedCaptured()]));
+    assert.doesNotThrow(() => validateUiMapRows([blockedCandidate()], [mappedBlocked()]));
+  });
+
+  test("rejects missing, duplicate, mismatched and PROPOSED mappings", () => {
+    assert.throws(() => validateUiMapRows([capturedCandidate()], []), /PORTIA_UI_MAP_ROW_MISSING/);
+    assert.throws(() => validateUiMapRows([capturedCandidate()], [mappedCaptured(), mappedCaptured()]), /PORTIA_UI_MAP_ROW_DUPLICATE/);
+    assert.throws(() => validateUiMapRows([capturedCandidate()], [{ ...mappedCaptured(), sha256: "c".repeat(64) }]), /PORTIA_UI_MAP_HASH_MISMATCH/);
+    assert.throws(() => validateUiMapRows([capturedCandidate()], [{ ...mappedCaptured(), section: "07 PROPOSED" }]), /PORTIA_UI_MAP_CURRENT_SECTION_INVALID/);
   });
 });
 

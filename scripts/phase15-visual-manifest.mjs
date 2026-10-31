@@ -10,6 +10,7 @@ const setId = process.env.PORTIA_VISUAL_SET_ID?.trim() || `phase15-current-${com
 const runRoot = path.resolve(workspace, "tests/e2e/visual-candidates/.runs", setId);
 const evidencePath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-VISUAL-CANDIDATES.md");
 const frameMapPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-FRAME-TEST-MAP.md");
+const localContractPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-LOCAL-UI-CONTRACT.md");
 const approvalPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-VISUAL-APPROVAL.md");
 const inventoryPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-STABLE-ROW-INVENTORY.json");
 const snapshotRoot = path.resolve(workspace, "tests/e2e/visual/__screenshots__");
@@ -93,7 +94,7 @@ function readStableInventory() {
   if (parsed.schema !== "portia-phase15-stable-row-inventory-v1" || !Array.isArray(parsed.rows)) {
     fail("PORTIA_STABLE_INVENTORY_INVALID");
   }
-  return parsed.rows;
+  return parsed;
 }
 
 function sha256(file) {
@@ -139,11 +140,11 @@ export function parseAuthorityMetadata(text, artifact) {
       `PORTIA_${artifact}_SOURCE_COMMIT_MISSING`,
       `PORTIA_${artifact}_SOURCE_COMMIT_DUPLICATE`,
     ),
-    figmaRevision: extractExactlyOne(
+    localContractDigest: extractExactlyOne(
       text,
-      /MCP session\s*`([a-f0-9-]+)`/gi,
-      `PORTIA_${artifact}_FIGMA_REVISION_MISSING`,
-      `PORTIA_${artifact}_FIGMA_REVISION_DUPLICATE`,
+      /Local contract SHA-256:\*{0,2}\s*`([a-f0-9]{64})`/gi,
+      `PORTIA_${artifact}_LOCAL_CONTRACT_DIGEST_MISSING`,
+      `PORTIA_${artifact}_LOCAL_CONTRACT_DIGEST_DUPLICATE`,
     ),
   };
 }
@@ -153,7 +154,7 @@ export function validateAuthorityMetadata(artifacts) {
     artifact,
     ...parseAuthorityMetadata(text, artifact.toUpperCase()),
   }));
-  for (const field of ["candidateSet", "sourceCommit", "figmaRevision"]) {
+  for (const field of ["candidateSet", "sourceCommit", "localContractDigest"]) {
     const values = new Set(parsed.map((entry) => entry[field]));
     if (values.size !== 1) {
       fail(`PORTIA_AUTHORITY_${field.replace(/[A-Z]/g, (letter) => `_${letter}`).toUpperCase()}_MISMATCH`,
@@ -161,6 +162,51 @@ export function validateAuthorityMetadata(artifacts) {
     }
   }
   return parsed[0];
+}
+
+export function parseUiMapRows(text) {
+  const block = text.match(/<!-- UI-MAP:START -->\s*```jsonl\s*([\s\S]*?)\s*```\s*<!-- UI-MAP:END -->/);
+  if (!block) fail("PORTIA_UI_MAP_BLOCK_MISSING");
+  return block[1].split(/\r?\n/).filter(Boolean).map((line) => {
+    try {
+      return JSON.parse(line);
+    } catch {
+      fail("PORTIA_UI_MAP_ROW_INVALID", line);
+    }
+  });
+}
+
+export function validateUiMapRows(candidateRows, mapRows) {
+  const candidates = new Map(candidateRows.map((row) => [rowIdentity(row), row]));
+  const mapped = new Map();
+  const currentSections = new Set([
+    "00 Evidence", "02 Desktop CURRENT", "03 Applications CURRENT",
+    "04 Editor CURRENT", "05 Promotion CURRENT", "06 Motion CURRENT",
+  ]);
+
+  for (const row of mapRows) {
+    const identity = `${row.project}:${row.id}`;
+    if (mapped.has(identity)) fail("PORTIA_UI_MAP_ROW_DUPLICATE", identity);
+    mapped.set(identity, row);
+    const candidate = candidates.get(identity);
+    if (!candidate) fail("PORTIA_UI_MAP_ROW_UNEXPECTED", identity);
+    if (row.status !== candidate.status) fail("PORTIA_UI_MAP_STATUS_MISMATCH", identity);
+    if (!currentSections.has(row.section)) fail("PORTIA_UI_MAP_CURRENT_SECTION_INVALID", `${identity}:${row.section ?? "missing"}`);
+    if (row.intendedSnapshot !== candidate.intendedSnapshot) fail("PORTIA_UI_MAP_DESTINATION_MISMATCH", identity);
+    if (row.status === "CAPTURED") {
+      if (row.sha256 !== candidate.sha256) fail("PORTIA_UI_MAP_HASH_MISMATCH", identity);
+      if (row.candidateFile !== candidate.candidateFile) fail("PORTIA_UI_MAP_PNG_MISMATCH", identity);
+      if (row.reasonCode !== undefined || row.recoveryPhase !== undefined) fail("PORTIA_UI_MAP_CAPTURED_BLOCKER", identity);
+    } else {
+      if (row.reasonCode !== candidate.reasonCode) fail("PORTIA_UI_MAP_BLOCKER_MISMATCH", identity);
+      if (row.recoveryPhase !== candidate.recoveryPhase) fail("PORTIA_UI_MAP_RECOVERY_MISMATCH", identity);
+      if (row.sha256 !== undefined || row.candidateFile !== undefined) fail("PORTIA_UI_MAP_BLOCKED_EVIDENCE", identity);
+    }
+  }
+  for (const identity of candidates.keys()) {
+    if (!mapped.has(identity)) fail("PORTIA_UI_MAP_ROW_MISSING", identity);
+  }
+  return mapRows;
 }
 
 /**
@@ -277,14 +323,20 @@ function verifyPromotion() {
   process.stdout.write(`Verified ${approved.length} exact owner-approved snapshot bytes; ${rows.length - approved.length} non-approved rows excluded.\n`);
 }
 
-function collectRows({ enforceInventory = false } = {}) {
-  if (!existsSync(runRoot)) fail("PORTIA_CANDIDATE_SET_MISSING", setId);
-  const files = readdirSync(runRoot).filter((file) => file.endsWith(".candidate.json") || file.endsWith(".blocked.json"));
-  if (!files.length) fail("PORTIA_CANDIDATE_ROWS_MISSING", setId);
-  const rows = files.map((file) => JSON.parse(readFileSync(path.join(runRoot, file), "utf8")));
+function collectRows({ enforceInventory = false, candidateSetId } = {}) {
+  const inventory = enforceInventory ? readStableInventory() : undefined;
+  const effectiveSetId = candidateSetId ?? inventory?.setId ?? setId;
+  const effectiveRunRoot = path.resolve(workspace, "tests/e2e/visual-candidates/.runs", effectiveSetId);
+  if (!existsSync(effectiveRunRoot)) fail("PORTIA_CANDIDATE_SET_MISSING", effectiveSetId);
+  const files = readdirSync(effectiveRunRoot).filter((file) => file.endsWith(".candidate.json") || file.endsWith(".blocked.json"));
+  if (!files.length) fail("PORTIA_CANDIDATE_ROWS_MISSING", effectiveSetId);
+  const rows = files.map((file) => JSON.parse(readFileSync(path.join(effectiveRunRoot, file), "utf8")));
   const sourceCommits = [...new Set(rows.map((row) => row.sourceCommit))];
   if (sourceCommits.length !== 1) fail("PORTIA_CANDIDATE_SOURCE_DIVERGED", sourceCommits.join(","));
-  if (!setId.endsWith(sourceCommits[0].slice(0, 12))) fail("PORTIA_CANDIDATE_SET_SOURCE_MISMATCH", setId);
+  if (!effectiveSetId.endsWith(sourceCommits[0].slice(0, 12))) fail("PORTIA_CANDIDATE_SET_SOURCE_MISMATCH", effectiveSetId);
+  if (inventory && (inventory.setId !== effectiveSetId || inventory.sourceCommit !== sourceCommits[0])) {
+    fail("PORTIA_STABLE_INVENTORY_AUTHORITY_MISMATCH", effectiveSetId);
+  }
   const required = [
     "schema", "setId", "status", "requirement", "surface", "actor", "state", "intendedSnapshot",
     "sourceCommit", "dirtyLedgerId", "fixtureRevision", "seed", "fixedTime", "tool", "browser", "project",
@@ -292,7 +344,7 @@ function collectRows({ enforceInventory = false } = {}) {
   ];
   for (const row of rows) {
     for (const field of required) if (row[field] === undefined || row[field] === "") fail("PORTIA_CANDIDATE_FIELD_MISSING", `${row.state ?? "unknown"}:${field}`);
-    if (row.setId !== setId) fail("PORTIA_CANDIDATE_SET_MISMATCH", row.setId);
+    if (row.setId !== effectiveSetId) fail("PORTIA_CANDIDATE_SET_MISMATCH", row.setId);
     const destination = path.resolve(workspace, row.intendedSnapshot).replaceAll("\\", "/").toLowerCase();
     if (!destination.includes("/tests/e2e/visual/__screenshots__/")) fail("PORTIA_SNAPSHOT_DESTINATION_INVALID", row.intendedSnapshot);
     if (row.status === "CAPTURED") {
@@ -301,7 +353,7 @@ function collectRows({ enforceInventory = false } = {}) {
       if (sha256(candidate) !== row.sha256) fail("PORTIA_CANDIDATE_HASH_MISMATCH", row.candidateFile);
     }
   }
-  validateCandidateRows(rows, enforceInventory ? readStableInventory() : undefined);
+  validateCandidateRows(rows, inventory?.rows);
   return rows.sort((left, right) => `${left.surface}:${left.state}`.localeCompare(`${right.surface}:${right.state}`));
 }
 
@@ -311,7 +363,7 @@ function markdown(rows) {
   const lines = [
     "# Phase 15 Visual Candidates",
     "",
-    `- Candidate set: \`${setId}\``,
+    `- Candidate set: \`${rows[0].setId}\``,
     `- Source commit: \`${rows[0].sourceCommit}\``,
     `- Status: **PENDING OWNER APPROVAL**`,
     `- Captured PNGs: ${captured.length}`,
@@ -334,21 +386,30 @@ function markdown(rows) {
     "",
     `All rows carry dirty ledger \`${rows[0].dirtyLedgerId}\`, fixture \`${rows[0].fixtureRevision}\`, seed \`${rows[0].seed}\`, fixed time \`${rows[0].fixedTime}\`, exact browser/OS, viewport/DPR, locale/timezone and effective desktop settings in the run manifest.`,
     "",
-    `Ignored run manifest: \`tests/e2e/visual-candidates/.runs/${setId}/manifest.json\`.`,
+    `Ignored run manifest: \`tests/e2e/visual-candidates/.runs/${rows[0].setId}/manifest.json\`.`,
     "",
   ];
   return `${lines.join("\n")}\n`;
 }
 
-function verifyFigmaMap() {
-  if (!existsSync(frameMapPath)) fail("PORTIA_FIGMA_MAP_MISSING", "Task 3 has not created the map.");
+function verifyUiMap() {
+  if (!existsSync(frameMapPath)) fail("PORTIA_UI_MAP_MISSING");
+  if (!existsSync(localContractPath)) fail("PORTIA_LOCAL_UI_CONTRACT_MISSING");
   const map = readFileSync(frameMapPath, "utf8");
-  const rows = collectRows({ enforceInventory: true });
-  for (const row of rows) {
-    const identity = row.status === "CAPTURED" ? row.sha256 : `BLOCKED:${row.id ?? row.state}`;
-    if (!map.includes(identity)) fail("PORTIA_FIGMA_MAP_ROW_MISSING", row.state);
-  }
-  process.stdout.write(`Verified Figma map for ${rows.length} candidate rows.\n`);
+  const contract = readFileSync(localContractPath, "utf8");
+  const authority = parseAuthorityMetadata(map, "UI_MAP");
+  const candidateSet = extractExactlyOne(contract, /Candidate set:\*{0,2}\s*`([^`]+)`/gi,
+    "PORTIA_LOCAL_CONTRACT_CANDIDATE_SET_MISSING", "PORTIA_LOCAL_CONTRACT_CANDIDATE_SET_DUPLICATE");
+  const sourceCommit = extractExactlyOne(contract, /Source commit:\*{0,2}\s*`([a-f0-9]{40})`/gi,
+    "PORTIA_LOCAL_CONTRACT_SOURCE_COMMIT_MISSING", "PORTIA_LOCAL_CONTRACT_SOURCE_COMMIT_DUPLICATE");
+  if (authority.candidateSet !== candidateSet) fail("PORTIA_UI_MAP_CANDIDATE_SET_MISMATCH");
+  if (authority.sourceCommit !== sourceCommit) fail("PORTIA_UI_MAP_SOURCE_COMMIT_MISMATCH");
+  const digest = createHash("sha256").update(contract.replaceAll("\r\n", "\n"), "utf8").digest("hex");
+  if (authority.localContractDigest !== digest) fail("PORTIA_UI_MAP_LOCAL_CONTRACT_DIGEST_MISMATCH", digest);
+  const rows = collectRows({ enforceInventory: true, candidateSetId: authority.candidateSet });
+  const mapRows = parseUiMapRows(map);
+  validateUiMapRows(rows, mapRows);
+  process.stdout.write(`Verified repository UI map for ${rows.length} rows (${rows.filter((row) => row.status === "CAPTURED").length} captured, ${rows.filter((row) => row.status === "BLOCKED").length} blocked).\n`);
 }
 
 function runCli() {
@@ -359,8 +420,8 @@ function runCli() {
     verifyPromotion();
   } else if (args.has("--verify-approval")) {
     verifyApproval();
-  } else if (args.has("--verify-figma-map")) {
-    verifyFigmaMap();
+  } else if (args.has("--verify-ui-map")) {
+    verifyUiMap();
   } else if (args.has("--write-inventory")) {
     if (existsSync(inventoryPath)) fail("PORTIA_STABLE_INVENTORY_EXISTS");
     const rows = collectRows();
