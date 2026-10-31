@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 const workspace = process.cwd();
 const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace, encoding: "utf8" }).trim();
 const setId = process.env.PORTIA_VISUAL_SET_ID?.trim() || `phase15-current-${commit.slice(0, 12)}`;
-const runRoot = path.resolve(workspace, "tests/e2e/visual-candidates/.runs", setId);
 const evidencePath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-VISUAL-CANDIDATES.md");
 const frameMapPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-FRAME-TEST-MAP.md");
 const localContractPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-LOCAL-UI-CONTRACT.md");
@@ -150,10 +149,13 @@ export function parseAuthorityMetadata(text, artifact) {
 }
 
 export function validateAuthorityMetadata(artifacts) {
-  const parsed = Object.entries(artifacts).map(([artifact, text]) => ({
+  return compareAuthority(Object.entries(artifacts).map(([artifact, text]) => ({
     artifact,
     ...parseAuthorityMetadata(text, artifact.toUpperCase()),
-  }));
+  })));
+}
+
+function compareAuthority(parsed) {
   for (const field of ["candidateSet", "sourceCommit", "localContractDigest"]) {
     const values = new Set(parsed.map((entry) => entry[field]));
     if (values.size !== 1) {
@@ -162,6 +164,29 @@ export function validateAuthorityMetadata(artifacts) {
     }
   }
   return parsed[0];
+}
+
+// The contract is the digest source, so its tuple uses the digest of its own LF-normalized bytes.
+function verifyAuthority() {
+  for (const [file, code] of [[approvalPath, "PORTIA_APPROVAL_LEDGER_MISSING"], [frameMapPath, "PORTIA_UI_MAP_MISSING"], [localContractPath, "PORTIA_LOCAL_UI_CONTRACT_MISSING"]]) {
+    if (!existsSync(file)) fail(code);
+  }
+  const contract = readFileSync(localContractPath, "utf8");
+  const contractAuthority = {
+    artifact: "contract",
+    candidateSet: extractExactlyOne(contract, /Candidate set:\*{0,2}\s*`([^`]+)`/gi,
+      "PORTIA_CONTRACT_CANDIDATE_SET_MISSING", "PORTIA_CONTRACT_CANDIDATE_SET_DUPLICATE"),
+    sourceCommit: extractExactlyOne(contract, /Source commit:\*{0,2}\s*`([a-f0-9]{40})`/gi,
+      "PORTIA_CONTRACT_SOURCE_COMMIT_MISSING", "PORTIA_CONTRACT_SOURCE_COMMIT_DUPLICATE"),
+    localContractDigest: createHash("sha256").update(contract.replaceAll("\r\n", "\n"), "utf8").digest("hex"),
+  };
+  const inventory = readStableInventory();
+  return compareAuthority([
+    { artifact: "approval", ...parseAuthorityMetadata(readFileSync(approvalPath, "utf8"), "APPROVAL") },
+    contractAuthority,
+    { artifact: "frameMap", ...parseAuthorityMetadata(readFileSync(frameMapPath, "utf8"), "FRAME_MAP") },
+    { artifact: "inventory", candidateSet: inventory.setId, sourceCommit: inventory.sourceCommit, localContractDigest: contractAuthority.localContractDigest },
+  ]);
 }
 
 export function parseUiMapRows(text) {
@@ -247,6 +272,7 @@ export function validateApprovalCoverage(candidateRows, verdictRows, isHistorica
 }
 
 function verifyApproval() {
+  verifyAuthority();
   const candidates = collectRows({ enforceInventory: true });
   const verdicts = approvalRows();
   validateApprovalCoverage(candidates, verdicts, (row) => {
@@ -277,6 +303,7 @@ function validateApprovalRows(rows) {
 }
 
 function promoteApproved() {
+  verifyAuthority();
   const approved = validateApprovalRows(approvalRows());
   const candidates = collectRows().filter((row) => row.status === "CAPTURED");
   const byHashAndDestination = new Map(candidates.map((row) => [
@@ -300,6 +327,7 @@ function promoteApproved() {
 }
 
 function verifyPromotion() {
+  verifyAuthority();
   const rows = approvalRows();
   const approved = validateApprovalRows(rows);
   const approvedByDestination = new Map(approved.map((row) => [path.resolve(workspace, row.intendedSnapshot), row]));
@@ -391,19 +419,8 @@ function markdown(rows) {
 }
 
 function verifyUiMap() {
-  if (!existsSync(frameMapPath)) fail("PORTIA_UI_MAP_MISSING");
-  if (!existsSync(localContractPath)) fail("PORTIA_LOCAL_UI_CONTRACT_MISSING");
+  const authority = verifyAuthority();
   const map = readFileSync(frameMapPath, "utf8");
-  const contract = readFileSync(localContractPath, "utf8");
-  const authority = parseAuthorityMetadata(map, "UI_MAP");
-  const candidateSet = extractExactlyOne(contract, /Candidate set:\*{0,2}\s*`([^`]+)`/gi,
-    "PORTIA_LOCAL_CONTRACT_CANDIDATE_SET_MISSING", "PORTIA_LOCAL_CONTRACT_CANDIDATE_SET_DUPLICATE");
-  const sourceCommit = extractExactlyOne(contract, /Source commit:\*{0,2}\s*`([a-f0-9]{40})`/gi,
-    "PORTIA_LOCAL_CONTRACT_SOURCE_COMMIT_MISSING", "PORTIA_LOCAL_CONTRACT_SOURCE_COMMIT_DUPLICATE");
-  if (authority.candidateSet !== candidateSet) fail("PORTIA_UI_MAP_CANDIDATE_SET_MISMATCH");
-  if (authority.sourceCommit !== sourceCommit) fail("PORTIA_UI_MAP_SOURCE_COMMIT_MISMATCH");
-  const digest = createHash("sha256").update(contract.replaceAll("\r\n", "\n"), "utf8").digest("hex");
-  if (authority.localContractDigest !== digest) fail("PORTIA_UI_MAP_LOCAL_CONTRACT_DIGEST_MISMATCH", digest);
   const rows = collectRows({ enforceInventory: true, candidateSetId: authority.candidateSet });
   const mapRows = parseUiMapRows(map);
   validateUiMapRows(rows, mapRows);
@@ -432,13 +449,16 @@ function runCli() {
     process.stdout.write(`Wrote stable inventory for ${rows.length} rows.\n`);
   } else {
     const rows = collectRows({ enforceInventory: args.has("--verify") });
-    mkdirSync(runRoot, { recursive: true });
-    writeFileSync(path.join(runRoot, "manifest.json"), `${JSON.stringify({ schema: "portia-phase15-visual-manifest-v1", setId, sourceCommit: rows[0].sourceCommit, rows }, null, 2)}\n`);
+    // Rows carry the authoritative set; the HEAD-derived default must never name a verified manifest.
+    const manifestSetId = rows[0].setId;
+    const manifestRoot = path.resolve(workspace, "tests/e2e/visual-candidates/.runs", manifestSetId);
+    mkdirSync(manifestRoot, { recursive: true });
+    writeFileSync(path.join(manifestRoot, "manifest.json"), `${JSON.stringify({ schema: "portia-phase15-visual-manifest-v1", setId: manifestSetId, sourceCommit: rows[0].sourceCommit, rows }, null, 2)}\n`);
     if (args.has("--verify")) {
       writeFileSync(evidencePath, markdown(rows));
-      process.stdout.write(`Verified ${rows.length} rows (${rows.filter((row) => row.status === "CAPTURED").length} PNGs) for ${setId}.\n`);
+      process.stdout.write(`Verified ${rows.length} rows (${rows.filter((row) => row.status === "CAPTURED").length} PNGs) for ${manifestSetId}.\n`);
     } else {
-      process.stdout.write(`Wrote manifest for ${setId}.\n`);
+      process.stdout.write(`Wrote manifest for ${manifestSetId}.\n`);
     }
   }
 }

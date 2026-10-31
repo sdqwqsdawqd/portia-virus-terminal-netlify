@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, test } from "node:test";
 import {
   parseAuthorityMetadata,
@@ -132,6 +136,56 @@ describe("Phase 15 signed authority metadata", () => {
     assert.throws(() => validateAuthorityMetadata({
       approval: authority(), contract: authority({ localContractDigest: "c".repeat(64) }), frameMap: authority(),
     }), /PORTIA_AUTHORITY_LOCAL_CONTRACT_DIGEST_MISMATCH/);
+  });
+});
+
+describe("Phase 15 CLI authority binding (disposable fixtures)", () => {
+  const script = path.resolve("scripts/phase15-visual-manifest.mjs");
+  const evidenceDir = ".planning/phases/PORTIA-15-baseline/evidence";
+  const files = ["15-VISUAL-APPROVAL.md", "15-LOCAL-UI-CONTRACT.md", "15-FRAME-TEST-MAP.md", "15-STABLE-ROW-INVENTORY.json"];
+
+  function fixture(mutate: (name: string, text: string) => string = (_, text) => text) {
+    const dir = mkdtempSync(path.join(tmpdir(), "portia-authority-"));
+    const git = (...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: dir });
+    git("init", "-q");
+    git("commit", "-q", "--allow-empty", "-m", "fixture");
+    mkdirSync(path.join(dir, evidenceDir), { recursive: true });
+    for (const name of files) {
+      const text = readFileSync(path.resolve(evidenceDir, name), "utf8");
+      writeFileSync(path.join(dir, evidenceDir, name), mutate(name, text));
+    }
+    return dir;
+  }
+
+  function run(dir: string, flag: string) {
+    const result = spawnSync(process.execPath, [script, flag], { cwd: dir, encoding: "utf8" });
+    rmSync(dir, { recursive: true, force: true });
+    return `${result.status}:${result.stderr}`;
+  }
+
+  const real = "phase15-current-efbc1401080d";
+  const cases: Array<[string, string, (text: string) => string, RegExp]> = [
+    ["approval candidate set", "15-VISUAL-APPROVAL.md", (t) => t.replace(real, "phase15-current-000000000000"), /PORTIA_AUTHORITY_CANDIDATE_SET_MISMATCH/],
+    ["frame-map source commit", "15-FRAME-TEST-MAP.md", (t) => t.replace(/Source commit:\*{0,2}\s*`[a-f0-9]{40}`/, "Source commit:** `" + "0".repeat(40) + "`"), /PORTIA_AUTHORITY_SOURCE_COMMIT_MISMATCH/],
+    ["approval digest", "15-VISUAL-APPROVAL.md", (t) => t.replace(/(Local contract SHA-256:\*{0,2}\s*`)[a-f0-9]{64}/, "$1" + "0".repeat(64)), /PORTIA_AUTHORITY_LOCAL_CONTRACT_DIGEST_MISMATCH/],
+    ["contract bytes", "15-LOCAL-UI-CONTRACT.md", (t) => `${t}\nextra byte drift\n`, /PORTIA_AUTHORITY_LOCAL_CONTRACT_DIGEST_MISMATCH/],
+    ["approval missing digest", "15-VISUAL-APPROVAL.md", (t) => t.replace(/^.*Local contract SHA-256.*$/m, ""), /PORTIA_APPROVAL_LOCAL_CONTRACT_DIGEST_MISSING/],
+    ["frame-map duplicate set", "15-FRAME-TEST-MAP.md", (t) => `${t}\n- Candidate set: \`${real}\`\n`, /PORTIA_FRAME_MAP_CANDIDATE_SET_DUPLICATE/],
+    ["inventory set", "15-STABLE-ROW-INVENTORY.json", (t) => t.replace(real, "phase15-current-000000000000"), /PORTIA_AUTHORITY_CANDIDATE_SET_MISMATCH/],
+  ];
+
+  for (const [name, file, mutate, expected] of cases) {
+    test(`--verify-promotion rejects ${name}`, () => {
+      const out = run(fixture((n, t) => (n === file ? mutate(t) : t)), "--verify-promotion");
+      assert.match(out, expected);
+      assert.match(out, /^1:/);
+    });
+  }
+
+  test("untouched fixture passes authority and fails only later on missing snapshots", () => {
+    const out = run(fixture(), "--verify-promotion");
+    assert.doesNotMatch(out, /PORTIA_(AUTHORITY|APPROVAL_(CANDIDATE|SOURCE|LOCAL)|CONTRACT|FRAME_MAP)/);
+    assert.match(out, /PORTIA_APPROVED_SNAPSHOT_MISSING/);
   });
 });
 
