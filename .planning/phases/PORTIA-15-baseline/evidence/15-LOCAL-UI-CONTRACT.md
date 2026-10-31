@@ -83,6 +83,13 @@ The CURRENT product behavior resolves “Анимации: Выключены”
 - Measure and, only if needed, adjust small muted labels and the Vivian bubble in a later implementation phase.
 - Evaluate denser phone vertical rhythm without changing app identity or the full-screen phone window contract.
 - A three-state motion preference remains an owner decision; it cannot enter CURRENT through this contract.
+- Owner-directed Phase 18 change: preserve the PORTIA OS idea while rebuilding shortcut icon art and its motion system so playback completes without container displacement or a visible animated-to-static quality jump.
+- Owner-directed Phase 18 change: replace the offset-route workaround with continuous spider interpolation across neighboring web sectors; footfall waves must follow actual steps and leave no one-sided trail or teleport.
+- Owner-directed Phase 18 change: window contents must reflow inside bounded geometry so important information moves responsively without breaking the composition.
+
+### Owner-rejected CURRENT motion
+
+Physical UAT by Qloxz on 2026-10-31 rejects the current spider route/gait, web-wave and shortcut-cycle behavior. Static PNGs remain immutable evidence of what was tested, but they do not establish smooth playback. Exact hash verdicts belong only in `15-VISUAL-APPROVAL.md`; all other captured hashes remain pending until explicitly decided.
 
 ## 08 APPROVED FOR BASELINE
 

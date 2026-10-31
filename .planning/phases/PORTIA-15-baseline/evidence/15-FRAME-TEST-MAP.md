@@ -3,7 +3,7 @@
 **Status:** CURRENT MAP COMPLETE — OWNER VERDICT PENDING
 **Candidate set:** `phase15-current-efbc1401080d`
 **Source commit:** `efbc1401080d6b65ba1f4916ad0343b783c62bb8`
-**Local contract SHA-256:** `fbbb1336dc3c1cf20fd54ca0bea270d4abe91f27f317cb83edb13d2eac94bffb`
+**Local contract SHA-256:** `3bad50d079f6c0973a93903147b29e3e1bf4243de21cac3e9cb9a569dac13d40`
 **Coverage:** 84 identities — 51 exact PNG/hash/project mappings and 33 typed blockers
 **Authority boundary:** mapping is evidence, not approval.
 
