@@ -47,6 +47,7 @@ The ROADMAP success criteria are the controlling must-haves.
 | `playwright.config.ts`, fixtures, preflight | Bounded deterministic runner | ✓ VERIFIED | Fail-closed preflight runs in the clean checkout; target guard keeps mutation lanes blocked. |
 | `tests/e2e/visual/__screenshots__/` | Approved exact bytes | ✓ VERIFIED | 33 PNGs; all hashes match the signed ledger; 0 unapproved PNGs. |
 | `evidence/15-VISUAL-APPROVAL.md`, `15-LOCAL-UI-CONTRACT.md`, `15-FRAME-TEST-MAP.md`, `15-STABLE-ROW-INVENTORY.json` | Per-hash verdicts and bound authority | ✓ VERIFIED | Candidate set `phase15-current-efbc1401080d`, source `efbc1401...`, contract digest `3bad50d0...3d40` agree (Plan 15-13, 24/24 tests). |
+| `evidence/15-CANDIDATE-INDEX.json` | Byte-free tracked projection of the 84 signed candidate rows (51 CAPTURED, 33 BLOCKED) of set `phase15-current-efbc1401080d` | ✓ VERIFIED | Generated from the raw capture by `--write-candidate-index` (Plan 15-16, `73d2e37`); refuses to overwrite (`PORTIA_CANDIDATE_INDEX_EXISTS`); deep-compared with the raw capture on every main-tree run (`PORTIA_CANDIDATE_INDEX_DRIFT`). |
 | `15-SECURITY.md` | Local security disposition | ✓ VERIFIED | PASS for repository-local scope; three lanes BLOCKED and not passed. |
 | `evidence/15-TRACEABILITY.md`, `15-BASELINE-RESULTS.md` | Terminal evidence chain | ✓ VERIFIED | Refreshed by Plan 15-15. |
 
@@ -57,7 +58,7 @@ The ROADMAP success criteria are the controlling must-haves.
 | Candidate rows | approved screenshot directory | signed hash + exact-byte promotion | ✓ WIRED | `--verify-promotion` passes on a clean checkout. |
 | Approval ledger | local UI contract | candidate-set + source-commit + digest equality | ✓ WIRED | Fails closed on any mismatch (8 disposable-fixture tests). |
 | Actor declaration | real server-authorized browser context | role fixture | ✗ NOT WIRED | No disposable identities exist; lanes are typed BLOCKED, owner declined isolated staging. |
-| UI map / approval verification | clean checkout | tracked inputs only | ⚠ PARTIAL | `--verify-ui-map` and `--verify-approval` need the gitignored `.runs/` capture directory and fail with `PORTIA_CANDIDATE_SET_MISSING` in a clean checkout. |
+| UI map / approval verification | clean checkout | tracked inputs only | ✓ WIRED | Plan 15-16: with no `.runs/` directory both verbs read `15-CANDIDATE-INDEX.json` and pass in a disposable clean checkout (`Source: tracked index (candidate PNG bytes not re-hashed)`); index tamper, authority drift and a missing index all exit 1 with stable `PORTIA_*` codes. |
 | Browser page | diagnostic gate | automatic listeners + assertion | ✓ WIRED | Clean-checkout diagnostics 15/15. |
 | Traceability | `STAB-BASE-01..06` | terminal matrix | ✓ WIRED | All six rows linked. |
 
@@ -72,7 +73,7 @@ The ROADMAP success criteria are the controlling must-haves.
 | `STAB-BASE-05` | ✓ SATISFIED | Unexpected diagnostics fail; 0 critical/serious Axe; local security review PASS. |
 | `STAB-BASE-06` | ✗ BLOCKED | Chain complete for local scope, but staging role proof, data-backed lanes and physical UAT remain. |
 
-**Coverage:** 2/6 requirements satisfied. Plan 15-15 advances none; the evidence does not fully prove any additional requirement.
+**Coverage:** 2/6 requirements satisfied. Plans 15-15 and 15-16 advance none; the evidence does not fully prove any additional requirement. Plan 15-16 (G6) is tooling reproducibility only.
 
 ## Behavioral Verification (disposable clean checkout, Node 22.13.1)
 
@@ -82,9 +83,9 @@ The ROADMAP success criteria are the controlling must-haves.
 | `npm test` | ✓ PASS — 636 tests, 635 pass, 0 fail, 1 skip |
 | `tsc --noEmit`, `npm run build` | ✓ PASS |
 | `npm run lint` | ✓ PASS — 0 errors, 18 pre-existing warnings |
-| Manifest tests | ✓ PASS — 24/24 |
+| Manifest tests | ✓ PASS — 24/24 at `348684a`; 37/37 after Plan 15-16 (clean checkout at `b6164ed`) |
 | `--verify-promotion` | ✓ PASS — 33 exact bytes, 18 excluded |
-| `--verify-ui-map` / `--verify-approval` | ⚠ BLOCKED in clean checkout (untracked `.runs/`); ✓ PASS on main tree (84 rows; 51 captured verdicts) |
+| `--verify-ui-map` / `--verify-approval` | ✓ PASS in the clean checkout via the tracked index (Plan 15-16, `b6164ed`): 84 rows (51 captured, 33 blocked) / 51 captured verdicts, 33 blocked excluded; `Source: tracked index (candidate PNG bytes not re-hashed)` — candidate PNG bytes are not re-hashed there (approved bytes are covered by `--verify-promotion`). ✓ PASS on main tree with `Source: capture` (PNG bytes re-hashed, index equality checked) |
 | `npm audit --omit=dev` | ✓ PASS — 0 vulnerabilities |
 | `npm audit` | ✓ ACCEPTED — 16 moderate dev-only, 0 high/critical |
 | Secret scan (tracked) | ✓ PASS — 0 matches |
@@ -117,11 +118,11 @@ decision needed on read backing for the data-dependent lanes (see Gaps).
 | G3 | 33 BLOCKED visual rows | visual / device | 16, 18, 19, 22 |
 | G4 | 18 rejected motion candidates | visual | 18 |
 | G5 | Physical PC/phone UAT | physical device | 22 |
-| G6 | UI-map/approval verification not reproducible from tracked files alone | tooling | owner decision (not fixed in Phase 15) |
+| G6 | UI-map/approval verification not reproducible from tracked files alone | tooling | **RESOLVED by Plan 15-16** (`73d2e37`, `b6164ed`): tracked `15-CANDIDATE-INDEX.json` + index-aware verifier; tooling reproducibility only, no requirement flips |
 
 ## Lifecycle Decision
 
-**Phase 15 stays `gaps_found`.** All 15 plans are executed. The phase is not
+**Phase 15 stays `gaps_found`.** All 16 plans are executed (Plan 15-16 closed G6 only; G1-G5 remain open and owned by Phases 16/18/19/22). The phase is not
 marked complete and does not auto-advance. Only STAB-BASE-01 and STAB-BASE-05 are
 complete. Every remaining gap above is a concrete role, data, visual or
 physical-device item with a named owner phase; no obsolete external blocker

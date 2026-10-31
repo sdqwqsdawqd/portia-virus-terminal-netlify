@@ -30,8 +30,8 @@
 | E2E preflight | `npm run test:e2e:preflight` | **PASS** (visitor mode, placeholder public shape) |
 | Manifest tests | `node --experimental-strip-types --test lib/phase15-visual-manifest.test.ts` | **PASS** — 24 tests, 24 pass |
 | Approved snapshot bytes | `node scripts/phase15-visual-manifest.mjs --verify-promotion` | **PASS** — 33 exact owner-approved bytes, 18 non-approved rows excluded |
-| UI map | `... --verify-ui-map` | **BLOCKED-IN-CLEAN-CHECKOUT** — `PORTIA_CANDIDATE_SET_MISSING phase15-current-efbc1401080d`: needs the gitignored `tests/e2e/visual-candidates/.runs/` capture directory that exists only on the capturing machine (passes on the main tree: 84 rows, 51 captured, 33 blocked) |
-| Approval ledger | `... --verify-approval` | **BLOCKED-IN-CLEAN-CHECKOUT** — same cause (passes on the main tree: 51 captured verdicts, 33 blocked excluded) |
+| UI map | `... --verify-ui-map` | **PASS (Plan 15-16, tracked index)** — 84 rows (51 captured, 33 blocked) in a disposable clean checkout with no `.runs/` (the original 15-15 result was BLOCKED with `PORTIA_CANDIDATE_SET_MISSING`; main tree: 84 rows, 51 captured, 33 blocked). `Source: tracked index (candidate PNG bytes not re-hashed)`; approved bytes are covered by `--verify-promotion` |
+| Approval ledger | `... --verify-approval` | **PASS (Plan 15-16, tracked index)** — 51 captured verdicts, 33 blocked excluded. `Source: tracked index (candidate PNG bytes not re-hashed)`; approved bytes are covered by `--verify-promotion` |
 | Manifest `--verify` default mode | `... --verify` | **NOT RUN** — it rewrites signed evidence markdown (owner constraint) and has the same `.runs/` dependency |
 | Dependency audit (runtime) | `npm audit --omit=dev` | **PASS** — 0 vulnerabilities |
 | Dependency audit (all) | `npm audit` | **ACCEPTED** — 0 critical, 0 high, 16 moderate dev-only (npm offers only breaking downgrades; see `15-SECURITY.md`) |
@@ -42,18 +42,32 @@
 
 | Gate | Result |
 |---|---|
-| `npm test` | **PASS** — 636 tests, 635 pass, 0 fail, 1 skip |
+| `npm test` | **PASS** — 649 tests, 648 pass, 0 fail, 1 skip (Plan 15-16; 636/635 before) |
 | `npm exec tsc -- --noEmit` | **PASS** |
 | `npm run lint` | **PASS** — 0 errors, 18 warnings |
-| Manifest tests | **PASS** — 24/24 |
-| `--verify-ui-map` | **PASS** — 84 rows (51 captured, 33 blocked) |
-| `--verify-approval` | **PASS** — 51 captured verdicts, 33 blocked excluded |
+| Manifest tests | **PASS** — 37/37 after Plan 15-16 (was 24/24) |
+| `--verify-ui-map` | **PASS** — 84 rows (51 captured, 33 blocked); `Source: capture`, drift guard green |
+| `--verify-approval` | **PASS** — 51 captured verdicts, 33 blocked excluded; `Source: capture`, drift guard green |
 | `--verify-promotion` | **PASS** — 33 exact approved bytes, 18 excluded |
 | `npm audit --omit=dev` / `npm audit` | **PASS** 0 / **ACCEPTED** 16 moderate dev-only |
 | `npm run test:e2e:preflight` | **FAIL-CLOSED** `missing-environment: NEXT_PUBLIC_SUPABASE_ANON_KEY` — the machine-local `.env.local` no longer supplies a complete public configuration, so browser lanes cannot start on the main tree either. Build and Playwright were deliberately not run there (they would load `.env.local`). |
 
 The main tree and the clean checkout agree on every gate that does not depend on
 the untracked capture directory or on a live read backing.
+
+## Plan 15-16 (G6) Clean-Checkout Proof
+
+Disposable `git clone --no-hardlinks` detached at `b6164ed2e45e1c1140d803d88d7ae03f17d3c98d`, Node `22.13.1`, no `tests/e2e/visual-candidates/.runs/` directory, `git status --porcelain` empty afterwards; removed afterwards.
+
+| Check | Result |
+|---|---|
+| Manifest tests | **PASS** — 37 tests, 37 pass, 0 fail |
+| `--verify-ui-map` | **PASS** — `Verified repository UI map for 84 rows (51 captured, 33 blocked). Source: tracked index (candidate PNG bytes not re-hashed).` |
+| `--verify-approval` | **PASS** — `Verified owner verdict coverage for 51 captured rows; 33 blocked rows excluded. Source: tracked index (candidate PNG bytes not re-hashed).` |
+| `--verify-promotion` | **PASS** — `Verified 33 exact owner-approved snapshot bytes; 18 non-approved rows excluded.` |
+| Tamper probe (one CAPTURED row sha256 zeroed in the clone's index) | **FAIL-CLOSED** — `--verify-ui-map` exit 1 `PORTIA_UI_MAP_HASH_MISMATCH`; `--verify-approval` exit 1 `PORTIA_APPROVAL_VERDICT_MISSING` |
+
+Limit: the clean checkout does not re-hash candidate PNG bytes (they live in the gitignored run directory); that is covered on the capturing machine (`Source: capture`) and approved bytes by `--verify-promotion`. G1-G5 and all STAB-BASE statuses are unchanged.
 
 ## Playwright Result Classification (clean checkout, 155 tests)
 
@@ -89,7 +103,7 @@ Counts: **pass 63 / fail 15 (all BLOCKED-DATA) / skip 77 (20 BLOCKED actor, 57 e
 |---|---|---|
 | 18 lint warnings (`<img>` optimization and one hook-dependency warning) | **CURRENT OBSERVATION**, not a waiver | Later implementation phases |
 | Approved visual specs tolerate a bounded count of differing real-time background pixels; approved source bytes remain exact | **TEST-HARNESS LIMITATION** | Phase 18 motion stabilization |
-| `--verify-ui-map` and `--verify-approval` need the untracked `.runs/` capture directory | **REPRODUCIBILITY GAP**, tooling only | Needs an owner decision (tracked approval-bound inventory or documented regeneration); not fixed in Phase 15 |
+| `--verify-ui-map` and `--verify-approval` needed the untracked `.runs/` capture directory | **RESOLVED by Plan 15-16** (tooling only): tracked `15-CANDIDATE-INDEX.json`. A clean checkout does not re-hash candidate PNG bytes; the main tree does and checks index == capture | Resolved; G1-G5 unchanged |
 | 16 moderate dev-only npm advisories | **ACCEPTED**, see `15-SECURITY.md` | Phase 21 |
 
 ## Blocking Gaps (concrete, unproven)
