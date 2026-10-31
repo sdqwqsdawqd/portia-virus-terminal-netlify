@@ -7,9 +7,9 @@ import {
 } from "../tests/e2e/fixtures/visual-policy.ts";
 
 describe("Phase 15 visual policy", () => {
-  test("declares all 23 approved visual states", () => {
-    assert.equal(visualPolicyStates.length, 23);
-    assert.equal(new Set(visualPolicyStates).size, 23);
+  test("declares all 26 approved visual states", () => {
+    assert.equal(visualPolicyStates.length, 26);
+    assert.equal(new Set(visualPolicyStates).size, 26);
   });
 
   test("rejects removal of a complete 16 by 32 pixel control on a static surface", () => {
