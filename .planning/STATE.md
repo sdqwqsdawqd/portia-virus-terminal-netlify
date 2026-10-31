@@ -5,17 +5,17 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 15
 current_phase_name: Восстановление контроля, контракты и браузерный baseline
 status: executing
-stopped_at: Completed 15-16-PLAN.md
-last_updated: "2026-10-31T23:04:36.192Z"
+stopped_at: Phase 17 context gathered
+last_updated: "2026-10-31T23:31:59.977Z"
 last_activity: 2026-11-01
 last_activity_desc: Plan 15-16 closed G6 (tracked candidate index); Phase 15 stays gaps_found
-state_head: c8ccfe340d7ec56df518455449bb08e8d1b7d71d
+state_head: 1140aef45734566ed0ff239876bb53500e8c1524
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 16
   completed_plans: 16
-  percent: 100
+  percent: 0
 ---
 
 # Project State
@@ -34,7 +34,7 @@ Plan: 16 of 16
 Status: All 16 plans executed; Phase 15 verification = gaps_found (G1-G5 open: role/data/visual/device; G6 resolved by Plan 15-16) — awaiting orchestrator verification gates
 Last activity: 2026-11-01 -- Plan 15-16 closed G6 (tracked candidate index, clean-checkout proof)
 
-Progress: [██████████] 100% of Phase 15 plans (phase gaps_found, not complete)
+Progress: [░░░░░░░░░░] 0% of Phase 15 plans (phase gaps_found, not complete)
 
 ## Performance Metrics
 
@@ -114,9 +114,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-10-31T23:04:36.145Z
-Stopped at: Completed 15-16-PLAN.md
-Resume file: None
+Last session: 2026-10-31T23:31:59.940Z
+Stopped at: Phase 17 context gathered
+Resume file: .planning/phases/PORTIA-17-obratimaya-dekompozitsiya-rabochego-stola-i-redaktora/17-CONTEXT.md
 
 ## Operator Next Step
 
