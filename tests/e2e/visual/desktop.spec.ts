@@ -22,6 +22,7 @@ test("[STAB-BASE-03] approved desktop and window shell", async ({ page }, testIn
   await page.getByRole("button", { name: "PORTIA", exact: true }).click();
 
   await desktop.openApp("Глобальный поиск");
+  await expect(desktop.window("Глобальный поиск").getByRole("status").filter({ hasText: /Загрузка/ })).toHaveCount(0);
   await expect(page).toHaveScreenshot(`window-search-restored--${testInfo.project.name}.png`, visualPolicy(page, "desktop:search-restored"));
   await page.getByRole("button", { name: "Развернуть Глобальный поиск" }).click();
   await expect(page).toHaveScreenshot(`window-search-maximized--${testInfo.project.name}.png`, visualPolicy(page, "desktop:search-maximized"));
