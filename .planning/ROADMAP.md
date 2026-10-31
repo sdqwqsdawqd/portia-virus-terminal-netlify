@@ -36,7 +36,7 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
   4. Неожиданная browser/console/network/CSP ошибка блокирует gate, а ожидаемый отказ виден как безопасное русское состояние; для каждой следующей фазы задана полная цепочка доказательств GSD.
 
 **Acceptance gate**: Локальный UI-review, per-hash approval и продвижение candidate captures в baseline остаются открытыми до явного решения владельца.
-**Plans**: 13/15 plans executed
+**Plans**: 14/15 plans executed
 
 Plans:
 **Wave 1**
@@ -93,7 +93,7 @@ Plans:
 
 **Wave 14** *(blocked on Wave 13 completion)*
 
-- [ ] 15-14-PLAN.md — deep GSD code review plus local auth/API/RLS/header/CSP/dependency/secret security matrix and finding disposition (STAB-BASE-02, STAB-BASE-05, STAB-BASE-06)
+- [x] 15-14-PLAN.md — deep GSD code review plus local auth/API/RLS/header/CSP/dependency/secret security matrix and finding disposition (STAB-BASE-02, STAB-BASE-05, STAB-BASE-06)
 
 **Wave 15** *(blocked on Wave 14 completion)*
 
@@ -223,7 +223,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 15. Восстановление контроля, контракты и браузерный baseline | 13/15 | In Progress|  |
+| 15. Восстановление контроля, контракты и браузерный baseline | 14/15 | In Progress|  |
 | 16. Канонический Supabase staging и SQL-истина | 0/TBD | Not started | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 0/TBD | Not started | - |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |

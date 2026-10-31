@@ -5,17 +5,17 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 15
 current_phase_name: Восстановление контроля, контракты и браузерный baseline
 status: executing
-stopped_at: Completed 15-13-PLAN.md
-last_updated: "2026-10-31T22:05:55.223Z"
+stopped_at: Completed 15-14-PLAN.md
+last_updated: "2026-10-31T22:20:34.953Z"
 last_activity: 2026-10-31
 last_activity_desc: Bound visual verification to signed candidate-set, source-commit and contract-digest authority
-state_head: a0bc3391bb1558d5443943decea924f968880e76
+state_head: dfa77aca0f77b7faec8f36ff2476866451f8f107
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
-  completed_plans: 13
-  percent: 87
+  completed_plans: 14
+  percent: 93
 ---
 
 # Project State
@@ -30,11 +30,11 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
-Plan: 13 of 15
+Plan: 14 of 15
 Status: Plan 15-13 complete (signed authority binding); plans 15-14 and 15-15 remain
 Last activity: 2026-10-31 -- Promoted and executed the owner-approved exact-byte visual baseline
 
-Progress: [█████████░] 87%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Progress: [█████████░] 87%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 15 P13 | 20min | 2 tasks | 2 files |
+| Phase 15 P14 | 45min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 15]: Final visual ledger contains 33 APPROVED, 18 REJECTED and 33 BLOCKED rows; new hashes require repository-local per-hash review.
 - [Phase 15]: Firefox is the Search-window pixel authority; other projects retain shell/device coverage.
 - [Phase 15]: Candidate-generation specs are opt-in and excluded from default Playwright regression discovery.
+- [Phase 15]: 15-14: Local security gate PASS (repo-local scope only); authenticated/RLS-runtime/staging lanes stay BLOCKED; 0 unresolved critical/high; dev-tooling highs fixed via lockfile-only audit fix
 
 ### Pending Todos
 
@@ -108,8 +110,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-10-31T22:05:55.184Z
-Stopped at: Completed 15-13-PLAN.md
+Last session: 2026-10-31T22:20:34.907Z
+Stopped at: Completed 15-14-PLAN.md
 Resume file: None
 
 ## Operator Next Step
