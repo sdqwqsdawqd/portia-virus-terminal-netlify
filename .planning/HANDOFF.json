@@ -1,36 +1,92 @@
 {
   "version": "1.0",
-  "timestamp": "2026-10-27T03:51:33.277Z",
-  "phase": "13",
-  "phase_name": "Приложение «Справочник»",
-  "phase_dir": ".planning/phases/PORTIA-13-prilozhenie-spravochnik",
-  "plan": 5,
-  "task": 2,
+  "timestamp": "2026-10-31T18:36:56.611Z",
+  "phase": "15",
+  "phase_name": "Восстановление контроля, контракты и браузерный baseline",
+  "phase_dir": ".planning/phases/PORTIA-15-baseline",
+  "plan": 13,
+  "task": 1,
   "total_tasks": 2,
   "status": "paused",
   "completed_tasks": [
-    {"id": 1, "name": "measure the grid, the thin-row ratio, the backstops and motion-off on the production build", "status": "done", "commit": "8a57cf8"}
+    {
+      "id": 11,
+      "name": "Repository UI authority and owner verdict ledger",
+      "status": "done",
+      "commit": "4ee3f52"
+    },
+    {
+      "id": 12,
+      "name": "Executable approved visual authority",
+      "status": "done",
+      "commit": "41f64b1"
+    }
   ],
   "remaining_tasks": [
-    {"id": 2, "name": "owner check on a PC and a phone (checkpoint:human-verify, blocking)", "status": "awaiting_owner"}
+    {
+      "id": 13,
+      "name": "Signed visual metadata and canonical snapshot-path verification",
+      "status": "not_started"
+    },
+    {
+      "id": 14,
+      "name": "Repository-local security evidence matrix and finding disposition",
+      "status": "not_started"
+    },
+    {
+      "id": 15,
+      "name": "Clean-checkout terminal verification and Phase 15 lifecycle decision",
+      "status": "not_started"
+    }
   ],
   "blockers": [
-    {"description": "Plan 13-05 Task 2 is a blocking human-verify checkpoint; 13-05-SUMMARY.md cannot be written until the owner types approved or lists issues", "type": "human_action", "workaround": "none"}
+    {
+      "description": "Authenticated participant/editor/reviewer/owner and mutating Supabase lanes remain unproven because no disposable isolated staging authority is available.",
+      "type": "external",
+      "workaround": "Keep these rows BLOCKED and recover them in Phase 16/19; never use production credentials or mutate production."
+    },
+    {
+      "description": "Physical owner PC/phone UAT has not occurred.",
+      "type": "human_action",
+      "workaround": "Keep physical-device acceptance open for Phase 22."
+    }
   ],
-  "async_jobs": [],
   "human_actions_pending": [
-    {"action": "Run the 10-step owner check from 13-05-PLAN.md Task 2 <how-to-verify> on a PC (npm run build; npx next start -p 3124 -H 0.0.0.0) and a phone", "context": "Last gate of phase 13 before verification; editor saves write live content", "blocking": true}
+    {
+      "action": "Review and explicitly accept any critical/high finding only if Plan 15-14 discovers one that cannot be fixed immediately.",
+      "context": "Plan 15-14 requires a named Qloxz disposition for unresolved critical/high local security findings.",
+      "blocking": false
+    }
   ],
   "decisions": [
-    {"decision": "Did not re-run Task 1 automated checks on resume; relied on commit 8a57cf8", "rationale": "Task 1 already committed by the previous executor", "phase": "13"}
+    {
+      "decision": "Firefox is the Search-window pixel authority.",
+      "rationale": "The owner requested Firefox and settled Firefox frames avoid transient loading captures; other projects retain shell/device coverage.",
+      "phase": "15"
+    },
+    {
+      "decision": "The visual ledger contains 33 APPROVED, 18 REJECTED and 33 BLOCKED rows.",
+      "rationale": "Only explicitly approved exact bytes may enter the canonical snapshot store.",
+      "phase": "15"
+    },
+    {
+      "decision": "Rejected shortcut, spider and web-wave motion frames are not baseline authority.",
+      "rationale": "The owner rejected jerky spider motion, shortcut displacement and interrupted animation endings; Phase 18 owns replacement candidates.",
+      "phase": "15"
+    },
+    {
+      "decision": "Figma and Codex Security are not prerequisites.",
+      "rationale": "The owner removed both from the plan; repository-native UI and local security evidence replace them.",
+      "phase": "15"
+    }
   ],
   "uncommitted_files": [
-    " M .planning/milestone.lock",
-    " M .planning/state.json",
-    " M package-lock.json",
-    " M package.json",
-    "?? .planning/ui-reviews/"
+    ".planning/milestone.lock",
+    ".planning/forensics/",
+    ".planning/milestones/v1.2-incomplete-research/",
+    ".planning/quick/261028-c9g-portia-promotion-1-8/",
+    ".planning/ui-reviews/"
   ],
-  "next_action": "Ask the owner for the Task 2 result. On approved: write 13-05-SUMMARY.md (Task 1 results + approval), commit, then continue /gsd-execute-phase 13 at aggregate_results -> verify_phase_goal. On issues: record each with its step number in 13-05-SUMMARY.md and plan fixes.",
-  "context_notes": "Plans 13-01..13-04 have SUMMARY files. npm run lint has 2 pre-existing errors in phase-06 .cjs files (deferred-items.md), not phase-13. package.json/package-lock.json changes were present before this session and are not from phase 13 work; do not commit them blindly."
+  "next_action": "Read 15-13-PLAN.md, then execute Plan 15-13 only: bind candidate-set/source-commit/UI-contract metadata and correct the stale snapshot path. Preserve every unrelated dirty path.",
+  "context_notes": "Plan 15-12 is complete and committed. Short verification passed: 16/16 manifest tests, 84 UI-map rows, 51 verdict-covered captures, 33 exact approved snapshot bytes and 18 excluded non-approved rows. The prior full visual suite passed 21 with 54 policy skips and 0 failures. Use Node 22.13.1 and PORTIA_VISUAL_SET_ID=phase15-current-efbc1401080d until Plan 15-13 removes the fragile default."
 }
