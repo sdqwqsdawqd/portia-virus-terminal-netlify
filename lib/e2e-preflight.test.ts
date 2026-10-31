@@ -63,6 +63,29 @@ test("visitor preflight rejects malformed values without reflecting them", () =>
   }
 });
 
+test("visitor preflight refuses a Supabase project listed as production", () => {
+  const environment = {
+    ...validEnvironment,
+    PORTIA_E2E_PRODUCTION_PROJECT_IDS: "otherproject00000001, ISOLATEDPROJECT00001",
+  };
+  assert.throws(
+    () => validateVisitorPreflight({ nodeVersion: "22.13.1", environment }),
+    (error: unknown) => {
+      assert.ok(error instanceof PreflightError);
+      assert.equal(error.code, "production-target");
+      assert.doesNotMatch(error.message, /isolatedproject/iu);
+      return true;
+    },
+  );
+  assert.deepEqual(
+    validateVisitorPreflight({
+      nodeVersion: "22.13.1",
+      environment: { ...validEnvironment, PORTIA_E2E_PRODUCTION_PROJECT_IDS: "otherproject00000001" },
+    }),
+    { mode: "visitor", status: "ready" },
+  );
+});
+
 test("unknown modes fail before mutation imports", async () => {
   await assert.rejects(
     runPreflight("unsafe", {

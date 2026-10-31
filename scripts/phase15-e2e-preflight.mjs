@@ -53,6 +53,16 @@ export function validateVisitorPreflight({
   if (!isSupabaseRootUrl(environment.NEXT_PUBLIC_SUPABASE_URL)) {
     throw new PreflightError("public-url-shape", ["NEXT_PUBLIC_SUPABASE_URL"]);
   }
+  const projectRef = new URL(environment.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
+  const productionRefs = (environment.PORTIA_E2E_PRODUCTION_PROJECT_IDS ?? "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase());
+  if (productionRefs.includes(projectRef)) {
+    throw new PreflightError("production-target", [
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "PORTIA_E2E_PRODUCTION_PROJECT_IDS",
+    ]);
+  }
   if (environment.NEXT_PUBLIC_SUPABASE_ANON_KEY.trim().length < 20) {
     throw new PreflightError("public-key-shape", ["NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
   }
