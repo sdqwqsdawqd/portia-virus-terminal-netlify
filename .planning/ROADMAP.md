@@ -79,11 +79,11 @@ Plans:
 
 **Wave 11** *(blocked on Wave 10 completion)*
 
-- [ ] 15-11-PLAN.md — repository-native GSD/Impeccable UI review, capture/blocker synchronization and Qloxz verdict for every available hash (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+- [x] 15-11-PLAN.md — repository-native GSD/Impeccable UI review, capture/blocker synchronization and Qloxz verdict for every available hash (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
 
 **Wave 12** *(blocked on Wave 11 completion)*
 
-- [ ] 15-12-PLAN.md — exact-byte promotion/comparison for available approved hashes with separate blocked accounting (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+- [x] 15-12-PLAN.md — exact-byte promotion/comparison for available approved hashes with separate blocked accounting (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
 
 **Wave 13** *(blocked on Wave 12 completion)*
 
@@ -206,7 +206,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 15. Восстановление контроля, контракты и браузерный baseline | 10/15 | In Progress|  |
+| 15. Восстановление контроля, контракты и браузерный baseline | 12/15 | In Progress|  |
 | 16. Канонический Supabase staging и SQL-истина | 0/TBD | Not started | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 0/TBD | Not started | - |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |

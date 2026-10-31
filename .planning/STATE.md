@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Стабилизация PORTIA OS
 status: executing
-stopped_at: Completed 15-10-PLAN.md
+stopped_at: Completed 15-12-PLAN.md; next is 15-13
 last_updated: "2026-10-31"
-last_activity: 2026-10-31 -- Replaced external UI/security gates with repository-native skill workflows
+last_activity: 2026-10-31 -- Promoted and executed the owner-approved exact-byte visual baseline
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
-  completed_plans: 10
-  percent: 67
+  completed_plans: 12
+  percent: 80
 ---
 
 # Project State
@@ -26,17 +26,17 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
-Plan: 10 of 15
-Status: Executing local/read-only gap plans; remote role proof deferred
-Last activity: 2026-10-31 -- Replaced external UI/security gates with GSD, Impeccable and Playwright evidence
+Plan: 12 of 15
+Status: Pausing after executable approved visual authority; plans 15-13 through 15-15 remain
+Last activity: 2026-10-31 -- Promoted and executed the owner-approved exact-byte visual baseline
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Current milestone:**
 
-- Total plans completed: 10
+- Total plans completed: 12
 - Average duration: 49m
 - Total execution time: 8h09m
 
@@ -55,6 +55,8 @@ Progress: [███████░░░] 67%
 | Phase 15 P08 | 18min | 2 tasks | 10 files |
 | Phase 15 P09 | 30min | 2 tasks | 8 files |
 | Phase 15 P10 | 25min | 2 tasks | 10 files |
+| Phase 15 P11 | 35min | 3 tasks | repository UI authority |
+| Phase 15 P12 | 45min | 2 tasks | approved visual authority |
 
 ## Accumulated Context
 
@@ -69,7 +71,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [v1.3 roadmap]: Repository-native UI approval, local security evidence and physical owner PC/phone UAT remain honest gates until performed.
 - [Phase 15]: External design and managed-scan dependencies were removed from the active plan by owner decision; historical artifacts remain provenance only.
 - [Phase 15]: Persisted candidate evidence remains bound to source commit `4ec66b7d693c`; later evidence commits do not change its byte identity.
-- [Phase 15]: Signer `Qloxz` approved exactly 23 CURRENT hashes; new hashes require repository-local per-hash review, and BLOCKED rows remain outside baseline authority.
+- [Phase 15]: Final visual ledger contains 33 APPROVED, 18 REJECTED and 33 BLOCKED rows; new hashes require repository-local per-hash review.
+- [Phase 15]: Firefox is the Search-window pixel authority; other projects retain shell/device coverage.
 - [Phase 15]: Candidate-generation specs are opt-in and excluded from default Playwright regression discovery.
 
 ### Pending Todos
@@ -79,7 +82,7 @@ Full decision history: `.planning/PROJECT.md`.
 ### Blockers/Concerns
 
 - [Phase 15] Existing dirty package/planning and quick/UI-review artifacts need an ownership ledger; preserve them and do not reset or absorb them automatically.
-- [Phase 15] All 23 approved hashes remain exact; the current strict ledger has 51 unapproved candidate PNGs and 33 typed BLOCKED rows, so STAB-BASE-03/04 remain partial.
+- [Phase 15] The 33 approved hashes are promoted exactly; 18 rejected candidates and 33 typed BLOCKED rows remain outside baseline authority.
 - [Phase 15] Participant/editor/reviewer/owner browser lanes remain explicit BLOCKED evidence; owner declined isolated staging, so real role proof is handed to Phase 16 and no production mutation is authorized.
 - [Phase 16] Dedicated isolated Supabase project/branch, credentials and disposable fixtures are not yet proven available.
 - [Phase 21] Security closure uses deep GSD review and the local auth/API/RLS/header/CSP/dependency/secret matrix with no external runtime prerequisite.
@@ -96,10 +99,10 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-10-30T21:31:08.794Z
-Stopped at: Completed 15-10-PLAN.md
-Resume file: .planning/phases/PORTIA-15-baseline/15-11-PLAN.md
+Last session: 2026-10-31T18:36:56.611Z
+Stopped at: Completed 15-12-PLAN.md; preparing structured handoff before 15-13
+Resume file: .planning/phases/PORTIA-15-baseline/.continue-here.md
 
 ## Operator Next Step
 
-Run `/gsd-execute-phase 15 --gaps-only`. Plans 15-11 through 15-15 use repository-native UI/security evidence and preserve an honest gaps_found verdict only for unresolved role, staging, visual or physical-device evidence.
+Run `/gsd-resume-work`. Plans 15-13 through 15-15 remain: signed metadata/path verification, local security evidence, then clean-checkout terminal verification.
