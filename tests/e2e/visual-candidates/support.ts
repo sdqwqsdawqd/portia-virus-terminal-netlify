@@ -5,6 +5,7 @@ import { release } from "node:os";
 import path from "node:path";
 import type { Browser, Locator, Page, TestInfo } from "@playwright/test";
 import type { deterministicContract } from "../fixtures/determinism";
+import type { CandidateFaultRecord } from "../fixtures/candidate-faults";
 
 type Determinism = typeof deterministicContract;
 
@@ -24,6 +25,7 @@ export type CandidateSpec = Readonly<{
   intendedSnapshot: string;
   mask?: Locator[];
   animations?: "allow" | "disabled";
+  fault?: CandidateFaultRecord;
 }>;
 
 const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -118,6 +120,7 @@ export async function captureCandidate(context: CandidateContext, spec: Candidat
     state: spec.state,
     candidateFile: path.relative(process.cwd(), pngPath).replaceAll("\\", "/"),
     intendedSnapshot: spec.intendedSnapshot,
+    ...(spec.fault ? { injectedFault: spec.fault } : {}),
     sha256,
     ...(await browserEnvironment(context)),
   };
