@@ -142,7 +142,7 @@ describe("Phase 15 signed authority metadata", () => {
 describe("Phase 15 CLI authority binding (disposable fixtures)", () => {
   const script = path.resolve("scripts/phase15-visual-manifest.mjs");
   const evidenceDir = ".planning/phases/PORTIA-15-baseline/evidence";
-  const files = ["15-VISUAL-APPROVAL.md", "15-LOCAL-UI-CONTRACT.md", "15-FRAME-TEST-MAP.md", "15-STABLE-ROW-INVENTORY.json"];
+  const files = ["15-VISUAL-APPROVAL.md", "15-LOCAL-UI-CONTRACT.md", "15-FRAME-TEST-MAP.md", "15-STABLE-ROW-INVENTORY.json", "15-CANDIDATE-INDEX.json"];
 
   function fixture(mutate: (name: string, text: string) => string = (_, text) => text) {
     const dir = mkdtempSync(path.join(tmpdir(), "portia-authority-"));
@@ -160,7 +160,7 @@ describe("Phase 15 CLI authority binding (disposable fixtures)", () => {
   function run(dir: string, flag: string) {
     const result = spawnSync(process.execPath, [script, flag], { cwd: dir, encoding: "utf8" });
     rmSync(dir, { recursive: true, force: true });
-    return `${result.status}:${result.stderr}`;
+    return `${result.status}:${result.stderr}${result.stdout}`;
   }
 
   const real = "phase15-current-efbc1401080d";
@@ -181,6 +181,13 @@ describe("Phase 15 CLI authority binding (disposable fixtures)", () => {
       assert.match(out, /^1:/);
     });
   }
+
+  test("--verify-ui-map passes from the tracked index when no raw capture exists", () => {
+    const out = run(fixture(), "--verify-ui-map");
+    assert.match(out, /^0:/);
+    assert.match(out, /Verified repository UI map for 84 rows \(51 captured, 33 blocked\)/);
+    assert.match(out, /Source: tracked index/);
+  });
 
   test("untouched fixture passes authority and fails only later on missing snapshots", () => {
     const out = run(fixture(), "--verify-promotion");

@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 const workspace = process.cwd();
 const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace, encoding: "utf8" }).trim();
@@ -12,6 +13,8 @@ const frameMapPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baselin
 const localContractPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-LOCAL-UI-CONTRACT.md");
 const approvalPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-VISUAL-APPROVAL.md");
 const inventoryPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-STABLE-ROW-INVENTORY.json");
+const candidateIndexPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-CANDIDATE-INDEX.json");
+const candidateIndexSchema = "portia-phase15-candidate-index-v1";
 const snapshotRoot = path.resolve(workspace, "tests/e2e/visual/__screenshots__");
 const args = new Set(process.argv.slice(2));
 
@@ -271,9 +274,50 @@ export function validateApprovalCoverage(candidateRows, verdictRows, isHistorica
   return verdictRows;
 }
 
+function runRootFor(candidateSetId) {
+  return path.resolve(workspace, "tests/e2e/visual-candidates/.runs", candidateSetId);
+}
+
+// Where --verify-ui-map / --verify-approval read rows from; the raw capture wins when present.
+function sourceLabel(candidateSetId) {
+  return existsSync(runRootFor(candidateSetId))
+    ? "Source: capture."
+    : "Source: tracked index (candidate PNG bytes not re-hashed).";
+}
+
+function readCandidateIndex(candidateSetId, setMismatchCode) {
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(candidateIndexPath, "utf8"));
+  } catch {
+    fail("PORTIA_CANDIDATE_INDEX_INVALID", "unreadable");
+  }
+  if (parsed?.schema !== candidateIndexSchema) fail("PORTIA_CANDIDATE_INDEX_INVALID", "schema");
+  if (parsed.setId !== candidateSetId) fail(setMismatchCode, `setId=${parsed.setId}`);
+  if (!Array.isArray(parsed.rows) || !parsed.rows.length) fail("PORTIA_CANDIDATE_INDEX_INVALID", "rows");
+  return parsed;
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} indexRows
+ * @param {Array<Record<string, unknown>>} captureRows
+ */
+export function assertCandidateIndexMatches(indexRows, captureRows) {
+  const keyed = (rows) => new Map(rows.map((row) => [rowIdentity(row), row]));
+  const indexed = keyed(indexRows);
+  const captured = keyed(captureRows);
+  for (const [identity, row] of captured) {
+    if (!indexed.has(identity) || !isDeepStrictEqual(indexed.get(identity), row)) fail("PORTIA_CANDIDATE_INDEX_DRIFT", identity);
+  }
+  for (const identity of indexed.keys()) {
+    if (!captured.has(identity)) fail("PORTIA_CANDIDATE_INDEX_DRIFT", identity);
+  }
+  if (indexRows.length !== captureRows.length) fail("PORTIA_CANDIDATE_INDEX_DRIFT", "row-count");
+}
+
 function verifyApproval() {
-  verifyAuthority();
-  const candidates = collectRows({ enforceInventory: true });
+  const authority = verifyAuthority();
+  const candidates = collectRows({ enforceInventory: true, candidateSetId: authority.candidateSet, allowIndex: true });
   const verdicts = approvalRows();
   validateApprovalCoverage(candidates, verdicts, (row) => {
     const destination = path.resolve(workspace, row.intendedSnapshot);
@@ -282,7 +326,7 @@ function verifyApproval() {
       && statSync(destination).isFile()
       && sha256(destination) === row.hash;
   });
-  process.stdout.write(`Verified owner verdict coverage for ${candidates.filter((row) => row.status === "CAPTURED").length} captured rows; ${candidates.filter((row) => row.status === "BLOCKED").length} blocked rows excluded.\n`);
+  process.stdout.write(`Verified owner verdict coverage for ${candidates.filter((row) => row.status === "CAPTURED").length} captured rows; ${candidates.filter((row) => row.status === "BLOCKED").length} blocked rows excluded. ${sourceLabel(authority.candidateSet)}\n`);
 }
 
 function snapshotFiles(directory) {
@@ -349,14 +393,21 @@ function verifyPromotion() {
   process.stdout.write(`Verified ${approved.length} exact owner-approved snapshot bytes; ${rows.length - approved.length} non-approved rows excluded.\n`);
 }
 
-function collectRows({ enforceInventory = false, candidateSetId } = {}) {
+function collectRows({ enforceInventory = false, candidateSetId, allowIndex = false } = {}) {
   const inventory = enforceInventory ? readStableInventory() : undefined;
   const effectiveSetId = candidateSetId ?? inventory?.setId ?? setId;
-  const effectiveRunRoot = path.resolve(workspace, "tests/e2e/visual-candidates/.runs", effectiveSetId);
-  if (!existsSync(effectiveRunRoot)) fail("PORTIA_CANDIDATE_SET_MISSING", effectiveSetId);
-  const files = readdirSync(effectiveRunRoot).filter((file) => file.endsWith(".candidate.json") || file.endsWith(".blocked.json"));
-  if (!files.length) fail("PORTIA_CANDIDATE_ROWS_MISSING", effectiveSetId);
-  const rows = files.map((file) => JSON.parse(readFileSync(path.join(effectiveRunRoot, file), "utf8")));
+  const effectiveRunRoot = runRootFor(effectiveSetId);
+  const fromCapture = existsSync(effectiveRunRoot);
+  const index = allowIndex && existsSync(candidateIndexPath) ? readCandidateIndex(effectiveSetId, fromCapture ? "PORTIA_CANDIDATE_INDEX_DRIFT" : "PORTIA_CANDIDATE_INDEX_INVALID") : undefined;
+  if (!fromCapture && !index) fail("PORTIA_CANDIDATE_SET_MISSING", effectiveSetId);
+  let rows;
+  if (fromCapture) {
+    const files = readdirSync(effectiveRunRoot).filter((file) => file.endsWith(".candidate.json") || file.endsWith(".blocked.json"));
+    if (!files.length) fail("PORTIA_CANDIDATE_ROWS_MISSING", effectiveSetId);
+    rows = files.map((file) => JSON.parse(readFileSync(path.join(effectiveRunRoot, file), "utf8")));
+  } else {
+    rows = index.rows;
+  }
   const sourceCommits = [...new Set(rows.map((row) => row.sourceCommit))];
   if (sourceCommits.length !== 1) fail("PORTIA_CANDIDATE_SOURCE_DIVERGED", sourceCommits.join(","));
   if (!effectiveSetId.endsWith(sourceCommits[0].slice(0, 12))) fail("PORTIA_CANDIDATE_SET_SOURCE_MISMATCH", effectiveSetId);
@@ -373,13 +424,20 @@ function collectRows({ enforceInventory = false, candidateSetId } = {}) {
     if (row.setId !== effectiveSetId) fail("PORTIA_CANDIDATE_SET_MISMATCH", row.setId);
     const destination = path.resolve(workspace, row.intendedSnapshot).replaceAll("\\", "/").toLowerCase();
     if (!destination.includes("/tests/e2e/visual/__screenshots__/")) fail("PORTIA_SNAPSHOT_DESTINATION_INVALID", row.intendedSnapshot);
-    if (row.status === "CAPTURED") {
+    // Candidate PNGs live in the gitignored run directory; index mode cannot re-hash them.
+    if (fromCapture && row.status === "CAPTURED") {
       const candidate = path.resolve(workspace, row.candidateFile);
       if (!existsSync(candidate) || !statSync(candidate).isFile()) fail("PORTIA_CANDIDATE_PNG_MISSING", row.candidateFile);
       if (sha256(candidate) !== row.sha256) fail("PORTIA_CANDIDATE_HASH_MISMATCH", row.candidateFile);
     }
   }
   validateCandidateRows(rows, inventory?.rows);
+  if (index) {
+    if (index.sourceCommit !== sourceCommits[0]) {
+      fail(fromCapture ? "PORTIA_CANDIDATE_INDEX_DRIFT" : "PORTIA_CANDIDATE_INDEX_INVALID", `sourceCommit=${index.sourceCommit}`);
+    }
+    if (fromCapture) assertCandidateIndexMatches(index.rows, rows);
+  }
   return rows.sort((left, right) => `${left.surface}:${left.state}`.localeCompare(`${right.surface}:${right.state}`));
 }
 
@@ -421,10 +479,10 @@ function markdown(rows) {
 function verifyUiMap() {
   const authority = verifyAuthority();
   const map = readFileSync(frameMapPath, "utf8");
-  const rows = collectRows({ enforceInventory: true, candidateSetId: authority.candidateSet });
+  const rows = collectRows({ enforceInventory: true, candidateSetId: authority.candidateSet, allowIndex: true });
   const mapRows = parseUiMapRows(map);
   validateUiMapRows(rows, mapRows);
-  process.stdout.write(`Verified repository UI map for ${rows.length} rows (${rows.filter((row) => row.status === "CAPTURED").length} captured, ${rows.filter((row) => row.status === "BLOCKED").length} blocked).\n`);
+  process.stdout.write(`Verified repository UI map for ${rows.length} rows (${rows.filter((row) => row.status === "CAPTURED").length} captured, ${rows.filter((row) => row.status === "BLOCKED").length} blocked). ${sourceLabel(authority.candidateSet)}\n`);
 }
 
 function runCli() {
@@ -437,6 +495,19 @@ function runCli() {
     verifyApproval();
   } else if (args.has("--verify-ui-map")) {
     verifyUiMap();
+  } else if (args.has("--write-candidate-index")) {
+    if (existsSync(candidateIndexPath)) fail("PORTIA_CANDIDATE_INDEX_EXISTS");
+    const authority = verifyAuthority();
+    const rows = collectRows({ enforceInventory: true, candidateSetId: authority.candidateSet });
+    // Plain string comparison keeps the committed order locale-independent.
+    rows.sort((left, right) => (rowIdentity(left) < rowIdentity(right) ? -1 : rowIdentity(left) > rowIdentity(right) ? 1 : 0));
+    writeFileSync(candidateIndexPath, `${JSON.stringify({
+      schema: candidateIndexSchema,
+      setId: authority.candidateSet,
+      sourceCommit: rows[0].sourceCommit,
+      rows,
+    }, null, 2)}\n`);
+    process.stdout.write(`Wrote candidate index for ${rows.length} rows.\n`);
   } else if (args.has("--write-inventory")) {
     if (existsSync(inventoryPath)) fail("PORTIA_STABLE_INVENTORY_EXISTS");
     const rows = collectRows();
