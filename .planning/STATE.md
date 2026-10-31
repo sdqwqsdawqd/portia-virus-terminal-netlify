@@ -1,17 +1,21 @@
 ---
-gsd_state_version: 1.0
+gsd_state_version: "1.0"
 milestone: v1.3
-milestone_name: Стабилизация PORTIA OS
+milestone_name: «Стабилизация PORTIA OS»
+current_phase: 15
+current_phase_name: Восстановление контроля, контракты и браузерный baseline
 status: executing
-stopped_at: Completed 15-12-PLAN.md; next is 15-13
-last_updated: "2026-10-31"
-last_activity: 2026-10-31 -- Promoted and executed the owner-approved exact-byte visual baseline
+stopped_at: Completed 15-13-PLAN.md
+last_updated: "2026-10-31T22:05:55.223Z"
+last_activity: 2026-10-31
+last_activity_desc: Bound visual verification to signed candidate-set, source-commit and contract-digest authority
+state_head: a0bc3391bb1558d5443943decea924f968880e76
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
-  completed_plans: 12
-  percent: 80
+  completed_plans: 13
+  percent: 87
 ---
 
 # Project State
@@ -26,17 +30,17 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
-Plan: 12 of 15
-Status: Pausing after executable approved visual authority; plans 15-13 through 15-15 remain
+Plan: 13 of 15
+Status: Plan 15-13 complete (signed authority binding); plans 15-14 and 15-15 remain
 Last activity: 2026-10-31 -- Promoted and executed the owner-approved exact-byte visual baseline
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 87%
 
 ## Performance Metrics
 
 **Current milestone:**
 
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: 49m
 - Total execution time: 8h09m
 
@@ -57,6 +61,11 @@ Progress: [████████░░] 80%
 | Phase 15 P10 | 25min | 2 tasks | 10 files |
 | Phase 15 P11 | 35min | 3 tasks | repository UI authority |
 | Phase 15 P12 | 45min | 2 tasks | approved visual authority |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 15 P13 | 20min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -99,9 +108,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-10-31T18:36:56.611Z
-Stopped at: Completed 15-12-PLAN.md; preparing structured handoff before 15-13
-Resume file: .planning/phases/PORTIA-15-baseline/.continue-here.md
+Last session: 2026-10-31T22:05:55.184Z
+Stopped at: Completed 15-13-PLAN.md
+Resume file: None
 
 ## Operator Next Step
 

@@ -1,53 +1,53 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.1 — Закрытие замечаний",
+  "milestone": "v1.3 — «Стабилизация PORTIA OS»",
   "phases": [
     {
-      "number": "6",
-      "name": "Учёт замечаний и страховка данных",
-      "status": "complete"
-    },
-    {
-      "number": "7",
-      "name": "Сервер: сохранение сотрудников и безопасный JSON",
-      "status": "complete"
-    },
-    {
-      "number": "8",
-      "name": "Сотрудники без потерь на экране",
-      "status": "complete"
-    },
-    {
-      "number": "9",
-      "name": "Целостность контента",
-      "status": "complete"
-    },
-    {
-      "number": "10",
-      "name": "Рабочий стол: устойчивость, встроенные документы, доступность",
-      "status": "complete"
-    },
-    {
-      "number": "11",
-      "name": "Редактор: панель оформления и тексты",
-      "status": "complete"
-    },
-    {
-      "number": "12",
-      "name": "Права редакторов и безопасность доступа",
-      "status": "complete"
-    },
-    {
-      "number": "13",
-      "name": "Приложение «Справочник»",
+      "number": "15",
+      "name": "Восстановление контроля, контракты и браузерный baseline",
       "status": "in_progress"
+    },
+    {
+      "number": "16",
+      "name": "Канонический Supabase staging и SQL-истина",
+      "status": "pending"
+    },
+    {
+      "number": "17",
+      "name": "Обратимая декомпозиция рабочего стола и редактора",
+      "status": "pending"
+    },
+    {
+      "number": "18",
+      "name": "Рабочий стол, окна и живые анимации",
+      "status": "pending"
+    },
+    {
+      "number": "19",
+      "name": "Доказательство «Повышения» и точечная стабилизация",
+      "status": "pending"
+    },
+    {
+      "number": "20",
+      "name": "Стабилизация приложений, редактора, поиска и медиа",
+      "status": "pending"
+    },
+    {
+      "number": "21",
+      "name": "Закрытие security, accessibility, CSP и зависимостей",
+      "status": "pending"
+    },
+    {
+      "number": "22",
+      "name": "Репетиция релиза и приёмка владельца",
+      "status": "pending"
     }
   ],
   "next": {
     "command": "/gsd:progress --next",
     "label": "Advance to the next step",
-    "reason": "Phase 13 of 8 · 88% · executing"
+    "reason": "Phase 15 of 8 · 0% · executing"
   },
-  "updated_at": "2026-10-26T20:29:33.101Z"
+  "updated_at": "2026-10-31T22:05:52.805Z"
 }
