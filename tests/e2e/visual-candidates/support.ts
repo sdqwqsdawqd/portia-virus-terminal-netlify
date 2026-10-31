@@ -28,6 +28,15 @@ export type CandidateSpec = Readonly<{
   fault?: CandidateFaultRecord;
 }>;
 
+export type CandidateBlocker = Readonly<{
+  reasonCode:
+    | "ISOLATED_AUTH_REQUIRED"
+    | "ISOLATED_PROMOTION_DATA_REQUIRED"
+    | "UNCLASSIFIED_BLOCKER";
+  recoveryPhase: 16 | 19 | 15;
+  reason: string;
+}>;
+
 const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
   cwd: process.cwd(),
   encoding: "utf8",
@@ -114,6 +123,7 @@ export async function captureCandidate(context: CandidateContext, spec: Candidat
     schema: "portia-phase15-visual-candidate-v1",
     setId,
     status: "CAPTURED",
+    id: spec.id,
     requirement: spec.requirement,
     surface: spec.surface,
     actor: spec.actor,
@@ -131,7 +141,7 @@ export async function captureCandidate(context: CandidateContext, spec: Candidat
 export async function recordBlockedCandidate(
   context: CandidateContext,
   spec: Omit<CandidateSpec, "mask" | "animations">,
-  reason: string,
+  blocker: CandidateBlocker | string,
 ) {
   mkdirSync(runRoot, { recursive: true });
   const stem = `${safeId(spec.id)}--${safeId(context.testInfo.project.name)}`;
@@ -139,12 +149,15 @@ export async function recordBlockedCandidate(
     schema: "portia-phase15-visual-candidate-v1",
     setId,
     status: "BLOCKED",
+    id: spec.id,
     requirement: spec.requirement,
     surface: spec.surface,
     actor: spec.actor,
     state: spec.state,
     intendedSnapshot: spec.intendedSnapshot,
-    reason,
+    reasonCode: typeof blocker === "string" ? "UNCLASSIFIED_BLOCKER" : blocker.reasonCode,
+    recoveryPhase: typeof blocker === "string" ? 15 : blocker.recoveryPhase,
+    reason: typeof blocker === "string" ? blocker : blocker.reason,
     ...(await browserEnvironment(context)),
   };
   writeFileSync(path.join(runRoot, `${stem}.blocked.json`), `${JSON.stringify(row, null, 2)}\n`);

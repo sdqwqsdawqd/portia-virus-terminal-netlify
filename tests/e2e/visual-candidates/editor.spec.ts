@@ -48,6 +48,10 @@ test("[STAB-BASE-03] inventory privileged editor states as blocked", async ({ pa
       actor,
       state,
       intendedSnapshot: `tests/e2e/visual/__screenshots__/${id}--${testInfo.project.name}.png`,
-    }, "Dedicated isolated Supabase target and disposable authorized identity are not provisioned.");
+    }, {
+      reasonCode: "ISOLATED_AUTH_REQUIRED",
+      recoveryPhase: 16,
+      reason: "Dedicated isolated Supabase target and disposable authorized identity are not provisioned.",
+    });
   }
 });

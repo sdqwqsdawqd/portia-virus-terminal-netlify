@@ -43,6 +43,10 @@ test("[STAB-BASE-03] inventory private Promotion states as blocked", async ({ pa
       actor,
       state,
       intendedSnapshot: `tests/e2e/visual/__screenshots__/${id}--${testInfo.project.name}.png`,
-    }, "State requires isolated server fixtures; private questions, answers, notes and live employee data cannot enter candidate evidence.");
+    }, {
+      reasonCode: "ISOLATED_PROMOTION_DATA_REQUIRED",
+      recoveryPhase: 19,
+      reason: "State requires isolated server fixtures; private questions, answers, notes and live employee data cannot enter candidate evidence.",
+    });
   }
 });
