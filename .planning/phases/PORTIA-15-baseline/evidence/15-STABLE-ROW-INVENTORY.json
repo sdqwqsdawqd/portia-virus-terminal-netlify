@@ -1,0 +1,427 @@
+{
+  "schema": "portia-phase15-stable-row-inventory-v1",
+  "setId": "phase15-current-efbc1401080d",
+  "sourceCommit": "efbc1401080d6b65ba1f4916ad0343b783c62bb8",
+  "rows": [
+    {
+      "project": "chromium-desktop",
+      "id": "application-broadcasts-current",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "application-charter-current",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "application-employees-current",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "application-guide-current",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "application-information-current",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "application-search-current",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "application-settings-current",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "application-table-current",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "application-trash-current",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "application-virus-archive-current",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "applications-system-empty",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "applications-system-fatal error",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "applications-system-loading",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "applications-system-permission denied",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "applications-system-stale/degraded",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "desktop-clean-rest",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "desktop-start-open",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "editor-conflict-error",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "editor-dirty-saving-saved",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "editor-long-list-dialog",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "editor-phone-keyboard",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "editor-role-clean",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "editor-role-closed",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "editor-signed-out-login",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "editor-visitor-denied",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "editor-wysiwyg",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-boot",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-shortcut-end",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-shortcut-interruption",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-shortcut-key",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-shortcut-rest",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-shortcut-start",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-spider-front-leg-hunt",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-spider-route",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-spider-spawn",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-vivian-activity",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-vivian-idle",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-vivian-offended",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-vivian-recovery",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-wallpapers",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-web-rest",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-web-wave",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "motion-window-lock",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "owner-editor-access",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-active-request",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-assigned",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-cooldown",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-deadline",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-eligible",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-participant-lookup",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-phone",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-qualification-lock",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-question-bank",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-result",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-reviewer-editor",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-reviewer-queue",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "promotion-safe-error",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "window-search-maximized",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "window-search-minimized",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-desktop",
+      "id": "window-search-restored",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-dpr125",
+      "id": "desktop-clean-rest",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-dpr125",
+      "id": "desktop-dpr125",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-dpr125",
+      "id": "desktop-start-open",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-dpr125",
+      "id": "window-search-maximized",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-dpr125",
+      "id": "window-search-minimized",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-dpr125",
+      "id": "window-search-restored",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-phone",
+      "id": "desktop-clean-rest",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-phone",
+      "id": "desktop-start-open",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-phone",
+      "id": "phone-chromium",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "chromium-phone",
+      "id": "window-search-maximized",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-phone",
+      "id": "window-search-minimized",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "chromium-phone",
+      "id": "window-search-restored",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "firefox-desktop",
+      "id": "desktop-clean-rest",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "firefox-desktop",
+      "id": "desktop-firefox",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "firefox-desktop",
+      "id": "desktop-start-open",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "firefox-desktop",
+      "id": "window-search-maximized",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "firefox-desktop",
+      "id": "window-search-minimized",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "firefox-desktop",
+      "id": "window-search-restored",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "webkit-phone",
+      "id": "desktop-clean-rest",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "webkit-phone",
+      "id": "desktop-start-open",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "webkit-phone",
+      "id": "phone-webkit",
+      "status": "CAPTURED"
+    },
+    {
+      "project": "webkit-phone",
+      "id": "window-search-maximized",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "webkit-phone",
+      "id": "window-search-minimized",
+      "status": "BLOCKED"
+    },
+    {
+      "project": "webkit-phone",
+      "id": "window-search-restored",
+      "status": "CAPTURED"
+    }
+  ]
+}
