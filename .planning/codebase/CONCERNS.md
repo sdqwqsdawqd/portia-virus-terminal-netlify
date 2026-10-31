@@ -1,218 +1,222 @@
 ---
-last_mapped_commit: e3941d4a097005a1674d3e9bc4d1e638aeda0846
-last_mapped_at: 2026-10-12
+last_mapped_commit: 2904899037d4243c8433d9d16a88f21ce7f7fe18
+last_mapped_at: 2026-11-01
 ---
 # Codebase Concerns
 
-**Analysis Date:** 2026-10-12
+**Analysis Date:** 2026-11-01
 
-## Known User-Reported Issues (verified in code)
-
-**Drag handle "ТЯНИТЕ" overflows its row (editor recommendation and recycle lists):**
-- Issue: `OrderDragHandle` renders a `≡` glyph plus a `<small>ТЯНИТЕ</small>` label inside a fixed 34px-wide grid column. The label is wider than 34px, so it spills out of the handle and past the row edge. The recommendation rows use a 40px column and have `overflow: hidden` only on the text span, not on the handle.
-- Files: `components/portia-editor.tsx` (`OrderDragHandle`, line ~153; used at lines ~592, 681, 724, 815), `app/portia.css` (`.order-drag-handle` line 406, `.order-drag-handle small` line 409, `.editor-record-row` line 404, `.recommendation-order-row` line 435)
-- Impact: Visible layout break in the editor; the label collides with neighbouring controls or is clipped by the row.
-- Fix approach: Drop the text label from the handle (keep `aria-label` for accessibility) or allow it to wrap vertically inside 34px. Add `overflow: hidden` to `.order-drag-handle` and `min-width: 0` on its grid parent. Verify in both recycle and recommendation lists.
-
-**Embedded charter window renders cropped (`EmbeddedDocument`):**
-- Issue: `EmbeddedDocument` sizes the iframe as `width/height: 100/zoom %` and applies `transform: scale(zoom)` with `transform-origin: 0 0`. The iframe height depends on a chain of percentage heights: `.document-app` uses `height: calc(100% - 46px)`, and `.document-app-viewport` uses `height: 100%`. If any ancestor in the app-window body lacks a definite height, the iframe collapses or is cut off. The viewport also has `overflow: hidden`, so anything outside the box is clipped. The iframe is `loading="lazy"`, so it may not load in a window that starts minimized or hidden.
-- Files: `components/portia-desktop.tsx` (`EmbeddedDocument`, line ~1104; `AppWindow` body), `app/portia.css` (`.document-app` line 1059, `.document-app-viewport` and iframe lines 1098-1100)
-- Impact: The document window shows a partial page; the user cannot read the full charter without "Открыть отдельно".
-- Fix approach: Give the window body an explicit height (`height: 100%` on the chain, or flex column with `flex: 1 1 auto; min-height: 0`). Replace percentage sizing with `position: absolute; inset: 0` on the iframe and scale it from a wrapper of known size. Confirm the behaviour at the 900px breakpoint, where the height changes to `calc(100svh - 150px)`. This was not confirmed in a running browser; it is inferred from the CSS.
-
-**Editor rich-text fields still use Georgia:**
-- Issue: The serif stack is hard-coded in four places, not taken from a variable. `.formatted-rich-input` sets `font: 17px/1.65 Georgia, ...` (line 465), and the focus state re-sets `font-family: Georgia` (line 468). `.scientist-rich-text` (line 519) and `.archive-document-section p` (line 772) also use it.
-- Files: `app/portia.css` lines 465, 468, 519, 772
-- Impact: Editor fields do not match the sans/mono type system used elsewhere in the editor (`--sans`, `--mono`), and the user has reported this as wrong.
-- Fix approach: Replace the Georgia literals with the project font variable chosen for the editor (for example `var(--sans)`), and remove the duplicate declaration at line 468 so focus does not change the family. Decide separately whether `.scientist-rich-text` and `.archive-document-section` should keep serif for document previews.
-
-**Assistant image and spider logo do not follow accent themes:**
-- Issue: The accent themes change `--teal`, `--teal-dim` and `--teal-soft` (lines 828-830), but the assistant and logo are fixed PNG files. `portia-assistant.png` is shown with a hard-coded `filter: brightness(.7)` (line 626), and its hover shadow uses a hard-coded teal `rgba(0,188,166,.2)` (line 627). The logo `portia-logo.png` appears unfiltered in six places in `components/portia-desktop.tsx` (lines 814, 978, 986, 999, 1004, 1383) and in `components/portia-editor.tsx` (line 939). No CSS applies the accent to either image.
-- Files: `public/assets/portia-assistant.png`, `public/assets/portia-logo.png`, `components/portia-desktop.tsx` (lines 814, 973, 978, 986, 999, 1383), `components/portia-editor.tsx` (line 939), `app/portia.css` (lines 626-630, 828-830)
-- Impact: On the "amber" and "red" themes the assistant and spider remain teal-tinted or uncoloured, so the theme looks inconsistent.
-- Fix approach: Ship monochrome (alpha-mask) versions of the two PNGs and render them with CSS `mask-image` filled with `var(--teal)`. Alternatively, apply a `filter` chain derived from the accent. The mask approach is preferred because the filter approach cannot map an arbitrary hue cleanly. Use `var(--teal)` in the hover shadow instead of the hard-coded RGB.
+Scope: `app/`, `components/`, `lib/` (the `--paths` hint). Previous findings from 2026-10-12 were re-verified against the code. Items no longer present were dropped: the ТЯНИТЕ label overflow, the Georgia literals in `app/portia.css`, the client-trusted upload MIME check, the untracked `tsconfig.tsbuildinfo`, and the 2 MB content cap.
 
 ## Tech Debt
 
 **Oversized component and stylesheet files:**
-- Issue: `components/portia-desktop.tsx` (1392 lines, 30 top-level functions) and `components/portia-editor.tsx` (1360 lines) each hold many unrelated components. `app/portia.css` (1108 lines) is a single file with more than 1000 rules and inline colours repeated across sections.
-- Files: `components/portia-desktop.tsx`, `components/portia-editor.tsx`, `app/portia.css`
-- Impact: Hard to review and to change safely. The known layout bugs above are in the same files as unrelated code.
-- Fix approach: Split by feature: window chrome, document viewer, editor tabs, recycle list, and the drag-order handle (shared, so it should live in its own module). Move colour literals to CSS custom properties.
+- Issue: `components/portia-editor.tsx` is 3033 lines and `components/portia-desktop.tsx` is 2317 lines. `app/portia.css` is 1981 lines. All three grew by roughly 2x since 2026-10-12. Each mixes many unrelated components and rules.
+- Files: `components/portia-editor.tsx`, `components/portia-desktop.tsx`, `app/portia.css`
+- Impact: Hard to review and to change safely. Unrelated edits collide, and the drag-order and embed code sit in the same files as the rest.
+- Fix approach: Split by feature (window chrome, document viewer, editor tabs, recycle list, promotion editors) and move the shared drag-order handle into its own module. Keep the split mechanical so behaviour does not change.
 
-**Hard-coded colours and fonts instead of theme tokens:**
-- Issue: Many colours are literals (for example `#08110f`, `#304942`, `#0b7568`, `#f3f1e9`) and there are literal teal RGB values, which bypass the accent system (`html[data-accent]`, lines 828-830).
-- Files: `app/portia.css` (throughout, e.g. lines 465-470)
-- Impact: Themes are incomplete, as the assistant and rich-text issues show.
-- Fix approach: Route every accent-related colour through `--teal`, `--teal-dim` and `--teal-soft`, and add fonts as variables.
+**Duplicated staff sheet source:**
+- Issue: The Google Sheets ID is hard-coded in three places, each with its own range or CSV URL.
+- Files: `components/portia-desktop.tsx` (line 29, `sheet.src`), `lib/portia-employees.ts` (line 152, `sheetCsvUrl`), `lib/portia-promotion-sheet.ts` (line 9, `sheetCsvUrl` with ranges `B2:B35` and `A61:E85`)
+- Impact: Changing or moving the sheet means editing three files. A missed one leaves the desktop link and the data source pointing at different documents.
+- Fix approach: Put the sheet ID in one module in `lib/` (for example `lib/portia-sheet-source.ts`) and derive the CSV URLs and ranges from it. The ID is not a secret, so it can be a plain constant.
 
-**Duplicated order-drag logic:**
-- Issue: The drag-to-reorder logic for virus, info section, recycle and recommendation lists is repeated with slightly different `onMove` handlers (`moveArrayItem` called inline at lines ~592, 681, 724, 815). `recycleKeys` in `components/portia-editor.tsx` (line 87) reconstructs order from several sources.
-- Files: `components/portia-editor.tsx`
-- Impact: Fixes such as the ТЯНИТЕ overflow must be repeated; order can drift if one list forgets to normalise its keys.
-- Fix approach: Use one hook or component for sorted lists that owns the pointer logic and the `data-sort-index` contract.
+**Fixed staff row range:**
+- Issue: `rosterFromRows` reads `rows.slice(1, staffRowsEnd)` with `staffRowsEnd = 35`, and the promotion access roster is capped at `rows.slice(0, 34)` with the range `B2:B35`.
+- Files: `lib/portia-employees.ts` (line 156 and `rosterFromRows`, line ~255), `lib/portia-promotion-sheet.ts` (`accessRosterFromRows`, `B2:B35`)
+- Impact: Staff or access entries beyond the fixed row are silently ignored, with no warning.
+- Fix approach: Read to the end of the populated sheet, and report a count mismatch in the `degraded` state instead of truncating.
 
-**Hard-coded external data source:**
-- Issue: The staff spreadsheet URL is a literal in source (`lib/portia-employees.ts` line 28) and the row range is fixed (`staffRowsEnd = 35`, line 30).
-- Files: `lib/portia-employees.ts`
-- Impact: Changing the sheet or extending the roster requires a code change and redeploy.
-- Fix approach: Move the sheet id and range to environment config (non-secret, so `NEXT_PUBLIC_` or a plain server variable is acceptable), and derive the row range from the data.
+**Global dependence on the promotion device secret:**
+- Issue: `promotionDeviceSecret()` throws when `PORTIA_PROMOTION_DEVICE_SECRET` is missing or shorter than 32 characters. The status, requests and banks routes wrap this call in `try/catch`, but `app/api/promotion/test/route.ts` and `app/api/promotion/reviewer/route.ts` do not. A missing secret on those paths becomes an unhandled exception.
+- Files: `lib/portia-device-binding.ts` (line 7, line 15), `app/api/promotion/test/route.ts` (`GET`, `POST`), `app/api/promotion/reviewer/route.ts` (`GET`, `POST`)
+- Impact: A configuration gap produces a 500 with no JSON error body on the test and reviewer paths. The other promotion routes return a clean 503.
+- Fix approach: Wrap the handlers in the same `try/catch` pattern used by `app/api/promotion/status/route.ts`, returning a `promotion-unavailable` body.
 
-**Test coverage limited to `lib/`:**
-- Issue: The `test` script runs only `lib/*.test.ts` (three test files: normalise, employees, window geometry). No tests cover API routes (`app/api/*`), `proxy.ts`, the upload validation, or any component.
-- Files: `package.json` (test script), `lib/*.test.ts`, `app/api/content/route.ts`, `app/api/uploads/route.ts`, `components/portia-editor.tsx`, `components/portia-desktop.tsx`
-- Impact: The save conflict (409) path, upload validation, and the layout issues above can regress unnoticed.
-- Fix approach: Add route-level tests for PUT `/api/content` (revision conflict, invalid body) and POST `/api/uploads` (type and size limits), and a visual check for the embedded viewer and drag handle.
-
-**Committed build artifact:**
-- Issue: `tsconfig.tsbuildinfo` sits at the project root. `.gitignore` line 59 ignores `*.tsbuildinfo`, so the file is presumably not tracked, but its presence in the working tree can mislead tooling.
-- Files: `tsconfig.tsbuildinfo`, `.gitignore`
-- Impact: Low.
-- Fix approach: Delete it from the working tree and confirm it is not tracked.
+**Limited test coverage of components:**
+- Issue: The `test` script runs only `lib/*.test.ts`. There are no component tests. Route coverage is partial: promotion routes are tested through `lib/portia-promotion-*.test.ts` and editor tabs through `lib/editor-tabs.test.ts`. There is no direct test of `PUT /api/content` or `POST /api/uploads` status codes.
+- Files: `package.json` (line 12), `app/api/content/route.ts`, `app/api/uploads/route.ts`, `components/portia-editor.tsx`, `components/portia-desktop.tsx`
+- Impact: Save conflicts (409), size limits (413) and upload type or signature rejection (415) can regress without a failing test.
+- Fix approach: Add route-level tests that call the exported handlers with mocked Supabase and request objects.
 
 ## Security Considerations
 
-**Public content and employee data with server-side write checks:**
-- Risk: `GET /api/content` and `GET /api/employees` are public and CDN-cached. Anyone can read the full content payload and staff profiles (from `public.portia_content` and `portia_employee_profiles` with `using (true)` select policies in `supabase/portia_setup.sql`). This is probably intended for a public desktop, but any field added later becomes public automatically.
-- Files: `app/api/content/route.ts`, `app/api/employees/route.ts`, `supabase/portia_setup.sql` (lines 119-123, 147-151)
-- Current mitigation: The owner email is kept out of the API (`revoke` at lines 79-81 of `portia_setup.sql`). Writes are gated by `getEditorAccess` and RLS policies that depend on `portia_can_edit()`.
-- Recommendations: Document which fields are public. Keep private data out of `payload`. Add a test that the public GET does not return editor-only fields.
+**Public content and employee reads:**
+- Risk: `GET /api/content` and `GET /api/employees` are public and CDN-cached. The full content payload and staff profiles are readable by anyone, from `public.portia_content` and `portia_employee_profiles` (both have `select` policies with `using (true)`).
+- Files: `app/api/content/route.ts`, `app/api/employees/route.ts`, `lib/supabase/server.ts` (`createPublicSupabaseClient`), `supabase/portia_setup.sql`
+- Current mitigation: The owner email is kept out of the API. Writes are gated by `getEditorAccess` (`lib/editor-access.ts`) and by RLS policies that call `portia_can_edit()`. The public client never touches cookies.
+- Recommendations: Document which fields are public, keep editor-only data out of `payload`, and add a test that public GET responses carry no editor-only fields.
 
-**Upload MIME check trusts the client:**
-- Risk: `POST /api/uploads` decides the type from `file.type`, which the browser sets from the filename. A file with a spoofed type can be stored with an image extension.
-- Files: `app/api/uploads/route.ts` (lines 24-38)
-- Current mitigation: Only PNG, JPEG, WEBP and GIF are accepted (no SVG or HTML), size is capped at 4 MB, the path is a random UUID, and access requires an editor.
-- Recommendations: Check the magic bytes of the first few bytes of the file before upload. The storage bucket `portia-media` should serve these with `Content-Type` set from the allow-list, never from the client.
+**Upload validation:**
+- Risk: Reduced. `POST /api/uploads` now compares the declared MIME type with the file signature from the first 16 bytes (`imageExtensionFromSignature` in `lib/image-upload.ts`) and rejects a mismatch with 415. The 4 MB limit is checked before the upload.
+- Files: `app/api/uploads/route.ts` (lines 24-45), `lib/image-upload.ts`
+- Current mitigation: Only PNG, JPEG, WEBP and GIF pass. Names are UUIDs. Access requires an open editor tab.
+- Remaining gap: Uploads go to the flat `recycle/` prefix. The uploader is not recorded in storage metadata, so unreferenced objects cannot be attributed or swept safely.
+- Recommendations: Store the uploader id in object metadata, and add a periodic sweep for objects no content row references.
 
-**Upload path is not scoped to the uploader:**
-- Risk: Any editor can upload to `recycle/` and other prefixes, and there is no record of who uploaded what. Storage cleanup depends on content references that are not tracked.
-- Files: `app/api/uploads/route.ts` (line 42)
-- Current mitigation: UUID names prevent collisions and guessing.
-- Recommendations: Store uploader id in metadata, and add a periodic sweep for unreferenced objects.
+**Content-Security-Policy allows inline scripts:**
+- Risk: `script-src 'self' 'unsafe-inline'` in `next.config.ts` (line 13) removes most of the XSS protection a script CSP gives. The accent boot script is injected with `dangerouslySetInnerHTML` (`app/layout.tsx`, line 34).
+- Files: `next.config.ts` (line 13), `app/layout.tsx` (line 34), `lib/accent-boot.ts`
+- Current mitigation: The boot script is built from constants with `JSON.stringify`, so no user data reaches it.
+- Recommendations: Move the boot script to a nonce or hash based policy, then drop `'unsafe-inline'` from `script-src`. Keep `style-src` as is unless the styles move to hashed sources.
 
-**Error details are logged, not returned:**
-- Status: Routes return generic Russian messages and log the raw error with `console.error` (`app/api/*/route.ts`, `lib/editor-access.ts`). This is good practice. Note that `console.error` output goes to the Netlify function logs, so Supabase error objects should not contain secrets.
+**Embedded frames with script and same-origin rights:**
+- Risk: `embedSandbox` (`components/portia-desktop.tsx`, line 34) is `allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox`. Together, `allow-scripts` and `allow-same-origin` let embedded content remove its own sandbox. The `frame-src` allow-list (`next.config.ts`, line 20) limits the hosts, but the editor controls the `src` values.
+- Files: `components/portia-desktop.tsx` (line 34, `EmbeddedDocument` line 1781, iframe line 1824, YouTube iframe line 1957), `next.config.ts` (line 20)
+- Current mitigation: `frame-src` restricts the hosts to Google Docs, the GitHub Pages site, and YouTube.
+- Recommendations: Drop `allow-same-origin` for the Google Docs and YouTube embeds if they do not need it, and validate `src` against the same host list in the editor before saving.
+
+**Promotion device binding:**
+- Risk: The promotion device token is an HttpOnly, Secure cookie that binds a device to one nickname. Its digest is an HMAC keyed by `PORTIA_PROMOTION_DEVICE_SECRET`. Anyone who can read the secret can compute the digest for any token. A device is locked after a failed attempt, and the lock is not shown to the user as a security event.
+- Files: `lib/portia-device-binding.ts`, `lib/portia-promotion-api.ts`, `app/api/promotion/requests/route.ts`, `app/api/promotion/status/route.ts`
+- Current mitigation: The secret must be at least 32 characters. Attempt buckets use a keyed coarse IP (`/24` or `/64`) and a keyed user-agent signal. Public clients receive only security-definer RPC execution.
+- Recommendations: Confirm in the Supabase test branch that `portia_promo_*` RPCs cannot be called with the anon key for another nickname. Rotate the secret through deployment config only. Record this as evidence only once the authenticated and Postgres checks have passed, not before.
+
+**Owner-only actions in the promotion reviewer:**
+- Risk: `reset-device` and `delete-request` are owner-only. The check is in the route (`app/api/promotion/reviewer/route.ts`, `canManageEditors`). The RPCs are the enforcement point for the database.
+- Files: `app/api/promotion/reviewer/route.ts`, `app/api/editors/route.ts`
+- Current mitigation: `getEditorAccess` returns `canManageEditors` only for the owner.
+- Recommendations: Confirm that each `portia_promo_*` RPC re-checks ownership inside the database. The route check alone is not enough.
 
 **Environment file present:**
-- `.env.local` exists in the project root. Its contents were not read. It is ignored by `.gitignore`. Confirm it is never committed and that `.env.example` lists only variable names.
+- `.env.local` exists in the project root. Its contents were not read for this analysis and must not be. It is listed in `.gitignore`. Confirm it is never committed and that `.env.example` lists only variable names.
 
 ## Performance Bottlenecks
 
 **Oversized assistant image:**
-- Problem: `public/assets/portia-assistant.png` is 854 KB at 1536x1024 and is rendered at roughly 220px wide (`.assistant-button img`, `app/portia.css` line 626). The desktop loads it on every visit.
-- Files: `public/assets/portia-assistant.png`, `components/portia-desktop.tsx` (line 973)
-- Cause: Full-resolution RGBA PNG for a small on-screen element.
-- Improvement path: Export a WebP or resized PNG at 2x of the displayed size (about 500px). The monochrome mask version proposed above will be smaller too. Add `loading`/`decoding` hints.
+- Problem: `public/assets/portia-assistant.png` is 854 KB (about 1536x1024) and is shown at about 220px wide.
+- Files: `public/assets/portia-assistant.png`, `components/portia-desktop.tsx` (assistant image), `app/portia.css` (line 890, `.assistant-button img`)
+- Cause: Full-resolution RGBA PNG for a small on-screen element, loaded on every desktop visit.
+- Improvement path: Export a 2x-sized WebP or PNG (about 500px wide).
 
 **Logo PNG reused at several sizes:**
-- Problem: `public/assets/portia-logo.png` (650x768, 73 KB) is used in six places, from 26px to 112px.
-- Files: `components/portia-desktop.tsx` (lines 814, 978, 986, 999, 1383), `components/portia-editor.tsx` (line 939)
-- Cause: Single large raster for small icons.
-- Improvement path: Use an SVG or a 2x raster sized to the largest use (112px).
+- Problem: `public/assets/portia-logo.png` (73 KB) is referenced in 7 places (6 in `components/portia-desktop.tsx`, 1 in `components/portia-editor.tsx`), from small icons to large headers.
+- Files: `components/portia-desktop.tsx`, `components/portia-editor.tsx`
+- Cause: One raster for icons of very different sizes.
+- Improvement path: Use an SVG, or a 2x raster sized to the largest use.
 
 **Public GETs are CDN-cached but browsers revalidate:**
-- Problem: `publicCacheHeaders` sets `max-age=0, must-revalidate` for browsers (`lib/portia-cdn.ts` line 9), so every desktop load revalidates content and employees.
+- Problem: `publicCacheHeaders` sets `max-age=0, must-revalidate` for browsers (`lib/portia-cdn.ts`), so every desktop load revalidates content and employees.
 - Files: `lib/portia-cdn.ts`, `app/api/content/route.ts`, `app/api/employees/route.ts`
-- Cause: Deliberate, to keep edits fresh.
+- Cause: Deliberate, so edits show up immediately.
 - Improvement path: Acceptable for now. Consider a short browser `max-age` if traffic grows.
 
-**Employee load fans out to external APIs:**
-- Problem: `loadEmployees` calls the Google Sheets CSV and then the Roblox user, headshot and avatar APIs (`lib/portia-employees.ts` lines 81-94, 183). Each call has a timeout (5-8 s), but a slow chain delays the response. The response is `degraded` when incomplete.
-- Files: `lib/portia-employees.ts`, `app/api/employees/route.ts`
+**Employee load fans out to external APIs on the request path:**
+- Problem: `loadEmployees` calls the Google Sheets CSV and then the Roblox user, headshot and avatar APIs (`lib/portia-employees.ts`, `fetch` calls at lines ~207, 219, 220, 380). Each has a 5-8 s timeout, so a slow chain delays the response. The response is `degraded` when incomplete.
+- Files: `lib/portia-employees.ts`, `app/api/employees/route.ts`, `app/api/employees/editor/route.ts`
 - Cause: Synchronous enrichment on the request path.
-- Improvement path: Keep the 600 s cache for complete responses (already done) and run the Roblox lookups in parallel with the sheet read where possible.
+- Improvement path: Keep the complete-response cache. Run the Roblox lookups in parallel with the sheet read where possible.
 
 ## Fragile Areas
 
 **Pointer-based drag reordering:**
-- Files: `components/portia-editor.tsx` (`OrderDragHandle`, lines 115-155)
-- Why fragile: Relies on `document.elementsFromPoint` and `data-sort-index` attributes. Any wrapper that adds a second `[data-sort-index]` ancestor, or a list that re-renders with changing keys, will move items to the wrong index. The `key` for recommendations (line 815) is built from value plus occurrence count, which is brittle when duplicates are edited.
+- Files: `components/portia-editor.tsx` (`elementsFromPoint` and `data-sort-index` logic, lines ~241-301; rows at lines ~613, 1327, 1604, 1701)
+- Why fragile: Relies on `document.elementsFromPoint` and on `data-sort-index` on the row element. A second `[data-sort-index]` ancestor, or a list that re-renders with changing keys, moves items to the wrong index. Recommendation keys are built from value plus occurrence count, which breaks when duplicates are edited.
 - Safe modification: Keep the `data-sort-index` contract on the row element only. Test a reorder with duplicate entries before shipping.
-- Test coverage: None. No component tests exist.
+- Test coverage: None for components.
 
 **Save conflict handling:**
-- Files: `app/api/content/route.ts` (lines 55-72), `components/portia-editor.tsx` (save flow)
-- Why fragile: Optimistic concurrency depends on `revision`. The `baseRevision === 0` insert branch handles the first save; a unique-constraint error (`23505`) is mapped to 409. A change to the revision logic can silently overwrite another editor's work.
+- Files: `app/api/content/route.ts` (lines ~49-80), `components/portia-editor.tsx` (save flow)
+- Why fragile: Optimistic concurrency depends on `revision`. The first save (`baseRevision === 0`) inserts, and a unique-constraint error (`23505`) maps to 409. The update path uses `.eq("revision", baseRevision)`, and zero matched rows also maps to 409. A change to either branch can silently overwrite another editor's work.
 - Safe modification: Keep the revision check and the `.eq("revision", baseRevision)` filter together. Add a test for the 409 path.
-- Test coverage: None for the route.
+- Test coverage: Partial. The `tabs` refusal path is covered in `lib/editor-tabs.test.ts`; the revision path is not.
 
-**Layout depends on fixed pixel breakpoints and percentage heights:**
-- Files: `app/portia.css` (lines 948-949, 987-989, 1059-1061), `components/portia-desktop.tsx` (`EmbeddedDocument`)
-- Why fragile: The embedded viewer and the editor rows rely on definite parent heights and fixed widths (34px, 40px). Text labels and content length change the layout.
-- Safe modification: Test at 900px and at narrow widths after any change to these rules.
+**Tab-restricted saves are enforced in application code:**
+- Files: `app/api/content/route.ts` (lines ~54-68, `closedSectionsOf`, `contentRefusal`), `lib/editor-tabs.ts`, `lib/editor-access.ts`
+- Why fragile: The database does not check sections (the code comment cites an accepted risk in `PROJECT.md`, "D-11"). A restricted editor is checked only in the route, which reads the stored payload and compares sections. A new write path that skips this read would let a restricted editor change closed sections.
+- Safe modification: Route every content write through `PUT /api/content`. Do not add a second writer.
+- Test coverage: Partial, through `lib/editor-tabs.test.ts`.
+
+**Embedded document viewer:**
+- Files: `components/portia-desktop.tsx` (`EmbeddedDocument`, line 1781; iframe with `loading="lazy"`, line 1824), `app/portia.css` (`.document-app`, `.document-app-viewport`)
+- Why fragile: The iframe sizes itself from percentage heights and a scale transform. If an ancestor lacks a definite height, the view is cut off. `loading="lazy"` can keep a hidden or minimised window from loading. This was inferred from the code and not confirmed in a running browser.
+- Safe modification: Test in a browser at 900px and at narrow widths after any change to these rules.
+- Test coverage: None.
 
 **Global window and keyboard listeners in the embedded viewer:**
-- Files: `components/portia-desktop.tsx` (`EmbeddedDocument`, lines ~1113-1138)
-- Why fragile: Listeners for `keydown`, `keyup`, `blur` and `wheel` are attached to `window` and the frame. The Ctrl layer blocks wheel events while Ctrl is held. A missed `keyup` (for example when focus leaves the window) can leave the layer covering the document. The `blur` handler mitigates this.
-- Safe modification: Keep the cleanup functions paired with each `addEventListener`.
+- Files: `components/portia-desktop.tsx` (`EmbeddedDocument`, around lines 1790-1830)
+- Why fragile: `keydown`, `keyup`, `blur` and `wheel` listeners are on `window` and the frame. A missed `keyup` can leave the Ctrl layer covering the document. The `blur` handler mitigates this.
+- Safe modification: Keep each cleanup paired with its `addEventListener`.
+
+**Layout depends on fixed pixel widths:**
+- Files: `app/portia.css` (order-drag handle, line 557: `width: 34px`; mobile override at line 1711: `44px`)
+- Why fragile: Fixed widths for the drag handle depend on the label-free glyph. Adding text to the handle reintroduces the overflow fixed in this revision.
+- Safe modification: Keep the handle label-free, and keep the `aria-label` for accessibility.
 
 ## Scaling Limits
 
 **Single content row:**
-- Current capacity: One `portia_content` row with `id = 'main'` holds the entire payload, capped at 2,000,000 characters per save (`app/api/content/route.ts` line 39).
-- Limit: Payload size and write contention. Large media stored as data is not the issue (media goes to `portia-media`), but the JSON grows with every record.
+- Current capacity: One `portia_content` row with `id = 'main'` holds the entire payload. The request body cap is `MAX_CONTENT_BODY_BYTES = 5_000_000` bytes (`lib/content-limits.ts`, line 19), checked in `app/api/content/route.ts` by UTF-8 byte count.
+- Limit: Payload size and write contention. Every save writes the whole payload, and the 5 MB cap sits close to the Netlify request limit noted in the code comment.
 - Scaling path: Split records (viruses, employees, archive) into their own rows or tables, keeping the revision check per record.
 
-**Employee sheet range is fixed:**
-- Current capacity: Rows up to `staffRowsEnd = 35` (`lib/portia-employees.ts` line 30).
-- Limit: Staff beyond row 35 are silently ignored.
-- Scaling path: Read to the end of the sheet and validate the count.
+**Employee and access sheet ranges are fixed:**
+- Current capacity: Staff rows up to 35 (`lib/portia-employees.ts`). Access roster rows `B2:B35` (`lib/portia-promotion-sheet.ts`). Promotion rows `A61:E85`.
+- Limit: Entries beyond these ranges are silently ignored.
+- Scaling path: Read to the end of the populated range, and validate the count.
 
 ## Dependencies at Risk
 
 **Netlify-specific cache APIs:**
 - Package: `@netlify/functions` (`purgeCache`), plus Netlify response headers in `lib/portia-cdn.ts`
-- Risk: Cache invalidation and `Netlify-CDN-Cache-Control` only work on Netlify. Other hosts ignore these headers, and the purge call fails silently (logged only).
-- Impact: Stale content on other hosts until `s-maxage` expires; no alert.
-- Migration plan: Keep the `purgeCacheTag` abstraction, and add a host check or a fallback TTL when not on Netlify.
+- Risk: Cache invalidation and `Netlify-CDN-Cache-Control` only work on Netlify. On another host the purge fails, and the code only logs it (`purgeCacheTag`).
+- Impact: Stale content until `s-maxage` expires (300 s for content), with no alert.
+- Migration plan: Keep the `purgeCacheTag` abstraction. Add a host check, or a fallback TTL when not on Netlify.
 
 **Google Sheets CSV endpoint:**
-- Package: Google `gviz` CSV export (`lib/portia-employees.ts` line 28)
-- Risk: An undocumented-stability endpoint with no SLA. Sheet permission changes break it.
-- Impact: Staff list falls back to the stored `portia_employee_profiles` data and reports `degraded`.
-- Migration plan: Move the staff roster into Supabase, with the sheet as an import step.
+- Package: Google `gviz` CSV export (`lib/portia-employees.ts`, `lib/portia-promotion-sheet.ts`)
+- Risk: An endpoint with no stability promise. Sheet permission changes or range edits break it. Promotion access and status depend on it.
+- Impact: The staff list falls back to stored profiles and reports `degraded`. Promotion access returns `sheet-unavailable` and blocks new requests.
+- Migration plan: Move the staff roster and promotion rosters into Supabase, with the sheet as an import step.
 
 **Roblox public APIs:**
-- Package: `users.roblox.com`, `thumbnails.roblox.com`
+- Package: `users.roblox.com`, `thumbnails.roblox.com` (`lib/portia-employees.ts`)
 - Risk: Third-party availability and rate limits.
-- Impact: Missing avatars (the code tolerates failure).
-- Migration plan: Cache results in `portia_employee_profiles`; the code already does this partly.
+- Impact: Missing avatars. The code tolerates failure.
+- Migration plan: Cache results in `portia_employee_profiles`, which the code already does in part.
 
 ## Missing Critical Features
 
 **No error reporting or monitoring:**
-- Problem: Errors go to `console.error` only. There is no tracked error service, uptime check or alert for failed saves, uploads or syncs.
-- Blocks: Detecting failed saves or upload failures in production.
+- Problem: Errors go to `console.error` only (for example `app/api/content/route.ts`, `app/api/uploads/route.ts`, `app/api/promotion/*`). There is no tracked error service, uptime check or alert for failed saves, uploads, promotion submissions or sheet syncs.
+- Blocks: Detecting failed saves, upload failures and promotion outages in production.
 
 **No undo for destructive editor actions beyond the recycle list:**
-- Problem: Deleting an info section (`components/portia-editor.tsx` line 681) or a recommendation removes it from the draft immediately. Only files and viruses have a recycle step.
+- Problem: Deleting an info section or a recommendation removes it from the draft immediately. Only files and viruses have a recycle step.
 - Blocks: Recovering an accidentally removed section without reloading the last saved revision.
 
 ## Test Coverage Gaps
 
 **Embedded document viewer:**
 - What's not tested: Sizing and zoom of the iframe, Ctrl+wheel behaviour, behaviour when the window is minimised or lazy-loaded.
-- Files: `components/portia-desktop.tsx` (`EmbeddedDocument`), `app/portia.css` (lines 1059-1100)
-- Risk: The cropped-window bug recurs after unrelated CSS changes.
+- Files: `components/portia-desktop.tsx` (`EmbeddedDocument`), `app/portia.css` (`.document-app`, `.document-app-viewport`)
+- Risk: The cropped-window issue can return after unrelated CSS changes.
 - Priority: High
 
 **Drag-to-reorder lists:**
 - What's not tested: Reordering in recycle, recommendation, virus and section lists; duplicate-value keys; pointer cancel.
-- Files: `components/portia-editor.tsx` (`OrderDragHandle` and its callers)
+- Files: `components/portia-editor.tsx` (`elementsFromPoint` logic and its callers)
 - Risk: Wrong item order saved, or handle layout breaking at narrow widths.
 - Priority: High
 
 **Content API save and conflict paths:**
-- What's not tested: `PUT /api/content` for the first save (`baseRevision === 0`), a stale revision (409), an invalid body (400), and the 2 MB limit (413).
+- What's not tested: `PUT /api/content` for the first save (`baseRevision === 0`), a stale revision (409), an invalid body (400), and the size limit (413).
 - Files: `app/api/content/route.ts`
 - Risk: Silent overwrites of other editors' work.
 - Priority: High
 
-**Upload validation:**
-- What's not tested: Type and size checks in `app/api/uploads/route.ts`, and the access gate.
-- Files: `app/api/uploads/route.ts`
-- Risk: Non-image or oversized files accepted.
+**Upload route status codes:**
+- What's not tested: The end-to-end route with the access gate, the 415 signature mismatch, and the 4 MB check. The signature helper itself is covered by `lib/image-upload.test.ts`.
+- Files: `app/api/uploads/route.ts`, `lib/image-upload.ts`
+- Risk: A regression in the gate or in the `file.slice(0, 16)` read goes unnoticed.
 - Priority: Medium
+
+**Promotion reviewer and test routes:**
+- What's not tested: Missing-secret behaviour (the unhandled throw described under Tech Debt), and the owner-only checks in the route.
+- Files: `app/api/promotion/reviewer/route.ts`, `app/api/promotion/test/route.ts`
+- Risk: 500 responses on configuration gaps, and an owner-only action that a future change exposes.
+- Priority: High
 
 **Proxy and auth session refresh:**
 - What's not tested: `proxy.ts` matcher behaviour and `lib/supabase/proxy.ts` cookie handling.
@@ -222,4 +226,4 @@ last_mapped_at: 2026-10-12
 
 ---
 
-*Concerns audit: 2026-10-12*
+*Concerns audit: 2026-11-01*

@@ -1,225 +1,307 @@
 ---
-last_mapped_commit: e3941d4a097005a1674d3e9bc4d1e638aeda0846
-last_mapped_at: 2026-10-12
+last_mapped_commit: 2904899037d4243c8433d9d16a88f21ce7f7fe18
+last_mapped_at: 2026-11-01
 ---
-<!-- refreshed: 2026-10-12 -->
+<!-- refreshed: 2026-11-01 -->
 
 # Architecture
 
-**Analysis Date:** 2026-10-12
+**Analysis Date:** 2026-11-01
 
 ## System Overview
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
-│                 Browser (public desktop + owner editor)               │
-│  `app/page.tsx` -> `components/portia-desktop.tsx`                    │
-│  editor (lazy) -> `components/portia-editor.tsx`                      │
-├───────────────────────────┬──────────────────────────────────────────┤
-│  Next.js App Router pages │  Route handlers (REST-ish JSON API)       │
-│  `app/layout.tsx`         │  `app/api/{content,employees,access,      │
-│  `app/owner-login/*`      │          editors,uploads}/route.ts`       │
-└───────────────┬───────────┴───────────────────┬──────────────────────┘
-                │ server actions                 │
-                ▼                                ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                     Shared server libraries (`lib/`)                  │
-│  content: `lib/portia-content*.ts`   employees: `lib/portia-employees.ts`│
-│  access:  `lib/editor-access.ts`     cache:  `lib/portia-cdn.ts`        │
-│  supabase clients: `lib/supabase/{server,env,proxy}.ts`               │
-└───────────────┬──────────────────────────────────┬───────────────────┘
-                ▼                                  ▼
-┌────────────────────────────────┐   ┌──────────────────────────────────┐
-│ Supabase (Postgres + Auth)     │   │ Netlify CDN / purgeCache          │
-│ tables portia_content,         │   │ tags portia-content,              │
-│ portia_editors, portia_employee_│   │ portia-employees                  │
-│ profiles; RLS + portia_* RPCs  │   └──────────────────────────────────┘
-│ defined in supabase/portia_setup.sql
-└────────────────────────────────┘
+│                    Browser (single page: app/page.tsx)                │
+│  ┌────────────────────────────────────────────────────────────────┐  │
+│  │ PortiaDesktop  `components/portia-desktop.tsx`                  │  │
+│  │  window manager (windows state, z, geometry, focus, exit timers) │  │
+│  │  ┌───────────┐ ┌────────────────┐ ┌──────────────────────────┐  │  │
+│  │  │ 11 App    │ │ PortiaEditor   │ │ PortiaPromotion          │  │  │
+│  │  │ windows   │ │ (dynamic, ssr  │ │ `portia-promotion.tsx`   │  │  │
+│  │  │ (inline)  │ │ false)         │ │                          │  │  │
+│  │  │           │ │ `portia-editor`│ │                          │  │  │
+│  │  └───────────┘ └───────┬────────┘ └──────────────────────────┘  │  │
+│  └────────────────────────┼───────────────────────────────────────┘  │
+│   lib/* pure domain + browser helpers (window-geometry, broadcasts,  │
+│   editor-*, portia-content*, accent-*, localStorage keys)            │
+└───────────────┬──────────────────────────────────────┬──────────────┘
+                │ fetch /api/content, /api/access,     │ next/script
+                │ /api/employees, /api/uploads         │ beforeInteractive
+                ▼                                      ▼
+┌──────────────────────────────────────┐   ┌──────────────────────────┐
+│ Route handlers `app/api/**/route.ts` │   │ accentBootScript         │
+│  force-dynamic, Supabase server      │   │ `lib/accent-boot.ts`     │
+│  client, getEditorAccess()           │   │ (pre-hydration theme)    │
+└───────────────┬──────────────────────┘   └──────────────────────────┘
+                ▼
+┌──────────────────────────────────────┐
+│ Supabase (`lib/supabase/server.ts`)  │   proxy: `lib/supabase/proxy.ts`
+│ tables: portia_content, editors, …   │   (session refresh, cookie `sb-*`)
+│ storage bucket: portia-media         │
+└──────────────────────────────────────┘
 ```
+
+Single-page application. The whole visitor experience is one client component tree mounted from `app/page.tsx`. Server code exists only as thin JSON route handlers and the owner login action. There is no client router; "navigation" is window open/close inside `PortiaDesktop`.
 
 ## Pattern Overview
 
-**Overall:** Single Next.js 16 App Router application (React 19, server-rendered shell with one large client-side "desktop" component). Data lives in Supabase; the public read path is cached by the Netlify CDN and invalidated by tag purge on writes.
+**Overall:** Client-rendered "desktop OS" shell (React 19 state machine) over a small Next.js App Router API layer and Supabase persistence.
 
 **Key Characteristics:**
-- Almost all UI state is client-side in two large components: `components/portia-desktop.tsx` (1392 lines, window manager, apps, public content) and `components/portia-editor.tsx` (1360 lines, owner/editor UI). There is no client state library; state is React hooks and context (`createContext` in `portia-editor.tsx`).
-- The public site is fully static-looking content delivered through `GET /api/content` and `GET /api/employees`. Both use `force-dynamic` with `publicCacheHeaders()` so the CDN caches them and browsers revalidate.
-- Authorization is enforced twice: in route handlers via `getEditorAccess()` (`lib/editor-access.ts`) and in Postgres via RLS policies and `portia_can_edit()` / `portia_is_owner()` functions in `supabase/portia_setup.sql`. The comment in `lib/editor-access.ts` states the database is the source of truth.
-- Writes use optimistic concurrency: `PUT /api/content` only updates when `revision` equals the editor's base revision, otherwise returns 409 (`app/api/content/route.ts`).
-- There is no `src/` directory; app code lives at the repository root (`app/`, `components/`, `lib/`).
+- One root client component owns almost all UI state: `PortiaDesktop` (`components/portia-desktop.tsx`, ~2300 lines, `"use client"`).
+- Apps are not routes. `AppId` (`components/portia-desktop.tsx`, line 25) enumerates 12 apps; each is a window with state in `windows: Record<AppId, WindowState>`.
+- Domain logic lives in pure, unit-tested modules in `lib/` (`*.test.ts` beside each, run with `node --experimental-strip-types --test`).
+- Content is a single JSON document (`PortiaContent`) stored in Supabase row `portia_content` id `main`, with optimistic concurrency via `revision`.
+- Public reads are CDN-cacheable; writes are authenticated and access-checked per request.
+- Heavy editor code is code-split with `next/dynamic` (`ssr: false`); the desktop shell is always loaded.
 
 ## Layers
 
-**Routing / Pages (App Router):**
-- Purpose: Mount the public desktop and the owner login flow.
-- Location: `app/page.tsx`, `app/layout.tsx`, `app/owner-login/page.tsx`
-- Contains: Server components. `page.tsx` renders `PortiaDesktop` with `defaultPortiaContent` as `initialContent`. `layout.tsx` loads fonts (`next/font/google`) and global CSS (`app/globals.css`, `app/portia.css`).
-- Depends on: `components/portia-desktop.tsx`, `lib/portia-content.ts`, `lib/supabase/server.ts`, `lib/editor-access.ts`
-- Used by: Browser requests to `/` and `/owner-login`
+**Presentation shell (client):**
+- Purpose: Desktop, taskbar, start panel, windows, shortcuts, wallpaper, assistant, toasts, boot screen.
+- Location: `components/portia-desktop.tsx`, `components/portia-wallpaper.tsx`, `components/portia-wallpaper-spider.tsx`, `components/portia-icons.tsx`, `components/custom-color-picker.tsx`
+- Contains: `PortiaDesktop` (named export), `AppWindow`, `DesktopIcon`, `DraggableDesktopIcon`, `GuideApp`, `EmbeddedDocument`, `QuestToast`, `PromotionRetakeToast`, `BootScreen`.
+- Depends on: `lib/*` domain modules, `components/portia-editor.tsx` (dynamic), `components/portia-promotion.tsx`.
+- Used by: `app/page.tsx` only.
 
-**Route handlers (API):**
-- Purpose: JSON endpoints for content, employee roster, editor access, editor management, and uploads.
-- Location: `app/api/content/route.ts`, `app/api/employees/route.ts`, `app/api/access/route.ts`, `app/api/editors/route.ts`, `app/api/uploads/route.ts`
-- Contains: `GET`/`PUT`/`POST` exports, each guarded by `getEditorAccess` for writes.
-- Depends on: `lib/supabase/server.ts`, `lib/editor-access.ts`, `lib/portia-cdn.ts`, `lib/portia-content-normalize.ts`, `lib/portia-employees.ts`
-- Used by: `components/portia-desktop.tsx` (`/api/content`, `/api/access`, `/api/employees`), `components/portia-editor.tsx` (`/api/uploads`, `/api/employees`, `/api/editors`)
+**Content editor (client, owner only):**
+- Purpose: Edit dossiers, guides, broadcasts, recycle bin, employees, access tabs, rich text formatting.
+- Location: `components/portia-editor.tsx` (~3000 lines), `components/portia-promotion-editor*.tsx`, `components/portia-promotion-qualification-editor.tsx`
+- Contains: `PortiaEditor` (named export, line 736), `EditorAccessManager`, `EmployeeProfilesEditor`, `FloatingTextFormatPanel`, field components, `ConfirmDialog`.
+- Depends on: `lib/editor-*`, `lib/format-fragments.ts`, `lib/rich-text-style.ts`, `lib/content-limits.ts`, `lib/portia-employees.ts`, `lib/broadcasts.ts`.
+- Used by: `PortiaDesktop` through `next/dynamic`, rendered inside the `editor` `AppWindow`, and only when `canEdit` is true.
 
-**Server actions:**
-- Purpose: Owner login, editor sign-up, logout from the login page.
-- Location: `app/owner-login/actions.ts`
-- Contains: Functions using `"use server"` that call Supabase auth, then `redirect()` or `revalidatePath()`.
-- Depends on: `lib/supabase/server.ts`, `lib/editor-access.ts`
-- Used by: `app/owner-login/page.tsx`
+**Promotion app (client):**
+- Purpose: Staff promotion request flow (qualification, reviewer view, sheet).
+- Location: `components/portia-promotion.tsx` (~440 lines), `lib/portia-promotion*.ts`, `lib/portia-qualification.ts`
+- Depends on: `/api/promotion/*` routes via `lib/portia-promotion-api.ts`.
+- Used by: `PortiaDesktop` (`promotion` window) and `components/portia-editor.tsx` (`PromotionEditor`).
 
-**Domain / content model (pure TypeScript):**
-- Purpose: Types, defaults, and normalization of the viral database content.
-- Location: `lib/portia-content.ts` (types `PortiaContent`, `Virus`, `ScientistLog`, `RecycleFile`, `RichTextDocument`; `defaultPortiaContent`), `lib/portia-content-normalize.ts` (`normalizePortiaContent`)
-- Contains: Runtime validation of untrusted JSON before it is stored or served.
-- Depends on: nothing app-specific
-- Used by: API routes, the desktop, the editor
+**Pure domain / helpers (shared, no React except where noted):**
+- Purpose: Geometry, content model, normalization, limits, broadcasts, accent theming, history, tabs, shortcuts, uploads, media URLs.
+- Location: `lib/*.ts` (excluding `*.test.ts`)
+- Contains: see Key Abstractions below.
+- Depends on: Mostly self-contained. `lib/accent-boot.ts` imports `./accent-custom.ts` and embeds its source into an inline script.
+- Used by: components and route handlers.
 
-**Employee roster:**
-- Purpose: Build the staff list from an external roster (CSV parsing and Roblox-keyed IDs) merged with editable profiles stored in Supabase.
-- Location: `lib/portia-employees.ts`
-- Contains: `parseCsv`, `rosterFromRows`, `employeeId`, `readEmployeeProfiles`, `loadEmployees`, `saveEmployeeProfile`, `sanitizeEmployeeUpdate`
-- Depends on: `@supabase/supabase-js` `SupabaseClient` (passed in, not created here)
-- Used by: `app/api/employees/route.ts`
+**API / persistence (server):**
+- Purpose: Serve content, editor access, employees, uploads, promotion data; write content with revision checks.
+- Location: `app/api/**/route.ts`, `lib/supabase/server.ts`, `lib/supabase/env.ts`, `lib/supabase/proxy.ts`, `lib/editor-access.ts`, `lib/portia-cdn.ts` and `lib/portia-promotion-api.ts`.
+- Depends on: `@supabase/ssr`, `@supabase/supabase-js`.
+- Used by: browser `fetch` calls from the desktop and editor.
 
-**Infrastructure libraries:**
-- Purpose: Supabase client construction, cache headers/purging, environment resolution.
-- Location: `lib/supabase/server.ts` (`createServerSupabaseClient` with cookies via `next/headers`, `createPublicSupabaseClient` without cookies), `lib/supabase/env.ts` (`getSupabaseConfig`), `lib/supabase/proxy.ts` (`updateSupabaseSession`), `lib/portia-cdn.ts` (`publicCacheHeaders`, `noStoreHeaders`, `purgeCacheTag` via `@netlify/functions`)
-- Depends on: `@supabase/ssr`, `@supabase/supabase-js`, `@netlify/functions`
-- Used by: Route handlers, `proxy.ts`
-
-**Presentation primitives:**
-- Purpose: Icons, wallpaper, window geometry math.
-- Location: `components/portia-icons.tsx`, `components/portia-wallpaper.tsx`, `lib/window-geometry.ts` (`fitGeometry`, `resizeGeometry`)
-- Used by: `components/portia-desktop.tsx`
+**Auth (server actions):**
+- Purpose: Owner login.
+- Location: `app/owner-login/page.tsx`, `app/owner-login/actions.ts`
+- Used by: owner only.
 
 ## Data Flow
 
-### Public Page Load
+### Primary Request Path (initial page load)
 
-1. Browser requests `/`; `app/layout.tsx` and `app/page.tsx` render, passing `defaultPortiaContent` as `initialContent` (`app/page.tsx`).
-2. `PortiaDesktop` (`components/portia-desktop.tsx`) runs in the client, calls `fetchWithTimeout("/api/content")` (line ~279) and `/api/access` (line ~302) and, when relevant, `/api/employees` (line ~324).
-3. `GET /api/content` (`app/api/content/route.ts`) reads `portia_content` row `id = 'main'` through the anonymous Supabase client, normalizes it with `normalizePortiaContent`, and falls back to `defaultPortiaContent` if no row exists. The response carries `publicCacheHeaders("portia-content", 300)`.
-4. On Supabase error the handler returns 503 with `noStoreHeaders`; the CDN keeps its last good copy.
+1. `app/layout.tsx` injects `accentBootScript` (`lib/accent-boot.ts`) with `strategy="beforeInteractive"`. It reads `localStorage["portia-desktop-settings-v1"]` and sets `data-accent`, `data-motion`, `data-spider`, `data-boot` on `<html>` before paint.
+2. `app/page.tsx` renders `PortiaDesktop` with `defaultPortiaContent` (`lib/portia-content.ts`) as `initialContent`.
+3. `PortiaDesktop` seeds state from cached content in `localStorage["portia-content-last-success-v1"]` (lines ~520-535), then calls `fetchContent()` which GETs `/api/content` (`app/api/content/route.ts`).
+4. `GET /api/content` reads `portia_content` row `main` and normalizes with `normalizePortiaContent` (`lib/portia-content-normalize.ts`). Responses use `publicCacheHeaders` or `noStoreHeaders` from `lib/portia-cdn.ts`.
+5. `acceptFetchedContent` (`lib/content-sync.ts`) drops any answer whose revision is not newer than the tab's known revision, or that was sent before a save started.
 
-### Editor Save
+### Edit and Save Path (owner)
 
-1. Owner opens `/owner-login` (`app/owner-login/page.tsx`), signs in via `ownerLogin` server action (`app/owner-login/actions.ts`), and Supabase sets `sb-*-auth-token` cookies.
-2. `PortiaDesktop` calls `/api/access`, and renders `PortiaEditor` (lazy import, `next/dynamic`) only when `canEdit` is true.
-3. Save: `saveContent` in `components/portia-desktop.tsx` (line ~618) sends `PUT /api/content` with `{ content, revision }`.
-4. `PUT` (`app/api/content/route.ts`) checks the user with `getEditorAccess`, rejects bodies over 2,000,000 characters, normalizes the content, and performs an insert (revision 0) or conditional update (`eq("revision", baseRevision)`).
-5. On success it calls `purgeCacheTag("portia-content")` (`lib/portia-cdn.ts`) and returns the new revision. A stale revision yields 409 with a copy-your-edits message.
+1. `fetchAccess()` GETs `/api/access` (`app/api/access/route.ts`) and calls `getEditorAccess` (`lib/editor-access.ts`). Result sets `canEdit`, `canManageEditors`, `openTabs`.
+2. `PortiaEditor` (`components/portia-editor.tsx`) keeps history in a reducer over `PortiaContent` (`lib/editor-history.ts`, `historyReducer`) with `TYPING_PAUSE_MS` batching.
+3. `saveContent` in `PortiaDesktop` (around line 1080) PUTs `{ content, revision: baseRevision }` to `/api/content`.
+4. The route (`app/api/content/route.ts`, `PUT`) authenticates via `supabase.auth.getUser()`, checks `getEditorAccess`, validates against `lib/content-limits.ts` and `lib/editor-tabs.ts` (`contentRefusal`), then updates `portia_content` with `.eq("revision", baseRevision)` (compare-and-swap). A mismatch returns a conflict.
+5. On success the route purges the CDN tag via `purgeCacheTag` (`lib/portia-cdn.ts`) and returns the new revision. The desktop sets `saveState` to `saved`, then `idle`.
 
-### Employee Roster
+### Window Open / Focus / Close Path
 
-1. `GET /api/employees` calls `loadEmployees` (`lib/portia-employees.ts`), which merges roster rows with `portia_employee_profiles`.
-2. Response is cached under tag `portia-employees` for 600 seconds when complete, 30 seconds when degraded (`app/api/employees/route.ts`).
-3. Editor writes go to `POST /api/employees`, which uses `sanitizeEmployeeUpdate` then `saveEmployeeProfile`, then purges `portia-employees`.
+1. Icon or taskbar calls `openApp(appId, origin)` (`components/portia-desktop.tsx`, ~line 960). It sets `open`, `minimized`, `exiting`, `openOrigin`, and a `geometry` (`createWindowGeometry` or `fitGeometry`) in one functional `setWindows` update.
+2. `focusApp(appId)` bumps `topZ` (a ref, not state) and writes `z` only if the window is not already top. `setActiveApp` marks the focused window.
+3. Close and minimize go through `requestExit(appId, kind, force?)`. Unsaved editor edits intercept close (`editorDirtyRef` and `setEditorCloseRequest`). A timer (`exitTimers` ref, `WINDOW_CLOSE_MS` / `WINDOW_MINIMIZE_MS`) then calls `finishExit`, which sets `open:false` or `minimized:true`. A timer is used instead of `animationend` because hidden tabs may never fire that event.
+4. Resize of the browser runs `fitGeometry` over every open window (`useEffect` on `resize`, under 900 px wide no geometry is applied).
 
-### Session Refresh
+### Secondary Flow: Employees Sync
 
-1. `proxy.ts` (repository root, Next.js proxy hook) runs `updateSupabaseSession` (`lib/supabase/proxy.ts`) for `/owner-login/*`, `/api/access`, `/api/editors`, `/api/uploads` only.
-2. It returns immediately when no `sb-*-auth-token` cookie exists; otherwise it calls `supabase.auth.getClaims()` to refresh cookies. Errors are swallowed so the public site still renders.
+1. `fetchEmployees` in `PortiaDesktop` calls `/api/employees` on mount and every 5 minutes (`employeeSyncTimer`). Results are cached under `portia-employees-last-success-v1`.
+2. `/api/employees/editor` handles owner-side profile writes. `EmployeeProfilesEditor` in the editor calls `onEmployeeSaved`, which patches the cache via `patchEmployeesCache`.
+
+### Secondary Flow: Content Polling
+
+1. A 1 s clock timer and a visibility-gated sync timer run in one effect (`components/portia-desktop.tsx`, ~lines 560-575). The sync timer calls `fetchContent()` and, for editors only, `fetchAccess()`.
 
 **State Management:**
-- Server: stateless per request; persistent state only in Supabase and the Netlify CDN.
-- Client: React `useState`/`useEffect`/`useRef` inside `PortiaDesktop` and `PortiaEditor`. The editor receives `content`, `saveState`, and callbacks as props and shares values through a context.
+- Window manager, desktop settings, shortcut positions, taskbar order: React `useState` inside `PortiaDesktop`, persisted to `localStorage` in effects (see the Storage Keys section below).
+- Server-authoritative content: `content` + `revision` state in `PortiaDesktop`, with the editor's working copy in its own reducer.
+- Global dirty flag from editor reported upward via `onDirtyChange` into `editorDirtyRef`.
+
+## Window and App-Id Model
+
+This section is the reference for the upcoming desktop and editor decomposition.
+
+**App identity:**
+- `type AppId` (line 25 of `components/portia-desktop.tsx`) is the single source of window identity: `archive | employees | search | info | guide | promotion | settings | broadcasts | trash | sheet | charter | editor`.
+- `DesktopShortcutId` (line 50) is a separate union of icon ids. It omits `editor`, which has no desktop icon. Keep it in sync when adding a launchable app.
+- `appMeta` (line ~134), `initialWindows`, `createWindowGeometry`'s `preferred` size map, and `windowMinimums` (line ~170) each enumerate the ids as a `Record<AppId, …>`, all in `components/portia-desktop.tsx`. Adding an app requires editing all four. TypeScript enforces completeness for the `Record` maps, not the order or the union in `globalSearchAppIds`.
+
+**Window state (`WindowState`, line 37):**
+- `open`, `minimized`, `maximized`, `z`, `geometry?`, `exiting?: "close" | "minimize"`, `openOrigin?` (icon or taskbar origin for the open animation).
+- Geometry is `WindowGeometry` from `lib/window-geometry.ts`: `{ x, y, width, height }`.
+- Geometry is held in React state only. It is not persisted. Each reopen after a close recomputes it with `createWindowGeometry(appId, openCount)` unless the window still has a remembered geometry from the same session.
+
+**Pure geometry helpers (`lib/window-geometry.ts`):**
+- `fitGeometry(geometry, bounds, minimum)`: clamps a frame into the workspace with an 8 px margin. Minimum size gives way to the screen on small viewports.
+- `resizeGeometry(start, edge, dx, dy, bounds, minimum)`: edge or corner drag. The opposite side stays put.
+- `dragGeometry(start, dx, dy, bounds)`: title-bar move. Y is clamped so the title bar stays visible (`bounds.height - 46`).
+- `ResizeEdge` is `"n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw"`.
+- These are pure. They do not read the DOM. `workspaceBounds()` in `components/portia-desktop.tsx` (line ~160) supplies bounds from `.workspace`.
+
+**Focus and restore:**
+- Active window: `activeApp` state. Focus is `focusApp`, which raises z by incrementing `topZ.current` (initial value 20). Windows initially sit at z 10 and archive at 11. The editor's format panel sits at z 950 (a comment at line ~1006 explains this).
+- Window restore from minimized: `openApp` on a minimized window clears `minimized`, reassigns geometry through `fitGeometry`, and calls `bounceTaskbarEntry`.
+- Fallback when the active window closes: `requestExit` picks the open, non-minimized, non-exiting window with the highest z, else `archive`.
+- Qualification lock: while `qualificationLocked` is true, only `promotion` may be focused or opened (`focusApp`, `openApp`, `requestExit`, `toggleMaximize`).
+- Editor close guard: `requestExit` for `editor` with unsaved edits does not close. It bumps `editorCloseRequest` and the editor shows its own dialog. The editor calls `onCloseApproved` (or passes `force`) to finish.
+
+**Known constraints in window model:**
+- `z` is a monotonic counter. A comment at line ~874 notes that after ~930 focus switches windows pass the format panel's z of 950. Renumbering is not implemented.
+- Geometry fitting on `resize` uses `window.innerWidth <= 900` as the mobile cutoff. Below it, `createWindowGeometry` returns `undefined` and windows use CSS layout.
+
+## Storage Keys (localStorage / sessionStorage)
+
+All keys are listed so the decomposition does not orphan or rename them. Renaming drops visitors' saved state.
+
+| Key | Store | Owner | Purpose |
+|-----|-------|-------|---------|
+| `portia-desktop-settings-v1` | localStorage | `lib/accent-boot.ts` (`desktopSettingsStorageKey`) | Accent, wallpaper, icon size, motion, spider. Read by head script and desktop. |
+| `portia-boot-seen-v1` | sessionStorage | `lib/accent-boot.ts` (`bootSeenStorageKey`) | Marks boot screen as already played this tab session. |
+| `portia-desktop-shortcuts-v3` | localStorage | `components/portia-desktop.tsx` (line 194) | Desktop icon positions. |
+| `portia-taskbar-order-v1` | localStorage | `components/portia-desktop.tsx` (line ~197) | Taskbar app order after drag. |
+| `portia-guide-collapsed-v2` | localStorage | `components/portia-desktop.tsx` (line 196) | Guide card collapse state. |
+| `portia-broadcasts-read-signature-v1` | localStorage | `components/portia-desktop.tsx` (line 189) | Unread-broadcast signature. |
+| `portia-quests-seen-v1` | localStorage | `components/portia-desktop.tsx` (line 190), parsed by `lib/broadcasts.ts` | Quest ids shown once. |
+| `portia-content-last-success-v1` | localStorage | `components/portia-desktop.tsx` (line 191) | Last good content for offline or fast first paint. |
+| `portia-employees-last-success-v1` | localStorage | `components/portia-desktop.tsx` (line 192) | Last good employees list. |
+| `portia-format-panel-v1` | localStorage | `components/portia-editor.tsx` (line 2727) | Floating format panel offset, parsed by `lib/panel-position.ts`. |
+
+Window geometry and z are not persisted.
 
 ## Key Abstractions
 
-**PortiaContent:**
-- Purpose: Whole content document (viruses, scientist logs, broadcasts, recycle bin files, rich text).
-- Examples: `lib/portia-content.ts` (type and `defaultPortiaContent`), `lib/portia-content-normalize.ts`
-- Pattern: Plain typed object; always passed through `normalizePortiaContent` at trust boundaries.
+**`PortiaContent`:**
+- Purpose: The whole editable site state (viruses, info, guide, broadcasts, recycle bin, scientist logs, rich text).
+- Defined in: `lib/portia-content.ts` (`defaultPortiaContent`, `classificationOptions`, `findGuide`, `findInfo`, `portiaTextKey`).
+- Normalized by: `lib/portia-content-normalize.ts`. Size bounded by `lib/content-limits.ts` (`MAX_BLOCKS`, `MAX_CONTENT_BODY_BYTES`).
+- Pattern: Plain JSON object cloned on edit (`clone` in `components/portia-editor.tsx`).
 
-**Revisioned row (`portia_content`):**
-- Purpose: Single-row optimistic lock for the whole site content.
-- Examples: `app/api/content/route.ts`, `supabase/portia_setup.sql` (table at line 4)
-- Pattern: `revision` integer incremented on each save; conditional update as compare-and-swap.
+**`EditorHistory<T>` and reducer:**
+- Purpose: Undo/redo for the editor.
+- Examples: `lib/editor-history.ts` (`historyReducer`, `initHistory`, `TYPING_PAUSE_MS`), used via `editorReducer` in `components/portia-editor.tsx` (line ~145).
 
-**Access check:**
-- Purpose: Single function answering "can this user edit / manage editors".
-- Examples: `lib/editor-access.ts` (`getEditorAccess`)
-- Pattern: Calls Supabase RPCs `portia_can_edit` and `portia_is_owner`; fails closed to `{ canEdit: false }`.
+**Editor tab registry:**
+- Purpose: Dossier and editor tab ids, which tabs are open for an editor account, and content refusal rules.
+- Examples: `lib/editor-tabs.ts` (`tabRegistry`, `openTabIds`, `closedSectionsOf`, `contentRefusal`), `lib/editor-changes.ts` (`changedSections`, `deniedSections`).
 
-**Cache tags:**
-- Purpose: Name CDN cache entries for targeted purge.
-- Examples: `contentCacheTag` and `employeesCacheTag` in `lib/portia-cdn.ts`
-- Pattern: `publicCacheHeaders(tag, seconds)` on reads, `purgeCacheTag(tag)` on writes.
+**Format fragments and rich text:**
+- Purpose: Inline styled spans over plain text.
+- Examples: `lib/format-fragments.ts` (`mergeFragments`, `pickCurrentRange`), `lib/rich-text-style.ts` (`applyRichTextStyle`, `resolveRange`).
 
-**Supabase client variants:**
-- Purpose: Choose between user-scoped (cookie) and anonymous clients.
-- Examples: `createServerSupabaseClient` and `createPublicSupabaseClient` in `lib/supabase/server.ts`
-- Pattern: Public reads never touch cookies, which keeps them CDN-cacheable.
+**Broadcasts and quests:**
+- Purpose: News, tasks, and quests with date gating and popups.
+- Examples: `lib/broadcasts.ts` (`broadcastFeed`, `questState`, `questPopup`, `markQuestsSeen`).
+
+**Accent theming:**
+- Purpose: Accent palette derived from a custom hex color; the same function is embedded in the boot script.
+- Examples: `lib/accent-custom.ts` (`deriveAccentTokens`, `accentTokenNames`), `lib/accent-boot.ts` (`accentBootScript`).
+- Pattern: Build-time constant source is stringified into `<head>`. Never interpolate user values into that string.
+
+**Promotion domain:**
+- Purpose: Qualification, sheet, reviewer view, notifications.
+- Examples: `lib/portia-promotion.ts`, `lib/portia-qualification.ts`, `lib/portia-promotion-sheet.ts`, `lib/portia-promotion-reviewer.ts`, `lib/portia-promotion-notifications.ts`, `lib/portia-promotion-api.ts`.
+
+**Editor access:**
+- Purpose: Map a Supabase user to `canEdit`, `canManageEditors`, `openTabs`.
+- Examples: `lib/editor-access.ts` (`getEditorAccess`), used by every mutating route.
 
 ## Entry Points
 
-**Public site:**
+**Web root:**
 - Location: `app/page.tsx`
-- Triggers: GET `/`
-- Responsibilities: Render the desktop with bundled default content; the client then fetches live content.
+- Triggers: `GET /`
+- Responsibilities: Renders `PortiaDesktop` with bundled default content.
+
+**Root layout and boot script:**
+- Location: `app/layout.tsx`
+- Triggers: Every route render.
+- Responsibilities: Fonts, `<html lang="ru">`, pre-hydration accent script, global CSS (`app/globals.css`, `app/portia.css`).
+
+**Content API:**
+- Location: `app/api/content/route.ts` (`GET`, `PUT`)
+- Triggers: Desktop poll and save.
+- Responsibilities: Public read and CAS write of `portia_content`.
+
+**Access API:**
+- Location: `app/api/access/route.ts`
+- Triggers: Desktop sync when a session may edit.
+- Responsibilities: Current editor capabilities. Network or 5xx auth errors are distinguished from logged-out to avoid unmounting the editor.
+
+**Other API routes:**
+- `app/api/employees/route.ts`, `app/api/employees/editor/route.ts`, `app/api/editors/route.ts`, `app/api/uploads/route.ts` (`portia-media` bucket), `app/api/promotion/{banks,requests,reviewer,status,test}/route.ts`.
 
 **Owner login:**
-- Location: `app/owner-login/page.tsx` and `app/owner-login/actions.ts`
-- Triggers: GET `/owner-login`, form submissions to server actions
-- Responsibilities: Sign in or sign up, show editor status, log out.
+- Location: `app/owner-login/page.tsx`, `app/owner-login/actions.ts`
+- Triggers: Owner navigates to `/owner-login`.
 
-**API routes:**
-- Location: `app/api/*/route.ts`
-- Triggers: Client `fetch` calls listed under Data Flow
-- Responsibilities: Read/write content, roster, access, editors, uploads.
-
-**Request middleware:**
-- Location: `proxy.ts`
-- Triggers: Requests matching its `config.matcher`
-- Responsibilities: Refresh Supabase auth cookies only where needed.
-
-**Tests (node test runner):**
-- Location: `lib/*.test.ts`, run by `npm test` (`node --experimental-strip-types --test lib/*.test.ts`)
+**Session proxy (library, not a route in this scope):**
+- Location: `lib/supabase/proxy.ts` (`updateSupabaseSession`). It is called from a root `middleware` or `proxy` file, which is outside the scope of this map. Only the anonymous short-circuit and the `sb-*-auth-token` cookie check are described here.
 
 ## Architectural Constraints
 
-- **Threading:** Single-threaded Node.js runtime for route handlers under the Netlify Next.js runtime; the browser main thread renders the whole desktop.
-- **Global state:** Module-level content constants `defaultPortiaContent` (`lib/portia-content.ts`) and cache tag strings (`lib/portia-cdn.ts`). The Supabase client is created per request, not as a singleton.
-- **Hosting coupling:** `lib/portia-cdn.ts` imports `purgeCache` from `@netlify/functions`. Route handlers depend on Netlify CDN semantics for correctness of freshness; `netlify.toml` pins Node 22.13.0 and build command `npm run build`.
-- **Circular imports:** None detected between `app/`, `components/`, and `lib/` in the files reviewed.
-- **Proxy scope:** `proxy.ts` deliberately excludes `/` and `/api/content`, `/api/employees` so GETs stay cacheable and free of `Set-Cookie`; the content `PUT` relies on its own server client for cookies.
-- **Missing scheduled job:** `README.md` describes an hourly sync in `netlify/functions/`, but no `netlify/` directory exists in this repository tree. The roster sync is therefore not present in this snapshot.
+- **Threading:** Single-threaded browser main thread for all UI. Server route handlers are stateless per request. No workers.
+- **Global state:** `PortiaDesktop` state is component-local. Module-level mutable state: `editKeys` `WeakMap` in `components/portia-editor.tsx` (line 148). `topZ` is a ref, not module-level. No Redux or Zustand.
+- **Circular imports:** Not checked. `components/portia-editor.tsx` imports `components/portia-promotion-editor`, and `components/portia-desktop.tsx` imports `components/portia-promotion`; no cycle was observed among these two files.
+- **Desktop/editor coupling:** The editor receives everything through `Props` (lines 37-59 of `components/portia-editor.tsx`): content, revision, save callback, dirty and close handshake, employee callbacks. It has no direct access to the window manager. Keep this boundary when decomposing.
+- **Dynamic import:** The editor is loaded with `next/dynamic` and `ssr: false`. Any new editor dependency must not be imported from the desktop shell eagerly.
+- **Client-only persistence:** All `localStorage` access is guarded by `try/catch`. Any new key must follow that pattern.
+- **Content revision CAS:** Writes must pass `baseRevision` and use the `.eq("revision", …)` update. Do not bypass.
 
 ## Anti-Patterns
 
-### Editing large client components in place
+### Parallel per-app records
 
-**What happens:** Desktop and editor logic is concentrated in `components/portia-desktop.tsx` and `components/portia-editor.tsx`, each over 1,300 lines.
-**Why it's wrong:** Changes to one window or app affect a single large file with many closures, which makes review and testing hard. Only the pure helpers in `lib/` are unit-tested.
-**Do this instead:** Move new pure logic (parsing, geometry, formatting) into `lib/` with a `*.test.ts` file, and keep components thin. Follow `lib/window-geometry.ts` as the model.
+**What happens:** `AppId` is enumerated in at least four places in `components/portia-desktop.tsx`: `appMeta` (~line 134), `initialWindows` (~line 118), the `preferred` size literal inside `createWindowGeometry` (~line 140), and `windowMinimums` (~line 170), plus `DesktopShortcutId` (line 50) and `globalSearchAppIds` (~line 152).
+**Why it's wrong:** Adding or renaming an app is a multi-site edit. The `Record<AppId, …>` maps catch missing keys, but `DesktopShortcutId` and `globalSearchAppIds` do not.
+**Do this instead:** Keep one registry per concern and derive the rest from it when the decomposition happens. Do not add a fifth copy.
 
-### Client-side access decisions without server verification
+### Window state and geometry in one component
 
-**What happens:** `PortiaDesktop` decides whether to render `PortiaEditor` from the `/api/access` response.
-**Why it's wrong:** The UI decision is only cosmetic; enforcement must stay in the route handler and database.
-**Do this instead:** Always call `getEditorAccess` in new write handlers, as `app/api/uploads/route.ts` and `app/api/editors/route.ts` do, and add RLS policies in `supabase/portia_setup.sql` for any new table.
+**What happens:** `PortiaDesktop` (~2300 lines) owns windows, z-order, exit timers, settings, content sync, broadcasts, quests, promotion toast, taskbar drag, search, and assistant.
+**Why it's wrong:** Every state change re-renders the whole tree; `setWindows` callbacks fan out across many apps.
+**Do this instead:** Extract a window-manager hook (the `focusApp`, `openApp`, `requestExit`, `fitGeometry` set) and keep it returning pure window state. Use the `lib/window-geometry.ts` functions as is.
+
+### Timer-based exit state with `setTimeout` in multiple places
+
+**What happens:** `exitTimers`, `bounceTimers`, `saveStateTimer`, `suppressTaskbarClick` timeouts are all managed by refs in `PortiaDesktop`.
+**Why it's wrong:** Cleanup is repeated by hand; the comment at line ~1044 ("a late timer must never act on a stale render") shows the risk.
+**Do this instead:** Keep the functional `setWindows` update pattern used by `finishExit`.
 
 ## Error Handling
 
-**Strategy:** Fail soft for public reads, fail closed for writes.
+**Strategy:** Errors are contained per window or per request. Client falls back to cached content. Server returns explicit JSON error codes.
 
 **Patterns:**
-- Public reads return bundled defaults or `503` with `noStoreHeaders` on database errors (`app/api/content/route.ts`).
-- Writes return explicit JSON errors with Russian messages: `403` (no access), `413` (too large), `400` (invalid structure), `409` (revision conflict), `500` (generic). See `app/api/content/route.ts`.
-- `getEditorAccess` returns `noAccess` on RPC errors instead of throwing (`lib/editor-access.ts`).
-- Cache purge failures are logged and ignored (`lib/portia-cdn.ts`).
+- Client `fetchWithTimeout` wraps `fetch` for `/api/content` and `/api/access`. On failure the last good cache is kept.
+- Route handlers use `parseJsonObject` (`lib/request-json.ts`) for body validation and return 4xx for bad input. A revision mismatch on `PUT /api/content` surfaces as the desktop `saveState` value `conflict`.
+- Auth failures on `/api/access` are not converted to `canEdit: false` unless the session is definitively logged out.
+- Supabase config errors on the proxy are swallowed so the public site still renders from bundled defaults.
 
 ## Cross-Cutting Concerns
 
-**Logging:** `console.error` with a `PORTIA ...` prefix in route handlers (e.g., `app/api/content/route.ts`, `app/api/employees/route.ts`).
-**Validation:** Runtime normalization of untrusted input: `normalizePortiaContent` (`lib/portia-content-normalize.ts`), `sanitizeEmployeeUpdate` (`lib/portia-employees.ts`), and body checks in route handlers.
-**Authentication:** Supabase Auth with email/password (`app/owner-login/actions.ts`). Owner identity comes from `portia_owner_email()` in `supabase/portia_setup.sql`. Editors are approved by email in `portia_editors`.
+**Logging:** `console` only in client code paths. Not centralized.
+**Validation:** Server-side via `lib/content-limits.ts`, `lib/portia-content-normalize.ts`, `lib/image-upload.ts` (signature-based extension check), `lib/media-url.ts`. Client-side mirrors the same limits in the editor.
+**Authentication:** Supabase Auth via `@supabase/ssr` cookies. Authorization per route through `getEditorAccess` (`lib/editor-access.ts`). Promotion reviewer checks in `lib/portia-promotion-reviewer.ts`.
+**Caching and headers:** `lib/portia-cdn.ts` (`publicCacheHeaders`, `noStoreHeaders`, `contentCacheTag`, `purgeCacheTag`). Security headers: only `lib/security-headers.test.ts` exists in scope; the implementation lies outside `app/`, `components/`, `lib/` and was not analyzed.
 
 ---
 
-*Architecture analysis: 2026-10-12*
+*Architecture analysis: 2026-11-01*
