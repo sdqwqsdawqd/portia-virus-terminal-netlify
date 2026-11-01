@@ -43,7 +43,7 @@ for (const role of privilegedRoles) {
   test.describe(`${role} server-authorized lane`, () => {
     test.use({ actorRole: role });
 
-    test(`[STAB-BASE-02] ${role} traverses its real authorized decision`, async ({ page, actor }) => {
+    test(`[STAB-BASE-02] ${role} traverses its real authorized decision`, async ({ page, actor, isMobile }) => {
       expect(actor.status).toBe("READY");
       const editor = new EditorPage(page);
       await editor.desktop.goto();
@@ -56,7 +56,8 @@ for (const role of privilegedRoles) {
       await editor.openSettings();
       await expect(editor.openEditor).toBeEnabled();
       await editor.openEditor.click();
-      await expect(editor.editorHeading()).toBeVisible();
+      // The phone layout shows the window title instead of the page heading; the section navigation is on both.
+      if (!isMobile) await expect(editor.editorHeading()).toBeVisible();
       await expect(editor.editorNavigation()).toBeVisible();
     });
   });

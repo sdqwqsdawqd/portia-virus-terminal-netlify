@@ -4142,5 +4142,282 @@
         }
       }
     }
+  },
+  "api": {
+    "schema": "portia-expected-authz-api-v1",
+    "generated_from": "app/api route handlers: the server-side role check before any RPC or write; not from observed behavior",
+    "mapping": {
+      "visitor": "anon",
+      "participant": "outsider",
+      "editor": "editor-full",
+      "promo-reviewer": "promo-reviewer",
+      "owner": "owner"
+    },
+    "notes": [
+      "visitor = no session cookie; participant = signed-in account without an editor row (cookie built by the @supabase/ssr serializer because /owner-login signs non-editors out); editor/promo-reviewer/owner sign in through the real /owner-login form.",
+      "POST /api/uploads writes to recycle/<uuid>.<ext>, not under the run prefix, so the spec removes each uploaded object with the admin client right after the check.",
+      "body lists only derived fields the spec compares: promoOpen = openTabs includes promo; ok/revisionAdvanced for content-put; urlIsString for uploads."
+    ],
+    "routes": [
+      {
+        "key": "access-get",
+        "method": "GET",
+        "path": "/api/access",
+        "source": "app/api/access/route.ts:17",
+        "cells": {
+          "visitor": {
+            "status": 200,
+            "body": {
+              "canEdit": false,
+              "canManageEditors": false,
+              "promoOpen": false
+            }
+          },
+          "participant": {
+            "status": 200,
+            "body": {
+              "canEdit": false,
+              "canManageEditors": false,
+              "promoOpen": false
+            }
+          },
+          "editor": {
+            "status": 200,
+            "body": {
+              "canEdit": true,
+              "canManageEditors": false,
+              "promoOpen": false
+            }
+          },
+          "promo-reviewer": {
+            "status": 200,
+            "body": {
+              "canEdit": true,
+              "canManageEditors": false,
+              "promoOpen": true
+            }
+          },
+          "owner": {
+            "status": 200,
+            "body": {
+              "canEdit": true,
+              "canManageEditors": true,
+              "promoOpen": true
+            }
+          }
+        }
+      },
+      {
+        "key": "content-put",
+        "method": "PUT",
+        "path": "/api/content",
+        "source": "app/api/content/route.ts:43",
+        "cells": {
+          "visitor": {
+            "status": 403
+          },
+          "participant": {
+            "status": 403
+          },
+          "editor": {
+            "status": 200,
+            "body": {
+              "ok": true,
+              "revisionAdvanced": true
+            }
+          },
+          "promo-reviewer": {
+            "status": 200,
+            "body": {
+              "ok": true,
+              "revisionAdvanced": true
+            }
+          },
+          "owner": {
+            "status": 200,
+            "body": {
+              "ok": true,
+              "revisionAdvanced": true
+            }
+          }
+        }
+      },
+      {
+        "key": "editors-get",
+        "method": "GET",
+        "path": "/api/editors",
+        "source": "app/api/editors/route.ts:16",
+        "cells": {
+          "visitor": {
+            "status": 403
+          },
+          "participant": {
+            "status": 403
+          },
+          "editor": {
+            "status": 403
+          },
+          "promo-reviewer": {
+            "status": 403
+          },
+          "owner": {
+            "status": 200,
+            "body": {
+              "editorsIsArray": true
+            }
+          }
+        }
+      },
+      {
+        "key": "editors-post",
+        "method": "POST",
+        "path": "/api/editors",
+        "source": "app/api/editors/route.ts:16",
+        "cells": {
+          "visitor": {
+            "status": 403
+          },
+          "participant": {
+            "status": 403
+          },
+          "editor": {
+            "status": 403
+          },
+          "promo-reviewer": {
+            "status": 403
+          },
+          "owner": {
+            "status": 200,
+            "body": {
+              "emailMatches": true
+            }
+          }
+        }
+      },
+      {
+        "key": "editors-delete",
+        "method": "DELETE",
+        "path": "/api/editors?email=<run-prefixed>",
+        "source": "app/api/editors/route.ts:16",
+        "cells": {
+          "visitor": {
+            "status": 403
+          },
+          "participant": {
+            "status": 403
+          },
+          "editor": {
+            "status": 403
+          },
+          "promo-reviewer": {
+            "status": 403
+          },
+          "owner": {
+            "status": 200,
+            "body": {
+              "ok": true
+            }
+          }
+        }
+      },
+      {
+        "key": "uploads-post",
+        "method": "POST",
+        "path": "/api/uploads",
+        "source": "app/api/uploads/route.ts:21",
+        "cells": {
+          "visitor": {
+            "status": 403
+          },
+          "participant": {
+            "status": 403
+          },
+          "editor": {
+            "status": 200,
+            "body": {
+              "urlIsString": true
+            }
+          },
+          "promo-reviewer": {
+            "status": 200,
+            "body": {
+              "urlIsString": true
+            }
+          },
+          "owner": {
+            "status": 200,
+            "body": {
+              "urlIsString": true
+            }
+          }
+        }
+      },
+      {
+        "key": "promotion-reviewer-get",
+        "method": "GET",
+        "path": "/api/promotion/reviewer",
+        "source": "app/api/promotion/reviewer/route.ts:22",
+        "via": "lib/portia-promotion-reviewer.ts:15",
+        "cells": {
+          "visitor": {
+            "status": 503,
+            "source": "lib/portia-promotion-reviewer.ts:21",
+            "note": "no session: auth.getUser() returns an error, which requirePromotionReviewer maps to unavailable (fail-closed 503), not forbidden"
+          },
+          "participant": {
+            "status": 403
+          },
+          "editor": {
+            "status": 403
+          },
+          "promo-reviewer": {
+            "status": 200,
+            "body": {
+              "sourceStatusIsString": true
+            }
+          },
+          "owner": {
+            "status": 200,
+            "body": {
+              "sourceStatusIsString": true
+            }
+          }
+        }
+      }
+    ],
+    "revoke": {
+      "editor": {
+        "owner_action": "DELETE /api/editors?email=<editor>",
+        "source": "app/api/editors/route.ts:75",
+        "after": {
+          "access": {
+            "canEdit": false
+          },
+          "contentPut": 403,
+          "ui": "open-editor button disabled after reload, same cookies"
+        }
+      },
+      "promo": {
+        "owner_action": "PATCH /api/editors {email, grantedTabs: []}",
+        "source": "app/api/editors/route.ts:88",
+        "after": {
+          "access": {
+            "promoOpen": false
+          },
+          "reviewerGet": 403
+        }
+      }
+    },
+    "cas": {
+      "route": "PUT /api/content",
+      "source": "app/api/content/route.ts:78",
+      "parallel": 6,
+      "rounds": 10,
+      "perRound": {
+        "ok": 1,
+        "conflict": 5
+      },
+      "finalRevision": "base+1"
+    }
   }
 }

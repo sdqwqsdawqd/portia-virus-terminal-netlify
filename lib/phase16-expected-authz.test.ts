@@ -83,7 +83,20 @@ test("matrix header lists the six roles and the supported placeholders", () => {
   assert.equal(matrix.baseline, baselinePath);
   assert.deepEqual(Object.keys(matrix.roles), ["anon", "outsider", "editor-full", "editor-restricted", "promo-reviewer", "owner"]);
   assert.ok(Array.isArray(matrix.placeholders) && matrix.placeholders.length > 0);
-  assert.equal(matrix.api, undefined, "section api belongs to plan 16-13");
+});
+
+test("api section (plan 16-13) has a cell per role and a source line that exists in the route code", () => {
+  const roles = ["visitor", "participant", "editor", "promo-reviewer", "owner"];
+  assert.equal(matrix.api.schema, "portia-expected-authz-api-v1");
+  assert.deepEqual(Object.keys(matrix.api.mapping), roles);
+  for (const route of matrix.api.routes) {
+    assert.deepEqual(Object.keys(route.cells), roles, `${route.key} cells`);
+    for (const source of [route.source, route.via, ...Object.values<{ source?: string }>(route.cells).map((cell) => cell.source)].filter(Boolean)) {
+      const [file, line] = String(source).split(":");
+      const length = readFileSync(new URL(`../${file}`, import.meta.url), "utf8").split(/\r?\n/).length;
+      assert.ok(Number(line) >= 1 && Number(line) <= length, `${route.key}: ${source} is outside the file`);
+    }
+  }
 });
 
 test("set comparison reports a function that has no decision, in both directions", () => {
