@@ -155,7 +155,7 @@ SKIP в visitor-прогоне (59): 52 пиксельный authority закр�
 
 ## Итог фазы
 
-Статус: **staging доказан; production DRIFT**. STAB-SEC-04 остаётся Pending; STAB-SEC-01 и STAB-REL-04 Complete.
+Статус: **staging доказан; production MATCH по правилу A** (после owner-run миграций, 2026-11-01). STAB-SEC-01, STAB-REL-04 и STAB-SEC-04 Complete.
 
 ### Success Criteria и acceptance gate
 
@@ -164,8 +164,8 @@ SKIP в visitor-прогоне (59): 52 пиксельный authority закр�
 | SC1: свежий изолированный проект только из canonical migrations даёт тот же fingerprint, что upgrade-путь | PASS | `fingerprint-fresh.json` (golden) == `fingerprint-upgrade.json` == `fingerprint-final.json` после teardown и повторного push (`16-UPGRADE-LADDER.md`, `16-FINGERPRINT-CALIBRATION.md`); `fingerprint-postdrop.json` == golden после третьей миграции |
 | SC2: anon/authenticated/editor/reviewer/owner через UI, API, таблицы и RPC; revoke сразу; fail-closed | PASS | role matrix 748 проверок + 3 revoke-теста (`receipt-roles.json`, `receipt-roles-postdrop.json`); UI/API lanes 4 роли x 5 проектов и API-матрица 7 маршрутов x 5 ролей, оба revoke на открытой сессии (`receipt-playwright.json`, раздел Browser) |
 | SC3: concurrent claim/admission/CAS/cleanup на disposable fixtures, один победитель, без production | PASS | 8 гонок N=6 x R=10 (`receipt-concurrency.json`, `receipt-concurrency-postdrop.json`) и HTTP CAS 6 x 10 (Browser); residual 0; `attest` ATTESTED перед запусками |
-| Acceptance gate: live-run и fingerprints | PASS для изолированной цели; production: DRIFT (`16-PRODUCTION-POSTFLIGHT.md`) | см. выше |
-| STAB-SEC-04: staging и production fingerprints == canonical | **не выполнено (Pending)** | staging доказан; production != golden (sequence ACL, два legacy overload) до применения миграций владельцем |
+| Acceptance gate: live-run и fingerprints | PASS (изолированная цель; production MATCH по правилу A) | см. выше и `16-PRODUCTION-POSTFLIGHT.md` |
+| STAB-SEC-04: staging и production fingerprints == canonical | PASS (правило A) | staging доказан; `fingerprint-production-after.json` vs golden: единственное отличие `public.rls_auto_enable()` (info), см. `16-PRODUCTION-POSTFLIGHT.md` |
 
 ### Сводка fingerprints
 
@@ -179,6 +179,7 @@ SKIP в visitor-прогоне (59): 52 пиксельный authority закр�
 | `fingerprint-final.json` | пересборка после teardown | golden == final (exit 0) |
 | `fingerprint-postdrop.json` | после `20261101000200` | golden == postdrop (exit 0) |
 | `fingerprint-production.json` (P) | owner-run, production | golden vs P: exit 1 (DRIFT, 4 ключа) |
+| `fingerprint-production-after.json` (P2) | owner-run, production после двух миграций | golden vs P2: exit 1, только `rls_auto_enable()` (info) = MATCH по правилу A |
 
 ### Остаются BLOCKED / вне фазы
 
@@ -186,7 +187,7 @@ SKIP в visitor-прогоне (59): 52 пиксельный authority закр�
 |-----|--------|----------|
 | 7 пиксельных application-сравнений и `search-restored` (DATA-SEED) | BLOCKED | D6, Phase 18-19 (визуальные эталоны владельца) |
 | Физические устройства | BLOCKED | Phase 22 |
-| Применение `20261101000100` и `20261101000200` к production и повторный fingerprint (закрытие DRIFT, STAB-SEC-04) | не выполнено агентом | владелец, отдельным owner-run шагом, вне Phase 16 по D5 |
+| Применение `20261101000100` и `20261101000200` к production и повторный fingerprint | выполнено владельцем 2026-11-01, MATCH по правилу A | владелец |
 | Management API автоматизация | отложено | D10 |
 | `supabase-rls-reviewer` для новой миграции `20261101000200` | выполнено: critical/high нет; находка на prod оценена как medium (см. 16-14-SUMMARY) | оркестратор |
 

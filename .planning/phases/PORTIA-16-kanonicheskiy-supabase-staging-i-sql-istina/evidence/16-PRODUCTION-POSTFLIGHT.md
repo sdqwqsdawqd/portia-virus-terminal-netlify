@@ -41,3 +41,23 @@ Production == golden плюс/минус ровно: ACL sequence (закрыв�
 
 - STAB-SEC-04: **Pending**. staging доказан (golden == U == final == postdrop), production DRIFT: пока обе миграции не применены владельцем и fingerprint не снят повторно (owner-run), равенство production canonical не доказано.
 - Требуется owner-run шаг в будущей фазе: применить обе миграции к production, повторно снять fingerprint тем же SQL (sha256 выше), сравнить с golden (ожидается exit 0 с учётом info `rls_auto_enable`).
+
+## Повторный postflight после owner-run миграций (2026-11-01)
+
+| Поле | Значение |
+|------|----------|
+| Кто выполнил | владелец, вручную в Dashboard SQL Editor production. Агент к production не подключался |
+| Применено | `20261101000100_portia_explicit_grants.sql` (sha256 `d6588aeafe9d2aa407734a115b9b6916f815ffe54cab65f9686f3f01d2cac954`), затем `20261101000200_portia_drop_legacy_promo_overloads.sql` (sha256 `b19caa7841b843c923ac4eb240da88a5627efa1a1375190bca93eef85eaac403`); оба `Success` по словам владельца |
+| Fingerprint | тот же SQL, sha256 `80c01284740fe1f2b25319e31f04dd1fd300c972f38524fb8209e5e976d71851`; результат `evidence/fingerprint-production-after.json` (P2), PG major 17 |
+| Сравнение | `node scripts/phase16-fingerprint-compare.mjs supabase/fingerprint/expected/portia.fingerprint.json evidence/fingerprint-production-after.json`: exit 1, `comparable: true`, `diff: { functions: ["public.rls_auto_enable()"] }`, `info: {}` |
+| Утечки | поиск по P2 на URL проекта, JWT и ключи: единственное `https://` взято из CHECK-ограничения `photo_url`; production-ref не записан |
+
+Ушли все три отличия DRIFT: ACL sequence `portia_promo_audit_events_id_seq` и оба legacy overload. Осталось только `public.rls_auto_enable()`, уже классифицированное выше как info (платформенная функция Supabase, не из репозитория).
+
+### Правило закрытия (решение владельца, вариант A)
+
+Компаратор остаётся строгим, allowlist не добавляется. Production считается равным canonical, если `comparable: true` и единственное отличие в `diff` — `functions: ["public.rls_auto_enable()"]`. Любое другое отличие — DRIFT.
+
+Итог: **MATCH по правилу A** (production == golden за исключением задокументированной платформенной функции).
+
+Известное следствие: миграции применены через SQL Editor и не записаны в `supabase_migrations.schema_migrations` production; `migration repair` вне Phase 16 (D5).

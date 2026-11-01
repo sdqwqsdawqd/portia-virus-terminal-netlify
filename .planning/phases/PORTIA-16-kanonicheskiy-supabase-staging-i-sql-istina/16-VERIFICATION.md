@@ -1,7 +1,7 @@
 ---
 phase: PORTIA-16-kanonicheskiy-supabase-staging-i-sql-istina
 verified: 2026-11-01T21:00:00Z
-status: human_needed
+status: passed
 score: 3/3 roadmap success criteria verified (STAB-SEC-04 production-часть вне score: ожидает владельца)
 covered_files:
   - .planning/phases/PORTIA-16-kanonicheskiy-supabase-staging-i-sql-istina/16-01-PLAN.md
@@ -146,3 +146,7 @@ Live staging, Playwright и visual manifest мной не запускались
 
 _Проверено: 2026-11-01_
 _Верификатор: Claude (gsd-verifier)_
+
+## Human verification (16-UAT.md, 2026-11-01)
+
+Оба пункта human_verification пройдены: владелец применил `20261101000100` и `20261101000200` к production и снял fingerprint повторно (`evidence/fingerprint-production-after.json`); golden vs production: единственное отличие `public.rls_auto_enable()`. Владелец выбрал правило A (без allowlist, задокументированное исключение). STAB-SEC-04: Complete. Статус отчёта переведён в `passed` по `phase uat-passed --uat-only`.
