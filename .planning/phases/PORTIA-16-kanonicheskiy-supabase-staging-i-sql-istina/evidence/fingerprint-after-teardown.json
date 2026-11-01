@@ -1,0 +1,245 @@
+{
+  "pg_major": 17,
+  "schema": "portia-fingerprint-v1",
+  "search_path": "\"\\$user\", public, extensions",
+  "sections": {
+    "bucket": {},
+    "columns": {},
+    "constraints": {},
+    "cron": {
+      "present": false
+    },
+    "default_acls": {
+      "postgres:S": {
+        "acl": [
+          "anon:SELECT",
+          "anon:UPDATE",
+          "anon:USAGE",
+          "authenticated:SELECT",
+          "authenticated:UPDATE",
+          "authenticated:USAGE",
+          "service_role:SELECT",
+          "service_role:UPDATE",
+          "service_role:USAGE"
+        ]
+      },
+      "postgres:f": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ]
+      },
+      "postgres:r": {
+        "acl": [
+          "anon:DELETE",
+          "anon:INSERT",
+          "anon:MAINTAIN",
+          "anon:REFERENCES",
+          "anon:SELECT",
+          "anon:TRIGGER",
+          "anon:TRUNCATE",
+          "anon:UPDATE",
+          "authenticated:DELETE",
+          "authenticated:INSERT",
+          "authenticated:MAINTAIN",
+          "authenticated:REFERENCES",
+          "authenticated:SELECT",
+          "authenticated:TRIGGER",
+          "authenticated:TRUNCATE",
+          "authenticated:UPDATE",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ]
+      },
+      "supabase_admin:S": {
+        "acl": [
+          "anon:SELECT",
+          "anon:UPDATE",
+          "anon:USAGE",
+          "authenticated:SELECT",
+          "authenticated:UPDATE",
+          "authenticated:USAGE",
+          "service_role:SELECT",
+          "service_role:UPDATE",
+          "service_role:USAGE"
+        ]
+      },
+      "supabase_admin:f": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ]
+      },
+      "supabase_admin:r": {
+        "acl": [
+          "anon:DELETE",
+          "anon:INSERT",
+          "anon:MAINTAIN",
+          "anon:REFERENCES",
+          "anon:SELECT",
+          "anon:TRIGGER",
+          "anon:TRUNCATE",
+          "anon:UPDATE",
+          "authenticated:DELETE",
+          "authenticated:INSERT",
+          "authenticated:MAINTAIN",
+          "authenticated:REFERENCES",
+          "authenticated:SELECT",
+          "authenticated:TRIGGER",
+          "authenticated:TRUNCATE",
+          "authenticated:UPDATE",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ]
+      }
+    },
+    "extensions": {
+      "pg_cron": {
+        "present": false
+      },
+      "pg_net": {
+        "present": false
+      },
+      "pgcrypto": {
+        "present": true
+      },
+      "plpgsql": {
+        "present": true
+      },
+      "uuid-ossp": {
+        "present": true
+      }
+    },
+    "functions": {
+      "public.rls_auto_enable()": {
+        "acl": [
+          "PUBLIC:EXECUTE",
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "kind": "f",
+        "returns": "event_trigger",
+        "secdef": true,
+        "src_sha256": "325ae266d9b166715ef5230ceaf7ff9d523e483cf5610dfb9779ab3f183f4af9",
+        "volatility": "v"
+      }
+    },
+    "indexes": {},
+    "policies": {},
+    "publications": {},
+    "roles": {
+      "anon": {
+        "bypassrls": false,
+        "member_of": [],
+        "super": false
+      },
+      "authenticated": {
+        "bypassrls": false,
+        "member_of": [],
+        "super": false
+      },
+      "authenticator": {
+        "bypassrls": false,
+        "member_of": [
+          "anon",
+          "authenticated",
+          "service_role"
+        ],
+        "super": false
+      },
+      "service_role": {
+        "bypassrls": true,
+        "member_of": [],
+        "super": false
+      }
+    },
+    "schemas": {
+      "public": {
+        "acl": [
+          "PUBLIC:USAGE",
+          "anon:USAGE",
+          "authenticated:USAGE",
+          "service_role:USAGE"
+        ]
+      },
+      "storage": {
+        "acl": [
+          "anon:USAGE",
+          "authenticated:USAGE",
+          "service_role:USAGE"
+        ]
+      }
+    },
+    "tables": {
+      "storage.buckets": {
+        "acl": [
+          "anon:DELETE",
+          "anon:INSERT",
+          "anon:SELECT",
+          "anon:UPDATE",
+          "authenticated:DELETE",
+          "authenticated:INSERT",
+          "authenticated:SELECT",
+          "authenticated:UPDATE",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "storage.objects": {
+        "acl": [
+          "anon:DELETE",
+          "anon:INSERT",
+          "anon:SELECT",
+          "anon:UPDATE",
+          "authenticated:DELETE",
+          "authenticated:INSERT",
+          "authenticated:SELECT",
+          "authenticated:UPDATE",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      }
+    },
+    "triggers": {}
+  }
+}
