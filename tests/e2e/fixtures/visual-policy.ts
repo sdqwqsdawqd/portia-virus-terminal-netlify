@@ -143,13 +143,6 @@ export async function compareApprovedScreenshot(page: Page, state: VisualState, 
   }
 }
 
-export function assertVisualDiffAllowed(state: VisualState, changedPixels: number) {
-  const cap = declarations[state].maxDiffPixels;
-  if (!Number.isInteger(changedPixels) || changedPixels < 0 || changedPixels > cap) {
-    throw new Error(`[PORTIA_VISUAL_DIFF:${state}] ${changedPixels} > ${cap}`);
-  }
-}
-
 export const visualPolicyStates = Object.freeze(
   Object.keys(declarations) as VisualState[],
 );
