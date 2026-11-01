@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { findGuide, findInfo, portiaTextKey, type Broadcast, type GuideBlock, type GuideSection, type PortiaContent, type RecycleFile, type RichTextDocument, type Virus } from "@/lib/portia-content";
+import { findGuide, findInfo, portiaTextKey, type Broadcast, type PortiaContent, type RecycleFile, type RichTextDocument, type Virus } from "@/lib/portia-content";
 import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
@@ -18,7 +18,7 @@ import { AppWindow, appMeta, minimumWindowSize, type AppId } from "@/components/
 import { DesktopIcon, StartPanelButton, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
-import { EmbeddedDocument, embedSandbox } from "@/components/portia-desktop-documents";
+import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-desktop-documents";
 import { FormattedText, LoadingState, prioritizeImage, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 
 const PortiaEditor = dynamic(
@@ -105,8 +105,6 @@ const contentCacheStorageKey = "portia-content-last-success-v1";
 const employeesCacheStorageKey = "portia-employees-last-success-v1";
 // v3: every shortcut gained an explicit independent home; discard v2 coordinates that could preserve the overlapping guide.
 const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3";
-// v2 starts every section folded; v1 stored the former open-by-default behaviour.
-const guideCollapsedStorageKey = "portia-guide-collapsed-v2";
 const taskbarOrderStorageKey = "portia-taskbar-order-v1";
 const TASKBAR_BOUNCE_MS = 520;
 const ASSISTANT_RECOVER_MS = 780;
@@ -1493,126 +1491,6 @@ function EmployeeImageInner({ src, alt, fallbackClassName = "" }: { src: string;
     <span className="personnel-image-skeleton" aria-hidden="true" />
     <img src={fallback ? "/assets/portia-logo.png" : src} alt={alt} className={fallback ? fallbackClassName : ""} loading="eager" decoding="async" fetchPriority="high" referrerPolicy="no-referrer" onLoad={() => setLoaded(true)} onError={() => fallback ? setLoaded(true) : setFailed(true)} />
   </div>;
-}
-
-// «Справочник»: the grid and the card page are one derived view of openCardId; a card that vanished simply means the grid (D-00d).
-function GuideApp({ sections, formattedText, openCardId, onOpenCard }: {
-  sections: GuideSection[];
-  formattedText: PortiaContent["formattedText"];
-  openCardId: string;
-  onOpenCard: (id: string) => void;
-}) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const page = useRef<HTMLElement>(null);
-  // Folded sections live on this device only (D-08): first visit starts with compact section headers only.
-  const [collapsed, setCollapsed] = useState<string[]>(() => sections.map((section) => section.id));
-  const [collapsedLoaded, setCollapsedLoaded] = useState(false);
-  const returnTo = useRef<{ cardId: string; scrollTop: number; sections: string } | null>(null);
-  const backIntent = useRef(false);
-  const lastShown = useRef("");
-  const found = findGuide(sections, openCardId);
-  const card = found?.card ?? null;
-  const shownId = card?.id ?? "";
-
-  useLayoutEffect(() => {
-    const root = scroller.current;
-    const previous = lastShown.current;
-    if (!root || previous === shownId) return;
-    lastShown.current = shownId;
-    if (shownId) {
-      root.scrollTop = 0;
-      page.current?.focus({ preventScroll: true });
-      return;
-    }
-    const back = backIntent.current;
-    backIntent.current = false;
-    const saved = returnTo.current;
-    root.scrollTop = back && saved && saved.cardId === previous && saved.sections === JSON.stringify(sections) ? saved.scrollTop : 0;
-    returnTo.current = null; // a card opened from search later must not inherit this position
-    if (back) (root.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(previous)}"]`) ?? root).focus({ preventScroll: true });
-  }, [shownId, sections]);
-
-  useEffect(() => {
-    let ids: string[] | null = null;
-    try {
-      const stored = window.localStorage.getItem(guideCollapsedStorageKey);
-      const saved: unknown = stored === null ? null : JSON.parse(stored);
-      if (Array.isArray(saved)) ids = saved.filter((id): id is string => typeof id === "string");
-    } catch {}
-    const restoreTimer = window.setTimeout(() => {
-      if (ids) setCollapsed(ids);
-      setCollapsedLoaded(true);
-    }, 0);
-    return () => window.clearTimeout(restoreTimer);
-  }, []);
-
-  useEffect(() => {
-    if (!collapsedLoaded) return;
-    try { window.localStorage.setItem(guideCollapsedStorageKey, JSON.stringify(collapsed.filter((id) => sections.some((section) => section.id === id)))); } catch {}
-  }, [collapsed, collapsedLoaded, sections]);
-
-  const openTile = (cardId: string) => {
-    returnTo.current = { cardId, scrollTop: scroller.current?.scrollTop ?? 0, sections: JSON.stringify(sections) };
-    onOpenCard(cardId);
-  };
-
-  return <div className="guide-app" ref={scroller} tabIndex={-1}>
-    {found && card ? <>
-      <div className="guide-back-bar"><button type="button" aria-label="Назад к списку карточек" onClick={() => { backIntent.current = true; onOpenCard(""); }}><span aria-hidden="true">←</span><span className="guide-back-label">Назад</span></button></div>
-      <article className="guide-page" tabIndex={-1} ref={page}>
-        <span className="eyebrow">{found.section.title || "Без названия"}</span>
-        <h1>{card.title || "Без названия"}</h1>
-        {!card.blocks.length && <p className="guide-section-empty">В карточке пока нет содержимого</p>}
-        <div className="guide-blocks">{card.blocks.map((block) => <GuideBlockView key={block.id} block={block} formattedText={formattedText} cardTitle={card.title} />)}</div>
-      </article>
-    </> : !sections.length ? <div className="guide-empty empty-state"><PortiaIllustration name="flask" /><strong>Справочник пока пуст</strong><span>Карточки появятся здесь, когда редакторы их добавят.</span></div>
-    : sections.map((section) => {
-      const folded = collapsed.includes(section.id);
-      const gridId = `guide-grid-${section.id}`;
-      return <section className="guide-section" key={section.id}>
-        <button type="button" className={`guide-section-head${section.photo ? " has-photo" : ""}`} aria-expanded={!folded} aria-controls={gridId} onClick={() => setCollapsed((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}>
-          {section.photo && <img className="guide-section-band" src={section.photo} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.hidden = true; }} />}
-          <span className="guide-section-title">{section.title || "Без названия"}</span>
-          <span className="guide-section-chevron" aria-hidden="true" />
-        </button>
-        <div className="guide-grid" id={gridId} hidden={folded}>
-          {!section.cards.length && <p className="guide-section-empty">В разделе пока нет карточек</p>}
-          {section.cards.map((item) => <button key={item.id} type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}`} data-card-id={item.id} onClick={() => openTile(item.id)}>
-            {item.cover && <span className="guide-tile-cover"><img src={item.cover} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.hidden = true; }} /></span>}
-            <span className="guide-tile-title">{item.title || "Без названия"}</span>
-          </button>)}
-        </div>
-      </section>;
-    })}
-  </div>;
-}
-
-function GuideBlockView({ block, formattedText, cardTitle }: { block: GuideBlock; formattedText: PortiaContent["formattedText"]; cardTitle: string }) {
-  if (block.type === "heading") return block.text.trim() ? <h2 className="guide-heading">{block.text}</h2> : null;
-  if (block.type === "text") return <FormattedText className="info-document-copy" text={block.text} document={formattedText[portiaTextKey.guideBlock(block.id)]} />;
-  if (block.type === "table") return <div className="guide-table"><dl className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row) => <div key={row.id}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl></div>;
-  if (block.type === "photo") return block.url ? <GuidePhoto key={block.url} url={block.url} caption={block.caption} /> : null;
-  if (block.type === "video") return block.videoId ? <YoutubeFigure videoId={block.videoId} title={cardTitle || "Без названия"} /> : null;
-  return <aside className="guide-callout">
-    {block.label.trim() && <span className="guide-callout-label">{block.label}</span>}
-    <FormattedText className="info-document-copy" text={block.text} document={formattedText[portiaTextKey.guideBlock(block.id)]} />
-  </aside>;
-}
-
-// A page photo is full width, not a link and has no zoom; a failed image is said so in words, never a broken icon (A11Y-03).
-function GuidePhoto({ url, caption }: { url: string; caption: string }) {
-  const [failed, setFailed] = useState(false);
-  return <figure className="info-block-photo guide-photo">
-    {failed
-      ? <p className="guide-photo-error">Фото не загрузилось</p>
-      : <img src={url} alt={caption} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />}
-    {caption.trim() && <figcaption>{caption}</figcaption>}
-  </figure>;
-}
-
-// The one YouTube figure for «Информация» and «Справочник»: nocookie embed, id validated by normalizePortiaContent (D-09); default referrer policy, YouTube refuses embeds without a Referer.
-function YoutubeFigure({ videoId, title }: { videoId: string; title: string }) {
-  return <figure className="info-block-video"><iframe title={`Видео YouTube: ${title}`} loading="lazy" sandbox={embedSandbox} allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" src={`https://www.youtube-nocookie.com/embed/${videoId}`} /><figcaption><a href={`https://www.youtube.com/watch?v=${videoId}`} target="_blank" rel="noopener noreferrer">Открыть на YouTube ↗</a></figcaption></figure>;
 }
 
 // In the archive list the badges stand alone, so each one names its term for screen readers and on hover.
