@@ -70,11 +70,17 @@ test("L0 upgrade fixture is the pre-phase12 portia_setup.sql from commit 8508d71
   assert.equal(sha(text), "016da4b0d1e4e6a1dd87506e0d28c5d1c896630aa52a1a9d2aa6cc413527cc97");
 });
 
+test("every migration is a PORTIA migration (teardown clears the journal by the portia_ name prefix)", () => {
+  for (const f of readdirSync(new URL("migrations/", root))) {
+    assert.match(f, /^\d{14}_portia_[a-z0-9_]+\.sql$/, `${f}: migration names must start with portia_ after the version`);
+  }
+});
+
 test("teardown is scoped to PORTIA objects only", () => {
   const raw = read("teardown/portia_teardown.sql");
   assert.match(raw.split("\n")[0], /^-- ISOLATED TEST PROJECT ONLY/);
   const sql = raw.replace(/^\s*--.*$/gm, "").toLowerCase();
-  for (const banned of ["drop schema", "truncate", "drop owned", "reassign owned", "storage.buckets"]) {
+  for (const banned of ["drop schema", "truncate", "drop owned", "reassign owned", "storage.buckets", "cascade"]) {
     assert.ok(!sql.includes(banned), `teardown must not contain "${banned}"`);
   }
   assert.ok(!/\bauth\./.test(sql), "teardown must not touch auth.*");
@@ -83,7 +89,16 @@ test("teardown is scoped to PORTIA objects only", () => {
   assert.ok(drops.length > 0);
   const dynamicLoopScoped = sql.includes("nspname = 'public'") && sql.includes("like 'portia\\_%'");
   for (const d of drops) {
-    // shortcut: dynamic drops (format string) are trusted to the filtered loops asserted here; upgrade if loops multiply.
-    assert.ok(/portia/.test(d) || (d.includes("%s") && dynamicLoopScoped), `unscoped drop in teardown: ${d}`);
+    // shortcut: dynamic drops (format string / aggregated list) are trusted to the filtered queries asserted here; upgrade if they multiply.
+    assert.ok(/portia/.test(d) || (/%|'\s*\|\|/.test(d) && dynamicLoopScoped), `unscoped drop in teardown: ${d}`);
   }
+  // Journal rows only by the portia_ prefix; pg_cron only when no foreign job exists.
+  assert.ok(sql.includes("left(name, 7) = 'portia_'"));
+  assert.match(sql, /not exists \(select 1 from cron\.job where jobname is distinct from 'portia-promo-cleanup'\)/);
+});
+
+test("teardown fails closed: the teardown_ok guard is the first statement after begin", () => {
+  const sql = read("teardown/portia_teardown.sql").replace(/^\s*--.*$/gm, "");
+  const afterBegin = sql.slice(sql.indexOf("begin;") + "begin;".length).trimStart();
+  assert.match(afterBegin, /^do \$\$\s+begin\s+if coalesce\(current_setting\('portia\.teardown_ok', true\), ''\) <> 'yes' then\s+raise exception/);
 });
