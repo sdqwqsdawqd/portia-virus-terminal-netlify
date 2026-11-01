@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { isVerifiedSession, type VerifiedSession } from "./session-probe.ts";
 import {
   MutationTargetBlockedError,
   requireSafeMutationTargetFromEnvironment,
@@ -17,12 +18,6 @@ export type ActorDeclaration = Readonly<{
   role: ActorRole;
   lifecycleOwner: string;
   cleanup: string;
-}>;
-
-export type ActorSessionProof = Readonly<{
-  role: Exclude<ActorRole, "visitor">;
-  status: "VERIFIED";
-  source: "server-probe";
 }>;
 
 export type ActorBlockCode =
@@ -63,7 +58,7 @@ export type ActorAvailability =
       status: "READY";
       actor: ActorDeclaration;
       target?: SafeMutationTarget;
-      sessionProof?: ActorSessionProof;
+      sessionProof?: VerifiedSession;
     }>
   | Readonly<{
       status: "BLOCKED";
@@ -75,7 +70,7 @@ export type ActorAvailability =
 export function actorAvailability(
   role: ActorRole,
   environment: Readonly<Record<string, string | undefined>> = process.env,
-  sessionProof?: ActorSessionProof,
+  sessionProof?: VerifiedSession,
 ): ActorAvailability {
   const actor = actorRoster.actors.find((candidate) => candidate.role === role);
   if (!actor) throw new Error(`[PORTIA_E2E_ROSTER_INVALID:${role}]`);
@@ -83,12 +78,7 @@ export function actorAvailability(
 
   try {
     const target = requireSafeMutationTargetFromEnvironment(environment);
-    if (
-      !sessionProof ||
-      sessionProof.status !== "VERIFIED" ||
-      sessionProof.source !== "server-probe" ||
-      sessionProof.role !== role
-    ) {
+    if (!isVerifiedSession(sessionProof, role, target)) {
       return Object.freeze({
         status: "BLOCKED",
         actor,
@@ -111,7 +101,7 @@ export function actorAvailability(
 export function requireActor(
   role: ActorRole,
   environment: Readonly<Record<string, string | undefined>> = process.env,
-  sessionProof?: ActorSessionProof,
+  sessionProof?: VerifiedSession,
 ) {
   const availability = actorAvailability(role, environment, sessionProof);
   if (availability.status === "BLOCKED") {
