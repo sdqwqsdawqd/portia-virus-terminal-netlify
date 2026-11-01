@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { openedWindow, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "./window-open.ts";
+import { componentFamily } from "./component-source.ts";
+import { exitedWindow, openedWindow, originOf, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "./window-open.ts";
 
 const bounds = { width: 1200, height: 800 };
 const minimum = { width: 520, height: 420 };
@@ -74,4 +75,102 @@ test("openedWindow does not mutate its argument", () => {
   const snapshot = structuredClone(state);
   openedWindow(state, origin, bounds, minimum, () => created);
   assert.deepEqual(state, snapshot);
+});
+
+test("closing resets open, minimized and maximized but keeps geometry, z and origin", () => {
+  const geometry = { x: 20, y: 20, width: 600, height: 450 };
+  const state: WindowState = { open: true, minimized: false, maximized: true, z: 17, exiting: "close", geometry, openOrigin: oldOrigin };
+  assert.deepEqual(exitedWindow(state, "close"), { open: false, minimized: false, maximized: false, z: 17, exiting: undefined, geometry, openOrigin: oldOrigin });
+});
+
+test("minimising keeps the window open and maximized", () => {
+  const state: WindowState = { open: true, minimized: false, maximized: true, z: 17, exiting: "minimize", openOrigin: oldOrigin };
+  assert.deepEqual(exitedWindow(state, "minimize"), { open: true, minimized: true, maximized: true, z: 17, exiting: undefined, openOrigin: oldOrigin });
+});
+
+test("originOf is the centre of the element and keeps the kind", () => {
+  const element = { getBoundingClientRect: () => ({ left: 10, top: 20, width: 40, height: 60 }) } as unknown as Element;
+  assert.deepEqual(originOf(element, "taskbar"), { x: 30, y: 50, kind: "taskbar" });
+});
+
+// Source tests follow the desktop family, so they survive moving AppWindow and the icons into seam modules (17-06).
+const source = componentFamily("portia-desktop").map((part) => part.text).join("\n").replace(/\r\n/g, "\n");
+
+/** Text of the `{ ... }` body that opens at the end of `marker`; asserts the marker exists exactly once so no check passes on an empty match. */
+function bodyAfter(marker: string): string {
+  assert.equal(source.split(marker).length, 2, `expected exactly one: ${marker}`);
+  const open = source.indexOf(marker) + marker.length - 1;
+  assert.equal(source[open], "{", `marker must end at an opening brace: ${marker}`);
+  let depth = 0;
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    else if (source[index] === "}" && (depth -= 1) === 0) return source.slice(open + 1, index);
+  }
+  throw new Error(`unbalanced braces after: ${marker}`);
+}
+
+const lockGuard = 'if (qualificationLocked && appId !== "promotion") return;';
+
+test("openApp is declared once and, like focusApp, starts with the qualification guard (STAB-DESK-01, T-17-10)", () => {
+  assert.ok(bodyAfter("const openApp = (appId: AppId, origin?: OpenOrigin) => {").trimStart().startsWith(lockGuard));
+  assert.ok(bodyAfter("const focusApp = (appId: AppId) => {").trimStart().startsWith(lockGuard));
+});
+
+test("every desktop icon, start panel button and search result opens its window through openApp", () => {
+  const icons = source.match(/<DesktopIcon app="\w+"[^\n]*\/>/g) ?? [];
+  assert.equal(icons.length, 11);
+  for (const icon of icons) assert.ok(icon.includes("onOpen={openApp}"), icon.slice(0, 40));
+  const buttons = source.match(/<StartPanelButton [^\n]*\/>/g) ?? [];
+  assert.equal(buttons.length, 5);
+  for (const button of buttons) assert.ok(button.includes("openApp("), button.slice(0, 60));
+  const search = bodyAfter("const openSearchResult = (result: (typeof searchResults)[number]) => {");
+  assert.equal(search.split("openApp(").length - 1, 7);
+  assert.ok(!/setWindows|open: true/.test(search));
+});
+
+test("a taskbar button restores a minimised or leaving window, minimises the active one, else focuses", () => {
+  const restore = source.indexOf('openApp(app, originOf(event.currentTarget, "taskbar"))');
+  const minimize = source.indexOf("else if (activeApp === app) minimizeApp(app);");
+  const focus = source.indexOf("else focusApp(app);");
+  assert.ok(restore > 0 && restore < minimize && minimize < focus);
+  assert.ok(source.slice(restore - 70, restore).includes("windows[app].minimized || windows[app].exiting"));
+});
+
+test("a window is opened only by openedWindow, apart from the forced qualification window", () => {
+  const literal = source.match(/\bopen: true\b/g) ?? [];
+  assert.equal(literal.length, 1);
+  assert.ok(bodyAfter("const updateQualificationLock = useCallback((locked: boolean) => {").includes("open: true"));
+  assert.ok(bodyAfter("const openApp = (appId: AppId, origin?: OpenOrigin) => {").includes("openedWindow(state[appId]"));
+});
+
+test("each app id has exactly one AppWindow surface, which unmounts when closed but not when minimised", () => {
+  for (const id of ["archive", "employees", "search", "info", "guide", "promotion", "broadcasts", "trash", "settings", "editor"]) {
+    assert.equal(source.split(`<AppWindow app="${id}"`).length - 1, 1, id);
+  }
+  assert.equal(source.split('(["sheet", "charter"] as const).map((app) => <AppWindow').length - 1, 1);
+  assert.equal(source.split("<AppWindow ").length - 1, 11);
+  assert.ok(source.indexOf("function AppWindow(") < source.indexOf("if (!state.open) return null;"));
+});
+
+test("leaving a window only touches window, active app and editor close request state", () => {
+  const allowed = new Set(["setWindows", "setActiveApp", "setEditorCloseRequest"]);
+  for (const marker of ['const finishExit = (appId: AppId, kind: "close" | "minimize") => {', 'const requestExit = (appId: AppId, kind: "close" | "minimize", force = false) => {']) {
+    const calls = new Set(bodyAfter(marker).match(/(?<![.\w])set[A-Z]\w*(?=\()/g) ?? []);
+    for (const call of calls) assert.ok(allowed.has(call), `${call} in ${marker.slice(0, 22)}`);
+  }
+  assert.ok(bodyAfter('const finishExit = (appId: AppId, kind: "close" | "minimize") => {').includes("exitedWindow(state[appId], kind)"));
+});
+
+test("state kept when a window is closed lives in PortiaDesktop, state reset on close lives inside the window body (D-06)", () => {
+  const start = source.indexOf("export function PortiaDesktop");
+  assert.ok(start >= 0);
+  const desktop = source.slice(start, source.indexOf("\n}\n", start));
+  const kept = ["activeVirusId", "virusQuery", "openLog", "globalQuery", "selectedEmployeeId", "employeeQuery", "selectedInfoId", "guideCardId", "broadcastTab", "activeTrashFileId", "desktopSettings", "shortcutPositions", "accentPickerOpen", "accentDraft", "settingsSavedVisible", "broadcastUnread", "openTabs", "canEdit"];
+  for (const name of kept) assert.ok(new RegExp(`const \[${name}, set\w+\] = useState`).test(desktop), `${name} must be PortiaDesktop state`);
+  for (const name of ["zoom", "ctrlHeld", "frameLoading"]) {
+    assert.ok(!new RegExp(`const \[${name}, set\w+\] = useState`).test(desktop), `${name} must not be PortiaDesktop state`);
+    assert.ok(new RegExp(`const \[${name}, set\w+\] = useState`).test(source), `${name} is expected in EmbeddedDocument`);
+  }
+  assert.ok(source.includes("if (!state.open) return null;"));
+  assert.ok(!/if \([^)\n]*minimized[^)\n]*\) return null/.test(source));
 });
