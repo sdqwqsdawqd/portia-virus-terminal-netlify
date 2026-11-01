@@ -2,7 +2,17 @@
 
 Дата: 2026-11-01. Commit (HEAD на момент проверки): 08473fe. Node: 22.13.1 (референсный, первый в PATH).
 
-Итог: **BLOCKED (ENV/credentials)**. `attest` НЕ вернул `ATTESTED`; это не pass. Свойства guard и блокировка production-ref доказаны, живая цель — нет.
+Итог: **ATTESTED** (повторный прогон 2026-11-01, HEAD 6508435, после перезапуска сессии владельцем). Первый прогон ниже был BLOCKED (401 на publishable-ключ) и оставлен как история.
+
+## Повторный прогон (2026-11-01, HEAD 6508435, Node 22.13.1)
+
+- `attest`: exit 0, `{"status":"ATTESTED","refHash":"01d085e7b9f0"}`.
+- `self-test-production-block`: exit 0, `{"checked":1,"blocked":1}`.
+- `node --test .claude/hooks/guard.test.mjs`: 7/7 pass. `lib/phase16-guard-boundary.test.ts`: 6/6 pass.
+- sha256 guard-файлов совпадают с таблицей ниже (guard не менялся).
+- `scan-evidence`: см. раздел scan-evidence.
+
+## Первый прогон (BLOCKED, история)
 
 ## Подтверждение владельца (со слов владельца, агент это не проверял)
 
