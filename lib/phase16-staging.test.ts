@@ -13,6 +13,9 @@ import {
   runCli,
   scanEvidence,
   selfTestProductionBlock,
+  cliHelp,
+  fingerprint,
+  push,
 } from "../scripts/phase16-staging.mjs";
 
 const ref = "aaaaaaaaaaaaaaaaaaaa";
@@ -257,6 +260,72 @@ describe("attest", () => {
   });
 });
 
+describe("cli-help, push and fingerprint (16-10)", () => {
+  const recorder = (outputs: { status?: number; stdout?: string }[]) => {
+    const argvs: string[][] = [];
+    const opts: Record<string, unknown>[] = [];
+    let i = 0;
+    return {
+      argvs,
+      opts,
+      spawn: (_command: string, args: string[], options: Record<string, unknown>) => {
+        argvs.push(args.slice(1));
+        opts.push(options);
+        const next = outputs[Math.min(i++, outputs.length - 1)];
+        return { status: next.status ?? 0, stdout: next.stdout ?? "", stderr: "" };
+      },
+    };
+  };
+  const quiet = { out: () => undefined, err: () => undefined };
+
+  test("cli-help runs --help with words only, no target, no DB URL", () => {
+    const r = recorder([{}]);
+    const { deps } = spies();
+    assert.equal(cliHelp(["db", "push"], { ...deps, spawn: r.spawn, env: { ...env, PATH: "/bin" }, ...quiet }), 0);
+    assert.deepEqual(r.argvs, [["db", "push", "--help"]]);
+    assert.deepEqual(Object.keys(r.opts[0].env as object), ["PATH"]);
+    for (const bad of [[], ["--db-url"], ["db", "push;x"], ["Db"]]) {
+      assert.equal(codeOf(() => cliHelp(bad, { ...deps, spawn: r.spawn })), "forbidden-argument");
+    }
+    assert.equal(r.argvs.length, 1);
+  });
+
+  test("push: db push --yes then migration list, both with the attested --db-url only", () => {
+    const r = recorder([{}, {}]);
+    const { deps } = spies();
+    assert.equal(push(env, { ...deps, spawn: r.spawn, env, ...quiet }), 0);
+    assert.deepEqual(r.argvs, [["db", "push", "--yes", "--db-url", dbUrl], ["migration", "list", "--db-url", dbUrl]]);
+    for (const argv of r.argvs) for (const word of ["link", "reset", "--linked", "--project-ref"]) assert.ok(!argv.includes(word));
+  });
+
+  test("push stops after a failed db push and refuses without a target", () => {
+    const r = recorder([{ status: 1 }, {}]);
+    const { deps } = spies();
+    assert.equal(push(env, { ...deps, spawn: r.spawn, env, ...quiet }), 1);
+    assert.equal(r.argvs.length, 1);
+    assert.equal(codeOf(() => push({ ...env, PORTIA_E2E_PRODUCTION_PROJECT_IDS: "" }, { ...deps, spawn: r.spawn })), "production-list-missing");
+    assert.equal(r.argvs.length, 1);
+  });
+
+  test("fingerprint: db query -f <sql> -o json, canonical evidence file; bad output writes nothing", () => {
+    const written: Record<string, string> = {};
+    const { deps } = spies({ mkdirSync: () => undefined, writeFileSync: (p: string, t: string) => { written[path.basename(p)] = t; } });
+    const payload = { schema: "portia-fingerprint-v1", pg_major: 17, sections: { tables: { b: 1, a: 2 } } };
+    const r = recorder([{ stdout: JSON.stringify([{ fingerprint: payload }]) }]);
+    assert.equal(fingerprint("fresh-1", env, { ...deps, spawn: r.spawn, env, evidenceDir: "/ev", sqlFile: "/sql/f.sql", ...quiet }), 0);
+    assert.deepEqual(r.argvs[0], ["db", "query", "-f", "/sql/f.sql", "-o", "json", "--db-url", dbUrl]);
+    assert.deepEqual(Object.keys(written), ["fingerprint-fresh-1.json"]);
+    const text = written["fingerprint-fresh-1.json"];
+    assert.ok(text.indexOf('"a"') < text.indexOf('"b"'));
+
+    const bad = recorder([{ stdout: "" }]);
+    assert.equal(codeOf(() => fingerprint("x", env, { ...deps, spawn: bad.spawn, env, ...quiet })), "fingerprint-unparseable");
+    assert.deepEqual(Object.keys(written), ["fingerprint-fresh-1.json"]);
+    assert.equal(codeOf(() => fingerprint("Bad_Label", env, { ...deps, spawn: bad.spawn })), "bad-label");
+    assert.equal(codeOf(() => fingerprint("x", { ...env, PORTIA_STAGING_DB_URL: undefined }, { ...deps, spawn: bad.spawn })), "missing-environment");
+  });
+});
+
 describe("scan-evidence and main", () => {
   test("reports file and class only, exit 1 on findings, 0 when clean", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "portia-scan-"));
@@ -285,7 +354,7 @@ describe("scan-evidence and main", () => {
 
   test("unknown subcommands exit 2; no link/reset subcommand or flag exists", async () => {
     const io = { out: () => undefined, err: () => undefined };
-    for (const argv of [[], ["link"], ["db", "reset"], ["push"], ["scan-evidence"]]) {
+    for (const argv of [[], ["link"], ["db", "reset"], ["push", "x"], ["fingerprint"], ["scan-evidence"]]) {
       assert.equal(await main(argv, { env, ...io }), 2, argv.join(" "));
     }
     const source = readFileSync(new URL("../scripts/phase16-staging.mjs", import.meta.url), "utf8");

@@ -3,12 +3,13 @@ import * as nodeFs from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { canonicalize, extractFingerprint, inventory } from "./phase16-fingerprint-compare.mjs";
 import { assertAppBoundToTarget } from "../tests/e2e/fixtures/target-attestation.ts";
 import { requireSafeMutationTargetFromEnvironment } from "../tests/e2e/fixtures/target-guard.ts";
 
 // Single guarded path to the isolated Supabase project (Phase 16, D2/D3).
 // Values come only from the process environment: this file never reads env files and never prints values.
-// Subcommands: attest, self-test-production-block, scan-evidence <dir>. push/fingerprint (16-10) and
+// Subcommands: attest, self-test-production-block, scan-evidence <dir>, cli-help, push, fingerprint (16-10).
 // teardown/upgrade-ladder (16-11) build on resolveStagingTarget + runCli.
 
 const ADMIN_KEY_VAR = "PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY";
@@ -107,9 +108,33 @@ function childEnv(env) {
 
 const FORBIDDEN_ARGS = new Set(["link", "reset", "--linked", "--project-ref"]);
 
+function cliEntry(deps) {
+  const fs = deps.fs ?? nodeFs;
+  const packageDir = path.join(deps.root ?? REPO_ROOT, "node_modules", "supabase");
+  let bin;
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8"));
+    bin = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.supabase;
+  } catch {
+    bin = undefined;
+  }
+  if (!bin) throw new StagingError("cli-missing", ["node_modules/supabase"]);
+  return path.join(packageDir, bin);
+}
+
+// Help text of the repo-pinned CLI: no target, no DB URL, empty child env. Words only, so no flag can slip in.
+export function cliHelp(words, deps = {}) {
+  if (words.length === 0 || !words.every((word) => /^[a-z][a-z-]*$/u.test(word))) throw new StagingError("forbidden-argument", ["wrapper arguments"]);
+  const result = (deps.spawn ?? spawnSync)(process.execPath, [cliEntry(deps), ...words, "--help"], {
+    shell: false, encoding: "utf8", windowsHide: true, maxBuffer: 8 * 1024 * 1024, env: childEnv(deps.env ?? process.env),
+  });
+  (deps.out ?? ((text) => process.stdout.write(text)))(result.stdout ?? "");
+  (deps.err ?? ((text) => process.stderr.write(text)))(result.stderr ?? "");
+  return typeof result.status === "number" ? result.status : 1;
+}
+
 // Common core for 16-10/16-11: runs the repo-pinned supabase CLI against the attested DB URL only.
 export function runCli(args, target, deps = {}) {
-  const fs = deps.fs ?? nodeFs;
   for (const arg of args) {
     const bare = arg.split("=")[0];
     if (
@@ -122,26 +147,50 @@ export function runCli(args, target, deps = {}) {
       throw new StagingError("forbidden-argument", ["wrapper arguments"]);
     }
   }
-  const root = deps.root ?? REPO_ROOT;
-  const packageDir = path.join(root, "node_modules", "supabase");
-  let bin;
-  try {
-    const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8"));
-    bin = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.supabase;
-  } catch {
-    bin = undefined;
-  }
-  if (!bin) throw new StagingError("cli-missing", ["node_modules/supabase"]);
+  const entry = cliEntry(deps);
   // Node cannot run .cmd shims without a shell, and a shell would open argument injection: run the JS entry directly.
   const result = (deps.spawn ?? spawnSync)(
     process.execPath,
-    [path.join(packageDir, bin), ...args, "--db-url", target.dbUrl],
+    [entry, ...args, "--db-url", target.dbUrl],
     { shell: false, encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024, env: childEnv(deps.env ?? process.env) },
   );
   const secrets = { "admin-key": target.adminKey, "publishable-key": target.publishableKey, "db-url": target.dbUrl, "db-password": target.dbPassword, ref: target.projectId, host: `${target.projectId}.supabase.co` };
   (deps.out ?? ((text) => process.stdout.write(text)))(redact(result.stdout ?? "", secrets));
   (deps.err ?? ((text) => process.stderr.write(text)))(redact(result.stderr ?? "", secrets));
   return typeof result.status === "number" ? result.status : 1;
+}
+
+const EVIDENCE_DIR = path.join(REPO_ROOT, ".planning", "phases", "PORTIA-16-kanonicheskiy-supabase-staging-i-sql-istina", "evidence");
+const FINGERPRINT_SQL = path.join(REPO_ROOT, "supabase", "fingerprint", "portia_schema_fingerprint.sql");
+
+// D1: the isolated project is built only from supabase/migrations through `db push`, then the journal is listed.
+export function push(env, deps = {}) {
+  const target = resolveStagingTarget(env, deps);
+  // Non-interactive confirmation flag confirmed via `cli-help db push`: global --yes.
+  const code = runCli(["db", "push", "--yes"], target, deps);
+  return code === 0 ? runCli(["migration", "list"], target, deps) : code;
+}
+
+// Runs the read-only fingerprint file, canonicalizes the one-cell result and writes evidence/fingerprint-<label>.json.
+// The CLI has no read-only switch for `db query`: read-only is proven statically (lib/phase16-fingerprint.test.ts).
+export function fingerprint(label, env, deps = {}) {
+  if (!/^[a-z0-9-]+$/u.test(label ?? "")) throw new StagingError("bad-label", ["fingerprint label"]);
+  const target = resolveStagingTarget(env, deps);
+  const fs = deps.fs ?? nodeFs;
+  let captured = "";
+  const code = runCli(["db", "query", "-f", deps.sqlFile ?? FINGERPRINT_SQL, "-o", "json"], target, { ...deps, out: (text) => { captured += text; } });
+  if (code !== 0) return code;
+  let result;
+  try {
+    result = canonicalize(extractFingerprint(captured));
+  } catch {
+    throw new StagingError("fingerprint-unparseable", ["db query output"]);
+  }
+  const dir = deps.evidenceDir ?? EVIDENCE_DIR;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `fingerprint-${label}.json`), `${JSON.stringify(result, null, 2)}\n`);
+  (deps.out ?? ((text) => process.stdout.write(text)))(`${JSON.stringify({ label, pg_major: result.pg_major, inventory: inventory(result) })}\n`);
+  return 0;
 }
 
 export async function attest(env, deps = {}) {
@@ -226,6 +275,9 @@ export async function main(argv, deps = {}) {
   const secrets = secretTable(env);
   const [command, ...rest] = argv;
   try {
+    if (command === "cli-help") return cliHelp(rest, deps);
+    if (command === "push" && rest.length === 0) return push(env, deps);
+    if (command === "fingerprint" && rest.length === 1) return fingerprint(rest[0], env, deps);
     if (command === "attest") {
       out(`${JSON.stringify(await attest(env, deps))}\n`);
       return 0;
@@ -246,7 +298,7 @@ export async function main(argv, deps = {}) {
     err(`${redact(error instanceof Error ? error.message : "[PORTIA_STAGING:internal]", secrets)}\n`);
     return 1;
   }
-  err("[PORTIA_STAGING:usage] Subcommands: attest | self-test-production-block | scan-evidence <dir>\n");
+  err("[PORTIA_STAGING:usage] Subcommands: attest | self-test-production-block | scan-evidence <dir> | cli-help <words...> | push | fingerprint <label>\n");
   return 2;
 }
 
