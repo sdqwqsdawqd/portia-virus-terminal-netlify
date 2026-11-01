@@ -18,7 +18,7 @@
 -- privileges show up as a diff. Compare outputs only when pg_major and search_path are equal (the comparator
 -- refuses otherwise): type and expression text depends on search_path.
 --
--- NOT YET EXECUTED against a live Postgres: syntax and semantics are calibrated in plan 16-10 (assumption A11).
+-- Executed and calibrated on a live Postgres 17 in plan 16-10 (assumption A11): deterministic across runs.
 
 with
 ext as (
@@ -56,7 +56,7 @@ fnset as (
 ),
 acl_src as (
   select 'rel' as t, r.nsp || '.' || r.name as k,
-    coalesce(r.racl, acldefault(case when r.kind = 'S' then 's' else 'r' end, r.rowner)) as a
+    coalesce(r.racl, acldefault((case when r.kind = 'S' then 's' else 'r' end)::"char", r.rowner)) as a
   from relset r
   union all
   select 'col', r.nsp || '.' || r.name || '.' || att.attname::text, att.attacl
@@ -64,10 +64,10 @@ acl_src as (
   join pg_attribute att on att.attrelid = r.rid
   where r.nsp = 'public' and r.kind in ('r', 'p', 'f') and att.attnum > 0 and not att.attisdropped and att.attacl is not null
   union all
-  select 'fn', f.k, coalesce(f.facl, acldefault('f', f.fowner))
+  select 'fn', f.k, coalesce(f.facl, acldefault('f'::"char", f.fowner))
   from fnset f
   union all
-  select 'nsp', n.nspname::text, coalesce(n.nspacl, acldefault('n', n.nspowner))
+  select 'nsp', n.nspname::text, coalesce(n.nspacl, acldefault('n'::"char", n.nspowner))
   from pg_namespace n
   where n.nspname in ('public', 'storage')
   union all

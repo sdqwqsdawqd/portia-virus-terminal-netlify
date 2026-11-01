@@ -20,6 +20,7 @@ const frozenLegacyHashes: Record<string, string> = {
 // Forward-only: never edit a pinned entry; a schema change is a NEW migration plus a NEW line here.
 const migrationHashes: Record<string, string> = {
   "20261101000000_portia_baseline.sql": "1d4a27a3a6933e88f8048623d2aa454c6c7a37dc15bf6c05ca8440be7fd284be",
+  "20261101000100_portia_explicit_grants.sql": "d6588aeafe9d2aa407734a115b9b6916f815ffe54cab65f9686f3f01d2cac954",
 };
 
 const baselineName = "20261101000000_portia_baseline.sql";
