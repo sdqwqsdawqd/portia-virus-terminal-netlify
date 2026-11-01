@@ -18,6 +18,7 @@ const fnKey = "public.portia_x(p_a text)";
 const make = (overrides: Record<string, unknown> = {}) => ({
   schema: "portia-fingerprint-v1",
   pg_major: 17,
+  search_path: '"$user", public',
   sections: {
     extensions: { pg_cron: true, plpgsql: true },
     functions: {
@@ -41,8 +42,30 @@ test("same content with different key order is equal with equal section hashes",
   // rebuild functions in reverse key order
   b.sections.functions = Object.fromEntries(Object.entries(b.sections.functions).reverse());
   b.sections.functions[fnKey] = { config: ["search_path=\"\""], acl: ["authenticated:EXECUTE"], secdef: true };
-  assert.deepEqual(diffFingerprints(a, b), { comparable: true, equal: true, diff: {} });
+  assert.deepEqual(diffFingerprints(a, b), { comparable: true, equal: true, diff: {}, info: {} });
   assert.deepEqual(sectionHashes(a), sectionHashes(b));
+});
+
+test("different search_path is incomparable like pg_major", () => {
+  assert.deepEqual(diffFingerprints(make(), make({ search_path: "public" })), {
+    comparable: false,
+    reason: "search-path",
+  });
+});
+
+test("a diff touching only the privileged API role ACL entries is tagged info but still a diff", () => {
+  const withRole = JSON.parse(JSON.stringify(make()));
+  withRole.sections.functions[fnKey].acl = ["authenticated:EXECUTE", "service_role:EXECUTE"];
+  const onlyRole = diffFingerprints(make(), withRole);
+  assert.equal(onlyRole.equal, false);
+  assert.deepEqual(onlyRole.diff, { functions: [fnKey] });
+  assert.deepEqual(onlyRole.info, { functions: [fnKey] });
+
+  const both = JSON.parse(JSON.stringify(withRole));
+  both.sections.functions[fnKey].acl.push("PUBLIC:EXECUTE");
+  const mixed = diffFingerprints(make(), both);
+  assert.deepEqual(mixed.diff, { functions: [fnKey] });
+  assert.deepEqual(mixed.info, {});
 });
 
 test("one changed ACL names only its section and key", () => {
@@ -190,16 +213,57 @@ test("query_to_xml payload literals are read-only SELECTs", () => {
   assert.doesNotMatch(code, /\bcron\.job\b/i);
 });
 
+test("exactly one query_to_xml, whose first argument is a single string literal", () => {
+  const uncommented = stripComments(sqlText);
+  assert.equal([...uncommented.matchAll(/query_to_xml\s*\(/gi)].length, 1);
+  // A literal directly followed by the next argument rules out concatenation or computed SQL.
+  assert.equal([...uncommented.matchAll(/query_to_xml\s*\(\s*'(?:[^']|'')*'\s*,/gi)].length, 1);
+});
+
+test("no state-changing or exfiltrating function appears anywhere, literals included", () => {
+  const uncommented = stripComments(sqlText).toLowerCase();
+  for (const needle of [
+    "nextval(", "setval(", "set_config(", "pg_notify(", "pg_advisory", "net.http", "http_post", "dblink",
+    "lo_import", "lo_export", "pg_read_file", "pg_read_binary_file", "pg_terminate_backend",
+    "pg_cancel_backend", "cron.schedule", "cron.unschedule", "vault",
+  ]) {
+    assert.ok(!uncommented.includes(needle), `denylisted: ${needle}`);
+  }
+});
+
+test("header tells the operator to wrap the query in a read-only transaction (instruction text only)", () => {
+  const header = sqlText.split("\nwith\n")[0];
+  assert.match(header, /begin read only;[\s\S]*rollback;/i);
+  assert.doesNotMatch(code, /\bread\b/i);
+});
+
+test("raw cron command text is never emitted, only its hash and an expected-command flag", () => {
+  const uncommented = stripComments(sqlText);
+  assert.ok(uncommented.includes("'command_sha256'") && uncommented.includes("'command_is_expected'"));
+  // The key 'command' (followed by a comma) would be a raw output; `path 'command'` ends a column list.
+  assert.doesNotMatch(uncommented, /'command'\s*,/);
+  assert.ok(uncommented.includes("'username'"));
+});
+
 test("fingerprint SQL covers the required catalog functions and sections", () => {
   for (const needle of [
     'collate "C"', "aclexplode", "acldefault", "pg_get_function_identity_arguments", "pg_get_expr",
     "pg_get_constraintdef", "pg_get_indexdef", "convalidated", "attacl", "pg_get_function_result",
     "prosecdef", "provolatile", "proconfig", "sha256", "relrowsecurity", "relforcerowsecurity",
     "polcmd", "polpermissive", "polroles", "portia-media", "portia-promo-cleanup",
+    "reloptions", "pg_get_viewdef", "pg_rewrite", "pg_get_triggerdef", "tgenabled", "tgisinternal",
+    "nspacl", "pg_default_acl", "pg_publication_tables", "rolbypassrls", "rolsuper", "pg_auth_members",
+    "command_sha256", "command_is_expected", "current_setting('search_path')", "chr(13)",
+    "'storage'", "'objects'", "'buckets'", "position('portia_' in", "prosecdef",
   ]) {
     assert.ok(sqlText.includes(needle), `missing: ${needle}`);
   }
-  for (const section of ["extensions", "tables", "columns", "constraints", "indexes", "functions", "policies", "bucket", "cron"]) {
+  // C1: every policy on storage.objects/buckets is fingerprinted, not only %PORTIA% names.
+  assert.doesNotMatch(code, /polname\s+like/i);
+  for (const section of [
+    "extensions", "roles", "schemas", "default_acls", "tables", "columns", "constraints", "indexes", "triggers",
+    "functions", "policies", "publications", "bucket", "cron",
+  ]) {
     assert.ok(sqlText.includes(`'${section}',`), `missing section: ${section}`);
   }
   assert.ok(sqlText.includes("'portia-fingerprint-v1'"));
@@ -208,20 +272,45 @@ test("fingerprint SQL covers the required catalog functions and sections", () =>
 test("fingerprint SQL emits no ordinals, owners, versions, credentials or raw rows", () => {
   // attnum and owner oids may only be join keys or acldefault() arguments, never output.
   const noJoinUse = code
-    .replace(/d\.adnum = a\.attnum/g, "")
-    .replace(/a\.attnum > 0/g, "")
+    .replace(/d\.adnum = att\.attnum/g, "")
+    .replace(/att\.attnum > 0/g, "")
+    .replace(/c\.relowner as rowner/g, "")
+    .replace(/p\.proowner as fowner/g, "")
     .replace(/acldefault\([^)]*\)/g, "");
   assert.doesNotMatch(noJoinUse, /\battnum\b|\b(proowner|relowner|nspowner)\b/i);
   assert.doesNotMatch(code, /\bextversion\b|\bjsonb_pretty\b/i);
-  assert.doesNotMatch(code, /\b(pg_authid|pg_shadow|pg_user_mapping|pg_roles|rolname|rolpassword|row_to_json|to_json)\b/i);
+  // pg_roles is allowed only through explicit columns; password hashes live in pg_authid/rolpassword.
+  assert.doesNotMatch(code, /\b(pg_authid|pg_shadow|pg_user_mapping|rolpassword|rolconfig|row_to_json|to_json)\b/i);
   assert.doesNotMatch(code, /to_jsonb\(\s*(?!true\b|false\b)[a-z_]+\s*\)/i);
-  assert.doesNotMatch(code, /\bas oid\b|\bselect\s+\*|,\s*\*\s*from/i);
+  assert.doesNotMatch(code, /\bas oid\b|\bselect\s+\*|,\s*\*\s*from|\w\.\*/i);
+  assert.ok(code.includes("rolbypassrls") && code.includes("rolsuper"));
 });
 
-test("ACL grantee filter is limited to PUBLIC and three fixed Supabase roles", () => {
-  const filters = [...code.matchAll(/in \('', '', ''\)/g)];
-  assert.equal(filters.length, 3, "relation, column and function ACL each need the filter");
-  const roles = [...stripComments(sqlText).matchAll(/in \('([a-z_]+)', '([a-z_]+)', '([a-z_]+)'\)/g)];
-  for (const m of roles) assert.deepEqual([m[1], m[2], m[3]], ["anon", "authenticated", "service_role"]);
+test("ACL grantee filter is limited to PUBLIC and the three fixed Supabase roles, in one place", () => {
+  const uncommented = stripComments(sqlText);
+  assert.equal([...uncommented.matchAll(/aclexplode\s*\(/gi)].length, 1, "one shared aclexplode");
+  // Role names are longer than the one-letter relkind lists that also use in (...).
+  const filters = [...uncommented.matchAll(/in \('([a-z_]{4,})', '([a-z_]{4,})', '([a-z_]{4,})'\)/g)];
+  assert.equal(filters.length, 1);
+  assert.deepEqual([filters[0][1], filters[0][2], filters[0][3]], ["anon", "authenticated", "service_role"]);
+});
+
+test("role facts cover exactly the four API roles", () => {
+  const m = stripComments(sqlText).match(/where r\.rolname in \(([^)]*)\)/);
+  assert.ok(m, "roles filter missing");
+  assert.deepEqual(
+    [...m[1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]),
+    ["anon", "authenticated", "authenticator", "service_role"],
+  );
+});
+
+test("extensions are an allowlist, not the full installed set", () => {
+  const m = stripComments(sqlText).match(/unnest\(array\[([^\]]*)\]\) as a\(n\)/);
+  assert.ok(m, "extension allowlist missing");
+  assert.deepEqual(
+    [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]),
+    ["pg_cron", "pgcrypto", "pg_net", "uuid-ossp", "plpgsql"],
+  );
+  assert.doesNotMatch(code, /from pg_extension e\s*(order|\)|$)/i);
 });
 

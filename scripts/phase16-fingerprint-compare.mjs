@@ -85,11 +85,23 @@ export function inventory(fingerprint) {
   );
 }
 
+// The privileged Supabase API role differs between hosted projects and default-privilege eras; a diff that
+// touches only its ACL entries is still listed (and still exit 1) but tagged as info.
+const PRIVILEGED_ACL_PREFIX = "service_role:";
+
+function withoutPrivilegedAcl(value) {
+  if (!isObject(value) || !Array.isArray(value.acl)) return value;
+  return { ...value, acl: value.acl.filter((entry) => !String(entry).startsWith(PRIVILEGED_ACL_PREFIX)) };
+}
+
 export function diffFingerprints(a, b) {
   validate(a);
   validate(b);
   if (a.pg_major !== b.pg_major) return { comparable: false, reason: "pg-major" };
+  // Type and expression text from the catalog depends on search_path, so a mismatch cannot be compared.
+  if (a.search_path !== b.search_path) return { comparable: false, reason: "search-path" };
   const diff = {};
+  const info = {};
   for (const section of [...new Set([...Object.keys(a.sections), ...Object.keys(b.sections)])].sort()) {
     const left = a.sections[section] ?? null;
     const right = b.sections[section] ?? null;
@@ -99,10 +111,14 @@ export function diffFingerprints(a, b) {
       continue;
     }
     for (const key of [...new Set([...Object.keys(left), ...Object.keys(right)])].sort()) {
-      if (stable(left[key]) !== stable(right[key])) (diff[section] ??= []).push(key);
+      if (stable(left[key]) === stable(right[key])) continue;
+      (diff[section] ??= []).push(key);
+      if (stable(withoutPrivilegedAcl(left[key])) === stable(withoutPrivilegedAcl(right[key]))) {
+        (info[section] ??= []).push(key);
+      }
     }
   }
-  return { comparable: true, equal: Object.keys(diff).length === 0, diff };
+  return { comparable: true, equal: Object.keys(diff).length === 0, diff, info };
 }
 
 function load(file) {
@@ -113,7 +129,7 @@ function main(args) {
   if (args[0] === "--summary" && args.length === 2) {
     const fingerprint = load(args[1]);
     process.stdout.write(
-      `${JSON.stringify({ pg_major: fingerprint.pg_major, inventory: inventory(fingerprint), sha256: sectionHashes(fingerprint) }, null, 2)}\n`,
+      `${JSON.stringify({ pg_major: fingerprint.pg_major, search_path: fingerprint.search_path ?? null, inventory: inventory(fingerprint), sha256: sectionHashes(fingerprint) }, null, 2)}\n`,
     );
     return 0;
   }
