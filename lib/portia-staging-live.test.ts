@@ -299,7 +299,10 @@ function registerLiveSuite(live: StagingLiveTarget) {
       const fingerprint = JSON.parse(readFileSync(golden, "utf8")) as { schema?: string; pg_major?: number; sections?: { functions?: Record<string, unknown> } };
       assert.equal(fingerprint.schema, "portia-fingerprint-v1");
       assert.ok(Number.isInteger(fingerprint.pg_major), "golden fingerprint has no pg_major");
-      const diff = diffSets(Object.keys(fingerprint.sections?.functions ?? {}), matrix.functions.map((fn) => fn.key));
+      const goldenKeys = Object.keys(fingerprint.sections?.functions ?? {});
+      // public.rls_auto_enable() is the Supabase platform event trigger (not in any repo SQL, returns event_trigger): pinned by name so a new foreign function still fails.
+      assert.deepEqual(goldenKeys.filter((key) => !key.startsWith("public.portia_")), ["public.rls_auto_enable()"]);
+      const diff = diffSets(goldenKeys.filter((key) => key.startsWith("public.portia_")), matrix.functions.map((fn) => fn.key));
       assert.deepEqual(diff, { missing: [], extra: [] }, `matrix rows without a live function: ${diff.missing.join("; ")}; live functions without a matrix row: ${diff.extra.join("; ")}`);
     });
 

@@ -70,7 +70,8 @@
   ],
   "notes": [
     "16-RESEARCH sketched outsider on reviewer RPCs as 42501; the SQL grants execute to authenticated, so an outsider reaches the gate and gets 'forbidden'. The matrix follows the SQL.",
-    "portia_promo_reset_device raises 'forbidden' for a reviewer without ownership (second raise), not 'owner-required'."
+    "portia_promo_reset_device raises 'forbidden' for a reviewer without ownership (second raise), not 'owner-required'.",
+    "Storage insert-oversize/insert-bad-mime: bucket limits (baseline lines 1639 file_size_limit, 1640 allowed_mime_types) are enforced by the Storage API before the insert policy (line 1655), so anon and outsider get http-413/http-415 like editors; observed live in 16-12 (no object is written, plain insert stays rls-deny)."
   ],
   "functions": [
     {
@@ -4026,14 +4027,12 @@
       },
       "insert-oversize": {
         "anon": {
-          "outcome": "rls-deny",
-          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1655",
-          "verify_live": true
+          "outcome": "http-413",
+          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1639"
         },
         "outsider": {
-          "outcome": "rls-deny",
-          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1655",
-          "verify_live": true
+          "outcome": "http-413",
+          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1639"
         },
         "editor-full": {
           "outcome": "http-413",
@@ -4058,14 +4057,12 @@
       },
       "insert-bad-mime": {
         "anon": {
-          "outcome": "rls-deny",
-          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1655",
-          "verify_live": true
+          "outcome": "http-415",
+          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1640"
         },
         "outsider": {
-          "outcome": "rls-deny",
-          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1655",
-          "verify_live": true
+          "outcome": "http-415",
+          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1640"
         },
         "editor-full": {
           "outcome": "http-415",
