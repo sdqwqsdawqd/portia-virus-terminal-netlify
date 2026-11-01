@@ -137,7 +137,7 @@ Plans:
   3. Каждый extraction increment можно откатить отдельно, не возвращая уже доказанные соседние seams и не вводя новый generic app shell.
 
 **Acceptance gate**: Декомпозиция начинается только после Phase 15 baseline и проходит parity-gate после каждого increment; намеренные UX-изменения сюда не входят.
-**Plans:** 3/7 plans executed
+**Plans:** 4/7 plans executed
 
 Plans:
 **Wave 1**
@@ -150,7 +150,7 @@ Plans:
 - [x] 17-03-PLAN.md — просмотр досье и FormattedText в отдельном модуле для 17.1
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 17-04-PLAN.md — форматирование текста (FormattedTextarea, панель, ActiveFormatContext) для 17.1
+- [x] 17-04-PLAN.md — форматирование текста (FormattedTextarea, панель, ActiveFormatContext) для 17.1
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 17-05-PLAN.md — контракт открытия окна (STAB-DESK-01): чистые функции, инвентаризация D-06, e2e
@@ -252,7 +252,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 15. Восстановление контроля, контракты и браузерный baseline | 16/16 | In Progress|  |
 | 16. Канонический Supabase staging и SQL-истина | 0/TBD | Not started | - |
-| 17. Обратимая декомпозиция рабочего стола и редактора | 3/7 | In Progress | - |
+| 17. Обратимая декомпозиция рабочего стола и редактора | 4/7 | In Progress | - |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
 | 19. Доказательство «Повышения» и точечная стабилизация | 0/TBD | Not started | - |
 | 20. Стабилизация приложений, редактора, поиска и медиа | 0/TBD | Not started | - |
