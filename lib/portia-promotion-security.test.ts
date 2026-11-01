@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { promotionReviewerDecision, createPreviewToken, verifyPreviewToken } from "./portia-promotion-reviewer.ts";
+import { promotionReviewerDecision } from "./portia-promotion-reviewer.ts";
+import { createPreviewToken, verifyPreviewToken } from "./portia-promotion-preview-token.ts";
 
 const sql = readFileSync(new URL("../supabase/phase14_apply.sql", import.meta.url), "utf8");
 const route = (name: string) => readFileSync(new URL(`../app/api/promotion/${name}/route.ts`, import.meta.url), "utf8");

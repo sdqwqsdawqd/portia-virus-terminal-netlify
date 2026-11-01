@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
-  createPreviewToken,
   parsePromotionBankCommand,
   parsePromotionReviewerCommand,
   promotionReviewerDecision,
@@ -14,8 +13,8 @@ import {
   selectTaskPreview,
   taskBankLimitError,
   validateQuestionDraft,
-  verifyPreviewToken,
 } from "./portia-promotion-reviewer.ts";
+import { createPreviewToken, verifyPreviewToken } from "./portia-promotion-preview-token.ts";
 
 test("promotion reviewer boundary fails closed and requires the trusted promo tab", () => {
   assert.equal(promotionReviewerDecision(false, null), "forbidden");

@@ -1,7 +1,6 @@
 import { noStoreHeaders } from "@/lib/portia-cdn";
 import { promotionDeviceSecret } from "@/lib/portia-device-binding";
 import {
-  createPreviewToken,
   parsePromotionBankCommand,
   qualificationBankLimitError,
   replacePreviewItem,
@@ -9,10 +8,10 @@ import {
   selectQualificationPreview,
   selectTaskPreview,
   taskBankLimitError,
-  verifyPreviewToken,
   type QualificationPreviewItem,
   type TaskPreviewItem,
 } from "@/lib/portia-promotion-reviewer";
+import { createPreviewToken, verifyPreviewToken } from "@/lib/portia-promotion-preview-token";
 import { parseJsonObject } from "@/lib/request-json";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
