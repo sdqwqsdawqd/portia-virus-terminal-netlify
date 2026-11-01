@@ -16,6 +16,10 @@ import {
   cliHelp,
   fingerprint,
   push,
+  teardown,
+  asSingleStatement,
+  extractStep,
+  upgradeLadder,
 } from "../scripts/phase16-staging.mjs";
 
 const ref = "aaaaaaaaaaaaaaaaaaaa";
@@ -323,6 +327,174 @@ describe("cli-help, push and fingerprint (16-10)", () => {
     assert.deepEqual(Object.keys(written), ["fingerprint-fresh-1.json"]);
     assert.equal(codeOf(() => fingerprint("Bad_Label", env, { ...deps, spawn: bad.spawn })), "bad-label");
     assert.equal(codeOf(() => fingerprint("x", { ...env, PORTIA_STAGING_DB_URL: undefined }, { ...deps, spawn: bad.spawn })), "missing-environment");
+  });
+});
+
+describe("teardown, extractStep and upgrade-ladder (16-11)", () => {
+  const quiet = { out: () => undefined, err: () => undefined };
+  const phase12 = readFileSync(new URL("../supabase/phase12_apply.sql", import.meta.url), "utf8");
+  const teardownSql = readFileSync(new URL("../supabase/teardown/portia_teardown.sql", import.meta.url), "utf8");
+  const payload = JSON.stringify([{ fingerprint: { schema: "portia-fingerprint-v1", pg_major: 17, sections: {} } }]);
+
+  // Fake fs: package manifest for the CLI, real SQL for the three source files, in-memory scratch/evidence.
+  function harness(overrides: { spawn?: (args: string[]) => { status: number; stdout?: string } } = {}) {
+    const log: string[] = [];
+    const written: Record<string, string> = {};
+    const argvs: string[][] = [];
+    const deps = {
+      root: "/repo",
+      ...quiet,
+      env,
+      tmpdir: "/scratch",
+      fs: {
+        existsSync: () => false,
+        readFileSync: (p: string) => {
+          if (p.endsWith("package.json")) return JSON.stringify({ bin: { supabase: "bin/supabase.js" } });
+          if (p.endsWith("phase12_apply.sql")) return phase12;
+          if (p.endsWith("portia_teardown.sql")) return teardownSql;
+          return `-- contents of ${path.basename(p)}\n`;
+        },
+        mkdtempSync: (prefix: string) => {
+          log.push("mkdtemp");
+          return `${prefix}x`;
+        },
+        writeFileSync: (p: string, text: string) => {
+          written[path.basename(p)] = text;
+        },
+        mkdirSync: () => undefined,
+        rmSync: () => log.push("rm-scratch"),
+      },
+      spawn: (_command: string, args: string[]) => {
+        argvs.push(args.slice(1));
+        log.push(`cli:${args[1]}${args[1] === "db" ? ` ${args[2]}` : ""}`);
+        return overrides.spawn?.(args.slice(1)) ?? { status: 0, stdout: args.includes("-o") ? payload : "", stderr: "" };
+      },
+    };
+    return { deps, log, written, argvs };
+  }
+
+  const bucketClient = (log: string[], errors: Record<string, { status?: number; message: string } | null> = {}) => ({
+    storage: {
+      emptyBucket: async (name: string) => {
+        log.push(`bucket-empty:${name}`);
+        return { error: errors.empty ?? null };
+      },
+      deleteBucket: async (name: string) => {
+        log.push(`bucket-delete:${name}`);
+        return { error: errors.delete ?? null };
+      },
+    },
+  });
+
+  test("teardown empties and deletes the bucket first, then runs only the teardown SQL with the session switch", async () => {
+    const h = harness();
+    assert.equal(await teardown(env, { ...h.deps, createClient: () => bucketClient(h.log) }), 0);
+    assert.deepEqual(h.log, ["bucket-empty:portia-media", "bucket-delete:portia-media", "mkdtemp", "cli:db query", "rm-scratch"]);
+    assert.equal(h.argvs.length, 1);
+    assert.deepEqual(h.argvs[0].slice(0, 3), ["db", "query", "-f"]);
+    assert.ok(h.argvs[0][3].includes("scratch"), h.argvs[0][3]);
+    assert.deepEqual(h.argvs[0].slice(4), ["--db-url", dbUrl]);
+    const sql = h.written["teardown.sql"];
+    assert.equal(sql, asSingleStatement(teardownSql, "select set_config('portia.teardown_ok', 'yes', false);\n"));
+    assert.ok(sql.startsWith("do $portia_do$ begin execute $portia_sql$\nselect set_config('portia.teardown_ok', 'yes', false);\n"));
+  });
+
+  test("asSingleStatement drops only top-level begin/commit lines of the real scripts and refuses tag collisions", () => {
+    const files = ["phase12_apply.sql", "phase14_apply.sql", "teardown/portia_teardown.sql", "upgrade-fixtures/L0_pre_phase12_portia_setup.sql"];
+    for (const file of files) {
+      const text = readFileSync(new URL(`../supabase/${file}`, import.meta.url), "utf8");
+      const topLevel = text.split(/\r?\n/u).filter((line) => /^(begin|commit);\s*$/iu.test(line)).length;
+      const wrapped = asSingleStatement(text);
+      assert.equal(wrapped.split(/\r?\n/u).filter((line) => /^(begin|commit);\s*$/iu.test(line)).length, 0, file);
+      assert.equal(wrapped.split(/\r?\n/u).length, text.split(/\r?\n/u).length + 3, `${file} lost lines beyond begin/commit (${topLevel})`);
+      assert.ok(wrapped.endsWith("\n$portia_sql$; end $portia_do$;\n"));
+    }
+    assert.equal(codeOf(() => asSingleStatement("select $portia_sql$;")), "sql-tag-collision");
+  });
+
+  test("a missing bucket is not an error; any other Storage failure stops before SQL", async () => {
+    const absent = harness();
+    const gone = { status: 404, message: "Bucket not found" };
+    assert.equal(await teardown(env, { ...absent.deps, createClient: () => bucketClient(absent.log, { empty: gone, delete: gone }) }), 0);
+    assert.equal(absent.argvs.length, 1);
+
+    const broken = harness();
+    await assert.rejects(
+      teardown(env, { ...broken.deps, createClient: () => bucketClient(broken.log, { delete: { status: 500, message: "boom" } }) }),
+      (e: StagingError) => e.code === "bucket-delete-failed",
+    );
+    assert.equal(broken.argvs.length, 0);
+  });
+
+  test("teardown refuses without a target or with a production ref before any client or spawn", async () => {
+    for (const bad of [{ ...env, PORTIA_E2E_PRODUCTION_PROJECT_IDS: "" }, { ...env, PORTIA_E2E_TARGET_ID: prod, PORTIA_E2E_SUPABASE_URL: `https://${prod}.supabase.co`, NEXT_PUBLIC_SUPABASE_URL: `https://${prod}.supabase.co` }, {}]) {
+      const h = harness();
+      let clients = 0;
+      await assert.rejects(teardown(bad, { ...h.deps, createClient: () => { clients += 1; return bucketClient(h.log); } }));
+      assert.deepEqual([clients, h.argvs.length], [0, 0]);
+    }
+  });
+
+  test("extractStep returns STEP 2 and STEP 2b of the real phase12 file and nothing of STEP 0/1/3/4", () => {
+    const two = extractStep(phase12, "2");
+    const twoB = extractStep(phase12, "2b");
+    assert.match(two, /^-- STEP 2 APPLY/u);
+    assert.match(two, /\nbegin;/u);
+    assert.match(two, /\ncommit;/u);
+    assert.match(twoB, /^-- STEP 2b/u);
+    assert.match(twoB, /validate constraint portia_employee_profiles_photo_url_local/u);
+    for (const block of [two, twoB]) {
+      assert.equal(block.split("\n").filter((line: string) => line.startsWith("-- STEP ")).length, 1);
+      assert.ok(!block.includes("STEP 4 ROLLBACK"));
+    }
+    assert.equal(codeOf(() => extractStep(phase12, "9")), "step-missing");
+  });
+
+  const fakeRun = (log: string[], residual = 0) => ({
+    createOwnerFixture: async () => { log.push("owner-create"); },
+    cleanup: async () => { log.push("owner-cleanup"); },
+    residual: async () => ({ authUsers: residual }),
+  });
+
+  test("ladder runs owner fixture, L0, STEP 2, STEP 2b, phase14, U0, push, U in order and removes the fixture", async () => {
+    const h = harness();
+    assert.equal(await upgradeLadder(env, { ...h.deps, createRun: () => fakeRun(h.log) }), 0);
+    assert.deepEqual(h.log.filter((x) => x.startsWith("owner")), ["owner-create", "owner-cleanup"]);
+    assert.equal(h.log[0], "owner-create");
+    const files = h.argvs.map((a) => (a[0] === "db" && a[1] === "query" ? path.basename(a[3]) : a.slice(0, 2).join(" ")));
+    assert.deepEqual(files, [
+      "L0.sql",
+      "step2.sql",
+      "step2b.sql",
+      "phase14.sql",
+      "portia_schema_fingerprint.sql",
+      "db push",
+      "migration list",
+      "portia_schema_fingerprint.sql",
+    ]);
+    assert.equal(h.written["step2.sql"], asSingleStatement(extractStep(phase12, "2")));
+    assert.equal(h.written["step2b.sql"], asSingleStatement(extractStep(phase12, "2b")));
+    assert.equal(h.log.filter((x) => x === "rm-scratch").length, 4);
+    assert.equal(h.log.at(-1), "owner-cleanup");
+    for (const argv of h.argvs) assert.ok(!argv.includes("--linked") && !argv.includes("reset"));
+  });
+
+  test("a failing stage is named, later stages do not run and the owner fixture is still removed", async () => {
+    const h = harness({ spawn: (args) => ({ status: args.some((a) => a.endsWith("step2.sql")) ? 1 : 0, stdout: "" }) });
+    await assert.rejects(upgradeLadder(env, { ...h.deps, createRun: () => fakeRun(h.log) }), (e: StagingError) => e.code === "ladder-phase12-step-2-exit-1");
+    assert.equal(h.argvs.length, 2);
+    assert.ok(h.log.includes("owner-cleanup"));
+  });
+
+  test("an owner fixture that survives cleanup fails a successful ladder", async () => {
+    const h = harness();
+    await assert.rejects(upgradeLadder(env, { ...h.deps, createRun: () => fakeRun(h.log, 1) }), (e: StagingError) => e.code === "owner-fixture-residual");
+  });
+
+  test("ladder and teardown dispatch through main; unknown arguments exit 2", async () => {
+    for (const argv of [["teardown", "x"], ["upgrade-ladder", "x"]]) assert.equal(await main(argv, { env, ...quiet }), 2);
+    assert.equal(await main(["teardown"], { env: {}, ...quiet }), 1);
+    assert.equal(await main(["upgrade-ladder"], { env: {}, ...quiet }), 1);
   });
 });
 

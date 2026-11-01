@@ -1,16 +1,19 @@
 import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs";
 import { spawnSync } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createClient } from "@supabase/supabase-js";
 import { canonicalize, extractFingerprint, inventory } from "./phase16-fingerprint-compare.mjs";
+import { createRun } from "../tests/e2e/fixtures/staging-harness.ts";
 import { assertAppBoundToTarget } from "../tests/e2e/fixtures/target-attestation.ts";
 import { requireSafeMutationTargetFromEnvironment } from "../tests/e2e/fixtures/target-guard.ts";
 
 // Single guarded path to the isolated Supabase project (Phase 16, D2/D3).
 // Values come only from the process environment: this file never reads env files and never prints values.
-// Subcommands: attest, self-test-production-block, scan-evidence <dir>, cli-help, push, fingerprint (16-10).
-// teardown/upgrade-ladder (16-11) build on resolveStagingTarget + runCli.
+// Subcommands: attest, self-test-production-block, scan-evidence <dir>, cli-help, push, fingerprint (16-10),
+// teardown, upgrade-ladder (16-11). All build on resolveStagingTarget + runCli.
 
 const ADMIN_KEY_VAR = "PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY";
 const PUBLISHABLE_KEY_VAR = "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY";
@@ -193,6 +196,123 @@ export function fingerprint(label, env, deps = {}) {
   return 0;
 }
 
+const MEDIA_BUCKET = "portia-media";
+const TEARDOWN_SQL = path.join(REPO_ROOT, "supabase", "teardown", "portia_teardown.sql");
+const L0_SQL = path.join(REPO_ROOT, "supabase", "upgrade-fixtures", "L0_pre_phase12_portia_setup.sql");
+const PHASE12_SQL = path.join(REPO_ROOT, "supabase", "phase12_apply.sql");
+const PHASE14_SQL = path.join(REPO_ROOT, "supabase", "phase14_apply.sql");
+
+const adminClient = (target, deps) =>
+  (deps.createClient ?? createClient)(target.url, target.adminKey, { auth: { autoRefreshToken: false, persistSession: false } });
+
+// Scratch files live outside the repo and are always removed.
+async function withScratch(deps, work) {
+  const fs = deps.fs ?? nodeFs;
+  const dir = fs.mkdtempSync(path.join(deps.tmpdir ?? os.tmpdir(), "portia-staging-"));
+  try {
+    return await work(dir, (name, text) => {
+      const file = path.join(dir, name);
+      fs.writeFileSync(file, text);
+      return file;
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// Same block rule as step() in lib/portia-sql.test.ts: from `-- STEP <id>` up to the next `-- STEP ` line (`2` never matches `2b`).
+export function extractStep(text, id) {
+  const lines = text.split(/\r?\n/u);
+  const start = lines.findIndex((line) => new RegExp(`^-- STEP ${id}\\b`, "u").test(line));
+  if (start < 0) throw new StagingError("step-missing", [`STEP ${id}`]);
+  const next = lines.slice(start + 1).findIndex((line) => line.startsWith("-- STEP "));
+  return lines.slice(start, next < 0 ? undefined : start + 1 + next).join("\n");
+}
+
+// `db query` sends one prepared statement ("cannot insert multiple commands"), and DO cannot run begin/commit.
+// So a multi-statement script becomes one DO block that EXECUTEs it (one transaction; top-level begin;/commit; lines dropped).
+// shortcut: assumes no top-level begin;/commit; line sits inside a function body and the file lacks the $portia_* tags; the unit test checks the real files.
+export function asSingleStatement(sql, preamble = "") {
+  if (/\$portia_(?:do|sql)\$/u.test(sql)) throw new StagingError("sql-tag-collision", ["sql file"]);
+  const body = sql.replace(/^(?:begin|commit);[ \t]*$/gimu, "");
+  return `do $portia_do$ begin execute $portia_sql$\n${preamble}${body}\n$portia_sql$; end $portia_do$;\n`;
+}
+
+// Runs one SQL text through the attested --db-url as a single statement. Not read-only: only teardown/ladder call it, with files from this repo.
+function runSql(name, sql, target, deps, preamble) {
+  return withScratch(deps, (_dir, write) => runCli(["db", "query", "-f", write(`${name}.sql`, asSingleStatement(sql, preamble))], target, deps));
+}
+
+const notFound = (error) => error && (String(error.status ?? error.statusCode) === "404" || /not.?found/iu.test(String(error.message)));
+
+// Teardown: the bucket goes through the Storage API (SQL cannot delete it), then PORTIA objects through the guarded SQL file.
+// The SQL file refuses to run unless this session sets portia.teardown_ok, which only this wrapper does.
+export async function teardown(env, deps = {}) {
+  const target = resolveStagingTarget(env, deps);
+  const fs = deps.fs ?? nodeFs;
+  const { storage } = adminClient(target, deps);
+  for (const [label, call] of [["empty", () => storage.emptyBucket(MEDIA_BUCKET)], ["delete", () => storage.deleteBucket(MEDIA_BUCKET)]]) {
+    const { error } = await call();
+    if (error && !notFound(error)) throw new StagingError(`bucket-${label}-failed`, ["Storage API"]);
+  }
+  const sql = fs.readFileSync(deps.teardownSql ?? TEARDOWN_SQL, "utf8");
+  return runSql("teardown", sql, target, deps, "select set_config('portia.teardown_ok', 'yes', false);\n");
+}
+
+// D4 ladder on one database: owner fixture -> L0 -> phase12 STEP 2 -> STEP 2b -> phase14 -> U0 -> push -> U.
+// Reports the failing stage by name; the owner fixture is removed in every case.
+export async function upgradeLadder(env, deps = {}) {
+  const target = resolveStagingTarget(env, deps);
+  const fs = deps.fs ?? nodeFs;
+  const live = {
+    target: { projectId: target.projectId },
+    url: target.url,
+    publishableKey: target.publishableKey,
+    adminKey: target.adminKey,
+    refHash: createHash("sha256").update(target.projectId).digest("hex").slice(0, 12),
+  };
+  const run = (deps.createRun ?? createRun)(live, deps.harness);
+  const read = (file) => fs.readFileSync(file, "utf8");
+  const phase12 = () => read(deps.phase12Sql ?? PHASE12_SQL);
+  const stages = [
+    ["L0", () => runSql("L0", read(deps.l0Sql ?? L0_SQL), target, deps)],
+    ["phase12-step-2", () => runSql("step2", extractStep(phase12(), "2"), target, deps)],
+    ["phase12-step-2b", () => runSql("step2b", extractStep(phase12(), "2b"), target, deps)],
+    ["phase14", () => runSql("phase14", read(deps.phase14Sql ?? PHASE14_SQL), target, deps)],
+    ["fingerprint-upgrade-legacy", () => fingerprint("upgrade-legacy", env, deps)],
+    ["push", () => push(env, deps)],
+    ["fingerprint-upgrade", () => fingerprint("upgrade", env, deps)],
+  ];
+  let failed;
+  try {
+    failed = "owner-fixture";
+    await run.createOwnerFixture();
+    for (const [name, work] of stages) {
+      failed = name;
+      const code = await work();
+      if (code !== 0) throw new StagingError(`ladder-${name}-exit-${code}`, ["wrapper arguments"]);
+    }
+    failed = undefined;
+  } catch (error) {
+    throw error instanceof StagingError ? error : new StagingError(`ladder-${failed}-failed`, ["wrapper arguments"]);
+  } finally {
+    let leftover = -1;
+    try {
+      await run.cleanup();
+    } catch {
+      // purge attempts every step; the residual check below decides
+    }
+    try {
+      leftover = (await run.residual()).authUsers;
+    } catch {
+      // table missing because the ladder stopped early: leftover stays -1 and is reported
+    }
+    (deps.out ?? ((text) => process.stdout.write(text)))(`${JSON.stringify({ ladder: failed ? `FAIL:${failed}` : "done", ownerFixtureResidual: leftover })}\n`);
+    if (leftover !== 0 && !failed) throw new StagingError("owner-fixture-residual", ["auth users"]);
+  }
+  return 0;
+}
+
 export async function attest(env, deps = {}) {
   const target = resolveStagingTarget(env, deps);
   const doFetch = deps.fetch ?? fetch;
@@ -278,6 +398,8 @@ export async function main(argv, deps = {}) {
     if (command === "cli-help") return cliHelp(rest, deps);
     if (command === "push" && rest.length === 0) return push(env, deps);
     if (command === "fingerprint" && rest.length === 1) return fingerprint(rest[0], env, deps);
+    if (command === "teardown" && rest.length === 0) return await teardown(env, deps);
+    if (command === "upgrade-ladder" && rest.length === 0) return await upgradeLadder(env, deps);
     if (command === "attest") {
       out(`${JSON.stringify(await attest(env, deps))}\n`);
       return 0;
@@ -298,7 +420,7 @@ export async function main(argv, deps = {}) {
     err(`${redact(error instanceof Error ? error.message : "[PORTIA_STAGING:internal]", secrets)}\n`);
     return 1;
   }
-  err("[PORTIA_STAGING:usage] Subcommands: attest | self-test-production-block | scan-evidence <dir> | cli-help <words...> | push | fingerprint <label>\n");
+  err("[PORTIA_STAGING:usage] Subcommands: attest | self-test-production-block | scan-evidence <dir> | cli-help <words...> | push | fingerprint <label> | teardown | upgrade-ladder\n");
   return 2;
 }
 
