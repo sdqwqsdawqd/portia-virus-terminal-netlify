@@ -10,7 +10,7 @@ import { accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes, 
 import { accentTokenNames, deriveAccentTokens } from "@/lib/accent-custom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
-import { openedWindow, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "@/lib/window-open";
+import { exitedWindow, openedWindow, originOf, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "@/lib/window-open";
 import { acceptFetchedContent } from "@/lib/content-sync";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
@@ -33,10 +33,6 @@ const embeddedApps = {
 // D-19: one permission set for every third-party frame. Scripts and same-origin let the viewers run, popups escape the sandbox so links open as normal tabs;
 // no top-navigation flag, so a frame can never move the PORTIA tab. If a device needs more, add only that one flag.
 const embedSandbox = "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox";
-const originOf = (element: Element, kind: OpenOrigin["kind"]): OpenOrigin => {
-  const rect = element.getBoundingClientRect();
-  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, kind };
-};
 // Must equal the window-close / window-minimize (full motion) and window-fade-out (reduced) durations in app/portia.css.
 const WINDOW_CLOSE_MS = 180;
 const WINDOW_MINIMIZE_MS = 320;
@@ -960,12 +956,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   // Functional update only: a late timer must never act on a stale render's windows.
   const finishExit = (appId: AppId, kind: "close" | "minimize") => {
-    setWindows((state) => ({
-      ...state,
-      [appId]: kind === "close"
-        ? { ...state[appId], open: false, minimized: false, maximized: false, exiting: undefined }
-        : { ...state[appId], minimized: true, exiting: undefined },
-    }));
+    setWindows((state) => ({ ...state, [appId]: exitedWindow(state[appId], kind) }));
   };
 
   // `force` is the editor's own dialog approving the close; minimize is never guarded (the window stays mounted).

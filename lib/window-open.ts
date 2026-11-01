@@ -27,3 +27,15 @@ export function openedWindow(state: WindowState, origin: OpenOrigin | undefined,
     geometry: state.geometry ? fitGeometry(state.geometry, bounds, minimum) : create(),
   };
 }
+
+export const originOf = (element: Element, kind: OpenOrigin["kind"]): OpenOrigin => {
+  const rect = element.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, kind };
+};
+
+/** Result of a finished exit: close drops open and maximized, minimise only hides; geometry, z and origin stay. */
+export function exitedWindow(state: WindowState, kind: "close" | "minimize"): WindowState {
+  return kind === "close"
+    ? { ...state, open: false, minimized: false, maximized: false, exiting: undefined }
+    : { ...state, minimized: true, exiting: undefined };
+}

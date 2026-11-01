@@ -161,15 +161,21 @@ test("leaving a window only touches window, active app and editor close request 
   assert.ok(bodyAfter('const finishExit = (appId: AppId, kind: "close" | "minimize") => {').includes("exitedWindow(state[appId], kind)"));
 });
 
+/** True when `text` declares `name` as a useState pair. */
+function declaresState(text: string, name: string): boolean {
+  const at = text.indexOf(`const [${name}, set`);
+  return at >= 0 && text.slice(at, at + 90).includes("] = useState");
+}
+
 test("state kept when a window is closed lives in PortiaDesktop, state reset on close lives inside the window body (D-06)", () => {
   const start = source.indexOf("export function PortiaDesktop");
   assert.ok(start >= 0);
   const desktop = source.slice(start, source.indexOf("\n}\n", start));
   const kept = ["activeVirusId", "virusQuery", "openLog", "globalQuery", "selectedEmployeeId", "employeeQuery", "selectedInfoId", "guideCardId", "broadcastTab", "activeTrashFileId", "desktopSettings", "shortcutPositions", "accentPickerOpen", "accentDraft", "settingsSavedVisible", "broadcastUnread", "openTabs", "canEdit"];
-  for (const name of kept) assert.ok(new RegExp(`const \[${name}, set\w+\] = useState`).test(desktop), `${name} must be PortiaDesktop state`);
+  for (const name of kept) assert.ok(declaresState(desktop, name), `${name} must be PortiaDesktop state`);
   for (const name of ["zoom", "ctrlHeld", "frameLoading"]) {
-    assert.ok(!new RegExp(`const \[${name}, set\w+\] = useState`).test(desktop), `${name} must not be PortiaDesktop state`);
-    assert.ok(new RegExp(`const \[${name}, set\w+\] = useState`).test(source), `${name} is expected in EmbeddedDocument`);
+    assert.ok(!declaresState(desktop, name), `${name} must not be PortiaDesktop state`);
+    assert.ok(declaresState(source, name), `${name} is expected in EmbeddedDocument`);
   }
   assert.ok(source.includes("if (!state.open) return null;"));
   assert.ok(!/if \([^)\n]*minimized[^)\n]*\) return null/.test(source));
