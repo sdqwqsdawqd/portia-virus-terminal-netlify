@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 // Files holding parts that Phase 17.1 reuses; 17-03 and 17-04 append one line each.
-const partFiles = ["portia-editor-dossier.tsx"];
+const partFiles = ["portia-editor-dossier.tsx", "portia-desktop-dossier.tsx"];
 
 test("17.1 parts stay server-agnostic (D-03)", () => {
   for (const file of partFiles) {
