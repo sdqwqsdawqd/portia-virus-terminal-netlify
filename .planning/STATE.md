@@ -6,10 +6,10 @@ current_phase: 18
 current_phase_name: Рабочий стол, окна и живые анимации
 status: planning
 stopped_at: Phase PORTIA-15 complete, ready to plan Phase 18
-last_updated: "2026-11-01T19:05:10.693Z"
+last_updated: "2026-11-01T19:24:42.338Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase PORTIA-15 complete, transitioned to Phase 18
-state_head: cd85a8497d2e09679f8eaeac4653babfcffea067
+state_head: 5a8045ab50c7dbacf8fb141bdd6e3fb4e24f891d
 progress:
   total_phases: 8
   completed_phases: 3
@@ -138,6 +138,12 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 16] Dedicated isolated Supabase project/branch, credentials and disposable fixtures are not yet proven available.
 - [Phase 21] Security closure uses deep GSD review and the local auth/API/RLS/header/CSP/dependency/secret matrix with no external runtime prerequisite.
 - [Phase 22] Physical owner PC (including DPR 1.25) and phone UAT has not occurred and blocks milestone completion.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261102-07k | Окна: плитки держат размер, редактор листается целиком и заполняет полный экран, поиск показывает все рекомендации | 2026-11-02 | 5a8045a | [261102-07k-fix-window-resize-and-editor-scroll-layo](./quick/261102-07k-fix-window-resize-and-editor-scroll-layo/) |
 
 ## Deferred Items
 
