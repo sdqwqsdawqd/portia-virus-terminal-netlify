@@ -188,6 +188,6 @@ SKIP в visitor-прогоне (59): 52 пиксельный authority закр�
 | Физические устройства | BLOCKED | Phase 22 |
 | Применение `20261101000100` и `20261101000200` к production и повторный fingerprint (закрытие DRIFT, STAB-SEC-04) | не выполнено агентом | владелец, отдельным owner-run шагом, вне Phase 16 по D5 |
 | Management API автоматизация | отложено | D10 |
-| `supabase-rls-reviewer` для новой миграции `20261101000200` | требуется | оркестратор (в этом плане добавлен `supabase/migrations/*.sql`) |
+| `supabase-rls-reviewer` для новой миграции `20261101000200` | выполнено: critical/high нет; находка на prod оценена как medium (см. 16-14-SUMMARY) | оркестратор |
 
 Ни один BLOCKED или DRIFT не записан как pass.
