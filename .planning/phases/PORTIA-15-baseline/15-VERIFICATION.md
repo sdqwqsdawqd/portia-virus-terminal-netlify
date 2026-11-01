@@ -1,10 +1,11 @@
 ---
 phase: 15-baseline
-verified: 2026-11-01T12:00:00Z
+verified: 2026-11-01T18:00:00Z
 status: gaps_found
 score: 1/4 must-haves verified
 behavior_unverified: 0
 covered_files:
+  - ".env.example"
   - ".planning/phases/PORTIA-15-baseline/15-01-PLAN.md"
   - ".planning/phases/PORTIA-15-baseline/15-01-SUMMARY.md"
   - ".planning/phases/PORTIA-15-baseline/15-02-PLAN.md"
@@ -37,25 +38,38 @@ covered_files:
   - ".planning/phases/PORTIA-15-baseline/15-15-SUMMARY.md"
   - ".planning/phases/PORTIA-15-baseline/15-16-PLAN.md"
   - ".planning/phases/PORTIA-15-baseline/15-16-SUMMARY.md"
+  - ".planning/phases/PORTIA-15-baseline/15-17-PLAN.md"
+  - ".planning/phases/PORTIA-15-baseline/15-17-SUMMARY.md"
+  - ".planning/phases/PORTIA-15-baseline/15-18-PLAN.md"
+  - ".planning/phases/PORTIA-15-baseline/15-18-SUMMARY.md"
+  - ".planning/phases/PORTIA-15-baseline/15-19-PLAN.md"
+  - ".planning/phases/PORTIA-15-baseline/15-19-SUMMARY.md"
   - ".planning/phases/PORTIA-15-baseline/evidence/15-CANDIDATE-INDEX.json"
   - "components/portia-desktop.tsx"
+  - "lib/e2e-preflight.test.ts"
+  - "lib/e2e-visual-policy.test.ts"
   - "lib/phase15-visual-manifest.test.ts"
+  - "lib/security-headers.test.ts"
   - "next.config.ts"
   - "playwright.config.ts"
+  - "scripts/phase15-e2e-preflight.mjs"
   - "scripts/phase15-visual-manifest.mjs"
+  - "tests/e2e/README.md"
   - "tests/e2e/fixtures/actors.ts"
   - "tests/e2e/fixtures/diagnostics.ts"
   - "tests/e2e/fixtures/target-guard.ts"
+  - "tests/e2e/fixtures/visual-policy.ts"
   - "tests/e2e/specs/roles.spec.ts"
-covered_digest: "v3:sha256:a408d038a00f5163d66f221d774b3c4e2f4fc490897fe6f881425de37ada273c"
+covered_digest: "v3:sha256:4bb7da1a4618419fdd87a6054f55463f873c5a9f2edc8970e4e7946b2ee756df"
 re_verification:
   previous_status: gaps_found
   previous_score: 1/4
   gaps_closed:
-    - "G6: UI-map / approval verification не воспроизводились из tracked-файлов"
+    - "W1: PORTIA_E2E_ALLOW_HTTP не может снять upgrade-insecure-requests в сборке Netlify (NETLIFY=true или любой CONTEXT); доказано поведенческим тестом"
+    - "W2: 12 находок 15-REVIEW.md получили диспозицию; WR-03/04/05/06 и IN-05 исправлены в коде, IN-01 исправлен частично"
   gaps_remaining:
     - "G1: disposable authenticated roles и изолированный Supabase"
-    - "G2: read backing для 15 data-dependent Playwright-дорожек в чистом checkout"
+    - "G2: read backing для 15 data-dependent Playwright-дорожек"
     - "G3: 33 BLOCKED visual-строки"
     - "G4: 18 отклонённых motion-кандидатов"
     - "G5: физический PC/phone UAT"
@@ -63,10 +77,10 @@ re_verification:
 gaps:
   - truth: "Из чистого checkout запускается committed Playwright/axe suite для visitor, participant, editor, promo reviewer и owner на PC/phone с фиксированными данными и без мутаций production (SC2)"
     status: failed
-    reason: "G1+G2: все четыре привилегированные роли заблокированы (нет ни одного производителя server-probe sessionProof, нет изолированной цели), а 15 data-backed тестов требуют read backing; блокеры записаны как BLOCKED/skip, не как pass."
+    reason: "G1+G2: четыре привилегированные роли заблокированы (в репозитории нет производителя server-probe sessionProof, нет изолированной цели); 15 data-backed тестов требуют read backing. BLOCKED/skip не засчитаны как pass."
     artifacts:
       - path: "tests/e2e/fixtures/actors.ts"
-        issue: "READY возможен только при sessionProof source=server-probe; производителя proof в репозитории нет (grep: единственное упоминание в самом типе)"
+        issue: "READY возможен только при sessionProof source=server-probe; единственное упоминание server-probe - сам тип и проверка (строки 25, 89)"
       - path: "tests/e2e/specs/roles.spec.ts"
         issue: "participant/editor/promo-reviewer/owner дорожки всегда skip"
     missing:
@@ -75,7 +89,7 @@ gaps:
       - "Read-only источник данных для data-dependent lanes"
   - truth: "Одобренные visual baselines воспроизводят desktop, окна, Повышение, редактор, паука, паутину, Вивьян и phone layout (SC3)"
     status: failed
-    reason: "G3+G4: утверждено 33 состояния; 18 motion-кандидатов REJECTED (паук/паутина/ярлык), 33 состояния BLOCKED (привилегированные актёры, representative phone/DPR, semantic states). Паук и паутина не покрыты утверждённым baseline."
+    reason: "G3+G4: утверждено 33 состояния; 18 motion-кандидатов REJECTED (паук/паутина/ярлык), 33 состояния BLOCKED. Паук и паутина не покрыты утверждённым baseline."
     artifacts:
       - path: "tests/e2e/visual/__screenshots__/"
         issue: "33 PNG; нет утверждённых кадров паука/паутины/motion-shortcut; нет phone/DPR-эталонов для BLOCKED-строк"
@@ -84,7 +98,7 @@ gaps:
       - "33 BLOCKED-состояния (Phases 16/18/19/22)"
   - truth: "Владелец может сравнить captures с текущим сайтом и явно одобрить UI/motion-контракт (SC1)"
     status: partial
-    reason: "Подписано только по 51 захваченному хэшу (33 APPROVED, 18 REJECTED); 33 строки не захвачены (BLOCKED). Контракт утверждён не полностью."
+    reason: "Подписано только по 51 захваченному хэшу (33 APPROVED, 18 REJECTED); 33 строки не захвачены (BLOCKED)."
     artifacts:
       - path: ".planning/phases/PORTIA-15-baseline/evidence/15-VISUAL-APPROVAL.md"
         issue: "18 REJECTED; 33 BLOCKED вне ledger"
@@ -92,7 +106,7 @@ gaps:
       - "Решение владельца по отклонённым и незахваченным состояниям (Phase 18 и далее)"
   - truth: "Физическая проверка владельца на PC (DPR 1.25) и телефоне"
     status: failed
-    reason: "G5: физические устройства не доказаны; остаётся BLOCKED до Phase 22."
+    reason: "G5: физические устройства не доказаны; BLOCKED до Phase 22."
     artifacts: []
     missing:
       - "Owner UAT на физических PC и phone (Phase 22)"
@@ -106,110 +120,111 @@ deferred:
   - truth: "Физический PC/phone UAT"
     addressed_in: "Phase 22"
     evidence: "15-BASELINE-RESULTS.md: Physical PC DPR 1.25 and representative phone UAT BLOCKED, Phase 22 owner UAT"
+human_verification:
+  - test: "Подтвердить формулировку W1: исключение b535d14 из правила «Do not modify product source in Phase 15»"
+    expected: "Владелец письменно подтверждает или правит строку в 15-REVIEW-DISPOSITION.md"
+    why_human: "Запись опирается на scope-решение, переданное оркестратором; отдельного письменного текста от владельца нет"
+  - test: "IN-06 часть 1: какие снимки window-search в firefox-desktop считаются авторитетными"
+    expected: "Ответ владельца, который затем попадёт в подписанный 15-FRAME-TEST-MAP.md"
+    why_human: "Решение владельца; нельзя записать в подписанный артефакт без явного ответа"
+  - test: "Физический PC (DPR 1.25) и phone UAT"
+    expected: "Owner UAT (Phase 22)"
+    why_human: "Физические устройства"
 ---
 
-# Phase 15: Baseline — повторная верификация (после плана 15-16)
+# Phase 15: Baseline — повторная верификация (после планов 15-17..15-19)
 
 **Phase Goal:** Текущий PORTIA OS зафиксирован как воспроизводимый и одобренный контракт до любых рефакторингов или точечных исправлений.
-**Verified:** 2026-11-01, HEAD `5e8087b`, Node 22.13.1 (из `%TEMP%\portia-node-v22.13.1\node-v22.13.1-win-x64`; машинный дефолт — 24)
+**Verified:** 2026-11-01, HEAD `38b85bf`, Node 22.13.1 (из `%TEMP%\portia-node-v22.13.1\node-v22.13.1-win-x64`; машинный дефолт - 24.21.0)
 **Status:** `gaps_found`
-**Re-verification:** Да — после gap closure 15-16. Предыдущий отчёт: `gaps_found`, 1/4.
+**Re-verification:** Да - после gap closure 15-17, 15-18, 15-19. Предыдущий отчёт: `gaps_found`, 1/4.
 
-Итог: G6 закрыт и подтверждён независимо (в одноразовом клоне HEAD без `.runs/`). G1–G5 остаются открытыми и подтверждены повторно по коду и evidence. Счёт 1/4 не меняется: план 15-16 касался только воспроизводимости инструментов. Ни один BLOCKED не записан как pass.
+Итог: владелец ограничил планы 15-17..15-19 исправимыми в репозитории находками (WR-03/05/06, IN-05, IN-01 часть 1, W1, W2). Это закрыто и подтверждено кодом и независимым прогоном. G1-G5 намеренно не планировались; проверено, что они честно остаются открытыми: ни один BLOCKED не записан как pass, утверждённые PNG, `playwright.config.ts`, `target-guard.ts`, `package.json`, `REQUIREMENTS.md` и evidence-каталог не менялись относительно `769c3d1`. Счёт 1/4 не меняется, потому что Success Criteria 1-3 зависят от G1-G5.
 
-## Повторная проверка пробелов G1–G6
+## G1-G5: остаются открытыми (проверено)
 
 | # | Пробел | Статус | Независимое доказательство |
 |---|---|---|---|
-| G1 | Disposable roles / изолированный Supabase | **ОТКРЫТ** | `tests/e2e/fixtures/actors.ts:25,89` — `READY` только при `source === "server-probe"`; других производителей proof в `tests/` и `lib/` нет. `15-ROLE-GATE.md`: participant/editor/promo-reviewer/owner = BLOCKED `TARGET_NOT_ISOLATED`, 0 privileged lanes passed. Совпадает с 20 skip в baseline-результатах. |
-| G2 | Read backing для 15 data-dependent lanes | **ОТКРЫТ** | В чистом клоне нет ни backing, ни `.env`; по `15-BASELINE-RESULTS.md` дорожки падают `ENOTFOUND` и записаны BLOCKED (DATA). Я браузерный suite повторно не запускал (нет данных, сборка потребует локальные секреты) — полагаюсь на recorded evidence и пометку. |
-| G3 | 33 BLOCKED visual-строки | **ОТКРЫТ** | Из `15-CANDIDATE-INDEX.json`: 84 строки = 51 CAPTURED + 33 BLOCKED (visitor 7+2+1+2, editor 7, participant 10, promo-reviewer 3, owner 1). В `tests/e2e/visual/__screenshots__/` ровно 33 PNG. |
-| G4 | 18 отклонённых motion-кандидатов | **ОТКРЫТ** | `15-VISUAL-APPROVAL.md`: 18 строк `REJECTED` (в т.ч. `motion-shortcut-*`), 33 `APPROVED`. Утверждённого baseline для паука/паутины нет. |
-| G5 | Физический PC/phone UAT | **ОТКРЫТ** | UAT-артефакта в каталоге фазы нет; `15-BASELINE-RESULTS.md` помечает DPR 1.25 и phone UAT как BLOCKED (Phase 22). |
-| G6 | UI-map/approval не воспроизводимы из tracked-файлов | **ЗАКРЫТ (подтверждено)** | Одноразовый клон `5e8087b`, `.runs/` отсутствует: `--verify-promotion` -> 33 exact bytes; `--verify-ui-map` -> `84 rows (51 captured, 33 blocked). Source: tracked index`; `--verify-approval` -> `51 captured rows; 33 blocked rows excluded. Source: tracked index`; все exit 0. Tamper (хэш одной строки индекса обнулён): `--verify-ui-map` -> `PORTIA_UI_MAP_HASH_MISMATCH`, `--verify-approval` -> `PORTIA_APPROVAL_VERDICT_MISSING`, оба exit 1. Индекс не содержит абсолютных путей/имён (0 совпадений), `.runs/` в `.gitignore`. Основное дерево: `Source: capture`. Тесты манифеста 37/37. Ограничение: в клоне байты PNG кандидатов не пересчитываются (утверждённые байты покрыты `--verify-promotion`). Это честно помечено в выводе. |
+| G1 | Disposable roles / изолированный Supabase | **ОТКРЫТ** | `grep server-probe` по `tests/ lib/ scripts/`: только `tests/e2e/fixtures/actors.ts:25,89` (тип и проверка); производителя proof нет. `15-ROLE-GATE.md`: participant/editor/promo-reviewer/owner = BLOCKED `TARGET_NOT_ISOLATED`. WR-01 отложен на Phase 16. |
+| G2 | Read backing для 15 data-dependent lanes | **ОТКРЫТ** | Не изменялось; браузерные прогоны не запускались (нет данных). Записано как BLOCKED (DATA) в `15-BASELINE-RESULTS.md`. |
+| G3 | 33 BLOCKED visual-строки | **ОТКРЫТ** | `15-CANDIDATE-INDEX.json`: 84 строки; в `tests/e2e/visual/__screenshots__/` ровно 33 PNG; `git diff 769c3d1 HEAD` по каталогу PNG пуст. |
+| G4 | 18 отклонённых motion-кандидатов | **ОТКРЫТ** | `15-VISUAL-APPROVAL.md`: 18 `REJECTED`; evidence-каталог не менялся с `769c3d1`. |
+| G5 | Физический PC/phone UAT | **ОТКРЫТ** | UAT-артефакта в каталоге фазы нет; DPR 1.25 и phone BLOCKED (Phase 22). |
 
 ## Достижение цели
 
-Контролирующие must-haves — Success Criteria из ROADMAP.
-
 | # | Истина | Статус | Доказательство |
 |---:|---|---|---|
-| 1 | Владелец может сравнить captures с текущим сайтом и явно одобрить UI/motion-контракт; предлагаемые изменения отмечены отдельно | ✗ PARTIAL (gap) | `Qloxz` вынес вердикт по всем 51 захваченным хэшам: 33 APPROVED, 18 REJECTED. 33 состояния не захвачены (BLOCKED). Authority (candidate set / source commit / contract digest) проверяется `verifyAuthority()`; `--verify-approval` проходит. Контракт одобрен не полностью. |
-| 2 | Из чистого checkout запускается committed Playwright/axe suite для всех пяти ролей на PC/phone с фиксированными условиями и без мутаций production | ✗ FAILED / BLOCKED (G1, G2) | Visitor и tooling/a11y/diagnostics дорожки есть и исполняются; четыре привилегированные роли всегда skip (нет производителя server proof); 15 data-backed тестов требуют read backing. Skip не засчитан как pass. Production не мутировался. |
-| 3 | Одобренные baselines воспроизводят desktop, окна, Повышение, редактор, паука, паутину, Вивьян и phone layout | ✗ FAILED / PARTIAL (G3, G4) | `--verify-promotion` подтверждает 33 exact bytes; паук/паутина/shortcut-motion отклонены, phone/DPR/privileged строки BLOCKED. |
-| 4 | Неожиданная browser/console/network/CSP ошибка блокирует gate, ожидаемый отказ виден как безопасное русское состояние, для следующих фаз задана цепочка доказательств GSD | ✓ VERIFIED | `tests/e2e/fixtures/diagnostics.ts` перехватывает `pageerror`, `requestfailed`, hydration, CSP и console error через редактирующий путь; allowlist истекает по реальному времени (`new Date()`); `npm test` (включая `lib/e2e-diagnostics.test.ts`) 648/649 pass, 0 fail. Traceability `STAB-BASE-01..06` и локальный `15-SECURITY.md` присутствуют. Браузерные 15/15 diagnostics и 10/10 axe взяты из записанного evidence, мною не перезапускались. |
+| 1 | Владелец может сравнить captures с текущим сайтом и явно одобрить UI/motion-контракт | ✗ PARTIAL (gap) | 51 захваченный хэш: 33 APPROVED, 18 REJECTED; 33 состояния не захвачены. `--verify-promotion` проходит. |
+| 2 | Из чистого checkout запускается committed Playwright/axe suite для всех пяти ролей на PC/phone без мутаций production | ✗ FAILED / BLOCKED (G1, G2) | Четыре привилегированные роли всегда skip; 15 data-backed тестов требуют read backing. Skip не засчитан как pass. |
+| 3 | Одобренные baselines воспроизводят desktop, окна, Повышение, редактор, паука, паутину, Вивьян и phone layout | ✗ FAILED / PARTIAL (G3, G4) | 33 точных байта подтверждены; паук/паутина/shortcut-motion отклонены; phone/DPR/privileged BLOCKED. |
+| 4 | Неожиданная browser/console/network/CSP ошибка блокирует gate, ожидаемый отказ - безопасное русское состояние, задана цепочка доказательств GSD | ✓ VERIFIED | `tests/e2e/fixtures/diagnostics.ts` не менялся; `npm test` 684/685 pass (1 skip) включая `lib/e2e-diagnostics.test.ts`; traceability STAB-BASE-01..06 и `15-SECURITY.md` присутствуют. Браузерные diagnostics/axe взяты из записанного evidence, не перезапускались. |
 
 **Score:** 1/4 истин подтверждено (0 present-but-behavior-unverified).
 
-## Deferred Items
+## Закрытие W1, W2 и находок ревью (проверено по коду)
 
-| # | Пункт | Phase | Основание |
-|---|---|---|---|
-| 1 | Roles / isolated Supabase / RLS-RPC | 16 / 19 | `15-ROLE-GATE.md`, `15-TRACEABILITY.md` |
-| 2 | Замена 18 motion-кандидатов | 18 | `15-VISUAL-APPROVAL.md` |
-| 3 | Физический UAT | 22 | `15-BASELINE-RESULTS.md` |
-
-Эти элементы не меняют статус: они остаются gaps, потому что они же — часть Success Criteria фазы 15.
+| Находка | Вердикт | Доказательство |
+|---|---|---|
+| W1 CSP guard | ✓ ЗАКРЫТО | `next.config.ts:7`: `allowHttpForE2E = PORTIA_E2E_ALLOW_HTTP === "1" && NETLIFY !== "true" && !CONTEXT`. Единственное изменение product source с `769c3d1` (diff: 3 строки). Поведенческий тест `lib/security-headers.test.ts` импортирует настоящий `next.config.ts` с уникальным query и проверяет 7 комбинаций (prod без флага - есть директива; prod+флаг - нет; +NETLIFY=true, +CONTEXT=production, +CONTEXT=deploy-preview, флаг `"true"` - есть; development - нет и `unsafe-eval`). Ошибка guard ведёт только в безопасную сторону. Остаток (не-Netlify хостинг) записан как T-15-50/SEC-L5 и пункт release checklist Phase 22. |
+| W2 диспозиция | ✓ ЗАКРЫТО | `15-REVIEW-DISPOSITION.md`: 12 строк, fixed 5 (WR-03/04/05/06, IN-05), partial 1 (IN-01), deferred 5 (WR-01, WR-02, IN-02, IN-03, IN-04), open 1 (IN-06); у fixed указаны план, SHA, тест. |
+| WR-03 | ✓ ИСПРАВЛЕНО | `scripts/phase15-e2e-preflight.mjs`: `shellEnvironment = {...process.env}` до `loadEnvConfig`; mutation-guard судит этот снимок. Тест `mutation preflight ignores mutation config that exists only in an env file` на одноразовом каталоге с контролем (те же значения в shell принимаются). `.env.example` переведён на shell-only. |
+| WR-04 | ✓ ИСПРАВЛЕНО (с оговоркой) | Commit `30faeab` (до 15-17): `production-target`, если ref из URL есть в `PORTIA_E2E_PRODUCTION_PROJECT_IDS`; тест `refuses a Supabase project listed as production`. Оговорка: пустой/незаданный список не блокирует (fail-open на конфигурацию оператора); раскрыто как допущение в IN-06 п.2, удалённая проверка отнесена в Phase 16. Это заявленное, а не скрытое ограничение. |
+| WR-05 | ✓ ИСПРАВЛЕНО (документация и тест) | Пин `^22\.13\.\d+$` сохранён намеренно (комментарий над regex); тест закрепляет 22.13.0/22.13.1 и отклонение 22.12/22.14/23/24; `engines` не менялся. |
+| WR-06 | ✓ ИСПРАВЛЕНО | `PUBLIC_KEY_VARIABLES`: publishable имеет приоритет, anon - fallback (по truthiness, как `||` в `lib/supabase/env.ts`); `missing-environment` называет оба имени; `public-key-shape` называет фактически использованное имя; `.env.example` содержит только плейсхолдеры. |
+| IN-05 | ✓ ИСПРАВЛЕНО | `lib/e2e-visual-policy.test.ts` исполняет настоящий `visualPolicy` на фиктивном Page для 26 состояний; мёртвая `assertVisualDiffAllowed` удалена (diff `visual-policy.ts` содержит только удаление функции и проверку компаратора; `declarations`/константы/`maskLocator` не тронуты). |
+| IN-01 (часть 1) | ✓ ЧАСТИЧНО, как заявлено | Явный `PORTIA_VISUAL_COMPARATOR_MISSING` + тест на наличие компаратора и точный пин 1.64.1. Прикрепление diff при падении отложено в Phase 18 (требует браузерного прогона). |
+| WR-01, WR-02, IN-02, IN-03, IN-04 | отложены, честно | Не затронуты; WR-02 (допуск до 2 300 px, маска `.personnel-app`) остаётся ослаблением SC3 до Phase 18. IN-06 открыта. |
 
 ## Требования (REQUIREMENTS.md)
 
-Все шесть ID (`STAB-BASE-01..06`) заявлены в планах и присутствуют в REQUIREMENTS.md; orphaned нет. Статусы в REQUIREMENTS.md согласуются с кодом и evidence.
+Все шесть ID (`STAB-BASE-01..06`) заявлены в планах (15-17, 15-18, 15-19 заявляют STAB-BASE-05/06) и присутствуют в REQUIREMENTS.md; orphaned нет. `REQUIREMENTS.md` не менялся с `769c3d1`, статусы согласуются с кодом.
 
 | Requirement | REQUIREMENTS.md | Статус | Основание |
 |---|---|---|---|
-| `STAB-BASE-01` | `[x]` Complete | ✓ SATISFIED | Текущие экраны/контракты/состояния записаны (ledger, UI-контракт, 33 утверждённых PNG). |
-| `STAB-BASE-02` | `[ ]` Pending | ✗ BLOCKED | Роли participant/editor/reviewer/owner не доказаны (G1); data-lanes без backing (G2). |
-| `STAB-BASE-03` | `[ ]` Pending | ✗ BLOCKED | Покрыто 33 из 84 состояний; паук/паутина отклонены (G3, G4). |
-| `STAB-BASE-04` | `[ ]` Pending | ✗ BLOCKED | Контракт подписан для 51 захваченного хэша, из них 18 REJECTED; 33 не захвачены. План 15-16 (G6) требований не продвигает. |
-| `STAB-BASE-05` | `[x]` Complete | ✓ SATISFIED | Диагностика, a11y 0 critical/serious, локальный security review PASS по repository-local scope. |
-| `STAB-BASE-06` | `[ ]` Pending | ✗ BLOCKED | Цепочка полна локально, но нет staging role proof, data-lanes и физического UAT. |
+| `STAB-BASE-01` | `[x]` Complete | ✓ SATISFIED | Ledger, UI-контракт, 33 утверждённых PNG. |
+| `STAB-BASE-02` | `[ ]` Pending | ✗ BLOCKED | Роли не доказаны (G1); data-lanes без backing (G2). |
+| `STAB-BASE-03` | `[ ]` Pending | ✗ BLOCKED | 33 из 84 состояний; паук/паутина отклонены (G3, G4). |
+| `STAB-BASE-04` | `[ ]` Pending | ✗ BLOCKED | Подписано 51 хэша, 18 REJECTED, 33 не захвачены. |
+| `STAB-BASE-05` | `[x]` Complete | ✓ SATISFIED | Диагностика, a11y, локальный security review; W1 дополнительно закрыт тестом. |
+| `STAB-BASE-06` | `[ ]` Pending | ✗ BLOCKED | Цепочка полна локально, нет staging role proof, data-lanes и физического UAT. 15-17..15-19 усилили tooling, но требование не закрывают. |
 
 **Покрытие:** 2/6 удовлетворено.
-
-## Артефакты и связи (уровни 1-3)
-
-| Артефакт / связь | Статус | Детали |
-|---|---|---|
-| `scripts/phase15-visual-manifest.mjs` | ✓ VERIFIED / WIRED | Режимы `--verify-promotion/--verify-ui-map/--verify-approval/--write-candidate-index`; индекс используется только вызовами с `allowIndex`. |
-| `evidence/15-CANDIDATE-INDEX.json` | ✓ VERIFIED | Tracked, схема/setId/sourceCommit/84 строки; tamper даёт exit 1. |
-| `lib/phase15-visual-manifest.test.ts` | ✓ VERIFIED | 37/37 pass (основное дерево и клон). |
-| `tests/e2e/visual/__screenshots__/` | ✓ VERIFIED | 33 PNG, `--verify-promotion` проходит в обоих деревьях. |
-| Actor fixture -> реальный серверный контекст | ✗ NOT WIRED | Нет производителя server-probe proof. |
-| Playwright data-lanes -> источник данных | ✗ NOT WIRED | Нет read backing. |
 
 ## Поведенческие проверки (мной, Node 22.13.1)
 
 | Проверка | Результат |
 |---|---|
-| `node --experimental-strip-types --test lib/phase15-visual-manifest.test.ts` | ✓ 37/37 |
-| `--verify-promotion`, `--verify-ui-map`, `--verify-approval` (основное дерево) | ✓ exit 0, `Source: capture` |
-| То же в одноразовом клоне `5e8087b` без `.runs/` | ✓ exit 0, `Source: tracked index` |
-| Tamper индекса в клоне | ✓ exit 1, стабильные коды `PORTIA_*` |
-| `npm test` | ✓ 649 тестов, 648 pass, 0 fail, 1 skip |
+| `npm test` | ✓ 685 тестов, 684 pass, 0 fail, 1 skip |
 | `npm exec tsc -- --noEmit` | ✓ exit 0 |
-| `npm run lint` | ✓ 0 errors, 18 warnings |
-| Playwright / `npm run build` / `npm audit` | Не запускались (нужны данные/секреты, сеть); ранее записано в evidence |
-| Режим `--verify` (по умолчанию) | Не запускался (перезаписывает подписанное evidence) |
+| `npm run lint` | ✓ 0 errors, 18 warnings (baseline) |
+| `node --experimental-strip-types --test lib/phase15-visual-manifest.test.ts` | ✓ 37/37 |
+| `node scripts/phase15-visual-manifest.mjs --verify-promotion` | ✓ «Verified 33 exact owner-approved snapshot bytes; 18 non-approved rows excluded.» |
+| `git diff 769c3d1 HEAD` по PNG, `playwright.config.ts`, `package.json`, `package-lock.json`, `target-guard.ts`, `app/`, `components/`, `lib/supabase/` | ✓ пусто |
+| Playwright / `npm run build` / режим `--verify` | Не запускались (данные/секреты; `--verify` переписывает подписанное evidence) |
 
 ## Anti-patterns и предупреждения
 
-Блокирующих debt-маркеров и стабов не найдено. Предупреждения:
+Блокирующих debt-маркеров и стабов в изменённых файлах не найдено. `.env*` реальные файлы не читались.
 
 | # | Находка | Серьёзность | Влияние |
 |---|---|---|---|
-| W1 | ROADMAP: «Do not modify product source in Phase 15». Коммит `b535d14` (план 15-03) изменил `components/portia-desktop.tsx` (`role="toolbar"`, a11y-фикс) и `next.config.ts` (`upgrade-insecure-requests` отключается при `PORTIA_E2E_ALLOW_HTTP=1`). Это раскрыто в `15-03-SUMMARY.md`, но прежнее утверждение отчёта «No product-source change was made in Phase 15» неточно (оно было верно только для плана 15-14). | Warning | Нарушение кросс-плановой границы; визуально нейтрально. Если `PORTIA_E2E_ALLOW_HTTP=1` попадёт в production-окружение, ослабляется CSP. Нужна фиксация владельцем. |
-| W2 | `15-REVIEW.md` (0 critical, 6 warning), все диспозиции `open` в `15-REVIEW-DISPOSITION.md`. Существенные: WR-01 (подделываемый `sessionProof`, относится к G1), WR-02 (допуск до 2 300 px, маска всего `.personnel-app`), WR-04 (visitor-preflight принимает любой `*.supabase.co`, deny-list не применяется), WR-05/06 (Node-пин строже `engines`; ANON vs PUBLISHABLE key). | Warning | Влияют на силу, но не на достоверность pass-результатов; WR-02 ослабляет SC3, WR-04 — безопасность visitor-дорожки (читает, но может смотреть на production). |
-| W3 | Клон без `.runs/` не пересчитывает хэши PNG кандидатов (помечено в выводе `Source: tracked index`). | Info | Допустимое, честно помеченное ограничение. |
+| W1 | Закрыто (см. выше). Остаётся вопрос формулировки: `15-REVIEW-DISPOSITION.md` пишет «принято решением владельца Qloxz в рамках scope-решения 2026-11-01» и сам оговаривает, что отдельного письменного подтверждения текста исключения нет; 15-19-SUMMARY повторяет это. Формулировка честная: уверенность не завышена, цитаты владельца не выдумано. Но заголовок «Фиксация владельцем» сильнее, чем есть: scope-решение «закрывать только исправимые в репозитории находки» само по себе не равно одобрению ретроспективного исключения b535d14; опора - пересказ оркестратора. | Warning | Человеческий пункт: владельцу подтвердить или поправить строку. На статус не влияет. |
+| W2 | `15-SECURITY.md` (`reviewed_commit: d6fe7e3`, PASS-LOCAL-SCOPE) не содержит угроз T-15-41..T-15-52 из планов 15-17..15-19: в файле вообще нет идентификаторов `T-15-*` (используются `SEC-L*`), обновлена только строка SEC-L5. Область ревью (preflight, visual-policy, `.env.example`) после `d6fe7e3` не пересматривалась. Угрозы существуют только в `<threat_model>` планов. | Warning | Реестр угроз неполон; для пересмотра запустить `/gsd-secure-phase 15`. Не меняет статус. |
+| W3 | `.planning/ROADMAP.md` показывает «16/19 plans executed» и неотмеченные чекбоксы 15-17..15-19, хотя планы выполнены и закоммичены. | Info | Рассинхрон документации прогресса; обновить при закрытии фазы. |
+| W4 | WR-04 помечена `fixed`, но guard работает только при заданном `PORTIA_E2E_PRODUCTION_PROJECT_IDS` (при пустом списке production-ref пропускается). | Info | Раскрыто в IN-06 п.2; смягчается правилом CLAUDE.md и Phase 16. |
+| W5 | В клоне без `.runs/` хэши PNG кандидатов не пересчитываются (прежний W3). | Info | Допустимое, помеченное ограничение. |
 
 ## Требуется участие человека
 
-1. Физический PC (DPR 1.25) и phone UAT владельца — Phase 22.
-2. Решение владельца: предоставить read-only источник данных для 15 data-dependent дорожек, либо отнести их в Phase 16.
-3. Диспозиция 12 находок `15-REVIEW.md` (все `open`) и фиксация W1.
+1. Подтвердить или поправить формулировку исключения b535d14 (W1) в `15-REVIEW-DISPOSITION.md`.
+2. IN-06 п.1: authority снимков window-search в firefox-desktop.
+3. Физический PC (DPR 1.25) и phone UAT - Phase 22.
+4. Решение владельца: read-only источник данных для 15 data-dependent дорожек либо перенос в Phase 16.
 
 ## Итог
 
-Phase 15 остаётся `gaps_found`. Выполнено и подтверждено независимо: G6 (воспроизводимая проверка UI-map/approval из tracked-файлов с fail-closed tamper-защитой), 33 точных утверждённых baseline-байта, диагностический gate, 2 из 6 требований. Остаются открытыми по конкретным причинам с названными владельцами: G1 (роли), G2 (данные), G3 (33 BLOCKED состояния), G4 (18 отклонённых motion-кандидатов), G5 (физический UAT). Фаза не должна помечаться завершённой и не должна автоматически переходить дальше. Рекомендация: закрывать G1-G5 в фазах 16/18/19/22; не повторять планирование gap closure для фазы 15, пока не появятся изолированная цель или read backing.
+Phase 15 остаётся `gaps_found`, 1/4. Работа 15-17..15-19 выполнена в заявленных границах и подтверждена независимо: W1 закрыт поведенческим тестом на настоящем `next.config.ts`, W2 закрыт полной диспозицией 12 находок, WR-03/05/06 и IN-05 исправлены в коде с тестами, IN-01 исправлен частично, как заявлено. G1-G5 честно открыты, ни один BLOCKED не записан как pass, утверждённые байты не менялись. Фаза не должна помечаться завершённой; закрытие G1-G5 - в фазах 16/18/19/22.
 
 ---
 
