@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { accentBootScript, accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes, spiderModes } from "./accent-boot.ts";
 import { accentTokenNames, deriveAccentTokens } from "./accent-custom.ts";
+import { componentFamily } from "./component-source.ts";
 
 type Rgb = [number, number, number];
 
 const css = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-const desktopSource = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8");
+const desktopSource = componentFamily("portia-desktop").map((part) => part.text).join("\n");
 const spiderSource = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
 
 // Median opaque (alpha >= 200) pixels with RGB chroma >= 40; the assistant split at its median OKLCH lightness.
@@ -180,7 +181,7 @@ test("no turquoise literal in the components", () => {
   for (const file of [...components, ...sources(new URL("../app/", import.meta.url))]) {
     readFileSync(file, "utf8").split("\n").forEach((line, i) => {
       // Text colour presets in the editor are stored content colours, not interface.
-      if (file.pathname.endsWith("portia-editor.tsx") && /value: "#[0-9a-f]{6}", label:/i.test(line)) return;
+      if (/\/portia-editor(-[a-z0-9-]+)?\.tsx$/.test(file.pathname) && /value: "#[0-9a-f]{6}", label:/i.test(line)) return;
       // Components keep the saturated threshold: near-neutral greys in TSX are content colours, not tints.
       for (const literal of turquoiseLiterals(line, 20)) left.push(`${file.pathname.split("/").slice(-2).join("/")}:${i + 1}: ${literal}`);
     });

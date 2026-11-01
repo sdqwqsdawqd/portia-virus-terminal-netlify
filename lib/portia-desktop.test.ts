@@ -1,8 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { componentFamily } from "./component-source.ts";
 
-const source = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8");
+const desktopFamily = componentFamily("portia-desktop");
+const editorFamily = componentFamily("portia-editor");
+const source = desktopFamily.map((part) => part.text).join("\n");
+const editorSource = editorFamily.map((part) => part.text).join("\n");
 const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
 const icons = readFileSync(new URL("../components/portia-icons.tsx", import.meta.url), "utf8");
 
@@ -85,19 +89,59 @@ test("the Roblox portrait link has its tooltip and the plain portrait none (A11Y
 });
 
 test("the ≡ handle keeps no tooltip (D-18)", () => {
-  const editor = readFileSync(new URL("../components/portia-editor.tsx", import.meta.url), "utf8");
-  const handle = /<[a-z]+\b[^>]*className="order-drag-handle"[^>]*>/.exec(editor)?.[0] ?? "";
+  const handle = /<[a-z]+\b[^>]*className="order-drag-handle"[^>]*>/.exec(editorSource)?.[0] ?? "";
   assert.ok(handle, "handle not found");
   assert.ok(!handle.includes("title="), handle);
 });
 
 test("the editor imports rich-text-style once and ships no joke or empty labels (TEST-02, A11Y-03)", () => {
-  const editor = readFileSync(new URL("../components/portia-editor.tsx", import.meta.url), "utf8");
-  assert.equal(editor.split('from "@/lib/rich-text-style"').length - 1, 1);
-  assert.doesNotMatch(editor, /<small>\s*<\/small>|<small\s*\/>/);
+  for (const part of editorFamily) assert.ok(part.text.split('from "@/lib/rich-text-style"').length - 1 <= 1, `${part.file} imports rich-text-style twice`);
+  assert.ok(editorSource.includes('from "@/lib/rich-text-style"'));
+  assert.doesNotMatch(editorSource, /<small>\s*<\/small>|<small\s*\/>/);
   for (const word of ["\u0444\u0438\u0433\u043d\u0438", "\u0434\u0440\u0443\u0436\u043e\u043a", "\u043f\u0438\u0440\u043e\u0436\u043e\u043a"]) {
-    assert.ok(!editor.includes(word), `joke word ${word} is back`);
+    assert.ok(!editorSource.includes(word), `joke word ${word} is back`);
   }
+});
+
+test("component families start with the full main file", () => {
+  const mainFile = (name: string) => readFileSync(new URL(`../components/${name}.tsx`, import.meta.url), "utf8");
+  assert.equal(desktopFamily[0].text, mainFile("portia-desktop"));
+  assert.equal(editorFamily[0].text, mainFile("portia-editor"));
+});
+
+test("component families import only their own seams and the known shared components", () => {
+  const allowed = {
+    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion"],
+    "portia-editor": ["custom-color-picker", "portia-promotion-editor"],
+  } as const;
+  for (const [main, family] of [["portia-desktop", desktopFamily], ["portia-editor", editorFamily]] as const) {
+    const members = family.map((part) => part.file.replace(/\.tsx$/, ""));
+    for (const part of family) {
+      for (const match of part.text.matchAll(/(from |import\()\s*"@\/components\/([a-z0-9-]+)"/g)) {
+        const name = match[2];
+        const dynamic = match[1] === "import(";
+        if (main === "portia-desktop" && name === "portia-editor") {
+          assert.ok(dynamic, `${part.file}: the editor must stay behind next/dynamic, not a static import`);
+          continue;
+        }
+        assert.ok(members.includes(name) || (allowed[main] as readonly string[]).includes(name), `${part.file} imports components/${name}, which is not a ${main} seam or a known shared component`);
+      }
+    }
+  }
+});
+
+test("STAB-DESK-07: app ids, storage keys and API endpoints stay as pinned", () => {
+  const keys = (text: string) => [...new Set([...text.matchAll(/"(portia-[a-z0-9-]+-v\d+)"/g)].map((match) => match[1]))].sort();
+  const endpoints = (text: string) => {
+    const found: Record<string, number> = {};
+    for (const match of text.matchAll(/["`](\/api\/[a-z/-]+)/g)) found[match[1]] = (found[match[1]] ?? 0) + 1;
+    return found;
+  };
+  assert.equal(/type AppId = ([^;]+);/.exec(source)?.[1], '"archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor"');
+  assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-content-last-success-v1", "portia-desktop-shortcuts-v3", "portia-employees-last-success-v1", "portia-guide-collapsed-v2", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
+  assert.deepEqual(keys(editorSource), ["portia-format-panel-v1"]);
+  assert.deepEqual(endpoints(source), { "/api/content": 2, "/api/access": 1, "/api/employees": 1 });
+  assert.deepEqual(endpoints(editorSource), { "/api/uploads": 1, "/api/employees/editor": 1, "/api/employees": 3, "/api/editors": 4 });
 });
 
 test("every desktop shortcut owns a default position and saved positions override only itself", () => {
