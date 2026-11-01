@@ -4,17 +4,17 @@ milestone: v1.3
 milestone_name: «Стабилизация PORTIA OS»
 current_phase: 17
 current_phase_name: Обратимая декомпозиция рабочего стола и редактора
-status: executing
-stopped_at: Completed 17-06-PLAN.md
-last_updated: "2026-11-01T03:35:37.848Z"
+status: verifying
+stopped_at: Completed 17-07-PLAN.md
+last_updated: "2026-11-01T03:40:18.731Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 17 execution started
-state_head: cb2792e1dcea2d37bacfe30452e86c235dea3959
+state_head: 440d4113a1e5b379e529766b540c757d344b9df9
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 23
-  completed_plans: 22
+  completed_plans: 23
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 Phase: 17 (Обратимая декомпозиция рабочего стола и редактора) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-01 — Phase 17 execution started
 
 Progress: [░░░░░░░░░░] 0% of Phase 15 plans (phase gaps_found, not complete)
@@ -75,6 +75,7 @@ Progress: [░░░░░░░░░░] 0% of Phase 15 plans (phase gaps_foun
 | Phase PORTIA-17 P04 | 20min | 2 tasks | 3 files |
 | Phase 17 P05 | 35min | 3 tasks | 6 files |
 | Phase 17 P06 | 15min | 2 tasks | 3 files |
+| Phase 17 P07 | 20min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-17]: 17-04: portia-editor-rich-text exports exactly seven names; one createContext, Provider stays in PortiaEditor
 - [Phase 17]: 17-05: решение openApp/finishExit вынесено в lib/window-open.ts (openedWindow, exitedWindow); поведение как на эталоне, e2e window-reopen BLOCKED (ENV)
 - [Phase 17]: 17-06: unused imports (dragGeometry, resizeGeometry, ResizeEdge, PortiaIconName) removed from portia-desktop.tsx after the AppWindow/shortcuts move to keep lint at 18 warnings
+- [Phase 17]: 17-07: embeddedApps stays in portia-desktop.tsx; embedSandbox private to portia-desktop-documents.tsx next to both iframes (D-19/SEC-03)
 
 ### Pending Todos
 
@@ -127,8 +129,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-01T03:35:37.794Z
-Stopped at: Completed 17-06-PLAN.md
+Last session: 2026-11-01T03:40:18.683Z
+Stopped at: Completed 17-07-PLAN.md
 Resume file: None
 
 ## Operator Next Step
