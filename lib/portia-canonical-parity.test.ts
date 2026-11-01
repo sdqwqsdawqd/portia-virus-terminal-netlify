@@ -72,6 +72,17 @@ test("L0 upgrade fixture is the pre-phase12 portia_setup.sql from commit 8508d71
   assert.equal(sha(text), "016da4b0d1e4e6a1dd87506e0d28c5d1c896630aa52a1a9d2aa6cc413527cc97");
 });
 
+// The bank-less overloads let a promo reviewer supply their own tasks/answer keys (dropped in 000200).
+test("no migration re-creates the bank-less confirm_assignment/confirm_test overloads", () => {
+  for (const f of readdirSync(new URL("migrations/", root))) {
+    assert.doesNotMatch(
+      read(`migrations/${f}`),
+      /create\s+(or\s+replace\s+)?function\s+public\.portia_promo_confirm_(assignment|test)\(\s*p_request_id\s+uuid\s*,\s*p_(items|questions)\s+jsonb/i,
+      f,
+    );
+  }
+});
+
 test("every migration is a PORTIA migration (teardown clears the journal by the portia_ name prefix)", () => {
   for (const f of readdirSync(new URL("migrations/", root))) {
     assert.match(f, /^\d{14}_portia_[a-z0-9_]+\.sql$/, `${f}: migration names must start with portia_ after the version`);

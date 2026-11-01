@@ -81,6 +81,10 @@ Owner-run fingerprint production сравнён с canonical: DRIFT в 4 клю�
 
 **В этом плане добавлен файл `supabase/migrations/20261101000200_portia_drop_legacy_promo_overloads.sql`: нужно запустить агента `supabase-rls-reviewer`** (CLAUDE.md: изменения `supabase/*.sql`, RLS, RPC).
 
+**Ревью `supabase-rls-reviewer` выполнено:** critical/high по миграции нет; сигнатуры drop совпадают с production `(uuid, jsonb)` и `(uuid, jsonb, text)`, 4-аргументные версии не задеваются; CASCADE не нужен; вызывающих старые сигнатуры нет.
+
+**Серьёзность находки на production — medium** (оркестратор прочитал тела из `4d527f6^:supabase/portia_setup.sql`). Обе старые функции проверяют `portia_has_tab_grant('promo')` и `status='claimed' and reviewer_id = auth.uid()`, но без банка и версии: ревьюер с вкладкой promo мог для своей взятой заявки передать собственные тексты заданий, вопросы и `answer_key`; старая `confirm_test` к тому же сразу ставила попытку в `active` с дедлайном, минуя `prepared`. Анонимного доступа и доступа к чужим заявкам нет. Дыра открыта на production, пока не применена `20261101000200`. Регрессионный тест против повторного создания этих сигнатур добавлен в `lib/portia-canonical-parity.test.ts`.
+
 ## Known Stubs
 
 Нет.
