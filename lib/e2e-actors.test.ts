@@ -58,6 +58,18 @@ describe("Phase 15 actor roster", () => {
     }
   });
 
+  test("roster follows D4: every fixture belongs to the isolated target, readiness stays runtime-only", () => {
+    for (const actor of actorRoster.actors.filter((a) => a.role !== "visitor")) {
+      assert.equal(actor.lifecycleOwner, "phase-16-isolated-fixture", actor.id);
+    }
+    const owner = actorRoster.actors.find((a) => a.role === "owner");
+    assert.match(owner?.cleanup ?? "", /isolated target only/);
+    assert.match(owner?.cleanup ?? "", /portia_run marker/);
+    assert.match(owner?.cleanup ?? "", /never created, modified or deleted on production/);
+    assert.equal(actorRoster.target.status, "BLOCKED");
+    assert.equal(actorRoster.target.safeMarker, "runtime-attestation-required");
+  });
+
   test("keeps tracked roster data sanitized", () => {
     const source = readFileSync(
       new URL("../tests/e2e/fixtures/data/roster.json", import.meta.url),

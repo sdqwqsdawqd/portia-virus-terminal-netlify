@@ -1,9 +1,9 @@
 {
   "schema": "portia-phase15-actor-roster-v1",
-  "revision": "phase15-actors-2026-10-30",
+  "revision": "phase16-actors-2026-11-01",
   "target": {
     "status": "BLOCKED",
-    "safeMarker": "non-production-target-not-provisioned"
+    "safeMarker": "runtime-attestation-required"
   },
   "actors": [
     {
@@ -33,8 +33,8 @@
     {
       "id": "owner-fixture",
       "role": "owner",
-      "lifecycleOwner": "repository-owner",
-      "cleanup": "pre-existing owner account; never delete or modify"
+      "lifecycleOwner": "phase-16-isolated-fixture",
+      "cleanup": "Phase 16 isolated target only: disposable account with the canonical owner email from portia_owner_email(), created with the portia_run marker and deleted by run cleanup; never created, modified or deleted on production"
     }
   ]
 }
