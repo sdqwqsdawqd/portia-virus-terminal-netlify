@@ -102,7 +102,7 @@
 - [ ] **STAB-REL-01**: На release commit проходят tests, typecheck, production build, full lint и production dependency audit; skipped live test допустим только вместе с успешным staging-run.
 - [ ] **STAB-REL-02**: Playwright-suite проходит с documented setup на clean checkout, не мутирует production, не маскирует flaky retry и сохраняет artifacts.
 - [ ] **STAB-REL-03**: На release commit проходят утверждённые visual baselines, axe, keyboard journeys и zero-unexpected-console policy.
-- [ ] **STAB-REL-04**: Fresh isolated Supabase строится canonical migrations; role/RLS/RPC и concurrent claim/admission/CAS/cleanup tests проходят на disposable fixtures.
+- [x] **STAB-REL-04**: Fresh isolated Supabase строится canonical migrations; role/RLS/RPC и concurrent claim/admission/CAS/cleanup tests проходят на disposable fixtures.
 - [ ] **STAB-REL-05**: Owner принимает Promotion на PC/phone с временными данными и без destructive production testing.
 - [ ] **STAB-REL-06**: Owner после clean reload принимает window bounds, spider lifecycle/gait/palette, shortcut handoff, Vivian accent, qualification lock, search coverage и bounded editor layout на PC/phone.
 - [ ] **STAB-REL-07**: Roadmap, requirements, summaries, verification и UAT описывают один commit/state; carried risks перечислены, blocked verification не помечен complete.
@@ -196,7 +196,7 @@
 | STAB-REL-01 | Phase 22 | Pending |
 | STAB-REL-02 | Phase 22 | Pending |
 | STAB-REL-03 | Phase 22 | Pending |
-| STAB-REL-04 | Phase 16 | Pending |
+| STAB-REL-04 | Phase 16 | Complete |
 | STAB-REL-05 | Phase 22 | Pending |
 | STAB-REL-06 | Phase 22 | Pending |
 | STAB-REL-07 | Phase 22 | Pending |

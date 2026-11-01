@@ -6,7 +6,7 @@ current_phase: 16
 current_phase_name: Канонический Supabase staging и SQL-истина
 status: executing
 stopped_at: Completed 16-09-PLAN.md
-last_updated: "2026-11-01T10:40:48.582Z"
+last_updated: "2026-11-01T10:40:59.278Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 16 execution started
 state_head: 519dc50e85c9fc870225d1d77c37e41ff45a263b
@@ -110,6 +110,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 17]: 17-07: embeddedApps stays in portia-desktop.tsx; embedSandbox private to portia-desktop-documents.tsx next to both iframes (D-19/SEC-03)
 - [Phase 16]: 16-08: authz matrix is derived from baseline SQL; D-11 and SEC-M1 are accepted outcomes, not denials; outsider on reviewer RPCs is forbidden (SQL), not 42501 as sketched in research
 - [Phase 16]: 16-09: race N and R go into receipt suite keys; races blocked by admin 42501 or a foreign owner are BLOCKED, never pass; the shared live script runs files serially because of the single owner fixture
+- [Phase 16]: 16-09: race winner is judged by RPC reply type; an idempotent reply inside a different-nonce race is unexpected and checked in a separate step
+- [Phase 16]: 16-09: the shared live npm script runs files serially via test-concurrency=1 (shared owner fixture and Auth limits)
 
 ### Pending Todos
 
@@ -135,7 +137,7 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-01T10:40:48.470Z
+Last session: 2026-11-01T10:40:59.184Z
 Stopped at: Completed 16-09-PLAN.md
 Resume file: None
 
