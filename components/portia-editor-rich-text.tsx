@@ -1,9 +1,14 @@
 "use client";
 
-import { createContext, useContext, useLayoutEffect, useRef } from "react";
-import { pickCurrentRange, type FormatFragment } from "@/lib/format-fragments";
-import type { RichTextDocument } from "@/lib/portia-content";
-import { compactRuns, expandStyles, fieldSelectionStep, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { CustomColorPicker } from "@/components/custom-color-picker";
+import { mergeFragments, pickCurrentRange, type FormatFragment } from "@/lib/format-fragments";
+import { TYPING_PAUSE_MS } from "@/lib/editor-history";
+import { makeId } from "@/lib/editor-items";
+import type { RichTextDocument, RichTextStyle } from "@/lib/portia-content";
+import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
+import { clampPanelOffset, initialPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
 
 export type FormatTarget = {
   key: string;
@@ -28,12 +33,32 @@ const addsFragment = (event: { ctrlKey: boolean; metaKey: boolean }) => event.ct
 export type EditorPreviewSurface = "light" | "dark";
 
 // Site area whose font the field mirrors; paired in the shared font block in app/portia.css.
-export type DisplayArea = "lead" | "metric" | "mutation" | "scientist" | "info" | "broadcast" | "trash" | "caption" | "search" | "assistant";
+type DisplayArea = "lead" | "metric" | "mutation" | "scientist" | "info" | "broadcast" | "trash" | "caption" | "search" | "assistant";
 
 // The surface each field opens on is its site place's own (D-09, D-17); an explicit БЕЛЫЙ/ЧЁРНЫЙ choice overrides it until the next tab switch.
-export const nativeSurface: Record<DisplayArea, EditorPreviewSurface> = { lead: "light", metric: "light", mutation: "light", scientist: "light", trash: "light", info: "dark", broadcast: "dark", caption: "dark", search: "dark", assistant: "dark" };
+const nativeSurface: Record<DisplayArea, EditorPreviewSurface> = { lead: "light", metric: "light", mutation: "light", scientist: "light", trash: "light", info: "dark", broadcast: "dark", caption: "dark", search: "dark", assistant: "dark" };
 
 export const ActiveFormatContext = createContext<{ key: string | null; surface: EditorPreviewSurface | null; phonePanelOpen: boolean }>({ key: null, surface: null, phonePanelOpen: false });
+
+const textColorPalette = [
+  { value: "#0b7568", label: "Portia" },
+  { value: "#167a4d", label: "Зелёный" },
+  { value: "#a06f00", label: "Янтарный" },
+  { value: "#b43632", label: "Красный" },
+  { value: "#316e9b", label: "Синий" },
+];
+
+// D-06 / D-07 base text colours; oklch is the source of truth (D-17). «Основной» shows this and stores no colour.
+const baseInk = { dark: "oklch(.79 calc(.02 * var(--accent-chroma)) var(--accent-hue))", light: "oklch(.237 calc(.015 * var(--accent-chroma)) var(--accent-hue))" };
+
+const backgroundColorPalette = [
+  { value: "#f0d66a", label: "Жёлтый" },
+  { value: "#9adfce", label: "Мятный" },
+  { value: "#a9cae1", label: "Голубой" },
+  { value: "#e8aaa6", label: "Розовый" },
+  { value: "#b8c0bd", label: "Серый" },
+  { value: "#26312f", label: "Тёмный" },
+];
 
 export function replaceRichText(document: RichTextDocument, nextText: string) {
   const previousText = document.runs.map((run) => run.text).join("");
@@ -126,7 +151,7 @@ function pinCaretUnderPointer(editor: HTMLElement, x: number, y: number) {
 }
 
 // Builds the Range for text offsets inside a rich-text field; used to restore the caret and to paint the phone highlight.
-export function rangeFromOffsets(root: HTMLElement, offsets: { start: number; end: number }): Range {
+function rangeFromOffsets(root: HTMLElement, offsets: { start: number; end: number }): Range {
   const walker = window.document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const range = window.document.createRange();
   // A caret right after a node's trailing "\n" belongs to the next line. Firefox and
@@ -164,12 +189,23 @@ export function rangeFromOffsets(root: HTMLElement, offsets: { start: number; en
 }
 
 // Never writes into an unfocused field: a phone would raise native selection handles, and an unfocused field has no stored selection anyway (cleared on blur).
-export function restoreSelection(root: HTMLElement, offsets: { start: number; end: number }) {
+function restoreSelection(root: HTMLElement, offsets: { start: number; end: number }) {
   if (window.document.activeElement !== root) return;
   const range = rangeFromOffsets(root, offsets);
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
+}
+
+// D-16: the batch of a panel control. The id is kept while the same control fires again within the typing pause (a slider or colour board drag).
+function nextBatch(last: { control: string; id: string; at: number } | null, control: string) {
+  const at = Date.now();
+  const id = last && last.control === control && at - last.at <= TYPING_PAUSE_MS ? last.id : `batch:${makeId("batch")}`;
+  return { control, id, at };
+}
+
+export function findFormatField(key: string) {
+  return window.document.querySelector<HTMLElement>(`[data-format-key="${CSS.escape(key)}"]`);
 }
 
 export function FormattedTextarea({ label, area, value, document, formatKey, onChange, onActivate, tall = false }: {
@@ -293,4 +329,298 @@ export function FormattedTextarea({ label, area, value, document, formatKey, onC
     />
     <small className="formatted-text-field-hint">Текст и GIF можно использовать вместе. Не добавляйте лишних элементов.</small>
   </div>;
+}
+
+export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onUpdate, onBatch, onClose }: {
+  target: FormatTarget;
+  previewSurface: EditorPreviewSurface | null;
+  onPreviewSurface: (surface: EditorPreviewSurface) => void;
+  onUpdate: (target: FormatTarget) => void;
+  onBatch: (id: string, run: () => void) => void;
+  onClose: () => void;
+}) {
+  // Seeds the custom colour picker for text without a colour: baseInk at the default accent.
+  const surface = previewSurface ?? nativeSurface[target.area];
+  const defaultTextColor = surface === "dark" ? "#aebfba" : "#17211f";
+  const documentRef = useRef(target.document);
+  const panelRef = useRef<HTMLElement>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; right: number; bottom: number; last: PanelOffset | null } | null>(null);
+  // Every control acts on one range: the selection, else the word under the caret, else nothing (D-04).
+  const text = target.document.runs.map((run) => run.text).join("");
+  const range = resolveRange(text, target.selection);
+  // EDIT-06: with fragments the controls act on all of them (the current non-empty selection included); a bare caret is not a fragment (planner decision 2).
+  const multi = target.fragments.length > 0;
+  const set = useMemo(() => {
+    if (target.fragments.length === 0) return [];
+    const selection = target.selection;
+    const length = target.document.runs.reduce((sum, run) => sum + run.text.length, 0);
+    const clamp = (value: number) => Math.max(0, Math.min(length, value));
+    const picked = selection && selection.start !== selection.end ? [{ key: target.key, from: clamp(selection.start), to: clamp(selection.end) }] : [];
+    return mergeFragments([...target.fragments, ...picked]).filter((fragment) => fragment.key === target.key || target.peers[fragment.key] !== undefined);
+  }, [target]);
+  const docFor = (key: string) => (key === target.key ? target.document : target.peers[key]?.document ?? target.document);
+  // The readout comes from the committed document, so a click shows exactly what it applied. A repeat click on a manual control
+  // re-applies the same value; the row styles toggle (D-02). Unstyled text marks no size or weight, because every area renders its own.
+  const style = multi
+    ? (set[0] ? richTextStyleAt(docFor(set[0].key), set[0].from) : {})
+    : richTextStyleAt(target.document, range?.from ?? target.selection?.start ?? 0);
+  const hasTarget = multi ? set.length > 0 : range !== null;
+  const marked = (preset: RichTextStyle) => multi
+    ? set.length > 0 && set.every((fragment) => rangeHasStyle(docFor(fragment.key), fragment.from, fragment.to, preset))
+    : range !== null && rangeHasStyle(target.document, range.from, range.to, preset);
+  const plainMarked = multi
+    ? set.length > 0 && set.every((fragment) => rangeIsPlain(docFor(fragment.key), fragment.from, fragment.to))
+    : range !== null && rangeIsPlain(target.document, range.from, range.to);
+  const color = style.color ?? defaultTextColor;
+  const { fontSize, fontWeight } = style;
+  const backgroundColor = style.backgroundColor ?? "#f0d66a";
+  const backgroundOpacity = style.backgroundOpacity ?? 0;
+  const [colorPicker, setColorPicker] = useState<"text" | "background" | null>(null);
+  // Phone only: one control group at a time under the style row (D-12); on a PC every group shows.
+  const [tab, setTab] = useState<"color" | "size" | "background">("color");
+  // Phone only: the sheet folds to a 44px strip so the text shows (D-08). The panel remounts on every opening, so a sheet opens expanded.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => { documentRef.current = target.document; }, [target.document]);
+
+  const formatKey = target.key;
+  const paintFrom = range?.from;
+  const paintTo = range?.to;
+  const formatDocument = target.document;
+  // The text the next style changes is painted with the Custom Highlight API at every width: on a phone it takes the keyboard's place
+  // (D-05, D-06; ✎ takes focus from the field once and rich fields carry inputMode none, owner UAT 12), on a PC it keeps the target
+  // visible when focus has gone to a panel input or the ✎ button. Only keeping it above the panel is phone-only.
+  // formatDocument is a dependency because a style change re-renders the field's text nodes, which orphans the painted range.
+  useEffect(() => {
+    const field = findFormatField(formatKey);
+    const panel = panelRef.current;
+    if (!field || !panel) return;
+    // Paint what the next style will change: every fragment, else the selection, else the word under the caret (D-04, D-05, D-17).
+    const items = multi ? set : paintFrom !== undefined && paintTo !== undefined ? [{ key: formatKey, from: paintFrom, to: paintTo }] : [];
+    const ranges = items.flatMap((item) => {
+      const holder = findFormatField(item.key);
+      return holder ? [rangeFromOffsets(holder, { start: item.from, end: item.to })] : [];
+    });
+    const painted = ranges[0] ?? null;
+    const paints = ranges.length > 0 && typeof Highlight !== "undefined" && "highlights" in CSS;
+    if (paints) CSS.highlights.set("portia-format", new Highlight(...ranges));
+    const keepVisible = () => {
+      const rect = painted ? painted.getBoundingClientRect() : field.getBoundingClientRect();
+      const overlap = rect.bottom - (panel.getBoundingClientRect().top - 16);
+      // 64 keeps the text under the 48px system bar.
+      if (overlap > 0) window.scrollBy(0, Math.max(0, Math.min(overlap, rect.top - 64)));
+    };
+    const phone = window.matchMedia("(max-width: 900px)").matches;
+    const frame = phone ? window.requestAnimationFrame(keepVisible) : 0;
+    if (phone) window.visualViewport?.addEventListener("resize", keepVisible);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.visualViewport?.removeEventListener("resize", keepVisible);
+      if (paints) CSS.highlights.delete("portia-format");
+    };
+  }, [formatKey, paintFrom, paintTo, formatDocument, collapsed, multi, set]);
+
+  // On a phone, closing returns the caret to the field in the same tap so the keyboard can come back (iOS may still need one more tap);
+  // flushSync commits the close first so the field has dropped inputMode none before it gets focus.
+  const finish = () => {
+    flushSync(onClose);
+    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    const field = findFormatField(formatKey);
+    // Nothing is known: a focused field would store the browser's caret at 0 as the next target.
+    if (!field || !target.selection) return;
+    field.focus({ preventScroll: true });
+    restoreSelection(field, target.selection);
+  };
+
+  const word = range ? text.slice(range.from, range.to) : "";
+  const selectionLabel = multi
+    ? (set.length === 1 ? `${set[0].to - set[0].from} ЗНАК.` : "ВЫДЕЛИТЕ ТЕКСТ")
+    : !range
+      ? "ВЫДЕЛИТЕ ТЕКСТ"
+      : target.selection?.start !== target.selection?.end
+        ? `${range.to - range.from} ЗНАК.`
+        : `СЛОВО: «${word.length > 12 ? `${word.slice(0, 12)}…` : word}»`;
+  const clearFragments = () => onUpdate({ ...target, fragments: [], peers: {} });
+
+  const commit = (document: RichTextDocument) => {
+    documentRef.current = document;
+    target.onCommit(target.value, document);
+    onUpdate({ ...target, document });
+  };
+
+  // One path for every control. With fragments each field's document is folded over that field's ranges and committed once (D-13);
+  // the offsets are the stored ones, so a DOM selection lost to a panel input changes nothing. applyRichTextStyle clamps stale offsets (T-11-13).
+  // D-16: a fresh batch id per control interaction; the same control firing again within the typing pause (a slider or colour board drag) keeps its id.
+  const lastBatch = useRef<{ control: string; id: string; at: number } | null>(null);
+  const batchFor = (control: string) => {
+    lastBatch.current = nextBatch(lastBatch.current, control);
+    return lastBatch.current.id;
+  };
+
+  const applyOp = (control: string, op: (document: RichTextDocument, from: number, to: number) => RichTextDocument) => {
+    if (!multi) {
+      if (range) commit(op(documentRef.current, range.from, range.to));
+      return;
+    }
+    onBatch(batchFor(control), () => {
+      let currentDocument = documentRef.current;
+      const nextPeers = { ...target.peers };
+      for (const key of new Set(set.map((fragment) => fragment.key))) {
+        const mine = set.filter((fragment) => fragment.key === key);
+        if (key === target.key) {
+          currentDocument = mine.reduce((doc, fragment) => op(doc, fragment.from, fragment.to), documentRef.current);
+          documentRef.current = currentDocument;
+          target.onCommit(target.value, currentDocument);
+        } else {
+          const peer = target.peers[key];
+          const next = mine.reduce((doc, fragment) => op(doc, fragment.from, fragment.to), peer.document);
+          nextPeers[key] = { ...peer, document: next };
+          peer.onCommit(peer.value, next);
+        }
+      }
+      onUpdate({ ...target, document: currentDocument, peers: nextPeers });
+    });
+  };
+
+  const applyStyle = (control: string, style: RichTextStyle) => applyOp(control, (doc, from, to) => applyRichTextStyle(doc, from, to, style));
+
+  // D-02: the preset leaves when every fragment already carries it, else it is applied to every fragment.
+  const togglePresetStyle = (name: string, preset: RichTextStyle) => {
+    const keys = Object.keys(preset) as (keyof RichTextStyle)[];
+    if (!multi) applyOp(`preset:${name}`, (doc, from, to) => togglePreset(doc, from, to, preset));
+    else if (marked(preset)) applyOp(`preset:${name}`, (doc, from, to) => removeRichTextStyleKeys(doc, from, to, keys));
+    else applyOp(`preset:${name}`, (doc, from, to) => applyRichTextStyle(doc, from, to, preset));
+  };
+
+  // Restore the remembered place on mount and keep 64px of it on screen whenever the browser window changes size (D-07). The phone panel is docked by CSS.
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const place = () => {
+      if (window.matchMedia("(max-width: 900px)").matches) {
+        panel.style.right = "";
+        panel.style.bottom = "";
+        return;
+      }
+      let saved: PanelOffset | null = null;
+      try { saved = parsePanelOffset(localStorage.getItem(formatPanelStorageKey)); } catch { saved = null; }
+      // Nothing remembered (or storage unreadable): beside the editor window when it fits, else the default corner (D-07).
+      const editor = document.querySelector(".editor-window")?.getBoundingClientRect() ?? null;
+      paintPanelOffset(panel, saved ?? initialPanelOffset(editor, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight }));
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, []);
+
+  // PC: the panel is a layer of the desktop and moves by its header anywhere on the screen (D-06, EDIT-04). The phone panel is docked.
+  const beginDrag = (event: React.PointerEvent<HTMLElement>) => {
+    const panel = panelRef.current;
+    if (!panel || window.matchMedia("(max-width: 900px)").matches) return;
+    if ((event.target as HTMLElement).closest("button")) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const rect = panel.getBoundingClientRect();
+    dragRef.current = {
+      pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
+      right: document.documentElement.clientWidth - rect.right, bottom: document.documentElement.clientHeight - rect.bottom, last: null,
+    };
+  };
+
+  const moveDrag = (event: React.PointerEvent<HTMLElement>) => {
+    const drag = dragRef.current;
+    const panel = panelRef.current;
+    if (!drag || !panel || drag.pointerId !== event.pointerId) return;
+    drag.last = paintPanelOffset(panel, { right: drag.right - (event.clientX - drag.startX), bottom: drag.bottom - (event.clientY - drag.startY) });
+  };
+
+  const endDrag = (event: React.PointerEvent<HTMLElement>) => {
+    const drag = dragRef.current;
+    if (drag?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    // A blocked storage only means the place is not remembered.
+    if (drag.last) try { localStorage.setItem(formatPanelStorageKey, JSON.stringify(drag.last)); } catch { /* ignore */ }
+  };
+
+  // Arrow keys move the panel from its header: 8px, Shift 32px (EDIT-04). Only when the header itself has focus, so buttons keep their keys.
+  const keyMove = (event: React.KeyboardEvent<HTMLElement>) => {
+    const panel = panelRef.current;
+    if (!panel || event.target !== event.currentTarget || window.matchMedia("(max-width: 900px)").matches) return;
+    const step = event.shiftKey ? 32 : 8;
+    const delta = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    const rect = panel.getBoundingClientRect();
+    const next = paintPanelOffset(panel, { right: document.documentElement.clientWidth - rect.right + delta[0], bottom: document.documentElement.clientHeight - rect.bottom + delta[1] });
+    try { localStorage.setItem(formatPanelStorageKey, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+
+  // Esc leaves the panel for the text: the field with its selection back, else the ✎ button. The panel stays open.
+  const leavePanel = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    if (multi) clearFragments();
+    const field = findFormatField(formatKey);
+    if (field && target.selection) {
+      field.focus({ preventScroll: true });
+      restoreSelection(field, target.selection);
+    } else document.querySelector<HTMLElement>(".global-format-launch > button")?.focus();
+  };
+
+  // mousedown is the event whose default moves focus and clears the field's selection; pointerdown alone does not stop it in Chromium or WebKit (WR-04); inputs keep focus.
+  const keepFieldFocus = (event: React.SyntheticEvent) => { if (!(event.target as HTMLElement).closest("input")) event.preventDefault(); };
+  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus} onKeyDown={leavePanel} data-collapsed={collapsed || undefined}>
+    <header tabIndex={0} role="group" aria-label="Перемещение панели: стрелки, с Shift шагом 32 px" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onKeyDown={keyMove} onClick={(event) => { if (window.matchMedia("(max-width: 900px)").matches && !(event.target as HTMLElement).closest("button")) setCollapsed((value) => !value); }}>
+      <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
+      <small>
+        {set.length >= 2
+          ? <><span className="format-selection-count">ВЫБРАНО: <b>{set.length}</b></span><button type="button" className="format-reset-fragments" aria-label="Снять все выделенные фрагменты" onClick={clearFragments}>СБРОСИТЬ</button></>
+          : selectionLabel}
+      </small>
+      <button type="button" data-sheet-toggle aria-expanded={!collapsed} aria-label={collapsed ? "Развернуть панель оформления" : "Свернуть панель оформления"} onClick={() => setCollapsed((value) => !value)}>{collapsed ? "ОФОРМЛЕНИЕ ▴" : "▾"}</button>
+      <button type="button" onClick={finish} aria-label="Закрыть панель оформления">×</button>
+    </header>
+    <div className="format-presets format-choice-row" role="group" aria-label="Готовые стили">
+      <button type="button" className={plainMarked ? "selected" : ""} aria-pressed={plainMarked} disabled={!hasTarget} onClick={() => applyOp("reset", resetRichTextStyle)}>Обычный</button>
+      <button type="button" className={marked(stylePresets.heading) ? "selected" : ""} aria-pressed={marked(stylePresets.heading)} disabled={!hasTarget} onClick={() => togglePresetStyle("heading", stylePresets.heading)}>Заголовок</button>
+      <button type="button" className={marked(stylePresets.important) ? "selected" : ""} aria-pressed={marked(stylePresets.important)} disabled={!hasTarget} onClick={() => togglePresetStyle("important", stylePresets.important)}>Важно</button>
+    </div>
+    <div className="format-tabs format-choice-row" role="tablist" aria-label="Группы оформления">
+      {([["color", "Цвет"], ["size", "Размер"], ["background", "Фон"]] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "selected" : ""} onClick={() => setTab(id)}>{label}</button>)}
+    </div>
+    <div className="rich-text-toolbar" aria-label="Оформление текста" data-tab={tab}>
+      {target.area === "assistant" && <p className="format-area-note">Помощник показывает фразы своим цветом, размером и толщиной — эти настройки здесь не действуют. Фон текста работает.</p>}
+      <div data-tab-group="background" className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={surface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={surface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
+      <div data-tab-group="color" className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: style.color ?? baseInk[surface] }} />{style.color ? style.color.toUpperCase() : "ОСНОВНОЙ"}</b></span><div className="format-swatches"><button type="button" disabled={!hasTarget} className={style.color ? "" : "selected"} title="Основной" aria-label="Основной" onClick={() => { setColorPicker(null); applyOp("colour-base", (doc, from, to) => removeRichTextStyleKeys(doc, from, to, ["color"])); }}><i style={{ backgroundColor: baseInk[surface] }} /></button>{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!hasTarget} className={style.color?.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle(`color:${item.value}`, { color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!hasTarget} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
+      <div data-tab-group="size" className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" disabled={!hasTarget} className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle(`size:${value}`, { fontSize: value }); }}>{label}</button>)}</div></div>
+      <div data-tab-group="size" className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" disabled={!hasTarget} className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); applyStyle(`weight:${value}`, { fontWeight: value }); }}>{label}</button>)}</div></div>
+      <div data-tab-group="background" className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" disabled={!hasTarget} className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle("no-background", { backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" disabled={!hasTarget} className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle(`background:${item.value}`, { backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!hasTarget} title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
+      <label data-tab-group="background" className="format-control opacity-control"><span>Плотность фона: {Math.round(backgroundOpacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={backgroundOpacity} disabled={!hasTarget} onChange={(event) => { const opacity = Number(event.target.value); applyStyle("density", { backgroundColor, backgroundOpacity: opacity }); }} /></label>
+      {colorPicker && <CustomColorPicker
+        key={`${colorPicker}:${target.selection?.start}:${target.selection?.end}`}
+        group={colorPicker === "text" ? "color" : "background"}
+        title={colorPicker === "text" ? "Свой цвет текста" : "Свой цвет фона"}
+        color={colorPicker === "text" ? color : backgroundColor}
+        onChange={(nextColor) => {
+          if (colorPicker === "text") {
+            applyStyle("picker:text", { color: nextColor });
+          } else {
+            const opacity = backgroundOpacity || .45;
+            applyStyle("picker:background", { backgroundColor: nextColor, backgroundOpacity: opacity });
+          }
+        }}
+        onClose={() => setColorPicker(null)}
+      />}
+    </div>
+    <footer><div className="format-notes"><p>Изменения применяются сразу. Без выделения меняется слово под курсором.</p><p className="format-multi-hint">Ctrl (Cmd на Mac) + выделение добавляет фрагмент. Esc снимает все.</p></div><div><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
+  </section>;
+}
+
+// Where the PC format panel was left, px from the viewport's right and bottom edges; read back on mount (D-07).
+const formatPanelStorageKey = "portia-format-panel-v1";
+
+// Writes the clamped right/bottom straight on the panel (no React render per move) and returns what was painted.
+function paintPanelOffset(panel: HTMLElement, offset: { right: number; bottom: number }) {
+  const next = clampPanelOffset(offset, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight });
+  panel.style.right = `${next.right}px`;
+  panel.style.bottom = `${next.bottom}px`;
+  return next;
 }
