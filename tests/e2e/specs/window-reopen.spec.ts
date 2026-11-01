@@ -48,6 +48,9 @@ test("[STAB-DESK-01] one app id keeps one window from every entry point", async 
   await expect(settings).toHaveClass(/is-active/);
 
   // (d) close and reopen from the shortcut: one window; globalQuery lives in PortiaDesktop, so 17-WINDOW-REOPEN.md says the query is kept.
+  // After (c) Settings is active and covers the search window, so bring search forward before closing it.
+  await taskbarSearch.click();
+  await expect(search).toHaveClass(/is-active/);
   await page.getByRole("button", { name: "Закрыть Глобальный поиск" }).click();
   await expect(search).toHaveCount(0);
   await desktop.openApp("Глобальный поиск");
