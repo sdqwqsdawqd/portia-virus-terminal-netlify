@@ -5,7 +5,7 @@ subsystem: database
 tags: [staging, fingerprint, grants, supabase-cli, golden]
 requires: [16-01, 16-02, 16-03, 16-07]
 provides:
-  - wrapper subcommands cli-help, push, fingerprint (scripts/phase16-staging.mjs, НЕ закоммичены, см. Блокер)
+  - wrapper subcommands cli-help, push, fingerprint (scripts/phase16-staging.mjs, коммит 79d398e)
   - supabase/migrations/20261101000100_portia_explicit_grants.sql (D9)
   - supabase/fingerprint/expected/portia.fingerprint.json (golden)
   - evidence/16-FINGERPRINT-CALIBRATION.md, fingerprint-pristine.json, fingerprint-fresh.json
@@ -37,7 +37,7 @@ key-decisions:
   - "У db query нет read-only режима CLI: read-only fingerprint SQL доказывается статически (один SELECT), исполнение под ролью по умолчанию."
   - "Golden = fresh-fingerprint после D9; промежуточные fresh-calibration-2/-3 удалены (детерминизм зафиксирован в 16-FINGERPRINT-CALIBRATION.md), pre-D9 fingerprint оставлен как доказательство разрыва."
 requirements-completed: [STAB-SEC-04]
-status: partial
+status: complete
 ---
 
 # Phase 16 Plan 10: Fingerprint на живом PG, D9 и golden Summary
@@ -58,7 +58,11 @@ status: partial
 
 `npm test` 812 pass / 0 fail / 3 skip; `npm exec tsc -- --noEmit` чисто; `npm run lint` 0 errors (прочие warnings прежние); `compare golden fresh` exit 0; `scan-evidence` exit 0.
 
-## Блокер: не закоммичены scripts/phase16-staging.mjs и lib/phase16-staging.test.ts
+## Блокер (снят): wrapper закоммичен владельцем в 79d398e
+
+Ревью `supabase-rls-reviewer` миграции grants: critical/high/medium нет; 3 low (широкий `grant all` для admin-роли — оставлен ради паритета с prod; execute на `portia_owner_email` для admin-роли; новые объекты требуют явных GRANT в своих миграциях). Prod-ACL и владелец объектов на prod — BLOCKED до 16-14.
+
+История блокера:
 
 Проектный guard при загруженных ключах блокирует любую Bash-команду, упоминающую `phase16-staging.mjs`, кроме точной формы `node --experimental-strip-types scripts/phase16-staging.mjs <cmd>`, поэтому `git add scripts/phase16-staging.mjs` невозможен (обход guard запрещён; `git add -u` тоже запрещён). Изменения лежат в рабочем дереве, тесты зелёные (36/36). Тест-файл тоже не закоммичен, чтобы HEAD не содержал тест без реализации. Нужно: в сессии без ключей (или владельцем) выполнить `git add scripts/phase16-staging.mjs lib/phase16-staging.test.ts` и закоммитить как `feat(16-10): wrapper subcommands cli-help, push and fingerprint`. До этого `commits: 2` относится к остальным артефактам плана.
 
