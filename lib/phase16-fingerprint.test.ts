@@ -155,6 +155,8 @@ test("CLI: exit 0 equal, 1 diff, 2 incomparable or bad format; --summary prints 
   const garbage = put("garbage.json", "{nope");
 
   assert.equal(run(a, same).status, 0);
+  const bom = put("bom.json", "﻿" + JSON.stringify([{ fingerprint: make() }], null, 2));
+  assert.equal(run(a, bom).status, 0);
   const d = run(a, diff);
   assert.equal(d.status, 1);
   assert.match(d.stdout, /functions/);

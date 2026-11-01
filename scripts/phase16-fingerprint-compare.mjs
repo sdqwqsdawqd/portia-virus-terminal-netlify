@@ -122,7 +122,8 @@ export function diffFingerprints(a, b) {
 }
 
 function load(file) {
-  return validate(extractFingerprint(readFileSync(file, "utf8")));
+  // Windows PowerShell 5 `Set-Content -Encoding utf8` prepends a BOM.
+  return validate(extractFingerprint(readFileSync(file, "utf8").replace(/^﻿/, "")));
 }
 
 function main(args) {
