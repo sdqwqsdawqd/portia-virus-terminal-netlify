@@ -58,9 +58,9 @@ test("visitor preflight pins Node 22.13.x, narrower than package.json engines", 
 });
 
 test("visitor preflight takes the publishable key first, like the app", () => {
-  const { NEXT_PUBLIC_SUPABASE_ANON_KEY: _anon, ...withoutAnon } = validEnvironment;
   const publishableOnly = {
-    ...withoutAnon,
+    ...validEnvironment,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: undefined,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable-key-for-tests-only",
   };
   assert.deepEqual(
