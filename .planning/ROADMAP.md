@@ -137,7 +137,7 @@ Plans:
   3. Каждый extraction increment можно откатить отдельно, не возвращая уже доказанные соседние seams и не вводя новый generic app shell.
 
 **Acceptance gate**: Декомпозиция начинается только после Phase 15 baseline и проходит parity-gate после каждого increment; намеренные UX-изменения сюда не входят.
-**Plans:** 7/7 plans executed
+**Plans:** 7/8 plans executed
 
 Plans:
 **Wave 1**
@@ -160,6 +160,9 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [x] 17-07-PLAN.md — окна-документы и «Справочник» в seam-модуле, итог фазы
+
+**Gap closure** *(после верификации)*
+- [ ] 17-08-PLAN.md — CR-01: шаг (d) window-reopen.spec.ts выводит поиск вперёд перед закрытием; CR-01 = fixed, браузерный прогон BLOCKED (ENV)
 
 **UI hint**: yes
 
