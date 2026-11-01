@@ -63,3 +63,27 @@ test("migrations are forward-only, pinned, ordered and carry no transaction wrap
     assert.ok(!/^(begin|commit);$/m.test(text), `${f}: the CLI owns the transaction, remove begin;/commit;`);
   }
 });
+
+test("L0 upgrade fixture is the pre-phase12 portia_setup.sql from commit 8508d71", () => {
+  const text = read("upgrade-fixtures/L0_pre_phase12_portia_setup.sql");
+  assert.equal(text.split("\n").length - 1, 269);
+  assert.equal(sha(text), "016da4b0d1e4e6a1dd87506e0d28c5d1c896630aa52a1a9d2aa6cc413527cc97");
+});
+
+test("teardown is scoped to PORTIA objects only", () => {
+  const raw = read("teardown/portia_teardown.sql");
+  assert.match(raw.split("\n")[0], /^-- ISOLATED TEST PROJECT ONLY/);
+  const sql = raw.replace(/^\s*--.*$/gm, "").toLowerCase();
+  for (const banned of ["drop schema", "truncate", "drop owned", "reassign owned", "storage.buckets"]) {
+    assert.ok(!sql.includes(banned), `teardown must not contain "${banned}"`);
+  }
+  assert.ok(!/\bauth\./.test(sql), "teardown must not touch auth.*");
+  assert.ok(!/\bstorage\.objects\s+(set|where)|delete\s+from\s+storage/.test(sql), "teardown must not mutate storage rows");
+  const drops = sql.match(/drop\s+(table|function|policy)[^;\n]*/g) ?? [];
+  assert.ok(drops.length > 0);
+  const dynamicLoopScoped = sql.includes("nspname = 'public'") && sql.includes("like 'portia\\_%'");
+  for (const d of drops) {
+    // shortcut: dynamic drops (format string) are trusted to the filtered loops asserted here; upgrade if loops multiply.
+    assert.ok(/portia/.test(d) || (d.includes("%s") && dynamicLoopScoped), `unscoped drop in teardown: ${d}`);
+  }
+});
