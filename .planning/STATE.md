@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 16
 current_phase_name: Канонический Supabase staging и SQL-истина
 status: executing
-stopped_at: Phase PORTIA-17 complete, ready to plan Phase 15
-last_updated: "2026-11-01T08:40:08.461Z"
+stopped_at: Completed 16-08-PLAN.md (offline; live run belongs to 16-12)
+last_updated: "2026-11-01T10:30:32.414Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 16 execution started
-state_head: 16f034ddd7e81c58fce13bb5d0e0c8f2669f8a6d
+state_head: a47dc8ba4ac0abceaf70566fa57b0242e9597860
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 41
-  completed_plans: 27
+  completed_plans: 34
   percent: 13
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 16 (Канонический Supabase staging и SQL-истина) — EXECUTING
-Plan: 1 of 14
+Plan: 16-08 done offline (16-01..06 done; 16-07 paused at checkpoint, attest BLOCKED); next in wave 3: 16-09
 Status: Executing Phase 16
 Last activity: 2026-11-01 — Phase 16 execution started
 
@@ -77,6 +77,7 @@ Progress: [█░░░░░░░░░] 13% of Phase 15 plans (phase gaps_fou
 | Phase 17 P05 | 35min | 3 tasks | 6 files |
 | Phase 17 P06 | 15min | 2 tasks | 3 files |
 | Phase 17 P07 | 20min | 2 tasks | 2 files |
+| Phase 16 P08 | 40min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 17]: 17-05: решение openApp/finishExit вынесено в lib/window-open.ts (openedWindow, exitedWindow); поведение как на эталоне, e2e window-reopen BLOCKED (ENV)
 - [Phase 17]: 17-06: unused imports (dragGeometry, resizeGeometry, ResizeEdge, PortiaIconName) removed from portia-desktop.tsx after the AppWindow/shortcuts move to keep lint at 18 warnings
 - [Phase 17]: 17-07: embeddedApps stays in portia-desktop.tsx; embedSandbox private to portia-desktop-documents.tsx next to both iframes (D-19/SEC-03)
+- [Phase 16]: 16-08: authz matrix is derived from baseline SQL; D-11 and SEC-M1 are accepted outcomes, not denials; outsider on reviewer RPCs is forbidden (SQL), not 42501 as sketched in research
 
 ### Pending Todos
 
@@ -130,8 +132,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-01T03:40:18.683Z
-Stopped at: Phase PORTIA-17 complete, ready to plan Phase 15
+Last session: 2026-11-01T10:30:09.116Z
+Stopped at: Completed 16-08-PLAN.md (offline; live run belongs to 16-12)
 Resume file: None
 
 ## Operator Next Step
