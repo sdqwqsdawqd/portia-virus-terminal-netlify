@@ -186,6 +186,15 @@ test("editor collections scroll inside bounded panes and the table of contents n
   assert.match(styles, /\.promotion-bank-editor, \.promotion-preview\s*\{[^}]*overflow-y:\s*auto/);
 });
 
+test("editor scrolls as one page and its tabs use the whole window", () => {
+  assert.doesNotMatch(styles, /\.content-editor\s*\{\s*overflow-y:\s*hidden/);
+  assert.doesNotMatch(styles, /\.flat-editor-form\s*\{[^}]*max-width/);
+  for (const cap of [/\.compact-editor\s*\{/, /\.assistant-editor\s*\{/, /\.access-editor\s*\{/]) assert.doesNotMatch(styles, cap);
+  assert.match(styles, /\.content-editor > \.promotion-editor\s*\{[^}]*flex:\s*1 1 0/);
+  assert.match(styles, /\.recommendation-order-list\s*\{[^}]*max-width:\s*720px/);
+  assert.match(styles, /\.access-editor-list\s*\{[^}]*max-width:\s*760px/);
+});
+
 test("Vivian follows the interface accent without painful overexposure or greying the image itself", () => {
   assert.match(styles, /\.assistant-button\s*\{[^}]*filter:\s*var\(--assistant-filter\) brightness\(1\.1\) saturate\(1\.08\)/);
   assert.match(styles, /\.assistant-button img\s*\{[^}]*filter:\s*none/);
