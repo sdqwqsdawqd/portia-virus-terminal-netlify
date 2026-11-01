@@ -46,3 +46,9 @@ isolated target:
 
 Production mutation is not authorized. This evidence intentionally contains no
 target identifier, credential, account identity, cookie or authorization header.
+
+## Phase 16 recovery (Plan 15-20)
+
+Четыре условия из «Open gate» доказаны Phase 16 на изолированной цели: см. `16-LIVE-RUN.md`, раздел «Привилегированные lanes и API (G1)». Lanes participant, editor, promo-reviewer и owner дали PASS в 5 проектах; `receipt-playwright.json` имеет status PASS с residual 0. Сверка: `15-GAP-RECONCILIATION.md`.
+
+Результат 2026-10-31 выше остаётся исторической записью. Это evidence по-прежнему не содержит идентификаторов цели, учётных данных, аккаунтов, cookie и заголовков авторизации.

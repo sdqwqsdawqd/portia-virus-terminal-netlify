@@ -118,3 +118,17 @@ Counts: **pass 63 / fail 15 (all BLOCKED-DATA) / skip 77 (20 BLOCKED actor, 57 e
 
 No external design service or managed scanner is a prerequisite. No requirement
 status is advanced by this report beyond what `15-VERIFICATION.md` records.
+
+## Post-Phase-16 Gap Status (Plan 15-20)
+
+Таблица повторяет пять строк «Blocking Gaps» с текущим статусом; детали и доказательства в `15-GAP-RECONCILIATION.md`.
+
+| Gap | Status now | Owner / phase |
+|---|---|---|
+| Isolated non-production Supabase and disposable identities (G1) | **CLOSED** by Phase 16 (`16-LIVE-RUN.md`) | — |
+| Read backing for the 15 data-backed lanes (G2) | **PARTIAL**: 7 PASS, 8 BLOCKED (7 pixel application comparisons by D6, Firefox `search-restored` by DATA-SEED) | Phases 18-19 |
+| 33 mapped visual rows (G3) | **BLOCKED**, unchanged | Phases 18/19/20/22; 9 rows with recoveryPhase 16 await owner reassignment |
+| 18 rejected candidates (G4) | **REJECTED**, unchanged | Phase 18 |
+| Physical PC DPR 1.25 and representative phone UAT (G5) | **BLOCKED** | Phase 22 |
+
+This report does not advance requirement statuses beyond what the re-verification records.

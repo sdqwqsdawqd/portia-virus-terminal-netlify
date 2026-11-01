@@ -34,3 +34,17 @@ scanner is referenced as evidence or as a prerequisite.
   read backing for data-dependent lanes (Phase 16), rejected motion (Phase 18),
   blocked visual states (Phases 16/18/19/22) and physical PC/phone UAT (Phase 22).
 - Phase 15 must not be marked complete or auto-advance.
+
+## Gap reconciliation after Phase 16 (Plan 15-20)
+
+Фактическое состояние пробелов после Phase 16 записано в `15-GAP-RECONCILIATION.md`.
+
+| Gap | Текущий статус | Владелец открытой части |
+|---|---|---|
+| G1 | CLOSED | — (закрыто Phase 16) |
+| G2 | PARTIAL (7 PASS, 8 BLOCKED: D6 и DATA-SEED) | Phases 18-19 |
+| G3 | OPEN (33 BLOCKED; 9 строк с recoveryPhase 16 ждут переназначения владельцем) | Phases 18/19/20/22 |
+| G4 | OPEN (18 REJECTED) | Phase 18 |
+| G5 | OPEN | Phase 22 |
+
+Строка `STAB-BASE-02` выше о BLOCKED привилегированных ролях описывает состояние на `348684a`. Привилегированные lanes доказаны Phase 16 (`16-LIVE-RUN.md`), но Closure для всех STAB-BASE этим планом не меняется: `STAB-BASE-02`, `-03`, `-04` и `-06` остаются BLOCKED по остатку G2, по G3, G4 и G5. Статус определяет повторная верификация.
