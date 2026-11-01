@@ -10,6 +10,7 @@ import { accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes, 
 import { accentTokenNames, deriveAccentTokens } from "@/lib/accent-custom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
 import { dragGeometry, fitGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
+import { openedWindow, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "@/lib/window-open";
 import { acceptFetchedContent } from "@/lib/content-sync";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
@@ -32,9 +33,6 @@ const embeddedApps = {
 // D-19: one permission set for every third-party frame. Scripts and same-origin let the viewers run, popups escape the sandbox so links open as normal tabs;
 // no top-navigation flag, so a frame can never move the PORTIA tab. If a device needs more, add only that one flag.
 const embedSandbox = "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox";
-// Where a window appears from: a desktop icon (zoom) or its taskbar button (scales back out of it).
-type OpenOrigin = { x: number; y: number; kind: "icon" | "taskbar" };
-type WindowState = { open: boolean; minimized: boolean; maximized: boolean; z: number; geometry?: WindowGeometry; exiting?: "close" | "minimize"; openOrigin?: OpenOrigin };
 const originOf = (element: Element, kind: OpenOrigin["kind"]): OpenOrigin => {
   const rect = element.getBoundingClientRect();
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, kind };
@@ -926,7 +924,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   const openApp = (appId: AppId, origin?: OpenOrigin) => {
     if (qualificationLocked && appId !== "promotion") return;
-    if (!windows[appId].open || windows[appId].minimized || windows[appId].exiting) bounceTaskbarEntry(appId);
+    if (windowAppears(windows[appId])) bounceTaskbarEntry(appId);
     // Re-opening a window while it closes or minimises cancels the exit and keeps it.
     const pendingExit = exitTimers.current[appId];
     if (pendingExit) {
@@ -934,21 +932,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       delete exitTimers.current[appId];
     }
     setWindows((state) => {
-      const openCount = Object.values(state).filter((windowState) => windowState.open && !windowState.minimized && !windowState.exiting).length;
-      // The origin only matters when the window appears; changing it on a visible window would replay its animation.
-      const appears = !state[appId].open || state[appId].minimized || Boolean(state[appId].exiting);
-      return {
-        ...state,
-        [appId]: {
-          ...state[appId],
-          open: true,
-          minimized: false,
-          exiting: undefined,
-          openOrigin: appears ? origin : state[appId].openOrigin,
-          // A size remembered from a bigger screen is refitted, so the window never opens past the edge.
-          geometry: state[appId].geometry ? fitGeometry(state[appId].geometry, workspaceBounds(), minimumWindowSize(appId)) : createWindowGeometry(appId, openCount),
-        },
-      };
+      const openCount = visibleWindowCount(state);
+      return { ...state, [appId]: openedWindow(state[appId], origin, workspaceBounds(), minimumWindowSize(appId), () => createWindowGeometry(appId, openCount)) };
     });
     focusApp(appId);
     setStartOpen(false);
