@@ -133,14 +133,14 @@ Plans:
   3. Guarded live suite на disposable fixtures доказывает concurrent claim/admission/CAS/cleanup, RLS и RPC без обращения к production-данным и без повторного успешного победителя.
 
 **Acceptance gate**: Live mutating staging-run и schema fingerprints обязательны; наличие SQL в Git или read-only inventory не считается прохождением.
-**Plans:** 14 plans
+**Plans:** 4/14 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 16-01-PLAN.md — canonical baseline-миграция = portia_setup.sql без обёртки, parity-тест, заморозка legacy SQL, L0 upgrade-fixture, PORTIA-only teardown, SQL-ревью (STAB-REL-04, STAB-SEC-04)
-- [ ] 16-02-PLAN.md — read-only fingerprint SQL по pg_catalog и offline comparator, SQL-ревью (STAB-SEC-04)
-- [ ] 16-03-PLAN.md — аттестация цели (app binding, запрет внешнего base URL — IN-03, JWT iss) и guarded wrapper phase16-staging.mjs (STAB-SEC-01, STAB-REL-04)
-- [ ] 16-04-PLAN.md — владелец: проверка пакета supabase CLI (D7) и создание изолированного Free-проекта с PG major production (D1, D8); точная установка CLI (STAB-REL-04)
+- [x] 16-01-PLAN.md — canonical baseline-миграция = portia_setup.sql без обёртки, parity-тест, заморозка legacy SQL, L0 upgrade-fixture, PORTIA-only teardown, SQL-ревью (STAB-REL-04, STAB-SEC-04)
+- [x] 16-02-PLAN.md — read-only fingerprint SQL по pg_catalog и offline comparator, SQL-ревью (STAB-SEC-04)
+- [x] 16-03-PLAN.md — аттестация цели (app binding, запрет внешнего base URL — IN-03, JWT iss) и guarded wrapper phase16-staging.mjs (STAB-SEC-01, STAB-REL-04)
+- [x] 16-04-PLAN.md — владелец: проверка пакета supabase CLI (D7) и создание изолированного Free-проекта с PG major production (D1, D8); точная установка CLI (STAB-REL-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 16-05-PLAN.md — непрозрачный server-derived session proof (WR-01) и roster owner-fixture D4 (STAB-SEC-01)
@@ -292,7 +292,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 15. Восстановление контроля, контракты и браузерный baseline | 19/19 | In Progress|  |
-| 16. Канонический Supabase staging и SQL-истина | 0/14 | Planned | - |
+| 16. Канонический Supabase staging и SQL-истина | 4/14 | In Progress | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 8/8 | Complete    | 2026-11-01 |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
 | 19. Доказательство «Повышения» и точечная стабилизация | 0/TBD | Not started | - |
