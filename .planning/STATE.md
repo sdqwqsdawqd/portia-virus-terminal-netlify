@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.3
 milestone_name: «Стабилизация PORTIA OS»
 current_phase: 15
-current_phase_name: Восстановление контроля, контракты и браузерный baseline
-status: planning
+current_phase_name: baseline
+status: executing
 stopped_at: Phase 16 complete, ready to plan Phase 15
-last_updated: "2026-11-01T16:00:59.382Z"
+last_updated: "2026-11-01T18:09:51.512Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 16 complete, transitioned to Phase 15
-state_head: a3307790e346bad99cd103ccdd043a8d52456fdf
+state_head: cea3644260b95addd994d0588b8f83959ac4db9e
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 41
+  total_plans: 42
   completed_plans: 41
   percent: 25
 ---
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 ## Current Position
 
-Phase: 15 — Восстановление контроля, контракты и браузерный baseline
+Phase: PORTIA-15 (baseline) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-11-01 — Phase 16 complete, transitioned to Phase 15
 
 Progress: [███░░░░░░░] 25% of Phase 15 plans (phase gaps_found, not complete)

@@ -36,7 +36,7 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
   4. Неожиданная browser/console/network/CSP ошибка блокирует gate, а ожидаемый отказ виден как безопасное русское состояние; для каждой следующей фазы задана полная цепочка доказательств GSD.
 
 **Acceptance gate**: Локальный UI-review, per-hash approval и продвижение candidate captures в baseline остаются открытыми до явного решения владельца.
-**Plans**: 19/19 plans executed
+**Plans**: 19/20 plans executed
 
 Plans:
 **Wave 1**
@@ -111,6 +111,10 @@ Plans:
 **Wave 18** *(blocked on Wave 17 completion)*
 
 - [x] 15-19-PLAN.md — E2E HTTP flag can never drop `upgrade-insecure-requests` in any Netlify build (behavioral test), owner fixation of the b535d14 exception, disposition of all 12 review findings (W1, W2; STAB-BASE-05, STAB-BASE-06)
+
+**Gap closure 15-20** *(documentation only, after Phase 16; no dependencies, no code)*
+
+- [ ] 15-20-PLAN.md — G1-G5 reconciliation against Phase 16 evidence: G1 closed, G2 partial (7 PASS / 8 BLOCKED, Phases 18-19), G3/G4/G5 open with owner phases; pointer sections in unsigned trace docs, signed evidence untouched, no requirement status change (STAB-BASE-01..06)
 
 **Cross-cutting constraints:**
 
