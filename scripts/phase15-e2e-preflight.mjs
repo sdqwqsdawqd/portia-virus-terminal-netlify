@@ -101,8 +101,12 @@ export async function runPreflight(mode = "visitor", options = {}) {
     const { requireSafeMutationTargetFromEnvironment } = await import(
       "../tests/e2e/fixtures/target-guard.ts"
     );
+    const { assertAppBoundToTarget } = await import("../tests/e2e/fixtures/target-attestation.ts");
     // Playwright workers do not load env files, so the guard must judge the same shell environment.
-    requireSafeMutationTargetFromEnvironment(options.environment ?? shellEnvironment);
+    const shell = options.environment ?? shellEnvironment;
+    requireSafeMutationTargetFromEnvironment(shell);
+    // `next build` inlines the effective values (shell over env files), so bind the app to the target on those (IN-03).
+    assertAppBoundToTarget(shell, options.environment ?? process.env);
   }
 
   return { mode, status: "ready" };

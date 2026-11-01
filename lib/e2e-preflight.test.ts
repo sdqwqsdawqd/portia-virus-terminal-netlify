@@ -157,6 +157,40 @@ test("mutation mode composes visitor checks with the isolated target guard", asy
   );
 });
 
+test("mutation preflight binds the app to the attested target and forbids an external base URL", async () => {
+  const projectId = "isolatedproject00001";
+  const mutation = {
+    ...validEnvironment,
+    PORTIA_E2E_MUTATION_CONFIRM: "ISOLATED_TEST_PROJECT",
+    PORTIA_E2E_TARGET_ENVIRONMENT: "isolated-test",
+    PORTIA_E2E_TARGET_ID: projectId,
+    PORTIA_E2E_SUPABASE_URL: `https://${projectId}.supabase.co`,
+    PORTIA_E2E_PRODUCTION_PROJECT_IDS: "productionproject000",
+    PORTIA_E2E_ISOLATED_PROJECT_IDS: projectId,
+  };
+  const run = (environment: NodeJS.ProcessEnv) =>
+    runPreflight("mutation", { nodeVersion: "22.13.1", environment, loadEnvironment: false });
+  const codeOf = (promise: Promise<unknown>) =>
+    promise.then(
+      () => "none",
+      (error: { code?: string }) => error.code,
+    );
+  assert.equal(await codeOf(run({ ...mutation, PORTIA_E2E_BASE_URL: "https://external.test" })), "external-base-url");
+  assert.equal(
+    await codeOf(run({ ...mutation, NEXT_PUBLIC_SUPABASE_URL: "https://otherproject00000001.supabase.co" })),
+    "app-target-mismatch",
+  );
+  assert.equal(await codeOf(run(mutation)), "none");
+  // Visitor mode keeps tolerating an external base URL.
+  await assert.doesNotReject(
+    runPreflight("visitor", {
+      nodeVersion: "22.13.1",
+      environment: { ...mutation, PORTIA_E2E_BASE_URL: "https://external.test" },
+      loadEnvironment: false,
+    }),
+  );
+});
+
 test("mutation preflight ignores mutation config that exists only in an env file", async () => {
   const projectId = "fileonlyproject00001";
   const fileEnvironment = {
