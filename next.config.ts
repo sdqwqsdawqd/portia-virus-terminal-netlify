@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
 const development = process.env.NODE_ENV !== "production";
-// The local Playwright server runs over plain HTTP; Netlify builds always keep the upgrade.
-const allowHttpForE2E = process.env.PORTIA_E2E_ALLOW_HTTP === "1" && process.env.NETLIFY !== "true";
+// The local Playwright server (itself a production build) runs over plain HTTP; any Netlify build
+// (NETLIFY=true or any deploy CONTEXT, CLI included) keeps the upgrade, so NODE_ENV cannot be the guard.
+const allowHttpForE2E = process.env.PORTIA_E2E_ALLOW_HTTP === "1" && process.env.NETLIFY !== "true" && !process.env.CONTEXT;
 const upgradeInsecureRequests = !development && !allowHttpForE2E;
 const contentSecurityPolicy = [
   "default-src 'self'",
