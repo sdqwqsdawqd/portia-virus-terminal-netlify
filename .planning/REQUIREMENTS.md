@@ -90,7 +90,7 @@
 - [ ] **STAB-A11Y-02**: Phone actions доступны touch без hover, не перекрываются keyboard/sticky bars, имеют практичную tap area и не создают page-level horizontal overflow.
 - [ ] **STAB-A11Y-03**: Русские labels, success/error/disabled reason понятны и объявляются; нет пустых, шуточных, удвоенных или непереведённых technical labels; alt соответствует назначению изображения.
 - [ ] **STAB-A11Y-04**: Итоговая motion-настройка применяется ко всем поверхностям; off/reduced прекращает looping movement, но сохраняет content и feedback.
-- [ ] **STAB-SEC-01**: Anon, authenticated, editor, reviewer и owner видят и изменяют только разрешённые данные; запрещённые UI/API/table/RPC действия fail-closed, revoke действует без rebuild.
+- [x] **STAB-SEC-01**: Anon, authenticated, editor, reviewer и owner видят и изменяют только разрешённые данные; запрещённые UI/API/table/RPC действия fail-closed, revoke действует без rebuild.
 - [ ] **STAB-SEC-02**: Participant network/UI не получает answer keys, future questions, internal notes, bank payload и reviewer identity; sensitive responses используют no-store.
 - [ ] **STAB-SEC-03**: CSP, frame, nosniff, referrer, permissions, COOP и HSTS присутствуют, не ломая approved charter/sheet/video; CSP ужесточается только через report-only.
 - [ ] **STAB-SEC-04**: Staging и production schema fingerprints, functions, grants и RLS соответствуют canonical migrations; ручной production step имеет записанный postflight.
@@ -187,7 +187,7 @@
 | STAB-A11Y-02 | Phase 21 | Pending |
 | STAB-A11Y-03 | Phase 21 | Pending |
 | STAB-A11Y-04 | Phase 21 | Pending |
-| STAB-SEC-01 | Phase 16 | Pending |
+| STAB-SEC-01 | Phase 16 | Complete |
 | STAB-SEC-02 | Phase 21 | Pending |
 | STAB-SEC-03 | Phase 21 | Pending |
 | STAB-SEC-04 | Phase 16 | Pending |

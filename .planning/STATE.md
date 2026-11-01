@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 16
 current_phase_name: Канонический Supabase staging и SQL-истина
 status: executing
-stopped_at: Completed 16-12-PLAN.md
-last_updated: "2026-11-01T14:01:16.792Z"
+stopped_at: Completed 16-13-PLAN.md
+last_updated: "2026-11-01T14:42:04.659Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 16 execution started
-state_head: dfe56975a4543b6d7bcc1c986671af623a00f56e
+state_head: 0155e6e64aa47af10e369fed29b1fbe8675d6fc0
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 41
-  completed_plans: 39
+  completed_plans: 40
   percent: 13
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 16 (Канонический Supabase staging и SQL-истина) — EXECUTING
-Plan: 16-08 done offline (16-01..06 done; 16-07 paused at checkpoint, attest BLOCKED); next in wave 3: 16-09
+Plan: 16-13 done (Browser: роли на UI/API, revoke, HTTP CAS, G1 закрыт, G2 разблокирован); next: 16-14 (production postflight)
 Status: Executing Phase 16
 Last activity: 2026-11-01 — Phase 16 execution started
 
@@ -83,6 +83,7 @@ Progress: [█░░░░░░░░░] 13% of Phase 15 plans (phase gaps_fou
 | Phase 16 P10 | ~1h | 3 tasks | 10 files |
 | Phase 16 P11 | ~50min | 3 tasks | 7 files |
 | Phase 16 P12 | 35min | 3 tasks | 5 files |
+| Phase 16 P13 | ~2h | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 16]: 16-10 D9: explicit grants migration needed (audit sequence ACL leaked to anon/authenticated); golden fingerprint recorded; wrapper code left uncommitted due to guard
 - [Phase 16]: 16-11: db query шлёт один prepared statement; скрипты ступеней оборачиваются в один DO EXECUTE без begin/commit верхнего уровня, SQL-файлы не менялись; golden == upgrade без мост-миграции
 - [Phase 16]: 16-12: platform function rls_auto_enable excluded from golden-vs-matrix check but pinned by name; Storage insert-oversize/bad-mime for anon/outsider expected http-413/415 (bucket limits before insert policy, baseline 1639/1640)
+- [Phase 16]: 16-13: proof привилегированной lane только от probeSession после входа через /owner-login и iss; participant cookie через supabase/ssr (owner-login выходит из сессии не-редактора); mutation запускается с --workers=1 (единственный owner email)
+- [Phase 16]: 16-13: клиентский бандл редактора не должен импортировать node:crypto (CSP eval); HMAC-токены предпросмотра вынесены в lib/portia-promotion-preview-token.ts
 
 ### Pending Todos
 
@@ -143,8 +146,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-01T14:01:16.702Z
-Stopped at: Completed 16-12-PLAN.md
+Last session: 2026-11-01T14:42:04.558Z
+Stopped at: Completed 16-13-PLAN.md
 Resume file: None
 
 ## Operator Next Step
