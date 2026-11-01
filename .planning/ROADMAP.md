@@ -17,10 +17,8 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
 - [x] **Phase 16: Канонический Supabase staging и SQL-истина** — доказать миграции, роли, RLS/RPC и конкурентные операции на изолированной базе (completed 2026-11-01)
 - [x] **Phase 17: Обратимая декомпозиция рабочего стола и редактора** — выделить безопасные seams без изменения поведения, данных и визуального контракта (completed 2026-11-01)
 - [ ] **Phase 18: Рабочий стол, окна и живые анимации** — стабилизировать геометрию, настройки, ярлыки, PNG-паука, паутину и Вивьян по утверждённым эталонам
-- [ ] **Phase 19: Доказательство «Повышения» и точечная стабилизация** — доказать весь participant/reviewer flow на staging и исправить только воспроизведённые разрывы
-- [ ] **Phase 20: Стабилизация приложений, редактора, поиска и медиа** — привести остальные поверхности к проверяемым state, access, search и media-контрактам
-- [ ] **Phase 21: Закрытие security, accessibility, CSP и зависимостей** — закрыть или явно принять подтверждённые риски и выполнить финальные технические гейты
-- [ ] **Phase 22: Репетиция релиза и приёмка владельца** — повторить релиз с чистого checkout, сверить доказательства и получить физическую PC/phone UAT
+- [ ] **Phase 19: «Повышение», приложения, редактор, поиск и медиа** — доказать весь participant/reviewer flow на staging, исправить только воспроизведённые разрывы и привести остальные поверхности к проверяемым state, access, search и media-контрактам
+- [ ] **Phase 20: Security, accessibility и приёмка релиза** — закрыть или явно принять подтверждённые риски, выполнить финальные технические гейты, повторить релиз с чистого checkout и получить физическую PC/phone UAT
 
 ## Phase Details
 
@@ -226,72 +224,52 @@ Plans:
 **Plans**: TBD
 **UI hint**: yes
 
-### Phase 19: Доказательство «Повышения» и точечная стабилизация
+### Phase 19: «Повышение», приложения, редактор, поиск и медиа
 
-**Goal**: Существующий поток «Повышения» доказан на staging от безопасного поиска ника до ручного решения reviewer, пересдачи и очистки без утечек и ложных успехов.
-**Depends on**: Phase 16
-**Requirements**: STAB-PROM-01, STAB-PROM-02, STAB-PROM-03, STAB-PROM-04, STAB-PROM-05, STAB-PROM-06, STAB-PROM-07, STAB-PROM-08, STAB-PROM-09, STAB-PROM-10, STAB-PROM-11, STAB-PROM-12, STAB-PROM-13, STAB-PROM-14, STAB-PROM-15
+**Goal**: Существующий поток «Повышения» доказан на staging от безопасного поиска ника до ручного решения reviewer, пересдачи и очистки без утечек и ложных успехов; все остальные пользовательские поверхности устойчиво работают с полными, пустыми, устаревшими, частичными и запрещёнными данными на PC и phone.
+**Depends on**: Phases 16, 17 and 18
+**Requirements**: STAB-PROM-01, STAB-PROM-02, STAB-PROM-03, STAB-PROM-04, STAB-PROM-05, STAB-PROM-06, STAB-PROM-07, STAB-PROM-08, STAB-PROM-09, STAB-PROM-10, STAB-PROM-11, STAB-PROM-12, STAB-PROM-13, STAB-PROM-14, STAB-PROM-15, STAB-DESK-08, STAB-APP-01, STAB-APP-02, STAB-APP-03, STAB-APP-04, STAB-APP-05, STAB-APP-06, STAB-APP-07, STAB-APP-08, STAB-APP-09, STAB-APP-10, STAB-SEARCH-01, STAB-SEARCH-02, STAB-SEARCH-03, STAB-SEARCH-04, STAB-MEDIA-01, STAB-MEDIA-02, STAB-MEDIA-03, STAB-MEDIA-04, STAB-MEDIA-05
+**Merged**: 2026-11-02 по решению владельца из бывших Phase 19 («Доказательство «Повышения» и точечная стабилизация») и Phase 20 («Стабилизация приложений, редактора, поиска и медиа»).
 **Success Criteria** (what must be TRUE):
   1. Участник без аккаунта видит только safe projection и одну допустимую ordinary/qualification action или стабильную русскую причину; outage, missing migration, stale response и validation refusal не маскируются под успех или «ник не найден».
   2. Первый принятый запрос атомарно создаёт binding и единственный активный flow; cooldown не продлевается от retry, reload восстанавливает состояние, а отказ не оставляет token, binding или request.
   3. Ordinary и qualification выдают только допустимые immutable наборы; qualification соблюдает переходы, типы вопросов, server deadline, CAS, PC/phone policy и никогда не раскрывает future questions или keys.
   4. Reviewer с актуальным `promo` grant управляет очередью и банками без потери typed data, единолично claims попытку, вручную выбирает итог, а participant получает только разрешённый результат; retake и cleanup соблюдают сроки и лимит истории.
   5. Владелец подряд принимает participant/reviewer, bank CRUD, ordinary, qualification, retake, cleanup и direct denial после clean reload на физическом PC и phone с временными данными и без unresolved failures.
+  6. «База вирусов», «Сотрудники», «Сводка», «Информация», «Справочник», «Корзина», «Таблица» и «Устав» сохраняют валидированное поведение и различают loading, empty, populated, stale/degraded, permission denied и fatal error без уничтожения last-good state.
+  7. Редактор на PC/phone сохраняет undo/redo, drafts during save, revision conflict, poll suppression, save-all, grants, per-field errors и WYSIWYG selection/range; success показывается только после authoritative ответа.
+  8. Глобальный поиск keyboard-first находит только разрешённые опубликованные сущности, нормализует регистр и `е/ё`, открывает точную сущность в приложении-владельце и никогда не индексирует private editor/reviewer data или answer keys.
+  9. Upload и URL normalization проверяют реальные bytes, размер, формат и scheme/path, не стирают draft при отказе и используют безопасный UUID URL либо устойчивый fallback для legacy/broken/slow media.
+  10. Hero/media загружается с корректным приоритетом, offscreen collections lazy, immutable media кэшируется без повторного скачивания, а смена записи, ошибка сети или blocked host не дают stale image, app crash или infinite spinner.
 
-**Acceptance gate**: Staging races/direct denials и полная owner PC/phone UAT обязательны; архивные отметки Phase 14 и preflight не закрывают фазу.
+**Acceptance gate**: Staging races/direct denials и полная owner PC/phone UAT «Повышения» обязательны; архивные отметки Phase 14 и preflight не закрывают фазу. Per-app desktop/phone matrix, authenticated editor journeys, search click-through и upload/cache/network evidence должны быть записаны до перехода к финальному CSP.
 **Plans**: TBD
 **UI hint**: yes
 
-### Phase 20: Стабилизация приложений, редактора, поиска и медиа
+### Phase 20: Security, accessibility и приёмка релиза
 
-**Goal**: Все остальные пользовательские поверхности устойчиво работают с полными, пустыми, устаревшими, частичными и запрещёнными данными на PC и phone.
-**Depends on**: Phases 17 and 18
-**Requirements**: STAB-DESK-08, STAB-APP-01, STAB-APP-02, STAB-APP-03, STAB-APP-04, STAB-APP-05, STAB-APP-06, STAB-APP-07, STAB-APP-08, STAB-APP-09, STAB-APP-10, STAB-SEARCH-01, STAB-SEARCH-02, STAB-SEARCH-03, STAB-SEARCH-04, STAB-MEDIA-01, STAB-MEDIA-02, STAB-MEDIA-03, STAB-MEDIA-04, STAB-MEDIA-05
-**Success Criteria** (what must be TRUE):
-  1. «База вирусов», «Сотрудники», «Сводка», «Информация», «Справочник», «Корзина», «Таблица» и «Устав» сохраняют валидированное поведение и различают loading, empty, populated, stale/degraded, permission denied и fatal error без уничтожения last-good state.
-  2. Редактор на PC/phone сохраняет undo/redo, drafts during save, revision conflict, poll suppression, save-all, grants, per-field errors и WYSIWYG selection/range; success показывается только после authoritative ответа.
-  3. Глобальный поиск keyboard-first находит только разрешённые опубликованные сущности, нормализует регистр и `е/ё`, открывает точную сущность в приложении-владельце и никогда не индексирует private editor/reviewer data или answer keys.
-  4. Upload и URL normalization проверяют реальные bytes, размер, формат и scheme/path, не стирают draft при отказе и используют безопасный UUID URL либо устойчивый fallback для legacy/broken/slow media.
-  5. Hero/media загружается с корректным приоритетом, offscreen collections lazy, immutable media кэшируется без повторного скачивания, а смена записи, ошибка сети или blocked host не дают stale image, app crash или infinite spinner.
-
-**Acceptance gate**: Per-app desktop/phone matrix, authenticated editor journeys, search click-through и upload/cache/network evidence должны быть записаны до перехода к финальному CSP.
-**Plans**: TBD
-**UI hint**: yes
-
-### Phase 21: Закрытие security, accessibility, CSP и зависимостей
-
-**Goal**: Подтверждённые accessibility/security/dependency риски закрыты или честно оформлены как release blockers/waivers, не ломая одобренный контент и интерфейс.
-**Depends on**: Phases 18, 19 and 20
-**Requirements**: STAB-MEDIA-07, STAB-A11Y-01, STAB-A11Y-02, STAB-A11Y-03, STAB-A11Y-04, STAB-SEC-02, STAB-SEC-03, STAB-SEC-05
+**Goal**: Подтверждённые accessibility/security/dependency риски закрыты или честно оформлены как release blockers/waivers, не ломая одобренный контент и интерфейс; один и тот же release commit проходит чистую репетицию, безопасную проверку инфраструктуры и окончательную владельческую приёмку без скрытых или переименованных пробелов.
+**Depends on**: Phase 19 (and therefore all prior v1.3 phases)
+**Requirements**: STAB-MEDIA-07, STAB-A11Y-01, STAB-A11Y-02, STAB-A11Y-03, STAB-A11Y-04, STAB-SEC-02, STAB-SEC-03, STAB-SEC-05, STAB-SEC-06, STAB-REL-01, STAB-REL-02, STAB-REL-03, STAB-REL-05, STAB-REL-06, STAB-REL-07, STAB-REL-08
+**Merged**: 2026-11-02 по решению владельца из бывших Phase 21 («Закрытие security, accessibility, CSP и зависимостей») и Phase 22 («Репетиция релиза и приёмка владельца»).
 **Success Criteria** (what must be TRUE):
   1. PC controls имеют корректные name/role/state, видимый focus, dialog trap/restore и keyboard alternative; phone actions доступны touch, не перекрываются keyboard/sticky bars и не создают page-level overflow.
   2. Русские labels и объявляемые success/error/disabled reasons понятны, alt соответствует назначению, а off/reduced прекращает looping movement на всех поверхностях без потери content и feedback.
   3. Participant network/UI не получает answer keys, future questions, internal notes, bank payload или reviewer identity, а sensitive responses используют no-store.
   4. Инвентаризированные media hosts проходят CSP report-only до enforcement; security headers не ломают approved charter/sheet/video, а rejected host показывает устойчивый fallback без необъяснённых CSP/console errors.
   5. Локальная security matrix даёт проверяемый отчёт; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, а lockfile меняется отдельным проверяемым increment.
+  6. Из clean checkout на release commit воспроизводимо проходят tests, typecheck, production build, full lint, production audit, Playwright, approved visuals, axe, keyboard journeys и zero-unexpected-console policy без скрытого retry-pass и без production mutations.
+  7. Владелец на физическом PC/phone после clean reload принимает полный «Повышение», window bounds, qualification lock, PNG-паука, паутину, ярлыки, Вивьян, поиск и bounded editor layout с временными безопасными данными.
+  8. Roadmap, requirements, summaries, verification, UAT и deployed evidence описывают один commit/state; blocked live check остаётся blocked, а не complete.
+  9. Финальный review подтверждает сохранение PORTIA OS и принятых out-of-scope; release notes честно перечисляют spoofable mode/device binding, остальные accepted risks и все waivers без обещания hardware attestation.
 
-**Acceptance gate**: Неполное локальное покрытие отмечается явно; незакрытый high finding блокирует релиз согласно config.
-**Plans**: TBD
-**UI hint**: yes
-
-### Phase 22: Репетиция релиза и приёмка владельца
-
-**Goal**: Один и тот же release commit проходит чистую репетицию, безопасную проверку инфраструктуры и окончательную владельческую приёмку без скрытых или переименованных пробелов.
-**Depends on**: Phase 21 (and therefore all prior v1.3 phases)
-**Requirements**: STAB-SEC-06, STAB-REL-01, STAB-REL-02, STAB-REL-03, STAB-REL-05, STAB-REL-06, STAB-REL-07, STAB-REL-08
-**Success Criteria** (what must be TRUE):
-  1. Из clean checkout на release commit воспроизводимо проходят tests, typecheck, production build, full lint, production audit, Playwright, approved visuals, axe, keyboard journeys и zero-unexpected-console policy без скрытого retry-pass и без production mutations.
-  2. Владелец на физическом PC/phone после clean reload принимает полный «Повышение», window bounds, qualification lock, PNG-паука, паутину, ярлыки, Вивьян, поиск и bounded editor layout с временными безопасными данными.
-  3. Roadmap, requirements, summaries, verification, UAT и deployed evidence описывают один commit/state; blocked live check остаётся blocked, а не complete.
-  4. Финальный review подтверждает сохранение PORTIA OS и принятых out-of-scope; release notes честно перечисляют spoofable mode/device binding, остальные accepted risks и все waivers без обещания hardware attestation.
-
-**Acceptance gate**: Фаза не закрывается без физической owner PC/phone UAT, точного evidence ledger и отсутствия pending high-severity blocker.
+**Acceptance gate**: Неполное локальное покрытие отмечается явно; незакрытый high finding блокирует релиз согласно config. Фаза не закрывается без физической owner PC/phone UAT, точного evidence ledger и отсутствия pending high-severity blocker.
 **Plans**: TBD
 **UI hint**: yes
 
 ## Progress
 
-**Execution order:** 15 → 16 → 17 → 18 → 19 → 20 → 21 → 22. Phase 17 непосредственно зависит от 15, а Phase 19 — от 16; номера сохраняют единый порядок milestone и не разрешают обход acceptance gates.
+**Execution order:** 15 → 16 → 17 → 18 → 19 → 20 (2026-11-02: бывшие 19+20 объединены в 19, бывшие 21+22 — в 20). Phase 17 непосредственно зависит от 15, а Phase 19 — от 16; номера сохраняют единый порядок milestone и не разрешают обход acceptance gates.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -299,17 +277,15 @@ Plans:
 | 16. Канонический Supabase staging и SQL-истина | 14/14 | Complete    | 2026-11-01 |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 8/8 | Complete    | 2026-11-01 |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
-| 19. Доказательство «Повышения» и точечная стабилизация | 0/TBD | Not started | - |
-| 20. Стабилизация приложений, редактора, поиска и медиа | 0/TBD | Not started | - |
-| 21. Закрытие security, accessibility, CSP и зависимостей | 0/TBD | Not started | - |
-| 22. Репетиция релиза и приёмка владельца | 0/TBD | Not started | - |
+| 19. «Повышение», приложения, редактор, поиск и медиа | 0/TBD | Not started | - |
+| 20. Security, accessibility и приёмка релиза | 0/TBD | Not started | - |
 
 ## Coverage
 
 - v1.3 requirements mapped: **76/76**
 - Orphaned requirements: **0**
 - Duplicate mappings: **0**
-- Granularity: **standard** (eight compact phases)
+- Granularity: **standard** (six phases after the 2026-11-02 merge of 19+20 and 21+22)
 
 ---
 *Roadmap created: 2026-10-30 for PORTIA OS v1.3 «Стабилизация PORTIA OS»*

@@ -6,16 +6,16 @@ current_phase: 18
 current_phase_name: Рабочий стол, окна и живые анимации
 status: planning
 stopped_at: Phase PORTIA-15 complete, ready to plan Phase 18
-last_updated: "2026-11-01T19:24:42.338Z"
+last_updated: "2026-11-01T19:38:46.982Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase PORTIA-15 complete, transitioned to Phase 18
-state_head: 5a8045ab50c7dbacf8fb141bdd6e3fb4e24f891d
+state_head: 91a2b51dd4d8ab233cff48623a02c590a6ab1a20
 progress:
-  total_phases: 8
+  total_phases: 6
   completed_phases: 3
   total_plans: 42
   completed_plans: 42
-  percent: 38
+  percent: 50
 ---
 
 # Project State
@@ -34,7 +34,7 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-11-02 — Phase PORTIA-15 complete, transitioned to Phase 18
 
-Progress: [████░░░░░░] 38% of Phase 15 plans (phase gaps_found, not complete)
+Progress: [█████░░░░░] 50% of Phase 15 plans (phase gaps_found, not complete)
 
 ## Performance Metrics
 
@@ -136,8 +136,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 15] The 33 approved hashes are promoted exactly; 18 rejected candidates and 33 typed BLOCKED rows remain outside baseline authority.
 - [Phase 15] Participant/editor/reviewer/owner browser lanes remain explicit BLOCKED evidence; owner declined isolated staging, so real role proof is handed to Phase 16 and no production mutation is authorized.
 - [Phase 16] Dedicated isolated Supabase project/branch, credentials and disposable fixtures are not yet proven available.
-- [Phase 21] Security closure uses deep GSD review and the local auth/API/RLS/header/CSP/dependency/secret matrix with no external runtime prerequisite.
-- [Phase 22] Physical owner PC (including DPR 1.25) and phone UAT has not occurred and blocks milestone completion.
+- [Phase 20] Security closure uses deep GSD review and the local auth/API/RLS/header/CSP/dependency/secret matrix with no external runtime prerequisite.
+- [Phase 20] Physical owner PC (including DPR 1.25) and phone UAT has not occurred and blocks milestone completion.
 
 ### Quick Tasks Completed
 
@@ -145,13 +145,17 @@ Full decision history: `.planning/PROJECT.md`.
 |---|-------------|------|--------|-----------|
 | 261102-07k | Окна: плитки держат размер, редактор листается целиком и заполняет полный экран, поиск показывает все рекомендации | 2026-11-02 | 5a8045a | [261102-07k-fix-window-resize-and-editor-scroll-layo](./quick/261102-07k-fix-window-resize-and-editor-scroll-layo/) |
 
+### Roadmap Evolution
+
+- Phase 19 edited: merged former phases 19+20 into 19 and 21+22 into 20 (owner decision 2026-11-02); requirements traceability remapped
+
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
 | live_proof | Promotion RLS/RPC/concurrency and authenticated reviewer flows | Open gate in Phase 16/19 | v1.2 incomplete close |
 | owner_uat | Promotion plus desktop/motion PC/phone acceptance | Open gate in Phase 19/22 | v1.2 incomplete close |
-| security | Local security matrix and finding disposition | Open gate in Phase 21 | v1.2 incomplete close |
+| security | Local security matrix and finding disposition | Open gate in Phase 20 | v1.2 incomplete close |
 | architecture | Oversized desktop/editor composition roots | Planned for reversible extraction in Phase 17 | v1.2 incomplete close |
 
 ## Session Continuity
