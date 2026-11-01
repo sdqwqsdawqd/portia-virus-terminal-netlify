@@ -36,7 +36,7 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
   4. Неожиданная browser/console/network/CSP ошибка блокирует gate, а ожидаемый отказ виден как безопасное русское состояние; для каждой следующей фазы задана полная цепочка доказательств GSD.
 
 **Acceptance gate**: Локальный UI-review, per-hash approval и продвижение candidate captures в baseline остаются открытыми до явного решения владельца.
-**Plans**: 16/16 plans executed
+**Plans**: 16/19 plans executed
 
 Plans:
 **Wave 1**
@@ -102,6 +102,15 @@ Plans:
 **Wave 16** *(gap closure G6 only; blocked on Wave 15 completion)*
 
 - [x] 15-16-PLAN.md — tracked candidate index so `--verify-ui-map` / `--verify-approval` pass in a clean checkout and still fail closed; G1-G5 untouched, no requirement status change (STAB-BASE-03, STAB-BASE-04, STAB-BASE-06)
+
+**Wave 17** *(gap closure: in-repo review findings only, G1-G5 untouched; blocked on Wave 16 completion)*
+
+- [ ] 15-17-PLAN.md — preflight judges the same environment as the tests (shell-only mutation guard), accepts publishable or anon key, documents the intentional Node 22.13.x pin (WR-03, WR-05, WR-06; STAB-BASE-06)
+- [ ] 15-18-PLAN.md — unit test of the real `visualPolicy` instead of arithmetic, explicit check of the internal Playwright comparator (IN-05, IN-01 part 1; STAB-BASE-06)
+
+**Wave 18** *(blocked on Wave 17 completion)*
+
+- [ ] 15-19-PLAN.md — E2E HTTP flag can never drop `upgrade-insecure-requests` in any Netlify build (behavioral test), owner fixation of the b535d14 exception, disposition of all 12 review findings (W1, W2; STAB-BASE-05, STAB-BASE-06)
 
 **Cross-cutting constraints:**
 
