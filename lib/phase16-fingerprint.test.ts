@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -145,5 +145,83 @@ test("CLI: exit 0 equal, 1 diff, 2 incomparable or bad format; --summary prints 
   const printed = JSON.parse(s.stdout);
   assert.equal(printed.inventory.functions, 2);
   assert.match(printed.sha256.functions, /^[0-9a-f]{64}$/);
+});
+
+// ---------------------------------------------------------------------------
+// Static read-only proof for the fingerprint SQL (owner runs it in production, D5).
+// ---------------------------------------------------------------------------
+
+const sqlText = readFileSync(new URL("../supabase/fingerprint/portia_schema_fingerprint.sql", import.meta.url), "utf8")
+  .replace(/\r\n/g, "\n");
+
+const stripComments = (sql: string) => sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+// Replace string literals with '' so keywords inside text do not count ('' escapes stay inside a literal).
+const stripLiterals = (sql: string) => sql.replace(/'(?:[^']|'')*'/g, "''");
+const code = stripLiterals(stripComments(sqlText));
+const literals = [...stripComments(sqlText).matchAll(/'((?:[^']|'')*)'/g)].map((m) => m[1].replace(/''/g, "'"));
+
+const forbidden = [
+  "insert", "update", "delete", "merge", "create", "drop", "alter", "grant", "revoke", "truncate",
+  "copy", "begin", "commit", "rollback", "vacuum", "analyze", "set", "do", "call", "lock", "notify", "refresh",
+];
+
+test("fingerprint SQL is a single read-only statement", () => {
+  const body = code.trim().replace(/;\s*$/, "");
+  assert.ok(!body.includes(";"), "more than one statement");
+  assert.match(body, /^(with|select)\b/i);
+  for (const word of forbidden) {
+    assert.doesNotMatch(code, new RegExp(`\\b${word}\\b`, "i"), `forbidden keyword: ${word}`);
+  }
+});
+
+test("query_to_xml payload literals are read-only SELECTs", () => {
+  // The bare 'cron.job' literal is the to_regclass() argument, not a payload.
+  const payloads = literals.filter((l) => /\bcron\.job\b/.test(l) && l !== "cron.job");
+  assert.ok(payloads.length >= 1, "cron.job payload missing");
+  for (const p of payloads) {
+    assert.match(p.trim(), /^select\b/i);
+    assert.ok(!p.replace(/;\s*$/, "").includes(";"));
+    const inner = stripLiterals(p);
+    for (const word of forbidden) {
+      assert.doesNotMatch(inner, new RegExp(`\\b${word}\\b`, "i"), `payload keyword: ${word}`);
+    }
+  }
+  // Naming cron.job outside a literal would fail to parse on a project without pg_cron.
+  assert.doesNotMatch(code, /\bcron\.job\b/i);
+});
+
+test("fingerprint SQL covers the required catalog functions and sections", () => {
+  for (const needle of [
+    'collate "C"', "aclexplode", "acldefault", "pg_get_function_identity_arguments", "pg_get_expr",
+    "pg_get_constraintdef", "pg_get_indexdef", "convalidated", "attacl", "pg_get_function_result",
+    "prosecdef", "provolatile", "proconfig", "sha256", "relrowsecurity", "relforcerowsecurity",
+    "polcmd", "polpermissive", "polroles", "portia-media", "portia-promo-cleanup",
+  ]) {
+    assert.ok(sqlText.includes(needle), `missing: ${needle}`);
+  }
+  for (const section of ["extensions", "tables", "columns", "constraints", "indexes", "functions", "policies", "bucket", "cron"]) {
+    assert.ok(sqlText.includes(`'${section}',`), `missing section: ${section}`);
+  }
+  assert.ok(sqlText.includes("'portia-fingerprint-v1'"));
+});
+
+test("fingerprint SQL emits no ordinals, owners, versions, credentials or raw rows", () => {
+  // attnum and owner oids may only be join keys or acldefault() arguments, never output.
+  const noJoinUse = code
+    .replace(/d\.adnum = a\.attnum/g, "")
+    .replace(/a\.attnum > 0/g, "")
+    .replace(/acldefault\([^)]*\)/g, "");
+  assert.doesNotMatch(noJoinUse, /\battnum\b|\b(proowner|relowner|nspowner)\b/i);
+  assert.doesNotMatch(code, /\bextversion\b|\bjsonb_pretty\b/i);
+  assert.doesNotMatch(code, /\b(pg_authid|pg_shadow|pg_user_mapping|pg_roles|rolname|rolpassword|row_to_json|to_json)\b/i);
+  assert.doesNotMatch(code, /to_jsonb\(\s*(?!true\b|false\b)[a-z_]+\s*\)/i);
+  assert.doesNotMatch(code, /\bas oid\b|\bselect\s+\*|,\s*\*\s*from/i);
+});
+
+test("ACL grantee filter is limited to PUBLIC and three fixed Supabase roles", () => {
+  const filters = [...code.matchAll(/in \('', '', ''\)/g)];
+  assert.equal(filters.length, 3, "relation, column and function ACL each need the filter");
+  const roles = [...stripComments(sqlText).matchAll(/in \('([a-z_]+)', '([a-z_]+)', '([a-z_]+)'\)/g)];
+  for (const m of roles) assert.deepEqual([m[1], m[2], m[3]], ["anon", "authenticated", "service_role"]);
 });
 
