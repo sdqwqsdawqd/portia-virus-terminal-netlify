@@ -9,7 +9,7 @@ import { shortcutOf } from "@/lib/editor-shortcuts";
 import { dropFields, mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
 import { TYPING_PAUSE_MS, historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
-import { addBroadcast, moveGuideCard, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
+import { addBroadcast, makeId, moveGuideCard, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
 import {
   classificationOptions,
   findGuide,
@@ -140,7 +140,6 @@ const backgroundColorPalette = [
   { value: "#26312f", label: "Тёмный" },
 ];
 
-const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const clone = (content: PortiaContent) => JSON.parse(JSON.stringify(content)) as PortiaContent;
 const editorReducer = (state: EditorHistory<PortiaContent>, action: HistoryAction<PortiaContent>) => historyReducer(state, action, clone);
 const initEditorHistory = (value: PortiaContent) => initHistory(value, clone);

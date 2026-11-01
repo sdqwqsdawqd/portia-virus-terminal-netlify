@@ -1,5 +1,7 @@
 import { portiaTextKey, type Broadcast, type GuideCard, type PortiaContent, type Virus } from "./portia-content.ts";
 
+export const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
 // A post added at the top, a delete or a reorder shifts every index that a handler or the open format panel captured (uat-03-owner-broadcast-duplicates).
 export function updateById<T extends { id: string }>(items: T[], id: string, update: (item: T) => void): void {
   const item = items.find((candidate) => candidate.id === id);
