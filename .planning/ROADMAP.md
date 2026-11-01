@@ -14,7 +14,7 @@ v1.3 превращает уже работающий PORTIA OS в доказу�
 ## Phases
 
 - [ ] **Phase 15: Восстановление контроля, контракты и браузерный baseline** — зафиксировать текущий PORTIA OS через локальный UI-review и ввести воспроизводимый Playwright/visual/a11y/console/security gate
-- [ ] **Phase 16: Канонический Supabase staging и SQL-истина** — доказать миграции, роли, RLS/RPC и конкурентные операции на изолированной базе
+- [x] **Phase 16: Канонический Supabase staging и SQL-истина** — доказать миграции, роли, RLS/RPC и конкурентные операции на изолированной базе (completed 2026-11-01)
 - [x] **Phase 17: Обратимая декомпозиция рабочего стола и редактора** — выделить безопасные seams без изменения поведения, данных и визуального контракта (completed 2026-11-01)
 - [ ] **Phase 18: Рабочий стол, окна и живые анимации** — стабилизировать геометрию, настройки, ярлыки, PNG-паука, паутину и Вивьян по утверждённым эталонам
 - [ ] **Phase 19: Доказательство «Повышения» и точечная стабилизация** — доказать весь participant/reviewer flow на staging и исправить только воспроизведённые разрывы
@@ -133,7 +133,7 @@ Plans:
   3. Guarded live suite на disposable fixtures доказывает concurrent claim/admission/CAS/cleanup, RLS и RPC без обращения к production-данным и без повторного успешного победителя.
 
 **Acceptance gate**: Live mutating staging-run и schema fingerprints обязательны; наличие SQL в Git или read-only inventory не считается прохождением.
-**Plans:** 14/14 plans executed
+**Plans:** 14/14 plans complete
 
 Plans:
 **Wave 1**
@@ -292,7 +292,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 15. Восстановление контроля, контракты и браузерный baseline | 19/19 | In Progress|  |
-| 16. Канонический Supabase staging и SQL-истина | 14/14 | In Progress | - |
+| 16. Канонический Supabase staging и SQL-истина | 14/14 | Complete    | 2026-11-01 |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 8/8 | Complete    | 2026-11-01 |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
 | 19. Доказательство «Повышения» и точечная стабилизация | 0/TBD | Not started | - |

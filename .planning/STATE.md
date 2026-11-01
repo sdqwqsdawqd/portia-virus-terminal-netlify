@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.3
 milestone_name: «Стабилизация PORTIA OS»
-current_phase: 16
-current_phase_name: Канонический Supabase staging и SQL-истина
-status: executing
-stopped_at: Completed 16-14-PLAN.md
-last_updated: "2026-11-01T15:34:57.402Z"
+current_phase: 15
+current_phase_name: Восстановление контроля, контракты и браузерный baseline
+status: planning
+stopped_at: Phase 16 complete, ready to plan Phase 15
+last_updated: "2026-11-01T16:00:59.382Z"
 last_activity: 2026-11-01
-last_activity_desc: Phase 16 execution started
-state_head: d79732e2f4d325bcbf97608a985d501ab1dd01e3
+last_activity_desc: Phase 16 complete, transitioned to Phase 15
+state_head: a3307790e346bad99cd103ccdd043a8d52456fdf
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 41
   completed_plans: 41
-  percent: 13
+  percent: 25
 ---
 
 # Project State
@@ -29,18 +29,18 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 ## Current Position
 
-Phase: 16 (Канонический Supabase staging и SQL-истина) — EXECUTING
-Plan: 16-14 done (14 of 14 plans summarized; production postflight DRIFT, миграция 20261101000200 добавлена, STAB-REL-04 Complete, STAB-SEC-04 Pending до owner-run применения миграций к production); next: phase verification
-Status: Phase 16 plans complete, awaiting verification
-Last activity: 2026-11-01 — Phase 16 execution started
+Phase: 15 — Восстановление контроля, контракты и браузерный baseline
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-01 — Phase 16 complete, transitioned to Phase 15
 
-Progress: [█░░░░░░░░░] 13% of Phase 15 plans (phase gaps_found, not complete)
+Progress: [███░░░░░░░] 25% of Phase 15 plans (phase gaps_found, not complete)
 
 ## Performance Metrics
 
 **Current milestone:**
 
-- Total plans completed: 18
+- Total plans completed: 32
 - Average duration: 49m
 - Total execution time: 8h09m
 
@@ -48,6 +48,7 @@ Progress: [█░░░░░░░░░] 13% of Phase 15 plans (phase gaps_fou
 |-------|-------|-------|----------|
 | 15 | 10 | 8h09m | 49m |
 | PORTIA-17 | 8 | - | - |
+| 16 | 14 | - | - |
 
 *Plan counts and velocity begin after Phase 15 planning.*
 | Phase 15 P01 | 8 min | 3 tasks | 5 files |
@@ -149,7 +150,7 @@ Full decision history: `.planning/PROJECT.md`.
 ## Session Continuity
 
 Last session: 2026-11-01T15:34:57.312Z
-Stopped at: Completed 16-14-PLAN.md
+Stopped at: Phase 16 complete, ready to plan Phase 15
 Resume file: None
 
 ## Operator Next Step
