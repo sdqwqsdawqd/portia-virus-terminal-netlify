@@ -137,7 +137,30 @@ Plans:
   3. Каждый extraction increment можно откатить отдельно, не возвращая уже доказанные соседние seams и не вводя новый generic app shell.
 
 **Acceptance gate**: Декомпозиция начинается только после Phase 15 baseline и проходит parity-gate после каждого increment; намеренные UX-изменения сюда не входят.
-**Plans**: TBD
+**Plans:** 7 plans
+
+Plans:
+**Wave 1**
+- [ ] 17-01-PLAN.md — эталон parity-gate, инструмент чистого переноса, source-тесты по семействам файлов, закрепление STAB-DESK-07
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 17-02-PLAN.md — части редактора досье (классификация, поле картинки, перетаскивание, вкладки, диалог, форма досье) для 17.1
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 17-03-PLAN.md — просмотр досье и FormattedText в отдельном модуле для 17.1
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 17-04-PLAN.md — форматирование текста (FormattedTextarea, панель, ActiveFormatContext) для 17.1
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 17-05-PLAN.md — контракт открытия окна (STAB-DESK-01): чистые функции, инвентаризация D-06, e2e
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 17-06-PLAN.md — рамка окна и ярлыки рабочего стола в seam-модулях
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 17-07-PLAN.md — окна-документы и «Справочник» в seam-модуле, итог фазы
+
 **UI hint**: yes
 
 ### Phase 18: Рабочий стол, окна и живые анимации

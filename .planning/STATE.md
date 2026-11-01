@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v1.3
 milestone_name: «Стабилизация PORTIA OS»
-current_phase: 15
-current_phase_name: Восстановление контроля, контракты и браузерный baseline
+current_phase: 17
+current_phase_name: obratimaya-dekompozitsiya-rabochego-stola-i-redaktora
 status: executing
 stopped_at: Phase 17 context gathered
-last_updated: "2026-10-31T23:31:59.977Z"
+last_updated: "2026-11-01T00:19:25.232Z"
 last_activity: 2026-11-01
 last_activity_desc: Plan 15-16 closed G6 (tracked candidate index); Phase 15 stays gaps_found
-state_head: 1140aef45734566ed0ff239876bb53500e8c1524
+state_head: cbbb1b7b09786452385bc716e38f17db695a8e7a
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 16
+  total_plans: 23
   completed_plans: 16
   percent: 0
 ---
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 ## Current Position
 
-Phase: PORTIA-15 (Восстановление контроля, контракты и браузерный baseline) — EXECUTING
+Phase: 17 (obratimaya-dekompozitsiya-rabochego-stola-i-redaktora) — READY TO EXECUTE
 Plan: 16 of 16
 Status: All 16 plans executed; Phase 15 verification = gaps_found (G1-G5 open: role/data/visual/device; G6 resolved by Plan 15-16) — awaiting orchestrator verification gates
 Last activity: 2026-11-01 -- Plan 15-16 closed G6 (tracked candidate index, clean-checkout proof)
