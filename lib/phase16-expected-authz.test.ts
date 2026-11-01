@@ -182,6 +182,10 @@ test("promo tables: RLS on, every privilege revoked, no grant and no policy, so 
     assert.doesNotMatch(sql, new RegExp(`^grant [^;]* on table public\\.${table.name}\\b`, "mu"), `${table.name}: unexpected grant`);
     assert.doesNotMatch(sql, new RegExp(`^create policy [^;]*on public\\.${table.name}\\b`, "mu"), `${table.name}: unexpected policy`);
     for (const op of tableOps) for (const [role, cell] of Object.entries<Cell>(table.ops[op])) assert.equal(cell.outcome, "42501", `${table.name} ${op} ${role}`);
+    // The live probes need a real column and a typed key, otherwise PostgREST may answer before the privilege check.
+    assert.ok(["uuid", "bigint", "text"].includes(table.pk_kind), `${table.name}: pk_kind`);
+    assert.ok(Object.keys(table.probes?.update?.set ?? {}).length > 0, `${table.name}: probe column`);
+    assert.ok(new RegExp(`^  ${Object.keys(table.probes.update.set)[0]} `, "mu").test(sql.slice(sql.indexOf(`create table if not exists public.${table.name} (`))), `${table.name}: probe column exists`);
   }
 });
 

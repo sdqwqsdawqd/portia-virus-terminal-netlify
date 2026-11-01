@@ -2026,6 +2026,16 @@
       "name": "portia_promo_device_bindings",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "nickname_key": "probe"
+        },
+        "update": {
+          "set": {
+            "nickname_key": "probe"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -2137,6 +2147,16 @@
       "name": "portia_promo_attempt_buckets",
       "pk": "bucket_key",
       "pk_kind": "text",
+      "probes": {
+        "insert": {
+          "updated_at": "2026-01-01T00:00:00Z"
+        },
+        "update": {
+          "set": {
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -2248,6 +2268,16 @@
       "name": "portia_promo_task_banks",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "updated_at": "2026-01-01T00:00:00Z"
+        },
+        "update": {
+          "set": {
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -2359,6 +2389,16 @@
       "name": "portia_promo_task_items",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "updated_at": "2026-01-01T00:00:00Z"
+        },
+        "update": {
+          "set": {
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -2470,6 +2510,16 @@
       "name": "portia_promo_requests",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "updated_at": "2026-01-01T00:00:00Z"
+        },
+        "update": {
+          "set": {
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -2581,6 +2631,16 @@
       "name": "portia_promo_assignments",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "updated_at": "2026-01-01T00:00:00Z"
+        },
+        "update": {
+          "set": {
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -2692,6 +2752,16 @@
       "name": "portia_promo_assignment_items",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "snapshot_text": "probe"
+        },
+        "update": {
+          "set": {
+            "snapshot_text": "probe"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -2803,6 +2873,16 @@
       "name": "portia_promo_qualification_banks",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "updated_at": "2026-01-01T00:00:00Z"
+        },
+        "update": {
+          "set": {
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -2914,6 +2994,16 @@
       "name": "portia_promo_qualification_questions",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "updated_at": "2026-01-01T00:00:00Z"
+        },
+        "update": {
+          "set": {
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -3025,6 +3115,16 @@
       "name": "portia_promo_qualification_options",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "option_text": "probe"
+        },
+        "update": {
+          "set": {
+            "option_text": "probe"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -3136,6 +3236,16 @@
       "name": "portia_promo_qualification_requests",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "updated_at": "2026-01-01T00:00:00Z"
+        },
+        "update": {
+          "set": {
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -3247,6 +3357,16 @@
       "name": "portia_promo_attempts",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "updated_at": "2026-01-01T00:00:00Z"
+        },
+        "update": {
+          "set": {
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -3358,6 +3478,16 @@
       "name": "portia_promo_attempt_questions",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "question_type": "probe"
+        },
+        "update": {
+          "set": {
+            "question_type": "probe"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -3469,6 +3599,16 @@
       "name": "portia_promo_answers",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "answer_nonce": "probe"
+        },
+        "update": {
+          "set": {
+            "answer_nonce": "probe"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -3580,6 +3720,16 @@
       "name": "portia_promo_results",
       "pk": "id",
       "pk_kind": "uuid",
+      "probes": {
+        "insert": {
+          "created_at": "2026-01-01T00:00:00Z"
+        },
+        "update": {
+          "set": {
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
@@ -3691,6 +3841,16 @@
       "name": "portia_promo_audit_events",
       "pk": "id",
       "pk_kind": "bigint",
+      "probes": {
+        "insert": {
+          "created_at": "2026-01-01T00:00:00Z"
+        },
+        "update": {
+          "set": {
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
       "ops": {
         "select": {
           "anon": {
