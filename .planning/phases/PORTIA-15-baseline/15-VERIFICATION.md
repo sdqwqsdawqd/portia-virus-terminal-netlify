@@ -1,7 +1,7 @@
 ---
 phase: 15-baseline
 verified: 2026-11-01T23:00:00Z
-status: gaps_found
+status: passed
 score: 1/4 must-haves verified
 behavior_unverified: 0
 covered_files:
@@ -271,3 +271,13 @@ Phase 15 остаётся `gaps_found`, 1/4. Реальный прогресс: 
 
 _Verified: 2026-11-01_
 _Verifier: Claude (gsd-verifier)_
+
+## Решение владельца (2026-11-02)
+
+Владелец Qloxz принял фазу 15 при открытых пунктах и выбрал закрыть её без переноса в другие фазы. Статус отчёта переведён в `passed` этим решением, а не доказательствами. Ни один BLOCKED не засчитан как pass:
+
+- 9 строк G3 с recoveryPhase 16 (editor-* x7, owner-editor-access, promotion-reviewer-editor): остаются BLOCKED, фаза-владелец не назначена.
+- 8 data-lanes (7 пиксельных application-сравнений D6, Firefox `search-restored` DATA-SEED): остаются BLOCKED, фаза-владелец не назначена.
+- G3/G4/G5 в остальной части: открыты и закреплены за фазами 18/19/20/22 по evidence (`evidence/15-GAP-RECONCILIATION.md`).
+- Требования STAB-BASE-02/03/04/06 остаются Pending; Complete только STAB-BASE-01 и -05.
+- Human items (W1 b535d14, IN-06 firefox window-search, физический UAT) остаются без ответа.
