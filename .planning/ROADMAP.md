@@ -133,7 +133,7 @@ Plans:
   3. Guarded live suite на disposable fixtures доказывает concurrent claim/admission/CAS/cleanup, RLS и RPC без обращения к production-данным и без повторного успешного победителя.
 
 **Acceptance gate**: Live mutating staging-run и schema fingerprints обязательны; наличие SQL в Git или read-only inventory не считается прохождением.
-**Plans:** 13/14 plans executed
+**Plans:** 14/14 plans executed
 
 Plans:
 **Wave 1**
@@ -162,7 +162,7 @@ Plans:
 - [x] 16-13-PLAN.md — Playwright: реальные role lanes через probeSession, API-матрица, revoke без re-login, HTTP CAS контента, G2 data-lanes (D6) (STAB-SEC-01, STAB-REL-04)
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 16-14-PLAN.md — владелец: read-only production fingerprint (D5); postflight, итог 16-LIVE-RUN.md, честная трассировка (STAB-SEC-04, STAB-SEC-01, STAB-REL-04)
+- [x] 16-14-PLAN.md — владелец: read-only production fingerprint (D5); postflight, итог 16-LIVE-RUN.md, честная трассировка (STAB-SEC-04, STAB-SEC-01, STAB-REL-04)
 
 ### Phase 17: Обратимая декомпозиция рабочего стола и редактора
 
@@ -292,7 +292,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 15. Восстановление контроля, контракты и браузерный baseline | 19/19 | In Progress|  |
-| 16. Канонический Supabase staging и SQL-истина | 13/14 | In Progress | - |
+| 16. Канонический Supabase staging и SQL-истина | 14/14 | In Progress | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 8/8 | Complete    | 2026-11-01 |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
 | 19. Доказательство «Повышения» и точечная стабилизация | 0/TBD | Not started | - |

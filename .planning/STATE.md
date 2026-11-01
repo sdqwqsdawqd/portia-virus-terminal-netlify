@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 16
 current_phase_name: Канонический Supabase staging и SQL-истина
 status: executing
-stopped_at: Completed 16-13-PLAN.md
-last_updated: "2026-11-01T14:42:04.659Z"
+stopped_at: Completed 16-14-PLAN.md
+last_updated: "2026-11-01T15:34:57.402Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 16 execution started
-state_head: 0155e6e64aa47af10e369fed29b1fbe8675d6fc0
+state_head: d79732e2f4d325bcbf97608a985d501ab1dd01e3
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 41
-  completed_plans: 40
+  completed_plans: 41
   percent: 13
 ---
 
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 16 (Канонический Supabase staging и SQL-истина) — EXECUTING
-Plan: 16-13 done (Browser: роли на UI/API, revoke, HTTP CAS, G1 закрыт, G2 разблокирован); next: 16-14 (production postflight)
-Status: Executing Phase 16
+Plan: 16-14 done (14 of 14 plans summarized; production postflight DRIFT, миграция 20261101000200 добавлена, STAB-REL-04 Complete, STAB-SEC-04 Pending до owner-run применения миграций к production); next: phase verification
+Status: Phase 16 plans complete, awaiting verification
 Last activity: 2026-11-01 — Phase 16 execution started
 
 Progress: [█░░░░░░░░░] 13% of Phase 15 plans (phase gaps_found, not complete)
@@ -84,6 +84,7 @@ Progress: [█░░░░░░░░░] 13% of Phase 15 plans (phase gaps_fou
 | Phase 16 P11 | ~50min | 3 tasks | 7 files |
 | Phase 16 P12 | 35min | 3 tasks | 5 files |
 | Phase 16 P13 | ~2h | 3 tasks | 15 files |
+| Phase 16 P14 | 40min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 16]: 16-12: platform function rls_auto_enable excluded from golden-vs-matrix check but pinned by name; Storage insert-oversize/bad-mime for anon/outsider expected http-413/415 (bucket limits before insert policy, baseline 1639/1640)
 - [Phase 16]: 16-13: proof привилегированной lane только от probeSession после входа через /owner-login и iss; participant cookie через supabase/ssr (owner-login выходит из сессии не-редактора); mutation запускается с --workers=1 (единственный owner email)
 - [Phase 16]: 16-13: клиентский бандл редактора не должен импортировать node:crypto (CSP eval); HMAC-токены предпросмотра вынесены в lib/portia-promotion-preview-token.ts
+- [Phase 16]: 16-14: production DRIFT (sequence ACL + two legacy promo RPC overloads) closed by forward-only migrations 20261101000100/20261101000200; NOT applied to production (owner decides, D5). STAB-SEC-04 stays Pending, STAB-REL-04 Complete.
 
 ### Pending Todos
 
@@ -146,8 +148,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-01T14:42:04.558Z
-Stopped at: Completed 16-13-PLAN.md
+Last session: 2026-11-01T15:34:57.312Z
+Stopped at: Completed 16-14-PLAN.md
 Resume file: None
 
 ## Operator Next Step
