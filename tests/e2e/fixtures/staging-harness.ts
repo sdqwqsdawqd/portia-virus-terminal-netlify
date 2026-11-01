@@ -252,6 +252,7 @@ export function createRun(live: StagingLiveTarget, deps: HarnessDeps = {}) {
   }
   const admin = make(live.url, live.adminKey, options);
   const clients = new Map<string, SupabaseClient>();
+  const credentials = new Map<string, { email: string; password: string }>();
   const secrets = new Set<string>([live.url, live.publishableKey, live.adminKey, live.target.projectId, `${live.target.projectId}.supabase.co`]);
   const created = { authUsers: 0, editors: 0 };
   let deleted: Residual = { promo: 0, editors: 0, storage: 0, content: 0, authUsers: 0 };
@@ -275,6 +276,7 @@ export function createRun(live: StagingLiveTarget, deps: HarnessDeps = {}) {
     const session = await client.auth.signInWithPassword({ email, password }); // one sign-in per identity (Auth rate limits)
     check(session.error, "sign in");
     clients.set(label, client);
+    credentials.set(label, { email, password });
     return client;
   }
 
@@ -301,6 +303,12 @@ export function createRun(live: StagingLiveTarget, deps: HarnessDeps = {}) {
         check((await admin.auth.admin.deleteUser(existing.id)).error, "delete stale owner fixture");
       }
       return provision("owner", email);
+    },
+    // For the real /owner-login form only; both values are already in secrets() and never reach a receipt.
+    credentials(label: string) {
+      const value = credentials.get(label);
+      if (!value) throw new Error("unknown-identity-label");
+      return value;
     },
     client(label: string) {
       if (label === "anon") {

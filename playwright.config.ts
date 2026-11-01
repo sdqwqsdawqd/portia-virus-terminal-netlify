@@ -48,7 +48,12 @@ export default defineConfig({
         command:
           "npm run build && npm run start -- --hostname 127.0.0.1 --port 3000",
         url: localBaseURL,
-        env: { PORTIA_E2E_ALLOW_HTTP: "1" },
+        // The Next server under test never needs the admin key or a DB URL (T-16-40): blank them even if the shell has them.
+        env: {
+          PORTIA_E2E_ALLOW_HTTP: "1",
+          PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY: "",
+          PORTIA_STAGING_DB_URL: "",
+        },
         reuseExistingServer: false,
         timeout: 180_000,
       },
