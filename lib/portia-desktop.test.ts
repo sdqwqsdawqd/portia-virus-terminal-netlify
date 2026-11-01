@@ -195,6 +195,14 @@ test("editor scrolls as one page and its tabs use the whole window", () => {
   assert.match(styles, /\.access-editor-list\s*\{[^}]*max-width:\s*760px/);
 });
 
+test("window tiles keep their own size and every recommendation is shown", () => {
+  assert.match(styles, /\.broadcast-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*340px\),\s*340px\)\)/);
+  assert.match(styles, /\.broadcast-grid\s*\{[^}]*align-items:\s*start/);
+  assert.match(styles, /\.broadcast-grid > \.broadcast-empty\s*\{[^}]*grid-column:\s*1 \/ -1/);
+  assert.match(styles, /\.guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*176px\),\s*176px\)\)/);
+  assert.ok(source.includes("content.searchRecommendations.map("));
+});
+
 test("Vivian follows the interface accent without painful overexposure or greying the image itself", () => {
   assert.match(styles, /\.assistant-button\s*\{[^}]*filter:\s*var\(--assistant-filter\) brightness\(1\.1\) saturate\(1\.08\)/);
   assert.match(styles, /\.assistant-button img\s*\{[^}]*filter:\s*none/);

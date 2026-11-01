@@ -520,6 +520,9 @@ html[data-motion="reduce"] .promotion-retake-toast { animation: none !important;
   .employee-editor-layout > .employee-profile-editor { min-height: 0; overflow-y: auto; }
   /* Editor scrolls as one page; pinned chrome took the owner's space (quick 261102-07k). */
   .content-editor > .promotion-editor { flex: 1 1 0; min-height: 0; }
+  /* Tiles keep their own size when the window grows; extra width adds columns. */
+  .broadcast-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 340px)); align-items: start; }
+  .broadcast-grid > .broadcast-empty { grid-column: 1 / -1; }
 }
 .primary-control, .secondary-control, .danger-control { padding: 11px 14px; border: 1px solid var(--teal-dim); background: var(--teal-soft); color: var(--teal); font: 700 11px var(--sans); letter-spacing: .04em; cursor: pointer; }
 .primary-control:disabled, .secondary-control:disabled, .danger-control:disabled { opacity: .4; cursor: not-allowed; }
@@ -1711,6 +1714,7 @@ html[data-motion="reduce"] :is(.boot-core > .portia-mark, .boot-thread) { animat
 .guide-section-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 16px; align-items: start; margin-top: 16px; }
 .guide-grid[hidden] { display: none; }
+@media (min-width: 901px) { .guide-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 176px), 176px)); } } /* after the base rule so it wins the cascade */
 .guide-tile { display: block; min-width: 0; padding: 0; border: 1px solid var(--line); background: var(--panel-2); color: oklch(.919 calc(.012 * var(--accent-chroma)) var(--accent-hue)); text-align: left; cursor: pointer; }
 .guide-tile:hover, .guide-tile:focus-visible { border-color: var(--teal); background: var(--teal-soft); }
 .guide-tile-cover { display: block; aspect-ratio: 4 / 3; background: var(--panel); overflow: hidden; }
