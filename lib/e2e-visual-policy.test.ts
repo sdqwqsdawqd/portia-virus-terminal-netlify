@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { describe, test } from "node:test";
 import type { Page } from "@playwright/test";
 import {
@@ -35,6 +37,18 @@ describe("Phase 15 visual policy", () => {
     for (const state of desktopStates) {
       assert.ok(visualPolicy(fakePage, state).maxDiffPixels < 16 * 32, state);
     }
+  });
+
+  test("internal Playwright comparator exists and Playwright is pinned to 1.64.1", () => {
+    const { utils } = createRequire(import.meta.url)("playwright-core/lib/coreBundle") as {
+      utils?: { getComparator?: (mimeType: string) => unknown };
+    };
+    assert.equal(typeof utils?.getComparator, "function");
+    assert.equal(typeof utils?.getComparator?.("image/png"), "function");
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+      devDependencies: Record<string, string>;
+    };
+    assert.equal(pkg.devDependencies["@playwright/test"], "1.64.1");
   });
 
   test("only employees, table and charter mask regions", () => {

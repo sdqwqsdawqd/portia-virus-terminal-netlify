@@ -46,10 +46,14 @@ type ImageComparator = (
   options: { maxDiffPixels: number; threshold?: number },
 ) => ImageComparison;
 
+// shortcut: internal Playwright API, verified for the pinned @playwright/test 1.64.1; re-check on every Playwright upgrade.
 const require = createRequire(import.meta.url);
 const { utils: playwrightUtils } = require("playwright-core/lib/coreBundle") as {
-  utils: { getComparator: (mimeType: string) => ImageComparator };
+  utils?: { getComparator?: (mimeType: string) => ImageComparator };
 };
+if (typeof playwrightUtils?.getComparator !== "function") {
+  throw new Error("[PORTIA_VISUAL_COMPARATOR_MISSING] playwright-core utils.getComparator not found; expected @playwright/test 1.64.1");
+}
 const comparePng = playwrightUtils.getComparator("image/png");
 
 const declarations: Record<VisualState, VisualPolicyDeclaration> = {
