@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 16
 current_phase_name: Канонический Supabase staging и SQL-истина
 status: executing
-stopped_at: Completed 16-11-PLAN.md
-last_updated: "2026-11-01T13:34:37.371Z"
+stopped_at: Completed 16-12-PLAN.md
+last_updated: "2026-11-01T14:01:16.792Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 16 execution started
-state_head: 86790098f15f670714fb5f1afccc2bb24b47f9b3
+state_head: dfe56975a4543b6d7bcc1c986671af623a00f56e
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 41
-  completed_plans: 38
+  completed_plans: 39
   percent: 13
 ---
 
@@ -82,6 +82,7 @@ Progress: [█░░░░░░░░░] 13% of Phase 15 plans (phase gaps_fou
 | Phase 16 P09 | 35min | 2 tasks | 3 files |
 | Phase 16 P10 | ~1h | 3 tasks | 10 files |
 | Phase 16 P11 | ~50min | 3 tasks | 7 files |
+| Phase 16 P12 | 35min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 16]: 16-09: the shared live npm script runs files serially via test-concurrency=1 (shared owner fixture and Auth limits)
 - [Phase 16]: 16-10 D9: explicit grants migration needed (audit sequence ACL leaked to anon/authenticated); golden fingerprint recorded; wrapper code left uncommitted due to guard
 - [Phase 16]: 16-11: db query шлёт один prepared statement; скрипты ступеней оборачиваются в один DO EXECUTE без begin/commit верхнего уровня, SQL-файлы не менялись; golden == upgrade без мост-миграции
+- [Phase 16]: 16-12: platform function rls_auto_enable excluded from golden-vs-matrix check but pinned by name; Storage insert-oversize/bad-mime for anon/outsider expected http-413/415 (bucket limits before insert policy, baseline 1639/1640)
 
 ### Pending Todos
 
@@ -141,8 +143,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-01T13:34:37.264Z
-Stopped at: Completed 16-11-PLAN.md
+Last session: 2026-11-01T14:01:16.702Z
+Stopped at: Completed 16-12-PLAN.md
 Resume file: None
 
 ## Operator Next Step
