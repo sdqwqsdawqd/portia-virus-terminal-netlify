@@ -5,7 +5,7 @@ titles: json
 findings:
   - id: CR-01
     severity: critical
-    disposition: open
+    disposition: fixed
     title: "шаг (d) e2e-спека кликает по кнопке окна, перекрытого окном «Настройки»"
   - id: WR-01
     severity: warning
@@ -31,7 +31,7 @@ findings:
     severity: info
     disposition: open
     title: "хрупкие source-тесты `window-open.test.ts`"
-open: 7
+open: 6
 total: 7
 recorded: 2026-11-01T03:45:30.375Z
 ---
@@ -40,7 +40,7 @@ recorded: 2026-11-01T03:45:30.375Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-01 | critical | open | - |
+| CR-01 | critical | fixed | 17-08: c278a29, taskbar bring-to-front перед закрытием в tests/e2e/specs/window-reopen.spec.ts; браузерный прогон BLOCKED (ENV) |
 | WR-01 | warning | open | - |
 | WR-02 | warning | open | - |
 | WR-03 | warning | open | - |
