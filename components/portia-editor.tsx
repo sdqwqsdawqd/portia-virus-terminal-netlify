@@ -11,7 +11,6 @@ import { TYPING_PAUSE_MS, historyReducer, initHistory, type EditorHistory, type 
 import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
 import { addBroadcast, makeId, moveGuideCard, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
 import {
-  classificationOptions,
   findGuide,
   findInfo,
   portiaTextKey,
@@ -31,6 +30,7 @@ import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rang
 import { clampPanelOffset, initialPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 import { PromotionEditor } from "@/components/portia-promotion-editor";
+import { ClassificationField } from "@/components/portia-editor-dossier";
 
 type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "promo" | "access";
 
@@ -2290,30 +2290,6 @@ function DossierTabs({ active, changed, onSelect }: { active: DossierTab; change
       </button>;
     })}
   </nav>;
-}
-
-function ClassificationField({ label, classificationKey, value, onChange }: {
-  label: string;
-  classificationKey: keyof Virus["classification"];
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const options = classificationOptions[classificationKey] as readonly { value: string; level?: number }[];
-  const selected = options.find((option) => option.value === value);
-  const level = selected?.level;
-
-  return <label className="editor-field classification-editor-field">
-    <span>{label}</span>
-    <div className={`classification-select-wrap${level ? ` level-${level}` : ""}`}>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => {
-          const optionLevel = option.level;
-          return <option key={option.value} value={option.value}>{optionLevel ? `${optionLevel} уровень — ` : ""}{option.value}</option>;
-        })}
-      </select>
-      {level ? <strong>УРОВЕНЬ {level}</strong> : <strong className="neutral">МЕТОД</strong>}
-    </div>
-  </label>;
 }
 
 function FormattedTextarea({ label, area, value, document, formatKey, onChange, onActivate, tall = false }: {
