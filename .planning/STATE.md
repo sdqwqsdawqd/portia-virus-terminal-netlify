@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 17
 current_phase_name: Обратимая декомпозиция рабочего стола и редактора
 status: executing
-stopped_at: Completed 17-01-PLAN.md
-last_updated: "2026-11-01T03:01:49.074Z"
+stopped_at: Completed 17-02-PLAN.md
+last_updated: "2026-11-01T03:08:14.758Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 17 execution started
-state_head: c768fa05a8271d86e6a4457963ec962eb53d7d75
+state_head: ef6912d0f770daa8c40a05ea29a6985d94cb8d30
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 23
-  completed_plans: 17
+  completed_plans: 18
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 17 (Обратимая декомпозиция рабочего стола и редактора) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-11-01 — Phase 17 execution started
 
@@ -70,6 +70,7 @@ Progress: [░░░░░░░░░░] 0% of Phase 15 plans (phase gaps_foun
 | Phase 15 P15 | 35min | 1 tasks | 5 files |
 | Phase 15 P16 | 40 min | 3 tasks | 8 files |
 | Phase 17 P01 | 25 min | 2 tasks | 9 files |
+| Phase 17 P02 | 20min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 15]: 15-16: tracked 15-CANDIDATE-INDEX.json is the clean-checkout source for --verify-ui-map/--verify-approval; raw capture stays preferred and index==capture is enforced (PORTIA_CANDIDATE_INDEX_DRIFT). G6 resolved, G1-G5 and all STAB-BASE statuses unchanged.
 - [Phase 17]: 17-01: визуальная дорожка в эталоне BLOCKED (ENV, preflight требует NEXT_PUBLIC_SUPABASE_*); чистота переносов доказывается scripts/phase17-move-parity.mjs
 - [Phase 17]: 17-01: seam-модули называются components/portia-desktop-<seam>.tsx / portia-editor-<seam>.tsx, source-тесты читают семейство через componentFamily()
+- [Phase 17]: 17-02: восемь частей досье перенесены чистым переносом в portia-editor-dossier.tsx; мутации без перетаскивания (UX вне Phase 17)
 
 ### Pending Todos
 
@@ -117,8 +119,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-01T03:01:49.024Z
-Stopped at: Completed 17-01-PLAN.md
+Last session: 2026-11-01T03:08:14.707Z
+Stopped at: Completed 17-02-PLAN.md
 Resume file: None
 
 ## Operator Next Step
