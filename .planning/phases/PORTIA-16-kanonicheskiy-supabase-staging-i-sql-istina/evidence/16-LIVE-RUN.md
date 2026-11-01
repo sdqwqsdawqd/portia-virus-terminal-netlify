@@ -134,8 +134,60 @@ SKIP в visitor-прогоне (59): 52 пиксельный authority закр�
 
 ## Production postflight (план 16-14)
 
-Статус: PENDING
+Статус: **DRIFT** (production != golden), подробности и классификация в `evidence/16-PRODUCTION-POSTFLIGHT.md`. Production fingerprint снял владелец вручную (read-only SELECT, sha256 SQL `80c01284740fe1f2b25319e31f04dd1fd300c972f38524fb8209e5e976d71851`), агент production не касался. PG major 17 == golden.
+
+| Сравнение | Exit | Результат |
+|-----------|------|-----------|
+| golden vs production | 1 | 4 ключа: sequence `portia_promo_audit_events_id_seq` (ACL: anon/authenticated SELECT/UPDATE/USAGE; ожидаемо, закрывает `20261101000100`), два legacy overload `portia_promo_confirm_assignment(uuid, jsonb)` и `portia_promo_confirm_test(uuid, jsonb, text)` (только production, SECURITY DEFINER, EXECUTE у authenticated; закрывает `20261101000200`), `rls_auto_enable()` (info: платформенная функция Supabase, есть только в golden) |
+| golden vs `fingerprint-postdrop.json` (изолированная цель после push `20261101000200`) | 0 | равны; golden не менялся, на каноническом build drop no-op |
+
+Находка плана 16-14 класса (c) в SQL: legacy overloads, оставшиеся от `43895f8` (14-02) и не удалённые `4d527f6`. Добавлена forward-only миграция `supabase/migrations/20261101000200_portia_drop_legacy_promo_overloads.sql` (ровно два `drop function if exists`; вызовов старых сигнатур в `lib/`, `app/`, `tests/` нет), hash закреплён в `lib/portia-canonical-parity.test.ts`. Применена только к изолированной цели; к production НЕ применена (решение владельца отдельно, D5).
+
+Проверка на изолированной цели после миграции (commit `a77bff4`):
+
+| Что | Результат |
+|-----|-----------|
+| `push` | применена `20261101000200`; журнал: Local == Remote для трёх версий |
+| `fingerprint postdrop` | pg_major 17, 36 функций; comparator vs golden: exit 0 |
+| `npm run test:staging-live` | 770 tests, 5 suites: 770 PASS, 0 FAIL, 0 BLOCKED, 0 SKIP |
+| `evidence/receipt-roles-postdrop.json` | PASS, residual authUsers 0, content 0, editors 0, promo 0, storage 0; sha256 (поле) `5a9d44c6e143f863a38eac7e1f255f95c163e02d1d3536a14b5964a37facd367` |
+| `evidence/receipt-concurrency-postdrop.json` | PASS, residual 0 по всем категориям; sha256 (поле) `6ebb1da352c55f6bf604b9184b1171d7cba5a16e5c67be2ead7e2f11acd12df8` |
 
 ## Итог фазы
 
-Статус: PENDING
+Статус: **staging доказан; production DRIFT**. STAB-SEC-04 остаётся Pending; STAB-SEC-01 и STAB-REL-04 Complete.
+
+### Success Criteria и acceptance gate
+
+| Критерий | Статус | Доказательство |
+|----------|--------|----------------|
+| SC1: свежий изолированный проект только из canonical migrations даёт тот же fingerprint, что upgrade-путь | PASS | `fingerprint-fresh.json` (golden) == `fingerprint-upgrade.json` == `fingerprint-final.json` после teardown и повторного push (`16-UPGRADE-LADDER.md`, `16-FINGERPRINT-CALIBRATION.md`); `fingerprint-postdrop.json` == golden после третьей миграции |
+| SC2: anon/authenticated/editor/reviewer/owner через UI, API, таблицы и RPC; revoke сразу; fail-closed | PASS | role matrix 748 проверок + 3 revoke-теста (`receipt-roles.json`, `receipt-roles-postdrop.json`); UI/API lanes 4 роли x 5 проектов и API-матрица 7 маршрутов x 5 ролей, оба revoke на открытой сессии (`receipt-playwright.json`, раздел Browser) |
+| SC3: concurrent claim/admission/CAS/cleanup на disposable fixtures, один победитель, без production | PASS | 8 гонок N=6 x R=10 (`receipt-concurrency.json`, `receipt-concurrency-postdrop.json`) и HTTP CAS 6 x 10 (Browser); residual 0; `attest` ATTESTED перед запусками |
+| Acceptance gate: live-run и fingerprints | PASS для изолированной цели; production: DRIFT (`16-PRODUCTION-POSTFLIGHT.md`) | см. выше |
+| STAB-SEC-04: staging и production fingerprints == canonical | **не выполнено (Pending)** | staging доказан; production != golden (sequence ACL, два legacy overload) до применения миграций владельцем |
+
+### Сводка fingerprints
+
+| Файл | Что | Сравнение |
+|------|-----|-----------|
+| `fingerprint-pristine.json` | чистая цель до миграций | базовая точка |
+| `fingerprint-fresh.json` | golden: baseline + explicit grants на свежей базе | эталон |
+| `fingerprint-upgrade-legacy.json` (U0) | legacy-цепочка до миграций | golden vs U0: exit 1, дельта `search_path` у `portia_editor_is_approved` и ACL sequence (объяснена) |
+| `fingerprint-upgrade.json` (U) | legacy-цепочка + canonical | golden == U (exit 0) |
+| `fingerprint-after-teardown.json` | после teardown | чистое состояние |
+| `fingerprint-final.json` | пересборка после teardown | golden == final (exit 0) |
+| `fingerprint-postdrop.json` | после `20261101000200` | golden == postdrop (exit 0) |
+| `fingerprint-production.json` (P) | owner-run, production | golden vs P: exit 1 (DRIFT, 4 ключа) |
+
+### Остаются BLOCKED / вне фазы
+
+| Что | Статус | Владелец |
+|-----|--------|----------|
+| 7 пиксельных application-сравнений и `search-restored` (DATA-SEED) | BLOCKED | D6, Phase 18-19 (визуальные эталоны владельца) |
+| Физические устройства | BLOCKED | Phase 22 |
+| Применение `20261101000100` и `20261101000200` к production и повторный fingerprint (закрытие DRIFT, STAB-SEC-04) | не выполнено агентом | владелец, отдельным owner-run шагом, вне Phase 16 по D5 |
+| Management API автоматизация | отложено | D10 |
+| `supabase-rls-reviewer` для новой миграции `20261101000200` | требуется | оркестратор (в этом плане добавлен `supabase/migrations/*.sql`) |
+
+Ни один BLOCKED или DRIFT не записан как pass.

@@ -93,7 +93,7 @@
 - [x] **STAB-SEC-01**: Anon, authenticated, editor, reviewer и owner видят и изменяют только разрешённые данные; запрещённые UI/API/table/RPC действия fail-closed, revoke действует без rebuild.
 - [ ] **STAB-SEC-02**: Participant network/UI не получает answer keys, future questions, internal notes, bank payload и reviewer identity; sensitive responses используют no-store.
 - [ ] **STAB-SEC-03**: CSP, frame, nosniff, referrer, permissions, COOP и HSTS присутствуют, не ломая approved charter/sheet/video; CSP ужесточается только через report-only.
-- [ ] **STAB-SEC-04**: Staging и production schema fingerprints, functions, grants и RLS соответствуют canonical migrations; ручной production step имеет записанный postflight.
+- [ ] **STAB-SEC-04**: Staging и production schema fingerprints, functions, grants и RLS соответствуют canonical migrations; ручной production step имеет записанный postflight. (Pending: staging доказан, golden == U == final; production DRIFT, см. `evidence/16-PRODUCTION-POSTFLIGHT.md`: закрывается применением владельцем миграций `20261101000100` и `20261101000200` и повторным fingerprint.)
 - [ ] **STAB-SEC-05**: Глубокий GSD code review и локальная security matrix покрывают auth/API/RLS/headers/CSP/uploads/secrets/dependencies; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, lockfile меняется отдельно.
 - [ ] **STAB-SEC-06**: Release notes честно фиксируют, что device binding не hardware attestation, initial mode spoofable, и перечисляют остальные accepted risks/waivers без расширения риска.
 
@@ -102,7 +102,7 @@
 - [ ] **STAB-REL-01**: На release commit проходят tests, typecheck, production build, full lint и production dependency audit; skipped live test допустим только вместе с успешным staging-run.
 - [ ] **STAB-REL-02**: Playwright-suite проходит с documented setup на clean checkout, не мутирует production, не маскирует flaky retry и сохраняет artifacts.
 - [ ] **STAB-REL-03**: На release commit проходят утверждённые visual baselines, axe, keyboard journeys и zero-unexpected-console policy.
-- [ ] **STAB-REL-04**: Fresh isolated Supabase строится canonical migrations; role/RLS/RPC и concurrent claim/admission/CAS/cleanup tests проходят на disposable fixtures.
+- [x] **STAB-REL-04**: Fresh isolated Supabase строится canonical migrations; role/RLS/RPC и concurrent claim/admission/CAS/cleanup tests проходят на disposable fixtures. (Доказано: `evidence/16-FINGERPRINT-CALIBRATION.md`, `16-UPGRADE-LADDER.md`, `16-LIVE-RUN.md`, receipts `receipt-roles*.json`, `receipt-concurrency*.json`, `receipt-playwright.json`, residual 0.)
 - [ ] **STAB-REL-05**: Owner принимает Promotion на PC/phone с временными данными и без destructive production testing.
 - [ ] **STAB-REL-06**: Owner после clean reload принимает window bounds, spider lifecycle/gait/palette, shortcut handoff, Vivian accent, qualification lock, search coverage и bounded editor layout на PC/phone.
 - [ ] **STAB-REL-07**: Roadmap, requirements, summaries, verification и UAT описывают один commit/state; carried risks перечислены, blocked verification не помечен complete.
@@ -196,7 +196,7 @@
 | STAB-REL-01 | Phase 22 | Pending |
 | STAB-REL-02 | Phase 22 | Pending |
 | STAB-REL-03 | Phase 22 | Pending |
-| STAB-REL-04 | Phase 16 | Pending |
+| STAB-REL-04 | Phase 16 | Complete |
 | STAB-REL-05 | Phase 22 | Pending |
 | STAB-REL-06 | Phase 22 | Pending |
 | STAB-REL-07 | Phase 22 | Pending |
