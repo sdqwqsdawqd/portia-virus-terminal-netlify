@@ -133,7 +133,36 @@ Plans:
   3. Guarded live suite на disposable fixtures доказывает concurrent claim/admission/CAS/cleanup, RLS и RPC без обращения к production-данным и без повторного успешного победителя.
 
 **Acceptance gate**: Live mutating staging-run и schema fingerprints обязательны; наличие SQL в Git или read-only inventory не считается прохождением.
-**Plans**: TBD
+**Plans:** 14 plans
+
+Plans:
+**Wave 1**
+- [ ] 16-01-PLAN.md — canonical baseline-миграция = portia_setup.sql без обёртки, parity-тест, заморозка legacy SQL, L0 upgrade-fixture, PORTIA-only teardown, SQL-ревью (STAB-REL-04, STAB-SEC-04)
+- [ ] 16-02-PLAN.md — read-only fingerprint SQL по pg_catalog и offline comparator, SQL-ревью (STAB-SEC-04)
+- [ ] 16-03-PLAN.md — аттестация цели (app binding, запрет внешнего base URL — IN-03, JWT iss) и guarded wrapper phase16-staging.mjs (STAB-SEC-01, STAB-REL-04)
+- [ ] 16-04-PLAN.md — владелец: проверка пакета supabase CLI (D7) и создание изолированного Free-проекта с PG major production (D1, D8); точная установка CLI (STAB-REL-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 16-05-PLAN.md — непрозрачный server-derived session proof (WR-01) и roster owner-fixture D4 (STAB-SEC-01)
+- [ ] 16-06-PLAN.md — harness live-проверок: единый guard, disposable identities, owner-fixture, cleanup/residual, редактированный receipt, sweep (STAB-REL-04, STAB-SEC-01)
+- [ ] 16-07-PLAN.md — владелец сужает guard и запускает сессию с ключами изолированного проекта; агент доказывает узость guard, ATTESTED и блокировку production-ref (STAB-SEC-01, STAB-REL-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 16-08-PLAN.md — каталожная матрица role x surface из SQL и live role-suite с revoke на выданных JWT (STAB-SEC-01, STAB-REL-04)
+- [ ] 16-09-PLAN.md — конкурентные раунды N x R: claim, admission, answer CAS, start_test, lease, cleanup; единый guard существующего live-теста (STAB-REL-04)
+- [ ] 16-10-PLAN.md — live: свежая сборка только из canonical migrations, калибровка fingerprint, явные grants D9 с ревью, golden (STAB-SEC-04, STAB-REL-04)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 16-11-PLAN.md — live: teardown до pristine, upgrade ladder L0 -> phase12 -> phase14 -> canonical, golden == upgrade, финальный канон (STAB-SEC-04, STAB-REL-04)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 16-12-PLAN.md — live: npm run test:staging-live (роли, RLS, RPC, Storage, revoke, конкурентность), receipts с residual 0 (STAB-SEC-01, STAB-REL-04)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 16-13-PLAN.md — Playwright: реальные role lanes через probeSession, API-матрица, revoke без re-login, HTTP CAS контента, G2 data-lanes (D6) (STAB-SEC-01, STAB-REL-04)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 16-14-PLAN.md — владелец: read-only production fingerprint (D5); postflight, итог 16-LIVE-RUN.md, честная трассировка (STAB-SEC-04, STAB-SEC-01, STAB-REL-04)
 
 ### Phase 17: Обратимая декомпозиция рабочего стола и редактора
 
@@ -263,7 +292,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 15. Восстановление контроля, контракты и браузерный baseline | 19/19 | In Progress|  |
-| 16. Канонический Supabase staging и SQL-истина | 0/TBD | Not started | - |
+| 16. Канонический Supabase staging и SQL-истина | 0/14 | Planned | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 8/8 | Complete    | 2026-11-01 |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
 | 19. Доказательство «Повышения» и точечная стабилизация | 0/TBD | Not started | - |

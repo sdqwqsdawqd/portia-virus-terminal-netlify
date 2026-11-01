@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v1.3
 milestone_name: «Стабилизация PORTIA OS»
-current_phase: 15
-current_phase_name: baseline
+current_phase: 16
+current_phase_name: Канонический Supabase staging и SQL-истина
 status: executing
 stopped_at: Phase PORTIA-17 complete, ready to plan Phase 15
-last_updated: "2026-11-01T07:18:43.051Z"
+last_updated: "2026-11-01T08:35:25.884Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase PORTIA-17 complete, transitioned to Phase 15
-state_head: 769c3d1461b8d48db83da1712c98b0b81405d6b9
+state_head: fab8089be57804d99d813f3e26e1a0e1c986cddc
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 27
+  total_plans: 41
   completed_plans: 24
   percent: 13
 ---
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 ## Current Position
 
-Phase: PORTIA-15 (baseline) — READY TO EXECUTE
+Phase: 16 (Канонический Supabase staging и SQL-истина) — READY TO EXECUTE
 Plan: Not started
 Status: Ready to execute
 Last activity: 2026-11-01 — Phase PORTIA-17 complete, transitioned to Phase 15
