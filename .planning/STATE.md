@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 16
 current_phase_name: Канонический Supabase staging и SQL-истина
 status: executing
-stopped_at: Completed 16-09-PLAN.md
-last_updated: "2026-11-01T10:40:59.278Z"
+stopped_at: "Completed 16-10-PLAN.md (wrapper commit pending: guard blocks staging it)"
+last_updated: "2026-11-01T13:08:21.720Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 16 execution started
-state_head: 519dc50e85c9fc870225d1d77c37e41ff45a263b
+state_head: 83dc49038299d5c16ef982b9f2e21e30c1605f44
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 41
-  completed_plans: 36
+  completed_plans: 37
   percent: 13
 ---
 
@@ -80,6 +80,7 @@ Progress: [█░░░░░░░░░] 13% of Phase 15 plans (phase gaps_fou
 | Phase 16 P08 | 40min | 2 tasks | 3 files |
 | Phase 16 P09 | 40min | 2 tasks | 3 files |
 | Phase 16 P09 | 35min | 2 tasks | 3 files |
+| Phase 16 P10 | ~1h | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 16]: 16-09: race N and R go into receipt suite keys; races blocked by admin 42501 or a foreign owner are BLOCKED, never pass; the shared live script runs files serially because of the single owner fixture
 - [Phase 16]: 16-09: race winner is judged by RPC reply type; an idempotent reply inside a different-nonce race is unexpected and checked in a separate step
 - [Phase 16]: 16-09: the shared live npm script runs files serially via test-concurrency=1 (shared owner fixture and Auth limits)
+- [Phase 16]: 16-10 D9: explicit grants migration needed (audit sequence ACL leaked to anon/authenticated); golden fingerprint recorded; wrapper code left uncommitted due to guard
 
 ### Pending Todos
 
@@ -137,8 +139,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-01T10:40:59.184Z
-Stopped at: Completed 16-09-PLAN.md
+Last session: 2026-11-01T13:08:21.631Z
+Stopped at: Completed 16-10-PLAN.md (wrapper commit pending: guard blocks staging it)
 Resume file: None
 
 ## Operator Next Step
