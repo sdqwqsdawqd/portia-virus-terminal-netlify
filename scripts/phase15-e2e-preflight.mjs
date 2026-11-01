@@ -5,9 +5,18 @@ const { loadEnvConfig } = nextEnv;
 
 export const PUBLIC_REQUIRED_VARIABLES = [
   "NEXT_PUBLIC_SUPABASE_URL",
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "PORTIA_PROMOTION_DEVICE_SECRET",
 ];
+
+// Same priority as lib/supabase/env.ts: publishable key first, legacy anon key as fallback.
+export const PUBLIC_KEY_VARIABLES = [
+  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+];
+
+function hasValue(environment, name) {
+  return typeof environment[name] === "string" && environment[name].trim() !== "";
+}
 
 export class PreflightError extends Error {
   constructor(code, variableNames = []) {
@@ -41,13 +50,17 @@ export function validateVisitorPreflight({
   nodeVersion = process.versions.node,
   environment = process.env,
 } = {}) {
+  // Intentionally narrower than package.json engines: ROADMAP Phase 15 ties browser/package evidence to Node 22.13.x.
   if (!/^22\.13\.\d+$/u.test(nodeVersion)) {
     throw new PreflightError("node-version", ["Node 22.13.x"]);
   }
 
-  const missing = PUBLIC_REQUIRED_VARIABLES.filter(
-    (name) => typeof environment[name] !== "string" || environment[name].trim() === "",
-  );
+  // Truthiness like the `||` in getSupabaseConfig: an empty publishable key falls through to anon.
+  const keyName = PUBLIC_KEY_VARIABLES.find((name) => environment[name]) ?? PUBLIC_KEY_VARIABLES[0];
+  const missing = PUBLIC_REQUIRED_VARIABLES.filter((name) => !hasValue(environment, name));
+  if (!PUBLIC_KEY_VARIABLES.some((name) => hasValue(environment, name))) {
+    missing.splice(1, 0, ...PUBLIC_KEY_VARIABLES);
+  }
   if (missing.length > 0) throw new PreflightError("missing-environment", missing);
 
   if (!isSupabaseRootUrl(environment.NEXT_PUBLIC_SUPABASE_URL)) {
@@ -63,8 +76,8 @@ export function validateVisitorPreflight({
       "PORTIA_E2E_PRODUCTION_PROJECT_IDS",
     ]);
   }
-  if (environment.NEXT_PUBLIC_SUPABASE_ANON_KEY.trim().length < 20) {
-    throw new PreflightError("public-key-shape", ["NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
+  if (environment[keyName].trim().length < 20) {
+    throw new PreflightError("public-key-shape", [keyName]);
   }
   if (environment.PORTIA_PROMOTION_DEVICE_SECRET.trim().length < 32) {
     throw new PreflightError("device-secret-shape", ["PORTIA_PROMOTION_DEVICE_SECRET"]);
@@ -78,6 +91,7 @@ export async function runPreflight(mode = "visitor", options = {}) {
     throw new PreflightError("mode", ["visitor", "mutation"]);
   }
 
+  const shellEnvironment = { ...process.env };
   if (options.loadEnvironment !== false) {
     loadEnvConfig(options.projectDirectory ?? process.cwd());
   }
@@ -87,7 +101,8 @@ export async function runPreflight(mode = "visitor", options = {}) {
     const { requireSafeMutationTargetFromEnvironment } = await import(
       "../tests/e2e/fixtures/target-guard.ts"
     );
-    requireSafeMutationTargetFromEnvironment(options.environment ?? process.env);
+    // Playwright workers do not load env files, so the guard must judge the same shell environment.
+    requireSafeMutationTargetFromEnvironment(options.environment ?? shellEnvironment);
   }
 
   return { mode, status: "ready" };

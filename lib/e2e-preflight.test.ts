@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -114,4 +117,53 @@ test("mutation mode composes visitor checks with the isolated target guard", asy
       loadEnvironment: false,
     }),
   );
+});
+
+test("mutation preflight ignores mutation config that exists only in an env file", async () => {
+  const projectId = "fileonlyproject00001";
+  const fileEnvironment = {
+    NEXT_PUBLIC_SUPABASE_URL: `https://${projectId}.supabase.co`,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "fake-publishable-key-for-tests-only-0001",
+    PORTIA_PROMOTION_DEVICE_SECRET: "fake-device-secret-for-tests-only-0000001",
+    PORTIA_E2E_MUTATION_CONFIRM: "ISOLATED_TEST_PROJECT",
+    PORTIA_E2E_TARGET_ENVIRONMENT: "isolated-test",
+    PORTIA_E2E_TARGET_ID: projectId,
+    PORTIA_E2E_SUPABASE_URL: `https://${projectId}.supabase.co`,
+    PORTIA_E2E_PRODUCTION_PROJECT_IDS: "productionproject000",
+    PORTIA_E2E_ISOLATED_PROJECT_IDS: projectId,
+  };
+  // Control: the same values supplied as the shell environment are accepted.
+  await assert.doesNotReject(
+    runPreflight("mutation", {
+      nodeVersion: "22.13.1",
+      environment: { NODE_ENV: "test", ...fileEnvironment },
+      loadEnvironment: false,
+    }),
+  );
+
+  const directory = mkdtempSync(path.join(os.tmpdir(), "portia-preflight-"));
+  const saved = new Map(Object.keys(fileEnvironment).map((name) => [name, process.env[name]]));
+  try {
+    writeFileSync(
+      path.join(directory, ".env"),
+      Object.entries(fileEnvironment).map(([name, value]) => `${name}=${value}`).join("\n"),
+    );
+    for (const name of saved.keys()) delete process.env[name];
+    // @next/env caches its first load per process: keep exactly one loading call in this file.
+    await assert.rejects(
+      runPreflight("mutation", { nodeVersion: "22.13.1", projectDirectory: directory }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal(error.name, "MutationTargetBlockedError");
+        assert.doesNotMatch(error.message, /fileonlyproject|fake-/u);
+        return true;
+      },
+    );
+  } finally {
+    for (const [name, value] of saved) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
