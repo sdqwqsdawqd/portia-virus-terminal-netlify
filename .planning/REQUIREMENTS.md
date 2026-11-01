@@ -16,13 +16,13 @@
 
 ## Рабочий стол, окна и декомпозиция
 
-- [ ] **STAB-DESK-01**: Один app id открывает одну поверхность из ярлыка, start panel, taskbar или search; повторное открытие восстанавливает и фокусирует окно без дубликата и потери состояния.
+- [x] **STAB-DESK-01**: Один app id открывает одну поверхность из ярлыка, start panel, taskbar или search; повторное открытие восстанавливает и фокусирует окно без дубликата и потери состояния.
 - [ ] **STAB-DESK-02**: Окно перетаскивается и изменяет размер за все края, не исчезает за workspace, имеет симметричные inset, сохраняет противоположный край и minimum и корректируется после смены viewport; важное содержимое reflow-ится в доступных границах без обрезки и разрушения композиции.
 - [ ] **STAB-DESK-03**: Minimize, maximize, close и taskbar не теряют состояние и не затрагивают другие окна; активная квалификация запрещает закрытие, сворачивание, перемещение и взаимодействие с фоном.
 - [ ] **STAB-DESK-04**: На phone приложения используют доступный экран, доступны touch, не перекрываются fixed/sticky controls и клавиатурой и не создают page-level horizontal overflow.
 - [ ] **STAB-DESK-05**: Accent, wallpaper, icon size/position, motion и spider сохраняются независимо; reload восстанавливает значения, повреждённое storage безопасно возвращается к default.
 - [ ] **STAB-DESK-06**: Drag изменяет только выбранный ярлык; позиция сохраняется, остаётся достижимой и не перекрывает критические controls; открытие доступно мышью, клавиатурой и touch.
-- [ ] **STAB-DESK-07**: Декомпозиция `portia-desktop.tsx` и `portia-editor.tsx` сохраняет app ids, DOM semantics, CSS hooks, storage keys, API shapes, порядок, данные и утверждённые snapshots, кроме отдельно согласованных fixes.
+- [x] **STAB-DESK-07**: Декомпозиция `portia-desktop.tsx` и `portia-editor.tsx` сохраняет app ids, DOM semantics, CSS hooks, storage keys, API shapes, порядок, данные и утверждённые snapshots, кроме отдельно согласованных fixes.
 - [ ] **STAB-DESK-08**: Каждая поверхность различает loading, empty, populated, stale/degraded и fatal error, не падает на пустых/частичных данных и не уничтожает last-good state при безопасном retry.
 
 ## Motion, паук, паутина, ярлыки и Вивьян
@@ -131,13 +131,13 @@
 | STAB-BASE-04 | Phase 15 | Pending |
 | STAB-BASE-05 | Phase 15 | Complete |
 | STAB-BASE-06 | Phase 15 | Pending |
-| STAB-DESK-01 | Phase 17 | Pending |
+| STAB-DESK-01 | Phase 17 | Complete |
 | STAB-DESK-02 | Phase 18 | Pending |
 | STAB-DESK-03 | Phase 18 | Pending |
 | STAB-DESK-04 | Phase 18 | Pending |
 | STAB-DESK-05 | Phase 18 | Pending |
 | STAB-DESK-06 | Phase 18 | Pending |
-| STAB-DESK-07 | Phase 17 | Pending |
+| STAB-DESK-07 | Phase 17 | Complete |
 | STAB-DESK-08 | Phase 20 | Pending |
 | STAB-MOTION-01 | Phase 18 | Pending |
 | STAB-MOTION-02 | Phase 18 | Pending |

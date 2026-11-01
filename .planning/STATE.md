@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.3
 milestone_name: «Стабилизация PORTIA OS»
-current_phase: 17
-current_phase_name: obratimaya-dekompozitsiya-rabochego-stola-i-redaktora
-status: executing
-stopped_at: Completed 17-07-PLAN.md
-last_updated: "2026-11-01T06:33:51.504Z"
+current_phase: 15
+current_phase_name: Восстановление контроля, контракты и браузерный baseline
+status: planning
+stopped_at: Phase PORTIA-17 complete, ready to plan Phase 15
+last_updated: "2026-11-01T06:54:52.520Z"
 last_activity: 2026-11-01
-last_activity_desc: Phase 17 execution started
-state_head: 2a348811dc2838346884a595070d4ab04f109e8e
+last_activity_desc: Phase PORTIA-17 complete, transitioned to Phase 15
+state_head: c352d68ba0909432e81ac623c30b0423a297de4c
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 24
-  completed_plans: 23
-  percent: 0
+  completed_plans: 24
+  percent: 13
 ---
 
 # Project State
@@ -29,24 +29,25 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 ## Current Position
 
-Phase: PORTIA-17 (obratimaya-dekompozitsiya-rabochego-stola-i-redaktora) — READY TO EXECUTE
-Plan: 7 of 7
-Status: Ready to execute
-Last activity: 2026-11-01 — Phase 17 execution started
+Phase: 15 — Восстановление контроля, контракты и браузерный baseline
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-01 — Phase PORTIA-17 complete, transitioned to Phase 15
 
-Progress: [░░░░░░░░░░] 0% of Phase 15 plans (phase gaps_found, not complete)
+Progress: [█░░░░░░░░░] 13% of Phase 15 plans (phase gaps_found, not complete)
 
 ## Performance Metrics
 
 **Current milestone:**
 
-- Total plans completed: 13
+- Total plans completed: 18
 - Average duration: 49m
 - Total execution time: 8h09m
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 15 | 10 | 8h09m | 49m |
+| PORTIA-17 | 8 | - | - |
 
 *Plan counts and velocity begin after Phase 15 planning.*
 | Phase 15 P01 | 8 min | 3 tasks | 5 files |
@@ -130,7 +131,7 @@ Full decision history: `.planning/PROJECT.md`.
 ## Session Continuity
 
 Last session: 2026-11-01T03:40:18.683Z
-Stopped at: Completed 17-07-PLAN.md
+Stopped at: Phase PORTIA-17 complete, ready to plan Phase 15
 Resume file: None
 
 ## Operator Next Step
