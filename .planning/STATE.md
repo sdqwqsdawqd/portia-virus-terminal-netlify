@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 17
 current_phase_name: Обратимая декомпозиция рабочего стола и редактора
 status: executing
-stopped_at: Completed 17-04-PLAN.md
-last_updated: "2026-11-01T03:21:53.864Z"
+stopped_at: Completed 17-05-PLAN.md
+last_updated: "2026-11-01T03:30:54.469Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 17 execution started
-state_head: e8c2f2ad264cca91914c1f721ba72b65a51115c2
+state_head: 76a5d7a6dc7fd4dd7ababc36ee7a59e3891e57e1
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 23
-  completed_plans: 20
+  completed_plans: 21
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 17 (Обратимая декомпозиция рабочего стола и редактора) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-11-01 — Phase 17 execution started
 
@@ -73,6 +73,7 @@ Progress: [░░░░░░░░░░] 0% of Phase 15 plans (phase gaps_foun
 | Phase 17 P02 | 20min | 2 tasks | 3 files |
 | Phase PORTIA-17 P03 | 15min | 2 tasks | 3 files |
 | Phase PORTIA-17 P04 | 20min | 2 tasks | 3 files |
+| Phase 17 P05 | 35min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 17]: 17-02: восемь частей досье перенесены чистым переносом в portia-editor-dossier.tsx; мутации без перетаскивания (UX вне Phase 17)
 - [Phase PORTIA-17]: 17-03: dossier viewer + FormattedText moved byte-for-byte to portia-desktop-dossier.tsx; seven exports; visual lane stays BLOCKED (ENV)
 - [Phase PORTIA-17]: 17-04: portia-editor-rich-text exports exactly seven names; one createContext, Provider stays in PortiaEditor
+- [Phase 17]: 17-05: решение openApp/finishExit вынесено в lib/window-open.ts (openedWindow, exitedWindow); поведение как на эталоне, e2e window-reopen BLOCKED (ENV)
 
 ### Pending Todos
 
@@ -123,8 +125,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-01T03:21:53.823Z
-Stopped at: Completed 17-04-PLAN.md
+Last session: 2026-11-01T03:30:54.410Z
+Stopped at: Completed 17-05-PLAN.md
 Resume file: None
 
 ## Operator Next Step
