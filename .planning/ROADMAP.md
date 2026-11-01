@@ -133,7 +133,7 @@ Plans:
   3. Guarded live suite на disposable fixtures доказывает concurrent claim/admission/CAS/cleanup, RLS и RPC без обращения к production-данным и без повторного успешного победителя.
 
 **Acceptance gate**: Live mutating staging-run и schema fingerprints обязательны; наличие SQL в Git или read-only inventory не считается прохождением.
-**Plans:** 7/14 plans executed
+**Plans:** 9/14 plans executed
 
 Plans:
 **Wave 1**
@@ -145,11 +145,11 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 16-05-PLAN.md — непрозрачный server-derived session proof (WR-01) и roster owner-fixture D4 (STAB-SEC-01)
 - [x] 16-06-PLAN.md — harness live-проверок: единый guard, disposable identities, owner-fixture, cleanup/residual, редактированный receipt, sweep (STAB-REL-04, STAB-SEC-01)
-- [ ] 16-07-PLAN.md — владелец сужает guard и запускает сессию с ключами изолированного проекта; агент доказывает узость guard, ATTESTED и блокировку production-ref (STAB-SEC-01, STAB-REL-04)
+- [x] 16-07-PLAN.md — владелец сужает guard и запускает сессию с ключами изолированного проекта; агент доказывает узость guard, ATTESTED и блокировку production-ref (STAB-SEC-01, STAB-REL-04)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [x] 16-08-PLAN.md — каталожная матрица role x surface из SQL и live role-suite с revoke на выданных JWT (STAB-SEC-01, STAB-REL-04)
-- [ ] 16-09-PLAN.md — конкурентные раунды N x R: claim, admission, answer CAS, start_test, lease, cleanup; единый guard существующего live-теста (STAB-REL-04)
+- [x] 16-09-PLAN.md — конкурентные раунды N x R: claim, admission, answer CAS, start_test, lease, cleanup; единый guard существующего live-теста (STAB-REL-04)
 - [ ] 16-10-PLAN.md — live: свежая сборка только из canonical migrations, калибровка fingerprint, явные grants D9 с ревью, golden (STAB-SEC-04, STAB-REL-04)
 
 **Wave 4** *(blocked on Wave 3 completion)*
@@ -292,7 +292,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 15. Восстановление контроля, контракты и браузерный baseline | 19/19 | In Progress|  |
-| 16. Канонический Supabase staging и SQL-истина | 7/14 | In Progress | - |
+| 16. Канонический Supabase staging и SQL-истина | 9/14 | In Progress | - |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 8/8 | Complete    | 2026-11-01 |
 | 18. Рабочий стол, окна и живые анимации | 0/TBD | Not started | - |
 | 19. Доказательство «Повышения» и точечная стабилизация | 0/TBD | Not started | - |

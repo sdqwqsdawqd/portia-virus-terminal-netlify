@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 16
 current_phase_name: Канонический Supabase staging и SQL-истина
 status: executing
-stopped_at: Completed 16-08-PLAN.md (offline; live run belongs to 16-12)
-last_updated: "2026-11-01T10:30:32.414Z"
+stopped_at: Completed 16-09-PLAN.md
+last_updated: "2026-11-01T10:40:48.582Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 16 execution started
-state_head: a47dc8ba4ac0abceaf70566fa57b0242e9597860
+state_head: 519dc50e85c9fc870225d1d77c37e41ff45a263b
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 41
-  completed_plans: 34
+  completed_plans: 36
   percent: 13
 ---
 
@@ -78,6 +78,8 @@ Progress: [█░░░░░░░░░] 13% of Phase 15 plans (phase gaps_fou
 | Phase 17 P06 | 15min | 2 tasks | 3 files |
 | Phase 17 P07 | 20min | 2 tasks | 2 files |
 | Phase 16 P08 | 40min | 2 tasks | 3 files |
+| Phase 16 P09 | 40min | 2 tasks | 3 files |
+| Phase 16 P09 | 35min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -107,6 +109,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 17]: 17-06: unused imports (dragGeometry, resizeGeometry, ResizeEdge, PortiaIconName) removed from portia-desktop.tsx after the AppWindow/shortcuts move to keep lint at 18 warnings
 - [Phase 17]: 17-07: embeddedApps stays in portia-desktop.tsx; embedSandbox private to portia-desktop-documents.tsx next to both iframes (D-19/SEC-03)
 - [Phase 16]: 16-08: authz matrix is derived from baseline SQL; D-11 and SEC-M1 are accepted outcomes, not denials; outsider on reviewer RPCs is forbidden (SQL), not 42501 as sketched in research
+- [Phase 16]: 16-09: race N and R go into receipt suite keys; races blocked by admin 42501 or a foreign owner are BLOCKED, never pass; the shared live script runs files serially because of the single owner fixture
 
 ### Pending Todos
 
@@ -132,8 +135,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-01T10:30:09.116Z
-Stopped at: Completed 16-08-PLAN.md (offline; live run belongs to 16-12)
+Last session: 2026-11-01T10:40:48.470Z
+Stopped at: Completed 16-09-PLAN.md
 Resume file: None
 
 ## Operator Next Step
