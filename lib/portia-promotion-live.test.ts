@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { after, before, describe, test } from "node:test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createRun, requireStagingLiveTarget, type Run, type StagingLiveTarget } from "../tests/e2e/fixtures/staging-harness.ts";
 
-const invokedDirectly = process.env.npm_lifecycle_event === "test:promotion-live";
+// Active under `npm run test:promotion-live` and under `npm run test:staging-live*`. The mutating branch goes through the single
+// guard (requireStagingLiveTarget) shared with the other live suites; READ_ONLY_PREFLIGHT (RPC inventory only) is unchanged.
+const lifecycleEvent = process.env.npm_lifecycle_event ?? "";
+const invokedDirectly = lifecycleEvent === "test:promotion-live" || lifecycleEvent.startsWith("test:staging-live");
 const readOnlyPreflight = process.env.PORTIA_PROMO_LIVE_CONFIRM === "READ_ONLY_PREFLIGHT";
 const requiredEnvironment = [
   "PORTIA_PROMO_LIVE_URL",
   "PORTIA_PROMO_LIVE_ANON_KEY",
 ] as const;
-const mutationEnvironment = ["PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY"] as const;
-const missingEnvironment = [...requiredEnvironment, ...(readOnlyPreflight ? [] : mutationEnvironment)].filter((name) => !process.env[name]);
-const mutationGuard = "ISOLATED_TEST_PROJECT";
+const missingEnvironment = requiredEnvironment.filter((name) => !process.env[name]);
 
 const inertUuid = "00000000-0000-4000-8000-000000000000";
 const rpcInventory: Array<[string, Record<string, unknown> | undefined]> = [
@@ -46,68 +48,59 @@ async function verifyRpcInventory(client: SupabaseClient) {
 
 if (!invokedDirectly) {
   test("live Promotion database verification is opt-in", { skip: "run npm run test:promotion-live against an isolated Supabase test project" }, () => {});
-} else if (missingEnvironment.length || (!readOnlyPreflight && process.env.PORTIA_PROMO_LIVE_CONFIRM !== mutationGuard)) {
-  test("live Promotion database verification requires an isolated-project guard", () => {
-    assert.fail(`Refusing live mutation. Set ${missingEnvironment.join(", ") || "the required credentials"} and PORTIA_PROMO_LIVE_CONFIRM=${mutationGuard}; use READ_ONLY_PREFLIGHT only for deployed RPC inventory.`);
-  });
 } else if (readOnlyPreflight) {
-  const client = createClient(process.env.PORTIA_PROMO_LIVE_URL!, process.env.PORTIA_PROMO_LIVE_ANON_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
-  test("deployed Promotion RPC inventory matches participant, reviewer and bank routes", async () => {
-    await verifyRpcInventory(client);
-    assert.equal(rpcInventory.length, 18);
-  });
+  if (missingEnvironment.length) {
+    test("live Promotion database verification requires read-only credentials", () => {
+      assert.fail(`Refusing live verification. Set ${missingEnvironment.join(", ")}; READ_ONLY_PREFLIGHT only lists deployed RPCs.`);
+    });
+  } else {
+    const client = createClient(process.env.PORTIA_PROMO_LIVE_URL!, process.env.PORTIA_PROMO_LIVE_ANON_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
+    test("deployed Promotion RPC inventory matches participant, reviewer and bank routes", async () => {
+      await verifyRpcInventory(client);
+      assert.equal(rpcInventory.length, 18);
+    });
+  }
 } else {
-  const url = process.env.PORTIA_PROMO_LIVE_URL!;
-  const anonKey = process.env.PORTIA_PROMO_LIVE_ANON_KEY!;
-  const serviceKey = process.env.PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY!;
-  const runId = `${Date.now().toString(36)}_${randomBytes(4).toString("hex")}`;
-  const fixturePrefix = `__portia_live_${runId}`;
-  if (!fixturePrefix.startsWith("__portia_live_") || fixturePrefix.length > 48) throw new Error("unsafe-live-fixture-prefix");
+  let live: StagingLiveTarget | undefined;
+  let blocked = "";
+  try {
+    live = requireStagingLiveTarget(process.env);
+  } catch (error) {
+    blocked = error instanceof Error ? error.message : "unknown guard failure";
+  }
+  if (!live) {
+    test("live Promotion database verification requires an isolated-project guard", () => {
+      assert.fail(`Refusing live mutation: ${blocked}. Use READ_ONLY_PREFLIGHT only for deployed RPC inventory.`);
+    });
+  } else registerMutatingSuite(live);
+}
 
-  const service = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
-  const anonymous = createClient(url, anonKey, { auth: { autoRefreshToken: false, persistSession: false } });
-  const userIds: string[] = [];
-  const editorEmails: string[] = [];
-  const nicknameKeys = new Set<string>();
-  const bucketKeys = new Set<string>();
+function registerMutatingSuite(live: StagingLiveTarget) {
+  const anonymous = createClient(live.url, live.publishableKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  // Identities, fixtures prefix, cleanup and residual check come from the shared harness (run-marked users, ordered purge).
+  let run: Run | undefined;
+  let fixturePrefix = "";
+  let service: SupabaseClient;
   let reviewerA: SupabaseClient;
   let reviewerB: SupabaseClient;
   let noPromo: SupabaseClient;
   let reviewerAId = "";
 
   const token = (label: string) => createHash("sha256").update(`${fixturePrefix}:${label}`).digest("hex");
-  const nickname = (label: string) => {
-    const value = `${fixturePrefix}_${label}`.slice(0, 64).toLowerCase();
-    nicknameKeys.add(value);
-    return value;
-  };
-  const bucket = (label: string) => {
-    const value = `${fixturePrefix}:bucket:${label}`;
-    bucketKeys.add(value);
-    return value;
-  };
+  const nickname = (label: string) => `${fixturePrefix}_${label}`.slice(0, 64).toLowerCase();
+  const bucket = (label: string) => `${fixturePrefix}:bucket:${label}`;
   const requireData = <T>(result: { data: T | null; error: { message: string } | null }, label: string): T => {
     assert.equal(result.error, null, `${label}: ${result.error?.message ?? "unknown error"}`);
     assert.notEqual(result.data, null, `${label}: missing data`);
     return result.data as T;
   };
 
-  async function createReviewer(label: string, promo: boolean) {
-    const email = `portia-live-${runId}-${label}@example.invalid`;
-    const password = `Live-${randomBytes(18).toString("base64url")}!9`;
-    const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
-    assert.equal(created.error, null, created.error?.message);
-    assert.ok(created.data.user?.id);
-    userIds.push(created.data.user!.id);
-    editorEmails.push(email);
-    if (promo) {
-      const editor = await service.from("portia_editors").upsert({ email, closed_tabs: [], granted_tabs: ["promo"] });
-      assert.equal(editor.error, null, editor.error?.message);
-    }
-    const client = createClient(url, anonKey, { auth: { autoRefreshToken: false, persistSession: false } });
-    const signedIn = await client.auth.signInWithPassword({ email, password });
-    assert.equal(signedIn.error, null, signedIn.error?.message);
-    return { client, id: created.data.user!.id };
+  async function createReviewer(current: Run, label: string, promo: boolean) {
+    const client = await current.createIdentity(label, promo ? { grantedTabs: ["promo"] } : undefined);
+    const user = await client.auth.getUser();
+    assert.equal(user.error, null, user.error?.message);
+    assert.ok(user.data.user?.id);
+    return { client, id: user.data.user!.id };
   }
 
   async function createAttempt(label: string, status: "prepared" | "active" = "active", leaseOffsetMs = 45_000) {
@@ -161,26 +154,23 @@ if (!invokedDirectly) {
     });
   }
 
+  // The old cleanup ignored every error; run.cleanup() throws on any failed step and the residual must be zero in every category.
   async function cleanup() {
-    const keys = [...nicknameKeys];
-    if (keys.length) {
-      await service.from("portia_promo_audit_events").delete().in("nickname_key", keys);
-      await service.from("portia_promo_results").delete().in("nickname_key", keys);
-      await service.from("portia_promo_requests").delete().in("nickname_key", keys);
-      await service.from("portia_promo_qualification_requests").delete().in("nickname_key", keys);
-      await service.from("portia_promo_device_bindings").delete().in("nickname_key", keys);
-    }
-    if (bucketKeys.size) await service.from("portia_promo_attempt_buckets").delete().in("bucket_key", [...bucketKeys]);
-    if (editorEmails.length) await service.from("portia_editors").delete().in("email", editorEmails);
-    for (const id of userIds) await service.auth.admin.deleteUser(id);
+    if (!run) return;
+    await run.cleanup();
+    const residual = await run.residual();
+    assert.ok(Object.values(residual).every((count) => count === 0), `residual after cleanup: ${JSON.stringify(residual)}`);
   }
 
   describe("live Promotion concurrency, lease and RLS", { concurrency: false }, () => {
     before(async () => {
+      run = createRun(live);
+      fixturePrefix = run.prefix;
+      service = run.admin;
       await verifyRpcInventory(anonymous);
-      const a = await createReviewer("reviewer-a", true); reviewerA = a.client; reviewerAId = a.id;
-      reviewerB = (await createReviewer("reviewer-b", true)).client;
-      noPromo = (await createReviewer("no-promo", false)).client;
+      const a = await createReviewer(run, "reviewer-a", true); reviewerA = a.client; reviewerAId = a.id;
+      reviewerB = (await createReviewer(run, "reviewer-b", true)).client;
+      noPromo = (await createReviewer(run, "no-promo", false)).client;
     });
     after(cleanup);
 
