@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -31,6 +31,7 @@ test("visitor preflight reports only missing variable names", () => {
       assert.ok(error instanceof PreflightError);
       assert.equal(error.code, "missing-environment");
       assert.match(error.message, /NEXT_PUBLIC_SUPABASE_URL/u);
+      assert.match(error.message, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/u);
       assert.match(error.message, /NEXT_PUBLIC_SUPABASE_ANON_KEY/u);
       assert.match(error.message, /PORTIA_PROMOTION_DEVICE_SECRET/u);
       assert.doesNotMatch(error.message, /isolatedproject|public-anon|phase15-device/u);
@@ -39,10 +40,47 @@ test("visitor preflight reports only missing variable names", () => {
   );
 });
 
-test("visitor preflight rejects versions outside Node 22.13.x", () => {
+test("visitor preflight pins Node 22.13.x, narrower than package.json engines", () => {
+  for (const nodeVersion of ["22.13.0", "22.13.1"]) {
+    assert.deepEqual(validateVisitorPreflight({ nodeVersion, environment: validEnvironment }), {
+      mode: "visitor",
+      status: "ready",
+    });
+  }
+  for (const nodeVersion of ["22.12.9", "22.14.0", "23.0.0", "24.0.0"]) {
+    assert.throws(
+      () => validateVisitorPreflight({ nodeVersion, environment: validEnvironment }),
+      (error: unknown) => error instanceof PreflightError && error.code === "node-version",
+    );
+  }
+  const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(packageJson.engines.node, ">=22.13.0 <23");
+});
+
+test("visitor preflight takes the publishable key first, like the app", () => {
+  const { NEXT_PUBLIC_SUPABASE_ANON_KEY: _anon, ...withoutAnon } = validEnvironment;
+  const publishableOnly = {
+    ...withoutAnon,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable-key-for-tests-only",
+  };
+  assert.deepEqual(
+    validateVisitorPreflight({ nodeVersion: "22.13.1", environment: publishableOnly }),
+    { mode: "visitor", status: "ready" },
+  );
+
   assert.throws(
-    () => validateVisitorPreflight({ nodeVersion: "24.0.0", environment: validEnvironment }),
-    (error: unknown) => error instanceof PreflightError && error.code === "node-version",
+    () =>
+      validateVisitorPreflight({
+        nodeVersion: "22.13.1",
+        environment: { ...validEnvironment, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "tiny-secret" },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof PreflightError);
+      assert.equal(error.code, "public-key-shape");
+      assert.match(error.message, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/u);
+      assert.doesNotMatch(error.message, /tiny-secret/u);
+      return true;
+    },
   );
 });
 
