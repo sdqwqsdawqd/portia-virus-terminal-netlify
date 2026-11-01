@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v1.3
 milestone_name: «Стабилизация PORTIA OS»
 current_phase: 17
-current_phase_name: obratimaya-dekompozitsiya-rabochego-stola-i-redaktora
+current_phase_name: Обратимая декомпозиция рабочего стола и редактора
 status: executing
-stopped_at: Phase 17 context gathered
-last_updated: "2026-11-01T00:19:25.232Z"
+stopped_at: Completed 17-01-PLAN.md
+last_updated: "2026-11-01T03:01:49.074Z"
 last_activity: 2026-11-01
-last_activity_desc: Plan 15-16 closed G6 (tracked candidate index); Phase 15 stays gaps_found
-state_head: cbbb1b7b09786452385bc716e38f17db695a8e7a
+last_activity_desc: Phase 17 execution started
+state_head: c768fa05a8271d86e6a4457963ec962eb53d7d75
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 23
-  completed_plans: 16
+  completed_plans: 17
   percent: 0
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-29)
 
 **Core value:** Сделать существующий PORTIA OS доказуемо устойчивым, безопасным и визуально последовательным, сохранив его текущую художественную основу.
-**Current focus:** Phase PORTIA-15 — Восстановление контроля, контракты и браузерный baseline
+**Current focus:** Phase 17 — Обратимая декомпозиция рабочего стола и редактора
 
 ## Current Position
 
-Phase: 17 (obratimaya-dekompozitsiya-rabochego-stola-i-redaktora) — READY TO EXECUTE
-Plan: 16 of 16
-Status: All 16 plans executed; Phase 15 verification = gaps_found (G1-G5 open: role/data/visual/device; G6 resolved by Plan 15-16) — awaiting orchestrator verification gates
-Last activity: 2026-11-01 -- Plan 15-16 closed G6 (tracked candidate index, clean-checkout proof)
+Phase: 17 (Обратимая декомпозиция рабочего стола и редактора) — EXECUTING
+Plan: 2 of 7
+Status: Ready to execute
+Last activity: 2026-11-01 — Phase 17 execution started
 
 Progress: [░░░░░░░░░░] 0% of Phase 15 plans (phase gaps_found, not complete)
 
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0% of Phase 15 plans (phase gaps_foun
 | Phase 15 P14 | 45min | 2 tasks | 3 files |
 | Phase 15 P15 | 35min | 1 tasks | 5 files |
 | Phase 15 P16 | 40 min | 3 tasks | 8 files |
+| Phase 17 P01 | 25 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 15]: 15-14: Local security gate PASS (repo-local scope only); authenticated/RLS-runtime/staging lanes stay BLOCKED; 0 unresolved critical/high; dev-tooling highs fixed via lockfile-only audit fix
 - [Phase 15]: 15-15: Phase 15 stays gaps_found after clean-checkout verification; only STAB-BASE-01 and -05 complete; 15 data-backed Playwright tests recorded BLOCKED (DATA) because no real read backing was supplied
 - [Phase 15]: 15-16: tracked 15-CANDIDATE-INDEX.json is the clean-checkout source for --verify-ui-map/--verify-approval; raw capture stays preferred and index==capture is enforced (PORTIA_CANDIDATE_INDEX_DRIFT). G6 resolved, G1-G5 and all STAB-BASE statuses unchanged.
+- [Phase 17]: 17-01: визуальная дорожка в эталоне BLOCKED (ENV, preflight требует NEXT_PUBLIC_SUPABASE_*); чистота переносов доказывается scripts/phase17-move-parity.mjs
+- [Phase 17]: 17-01: seam-модули называются components/portia-desktop-<seam>.tsx / portia-editor-<seam>.tsx, source-тесты читают семейство через componentFamily()
 
 ### Pending Todos
 
@@ -114,9 +117,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-10-31T23:31:59.940Z
-Stopped at: Phase 17 context gathered
-Resume file: .planning/phases/PORTIA-17-obratimaya-dekompozitsiya-rabochego-stola-i-redaktora/17-CONTEXT.md
+Last session: 2026-11-01T03:01:49.024Z
+Stopped at: Completed 17-01-PLAN.md
+Resume file: None
 
 ## Operator Next Step
 
