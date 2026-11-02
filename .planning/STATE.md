@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 18
 current_phase_name: Рабочий стол, окна и живые анимации
 status: executing
-stopped_at: Completed PORTIA-18-03-PLAN.md
-last_updated: "2026-11-02T03:32:07.508Z"
+stopped_at: Completed 18-04-PLAN.md
+last_updated: "2026-11-02T03:40:38.517Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase PORTIA-18 execution started
-state_head: 4c2c59ef8e17552382f87bfa469d5637a8a76740
+state_head: d5f4f47fa21160123017f345185e3d3e54e3dd97
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 49
-  completed_plans: 45
+  completed_plans: 46
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-18 (Рабочий стол, окна и живые анимации) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Executing Phase PORTIA-18
 Last activity: 2026-11-02 — Phase PORTIA-18 execution started
 
@@ -90,6 +90,7 @@ Progress: [█████░░░░░] 50% of Phase 15 plans (phase gaps_fou
 | Phase PORTIA-18 P01 | n/a | 3 tasks | 8 files |
 | Phase 18 P02 | not measured | 3 tasks | 8 files |
 | Phase PORTIA-18 P03 | not measured | 3 tasks | 5 files |
+| Phase PORTIA-18 P18-04 | not measured | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -131,6 +132,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-18]: 18-01: owner approved all motion [PROPOSED] values (7=A drag inside 8px, 8=A Vivian hidden on phone with open window); STAB-MEDIA-06 stays BLOCKED until owner traces
 - [Phase 18]: 18-02: заставка только в режиме full; в reduced и off не рендерится (п. 6 утверждён)
 - [Phase PORTIA-18]: 18-03: ease-in on shortcut return sits on the peak keyframe; promotion arrow removed from the soft-mode kill rule so it plays in reduced
+- [Phase PORTIA-18]: 18-04: dragGeometry keeps symmetric 8px inset vertically (owner variant A); nodWindow via Web Animations, 240ms, only motion full and not qualification-locked
 
 ### Pending Todos
 
@@ -166,8 +168,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-02T03:32:07.367Z
-Stopped at: Completed PORTIA-18-03-PLAN.md
+Last session: 2026-11-02T03:40:38.372Z
+Stopped at: Completed 18-04-PLAN.md
 Resume file: None
 
 ## Operator Next Step
