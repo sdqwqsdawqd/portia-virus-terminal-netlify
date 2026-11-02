@@ -121,6 +121,9 @@ export type QuestionType = "single" | "multiple" | "free-text";
 export type QualificationPreviewItem = TaskPreviewItem & { type: QuestionType };
 type PreviewChoice = { manualIds?: string[]; random?: () => number };
 
+const byOrder = (a: { sortOrder: number; id: string }, b: { sortOrder: number; id: string }) =>
+  a.sortOrder - b.sortOrder || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
 function assertCount(value: number) {
   if (!Number.isInteger(value) || value < 0 || value > 100) throw new Error("invalid-count");
 }
@@ -147,14 +150,14 @@ export function selectTaskPreview(items: readonly TaskPreviewItem[], required: n
     return selected as TaskPreviewItem[];
   }
   if (active.length < required) throw new Error("insufficient-pool");
-  return randomWithoutReplacement(active, required, choice.random ?? Math.random);
+  return randomWithoutReplacement([...active].sort(byOrder), required, choice.random ?? Math.random).sort(byOrder);
 }
 
 export type QualificationQuotas = { single: number; multiple: number; freeText: number };
 
 export function taskBankLimitError(required: number, activePool: number, bankExists: boolean) {
   if (!bankExists || required <= activePool) return null;
-  return `Нужно ${required}, активно ${activePool}.`;
+  return `В банке недостаточно активных вопросов: нужно ${required}, есть ${activePool}.`;
 }
 
 export function qualificationBankLimitError(
@@ -163,6 +166,7 @@ export function qualificationBankLimitError(
   bankExists: boolean,
 ) {
   if (!bankExists) return null;
+  if (quotas.single + quotas.multiple + quotas.freeText === 0) return "Задайте хотя бы один вопрос в квотах.";
   const labels: Record<keyof QualificationQuotas, string> = {
     single: "один вариант",
     multiple: "несколько вариантов",
@@ -192,10 +196,10 @@ export function selectQualificationPreview(items: readonly QualificationPreviewI
   }
   const random = choice.random ?? Math.random;
   return (["single", "multiple", "free-text"] as const).flatMap((type) => {
-    const pool = active.filter((item) => item.type === type);
+    const pool = active.filter((item) => item.type === type).sort(byOrder);
     const count = requiredFor(type);
     if (pool.length < count) throw new Error("insufficient-pool");
-    return randomWithoutReplacement(pool, count, random);
+    return randomWithoutReplacement(pool, count, random).sort(byOrder);
   });
 }
 
@@ -225,8 +229,12 @@ export type QuestionDraft =
   | { type: "multiple"; text: string; options: string[]; answer: number[] }
   | { type: "free-text"; text: string; answer: string };
 
+// Length in code points, matching Postgres length(); String.length counts UTF-16 units and would reject 4000 emoji.
 function validText(value: unknown, max = 4000) {
-  return typeof value === "string" && value.trim().length >= 1 && value.trim().length <= max ? value.trim() : null;
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  const length = [...text].length;
+  return length >= 1 && length <= max ? text : null;
 }
 
 function optionsOf(value: unknown) {

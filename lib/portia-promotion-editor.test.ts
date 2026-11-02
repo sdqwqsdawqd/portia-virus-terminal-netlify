@@ -250,9 +250,9 @@ test("any bank mutation shows the stale-preview banner until the set is rebuilt"
 
 test("a save response never overwrites newer edits of counts and quotas", () => {
   assert.ok(ordinary.includes("submittedCount"));
-  assert.ok(ordinary.includes("current[transition.targetTitleId] === submittedCount"));
+  assert.ok(ordinary.includes("current[transition.targetTitleId] !== submittedCount"));
   assert.ok(qualification.includes("submittedQuotas"));
-  assert.ok(qualification.includes("JSON.stringify(current[transition.transitionId]) === JSON.stringify(submittedQuotas)"));
+  assert.ok(qualification.includes("JSON.stringify(current[transition.transitionId]) !== JSON.stringify(submittedQuotas)"));
 });
 
 test("a failed save keeps the typed draft and reports the network failure in Russian", () => {
