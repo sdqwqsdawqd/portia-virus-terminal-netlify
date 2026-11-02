@@ -256,6 +256,17 @@ test("the boot animation plays once per browser session", () => {
   assert.match(desktopSource, /sessionStorage\.setItem\(bootSeenStorageKey,/);
 });
 
+test("the boot screen plays only in full mode; reduced and off skip it, the failsafe stays (D-12, D-13, T-18-03)", () => {
+  assert.match(desktopSource, /const bootSkipped = bootSeen \|\| document\.documentElement\.dataset\.motion !== "full";/);
+  assert.match(desktopSource, /bootSkipped \? 0 : 1650/);
+  assert.match(desktopSource, /if \(!bootSkipped\) try \{ window\.sessionStorage\.setItem\(bootSeenStorageKey,/);
+  assert.match(css, /html:is\(\[data-motion="reduced"\], \[data-motion="off"\]\) \.boot-screen\s*\{\s*display:\s*none/);
+  assert.match(css, /boot-screen-failsafe 220ms ease 2\.2s/);
+  // Approved hint (18-MOTION-APPROVAL item 4) sits under the group and wraps inside the window.
+  assert.match(desktopSource, /<p className="setting-hint">Системная настройка «уменьшить движение» не учитывается: управляйте анимациями здесь\.<\/p>/);
+  assert.match(css, /\.setting-hint\s*\{[^}]*font:\s*500 11px[^}]*overflow-wrap:\s*anywhere/);
+});
+
 test("the boot script applies only a whitelisted saved accent", () => {
   const run = (getItem: () => string | null) => runBoot(getItem).accent;
   assert.equal(run(() => JSON.stringify({ accent: "ice" })), "ice");

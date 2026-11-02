@@ -431,11 +431,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       } catch {}
     }, 0);
     // A repeat load in this tab session skips the boot; only a boot that played to its end is recorded (D-06).
+    // Reduced and off have no boot at all (D-12); a repeat in the same tab is skipped (D-13).
     const bootSeen = document.documentElement.dataset.boot === "seen";
+    const bootSkipped = bootSeen || document.documentElement.dataset.motion !== "full";
     const bootTimer = window.setTimeout(() => {
       setBooting(false);
-      if (!bootSeen) try { window.sessionStorage.setItem(bootSeenStorageKey, "1"); } catch {}
-    }, bootSeen ? 0 : 1650);
+      if (!bootSkipped) try { window.sessionStorage.setItem(bootSeenStorageKey, "1"); } catch {}
+    }, bootSkipped ? 0 : 1650);
     const tick = () => {
       const now = new Date();
       setClock(new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(now));
@@ -1411,7 +1413,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               </SettingGroup>
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
-              <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
+              <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)}><p className="setting-hint">Системная настройка «уменьшить движение» не учитывается: управляйте анимациями здесь.</p></SettingGroup>
               <SettingGroup title="Паук" values={[['on','Показывать'],['off','Скрыть']]} current={desktopSettings.spider} onSelect={(value) => updateDesktopSetting("spider", value)} />
               <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сводку, поиск и советы помощника." : "Войдите в разрешённый аккаунт редактора."}</p></div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>
