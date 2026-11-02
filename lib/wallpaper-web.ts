@@ -314,6 +314,13 @@ export function turnStep(angle: number, target: number, dt: number, turnTime: nu
   return angle + Math.max(-limit, Math.min(limit, difference * (1 - Math.exp(-dt / turnTime))));
 }
 
+// Share of the route clock that runs while the body is `turn` radians off its heading: full speed within 60 degrees, none from 90 degrees on.
+// A route therefore starts by curving into its direction with the legs stepping, never by sliding sideways or backwards on a frozen pose.
+export function turnGate(turn: number): number {
+  const x = Math.max(0, Math.min(1, Math.cos(turn) / 0.5));
+  return x * x * (3 - 2 * x);
+}
+
 // The lane point `offset` units to the left (side 1) or right (side -1) of the travel direction at (px, py).
 export function besideThread(px: number, py: number, direction: number, side: number, offset: number): Point {
   return [px + Math.cos(direction + Math.PI / 2) * offset * side, py + Math.sin(direction + Math.PI / 2) * offset * side];

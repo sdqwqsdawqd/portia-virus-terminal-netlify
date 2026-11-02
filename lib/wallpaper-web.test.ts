@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, besideThread, emitPulse, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, planSpawn, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, turnStep, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
+import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, besideThread, emitPulse, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, planSpawn, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, turnGate, turnStep, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
 
 const near = (a: Point, b: Point, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
 // Distance from a point to the thread drawn as a 400-piece polyline.
@@ -519,4 +519,28 @@ test("the spider tick uses the blended lane target and eases to the rest point i
   assert.equal(source.match(/relocateVisible\(\)/g)?.length, 2);
   assert.match(source, /rest = 6 \+ rand\(\) \* 4/g);
   assert.equal(source.match(/rand\(\)/g)?.length, 11, "no rand() call added or removed: the seeded route sequence stays");
+});
+
+test("turnGate holds the route clock while the body is far off its heading and releases it smoothly (owner-delegated start of a route)", () => {
+  assert.ok(Math.abs(turnGate(0) - 1) < 1e-9);
+  assert.ok(Math.abs(turnGate(Math.PI / 3) - 1) < 1e-9);
+  assert.ok(turnGate(Math.PI / 2) < 1e-9);
+  assert.equal(turnGate(Math.PI), 0);
+  assert.equal(turnGate(-Math.PI), 0);
+  assert.ok(Math.abs(turnGate(0.9) - turnGate(-0.9)) < 1e-12, "symmetric");
+  let last = 1;
+  for (let turn = 0; turn <= Math.PI; turn += 0.01) { const gate = turnGate(turn); assert.ok(gate <= last + 1e-12 && gate >= 0 && gate <= 1, `monotone at ${turn}`); last = gate; }
+  // A 180 degree turn at the capped rate releases the clock after about (pi - pi/2) / 3.5 s, not after the whole turn.
+  let angle = 0, seconds = 0;
+  while (turnGate(Math.PI - angle) < 1 && seconds < 3) { angle = turnStep(angle, Math.PI, 1 / 60, 0.22, 3.5); seconds += 1 / 60; }
+  assert.ok(seconds > 0.4 && seconds < 1, `the clock is fully released after ${seconds.toFixed(2)}s`);
+});
+
+test("the spider steps its legs while it turns, the route clock is gated by the turn, and the pauses stay 6-10 s", () => {
+  const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
+  assert.match(source, /walked \+= dt \* turnGate\(turn\)/);
+  assert.match(source, /gaitDistance \+= turnTravel/);
+  assert.match(source, /\(walking \|\| Math\.abs\(turn\) > TURN_STEP_MIN \? 1 : 0\) - gait/);
+  assert.match(source, /const turned = turnStep\(angle, /);
+  assert.equal(source.match(/rest = 6 \+ rand\(\) \* 4/g)?.length, 2, "pauses between routes are unchanged");
 });

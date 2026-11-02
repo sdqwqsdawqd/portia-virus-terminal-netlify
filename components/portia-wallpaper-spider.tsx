@@ -5,7 +5,7 @@
 // it reads no layout and sets no React state.
 
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
-import { REST_NODE, besideThread, createPulsePool, emitPulse, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, planSpawn, planWalk, pulseShape, seeded, stepPulses, turnStep, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
+import { REST_NODE, besideThread, createPulsePool, emitPulse, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, planSpawn, planWalk, pulseShape, seeded, stepPulses, turnGate, turnStep, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
 
 type LegId = "L1" | "L2" | "L3" | "L4" | "R1" | "R2" | "R3" | "R4";
 
@@ -33,6 +33,8 @@ const LEG_SWING_BY_PAIR = [0, 2.4, 4.8, 7.4, 14] as const;
 const LEG_TUCK_BY_PAIR = [0, 0.02, 0.035, 0.052, 0.09] as const;
 const BODY_BOB = 0.006; // nearly still abdomen; no conspicuous pulsing in the background
 const GAIT_EASE = 0.45; // legs settle softly after a stop
+const TURN_STEP_RADIUS = 20; // units of gait travel per radian of body turn: the legs step while the body turns, at about the walking cadence
+const TURN_STEP_MIN = 0.02; // below ~1 degree left to turn the legs stay put
 const TURN_TIME = 0.22; // smooth directional changes instead of abrupt pivots
 const MAX_TURN_RATE = 3.5; // rad/s ~ 200 deg/s: a 180 degree turn takes no less than ~0.9s, no sharp pivots (D-06)
 const PROBE_SWING = 8.5;
@@ -88,7 +90,7 @@ export function WallpaperSpider() {
     // laneStart: the body's offset from the first point of the route when it set off. settleX/Y: where the body comes to rest after a route.
     let laneStart: [number, number] = [0, 0], settleX = x, settleY = y;
     // heading is where the body should face (travel direction); angle is how far the artwork is turned now.
-    let heading = ARTWORK_HEADING, angle = 0, phase = 0, gait = 0, clean = true, legsNeutral = true;
+    let heading = ARTWORK_HEADING, angle = 0, turn = 0, phase = 0, gait = 0, clean = true, legsNeutral = true;
     let gaitDistance = 0, pathDistance = 0, laneSide = rand() < 0.5 ? -1 : 1;
     let probeDelay = FIRST_PROBE_MIN_DELAY + rand() * (FIRST_PROBE_MAX_DELAY - FIRST_PROBE_MIN_DELAY), probeRemaining = 0, probeDuration = 0;
 
@@ -107,7 +109,7 @@ export function WallpaperSpider() {
       if (planned.node === previousVisibleSpawn) return false;
       previousVisibleSpawn = planned.node; node = planned.node; previous = -1; path = planned.path.length > 1 ? planned.path : null; walked = 0; rest = path ? 0 : 1.2 + rand() * 0.8;
       laneSide = rand() < 0.5 ? -1 : 1;
-      heading = planned.heading; angle = heading - ARTWORK_HEADING; phase = planned.phase; gait = path ? 1 : 0; gaitDistance = phase * 20; pathDistance = 0;
+      heading = planned.heading; angle = heading - ARTWORK_HEADING; turn = 0; phase = planned.phase; gait = path ? 1 : 0; gaitDistance = phase * 20; pathDistance = 0;
       [x, y] = besideThread(...webGeometry.nodes[planned.node], heading, laneSide, THREAD_LANE_OFFSET);
       laneStart = [x - webGeometry.nodes[planned.node][0], y - webGeometry.nodes[planned.node][1]]; settleX = x; settleY = y;
       probeRemaining = 0; probeDelay = FIRST_PROBE_MIN_DELAY + rand() * (FIRST_PROBE_MAX_DELAY - FIRST_PROBE_MIN_DELAY);
@@ -145,7 +147,7 @@ export function WallpaperSpider() {
         if (Math.hypot(settleX - x, settleY - y) < 0.01) { x = settleX; y = settleY; }
       }
       if (path) {
-        walked += dt;
+        walked += dt * turnGate(turn); // the route clock waits while the body is far off its heading
         const pose = walkPose(path, walked);
         heading = pose.heading;
         const [targetX, targetY] = laneTarget(pose, laneSide, THREAD_LANE_OFFSET, laneStart, LANE_BLEND_DISTANCE);
@@ -195,9 +197,14 @@ export function WallpaperSpider() {
         probeDelay = PROBE_MIN_DELAY + rand() * (PROBE_MAX_DELAY - PROBE_MIN_DELAY);
         probing = true;
       }
-      angle = turnStep(angle, heading - ARTWORK_HEADING, dt, TURN_TIME, MAX_TURN_RATE);
-      const turn = Math.atan2(Math.sin(heading - ARTWORK_HEADING - angle), Math.cos(heading - ARTWORK_HEADING - angle)); // what is left to turn
-      gait += Math.max(-dt / GAIT_EASE, Math.min(dt / GAIT_EASE, (walking ? 1 : 0) - gait));
+      const turned = turnStep(angle, heading - ARTWORK_HEADING, dt, TURN_TIME, MAX_TURN_RATE);
+      const turnTravel = Math.abs(turned - angle) * TURN_STEP_RADIUS;
+      angle = turned;
+      turn = Math.atan2(Math.sin(heading - ARTWORK_HEADING - angle), Math.cos(heading - ARTWORK_HEADING - angle)); // what is left to turn
+      gait += Math.max(-dt / GAIT_EASE, Math.min(dt / GAIT_EASE, (walking || Math.abs(turn) > TURN_STEP_MIN ? 1 : 0) - gait));
+      // Turning on the spot steps the legs too, so the body never rotates on frozen legs (no waves: only walking footfalls make them).
+      gaitDistance += turnTravel;
+      if (!path) phase = gaitPhase(gaitDistance);
       // A resting spider that has finished turning and straightening its legs needs no writes at all.
       const settled = !walking && gait === 0 && !probing && Math.abs(turn) < 1e-3 && x === settleX && y === settleY;
       if (settled && clean) return;
