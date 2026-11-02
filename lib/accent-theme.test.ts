@@ -332,7 +332,7 @@ test("animations are full by default; reduced and off only by the saved setting,
   assert.doesNotMatch(css, /data-motion="reduce"/);
   assert.doesNotMatch(css, /prefers-reduced-motion/);
   // Windows under «Уменьшены»: fade only, no scale, at the fast duration; Vivian's idle offended pose is static in every mode.
-  assert.match(css, /html\[data-motion="reduced"\] \.app-window \{ animation: fade-in var\(--motion-fast\) var\(--ease-out\) !important; \}/);
+  assert.match(css, /html\[data-motion="reduced"\] \.app-window:not\(.is-closing, .is-minimizing\) \{ animation: fade-in var\(--motion-fast\) ease-out !important; \}/);
   assert.match(css, /html\[data-motion="reduced"\] \.assistant-button img \{ transition-duration: var\(--motion-fast\); \}/);
   assert.match(css, /(^|\n)\.desktop-assistant\.is-offended \.assistant-button img \{[^}]*rotate:[^}]*grayscale\([^}]*opacity:/);
   const group = desktopSource.match(/title="Анимации" values=\{(\[\[.*?\]\])\}/)?.[1];
@@ -572,4 +572,23 @@ test("the spider has no outline: owner recalled item 3 of 18-MOTION-APPROVAL (qu
   assert.match(css, /\.wallpaper-spider-dark\s*\{\s*fill:\s*color-mix\(in oklab, var\(--teal\) 12%, #020706\);\s*\}/, "dark fill unchanged");
   assert.match(css, /\.wallpaper-spider-teal\s*\{\s*fill:\s*currentColor;\s*\}/);
   assert.match(css, /\.wallpaper-spider-pale\s*\{\s*fill:\s*color-mix\(in oklab, var\(--teal\) 14%, #ececec\);\s*\}/);
+});
+
+test("a window appears smoothly under «Включены» and «Уменьшены» and at once under «Выключены» (quick 261102-d7r)", () => {
+  const msOf = (token: string) => Number(new RegExp(`${token}:\\s*(\\d+)ms`).exec(css)?.[1]);
+  const closeMs = Number(/WINDOW_CLOSE_MS = (\d+)/.exec(desktopSource)?.[1]), fadeOutMs = Number(/WINDOW_FADE_OUT_MS = (\d+)/.exec(desktopSource)?.[1]);
+  // «Включены»: the opening mirrors the close (same two frames, opacity 0 and scale .97 about the centre), longer than it and on a plain ease-out.
+  assert.match(css, /(^|\n)\.app-window \{ animation: window-open var\(--motion-base\) ease-out; \}/);
+  const opening = /@keyframes window-open \{ from \{([^}]*)\} \}/.exec(css)?.[1]?.trim(), closing = /@keyframes window-close \{ to \{([^}]*)\} \}/.exec(css)?.[1]?.trim();
+  assert.ok(opening && opening === closing, `window-open from (${opening}) mirrors window-close to (${closing})`);
+  assert.doesNotMatch(opening!, /translate|transform/, "no lift: the nod (18-04) owns translate");
+  assert.ok(msOf("--motion-base") > closeMs, "opening is longer than closing");
+  // «Уменьшены»: the selector outranks the blanket rule (0,2,2), otherwise the fade is cut to .01ms and the window just pops in.
+  assert.match(css, /html\[data-motion="reduced"\] \.app-window:not\(\.is-closing, \.is-minimizing\) \{ animation: fade-in var\(--motion-fast\) ease-out !important; \}/);
+  assert.doesNotMatch(css, /html\[data-motion="reduced"\] \.app-window \{/);
+  assert.match(css, /html\[data-motion="reduced"\] \.app-window:is\(\.is-closing, \.is-minimizing\) \{ animation: fade-out 120ms var\(--ease-in\) forwards !important; \}/);
+  assert.ok(msOf("--motion-fast") > fadeOutMs, "fade-in is longer than fade-out");
+  // «Выключены»: no window rule of its own; the blanket zero-duration rule makes it instant.
+  assert.doesNotMatch(css, /html\[data-motion="off"\][^{\n]*\.app-window[^{\n]*\{[^}]*animation/);
+  assert.doesNotMatch(css, /prefers-reduced-motion|matchMedia/);
 });
