@@ -1383,7 +1383,7 @@ html[data-motion="reduced"], html[data-motion="reduced"] *:not(:is(.desktop-icon
 html[data-motion="off"], html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="off"] *::after { scroll-behavior: auto !important; animation-duration: 0s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; transition-delay: 0s !important; }
 /* «Анимации: Уменьшены / Выключены» show every wallpaper still and fully drawn (D-07). */
 html:is([data-motion="reduced"], [data-motion="off"]) :is(.desktop-wallpaper, .desktop-wallpaper *, .wallpaper-spider) { animation: none !important; }
-html:is([data-motion="reduced"], [data-motion="off"]) .wallpaper-spider,
+/* Only the switch hides the spider; in «Уменьшены» and «Выключены» it stays visible and sits still (no waves, neutral legs). */
 html[data-spider="off"] .wallpaper-spider { display: none; }
 html:is([data-motion="reduced"], [data-motion="off"]) .wallpaper-web path { stroke-dashoffset: 0; }
 html:is([data-motion="reduced"], [data-motion="off"]) .wallpaper-web-dew { opacity: 1; }
@@ -1414,9 +1414,10 @@ html[data-motion="reduced"] .wallpaper-layer.is-leaving { animation: fade-out 30
 .wallpaper-web-dew { fill: currentColor; stroke: none; opacity: 0; animation: web-dew-in 1.6s ease-out 2.2s forwards; }
 .wallpaper-web-dew circle { opacity: .32; }
 html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-in-out infinite; }
-/* With the spider hidden the silk itself moves almost imperceptibly. There is no glow, travelling highlight or
-   newly appearing dot: the already drawn geometry only shifts by a few pixels as one quiet layer. */
-html[data-motion="full"][data-spider="off"] .wallpaper-web { transform-box: fill-box; transform-origin: 62% 44%; animation: web-idle-drift 11s ease-in-out infinite alternate; }
+/* The web, the waves and the spider share one layer that sways by at most 2px, so a wave never drifts off its thread (D-09).
+   It sways the same with the spider shown or hidden, and only under «Включены»: the frames before and after are `transform: none`. */
+.wallpaper-web-drift { position: absolute; inset: 0; }
+html[data-motion="full"] .wallpaper-web-drift { animation: web-idle-drift 22s ease-in-out infinite; }
 /* The spider is placed from its rest crossing with the same mapping as the web's «xMaxYMin slice» (scale = the larger of
    width/1440 and height/900). The loop only adds a transform; legs turn about pivots given in artwork units. The body
    centre (325, 360 of 649.5 x 768) is the anchor that walks on the threads. It lives outside .wallpaper-web, whose rules
@@ -1426,6 +1427,8 @@ html[data-motion="full"][data-spider="off"] .wallpaper-web { transform-box: fill
 .wallpaper-spider :is(path, circle) { stroke: none; }
 .wallpaper-spider-teal { fill: currentColor; }
 .wallpaper-spider-dark { fill: color-mix(in oklab, var(--teal) 12%, #020706); }
+/* Body outline (18-MOTION-APPROVAL item 3): the dark fill is kept and a 1px accent edge keeps the silhouette readable without brightening it. */
+.wallpaper-spider .wallpaper-spider-dark { stroke: color-mix(in oklab, var(--teal) 38%, transparent); stroke-width: 1px; vector-effect: non-scaling-stroke; paint-order: stroke; }
 .wallpaper-spider-pale { fill: color-mix(in oklab, var(--teal) 14%, #ececec); }
 .wallpaper-spider-leg { transform-box: view-box; }
 /* Waves along the threads: no filter, no blur (cost). The svg carries .desktop-wallpaper, so the accent and the reduce gate apply. */
@@ -1434,7 +1437,7 @@ html[data-motion="full"] .wallpaper-spider { animation: fade-in 600ms ease-out 1
 @keyframes web-dew { 0%, 100% { opacity: .32; } 50% { opacity: .75; } }
 @keyframes web-draw { to { stroke-dashoffset: 0; } }
 @keyframes web-dew-in { to { opacity: 1; } }
-@keyframes web-idle-drift { from { transform: translate3d(-1px, 1px, 0) scale(.999); } to { transform: translate3d(2px, -1px, 0) scale(1.003); } }
+@keyframes web-idle-drift { 0%, 100% { transform: none; } 50% { transform: translate3d(2px, -1px, 0); } }
 /* One composited layer three loops tall, moved by a third of its own height: the picture repeats exactly, the seam is
    invisible, and no container-query unit is evaluated inside the keyframe (D-09). It moves with transform, not translate:
    Edge keeps a `translate` animation on an outer <svg> on the main thread (traced), a `transform` one on the compositor. */

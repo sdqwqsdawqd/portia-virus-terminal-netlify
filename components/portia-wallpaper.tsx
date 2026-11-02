@@ -220,8 +220,10 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
   const shown = [layers.leaving, layers.current].filter((value): value is string => !!value && value !== "quiet");
   return <div className="desktop-wallpaper-frame" aria-hidden="true">
     {shown.map((value) => <div key={value} className={`wallpaper-layer${value === layers.leaving ? " is-leaving" : layers.leaving ? " is-entering" : ""}`}>
-      <WallpaperArt kind={value} />
-      {value === "radar" ? <WallpaperSpider /> : value === "gel" ? <WallpaperGelStrip /> : null}
+      {value === "radar"
+        // The web, the waves and the spider sway as one layer, so the waves never part from the threads (D-09).
+        ? <div className="wallpaper-web-drift"><WallpaperArt kind={value} /><WallpaperSpider /></div>
+        : <><WallpaperArt kind={value} />{value === "gel" ? <WallpaperGelStrip /> : null}</>}
     </div>)}
   </div>;
 }

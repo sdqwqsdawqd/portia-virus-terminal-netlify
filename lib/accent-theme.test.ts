@@ -550,7 +550,7 @@ test("the background spider uses the same readable interface accent instead of t
   }
 });
 
-test("the spider has an independent saved switch and disappears with animations", () => {
+test("the spider has an independent saved switch and stays visible and still when animations are reduced or off", () => {
   assert.equal(runBoot(() => null).spider, "on");
   assert.equal(runBoot(() => JSON.stringify({ spider: "on" })).spider, "on");
   assert.equal(runBoot(() => JSON.stringify({ spider: "off" })).spider, "off");
@@ -558,7 +558,20 @@ test("the spider has an independent saved switch and disappears with animations"
   const group = desktopSource.match(/title="Паук" values=\{(\[\[.*?\]\])\}/)?.[1];
   assert.ok(group, "«Паук» SettingGroup not found");
   assert.deepEqual([...spiderModes], [...group.matchAll(/\['(\w+)',/g)].map((m) => m[1]));
-  assert.match(css, /html:is\(\[data-motion="reduced"\], \[data-motion="off"\]\) \.wallpaper-spider,\s*html\[data-spider="off"\] \.wallpaper-spider\s*\{\s*display:\s*none;/);
+  // The switch hides the spider; a motion mode never does: it sits still and visible in «Уменьшены» and «Выключены» (UI-SPEC matrix).
+  assert.match(css, /html\[data-spider="off"\] \.wallpaper-spider\s*\{\s*display:\s*none;/);
+  assert.doesNotMatch(css, /data-motion="(reduced|off)"\][^{]*\.wallpaper-spider\s*(,[^{]*)?\{[^}]*display:\s*none/);
   assert.match(css, /\.wallpaper-spider\s*\{[^}]*opacity:\s*1;/);
   assert.match(spiderSource, /attributeFilter:\s*\["data-motion", "data-spider"\]/);
+});
+
+test("the spider body outline stays visible against --desktop-base on every accent preset (D-07)", () => {
+  // Outline = the accent at 38% alpha (color-mix in oklab with transparent) composited over the page, in gamma sRGB.
+  assert.match(css, /\.wallpaper-spider \.wallpaper-spider-dark\s*\{[^}]*stroke:\s*color-mix\(in oklab, var\(--teal\) 38%, transparent\);[^}]*stroke-width:\s*1px;[^}]*vector-effect:\s*non-scaling-stroke/);
+  for (const [id, tokens] of [["teal", root], ...Object.entries(themes)] as const) {
+    const accent = hex(tokens.get("--teal")!), base = hex(tokens.get("--desktop-base")!);
+    const outline = accent.map((channel, i) => channel * 0.38 + base[i] * 0.62) as Rgb;
+    const ratio = contrast(outline, base);
+    assert.ok(ratio >= 1.5, `${id}: outline against --desktop-base is ${ratio.toFixed(2)}:1`);
+  }
 });

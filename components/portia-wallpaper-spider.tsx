@@ -239,6 +239,11 @@ export function WallpaperSpider() {
       }
       if (!motionOn()) {
         cancelAnimationFrame(frame); frame = 0;
+        // Outside «Включены» the spider sits where it is, without waves or trails: legs neutral, body at rest scale, position unchanged.
+        clearPulses();
+        legs.forEach((leg) => { leg.style.rotate = "0deg"; leg.style.scale = "1"; });
+        element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg)`;
+        legsNeutral = true; clean = true;
         return;
       }
       if (!document.hidden) {

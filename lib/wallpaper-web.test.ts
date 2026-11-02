@@ -76,12 +76,31 @@ test("the spider palette follows the readable interface accent with logo-like bl
   assert.match(styles, /\.wallpaper-spider-pale\s*\{[^}]*color-mix\(in oklab, var\(--teal\)/);
 });
 
-test("hiding the spider leaves only a subtle dot-free web drift", () => {
+test("the web, its waves and the spider sway as one layer, the same with the spider shown or hidden, and only under «Включены»", () => {
   const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
+  const wallpaper = readFileSync(new URL("../components/portia-wallpaper.tsx", import.meta.url), "utf8");
   assert.match(styles, /html\[data-spider="off"\] \.wallpaper-web-dew\s*\{[^}]*animation:\s*none !important;[^}]*opacity:\s*0 !important/);
   assert.match(styles, /html\[data-spider="off"\] \.wallpaper-web-pulses\s*\{[^}]*opacity:\s*0/);
-  assert.match(styles, /html\[data-motion="full"\]\[data-spider="off"\] \.wallpaper-web\s*\{[^}]*animation:\s*web-idle-drift/);
-  assert.match(styles, /@keyframes web-idle-drift/);
+  assert.match(styles, /\.wallpaper-web-drift\s*\{\s*position:\s*absolute;\s*inset:\s*0;\s*\}/);
+  assert.match(styles, /html\[data-motion="full"\] \.wallpaper-web-drift\s*\{\s*animation:\s*web-idle-drift/);
+  assert.doesNotMatch(styles, /data-spider="off"\]\s*\.wallpaper-web\s*\{/);
+  const frames = styles.match(/@keyframes web-idle-drift[^\n]*/)?.[0] ?? "";
+  assert.match(frames, /0%, 100%\s*\{\s*transform:\s*none;/);
+  const offsets = [...frames.matchAll(/translate3d\((-?[\d.]+)px, (-?[\d.]+)px/g)].flatMap((m) => [Number(m[1]), Number(m[2])]);
+  assert.ok(offsets.length > 0 && offsets.every((value) => Math.abs(value) <= 2), `sway is at most 2px (${offsets})`);
+  assert.match(wallpaper, /<div className="wallpaper-web-drift">[\s\S]*<WallpaperArt kind=\{value\} \/>[\s\S]*<WallpaperSpider \/>/);
+});
+
+test("the spider stays where it is, without waves and in a neutral pose, once motion leaves «Включены»", () => {
+  const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
+  const branch = source.match(/if \(!motionOn\(\)\) \{([\s\S]*?)\n      \}/)?.[1] ?? "";
+  assert.match(branch, /clearPulses\(\)/);
+  assert.match(branch, /style\.rotate = "0deg"/);
+  assert.match(branch, /style\.scale = "1"/);
+  assert.match(branch, /legsNeutral = true/);
+  assert.match(branch, /clean = true/);
+  assert.doesNotMatch(branch, /relocateVisible/);
+  assert.match(source, /const MAX_DT = 0\.05;/);
 });
 
 test("explicit show plans a distinct spawn with a route-derived pose", () => {
