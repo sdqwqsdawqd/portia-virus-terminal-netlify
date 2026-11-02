@@ -20,21 +20,21 @@
 - [ ] **STAB-DESK-02**: Окно перетаскивается и изменяет размер за все края, не исчезает за workspace, имеет симметричные inset, сохраняет противоположный край и minimum и корректируется после смены viewport; важное содержимое reflow-ится в доступных границах без обрезки и разрушения композиции.
 - [ ] **STAB-DESK-03**: Minimize, maximize, close и taskbar не теряют состояние и не затрагивают другие окна; активная квалификация запрещает закрытие, сворачивание, перемещение и взаимодействие с фоном.
 - [ ] **STAB-DESK-04**: На phone приложения используют доступный экран, доступны touch, не перекрываются fixed/sticky controls и клавиатурой и не создают page-level horizontal overflow.
-- [ ] **STAB-DESK-05**: Accent, wallpaper, icon size/position, motion и spider сохраняются независимо; reload восстанавливает значения, повреждённое storage безопасно возвращается к default.
+- [x] **STAB-DESK-05**: Accent, wallpaper, icon size/position, motion и spider сохраняются независимо; reload восстанавливает значения, повреждённое storage безопасно возвращается к default.
 - [ ] **STAB-DESK-06**: Drag изменяет только выбранный ярлык; позиция сохраняется, остаётся достижимой и не перекрывает критические controls; открытие доступно мышью, клавиатурой и touch.
 - [x] **STAB-DESK-07**: Декомпозиция `portia-desktop.tsx` и `portia-editor.tsx` сохраняет app ids, DOM semantics, CSS hooks, storage keys, API shapes, порядок, данные и утверждённые snapshots, кроме отдельно согласованных fixes.
 - [ ] **STAB-DESK-08**: Каждая поверхность различает loading, empty, populated, stale/degraded и fatal error, не падает на пустых/частичных данных и не уничтожает last-good state при безопасном retry.
 
 ## Motion, паук, паутина, ярлыки и Вивьян
 
-- [ ] **STAB-MOTION-01**: Владелец утверждает единый контракт «Анимации»; boot script, desktop, приложения, «Повышение» и редактор одинаково соблюдают on/off и выбранное решение для system preference.
+- [x] **STAB-MOTION-01**: Владелец утверждает единый контракт «Анимации»; boot script, desktop, приложения, «Повышение» и редактор одинаково соблюдают on/off и выбранное решение для system preference.
 - [ ] **STAB-MOTION-02**: Boot animation показывается максимум один раз за tab session; reload не блокируется повторной заставкой, off/reduced приводит к утверждённому безопасному состоянию.
 - [ ] **STAB-MOTION-03**: Включённый PNG-паук не исчезает, не телепортируется и непрерывно интерполируется по утверждённой траектории через соседние сектора паутины; новая точка/поза выбирается при загрузке и после явного `Скрыть → Показать`, смещение spawn-точки не используется как обход маршрутизации, а выключение не оставляет следов.
 - [ ] **STAB-MOTION-04**: Передняя пара лап у лица ведёт шаг и выполняет редкий hunting signal; задние лапы не дёргаются постоянно, а волны появляются только от постановки лап и затухают.
 - [ ] **STAB-MOTION-05**: Сохраняя идею PORTIA OS, artwork ярлыков и hover/focus-анимации переработаны как единая система; каждый ярлык проигрывает полный semantic cycle без сдвига контейнера, уход pointer не обрывает цикл, последний кадр совпадает со статичным по geometry, viewBox, filter и качеству.
 - [ ] **STAB-MOTION-06**: Вивьян следует выбранному accent без неоновой или серой рассинхронизации, остаётся читаемой, детерминированно реагирует на click/idle/activity/offended и не зависит от motion для понимания ответа.
 - [ ] **STAB-MOTION-07**: Обои не создают заметный jank; при motion off они полностью статичны, а переключение не даёт flash или пустого слоя.
-- [ ] **STAB-MOTION-08**: Для spider/web/Vivian/shortcut/window motion до реализации утверждены start, key states, end/rest, duration, easing, interruption и reduced/off; после реализации проходят visual regression и owner review.
+- [x] **STAB-MOTION-08**: Для spider/web/Vivian/shortcut/window motion до реализации утверждены start, key states, end/rest, duration, easing, interruption и reduced/off; после реализации проходят visual regression и owner review.
 
 ## «Повышение»
 
@@ -135,18 +135,18 @@
 | STAB-DESK-02 | Phase 18 | Pending |
 | STAB-DESK-03 | Phase 18 | Pending |
 | STAB-DESK-04 | Phase 18 | Pending |
-| STAB-DESK-05 | Phase 18 | Pending |
+| STAB-DESK-05 | Phase 18 | Complete |
 | STAB-DESK-06 | Phase 18 | Pending |
 | STAB-DESK-07 | Phase 17 | Complete |
 | STAB-DESK-08 | Phase 19 | Pending |
-| STAB-MOTION-01 | Phase 18 | Pending |
+| STAB-MOTION-01 | Phase 18 | Complete |
 | STAB-MOTION-02 | Phase 18 | Pending |
 | STAB-MOTION-03 | Phase 18 | Pending |
 | STAB-MOTION-04 | Phase 18 | Pending |
 | STAB-MOTION-05 | Phase 18 | Pending |
 | STAB-MOTION-06 | Phase 18 | Pending |
 | STAB-MOTION-07 | Phase 18 | Pending |
-| STAB-MOTION-08 | Phase 18 | Pending |
+| STAB-MOTION-08 | Phase 18 | Complete |
 | STAB-PROM-01 | Phase 19 | Pending |
 | STAB-PROM-02 | Phase 19 | Pending |
 | STAB-PROM-03 | Phase 19 | Pending |

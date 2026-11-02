@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 18
 current_phase_name: Рабочий стол, окна и живые анимации
 status: executing
-stopped_at: Phase 18 UI-SPEC approved
-last_updated: "2026-11-01T23:03:30.074Z"
+stopped_at: Completed 18-01-PLAN.md
+last_updated: "2026-11-02T03:17:26.670Z"
 last_activity: 2026-11-02
-last_activity_desc: Phase PORTIA-15 complete, transitioned to Phase 18
-state_head: b867917e0a1c458f8bb9921c3fb04d4705622d4e
+last_activity_desc: Phase PORTIA-18 execution started
+state_head: 857fb2ec0ae160aa965fa650e1a530d68061d9e8
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 49
-  completed_plans: 42
+  completed_plans: 43
   percent: 50
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-29)
 
 **Core value:** Сделать существующий PORTIA OS доказуемо устойчивым, безопасным и визуально последовательным, сохранив его текущую художественную основу.
-**Current focus:** Phase 16 — Канонический Supabase staging и SQL-истина
+**Current focus:** Phase PORTIA-18 — Рабочий стол, окна и живые анимации
 
 ## Current Position
 
-Phase: 18 (Рабочий стол, окна и живые анимации) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-11-02 — Phase PORTIA-15 complete, transitioned to Phase 18
+Phase: PORTIA-18 (Рабочий стол, окна и живые анимации) — EXECUTING
+Plan: 2 of 7
+Status: Executing Phase PORTIA-18
+Last activity: 2026-11-02 — Phase PORTIA-18 execution started
 
 Progress: [█████░░░░░] 50% of Phase 15 plans (phase gaps_found, not complete)
 
@@ -87,6 +87,7 @@ Progress: [█████░░░░░] 50% of Phase 15 plans (phase gaps_fou
 | Phase 16 P12 | 35min | 3 tasks | 5 files |
 | Phase 16 P13 | ~2h | 3 tasks | 15 files |
 | Phase 16 P14 | 40min | 3 tasks | 10 files |
+| Phase PORTIA-18 P01 | n/a | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 16]: 16-13: proof привилегированной lane только от probeSession после входа через /owner-login и iss; participant cookie через supabase/ssr (owner-login выходит из сессии не-редактора); mutation запускается с --workers=1 (единственный owner email)
 - [Phase 16]: 16-13: клиентский бандл редактора не должен импортировать node:crypto (CSP eval); HMAC-токены предпросмотра вынесены в lib/portia-promotion-preview-token.ts
 - [Phase 16]: 16-14: production DRIFT (sequence ACL + two legacy promo RPC overloads) closed by forward-only migrations 20261101000100/20261101000200; NOT applied to production (owner decides, D5). STAB-SEC-04 stays Pending, STAB-REL-04 Complete.
+- [Phase PORTIA-18]: 18-01: owner approved all motion [PROPOSED] values (7=A drag inside 8px, 8=A Vivian hidden on phone with open window); STAB-MEDIA-06 stays BLOCKED until owner traces
 
 ### Pending Todos
 
@@ -160,9 +162,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-01T20:07:37.430Z
-Stopped at: Phase 18 UI-SPEC approved
-Resume file: .planning/phases/PORTIA-18-rabochiy-stol-okna-i-zhivye-animatsii/18-UI-SPEC.md
+Last session: 2026-11-02T03:17:26.531Z
+Stopped at: Completed 18-01-PLAN.md
+Resume file: None
 
 ## Operator Next Step
 
