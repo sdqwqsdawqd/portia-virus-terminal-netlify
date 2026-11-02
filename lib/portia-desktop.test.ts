@@ -203,6 +203,20 @@ test("window tiles keep their own size and every recommendation is shown", () =>
   assert.ok(source.includes("content.searchRecommendations.map("));
 });
 
+test("editor form cards keep one fixed width set by a single variable and fill columns on desktop only (D-15)", () => {
+  assert.equal(styles.match(/--editor-card-width:/g)?.length, 1);
+  assert.match(styles, /--editor-card-width:\s*340px/); // 18-MOTION-APPROVAL item 5
+  const desktop = /@media \(min-width: 901px\) \{\s*\.editor-card-columns \{[^}]*\}/.exec(styles)?.[0] ?? "";
+  assert.match(desktop, /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*var\(--editor-card-width\)\),\s*var\(--editor-card-width\)\)\)/);
+  assert.match(desktop, /align-items:\s*start/);
+  assert.match(styles, /\.editor-card-columns > :not\(\.nested-editor-card\)\s*\{[^}]*grid-column:\s*1 \/ -1/);
+  assert.match(styles, /\.editor-card-columns > \.nested-editor-card \+ \.nested-editor-card\s*\{[^}]*margin-top:\s*0/);
+  // It must follow .flat-editor-form (same specificity) to win the cascade, and the sorted lists stay one column.
+  assert.ok(styles.indexOf(".editor-card-columns {") > styles.indexOf(".flat-editor-form { display: grid"));
+  for (const list of [".recommendation-order-list", ".access-editor-list"]) assert.doesNotMatch(styles, new RegExp(`\\${list}\\s*\\{[^}]*grid-template-columns`));
+  assert.match(editorSource, /<div className="editor-form flat-editor-form editor-card-columns">\s*<p className="editor-guidance">Публикуйте новости/);
+});
+
 test("Vivian follows the interface accent without painful overexposure or greying the image itself", () => {
   assert.match(styles, /\.assistant-button\s*\{[^}]*filter:\s*var\(--assistant-filter\) brightness\(1\.1\) saturate\(1\.08\)/);
   assert.match(styles, /\.assistant-button img\s*\{[^}]*filter:\s*none/);

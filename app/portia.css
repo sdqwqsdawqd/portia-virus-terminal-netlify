@@ -787,6 +787,12 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .access-tab-note.is-error { color: #e0aaa3; }
 /* One column that may shrink below its content: a nowrap card title would otherwise widen the whole form past a phone screen. */
 .flat-editor-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+/* Form cards keep one fixed width and add columns as the window widens (D-15). After .flat-editor-form so it wins the cascade; the sorted recommendation and access lists stay one column. */
+@media (min-width: 901px) {
+  .editor-card-columns { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--editor-card-width)), var(--editor-card-width))); gap: 10px; align-items: start; }
+  .editor-card-columns > :not(.nested-editor-card) { grid-column: 1 / -1; }
+  .editor-card-columns > .nested-editor-card + .nested-editor-card { margin-top: 0; }
+}
 .editor-guidance { margin: 0 0 6px; color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font-size: 13px; line-height: 1.55; }
 .publish-toggle { display: flex; align-items: center; gap: 9px; margin-top: 14px; color: oklch(.777 calc(.021 * var(--accent-chroma)) var(--accent-hue)); font-size: 13px; }
 .publish-toggle input { width: 17px; height: 17px; accent-color: var(--teal); }
@@ -1510,6 +1516,8 @@ html[data-motion="full"] .loading-spinner { animation: loading-spin 900ms linear
   --motion-slow: 300ms;
   --ease-out: cubic-bezier(.16, 1, .3, 1);
   --ease-in: cubic-bezier(.5, 0, .75, 0);
+  /* Width of one editor form card; the only place it is set (D-15, 18-MOTION-APPROVAL item 5). */
+  --editor-card-width: 340px;
 }
 
 /* A taskbar entry being dragged to a new place (state, not motion). */

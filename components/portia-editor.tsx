@@ -1148,7 +1148,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       )}
 
       {tab === "broadcasts" && (
-        <div className="editor-form flat-editor-form">
+        <div className="editor-form flat-editor-form editor-card-columns">
           <p className="editor-guidance">Публикуйте новости, еженедельные квесты и задачи. Выключенные записи сохраняются как черновики.</p>
           <nav className="editor-tabs dossier-tabs" aria-label="Разделы сводки">
             {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([id, label]) => (
