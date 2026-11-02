@@ -263,3 +263,36 @@ test("a failed save keeps the typed draft and reports the network failure in Rus
     assert.ok(afterFailure.includes("return null"));
   }
 });
+
+test("a 403 without an error code closes the workspace and drops loaded reviewer data", () => {
+  assert.ok(main.includes("response.status === 403 && typeof body.code !== \"string\""));
+  assert.ok(main.includes('role="alert"'));
+  assert.ok(main.includes("Доступ закрыт"));
+  const deny = main.slice(main.indexOf("const deny = "), main.indexOf("const deny = ") + 400);
+  for (const reset of ["setQueue(emptyQueue)", "setBanks(emptyBanks)", 'setSelectedRequestId("")', "setDenied(true)"]) assert.ok(deny.includes(reset), reset);
+  for (const loader of ["loadQueue", "loadBanks", "reviewerCommand", "postBank", "resetDevice"]) {
+    const body = main.slice(main.indexOf(`const ${loader} = `), main.indexOf(`const ${loader} = `) + 900);
+    assert.ok(body.includes("isDenied(response, body)"), loader);
+  }
+  assert.doesNotMatch(main, /Доступ закрыт[^"`]*(?:Вкладка|причин)/);
+});
+
+test("a missing server part is not shown as an empty queue", () => {
+  assert.ok(main.includes('body.code === "pending-database"'));
+  assert.ok(main.includes("Серверная часть раздела не обновлена."));
+  assert.ok(main.includes('queueStatus === "loading"'));
+  assert.ok(main.includes('queueStatus === "ready"'));
+  assert.ok(main.includes('banksStatus === "ready"'));
+  assert.ok(main.includes("promotion-skeleton"));
+  assert.ok(main.includes("НОВЫХ ЗАПРОСОВ НЕТ"));
+  assert.ok(main.includes("ОЧЕРЕДЬ НЕ ЗАГРУЖЕНА"));
+});
+
+test("a failed attempt proposes a two-day retake that the reviewer can change, extend or drop", () => {
+  assert.ok(main.includes("useState(2)"));
+  assert.ok(main.includes("Срок пересдачи, дней (0 — без ожидания)"));
+  assert.ok(main.includes("min={0} max={365}"));
+  assert.ok(main.includes("ОТКРЫТЬ ПЕРЕСДАЧУ ДОСРОЧНО"));
+  assert.ok(main.includes('"release-retake"'));
+  assert.ok(main.includes("Срок пересдачи: ${retakeDays} дн."));
+});
