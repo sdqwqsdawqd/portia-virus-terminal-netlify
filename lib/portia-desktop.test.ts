@@ -586,3 +586,31 @@ test("«Корзина» shows no restore or delete control on the desktop; the 
     assert.ok(block.includes('label: "Не удалять"') && !block.includes("ОТМЕНА"), `${dialog} names the refusal`);
   }
 });
+
+test("«Таблица» and «Устав»: skeleton until onLoad, fatal panel after the 15s timeout, retry remounts the frame; sandbox and zoom stay (STAB-APP-06, T-19-20)", () => {
+  const documents = desktopFamily.find((part) => part.file === "portia-desktop-documents.tsx")?.text ?? "";
+  const start = documents.indexOf("export function EmbeddedDocument");
+  const embedded = documents.slice(start, documents.indexOf("// v2 starts every section folded", start));
+  assert.match(embedded, /<iframe[^>]*key=\{frameKey\}[^>]*onLoad=/);
+  assert.ok(embedded.includes("sandbox={embedSandbox}"));
+  assert.equal(count(documents, "sandbox={embedSandbox}"), 2, "the document frame and the YouTube frame");
+  assert.match(embedded, /useState<"loading" \| "loaded" \| "failed">\("loading"\)/);
+  // The timer is armed only while loading, fires after iframeLoadTimeoutMs and is cleared on unmount, on load and on retry.
+  assert.match(embedded, /window\.setTimeout\(\(\) => setFrameState\("failed"\), iframeLoadTimeoutMs\)/);
+  assert.match(embedded, /return \(\) => window\.clearTimeout\(/);
+  assert.match(embedded, /onLoad=\{\(\) => setFrameState\("loaded"\)\}/);
+  assert.ok(embedded.includes('<AppSkeleton shape="document"'));
+  assert.match(embedded, /<AppFatalPanel failure="iframe"[^>]*extra=\{/);
+  assert.match(embedded, /setFrameKey\(\(key\) => key \+ 1\)/);
+  assert.ok(embedded.includes('href={external}'));
+  // zoom and fullscreen-facing handlers are unchanged
+  for (const kept of ['aria-label="Уменьшить"', 'aria-label="Увеличить"', "onClick={() => setZoom(1)}", "step(event.deltaY < 0 ? 1 : -1)", "zoomModifier(event)"]) assert.ok(embedded.includes(kept), kept);
+});
+
+test("AppDeniedPanel shows only «Доступ закрыт» (and one fixed caller line) as an alert, without buttons (D-07)", () => {
+  assert.equal(statesSource.match(/^export function AppDeniedPanel\b/gm)?.length, 1);
+  const start = statesSource.indexOf("export function AppDeniedPanel");
+  const panel = statesSource.slice(start, statesSource.indexOf("\n}\n", start));
+  assert.ok(panel.includes("Доступ закрыт") && panel.includes('role="alert"') && panel.includes("detail"));
+  assert.ok(!panel.includes("<button") && !panel.includes("onClick"));
+});

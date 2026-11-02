@@ -173,7 +173,7 @@ test("state kept when a window is closed lives in PortiaDesktop, state reset on 
   const desktop = source.slice(start, source.indexOf("\n}\n", start));
   const kept = ["activeVirusId", "virusQuery", "openLog", "globalQuery", "selectedEmployeeId", "employeeQuery", "selectedInfoId", "guideCardId", "broadcastTab", "activeTrashFileId", "desktopSettings", "shortcutPositions", "accentPickerOpen", "accentDraft", "settingsSavedVisible", "broadcastUnread", "openTabs", "canEdit"];
   for (const name of kept) assert.ok(declaresState(desktop, name), `${name} must be PortiaDesktop state`);
-  for (const name of ["zoom", "ctrlHeld", "frameLoading"]) {
+  for (const name of ["zoom", "ctrlHeld", "frameState", "frameKey"]) {
     assert.ok(!declaresState(desktop, name), `${name} must not be PortiaDesktop state`);
     assert.ok(declaresState(source, name), `${name} is expected in EmbeddedDocument`);
   }
