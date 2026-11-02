@@ -264,7 +264,42 @@ Plans:
   10. Hero/media загружается с корректным приоритетом, offscreen collections lazy, immutable media кэшируется без повторного скачивания, а смена записи, ошибка сети или blocked host не дают stale image, app crash или infinite spinner.
 
 **Acceptance gate**: Staging races/direct denials и полная owner PC/phone UAT «Повышения» обязательны; архивные отметки Phase 14 и preflight не закрывают фазу. Per-app desktop/phone matrix, authenticated editor journeys, search click-through и upload/cache/network evidence должны быть записаны до перехода к финальному CSP.
-**Plans**: TBD
+**Plans:** 14 plans
+
+Plans:
+**Wave 1**
+- [ ] 19-01-PLAN.md — сквозной срез stale-состояния (D-05) и вердикты владельца по [PROPOSED] и допущениям фазы (STAB-DESK-08, STAB-APP-10)
+- [ ] 19-02-PLAN.md — upload по реальным байтам без потери черновика и единый URL-контракт (STAB-MEDIA-01, -02, -04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 19-03-PLAN.md — инструмент приёмки: staging-ростер, seed/shift/residual/teardown через guarded wrapper (STAB-PROM-01, -13, -15)
+- [ ] 19-04-PLAN.md — UI участника «Повышения»: различимые состояния, срок без `..`, предупреждение режима, подсказка очистки (STAB-PROM-01..04, 06..08, 11..14)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 19-05-PLAN.md — UI reviewer: оценка ✓/✗, ручной итог, банки без потери данных, «Доступ закрыт» (STAB-PROM-05, 06, 09..12, 14)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 19-06-PLAN.md — живой seed, live/Playwright receipts и owner UAT «Повышения» на PC и phone (STAB-PROM-01..15)
+- [ ] 19-08-PLAN.md — состояния 8 приложений: скелетон, empty, stale, fatal, denied, iframe-таймаут (STAB-DESK-08, STAB-APP-01..06, -10)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 19-07-PLAN.md — teardown только помеченных данных приёмки после «принято» (STAB-PROM-13, -15)
+- [ ] 19-09-PLAN.md — покой иконок ярлыков = конечный кадр (D-17, хвост STAB-MOTION-05)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 19-10-PLAN.md — медиа: скелетон, заглушка «Изображение недоступно», приоритеты загрузки (STAB-MEDIA-02, -03, -05)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 19-11-PLAN.md — глобальный поиск: allowlist-индекс, открытие точной записи с подсветкой, клавиатура (STAB-SEARCH-01..04)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 19-12-PLAN.md — редактор: единый статус, конфликт ревизии, частичное сохранение (STAB-APP-07)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 19-13-PLAN.md — редактор: rebase при фоновом обновлении, fail-closed по правам, WYSIWYG и прокрутка (STAB-APP-07..09)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 19-14-PLAN.md — browser-матрица приложений, editor journeys, search click-through, upload/cache evidence и вердикт владельца PC/phone
 **UI hint**: yes
 
 ### Phase 20: Security, accessibility и приёмка релиза
