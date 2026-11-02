@@ -229,6 +229,13 @@ test("drag sorting in columns decides by reading order and slides rows along bot
   assert.ok(dossier.includes("if (!row) { moveAcross(parent, hits, x, y); return; }")); // moveAcross and the same-parent rule are untouched
 });
 
+test("on phone Vivian is hidden while a window is open and is a sibling of the workspace (STAB-DESK-04)", () => {
+  const phone = /@media \(max-width: 900px\) \{\s*\.quest-toast[\s\S]*?\n\}/.exec(styles)?.[0] ?? "";
+  assert.match(phone, /\.workspace\.mobile-app-open ~ \.desktop-assistant\s*\{\s*display:\s*none;\s*\}/);
+  assert.match(source, /<main className=\{`workspace\$\{[^`]*" mobile-app-open"/);
+  assert.ok(source.indexOf('className={`desktop-assistant') > source.indexOf("</main>"), "the sibling selector needs the assistant after <main>");
+});
+
 test("Vivian follows the interface accent without painful overexposure or greying the image itself", () => {
   assert.match(styles, /\.assistant-button\s*\{[^}]*filter:\s*var\(--assistant-filter\) brightness\(1\.1\) saturate\(1\.08\)/);
   assert.match(styles, /\.assistant-button img\s*\{[^}]*filter:\s*none/);

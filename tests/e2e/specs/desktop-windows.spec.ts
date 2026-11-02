@@ -165,4 +165,21 @@ test.describe("desktop windows (phone)", () => {
     await expect(desktop.window("Глобальный поиск")).toBeVisible();
     await expect(page.locator(".app-window:visible")).toHaveCount(1);
   });
+
+  test("[STAB-DESK-04] Vivian never covers an open window on phone", async ({ page }) => {
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    const assistant = page.locator(".desktop-assistant");
+    await expect(assistant).toBeVisible();
+    await desktop.shortcut("Глобальный поиск").tap();
+    const current = desktop.window("Глобальный поиск");
+    await expect(current).toBeVisible();
+    // Approved variant A (18-MOTION-APPROVAL item 8): hidden for as long as the window is open, whatever the scroll position.
+    await expect(assistant).toBeHidden();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect(assistant).toBeHidden();
+    // She comes back with the desktop.
+    await current.getByRole("button", { name: /^Свернуть / }).tap();
+    await expect(assistant).toBeVisible();
+  });
 });

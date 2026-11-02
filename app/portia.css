@@ -1158,6 +1158,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .mobile-app-open .desktop-icons { display: none; }
   .app-window, .archive-window, .global-search-window { position: relative; inset: auto !important; width: 100% !important; height: auto !important; min-height: calc(100svh - 98px); transform: none !important; border-radius: 7px; }
   .mobile-app-open .app-window:not(.is-active) { display: none !important; }
+  /* The window fills the phone screen, so Vivian would cover its content: she steps out while a window is open and returns when it is minimised or closed (D-16, 18-MOTION-APPROVAL item 8). */
+  .workspace.mobile-app-open ~ .desktop-assistant { display: none; }
   .window-titlebar { grid-template-columns: 1fr auto; height: 42px; padding: 0 11px; }
   .window-titlebar { cursor: default; touch-action: auto; }
   .window-controls button { width: 30px; height: 30px; }
