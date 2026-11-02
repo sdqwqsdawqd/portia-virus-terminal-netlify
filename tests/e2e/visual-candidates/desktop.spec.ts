@@ -47,23 +47,27 @@ test("[STAB-BASE-03] capture desktop rest, start and window geometry candidates"
     intendedSnapshot: `tests/e2e/visual/__screenshots__/window-search-restored--${testInfo.project.name}.png`,
   });
   if (testInfo.project.name.endsWith("-phone")) {
-    for (const [id, state] of [
-      ["window-search-maximized", "separate maximized control"],
-      ["window-search-minimized", "separate minimized control"],
-    ] as const) {
-      await recordBlockedCandidate(context, {
-        id,
-        requirement: "STAB-BASE-03",
-        surface: "Desktop and window shell",
-        actor: "visitor",
-        state: `${state}; ${testInfo.project.name}`,
-        intendedSnapshot: `tests/e2e/visual/__screenshots__/${id}--${testInfo.project.name}.png`,
-      }, {
-        reasonCode: "PHONE_WINDOW_CONTRACT",
-        recoveryPhase: 18,
-        reason: "Phone windows use the full-screen phone contract and do not expose this desktop window control.",
-      });
-    }
+    // D-16: a phone window is always full screen and has no maximize button, so "maximized" is the open window itself.
+    await expect(desktop.window("Глобальный поиск").locator('[data-window-action="maximize"]')).toBeHidden();
+    await captureCandidate(context, {
+      id: "window-search-maximized",
+      requirement: "STAB-BASE-03",
+      surface: "Desktop and window shell",
+      actor: "visitor",
+      state: `search window full screen (phone: always maximized, no maximize control); motion off; ${testInfo.project.name}`,
+      intendedSnapshot: `tests/e2e/visual/__screenshots__/window-search-maximized--${testInfo.project.name}.png`,
+    });
+    await page.getByRole("button", { name: "Свернуть Глобальный поиск" }).click();
+    await expect(desktop.window("Глобальный поиск")).toBeHidden();
+    await expect(page.locator('[data-taskbar-app="search"]')).toBeVisible();
+    await captureCandidate(context, {
+      id: "window-search-minimized",
+      requirement: "STAB-BASE-03",
+      surface: "Desktop and window shell",
+      actor: "visitor",
+      state: `desktop after minimizing the search window, taskbar button present; motion off; ${testInfo.project.name}`,
+      intendedSnapshot: `tests/e2e/visual/__screenshots__/window-search-minimized--${testInfo.project.name}.png`,
+    });
     return;
   }
   await page.getByRole("button", { name: "Развернуть Глобальный поиск" }).click();
