@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { qualificationGrade } from "./portia-qualification.ts";
 
 const main = readFileSync(new URL("../components/portia-promotion-editor-main.tsx", import.meta.url), "utf8");
 const ordinary = readFileSync(new URL("../components/portia-promotion-ordinary-editor.tsx", import.meta.url), "utf8");
@@ -183,4 +184,46 @@ test("reviewer style contract keeps readable labels and forty-pixel controls", (
   assert.match(promotionStyles, /\.promotion-bank-settings input[^\{]*\{[^}]*min-height:\s*40px/);
   assert.match(promotionStyles, /\.promotion-request-list em[^\{]*\{[^}]*font:\s*700 11px/);
   assert.match(promotionStyles, /\.promotion-grade-controls button[^\{]*\{[^}]*font:\s*700 11px/);
+});
+
+test("grade buttons carry a visible label, a question-numbered accessible name and aria-pressed", () => {
+  assert.ok(main.includes('<span className="promotion-grade-label">Верно</span>'));
+  assert.ok(main.includes('<span className="promotion-grade-label">Неверно</span>'));
+  assert.ok(main.includes("`Ответ верен, вопрос ${index + 1}`"));
+  assert.ok(main.includes("`Ответ неверен, вопрос ${index + 1}`"));
+  assert.ok(main.includes("aria-pressed={answer.correct === true}"));
+  assert.ok(main.includes("aria-pressed={answer.correct === false}"));
+  assert.ok(main.includes("<span>ВОПРОС {index + 1}</span>"), "visible number must equal the aria-label number");
+  assert.match(styles, /\.promotion-grade-label\s*\{[^}]*font:\s*700 11px\/1\.25/);
+  assert.match(styles, /@media \(max-width: 900px\)[\s\S]*\.promotion-grade-controls button\s*\{[^}]*min-height:\s*44px/);
+});
+
+test("the final outcome is sent only after the labelled confirmation and never from the percent", () => {
+  const finalize = [...main.matchAll(/"finalize-attempt"/g)];
+  assert.equal(finalize.length, 2);
+  for (const hit of finalize) assert.match(main.slice(Math.max(0, hit.index - 40), hit.index), /run: \(\) => void onCommand\($/);
+  assert.ok(main.includes('confirmLabel: "Подтвердить итог"'));
+  assert.ok(main.includes('cancelLabel: "Не подтверждать"'));
+  assert.ok(main.includes("Подтвердите итог:"));
+  assert.ok(main.includes("aria-disabled={outcomeBlocked}"));
+  assert.ok(main.includes("Отметьте все ответы"));
+  const result = qualificationGrade([{ id: "q1", type: "single", text: "Q", options: ["A"], answerKey: 0 }], [], { q1: true });
+  for (const marks of [{}, { q1: true }]) {
+    const graded = qualificationGrade([{ id: "q1", type: "single", text: "Q", options: ["A"], answerKey: 0 }], [], marks);
+    assert.deepEqual(Object.keys(graded).sort(), ["items", "percent"]);
+  }
+  assert.equal(result.percent, 100);
+  assert.equal(qualificationGrade([], [], {}).percent, 0);
+});
+
+test("confirmations name the action being declined and never use a generic cancel label", () => {
+  const all = main + ordinary + qualification;
+  assert.ok(main.includes("intent.cancelLabel"));
+  assert.ok(main.includes("intent.confirmLabel"));
+  assert.doesNotMatch(all, />\s*ОТМЕНИТЬ\s*</);
+  assert.doesNotMatch(all, />\s*Отмена\s*</);
+  assert.doesNotMatch(all, /ПОДТВЕРДИТЬ<\/button><\/div>/);
+  for (const label of ["Удалить запрос", "Не удалять", "Снять claim", "Не снимать"]) assert.ok(main.includes(label), label);
+  for (const label of ["Удалить вопрос", "Оставить вопрос", "Вопрос будет удалён из банка. Это нельзя отменить."]) assert.ok(qualification.includes(label), label);
+  assert.equal([...(all.match(/requestConfirm\(\{|setConfirm\(\{/g) ?? [])].length, [...(all.match(/cancelLabel: "/g) ?? [])].length);
 });
