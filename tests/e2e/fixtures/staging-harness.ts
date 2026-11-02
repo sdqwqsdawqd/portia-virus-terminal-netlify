@@ -332,6 +332,23 @@ export function createRun(live: StagingLiveTarget, deps: HarnessDeps = {}) {
 }
 export type Run = ReturnType<typeof createRun>;
 
+// For a run from an earlier session (acceptance teardown). The run id is validated before any client is built.
+function adminForRun(live: StagingLiveTarget, runId: string, deps: HarnessDeps) {
+  if (!runIdPattern.test(runId)) throw new Error("unsafe-live-run-id");
+  return (deps.createClient ?? createClient)(live.url, live.adminKey, { auth: { autoRefreshToken: false, persistSession: false } });
+}
+
+export async function purgeRun(live: StagingLiveTarget, runId: string, deps: HarnessDeps = {}) {
+  const admin = adminForRun(live, runId, deps);
+  const errors: string[] = [];
+  const deleted = await purge(admin, runId, errors);
+  return { deleted, errors };
+}
+
+export async function residualOf(live: StagingLiveTarget, runId: string, deps: HarnessDeps = {}): Promise<Residual> {
+  return countResidual(adminForRun(live, runId, deps), runId);
+}
+
 // Removes leftovers of crashed runs. Only resources named `__portia_live_<runId>` / `portia-live-<runId>-` or users carrying
 // the portia_run marker are discovered; a user without the marker is never touched.
 export async function sweep(live: StagingLiveTarget, olderThanMs: number, deps: HarnessDeps = {}) {

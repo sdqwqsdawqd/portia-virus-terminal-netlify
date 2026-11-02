@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { canonicalize, extractFingerprint, inventory } from "./phase16-fingerprint-compare.mjs";
+import { acceptanceResidual, acceptanceSeed, acceptanceShift, acceptanceTeardown } from "./phase19-acceptance.mjs";
 import { createRun } from "../tests/e2e/fixtures/staging-harness.ts";
 import { assertAppBoundToTarget } from "../tests/e2e/fixtures/target-attestation.ts";
 import { requireSafeMutationTargetFromEnvironment } from "../tests/e2e/fixtures/target-guard.ts";
@@ -13,7 +14,7 @@ import { requireSafeMutationTargetFromEnvironment } from "../tests/e2e/fixtures/
 // Single guarded path to the isolated Supabase project (Phase 16, D2/D3).
 // Values come only from the process environment: this file never reads env files and never prints values.
 // Subcommands: attest, self-test-production-block, scan-evidence <dir>, cli-help, push, fingerprint (16-10),
-// teardown, upgrade-ladder (16-11). All build on resolveStagingTarget + runCli.
+// teardown, upgrade-ladder (16-11), acceptance-seed|shift|residual|teardown (19-03). All build on resolveStagingTarget + runCli.
 
 const ADMIN_KEY_VAR = "PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY";
 const PUBLISHABLE_KEY_VAR = "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY";
@@ -400,6 +401,17 @@ export async function main(argv, deps = {}) {
     if (command === "fingerprint" && rest.length === 1) return fingerprint(rest[0], env, deps);
     if (command === "teardown" && rest.length === 0) return await teardown(env, deps);
     if (command === "upgrade-ladder" && rest.length === 0) return await upgradeLadder(env, deps);
+    // Phase 19 acceptance data: the target is resolved (every guard runs) before any client exists; stdout and stderr are redacted too.
+    const acceptance = {
+      "acceptance-seed": [(t, d) => acceptanceSeed(t, d), rest.length === 0],
+      "acceptance-shift": [(t, d) => acceptanceShift(t, rest[0], rest[1], rest.slice(2), d), rest.length >= 2 && rest.length <= 4],
+      "acceptance-residual": [(t, d) => acceptanceResidual(t, rest[0], d), rest.length === 1],
+      "acceptance-teardown": [(t, d) => acceptanceTeardown(t, rest[0], d), rest.length === 1],
+    }[command];
+    if (acceptance?.[1]) {
+      const target = resolveStagingTarget(env, deps);
+      return await acceptance[0](target, { ...deps, out: (text) => out(redact(text, secrets)), err: (text) => err(redact(text, secrets)) });
+    }
     if (command === "attest") {
       out(`${JSON.stringify(await attest(env, deps))}\n`);
       return 0;
@@ -420,7 +432,7 @@ export async function main(argv, deps = {}) {
     err(`${redact(error instanceof Error ? error.message : "[PORTIA_STAGING:internal]", secrets)}\n`);
     return 1;
   }
-  err("[PORTIA_STAGING:usage] Subcommands: attest | self-test-production-block | scan-evidence <dir> | cli-help <words...> | push | fingerprint <label> | teardown | upgrade-ladder\n");
+  err("[PORTIA_STAGING:usage] Subcommands: attest | self-test-production-block | scan-evidence <dir> | cli-help <words...> | push | fingerprint <label> | teardown | upgrade-ladder | acceptance-seed | acceptance-shift <runId> <kind> [label] [value] | acceptance-residual <runId> | acceptance-teardown <runId>\n");
   return 2;
 }
 
