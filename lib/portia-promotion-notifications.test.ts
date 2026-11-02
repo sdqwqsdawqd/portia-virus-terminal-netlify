@@ -46,6 +46,42 @@ test("retake ledgers isolate nicknames, reject junk and stay bounded", () => {
   assert.ok(ledger.length <= 200);
 });
 
+test("polling the same attemptId again never produces a second notification, even long after", () => {
+  const first = updateRetakeLedger([], wait, new Date("2026-10-30T12:00:00.000Z"), false);
+  assert.ok(first.notification);
+  let ledger = first.ledger;
+  for (const at of ["2026-10-30T12:00:05.000Z", "2026-10-30T12:00:10.000Z", "2026-11-05T00:00:00.000Z"]) {
+    const poll = updateRetakeLedger(ledger, wait, new Date(at), false);
+    assert.equal(poll.notification, null);
+    ledger = poll.ledger;
+  }
+  assert.equal(ledger.filter((entry) => entry.id === first.notification!.id).length, 1);
+});
+
+test("two consecutive calls with the same now keep exactly one record and do not lose the first", () => {
+  const now = new Date("2026-10-29T12:00:00.000Z");
+  const one = updateRetakeLedger([], wait, now, false);
+  const two = updateRetakeLedger(one.ledger, wait, now, false);
+  assert.equal(two.ledger.length, 1);
+  assert.deepEqual(two.ledger, one.ledger);
+  const ready = new Date("2026-10-30T12:00:00.000Z");
+  const a = updateRetakeLedger(two.ledger, wait, ready, false);
+  const b = updateRetakeLedger(a.ledger, wait, ready, false);
+  assert.ok(a.notification);
+  assert.equal(b.notification, null);
+  assert.equal(b.ledger.length, 1);
+  assert.equal(b.ledger[0].notified, true);
+});
+
+test("a new attemptId for the same nickname is a separate wait with its own single notification", () => {
+  const ready = new Date("2026-10-30T12:00:00.000Z");
+  const first = updateRetakeLedger([], wait, ready, false);
+  const second = updateRetakeLedger(first.ledger, { ...wait, attemptId: "attempt-2" }, ready, false);
+  assert.ok(second.notification);
+  assert.notEqual(second.notification!.id, first.notification!.id);
+  assert.equal(second.ledger.length, 2);
+});
+
 test("retake notification reuses the quiet in-site quest toast pattern and opens Promotion", () => {
   assert.ok(participant.includes("onRetakeReady"));
   assert.ok(desktop.includes("function PromotionRetakeToast"));

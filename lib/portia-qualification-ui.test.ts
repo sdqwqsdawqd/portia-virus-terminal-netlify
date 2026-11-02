@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { qualificationPublicProjection, qualificationTransition, type QualificationAttempt } from "./portia-qualification.ts";
 
 const participant = readFileSync(new URL("../components/portia-promotion.tsx", import.meta.url), "utf8");
 const reviewer = readFileSync(new URL("../components/portia-promotion-editor-main.tsx", import.meta.url), "utf8");
@@ -89,4 +90,44 @@ test("an active qualification locks the desktop to one immovable promotion windo
   assert.ok(desktop.includes('if (qualificationLocked && appId !== "promotion") return;'));
   assert.match(styles, /\.app-window\.promotion-window\.is-modal-locked\s*\{[^}]*z-index:\s*990\s*!important/);
   assert.match(styles, /\.qualification-focus-backdrop\s*\{[^}]*pointer-events:\s*auto/);
+});
+
+const draft: QualificationAttempt = {
+  id: "attempt", status: "prepared", clientMode: "desktop", startedAt: null, deadlineAt: null, technicalFailure: null, finalDecision: null,
+  questions: [
+    { id: "q1", type: "single", text: "Первый?", options: ["A", "B"], answerKey: 1 },
+    { id: "q2", type: "free-text", text: "Второй?", options: [], answerKey: "секрет" },
+  ],
+  answers: [],
+};
+
+test("a reload gets the same server deadline back and the timer counts down from it, not from mount time", () => {
+  const started = qualificationTransition(draft, { type: "start", clientMode: "desktop" }, new Date("2026-11-02T10:00:00Z"));
+  const afterReload = qualificationTransition(started, { type: "start", clientMode: "desktop" }, new Date("2026-11-02T10:07:00Z"));
+  assert.equal(qualificationPublicProjection(afterReload, new Date("2026-11-02T10:07:00Z")).deadlineAt, "2026-11-02T10:15:00.000Z");
+  assert.match(participant, /Date\.parse\(test\.deadlineAt\) - current/);
+  assert.match(participant, /Date\.parse\(deadlineAt\) - now/);
+  assert.doesNotMatch(participant, /15 \* 60|900_?000|new Date\(Date\.now\(\) \+/);
+});
+
+test("timeout ends the attempt exactly once and later signals cannot replace the first reason", () => {
+  assert.equal(participant.split('setTerminal("timeout")').length - 1, 1);
+  assert.match(participant, /if \(test\?\.status !== "active" \|\| terminal\) return;\s*const tick/);
+  assert.match(participant, /setTerminal\(\(current\) => current \?\? reason\)/);
+  assert.match(participant, /\[\[300_000, "Осталось 5 минут"\], \[180_000, "Осталось 3 минуты"\], \[60_000, "Осталась 1 минута"\]\]/);
+  assert.match(participant, /!announcedRef\.current\.has\(threshold\)/);
+});
+
+test("the participant projection never carries keys, reviewer marks, other questions or the answers given", () => {
+  let state = qualificationTransition(draft, { type: "start", clientMode: "phone" }, new Date("2026-11-02T10:00:00Z"));
+  state = qualificationTransition(state, { type: "answer", questionId: "q1", answer: 1, nonce: "n1" }, new Date("2026-11-02T10:01:00Z"));
+  state = { ...state, answers: state.answers.map((answer) => ({ ...answer, reviewerCorrect: true })) };
+  const projection = qualificationPublicProjection(state, new Date("2026-11-02T10:02:00Z"));
+  assert.deepEqual(projection.question, { id: "q2", type: "free-text", text: "Второй?", options: [], index: 1, total: 2 });
+  const text = JSON.stringify(projection);
+  for (const forbidden of ["answerKey", "секрет", "reviewerCorrect", "reviewer", "Первый?", "notes", "answers", "nonce"]) assert.ok(!text.includes(forbidden), forbidden);
+  const reviewed = qualificationPublicProjection({ ...state, status: "reviewed", finalDecision: "passed" }, new Date("2026-11-02T10:20:00Z"));
+  assert.equal(reviewed.question, null);
+  assert.equal(reviewed.result, "passed");
+  assert.ok(!JSON.stringify(reviewed).includes("answerKey"));
 });
