@@ -89,25 +89,11 @@ test("[STAB-BASE-03] capture semantic spider, web and Vivian states", async ({ p
     requirement: "STAB-BASE-03",
     surface: "Motion CURRENT",
     actor: "visitor",
-    state: `${state}; web sway pinned at frame 0`,
+    state,
     intendedSnapshot: `tests/e2e/visual/__screenshots__/${id}--${testInfo.project.name}.png`,
     animations: "allow",
   });
 
-  // The 22s web sway runs on real time, not on page.clock: pin it so frames differ only by spider and waves.
-  const pinned = await page.evaluate(() => {
-    let count = 0;
-    for (const animation of document.getAnimations()) {
-      const target = (animation.effect as KeyframeEffect | null)?.target;
-      if (target instanceof Element && target.classList.contains("wallpaper-web-drift")) {
-        animation.pause();
-        animation.currentTime = 0;
-        count += 1;
-      }
-    }
-    return count;
-  });
-  expect(pinned, "wallpaper-web-drift animation pinned").toBeGreaterThan(0);
   await expect(desktop.spider).toBeVisible();
   await expect(desktop.spider).toHaveCSS("opacity", "1");
   const spawnTransform = await desktop.spider.evaluate((element) => element.style.transform);

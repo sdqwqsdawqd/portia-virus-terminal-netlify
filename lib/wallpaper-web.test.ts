@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, besideThread, emitPulse, footfallThreads, gaitPhase, laneSideFor, legPose, planSpawn, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, turnStep, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
+import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, besideThread, emitPulse, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, planSpawn, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, turnStep, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
 
 const near = (a: Point, b: Point, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
 // Distance from a point to the thread drawn as a 400-piece polyline.
@@ -76,19 +76,15 @@ test("the spider palette follows the readable interface accent with logo-like bl
   assert.match(styles, /\.wallpaper-spider-pale\s*\{[^}]*color-mix\(in oklab, var\(--teal\)/);
 });
 
-test("the web, its waves and the spider sway as one layer, the same with the spider shown or hidden, and only under «Включены»", () => {
+test("the web stands still in every mode, with the spider shown or hidden (owner recall of the D-09 sway, quick 261102-d7r)", () => {
   const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
   const wallpaper = readFileSync(new URL("../components/portia-wallpaper.tsx", import.meta.url), "utf8");
   assert.match(styles, /html\[data-spider="off"\] \.wallpaper-web-dew\s*\{[^}]*animation:\s*none !important;[^}]*opacity:\s*0 !important/);
   assert.match(styles, /html\[data-spider="off"\] \.wallpaper-web-pulses\s*\{[^}]*opacity:\s*0/);
-  assert.match(styles, /\.wallpaper-web-drift\s*\{\s*position:\s*absolute;\s*inset:\s*0;\s*\}/);
-  assert.match(styles, /html\[data-motion="full"\] \.wallpaper-web-drift\s*\{\s*animation:\s*web-idle-drift/);
-  assert.doesNotMatch(styles, /data-spider="off"\]\s*\.wallpaper-web\s*\{/);
-  const frames = styles.match(/@keyframes web-idle-drift[^\n]*/)?.[0] ?? "";
-  assert.match(frames, /0%, 100%\s*\{\s*transform:\s*none;/);
-  const offsets = [...frames.matchAll(/translate3d\((-?[\d.]+)px, (-?[\d.]+)px/g)].flatMap((m) => [Number(m[1]), Number(m[2])]);
-  assert.ok(offsets.length > 0 && offsets.every((value) => Math.abs(value) <= 2), `sway is at most 2px (${offsets})`);
-  assert.match(wallpaper, /<div className="wallpaper-web-drift">[\s\S]*<WallpaperArt kind=\{value\} \/>[\s\S]*<WallpaperSpider \/>/);
+  assert.doesNotMatch(styles, /wallpaper-web-drift|web-idle-drift/, "no sway layer, rule or keyframes anywhere in the stylesheet");
+  assert.doesNotMatch(styles, /\.wallpaper-web\s*\{[^}]*animation/, "the web itself carries no animation rule (only its threads and dew draw in)");
+  assert.doesNotMatch(wallpaper, /wallpaper-web-drift/);
+  assert.match(wallpaper, /<WallpaperArt kind=\{value\} \/>\s*\n\s*\{value === "radar" \? <WallpaperSpider \/> : value === "gel" \? <WallpaperGelStrip \/> : null\}/);
 });
 
 test("the spider stays where it is, without waves and in a neutral pose, once motion leaves «Включены»", () => {
@@ -430,4 +426,97 @@ test("speed and leg swing are unchanged, and the spider only relocates on load a
   assert.match(source, /const MAX_TURN_RATE = 3\.5;/);
   assert.match(source, /turnStep\(angle, /);
   assert.match(source, /laneSideFor\(x, y, /);
+});
+
+test("laneTarget starts exactly on the body, blends into the lane over `blend` units, and degenerates to the lane at blend <= 0", () => {
+  const start: Point = [11, -17];
+  const pose = (distance: number) => ({ x: 400, y: 300, heading: 0.7, distance });
+  assert.ok(near(laneTarget(pose(0), 1, 30, start, 60), [411, 283], 1e-9), "distance 0 = pose + start offset");
+  for (const side of [1, -1]) {
+    const lane = besideThread(400, 300, 0.7, side, 30);
+    assert.ok(near(laneTarget(pose(60), side, 30, start, 60), lane, 1e-9));
+    assert.ok(near(laneTarget(pose(500), side, 30, start, 60), lane, 1e-9));
+    assert.ok(near(laneTarget(pose(0), side, 30, start, 0), lane, 1e-9), "blend 0 = lane at once");
+  }
+  const mid = laneTarget(pose(30), 1, 30, start, 60), lane = besideThread(400, 300, 0.7, 1, 30);
+  assert.ok(near(mid, [(411 + lane[0]) / 2, (283 + lane[1]) / 2], 1e-9), "smoothstep is half way at half the distance");
+});
+
+test("followStep is the exponential follow: 1 - exp(-dt / settle) per axis, nothing at dt = 0", () => {
+  const [x, y] = followStep(10, -4, 110, 96, 1 / 60, 0.16);
+  const k = 1 - Math.exp(-1 / 60 / 0.16);
+  assert.ok(Math.abs(x - (10 + 100 * k)) < 1e-12 && Math.abs(y - (-4 + 100 * k)) < 1e-12);
+  assert.deepEqual(followStep(3, 4, 50, 60, 0, 0.16), [3, 4]);
+});
+
+// The body of tick() in miniature: route, lane follow, rest. `next` is the fixed scheme (lane blended into the acceleration, body eases to
+// the rest point after the route); `previous` is the 18-05 scheme (lane jumps to the new thread at once, the body is copied to the target on arrival).
+function simulateSpider(seed: number, scheme: "next" | "previous") {
+  // The start check covers the straight run before the first corner: a lane point swinging round a sharp corner moves fast under either scheme (route geometry); the stop check likewise skips frames still turning into the final heading.
+  const dt = 1 / 60, limit = 2 * SPIDER_WALK_SPEED * dt, blend = 60, offset = 30, settle = 0.16;
+  const rand = seeded(seed), visible = visibleNodes(1440, 900, 90);
+  let node = REST_NODE, previous = -1, [x, y] = webGeometry.nodes[REST_NODE];
+  const violations: string[] = [];
+  for (let route = 0; route < 3; route += 1) {
+    const path = planWalk(node, previous, visible, rand);
+    if (path.length < 2) continue;
+    const first = walkPose(path, 0), side = laneSideFor(x, y, first.x, first.y, first.heading, offset);
+    const laneStart: Point = [x - first.x, y - first.y];
+    const steps: { step: number; distance: number; done: boolean; straight: boolean; heading: number }[] = [];
+    let rest: Point = [x, y], walked = 0;
+    for (let frame = 0; frame < 2000; frame += 1) {
+      walked += dt;
+      const pose = walkPose(path, walked);
+      const target = scheme === "next" ? laneTarget(pose, side, offset, laneStart, blend) : besideThread(pose.x, pose.y, pose.heading, side, offset);
+      const [nx, ny] = followStep(x, y, target[0], target[1], dt, settle);
+      let [px, py] = [x, y];
+      [x, y] = [nx, ny];
+      if (pose.done) {
+        rest = target;
+        if (scheme === "previous") [x, y] = target;
+      }
+      steps.push({ step: Math.hypot(x - px, y - py), distance: pose.distance, done: pose.done, straight: Math.abs(pose.heading - first.heading) < 0.05, heading: pose.heading });
+      if (pose.done) break;
+    }
+    const doneAt = steps.findIndex((entry) => entry.done);
+    // The last snap onto the rest point (under 0.01 units) is the only step allowed to exceed 1.05 x the one before it.
+    // Settling after the route: the next scheme keeps easing to the rest point, the previous one has already snapped.
+    for (let frame = 0; frame < 60; frame += 1) {
+      let [px, py] = [x, y];
+      if (scheme === "next") {
+        [x, y] = followStep(x, y, rest[0], rest[1], dt, settle);
+        if (Math.hypot(rest[0] - x, rest[1] - y) < 0.01) [x, y] = rest;
+      }
+      steps.push({ step: Math.hypot(x - px, y - py), distance: Infinity, done: true, straight: false, heading: NaN });
+    }
+    steps.forEach((entry, index) => {
+      if (entry.distance < blend && entry.straight && entry.step > limit) violations.push(`seed ${seed} route ${route}: start step ${entry.step.toFixed(2)} > ${limit.toFixed(2)}`);
+      if (index >= doneAt - 10 && (index >= doneAt || Math.abs(entry.heading - steps[doneAt].heading) < 0.01) && entry.step > limit) violations.push(`seed ${seed} route ${route}: stop step ${entry.step.toFixed(2)} > ${limit.toFixed(2)}`);
+      if (index > doneAt && entry.step > steps[index - 1].step * 1.05 + 0.01 + 1e-6) violations.push(`seed ${seed} route ${route}: step grows after the stop (${index - doneAt}: ${steps[index - 1].step} -> ${entry.step})`);
+    });
+    previous = path[path.length - 2]; node = path[path.length - 1];
+  }
+  return violations;
+}
+
+test("the body never jumps at the start of a route or at the stop; the previous scheme did (quick 261102-d7r)", () => {
+  const seeds = Array.from({ length: 24 }, (_, index) => 101 + index * 7);
+  const bad = seeds.flatMap((seed) => simulateSpider(seed, "next"));
+  assert.deepEqual(bad.slice(0, 5), [], `${bad.length} violations`);
+  const before = seeds.flatMap((seed) => simulateSpider(seed, "previous"));
+  assert.ok(before.length > 0, "the same check must fail on the previous scheme, otherwise it proves nothing");
+});
+
+test("the spider tick uses the blended lane target and eases to the rest point instead of copying it", () => {
+  const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
+  assert.match(source, /laneTarget\(/);
+  assert.ok((source.match(/followStep\(/g)?.length ?? 0) >= 2, "route follow and the settle after the route");
+  assert.match(source, /const LANE_BLEND_DISTANCE = 2 \* THREAD_LANE_OFFSET/);
+  const done = source.match(/if \(pose\.done\) \{([\s\S]*?)\n        \}/)?.[1] ?? "";
+  assert.ok(done.length > 0 && !/\bx = |\by = /.test(done), "the stop branch does not assign the target to the body");
+  assert.match(done, /path = null/);
+  assert.match(source, /const settled = [^;\n]*settleX/);
+  assert.equal(source.match(/relocateVisible\(\)/g)?.length, 2);
+  assert.match(source, /rest = 6 \+ rand\(\) \* 4/g);
+  assert.equal(source.match(/rand\(\)/g)?.length, 11, "no rand() call added or removed: the seeded route sequence stays");
 });

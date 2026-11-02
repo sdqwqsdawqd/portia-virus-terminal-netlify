@@ -319,6 +319,20 @@ export function besideThread(px: number, py: number, direction: number, side: nu
   return [px + Math.cos(direction + Math.PI / 2) * offset * side, py + Math.sin(direction + Math.PI / 2) * offset * side];
 }
 
+// The body target on a route: the side shift is woven into the acceleration (smoothstep over `blend` units of distance) instead of jumping at the start (D-06).
+export function laneTarget(pose: Pick<WalkPose, "x" | "y" | "heading" | "distance">, side: number, offset: number, start: Point, blend: number): Point {
+  const raw = blend > 0 ? Math.max(0, Math.min(1, pose.distance / blend)) : 1;
+  const s = raw * raw * (3 - 2 * raw);
+  const lane = besideThread(0, 0, pose.heading, side, offset);
+  return [pose.x + start[0] + (lane[0] - start[0]) * s, pose.y + start[1] + (lane[1] - start[1]) * s];
+}
+
+// One frame of the exponential follow of a target; frame-rate independent.
+export function followStep(x: number, y: number, tx: number, ty: number, dt: number, settleTime: number): Point {
+  const k = 1 - Math.exp(-dt / settleTime);
+  return [x + (tx - x) * k, y + (ty - y) * k];
+}
+
 // Which side (1 or -1) of a thread point (px, py) walking along `direction` is nearer to the body at (x, y): a new route keeps the side
 // the spider already stands on instead of throwing it across the thread.
 export function laneSideFor(x: number, y: number, px: number, py: number, direction: number, offset: number): 1 | -1 {

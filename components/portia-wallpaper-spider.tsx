@@ -5,7 +5,7 @@
 // it reads no layout and sets no React state.
 
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
-import { REST_NODE, besideThread, createPulsePool, emitPulse, footfallThreads, gaitPhase, laneSideFor, legPose, planSpawn, planWalk, pulseShape, seeded, stepPulses, turnStep, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
+import { REST_NODE, besideThread, createPulsePool, emitPulse, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, planSpawn, planWalk, pulseShape, seeded, stepPulses, turnStep, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
 
 type LegId = "L1" | "L2" | "L3" | "L4" | "R1" | "R2" | "R3" | "R4";
 
@@ -46,6 +46,7 @@ const FIRST_WALK = 4.5; // let the desktop settle before the first quiet walk
 const MAX_DT = 0.05; // a slow frame never makes a jump
 const THREAD_LANE_OFFSET = 30; // travel beside the silk, visually through the cells rather than over a thread
 const LANE_SETTLE_TIME = 0.16;
+const LANE_BLEND_DISTANCE = 2 * THREAD_LANE_OFFSET; // the side shift of a new route is woven into its first 60 units of acceleration
 
 // Waves (D-05): only footfalls make waves, one pair of pulses each time a leg group plants; at most 8 alive.
 const PULSE_SLOTS = 8;
@@ -84,6 +85,8 @@ export function WallpaperSpider() {
     let frame = 0, last = 0, time = 0;
     let node = REST_NODE, previousVisibleSpawn = REST_NODE, previous = -1, path: number[] | null = null;
     let walked = 0, rest = FIRST_WALK, x = restX, y = restY;
+    // laneStart: the body's offset from the first point of the route when it set off. settleX/Y: where the body comes to rest after a route.
+    let laneStart: [number, number] = [0, 0], settleX = x, settleY = y;
     // heading is where the body should face (travel direction); angle is how far the artwork is turned now.
     let heading = ARTWORK_HEADING, angle = 0, phase = 0, gait = 0, clean = true, legsNeutral = true;
     let gaitDistance = 0, pathDistance = 0, laneSide = rand() < 0.5 ? -1 : 1;
@@ -106,6 +109,7 @@ export function WallpaperSpider() {
       laneSide = rand() < 0.5 ? -1 : 1;
       heading = planned.heading; angle = heading - ARTWORK_HEADING; phase = planned.phase; gait = path ? 1 : 0; gaitDistance = phase * 20; pathDistance = 0;
       [x, y] = besideThread(...webGeometry.nodes[planned.node], heading, laneSide, THREAD_LANE_OFFSET);
+      laneStart = [x - webGeometry.nodes[planned.node][0], y - webGeometry.nodes[planned.node][1]]; settleX = x; settleY = y;
       probeRemaining = 0; probeDelay = FIRST_PROBE_MIN_DELAY + rand() * (FIRST_PROBE_MAX_DELAY - FIRST_PROBE_MIN_DELAY);
       clearPulses();
       element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg)`;
@@ -135,14 +139,17 @@ export function WallpaperSpider() {
       const dt = Math.min((now - last) / 1000, MAX_DT);
       last = now;
       time += dt;
+      // After a route the body keeps easing onto its rest point and snaps in once it is within 0.01 units.
+      if (!path && (x !== settleX || y !== settleY)) {
+        [x, y] = followStep(x, y, settleX, settleY, dt, LANE_SETTLE_TIME);
+        if (Math.hypot(settleX - x, settleY - y) < 0.01) { x = settleX; y = settleY; }
+      }
       if (path) {
         walked += dt;
         const pose = walkPose(path, walked);
         heading = pose.heading;
-        const [targetX, targetY] = besideThread(pose.x, pose.y, heading, laneSide, THREAD_LANE_OFFSET);
-        const laneFollow = 1 - Math.exp(-dt / LANE_SETTLE_TIME);
-        x += (targetX - x) * laneFollow;
-        y += (targetY - y) * laneFollow;
+        const [targetX, targetY] = laneTarget(pose, laneSide, THREAD_LANE_OFFSET, laneStart, LANE_BLEND_DISTANCE);
+        [x, y] = followStep(x, y, targetX, targetY, dt, LANE_SETTLE_TIME);
         gaitDistance += Math.max(0, pose.distance - pathDistance);
         pathDistance = pose.distance;
         // A group plants its feet when the gait phase passes 0 (group A) or 0.5 (group B). The feet land on both sides of the
@@ -157,8 +164,8 @@ export function WallpaperSpider() {
           }
         }
         if (pose.done) {
-          x = targetX;
-          y = targetY;
+          // The body is not copied onto the target: it keeps easing onto it from the next frame, so there is no jump at the stop.
+          settleX = targetX; settleY = targetY;
           previous = path[path.length - 2];
           node = path[path.length - 1];
           path = null;
@@ -174,6 +181,7 @@ export function WallpaperSpider() {
           rand();
           const start = walkPose(next, 0);
           laneSide = laneSideFor(x, y, start.x, start.y, start.heading, THREAD_LANE_OFFSET);
+          laneStart = [x - start.x, y - start.y];
         } else rest = 6 + rand() * 4;
       }
       drawPulses();
@@ -191,7 +199,7 @@ export function WallpaperSpider() {
       const turn = Math.atan2(Math.sin(heading - ARTWORK_HEADING - angle), Math.cos(heading - ARTWORK_HEADING - angle)); // what is left to turn
       gait += Math.max(-dt / GAIT_EASE, Math.min(dt / GAIT_EASE, (walking ? 1 : 0) - gait));
       // A resting spider that has finished turning and straightening its legs needs no writes at all.
-      const settled = !walking && gait === 0 && !probing && Math.abs(turn) < 1e-3;
+      const settled = !walking && gait === 0 && !probing && Math.abs(turn) < 1e-3 && x === settleX && y === settleY;
       if (settled && clean) return;
       clean = settled;
       // The body swells a touch as each group lands (phase 0 and 0.5) and settles in between.

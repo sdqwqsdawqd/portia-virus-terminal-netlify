@@ -565,13 +565,11 @@ test("the spider has an independent saved switch and stays visible and still whe
   assert.match(spiderSource, /attributeFilter:\s*\["data-motion", "data-spider"\]/);
 });
 
-test("the spider body outline stays visible against --desktop-base on every accent preset (D-07)", () => {
-  // Outline = the accent at 38% alpha (color-mix in oklab with transparent) composited over the page, in gamma sRGB.
-  assert.match(css, /\.wallpaper-spider \.wallpaper-spider-dark\s*\{[^}]*stroke:\s*color-mix\(in oklab, var\(--teal\) 38%, transparent\);[^}]*stroke-width:\s*1px;[^}]*vector-effect:\s*non-scaling-stroke/);
-  for (const [id, tokens] of [["teal", root], ...Object.entries(themes)] as const) {
-    const accent = hex(tokens.get("--teal")!), base = hex(tokens.get("--desktop-base")!);
-    const outline = accent.map((channel, i) => channel * 0.38 + base[i] * 0.62) as Rgb;
-    const ratio = contrast(outline, base);
-    assert.ok(ratio >= 1.5, `${id}: outline against --desktop-base is ${ratio.toFixed(2)}:1`);
-  }
+test("the spider has no outline: owner recalled item 3 of 18-MOTION-APPROVAL (quick 261102-d7r)", () => {
+  assert.match(css, /\.wallpaper-spider :is\(path, circle\)\s*\{\s*stroke:\s*none;/);
+  assert.doesNotMatch(css, /\.wallpaper-spider-dark\s*\{[^}]*stroke/, "no stroke on the dark spider parts");
+  assert.doesNotMatch(css, /\.wallpaper-spider \.wallpaper-spider-dark/, "no rule that outlines the dark parts");
+  assert.match(css, /\.wallpaper-spider-dark\s*\{\s*fill:\s*color-mix\(in oklab, var\(--teal\) 12%, #020706\);\s*\}/, "dark fill unchanged");
+  assert.match(css, /\.wallpaper-spider-teal\s*\{\s*fill:\s*currentColor;\s*\}/);
+  assert.match(css, /\.wallpaper-spider-pale\s*\{\s*fill:\s*color-mix\(in oklab, var\(--teal\) 14%, #ececec\);\s*\}/);
 });
