@@ -58,10 +58,10 @@ test("qualification UI supports every answer type without backward navigation", 
 test("qualification UI gives reviewers grading and an explicit independent final decision", () => {
   assert.ok(reviewer.includes("promotion-grading-workspace"));
   assert.ok(reviewer.includes("grade-answer"));
-  assert.ok(reviewer.includes("ВЕРНО"));
-  assert.ok(reviewer.includes("НЕВЕРНО"));
-  assert.ok(reviewer.includes("ЗАСЧИТАТЬ ПРОВЕРКУ"));
-  assert.ok(reviewer.includes("НЕ ЗАСЧИТЫВАТЬ"));
+  assert.ok(reviewer.includes(">Верно<"));
+  assert.ok(reviewer.includes(">Неверно<"));
+  assert.ok(reviewer.includes(">Проверка пройдена<"));
+  assert.ok(reviewer.includes(">Проверка не пройдена<"));
   assert.ok(reviewer.includes("ОТМЕНИТЬ АВТОПРОВАЛ"));
 });
 

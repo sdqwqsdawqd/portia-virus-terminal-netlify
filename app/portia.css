@@ -1923,11 +1923,15 @@ html:is([data-motion="reduced"], [data-motion="off"]) :is(.promotion-card, .prom
 .promotion-technical-failure button, .promotion-release-retake { min-height: 40px; }
 .promotion-grade-answers { display: grid; gap: 8px; }
 .promotion-grade-answers article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 7px; }
+.promotion-grade-copy { min-width: 0; overflow-wrap: anywhere; }
 .promotion-grade-copy span { color: var(--muted); font: 700 11px var(--sans); }
 .promotion-grade-copy h4 { margin: 4px 0 8px; white-space: pre-wrap; font: 600 13px/1.45 var(--doc); }
 .promotion-grade-copy p { margin: 0; padding: 8px; border-left: 2px solid var(--teal-dim); color: oklch(.72 calc(.02 * var(--accent-chroma)) var(--accent-hue)); white-space: pre-wrap; font: 400 12px/1.5 var(--doc); }
 .promotion-grade-controls { display: grid; align-content: start; gap: 8px; }
 .promotion-grade-controls button { min-width: 92px; min-height: 40px; border: 1px solid var(--line); background: transparent; font: 700 11px var(--sans); }
+.promotion-grade-controls button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.promotion-grade-label { font: 700 11px/1.25 var(--sans); }
+.promotion-bank-reason { grid-column: 1 / -1; margin: 8px 0 0; color: #efaaa3; font: 400 12px/1.45 var(--doc); overflow-wrap: anywhere; }
 .promotion-grade-controls button.correct.active { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
 .promotion-grade-controls button.incorrect.active { border-color: var(--danger); background: rgba(224,125,116,.08); color: #efaaa3; }
 .promotion-final-decision { display: grid; grid-template-columns: minmax(140px, 1fr) 150px; gap: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
@@ -1984,6 +1988,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) :is(.promotion-card, .prom
   .promotion-editor-branches { overflow-x: auto; }
   .promotion-editor-branches button { flex: 0 0 auto; }
   .promotion-phone-back { display: inline-flex; align-items: center; }
+  .promotion-grade-controls button { min-height: 44px; }
 }
 
 @media (max-width: 520px) {

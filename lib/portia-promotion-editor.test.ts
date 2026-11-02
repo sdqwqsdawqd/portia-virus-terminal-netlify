@@ -200,7 +200,7 @@ test("grade buttons carry a visible label, a question-numbered accessible name a
 
 test("the final outcome is sent only after the labelled confirmation and never from the percent", () => {
   const finalize = [...main.matchAll(/"finalize-attempt"/g)];
-  assert.equal(finalize.length, 2);
+  assert.equal(finalize.length, 1, "one finalize path, reachable only through the confirmation");
   for (const hit of finalize) assert.match(main.slice(Math.max(0, hit.index - 40), hit.index), /run: \(\) => void onCommand\($/);
   assert.ok(main.includes('confirmLabel: "Подтвердить итог"'));
   assert.ok(main.includes('cancelLabel: "Не подтверждать"'));
@@ -208,7 +208,7 @@ test("the final outcome is sent only after the labelled confirmation and never f
   assert.ok(main.includes("aria-disabled={outcomeBlocked}"));
   assert.ok(main.includes("Отметьте все ответы"));
   const result = qualificationGrade([{ id: "q1", type: "single", text: "Q", options: ["A"], answerKey: 0 }], [], { q1: true });
-  for (const marks of [{}, { q1: true }]) {
+  for (const marks of [{} as Record<string, boolean>, { q1: true }]) {
     const graded = qualificationGrade([{ id: "q1", type: "single", text: "Q", options: ["A"], answerKey: 0 }], [], marks);
     assert.deepEqual(Object.keys(graded).sort(), ["items", "percent"]);
   }
@@ -225,5 +225,5 @@ test("confirmations name the action being declined and never use a generic cance
   assert.doesNotMatch(all, /ПОДТВЕРДИТЬ<\/button><\/div>/);
   for (const label of ["Удалить запрос", "Не удалять", "Снять claim", "Не снимать"]) assert.ok(main.includes(label), label);
   for (const label of ["Удалить вопрос", "Оставить вопрос", "Вопрос будет удалён из банка. Это нельзя отменить."]) assert.ok(qualification.includes(label), label);
-  assert.equal([...(all.match(/requestConfirm\(\{|setConfirm\(\{/g) ?? [])].length, [...(all.match(/cancelLabel: "/g) ?? [])].length);
+  assert.equal([...(all.match(/requestConfirm\(\{|setConfirm\(\{|onConfirm\(\{/g) ?? [])].length, [...(all.match(/cancelLabel: "/g) ?? [])].length);
 });
