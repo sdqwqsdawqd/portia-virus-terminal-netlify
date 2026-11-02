@@ -214,7 +214,19 @@ test("editor form cards keep one fixed width set by a single variable and fill c
   // It must follow .flat-editor-form (same specificity) to win the cascade, and the sorted lists stay one column.
   assert.ok(styles.indexOf(".editor-card-columns {") > styles.indexOf(".flat-editor-form { display: grid"));
   for (const list of [".recommendation-order-list", ".access-editor-list"]) assert.doesNotMatch(styles, new RegExp(`\\${list}\\s*\\{[^}]*grid-template-columns`));
-  assert.match(editorSource, /<div className="editor-form flat-editor-form editor-card-columns">\s*<p className="editor-guidance">Публикуйте новости/);
+  for (const lead of ["Каждый блок становится", "Справочник на рабочем столе", "Публикуйте новости"]) {
+    assert.ok(editorSource.includes(`<div className="editor-form flat-editor-form editor-card-columns">\n          <p className="editor-guidance">${lead}`), `${lead}: form must be in columns`);
+  }
+  assert.equal(editorSource.match(/editor-card-columns/g)?.length, 3); // never the sorted recommendation or access lists (D-15)
+});
+
+test("drag sorting in columns decides by reading order and slides rows along both axes", () => {
+  const dossier = readFileSync(new URL("../components/portia-editor-dossier.tsx", import.meta.url), "utf8");
+  assert.ok(dossier.includes('from "@/lib/sort-order"'));
+  assert.match(dossier, /passesTarget\(/);
+  assert.match(dossier, /offsetLeft/);
+  assert.match(dossier, /translate\(\$\{previous\.left - left\}px, \$\{previous\.top - top\}px\)/);
+  assert.ok(dossier.includes("if (!row) { moveAcross(parent, hits, x, y); return; }")); // moveAcross and the same-parent rule are untouched
 });
 
 test("Vivian follows the interface accent without painful overexposure or greying the image itself", () => {

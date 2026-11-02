@@ -1016,7 +1016,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       )}
 
       {tab === "info" && (
-        <div className="editor-form flat-editor-form">
+        <div className="editor-form flat-editor-form editor-card-columns">
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация». Раздел может содержать подразделы, собранные из блоков в любом порядке.</p>
           <EditorToc items={infoTocItems} onJump={jumpInfo} onAll={(open) => setAllOpen(infoCardIds, open)} />
           {draft.infoSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
@@ -1067,7 +1067,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       )}
 
       {tab === "guide" && (
-        <div className="editor-form flat-editor-form">
+        <div className="editor-form flat-editor-form editor-card-columns">
           <p className="editor-guidance">Справочник на рабочем столе состоит из разделов, в разделах лежат карточки-плитки. Нажатие на плитку открывает страницу карточки из блоков в любом порядке.</p>
           <EditorToc items={guideTocItems} onJump={jumpGuide} onAll={(open) => setAllOpen(guideCardIds, open)} />
           {draft.guideSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}

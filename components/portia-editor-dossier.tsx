@@ -6,6 +6,7 @@ import { makeId } from "@/lib/editor-items";
 import { classificationOptions, scientistLogPlainText, type Virus } from "@/lib/portia-content";
 import { isLocalMediaPath } from "@/lib/media-url";
 import { MAX_SCIENTIST_LOGS } from "@/lib/content-limits";
+import { passesTarget, type Box } from "@/lib/sort-order";
 
 type ImagePlacement = "dossier" | "mutation" | "recycle" | "guide" | "employee";
 
@@ -41,20 +42,20 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
   const pointer = useRef({ x: 0, y: 0 });
   const active = useRef(false);
   useEffect(() => { indexRef.current = index; onMoveRef.current = onMove; onMoveAcrossRef.current = onMoveAcross; itemIdRef.current = itemId; });
-  const placed = useRef<{ index: number; top: number } | null>(null);
-  // Per-handle FLIP: every row whose index changed slides itself, so the dragged row and its displaced neighbours all animate.
+  const placed = useRef<{ index: number; left: number; top: number } | null>(null);
+  // Per-handle FLIP: every row whose index changed slides itself (along both axes, rows can sit in columns), so the dragged row and its displaced neighbours all animate.
   useLayoutEffect(() => {
     const row = button.current?.closest<HTMLElement>("[data-sort-index]");
     if (!row || row.offsetParent === null) { placed.current = null; return; }
-    const top = row.offsetTop;
+    const { offsetLeft: left, offsetTop: top } = row;
     const previous = placed.current;
-    placed.current = { index, top };
-    if (!previous || previous.index === index || previous.top === top) return;
+    placed.current = { index, left, top };
+    if (!previous || previous.index === index || (previous.left === left && previous.top === top)) return;
     // Mirrors the CSS motion switch, which cannot clamp Web Animations started from script.
     const motion = document.documentElement.dataset.motion;
     if (motion === "reduced" || motion === "off") return;
     const easing = getComputedStyle(document.documentElement).getPropertyValue("--ease-out").trim() || "ease-out";
-    row.animate([{ transform: `translateY(${previous.top - top}px)` }, { transform: "none" }], { duration: 160, easing });
+    row.animate([{ transform: `translate(${previous.left - left}px, ${previous.top - top}px)` }, { transform: "none" }], { duration: 160, easing });
   });
 
   const stop = (event?: React.PointerEvent<HTMLButtonElement>) => {
@@ -98,7 +99,7 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
       return;
     }
   };
-  // A row swaps only once the pointer crosses its vertical middle, so rows of unequal height do not flip back and forth.
+  // A row swaps only once the pointer crosses the target's middle in reading order (sideways in a row of columns, downwards otherwise), so rows of unequal height do not flip back and forth.
   const moveTo = (x: number, y: number) => {
     // Nested «Информация» lists must not swap across levels: only rows sharing the dragged row's parent are targets.
     const parent = button.current?.closest<HTMLElement>("[data-sort-index]")?.parentElement;
@@ -109,9 +110,9 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
     if (!row) { moveAcross(parent, hits, x, y); return; }
     const target = Number(row.dataset.sortIndex);
     if (!row || !Number.isInteger(target) || target === indexRef.current) return;
-    const { top, height } = row.getBoundingClientRect();
-    const middle = top + height / 2;
-    if (target > indexRef.current ? y < middle : y > middle) return;
+    const boxOf = ({ left, top, width, height }: DOMRect): Box => ({ left, top, width, height });
+    const ownRow = button.current?.closest<HTMLElement>("[data-sort-index]");
+    if (!ownRow || !passesTarget(boxOf(ownRow.getBoundingClientRect()), boxOf(row.getBoundingClientRect()), { x, y }, target > indexRef.current)) return;
     onMoveRef.current(indexRef.current, target);
     indexRef.current = target;
   };
