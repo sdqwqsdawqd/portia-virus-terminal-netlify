@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appViewState, contentSyncFailed, contentSyncSucceeded, failureCopy, failureFromResponse, staleBannerText, type AppFailure, type AppViewState } from "./app-state.ts";
+import { appViewState, contentSyncFailed, contentSyncSucceeded, emptyCopy, failureCopy, failureFromResponse, iframeFailureCopy, iframeLoadTimeoutMs, staleBannerText, type AppFailure, type AppViewState } from "./app-state.ts";
 
 const clock = (date: Date) => new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(date);
 
@@ -78,4 +78,44 @@ test("a success clears the failure and takes the new time; a quiet success does 
   assert.deepEqual(contentSyncSucceeded(failing, "2026-11-02T12:00:00.000Z"), { lastGoodAt: "2026-11-02T12:00:00.000Z", failure: null, retrying: true });
   const quiet = { lastGoodAt: "2026-11-02T11:05:00.000Z", failure: null, retrying: false };
   assert.equal(contentSyncSucceeded(quiet, "2026-11-02T12:00:00.000Z"), quiet);
+});
+
+test("emptyCopy holds the seven UI-SPEC empty texts and the iframe failure is one fixed phrase (D-08)", () => {
+  assert.deepEqual(Object.keys(emptyCopy).sort(), ["archive", "employees", "guide", "info", "news", "quests", "trash"]);
+  assert.deepEqual(emptyCopy.archive, { heading: "В базе пока нет записей", body: "Новые записи появятся здесь после публикации." });
+  assert.equal(emptyCopy.employees.heading, "Список сотрудников пуст");
+  assert.equal(emptyCopy.news.heading, "Новостей пока нет");
+  assert.equal(emptyCopy.quests.heading, "Заданий пока нет");
+  assert.equal(emptyCopy.info.heading, "В «Информации» пока нет статей");
+  assert.equal(emptyCopy.guide.heading, "В «Справочнике» пока нет карточек");
+  assert.deepEqual(emptyCopy.trash, { heading: "Корзина пуста", body: "Удалённые записи появятся здесь." });
+  assert.deepEqual(iframeFailureCopy, { heading: "Не удалось загрузить", body: "Повторите или откройте во внешней вкладке." });
+  assert.equal(iframeLoadTimeoutMs, 15_000);
+});
+
+test("first load with nothing to show is fatal, with last-good data it is stale (D-06)", () => {
+  assert.equal(appViewState({ denied: false, ready: true, hasData: false, count: 0, failure: "offline" }), "fatal");
+  assert.equal(appViewState({ denied: false, ready: true, hasData: true, count: 3, failure: "offline" }), "stale");
+});
+
+test("one appViewState rule serves all eight apps: every app id walks the same state table (STAB-APP-10)", () => {
+  const apps = ["archive", "employees", "broadcasts", "info", "guide", "trash", "sheet", "charter"];
+  const rows: [Parameters<typeof appViewState>[0], AppViewState][] = [
+    [{ denied: false, ready: false, hasData: false, count: 0, failure: null }, "loading"],
+    [{ denied: false, ready: true, hasData: true, count: 0, failure: null }, "empty"],
+    [{ denied: false, ready: true, hasData: true, count: 1, failure: null }, "populated"],
+    [{ denied: false, ready: true, hasData: true, count: 34, failure: "unavailable" }, "stale"],
+    [{ denied: false, ready: true, hasData: false, count: 0, failure: "unexpected" }, "fatal"],
+    [{ denied: true, ready: true, hasData: true, count: 5, failure: null }, "denied"],
+  ];
+  for (const app of apps) for (const [input, expected] of rows) assert.equal(appViewState(input), expected, `${app}: ${JSON.stringify(input)}`);
+});
+
+test("a failure never discards a time the state already knows (data from the device cache)", () => {
+  const cached = { lastGoodAt: "2026-11-02T10:00:00.000Z", failure: null, retrying: false };
+  assert.equal(contentSyncFailed(cached, "offline", null).lastGoodAt, "2026-11-02T10:00:00.000Z");
+  assert.equal(contentSyncFailed(cached, "offline", "2026-11-02T11:00:00.000Z").lastGoodAt, "2026-11-02T11:00:00.000Z");
+  // "" = data is on screen but its time is unknown: the banner still shows, without a time.
+  assert.equal(staleBannerText("", new Date()), "Не удалось обновить — показаны сохранённые данные");
+  assert.equal(contentSyncFailed({ lastGoodAt: "", failure: null, retrying: false }, "offline", null).lastGoodAt, "");
 });

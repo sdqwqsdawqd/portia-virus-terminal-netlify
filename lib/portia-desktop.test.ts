@@ -496,3 +496,39 @@ test("shortcut artwork is not redrawn: the cycle animates only translate/scale/r
     assert.doesNotMatch(body, /(?<![\w-])(filter|transform|viewBox|d):/, `${cycle.name} must not touch filter, transform or geometry`);
   }
 });
+
+// Phase 19-08: one set of state components inside the existing window bodies (D-05..D-08, STAB-DESK-08, STAB-APP-10).
+const statesSource = desktopFamily.find((part) => part.file === "portia-desktop-states.tsx")?.text ?? "";
+const desktopMain = desktopFamily[0].text;
+const count = (text: string, needle: string) => text.split(needle).length - 1;
+
+test("the fatal panel and the skeleton are exported once, with one retry label and the alert on the text only (D-06, D-08)", () => {
+  assert.equal(statesSource.match(/^export function (AppFatalPanel|AppSkeleton)\b/gm)?.length, 2);
+  assert.equal(count(statesSource, "Повторить загрузку"), 1);
+  assert.ok(statesSource.includes("Загружаем…"));
+  // role="alert" sits on the heading and body, not on the button, so a retry never re-announces the panel.
+  assert.equal(count(statesSource, 'role="alert"'), 1);
+  assert.match(statesSource, /aria-busy="true"/);
+  assert.ok(statesSource.includes("failureCopy") && statesSource.includes("iframeFailureCopy"));
+});
+
+test("skeleton and state-panel CSS: shimmer only under data-motion=full, 150ms delayed show, only 11/13/16px fonts", () => {
+  assert.ok(styles.includes('html[data-motion="full"] .skeleton-block'));
+  assert.ok(/\.skeleton-block\s*\{[^}]*var\(--panel-2\)/.test(styles));
+  assert.ok(/\.app-skeleton\s*\{[^}]*loader-appear 1ms linear 150ms forwards/.test(styles));
+  assert.ok(/\.app-fatal-panel[^{]*\{[^}]*padding: 32px 24px/.test(styles));
+  const rules = styles.split("\n").filter((line) => /^(?:html\[[^\]]*\] )?\.(app-fatal-panel|app-denied-panel|app-skeleton|skeleton-)/.test(line));
+  assert.ok(rules.length >= 4);
+  for (const rule of rules) for (const size of rule.matchAll(/font(?:-size)?:\s*(?:\d+\s+)?(\d+(?:\.\d+)?)px/g)) assert.ok(["11", "13", "16"].includes(size[1]), `unexpected font size in: ${rule.slice(0, 60)}`);
+});
+
+test("«Справочник» body picks its render by appViewState: skeleton, fatal panel with retry, stale strip (D-05, D-06)", () => {
+  const start = desktopMain.indexOf('<AppWindow app="guide"');
+  const body = desktopMain.slice(start, desktopMain.indexOf("</AppWindow>", start));
+  assert.ok(body.includes('<AppSkeleton shape="guide"'));
+  assert.ok(body.includes("<AppFatalPanel"));
+  assert.ok(body.includes("retryContent"));
+  assert.ok(body.includes("<AppStaleBanner"));
+  assert.ok(!body.includes("Загрузка справочника"));
+  assert.ok(desktopMain.includes("const guideView = appViewState("));
+});
