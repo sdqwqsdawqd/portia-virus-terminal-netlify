@@ -469,7 +469,7 @@ function simulateSpider(seed: number, scheme: "next" | "previous") {
       const pose = walkPose(path, walked);
       const target = scheme === "next" ? laneTarget(pose, side, offset, laneStart, blend) : besideThread(pose.x, pose.y, pose.heading, side, offset);
       const [nx, ny] = followStep(x, y, target[0], target[1], dt, settle);
-      let [px, py] = [x, y];
+      const [px, py] = [x, y];
       [x, y] = [nx, ny];
       if (pose.done) {
         rest = target;
@@ -482,7 +482,7 @@ function simulateSpider(seed: number, scheme: "next" | "previous") {
     // The last snap onto the rest point (under 0.01 units) is the only step allowed to exceed 1.05 x the one before it.
     // Settling after the route: the next scheme keeps easing to the rest point, the previous one has already snapped.
     for (let frame = 0; frame < 60; frame += 1) {
-      let [px, py] = [x, y];
+      const [px, py] = [x, y];
       if (scheme === "next") {
         [x, y] = followStep(x, y, rest[0], rest[1], dt, settle);
         if (Math.hypot(rest[0] - x, rest[1] - y) < 0.01) [x, y] = rest;
