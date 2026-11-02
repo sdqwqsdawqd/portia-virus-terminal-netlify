@@ -130,3 +130,38 @@ test("promotion copy and visual tokens follow the reviewed accessibility contrac
   assert.doesNotMatch(promotionStyles, /min-height:\s*38px/);
   assert.match(promotionStyles, /@media \(max-width:\s*520px\)[\s\S]*\.promotion-(?:action|final-actions|preview)[^\{]*\{[^}]*min-height:\s*44px/);
 });
+
+test("the mode warning shows both approved owner texts, chosen by the server clientMode, and never claims hardware attestation", () => {
+  const desktopText = "Не переключайте вкладку и окно: потеря фокуса завершит попытку как проваленную.";
+  const phoneText = "Можно переключаться между приложениями. Попытка завершится при потере связи или по истечении времени.";
+  assert.ok(source.includes(desktopText));
+  assert.ok(source.includes(phoneText));
+  assert.match(source, /className="promotion-mode-warning"/);
+  assert.match(source, /test\.clientMode === "phone"[\s\S]{0,80}(?:phoneText|PHONE_WARNING|Можно переключаться)/);
+  assert.doesNotMatch(source, /аттестац|hardware/i);
+});
+
+test("the cleanup hint sits under the action cards and history stays at three results", () => {
+  assert.ok(source.includes('<p className="promotion-cleanup-hint">Подробные данные проверки удаляются после закрытия. Хранятся три последних результата.</p>'));
+  assert.ok(source.indexOf("promotion-cleanup-hint") > source.indexOf("promotion-flow-list"));
+  assert.ok(source.includes("status.results.slice(0, 3)"));
+  assert.ok(source.includes("Math.min(status.results.length, 3)"));
+});
+
+test("the submitted message is produced only after the server created the request", () => {
+  const submitStart = source.indexOf("const requestPromotion = async");
+  const submit = source.slice(submitStart, source.indexOf("\n  };", submitStart));
+  const createdAt = submit.indexOf("createdRequest(body)");
+  const successAt = submit.indexOf('phase: "success"');
+  const sendingAt = submit.indexOf("Отправляем заявку…");
+  assert.ok(sendingAt >= 0 && createdAt > sendingAt && successAt > createdAt, "success text must follow the created check");
+  assert.equal(source.split("отправлена в очередь. Проверяющий ещё не взял").length - 1, 2);
+  assert.match(source, /function createdRequest[\s\S]*typeof [\w.]*requestId === "string"/);
+  assert.match(submit, /if \(!response\.ok \|\| !createdRequest\(body\)\)[\s\S]*phase: "error"[\s\S]*publicError/);
+});
+
+test("participant component never receives reviewer identity, keys, notes or future questions", () => {
+  for (const forbidden of ["futureQuestions", "answerKey", "reviewerId", "reviewerName", "reviewerNote", "internalNote", "correctAnswer", "isCorrect", "reviewerCorrect"]) {
+    assert.ok(!source.includes(forbidden), forbidden);
+  }
+});

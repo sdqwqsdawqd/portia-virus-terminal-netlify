@@ -261,3 +261,60 @@ test("request admission has no preliminary binding or throttle mutation", () => 
   assert.match(adapter, /data\.code === "throttled"/);
   assert.match(adapter, /data\.code === "device-denied"/);
 });
+
+test("the seven participant refusals carry pairwise distinct codes and texts, and only not-listed says the nickname is absent", async () => {
+  const ask = (overrides: Partial<PromotionApiDependencies>, nickname = "Alice") =>
+    submitPromotionRequest({ nickname, kind: "ordinary", token: null, headers: new Headers() }, dependencies(overrides).deps);
+  const results = await Promise.all([
+    ask({ loadAccessRoster: async () => ({ status: "ok", roster: [] }) }),
+    ask({ loadAccessRoster: async () => ({ status: "unavailable", reason: "network" }) }),
+    ask({ workflowStatus: async () => ({ status: "unavailable" }) }),
+    ask({ submitRequest: async () => ({ status: "unavailable", reason: "rpc-missing" }) }),
+    ask({ submitRequest: async () => ({ status: "unavailable", reason: "database-error" }) }),
+    ask({ submitRequest: async () => ({ status: "unavailable", reason: "invalid-response" }) }),
+    ask({}, "   "),
+  ]);
+  assert.deepEqual(results.map((result) => result.body.code), [
+    "not-listed", "sheet-unavailable", "pending-database", "promotion-rollout-incomplete",
+    "promotion-database-unavailable", "promotion-contract-invalid", "invalid-request",
+  ]);
+  assert.equal(new Set(results.map((result) => result.body.error)).size, 7);
+  for (const result of results.slice(1)) assert.ok(!/не найден/i.test(String(result.body.error)), String(result.body.code));
+});
+
+test("validation precedes every lookup: blank and 65-character nicknames never reach a roster or the write path", async () => {
+  for (const nickname of ["", "   ", "a".repeat(65)]) {
+    const { deps, calls } = dependencies({
+      loadAccessRoster: async () => { throw new Error("access roster must not be read"); },
+      loadRoster: async () => { throw new Error("promotion roster must not be read"); },
+    });
+    const result = await submitPromotionRequest({ nickname, kind: "ordinary", token: null, headers: new Headers() }, deps);
+    assert.equal(result.status, 400);
+    assert.equal(result.body.code, "invalid-request");
+    assert.equal(calls.submit, 0);
+    assert.equal(calls.status, 0);
+  }
+  // 64 characters is valid input; it is then absent from the access roster, so the refusal is not-listed, not invalid-request.
+  assert.equal((await submitPromotionRequest({ nickname: "a".repeat(64), kind: "ordinary", token: null, headers: new Headers() }, dependencies().deps)).body.code, "not-listed");
+});
+
+test("check order is access roster, then promotion roster, then database: a sheet outage is never masked by a later stage", async () => {
+  const order: string[] = [];
+  const { deps, calls } = dependencies({
+    loadAccessRoster: async () => { order.push("access"); return { status: "unavailable", reason: "network" }; },
+    loadRoster: async () => { order.push("roster"); return roster; },
+    workflowStatus: async () => { order.push("database"); return { status: "unavailable" }; },
+  });
+  const result = await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: null, headers: new Headers() }, deps);
+  assert.deepEqual(order, ["access"]);
+  assert.equal(result.body.code, "sheet-unavailable");
+  assert.equal(calls.submit, 0);
+  const second: string[] = [];
+  const later = dependencies({
+    loadRoster: async () => { second.push("roster"); return { status: "unavailable", reason: "network" }; },
+    workflowStatus: async () => { second.push("database"); return { status: "unavailable" }; },
+  });
+  const outage = await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: null, headers: new Headers() }, later.deps);
+  assert.deepEqual(second, ["roster"]);
+  assert.equal(outage.body.code, "promotion-sheet-unavailable");
+});
