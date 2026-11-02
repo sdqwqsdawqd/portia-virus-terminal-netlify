@@ -34,7 +34,7 @@
 - [ ] **STAB-MOTION-05**: Сохраняя идею PORTIA OS, artwork ярлыков и hover/focus-анимации переработаны как единая система; каждый ярлык проигрывает полный semantic cycle без сдвига контейнера, уход pointer не обрывает цикл, последний кадр совпадает со статичным по geometry, viewBox, filter и качеству.
 - [ ] **STAB-MOTION-06**: Вивьян следует выбранному accent без неоновой или серой рассинхронизации, остаётся читаемой, детерминированно реагирует на click/idle/activity/offended и не зависит от motion для понимания ответа.
 - [ ] **STAB-MOTION-07**: Обои не создают заметный jank; при motion off они полностью статичны, а переключение не даёт flash или пустого слоя.
-- [x] **STAB-MOTION-08**: Для spider/web/Vivian/shortcut/window motion до реализации утверждены start, key states, end/rest, duration, easing, interruption и reduced/off; после реализации проходят visual regression и owner review.
+- [ ] **STAB-MOTION-08**: Для spider/web/Vivian/shortcut/window motion до реализации утверждены start, key states, end/rest, duration, easing, interruption и reduced/off; после реализации проходят visual regression и owner review.
 
 ## «Повышение»
 
@@ -146,7 +146,7 @@
 | STAB-MOTION-05 | Phase 18 | Pending |
 | STAB-MOTION-06 | Phase 18 | Pending |
 | STAB-MOTION-07 | Phase 18 | Pending |
-| STAB-MOTION-08 | Phase 18 | Complete |
+| STAB-MOTION-08 | Phase 18 | Pending |
 | STAB-PROM-01 | Phase 19 | Pending |
 | STAB-PROM-02 | Phase 19 | Pending |
 | STAB-PROM-03 | Phase 19 | Pending |
