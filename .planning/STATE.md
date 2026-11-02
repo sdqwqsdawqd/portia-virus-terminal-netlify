@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 19
 current_phase_name: «Повышение», приложения, редактор, поиск и медиа
 status: executing
-stopped_at: Completed 19-04-PLAN.md
-last_updated: "2026-11-02T10:32:21.960Z"
+stopped_at: Completed 19-05-PLAN.md
+last_updated: "2026-11-02T10:42:27.750Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase 19 execution started
-state_head: b118418acbdbc0f31e3a336b513dd43d2438a0e9
+state_head: c466404882dee5262e04cac6a2cd6babb068ea99
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 63
-  completed_plans: 53
+  completed_plans: 54
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 19 («Повышение», приложения, редактор, поиск и медиа) — EXECUTING
-Plan: 5 of 14
+Plan: 6 of 14
 Status: Ready to execute
 Last activity: 2026-11-02 — Phase 19 execution started
 
@@ -98,6 +98,7 @@ Progress: [█████░░░░░] 50% of Phase 15 plans (phase gaps_fou
 | Phase 19 P01 | n/a | 3 tasks | 6 files |
 | Phase 19 P03 | ~40min | 3 tasks | 7 files |
 | Phase 19 P04 | 30min | 3 tasks | 8 files |
+| Phase 19 P05 | 40min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -147,6 +148,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 19]: 19-01: owner approved all 11 agent recommendations (staging roster via PORTIA_PROMOTION_STAGING_ROSTER, LAN dev, search keys, fail-closed permission text)
 - [Phase 19]: 19-03: staging promotion roster is honoured only behind the isolated-project guard (isolated ref, non-empty production list, CONTEXT not production); acceptance data scoped by run prefix, manifest and window
 - [Phase 19]: 19-04: submit success requires response.ok plus a string requestId; PC/phone warning texts per owner verdict 11; server refusal texts unchanged (verdict 10 A)
+- [Phase 19]: 19-05: access revocation = HTTP 403 without error code; per-command 403s keep their code and do not wipe reviewer state
 
 ### Pending Todos
 
@@ -183,8 +185,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-02T10:32:21.801Z
-Stopped at: Completed 19-04-PLAN.md
+Last session: 2026-11-02T10:42:27.591Z
+Stopped at: Completed 19-05-PLAN.md
 Resume file: None
 
 ## Operator Next Step
