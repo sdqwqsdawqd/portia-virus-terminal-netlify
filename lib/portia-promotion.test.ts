@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   normalizePromotionTitle,
   ordinaryPromotionTransitions,
+  promotionAvailabilityText,
   promotionEligibility,
   promotionTitles,
   qualificationPromotionTransitions,
@@ -139,4 +140,23 @@ test("promotion returns a safe not-listed state without inventing roster data", 
     promotionEligibility(null, { kind: "ordinary", now: new Date("2026-10-27T00:00:00.000Z") }),
     { status: "not-listed", copyKey: "promotion.notListed" },
   );
+});
+
+test("availability text shows a device-time date and time without dots, gaps or Invalid Date", () => {
+  const now = new Date("2026-11-02T00:00:00.000Z");
+  const text = promotionAvailabilityText("2026-11-05T09:30:00Z", now);
+  assert.match(text ?? "", /^Следующая заявка будет доступна \d{2}\.\d{2}\.\d{4} в \d{2}:\d{2}$/);
+  for (const bad of ["..", "Invalid", " в  ", "МСК"]) assert.ok(!text!.includes(bad), bad);
+  const at = new Date("2026-11-05T09:30:00Z");
+  const date = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" }).format(at);
+  const time = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
+  assert.equal(text, `Следующая заявка будет доступна ${date} в ${time}`);
+});
+
+test("availability text is null for missing, invalid or already-passed dates", () => {
+  const now = new Date("2026-11-02T00:00:00.000Z");
+  for (const value of [undefined, "", "abc"]) assert.equal(promotionAvailabilityText(value, now), null);
+  assert.equal(promotionAvailabilityText("2026-11-02T00:00:00.000Z", now), null);
+  assert.equal(promotionAvailabilityText("2026-11-01T23:59:59.999Z", now), null);
+  assert.ok(promotionAvailabilityText("2026-11-02T00:00:00.001Z", now));
 });
