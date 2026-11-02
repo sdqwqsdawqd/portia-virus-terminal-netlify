@@ -1,92 +1,52 @@
 {
   "version": "1.0",
-  "timestamp": "2026-10-31T18:36:56.611Z",
-  "phase": "15",
-  "phase_name": "Восстановление контроля, контракты и браузерный baseline",
-  "phase_dir": ".planning/phases/PORTIA-15-baseline",
-  "plan": 13,
+  "timestamp": "2026-11-02T11:03:17.855Z",
+  "phase": "19",
+  "phase_name": "«Повышение», приложения, редактор, поиск и медиа",
+  "phase_dir": ".planning/phases/PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media",
+  "plan": 6,
   "task": 1,
-  "total_tasks": 2,
+  "total_tasks": 3,
   "status": "paused",
   "completed_tasks": [
-    {
-      "id": 11,
-      "name": "Repository UI authority and owner verdict ledger",
-      "status": "done",
-      "commit": "4ee3f52"
-    },
-    {
-      "id": 12,
-      "name": "Executable approved visual authority",
-      "status": "done",
-      "commit": "41f64b1"
-    }
+    {"id": 1, "name": "19-06 Task 1: Живой seed временных данных через wrapper и проверка evidence", "status": "in_progress", "commit": "0269edc", "progress": "seed выполнен (runId mvz5fqgv_c40b449b), манифест evidence/19-ACCEPTANCE-RUN.json закоммичен; проверка evidence после seed не подтверждена — исполнитель остановлен владельцем по /gsd-pause-work"}
   ],
   "remaining_tasks": [
-    {
-      "id": 13,
-      "name": "Signed visual metadata and canonical snapshot-path verification",
-      "status": "not_started"
-    },
-    {
-      "id": 14,
-      "name": "Repository-local security evidence matrix and finding disposition",
-      "status": "not_started"
-    },
-    {
-      "id": 15,
-      "name": "Clean-checkout terminal verification and Phase 15 lifecycle decision",
-      "status": "not_started"
-    }
+    {"id": 1, "name": "19-06 Task 1: досверить seed (acceptance-residual mvz5fqgv_c40b449b, read-only) и завершить проверку evidence", "status": "in_progress"},
+    {"id": 2, "name": "19-06 Task 2: Live- и Playwright-прогоны на коммите фазы и матрица STAB-PROM", "status": "not_started"},
+    {"id": 3, "name": "19-06 Task 3: Owner UAT «Повышения» на PC, затем phone (blocking-human)", "status": "not_started"}
   ],
+  "phase_plans": {
+    "complete": ["19-01", "19-02", "19-03", "19-04", "19-05", "19-08"],
+    "in_progress": ["19-06"],
+    "not_started": ["19-07", "19-09", "19-10", "19-11", "19-12", "19-13", "19-14"],
+    "waves_remaining": "wave 4: 19-06; wave 5: 19-07 (teardown after owner «принято»), 19-09; wave 6: 19-10; 7: 19-11; 8: 19-12; 9: 19-13; 10: 19-14"
+  },
   "blockers": [
-    {
-      "description": "Authenticated participant/editor/reviewer/owner and mutating Supabase lanes remain unproven because no disposable isolated staging authority is available.",
-      "type": "external",
-      "workaround": "Keep these rows BLOCKED and recover them in Phase 16/19; never use production credentials or mutate production."
-    },
-    {
-      "description": "Physical owner PC/phone UAT has not occurred.",
-      "type": "human_action",
-      "workaround": "Keep physical-device acceptance open for Phase 22."
-    }
+    {"description": "Seed-данные приёмки лежат на изолированном staging; teardown разрешён только в 19-07 после «принято» владельца", "type": "external", "workaround": "не создавать ничего вручную на этом staging-проекте: teardown удаляет всё, созданное после createdAt манифеста"}
   ],
+  "async_jobs": [],
   "human_actions_pending": [
-    {
-      "action": "Review and explicitly accept any critical/high finding only if Plan 15-14 discovers one that cannot be fixed immediately.",
-      "context": "Plan 15-14 requires a named Qloxz disposition for unresolved critical/high local security findings.",
-      "blocking": false
-    }
+    {"action": "Owner UAT 19-06 Task 3: локальный npm run dev по LAN, один сквозной прогон «Повышения» на PC, затем на phone", "context": "вердикт владельца пункт 2 A; gate blocking-human", "blocking": true}
   ],
   "decisions": [
-    {
-      "decision": "Firefox is the Search-window pixel authority.",
-      "rationale": "The owner requested Firefox and settled Firefox frames avoid transient loading captures; other projects retain shell/device coverage.",
-      "phase": "15"
-    },
-    {
-      "decision": "The visual ledger contains 33 APPROVED, 18 REJECTED and 33 BLOCKED rows.",
-      "rationale": "Only explicitly approved exact bytes may enter the canonical snapshot store.",
-      "phase": "15"
-    },
-    {
-      "decision": "Rejected shortcut, spider and web-wave motion frames are not baseline authority.",
-      "rationale": "The owner rejected jerky spider motion, shortcut displacement and interrupted animation endings; Phase 18 owns replacement candidates.",
-      "phase": "15"
-    },
-    {
-      "decision": "Figma and Codex Security are not prerequisites.",
-      "rationale": "The owner removed both from the plan; repository-native UI and local security evidence replace them.",
-      "phase": "15"
-    }
+    {"decision": "Все 11 пунктов 19-OWNER-DECISIONS.md: приняты рекомендации («все рекомендации»)", "rationale": "вердикт владельца 2026-11-02", "phase": "19"},
+    {"decision": "Исполнители читают execute-plan.md/checkpoints.md/summary.md сами вместо инлайна в промпт", "rationale": "экономия ~127 КБ на диспатч", "phase": "19"}
   ],
   "uncommitted_files": [
-    ".planning/milestone.lock",
-    ".planning/forensics/",
-    ".planning/milestones/v1.2-incomplete-research/",
-    ".planning/quick/261028-c9g-portia-promotion-1-8/",
-    ".planning/ui-reviews/"
+    " M .planning/milestone.lock",
+    " M .planning/state.json",
+    " M app/portia.css",
+    " M lib/app-state.test.ts",
+    " M lib/app-state.ts",
+    "?? .mcp.json",
+    "?? .planning/forensics/",
+    "?? .planning/milestones/v1.2-incomplete-research/",
+    "?? .planning/quick/261028-c9g-portia-promotion-1-8/",
+    "?? .planning/ui-reviews/",
+    "?? AGENTS.md",
+    "?? CLAUDE.md"
   ],
-  "next_action": "Read 15-13-PLAN.md, then execute Plan 15-13 only: bind candidate-set/source-commit/UI-contract metadata and correct the stale snapshot path. Preserve every unrelated dirty path.",
-  "context_notes": "Plan 15-12 is complete and committed. Short verification passed: 16/16 manifest tests, 84 UI-map rows, 51 verdict-covered captures, 33 exact approved snapshot bytes and 18 excluded non-approved rows. The prior full visual suite passed 21 with 54 policy skips and 0 failures. Use Node 22.13.1 and PORTIA_VISUAL_SET_ID=phase15-current-efbc1401080d until Plan 15-13 removes the fragile default."
+  "next_action": "/gsd-execute-phase 19 — перед диспатчем 19-06 сверить seed: acceptance-residual mvz5fqgv_c40b449b через guarded wrapper (read-only), убедиться, что второго seed нет; продолжить 19-06 с Task 1 verify, НЕ делать повторный seed",
+  "context_notes": "Исполнитель 19-06 остановлен посреди Task 1 после коммита манифеста; последняя его строка была 'Running the seed' — во %TEMP% только одна папка portia-acceptance-mvz5fqgv_c40b449b, повторного seed не видно, но подтвердить через residual. app/portia.css, lib/app-state*.ts помечены M только из-за core.autocrlf (git diff пуст). milestone.lock/state.json — владельца, не трогать."
 }
