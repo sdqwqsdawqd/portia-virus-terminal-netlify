@@ -77,7 +77,7 @@ test("qualification runner and grading workspace have sticky responsive reduced-
   assert.match(styles, /\.promotion-test-timer\s*\{[^}]*position:\s*sticky/);
   assert.match(styles, /\.promotion-grading-workspace\s*\{/);
   assert.match(styles, /@media \(max-width:\s*520px\)[\s\S]*\.promotion-question/);
-  assert.match(styles, /html\[data-motion="reduce"\][^\n]*\.promotion-qualification-runner/);
+  assert.match(styles, /html:is\(\[data-motion="reduced"\], \[data-motion="off"\]\)[^\n]*\.promotion-qualification-runner/);
 });
 
 test("an active qualification locks the desktop to one immovable promotion window and refreshes immediately after completion", () => {

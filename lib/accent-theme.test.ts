@@ -317,12 +317,13 @@ test("animations are full by default; reduced and off only by the saved setting,
   assert.match(switchBlock, /html\[data-motion="reduced"\] \*/);
   // Without the head script the SSR attribute is the safe state.
   assert.match(layoutSource, /<html[^>]*data-motion="full"/);
-  // Any media query that remains must stay scoped to the missing-attribute fallback.
-  for (const [, body] of css.matchAll(/@media\s*\(prefers-reduced-motion[^)]*\)\s*\{((?:[^{}]*\{[^{}]*\})*[^{}]*)\}/g)) {
-    for (const [, selectors] of body.matchAll(/([^{}]+)\{[^{}]*\}/g)) {
-      for (const selector of selectors.split(",")) assert.match(selector.trim(), /^html:not\(\[data-motion\]\)/, `unscoped motion rule: ${selector.trim()}`);
-    }
-  }
+  // No legacy mode value and no system-preference media block remain anywhere in the stylesheet (STAB-MOTION-01, D-10).
+  assert.doesNotMatch(css, /data-motion="reduce"/);
+  assert.doesNotMatch(css, /prefers-reduced-motion/);
+  // Windows under «Уменьшены»: fade only, no scale, at the fast duration; Vivian's idle offended pose is static in every mode.
+  assert.match(css, /html\[data-motion="reduced"\] \.app-window \{ animation: fade-in var\(--motion-fast\) var\(--ease-out\) !important; \}/);
+  assert.match(css, /html\[data-motion="reduced"\] \.assistant-button img \{ transition-duration: var\(--motion-fast\); \}/);
+  assert.match(css, /(^|\n)\.desktop-assistant\.is-offended \.assistant-button img \{[^}]*rotate:[^}]*grayscale\([^}]*opacity:/);
   const group = desktopSource.match(/title="Анимации" values=\{(\[\[.*?\]\])\}/)?.[1];
   assert.ok(group, "«Анимации» SettingGroup not found");
   assert.deepEqual([...motionModes], ["on", "reduced", "off"]);

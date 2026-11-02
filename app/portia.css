@@ -508,7 +508,8 @@ a.personnel-portrait:focus-visible { outline: 2px solid var(--teal); outline-off
 html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out); }
 .promotion-retake-toast { border-color: var(--teal-dim); }
 html[data-motion="full"] .promotion-retake-toast { animation: fade-in 220ms var(--ease-out); }
-html[data-motion="reduce"] .promotion-retake-toast { animation: none !important; transform: none !important; }
+/* Reduced and off: the toast appears at once. */
+html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { animation: none !important; transform: none !important; }
 @media (min-width: 901px) {
   /* The panel is a layer of the desktop and is dragged by its header anywhere on the screen (D-06, EDIT-04). */
   .floating-text-format > header { cursor: grab; touch-action: none; user-select: none; }
@@ -830,7 +831,6 @@ html:is([data-motion="reduced"], [data-motion="off"]) .boot-screen { display: no
 .boot-lines { width: 100%; display: grid; gap: 4px; margin-top: 28px; text-align: left; color: var(--teal-dim); font: 500 11px/1.5 var(--sans); letter-spacing: .04em; }
 .boot-lines p { margin: 0; white-space: nowrap; overflow: hidden; }
 html[data-motion="full"] .boot-lines p { clip-path: inset(0 100% 0 0); animation: boot-type 260ms steps(18, end) both; }
-html[data-motion="reduce"] .boot-lines p { animation: fade-in 160ms ease-out both !important; }
 @keyframes boot-type { to { clip-path: inset(0 0 0 0); } }
 @keyframes boot-screen-failsafe { to { opacity: 0; visibility: hidden; pointer-events: none; } }
 
@@ -1392,11 +1392,11 @@ html[data-spider="off"] .wallpaper-web-pulses { opacity: 0; }
 
 .desktop-wallpaper-frame { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 .wallpaper-layer { position: absolute; inset: 0; overflow: hidden; container-type: size; }
-/* Switching wallpapers crossfades (review #11); the wallpaper itself still stands still under «Выключены». */
+/* Switching wallpapers crossfades 500ms (full) or 300ms (reduced); under «Выключены» the global rule makes fade-out land on opacity 0 and fade-in on opacity 1 at once, so there is never an empty layer. The wallpaper itself stands still in reduced and off. */
 .wallpaper-layer.is-entering { animation: fade-in 500ms ease-out both; }
 .wallpaper-layer.is-leaving { animation: fade-out 500ms ease-in forwards; }
-html[data-motion="reduce"] .wallpaper-layer.is-entering { animation: fade-in 300ms ease-out both !important; }
-html[data-motion="reduce"] .wallpaper-layer.is-leaving { animation: fade-out 300ms ease-in forwards !important; }
+html[data-motion="reduced"] .wallpaper-layer.is-entering { animation: fade-in 300ms ease-out both !important; }
+html[data-motion="reduced"] .wallpaper-layer.is-leaving { animation: fade-out 300ms ease-in forwards !important; }
 .desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--teal); fill: none; stroke: currentColor; stroke-linecap: round; }
 /* The web is spun at an even pace, without cap dots or an elastic ease (D-07). */
 .wallpaper-web path { stroke-width: 1; opacity: .26; stroke-linecap: butt; stroke-dasharray: 1; stroke-dashoffset: 1; animation: web-draw .9s linear forwards; }
@@ -1510,8 +1510,8 @@ html[data-motion="full"] .loading-spinner { animation: loading-spin 900ms linear
 html[data-motion="full"] .app-window.from-taskbar { animation: window-restore 340ms var(--ease-out); }
 html[data-motion="full"] .app-window.is-closing { animation: window-close 180ms var(--ease-in) forwards; }
 html[data-motion="full"] .app-window.is-minimizing { animation: window-minimize 320ms var(--ease-in) forwards; }
-html[data-motion="reduce"] .app-window { animation: fade-in 160ms ease-out !important; }
-html[data-motion="reduce"] .app-window:is(.is-closing, .is-minimizing) { animation: fade-out 120ms ease-in forwards !important; }
+html[data-motion="reduced"] .app-window { animation: fade-in var(--motion-fast) var(--ease-out) !important; }
+html[data-motion="reduced"] .app-window:is(.is-closing, .is-minimizing) { animation: fade-out 120ms var(--ease-in) forwards !important; }
 @keyframes window-open { from { opacity: 0; scale: .97; } }
 @keyframes window-restore { from { opacity: 0; scale: .08; } 45% { opacity: 1; } }
 @keyframes window-close { to { opacity: 0; scale: .97; } }
@@ -1522,13 +1522,13 @@ html[data-motion="reduce"] .app-window:is(.is-closing, .is-minimizing) { animati
 /* Documents (Корзина files, scientist logs): the viewer settles in while the page feeds out top to bottom, like a terminal printout. */
 html[data-motion="full"] .doc-open { animation: doc-open 320ms var(--ease-out); }
 html[data-motion="full"] .doc-print { animation: doc-print 560ms 80ms var(--ease-out) backwards; }
-html[data-motion="reduce"] .doc-open { animation: fade-in 160ms ease-out !important; }
+html[data-motion="reduced"] .doc-open { animation: fade-in var(--motion-fast) var(--ease-out) !important; }
 @keyframes doc-open { from { opacity: 0; translate: 0 26px; scale: .98; } }
 @keyframes doc-print { from { clip-path: inset(0 0 100% 0); opacity: .4; } }
 
 /* Switching a record, profile or section: a short cross-fade, no movement, in both modes. */
 .content-fade { animation: fade-in 200ms ease-out; }
-html[data-motion="reduce"] .content-fade { animation-duration: var(--motion-fast) !important; }
+html[data-motion="reduced"] .content-fade { animation-duration: var(--motion-fast) !important; }
 
 /* Feedback. Icons press in and come back without overshoot; a window that appears makes its taskbar entry hop once. */
 html[data-motion="full"] .desktop-icon { transition: background-color 130ms ease, border-color 130ms ease, transform 130ms ease, opacity 130ms ease, box-shadow 130ms ease; }
@@ -1638,11 +1638,12 @@ html[data-motion="full"] .desktop-assistant[data-mood="3"][data-squish="b"]:not(
 html[data-motion="full"] .desktop-assistant.is-offended .assistant-button img { animation: vivian-offended 660ms cubic-bezier(.3, .7, .3, 1) both; }
 html[data-motion="full"] .desktop-assistant.is-recovering .assistant-button img { animation: vivian-recover 780ms var(--ease-out) both; }
 html[data-motion="full"] .assistant-bubble { transform-origin: 100% 85%; animation: vivian-bubble 360ms var(--ease-out) both; }
-html[data-motion="reduce"] .assistant-bubble { animation: fade-in 160ms ease-out both !important; }
-/* Vivian, soft («Анимации: Выключены»): no hops or shakes, but she still answers a click and fades between moods. */
-html[data-motion="reduce"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-button img { animation: vivian-soft-a 260ms ease-out !important; }
-html[data-motion="reduce"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-button img { animation: vivian-soft-b 260ms ease-out !important; }
-html[data-motion="reduce"] .desktop-assistant:is(.is-offended, .is-recovering) .assistant-button img { animation: fade-in 280ms ease-out both !important; }
+html[data-motion="reduced"] .assistant-bubble { animation: fade-in var(--motion-fast) var(--ease-out) both !important; }
+/* Vivian under «Анимации: Уменьшены»: no hops or shakes, but she still answers a click and fades between moods, all within --motion-fast. Under «Выключены» the global rule makes every expression change instant. */
+html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-button img { animation: vivian-soft-a var(--motion-fast) var(--ease-out) !important; }
+html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-button img { animation: vivian-soft-b var(--motion-fast) var(--ease-out) !important; }
+html[data-motion="reduced"] .desktop-assistant:is(.is-offended, .is-recovering) .assistant-button img { animation: fade-in var(--motion-fast) var(--ease-out) both !important; }
+html[data-motion="reduced"] .assistant-button img { transition-duration: var(--motion-fast); }
 @keyframes vivian-soft-a { 50% { opacity: .72; scale: .97; } }
 @keyframes vivian-soft-b { 50% { opacity: .72; scale: .97; } }
 @keyframes vivian-hop {
@@ -1676,8 +1677,6 @@ html[data-motion="reduce"] .desktop-assistant:is(.is-offended, .is-recovering) .
 }
 @keyframes vivian-bubble { from { opacity: 0; scale: .55; translate: 10px 6px; } 60% { opacity: 1; scale: 1.05; translate: 0 0; } to { opacity: 1; scale: 1; translate: 0 0; } }
 
-/* Boot under reduced motion: the spider and thread appear in place instead of descending. */
-html[data-motion="reduce"] :is(.boot-core > .portia-mark, .boot-thread) { animation: fade-in 200ms ease-out !important; }
 .empty-state { display: grid; justify-items: center; gap: 8px; padding: 40px 20px; color: oklch(.742 calc(.025 * var(--accent-chroma)) var(--accent-hue)); text-align: center; }
 .empty-state svg { width: 96px; height: 96px; margin-bottom: 6px; color: var(--teal); opacity: .85; }
 .empty-state strong { color: oklch(.945 calc(.01 * var(--accent-chroma)) var(--accent-hue)); font: 600 16px var(--sans); letter-spacing: 0; }
@@ -1856,10 +1855,7 @@ html[data-motion="full"] .promotion-card { animation: promotion-card-enter 160ms
   .promotion-history li > span { grid-column: 1 / -1; }
 }
 
-html[data-motion="reduce"] .promotion-card, html[data-motion="reduce"] .promotion-qualification-runner, html[data-motion="reduce"] .icon-promotion-arrow { animation: none !important; transform: none !important; }
-@media (prefers-reduced-motion: reduce) {
-  html:not([data-motion]) .promotion-card, html:not([data-motion]) .icon-promotion-arrow { animation: none !important; transform: none !important; }
-}
+html:is([data-motion="reduced"], [data-motion="off"]) :is(.promotion-card, .promotion-qualification-runner, .icon-promotion-arrow) { animation: none !important; transform: none !important; }
 
 .promotion-editor { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 16px; }
 .promotion-editor-branches, .promotion-queue-filters { display: flex; gap: 8px; margin-bottom: 16px; }

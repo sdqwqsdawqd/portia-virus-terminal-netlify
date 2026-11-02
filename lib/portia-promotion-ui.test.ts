@@ -119,7 +119,8 @@ test("promotion window is responsive and motion respects the desktop preference"
   assert.match(styles, /\.promotion-action[^{]*\{[^}]*min-height:\s*4[04]px/);
   assert.match(styles, /html\[data-motion="full"\][^{]*\.promotion-card/);
   assert.match(styles, /@media \(max-width:\s*520px\)[\s\S]*\.promotion-app/);
-  assert.match(styles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.promotion-card/);
+  assert.match(styles, /html:is\(\[data-motion="reduced"\], \[data-motion="off"\]\)[^\n]*\.promotion-card[^\n]*animation:\s*none/);
+  assert.doesNotMatch(styles, /prefers-reduced-motion/);
 });
 
 test("promotion copy and visual tokens follow the reviewed accessibility contract", () => {
