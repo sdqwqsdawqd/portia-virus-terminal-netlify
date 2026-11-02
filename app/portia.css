@@ -1824,6 +1824,8 @@ html[data-motion]:not([data-motion="off"]) .app-stale-banner { animation: fade-i
 .promotion-test-warning { margin: 16px 0; padding: 16px; border: 1px solid oklch(.58 .08 80 / .55); border-radius: 7px; background: oklch(.3 .04 80 / .12); }
 .promotion-test-warning strong { color: oklch(.82 .07 80); font: 700 11px/1.35 var(--sans); letter-spacing: .06em; }
 .promotion-test-warning p { margin: 8px 0 0; color: oklch(.72 .04 80); font: 400 13px/1.55 var(--doc); }
+.promotion-mode-warning { margin: 8px 0; color: var(--warning); font: 400 13px/1.5 var(--doc); overflow-wrap: anywhere; }
+.promotion-cleanup-hint { margin: 16px 0 0; color: var(--muted); font: 700 11px/1.25 var(--sans); letter-spacing: .06em; overflow-wrap: anywhere; }
 .promotion-qualification-runner { position: relative; display: grid; gap: 16px; margin: 16px -8px -8px; padding: 8px; border-top: 1px solid var(--line); }
 .promotion-test-timer { position: sticky; z-index: 3; top: 78px; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 8px 0 0; padding: 8px 16px; border: 1px solid var(--teal-dim); border-radius: 7px; background: oklch(.19 calc(.02 * var(--accent-chroma)) var(--accent-hue) / .96); color: var(--teal); backdrop-filter: blur(12px); }
 .promotion-test-timer span { font: 700 11px/1 var(--sans); letter-spacing: .08em; }

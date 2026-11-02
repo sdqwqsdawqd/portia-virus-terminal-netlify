@@ -40,6 +40,14 @@ function formatDate(value?: string) {
   return `${dateTime.format(new Date(value))} МСК`;
 }
 
+const desktopModeWarning = "Не переключайте вкладку и окно: потеря фокуса завершит попытку как проваленную.";
+const phoneModeWarning = "Можно переключаться между приложениями. Попытка завершится при потере связи или по истечении времени.";
+
+/** A submit counts as accepted only when the server answered with the created request id. */
+function createdRequest(value: unknown) {
+  return !!value && typeof value === "object" && !Array.isArray(value) && typeof (value as Record<string, unknown>).requestId === "string";
+}
+
 function publicError(value: unknown, fallback: string) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
   const error = (value as Record<string, unknown>).error;
@@ -203,6 +211,7 @@ function QualificationRunner({ attemptId, visible, onLockChange, onFinished }: {
   const selected = Array.isArray(answer) ? answer : [];
   const valid = question.type === "free-text" ? typeof answer === "string" && answer.trim().length > 0 : question.type === "single" ? Number.isInteger(answer) : selected.length > 0;
   return <section className="promotion-qualification-runner">
+    <p className="promotion-mode-warning">{test.clientMode === "phone" ? phoneModeWarning : desktopModeWarning}</p>
     <div className={`promotion-test-timer ${timer.remaining <= 60_000 ? "danger" : timer.remaining <= 180_000 ? "warning" : ""}`}><span>ОСТАЛОСЬ</span><strong>{timer.label}</strong></div>
     <p className="sr-only" aria-live="polite">{announcement}</p>
     <div className="promotion-question-progress">ВОПРОС {question.index + 1} ИЗ {question.total}</div>
@@ -281,7 +290,7 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback,
     <header><span className="promotion-flow-icon" aria-hidden="true">{ordinary ? "▤" : "◇"}</span><div><span className="promotion-eyebrow">{ordinary ? "ОБЫЧНОЕ ПОВЫШЕНИЕ" : "КВАЛИФИКАЦИЯ"}</span><h2>{ordinary ? "Задания на повышение" : "Проверка знаний"}</h2></div></header>
     <p className="promotion-status-copy">{active ? activeCopy(kind, active) : eligibilityCopy(kind, eligibility)}</p>
     {feedback.phase !== "idle" && <p ref={feedbackRef} tabIndex={-1} role={feedback.phase === "error" ? "alert" : "status"} className={`promotion-submit-feedback ${feedback.phase}`}>{feedback.message}</p>}
-    {!ordinary && active && !active.attemptId && (active.status === "claimed" || active.status === "approved") && <div className="promotion-test-warning"><strong>15 МИНУТ ПОСЛЕ РАЗРЕШЕНИЯ</strong><p>После разрешения проверяющего начнутся 15 минут. На ПК уход со вкладки, потеря фокуса или соединения завершат попытку.</p></div>}
+    {!ordinary && active && !active.attemptId && (active.status === "claimed" || active.status === "approved") && <div className="promotion-test-warning"><strong>15 МИНУТ ПОСЛЕ РАЗРЕШЕНИЯ</strong><p>После разрешения проверяющего начнутся 15 минут.</p><p className="promotion-mode-warning">ПК. {desktopModeWarning}</p><p className="promotion-mode-warning">Телефон. {phoneModeWarning}</p></div>}
     {!ordinary && active?.attemptId && <QualificationRunner attemptId={active.attemptId} visible={visible !== false} onLockChange={onQualificationLockChange ?? (() => undefined)} onFinished={onQualificationFinished ?? (() => undefined)} />}
     {tasks.length > 0 && <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task) => <li key={task.id}><span>{String(task.sortOrder).padStart(2, "0")}</span><p>{task.text}</p></li>)}</ol></div>}
     {canRequest && <button className="promotion-action" type="button" disabled={busy || stale} onClick={() => onRequest(kind)}>{busy ? "ОТПРАВЛЯЕМ…" : ordinary ? "ПОДАТЬ ЗАЯВКУ НА ЗАДАНИЯ" : "ЗАПРОСИТЬ КВАЛИФИКАЦИЮ"}</button>}
@@ -386,7 +395,7 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
     try {
       const response = await fetch("/api/promotion/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nickname: checkedNickname, kind }) });
       const body: unknown = await response.json();
-      if (!response.ok) {
+      if (!response.ok || !createdRequest(body)) {
         setSubmitState((current) => ({ ...current, [kind]: { phase: "error", message: publicError(body, "Заявку не удалось отправить.") } }));
         requestAnimationFrame(() => submitFeedbackRefs.current[kind]?.focus());
         return;
@@ -430,6 +439,7 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
         <PromotionStatusCard kind="ordinary" active={status.ordinary.active} eligibility={status.ordinary.eligibility} busy={submitState.ordinary.phase === "submitting"} stale={stale} feedback={submitState.ordinary} feedbackRef={(node) => { submitFeedbackRefs.current.ordinary = node; }} onRequest={requestPromotion} />
         {status.ordinary.eligibility.status !== "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
       </div>
+      <p className="promotion-cleanup-hint">Подробные данные проверки удаляются после закрытия. Хранятся три последних результата.</p>
       {status.results.length > 0 && <details className="promotion-history"><summary>Последние результаты <span>{Math.min(status.results.length, 3)}</span></summary><ul>{status.results.slice(0, 3).map((result, index) => <li key={`${result.createdAt}-${index}`}><span>{result.kind === "ordinary" ? "ЗАДАНИЯ" : "КВАЛИФИКАЦИЯ"}</span><strong>{outcomeLabels[result.outcome] ?? "Результат обновлён"}</strong><time dateTime={result.createdAt}>{formatDate(result.createdAt)}</time></li>)}</ul></details>}
     </div>
   </div>;

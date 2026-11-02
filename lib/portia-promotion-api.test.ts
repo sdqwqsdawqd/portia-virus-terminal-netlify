@@ -318,3 +318,19 @@ test("check order is access roster, then promotion roster, then database: a shee
   assert.deepEqual(second, ["roster"]);
   assert.equal(outage.body.code, "promotion-sheet-unavailable");
 });
+
+test("the status body for a participant carries no linked nickname, keys, notes, reviewer or device fields", async () => {
+  const hostile = {
+    ...emptyProjection,
+    ordinary: { status: "assigned", targetTitleId: "trainee", reviewerId: "r-1", reviewerName: "Boss", internalNote: "n", linkedNickname: "Other", tokenHash: "h", tasks: [] },
+    qualification: { status: "testing", targetTitleId: "trainee", attemptId: "a-1", answerKey: "k", futureQuestions: ["q"], reviewerCorrect: true },
+    results: [{ kind: "qualification", outcome: "failed", createdAt: "2026-10-26T00:00:00.000Z", reviewerId: "r-1", notes: "n", percent: 10 }],
+  };
+  const { deps } = dependencies({ workflowStatus: async () => ({ status: "ok", projection: promotionProjectionFromRpc(hostile)! }) });
+  const result = await promotionStatus({ nickname: "Alice", token: null, headers: new Headers() }, deps);
+  assert.equal(result.status, 200);
+  const text = JSON.stringify(result.body);
+  for (const forbidden of ["reviewerId", "reviewerName", "Boss", "internalNote", "linkedNickname", "Other", "tokenHash", "answerKey", "futureQuestions", "reviewerCorrect", "notes"]) {
+    assert.ok(!text.includes(forbidden), forbidden);
+  }
+});

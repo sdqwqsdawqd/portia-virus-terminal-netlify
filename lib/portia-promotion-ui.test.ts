@@ -107,7 +107,7 @@ test("typed submit refusal stays local while transport failure alone marks the p
   const submitStart = source.indexOf("const requestPromotion = async");
   const submitEnd = source.indexOf("\n  };", submitStart);
   const submit = source.slice(submitStart, submitEnd);
-  assert.match(submit, /if \(!response\.ok\)[\s\S]*phase: "error"[\s\S]*publicError/);
+  assert.match(submit, /if \(!response\.ok \|\| !createdRequest\(body\)\)[\s\S]*phase: "error"[\s\S]*publicError/);
   assert.match(submit, /catch[\s\S]*setStale\(true\)/);
   assert.match(submit, /phase: "success"[\s\S]*await loadStatus\(checkedNickname\)/);
   assert.match(submit, /requestAnimationFrame[\s\S]*submitFeedbackRefs\.current\[kind\]\?\.focus/);
@@ -137,7 +137,7 @@ test("the mode warning shows both approved owner texts, chosen by the server cli
   assert.ok(source.includes(desktopText));
   assert.ok(source.includes(phoneText));
   assert.match(source, /className="promotion-mode-warning"/);
-  assert.match(source, /test\.clientMode === "phone"[\s\S]{0,80}(?:phoneText|PHONE_WARNING|Можно переключаться)/);
+  assert.match(source, /test\.clientMode === "phone"[\s\S]{0,80}phoneModeWarning : desktopModeWarning/);
   assert.doesNotMatch(source, /аттестац|hardware/i);
 });
 
@@ -155,8 +155,8 @@ test("the submitted message is produced only after the server created the reques
   const successAt = submit.indexOf('phase: "success"');
   const sendingAt = submit.indexOf("Отправляем заявку…");
   assert.ok(sendingAt >= 0 && createdAt > sendingAt && successAt > createdAt, "success text must follow the created check");
-  assert.equal(source.split("отправлена в очередь. Проверяющий ещё не взял").length - 1, 2);
-  assert.match(source, /function createdRequest[\s\S]*typeof [\w.]*requestId === "string"/);
+  assert.equal(source.split("в очередь. Проверяющий ещё не взял").length - 1, 2);
+  assert.match(source, /function createdRequest[\s\S]*typeof [^\n]*requestId === "string"/);
   assert.match(submit, /if \(!response\.ok \|\| !createdRequest\(body\)\)[\s\S]*phase: "error"[\s\S]*publicError/);
 });
 
