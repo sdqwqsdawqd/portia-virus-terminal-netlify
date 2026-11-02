@@ -532,3 +532,55 @@ test("«Справочник» body picks its render by appViewState: skeleton, 
   assert.ok(!body.includes("Загрузка справочника"));
   assert.ok(desktopMain.includes("const guideView = appViewState("));
 });
+
+function windowBody(app: string) {
+  const start = desktopMain.indexOf(`<AppWindow app="${app}"`);
+  assert.ok(start >= 0, `window ${app}`);
+  return desktopMain.slice(start, desktopMain.indexOf("</AppWindow>", start));
+}
+
+test("every data window picks skeleton, fatal panel, stale strip and the shared empty text from appViewState (D-05..D-08)", () => {
+  assert.ok(count(desktopMain, "appViewState(") >= 6, "one appViewState call per data window");
+  const rows: [string, string, string[]][] = [
+    ["archive", "archive", ["archive"]],
+    ["employees", "employees", ["employees"]],
+    ["info", "info", ["info"]],
+    ["broadcasts", "broadcasts", ["news", "quests"]],
+    ["trash", "trash", ["trash"]],
+  ];
+  for (const [app, shape, keys] of rows) {
+    const body = windowBody(app);
+    assert.ok(body.includes(`<AppSkeleton shape="${shape}"`), `${app} skeleton`);
+    assert.ok(body.includes("<AppFatalPanel"), `${app} fatal`);
+    assert.ok(body.includes("<AppStaleBanner"), `${app} stale`);
+    for (const key of keys) assert.ok(body.includes(`emptyCopy.${key}`), `${app} empty ${key}`);
+    assert.ok(!body.includes("<LoadingState"), `${app} no spinner loader`);
+  }
+  assert.ok(!desktopMain.includes("В базе пока нет вирусов") && !desktopMain.includes("Квестов и задач пока нет"));
+});
+
+test("a failed roster fetch writes employeesSync and never touches the roster; only a complete answer moves lastGoodAt (STAB-APP-02)", () => {
+  const start = desktopMain.indexOf("const fetchEmployees = useCallback");
+  const body = desktopMain.slice(start, desktopMain.indexOf("useEffect(", start));
+  const failed = body.slice(body.indexOf("if (!response.ok)"), body.indexOf("const payload"));
+  assert.ok(failed.includes("failureFromResponse(response.status"));
+  assert.ok(!failed.includes("setEmployees("));
+  assert.ok(body.includes("contentSyncFailed(") && body.includes("contentSyncSucceeded("));
+  assert.ok(/degraded === false/.test(body));
+  // the last good roster survives in the same state the failure leaves untouched
+  assert.equal(count(body, "setEmployees("), 1);
+  assert.ok(desktopMain.includes("retryEmployees"));
+});
+
+test("«Корзина» shows no restore or delete control on the desktop; the editor's permanent delete says it cannot be restored and refuses by name (STAB-APP-05, T-19-19)", () => {
+  const trash = windowBody("trash");
+  assert.doesNotMatch(trash, /Восстановить|Удалить навсегда|УДАЛИТЬ НАВСЕГДА|onRestore|onDelete/);
+  for (const dialog of ["delete", "delete-file"]) {
+    const start = editorSource.indexOf(`dialog === "${dialog}"`);
+    assert.ok(start >= 0, dialog);
+    const block = editorSource.slice(start, editorSource.indexOf("/>", start));
+    assert.ok(block.includes("её не восстановить"), `${dialog} says it cannot be restored`);
+    assert.ok(block.includes('label: "УДАЛИТЬ НАВСЕГДА"'), `${dialog} keeps the action label`);
+    assert.ok(block.includes('label: "Не удалять"') && !block.includes("ОТМЕНА"), `${dialog} names the refusal`);
+  }
+});
