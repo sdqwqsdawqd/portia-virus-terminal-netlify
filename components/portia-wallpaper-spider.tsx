@@ -5,7 +5,7 @@
 // it reads no layout and sets no React state.
 
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
-import { REST_NODE, createPulsePool, emitPulse, footfallThreads, gaitPhase, legPose, planSpawn, planWalk, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
+import { REST_NODE, besideThread, createPulsePool, emitPulse, footfallThreads, gaitPhase, laneSideFor, legPose, planSpawn, planWalk, pulseShape, seeded, stepPulses, turnStep, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
 
 type LegId = "L1" | "L2" | "L3" | "L4" | "R1" | "R2" | "R3" | "R4";
 
@@ -34,6 +34,7 @@ const LEG_TUCK_BY_PAIR = [0, 0.02, 0.035, 0.052, 0.09] as const;
 const BODY_BOB = 0.006; // nearly still abdomen; no conspicuous pulsing in the background
 const GAIT_EASE = 0.45; // legs settle softly after a stop
 const TURN_TIME = 0.22; // smooth directional changes instead of abrupt pivots
+const MAX_TURN_RATE = 3.5; // rad/s ~ 200 deg/s: a 180 degree turn takes no less than ~0.9s, no sharp pivots (D-06)
 const PROBE_SWING = 8.5;
 const FIRST_PROBE_MIN_DELAY = 3;
 const FIRST_PROBE_MAX_DELAY = 7;
@@ -69,10 +70,6 @@ export function WallpaperSpider() {
     window.crypto.getRandomValues(seedWords);
     const rand = seeded(seedWords[0] || (Date.now() >>> 0));
     const [restX, restY] = webGeometry.nodes[REST_NODE];
-    const besideThread = (px: number, py: number, direction: number, side: number): [number, number] => [
-      px + Math.cos(direction + Math.PI / 2) * THREAD_LANE_OFFSET * side,
-      py + Math.sin(direction + Math.PI / 2) * THREAD_LANE_OFFSET * side,
-    ];
 
     // Size is cached here (a layout read outside the loop); the observer keeps it current.
     let scale = Math.max(layer.clientWidth / 1440, layer.clientHeight / 900);
@@ -108,7 +105,7 @@ export function WallpaperSpider() {
       previousVisibleSpawn = planned.node; node = planned.node; previous = -1; path = planned.path.length > 1 ? planned.path : null; walked = 0; rest = path ? 0 : 1.2 + rand() * 0.8;
       laneSide = rand() < 0.5 ? -1 : 1;
       heading = planned.heading; angle = heading - ARTWORK_HEADING; phase = planned.phase; gait = path ? 1 : 0; gaitDistance = phase * 20; pathDistance = 0;
-      [x, y] = besideThread(...webGeometry.nodes[planned.node], heading, laneSide);
+      [x, y] = besideThread(...webGeometry.nodes[planned.node], heading, laneSide, THREAD_LANE_OFFSET);
       probeRemaining = 0; probeDelay = FIRST_PROBE_MIN_DELAY + rand() * (FIRST_PROBE_MAX_DELAY - FIRST_PROBE_MIN_DELAY);
       clearPulses();
       element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg)`;
@@ -142,7 +139,7 @@ export function WallpaperSpider() {
         walked += dt;
         const pose = walkPose(path, walked);
         heading = pose.heading;
-        const [targetX, targetY] = besideThread(pose.x, pose.y, heading, laneSide);
+        const [targetX, targetY] = besideThread(pose.x, pose.y, heading, laneSide, THREAD_LANE_OFFSET);
         const laneFollow = 1 - Math.exp(-dt / LANE_SETTLE_TIME);
         x += (targetX - x) * laneFollow;
         y += (targetY - y) * laneFollow;
@@ -170,7 +167,14 @@ export function WallpaperSpider() {
         phase = after;
       } else if ((rest -= dt) <= 0) {
         const next = planWalk(node, previous, visible, rand);
-        if (next.length > 1) { path = next; walked = 0; pathDistance = 0; laneSide = rand() < 0.5 ? -1 : 1; } else rest = 6 + rand() * 4;
+        if (next.length > 1) {
+          path = next; walked = 0; pathDistance = 0;
+          // Keep the side of the thread the body already stands on, so a new route never throws it across the thread (D-06).
+          // rand() is still drawn and its result unused: it keeps the seeded route sequence as before, so frames change only where behaviour changed.
+          rand();
+          const start = walkPose(next, 0);
+          laneSide = laneSideFor(x, y, start.x, start.y, start.heading, THREAD_LANE_OFFSET);
+        } else rest = 6 + rand() * 4;
       }
       drawPulses();
       const walking = path !== null;
@@ -183,8 +187,8 @@ export function WallpaperSpider() {
         probeDelay = PROBE_MIN_DELAY + rand() * (PROBE_MAX_DELAY - PROBE_MIN_DELAY);
         probing = true;
       }
-      const turn = Math.atan2(Math.sin(heading - ARTWORK_HEADING - angle), Math.cos(heading - ARTWORK_HEADING - angle));
-      angle += turn * (1 - Math.exp(-dt / TURN_TIME));
+      angle = turnStep(angle, heading - ARTWORK_HEADING, dt, TURN_TIME, MAX_TURN_RATE);
+      const turn = Math.atan2(Math.sin(heading - ARTWORK_HEADING - angle), Math.cos(heading - ARTWORK_HEADING - angle)); // what is left to turn
       gait += Math.max(-dt / GAIT_EASE, Math.min(dt / GAIT_EASE, (walking ? 1 : 0) - gait));
       // A resting spider that has finished turning and straightening its legs needs no writes at all.
       const settled = !walking && gait === 0 && !probing && Math.abs(turn) < 1e-3;

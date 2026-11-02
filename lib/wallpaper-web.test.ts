@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, emitPulse, footfallThreads, gaitPhase, legPose, planSpawn, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
+import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, besideThread, emitPulse, footfallThreads, gaitPhase, laneSideFor, legPose, planSpawn, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, turnStep, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
 
 const near = (a: Point, b: Point, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
 // Distance from a point to the thread drawn as a 400-piece polyline.
@@ -363,4 +363,52 @@ test("each footfall of the spider waves the nearest thread on both sides of the 
   assert.match(source, /emitPulse\(pool, side\.edge, side\.at, 1, STEP_PEAK, time\)/);
   assert.match(source, /emitPulse\(pool, side\.edge, side\.at, -1, STEP_PEAK, time\)/);
   assert.doesNotMatch(source, /emitPulse\(pool, pose\.edge/);
+});
+
+test("turnStep turns the short way, never faster than maxRate, and never overshoots", () => {
+  // From +170 deg to -170 deg the short way is +20 deg (through pi), not -340.
+  const from = (170 * Math.PI) / 180, to = (-170 * Math.PI) / 180;
+  const step = turnStep(from, to, 1 / 60, 0.22, 3.5);
+  assert.ok(step > from, "turns through pi");
+  assert.ok(step - from <= 3.5 / 60 + 1e-12, "step is capped by maxRate * dt");
+  // A big instant error is capped to maxRate * dt; the cap, not the filter, governs it.
+  assert.ok(Math.abs(turnStep(0, Math.PI, 0.05, 0.001, 3.5) - 3.5 * 0.05) < 1e-12);
+  let angle = 0;
+  const target = 1.3;
+  for (let frame = 0; frame < 600; frame += 1) {
+    const next = turnStep(angle, target, 1 / 60, 0.22, 3.5);
+    assert.ok(next <= target + 1e-12 && next >= angle, "monotone and never past the target");
+    angle = next;
+  }
+  assert.ok(Math.abs(angle - target) < 1e-3, "converges");
+  // A half turn takes no less than pi / maxRate seconds.
+  let seconds = 0;
+  angle = 0;
+  while (Math.abs(angle - Math.PI) > 0.05 && seconds < 10) { angle = turnStep(angle, Math.PI, 1 / 60, 0.22, 3.5); seconds += 1 / 60; }
+  assert.ok(seconds >= (Math.PI - 0.05) / 3.5 - 0.02, `a 180 degree turn took ${seconds}s`);
+});
+
+test("besideThread puts the lane point to the left (1) or right (-1) of the direction", () => {
+  const left = besideThread(100, 100, 0, 1, 30), right = besideThread(100, 100, 0, -1, 30);
+  assert.ok(near(left, [100, 130], 1e-9));
+  assert.ok(near(right, [100, 70], 1e-9));
+});
+
+test("laneSideFor keeps the physical side of the thread when the direction turns by pi", () => {
+  const offset = 30;
+  const start = besideThread(500, 400, 0.4, 1, offset);
+  assert.equal(laneSideFor(start[0], start[1], 500, 400, 0.4, offset), 1);
+  assert.equal(laneSideFor(start[0], start[1], 500, 400, 0.4 + Math.PI, offset), -1, "reversed direction flips the sign, the physical side stays");
+  const other = besideThread(500, 400, 0.4, -1, offset);
+  assert.equal(laneSideFor(other[0], other[1], 500, 400, 0.4, offset), -1);
+});
+
+test("speed and leg swing are unchanged, and the spider only relocates on load and on show", () => {
+  assert.equal(SPIDER_MOTION_RATE, 1.8);
+  const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
+  assert.match(source, /const LEG_SWING_BY_PAIR = \[0, 2\.4, 4\.8, 7\.4, 14\]/);
+  assert.equal(source.match(/relocateVisible\(\)/g)?.length, 2, "initial load and the turnedOn branch only");
+  assert.match(source, /const MAX_TURN_RATE = 3\.5;/);
+  assert.match(source, /turnStep\(angle, /);
+  assert.match(source, /laneSideFor\(x, y, /);
 });

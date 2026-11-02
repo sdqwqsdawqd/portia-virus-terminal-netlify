@@ -307,6 +307,25 @@ export function stepPulses(pool: PulsePool, now: number): void {
   }
 }
 
+// One frame of the body turn: eases toward target by the shortest way (through pi), never faster than maxRate rad/s, never past the target (D-06).
+export function turnStep(angle: number, target: number, dt: number, turnTime: number, maxRate: number): number {
+  const difference = Math.atan2(Math.sin(target - angle), Math.cos(target - angle));
+  const limit = maxRate * dt;
+  return angle + Math.max(-limit, Math.min(limit, difference * (1 - Math.exp(-dt / turnTime))));
+}
+
+// The lane point `offset` units to the left (side 1) or right (side -1) of the travel direction at (px, py).
+export function besideThread(px: number, py: number, direction: number, side: number, offset: number): Point {
+  return [px + Math.cos(direction + Math.PI / 2) * offset * side, py + Math.sin(direction + Math.PI / 2) * offset * side];
+}
+
+// Which side (1 or -1) of a thread point (px, py) walking along `direction` is nearer to the body at (x, y): a new route keeps the side
+// the spider already stands on instead of throwing it across the thread.
+export function laneSideFor(x: number, y: number, px: number, py: number, direction: number, offset: number): 1 | -1 {
+  const left = besideThread(px, py, direction, 1, offset), right = besideThread(px, py, direction, -1, offset);
+  return Math.hypot(left[0] - x, left[1] - y) <= Math.hypot(right[0] - x, right[1] - y) ? 1 : -1;
+}
+
 export type Footfall = { edge: number; at: number } | null;
 
 // Waves run along the threads on both sides of the body (D-08): the nearest thread point within reach strictly left (cross product > 0) and right (< 0) of the heading.
