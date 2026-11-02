@@ -17,6 +17,8 @@ import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuests
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
 import { DesktopIcon, StartPanelButton, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
+import { AppStaleBanner } from "@/components/portia-desktop-states";
+import { appViewState, contentSyncFailed, contentSyncSucceeded, failureFromResponse, type AppFailure, type ContentSync } from "@/lib/app-state";
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-desktop-documents";
 import { FormattedText, LoadingState, prioritizeImage, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
@@ -203,6 +205,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [content, setContent] = useState<PortiaContent>(initialContent);
   // False until the cached copy or the first /api/content answer arrives; until then content windows show a loader, not defaults.
   const [contentReady, setContentReady] = useState(false);
+  // D-05: why the last /api/content poll failed and when data last really arrived (cache savedAt or a good answer). lastGoodRef moves on every good poll without a redraw; the state copies it when a failure starts.
+  const [contentSync, setContentSync] = useState<ContentSync>({ lastGoodAt: null, failure: null, retrying: false });
+  const lastGoodRef = useRef<string | null>(null);
+  const retryBusy = useRef(false);
   const [broadcastTab, setBroadcastTab] = useState<BroadcastTab>("news");
   const [canEdit, setCanEdit] = useState(false);
   const [canManageEditors, setCanManageEditors] = useState(false);
@@ -315,16 +321,20 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   // Served from the CDN cache (s-maxage 300, purged only by deployed saves, never from next dev), so it can be older than this tab's copy; such answers are dropped (uat-03-owner-broadcast-vanishes).
   const fetchContent = useCallback(async () => {
     const savesAtSend = savesStarted.current;
+    // Any answer that is not an authoritative copy of the content is a failure for the stale banner (D-05); a good one, even an unchanged revision, is a success.
+    let failure: AppFailure | null = null;
+    let responded = false;
     try {
       const response = await fetchWithTimeout("/api/content");
-      if (!response.ok) return;
+      responded = true;
+      if (!response.ok) { failure = failureFromResponse(response.status, false); return; }
       const payload = (await response.json()) as ContentResponse;
-      if (!payload.content) return;
+      if (!payload.content) { failure = "unexpected"; return; }
       const fetchedRevision = payload.revision ?? 0;
       // The revision is checked first so an unchanged poll does no work and never hands the editor a new object (SYNC-01).
       if (!acceptFetchedContent(fetchedRevision, knownRevision.current, savesAtSend, savesStarted.current)) return;
       const fetched = normalizePortiaContent(payload.content);
-      if (!fetched) return;
+      if (!fetched) { failure = "unexpected"; return; }
       knownRevision.current = fetchedRevision;
       setContent(fetched);
       setActiveVirusId((current) => fetched.viruses.some((virus) => virus.id === current) ? current : fetched.viruses[0]?.id ?? "");
@@ -339,13 +349,35 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           savedAt: new Date().toISOString(),
         }));
       } catch {}
-    } catch {
-      // The last copy saved on this device keeps the terminal usable while offline.
+    } catch (error) {
+      // The last copy saved on this device keeps the terminal usable while offline; the banner only says so.
+      failure = !responded ? failureFromResponse(null, error instanceof DOMException && error.name === "AbortError") : "unexpected";
     } finally {
+      if (failure === null) {
+        const at = new Date().toISOString();
+        lastGoodRef.current = at;
+        setContentSync((sync) => contentSyncSucceeded(sync, at));
+      } else {
+        const reason = failure;
+        setContentSync((sync) => contentSyncFailed(sync, reason, lastGoodRef.current));
+      }
       // Even a failed answer ends the wait: what is on screen then is all there is.
       setContentReady(true);
     }
   }, []);
+
+  // Never clears what is shown: a failed retry leaves the data and the banner time as they were.
+  const retryContent = useCallback(async () => {
+    if (retryBusy.current) return;
+    retryBusy.current = true;
+    setContentSync((sync) => ({ ...sync, retrying: true }));
+    try {
+      await fetchContent();
+    } finally {
+      retryBusy.current = false;
+      setContentSync((sync) => ({ ...sync, retrying: false }));
+    }
+  }, [fetchContent]);
 
   const fetchAccess = useCallback(async () => {
     try {
@@ -413,6 +445,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             setActiveVirusId((current) => cachedContent.viruses.some((virus) => virus.id === current) ? current : cachedContent.viruses[0]?.id ?? "");
             setSelectedInfoId((current) => findInfo(cachedContent.infoSections, current) ? current : cachedContent.infoSections[0]?.id ?? "");
             setGuideCardId((current) => findGuide(cachedContent.guideSections, current)?.card ? current : "");
+            const savedAt = (parsed as { savedAt?: unknown }).savedAt;
+            // A savedAt that does not parse is ignored (T-19-01): no time is better than "Invalid Date".
+            if (!lastGoodRef.current && typeof savedAt === "string" && !Number.isNaN(new Date(savedAt).getTime())) lastGoodRef.current = savedAt;
             setContentReady(true);
           }
         }
@@ -991,6 +1026,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
   const filteredViruses = content.viruses.filter((virus) => escapeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(escapeSearch(virusQuery)));
   const virusListbox = contentReady && filteredViruses.length > 0;
+  // D-05: the dossier area shows the stale strip only while last-good records are on screen; the other apps join in 19-08.
+  const archiveStale = appViewState({ denied: false, ready: contentReady, hasData: contentSync.lastGoodAt !== null, count: content.viruses.length, failure: contentSync.failure }) === "stale";
   const selectedInfoEntry = findInfo(content.infoSections, selectedInfoId)
     ?? (content.infoSections[0] ? { section: content.infoSections[0], subsection: null } : null);
   const selectedInfo = selectedInfoEntry?.section;
@@ -1252,6 +1289,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <div className="browser-footer"><span><i className="status-dot" />СИНХРОНИЗИРОВАНО</span><span>РЕВИЗИЯ {String(revision).padStart(2, "0")}</span></div>
               </aside>
               <article className="record-view" aria-live="polite">
+                {archiveStale && contentSync.lastGoodAt !== null && <AppStaleBanner lastGoodAt={contentSync.lastGoodAt} retrying={contentSync.retrying} onRetry={() => void retryContent()} />}
                 {!contentReady ? <LoadingState label="Загрузка досье…" /> : activeVirus ? openLog ? <ScientistDocument key={openLog} virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} /> : <div className="record-empty empty-state"><PortiaIllustration name="dish" /><strong>В базе пока нет вирусов</strong></div>}
               </article>
             </div>
