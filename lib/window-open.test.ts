@@ -199,3 +199,21 @@ test("re-opening a visible window nods it only without the qualification lock, a
   assert.ok(duration > 0 && duration <= 240);
   assert.equal(source.split("data-window-app={app}").length - 1, 1);
 });
+
+test("a locked qualification window cannot be dragged, resized, maximised, closed or minimised (STAB-DESK-03, T-18-07)", () => {
+  const exitGuard = 'if (qualificationLocked && appId === "promotion") return;';
+  assert.ok(bodyAfter('const requestExit = (appId: AppId, kind: "close" | "minimize", force = false) => {').trimStart().startsWith(exitGuard));
+  assert.ok(bodyAfter("const toggleMaximize = (appId: AppId) => {").trimStart().startsWith(exitGuard));
+  const gate = 'if (locked || state.maximized || window.matchMedia("(max-width: 900px)").matches) return;';
+  assert.ok(bodyAfter("const beginDrag = (event: React.PointerEvent<HTMLDivElement>) => {").trimStart().startsWith(gate));
+  assert.ok(bodyAfter("const beginResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLSpanElement>) => {").trimStart().startsWith(gate));
+  assert.ok(source.includes("{!locked && resizeEdges.map("));
+  assert.ok(source.includes("onDoubleClick={(event) => { if (!locked &&"));
+  assert.ok(source.includes("{!locked && <div className=\"window-controls\">"));
+});
+
+test("a resize of the browser refits every window that has a geometry", () => {
+  const refit = source.slice(source.indexOf("const refit = () => {"), source.indexOf('window.addEventListener("resize", refit)'));
+  assert.ok(refit.includes("fitGeometry(geometry, bounds, minimumWindowSize(id))"));
+  assert.ok(refit.includes("Object.keys(state)"));
+});

@@ -35,17 +35,14 @@ export function resizeGeometry(start: WindowGeometry, edge: ResizeEdge, dx: numb
   return { x, y, width, height };
 }
 
-/** Moves a window by its title bar; horizontal bounds keep the full fitted frame inside equal insets. */
+/** Moves a window by its title bar; symmetric 8px inset on all four sides, so the title bar is always reachable. */
 export function dragGeometry(start: WindowGeometry, dx: number, dy: number, bounds: Bounds): WindowGeometry {
-  const availableWidth = Math.max(0, bounds.width - margin * 2);
-  const width = Math.min(start.width, availableWidth);
-  const horizontalRoom = bounds.width >= margin * 2;
-  const left = horizontalRoom ? margin : 0;
-  const right = horizontalRoom ? bounds.width - width - margin : 0;
-  return {
-    x: Math.min(Math.max(left, start.x + dx), Math.max(left, right)),
-    y: Math.min(Math.max(0, start.y + dy), Math.max(0, bounds.height - 46)),
-    width,
-    height: start.height,
+  const width = Math.min(start.width, Math.max(0, bounds.width - margin * 2));
+  const height = Math.min(start.height, Math.max(0, bounds.height - margin * 2));
+  const clamp = (value: number, size: number, room: number) => {
+    const low = room >= margin * 2 ? margin : 0;
+    const high = room >= margin * 2 ? room - size - margin : 0;
+    return Math.min(Math.max(low, value), Math.max(low, high));
   };
+  return { x: clamp(start.x + dx, width, bounds.width), y: clamp(start.y + dy, height, bounds.height), width, height };
 }
