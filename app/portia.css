@@ -1365,23 +1365,20 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .boot-core > .portia-mark { width: 92px; height: 92px; }
 }
 
-/* Motion switch: html[data-motion] is "reduce" or "full", resolved from «Анимации» (lib/accent-boot.ts).
-   «Выключены» is a soft mode: keyframe motion stops, but the short authored transitions (colour, opacity, small hover
-   lifts, all under 400ms) stay so the interface does not snap. The wallpaper stands still (rule below). */
-html[data-motion="reduce"], html[data-motion="reduce"] *, html[data-motion="reduce"] *::before, html[data-motion="reduce"] *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
-/* «Анимации: Выключены» shows every wallpaper still and fully drawn (D-07). */
-html[data-motion="reduce"] :is(.desktop-wallpaper, .desktop-wallpaper *, .wallpaper-spider) { animation: none !important; }
-html[data-motion="reduce"] .wallpaper-spider,
+/* Motion switch: html[data-motion] is "full", "reduced" or "off", resolved from «Анимации» (lib/accent-boot.ts); the OS setting is not read (D-10).
+   «Уменьшены» is the soft mode: keyframe motion stops, but the short authored transitions (colour, opacity, small hover
+   lifts, all under 400ms) stay so the interface does not snap. «Выключены» makes everything static. */
+html[data-motion="reduced"], html[data-motion="reduced"] *, html[data-motion="reduced"] *::before, html[data-motion="reduced"] *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+/* Animations with a fill-mode jump to their last frame, so a drawn web and visible layers do not vanish. */
+html[data-motion="off"], html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="off"] *::after { scroll-behavior: auto !important; animation-duration: 0s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; transition-delay: 0s !important; }
+/* «Анимации: Уменьшены / Выключены» show every wallpaper still and fully drawn (D-07). */
+html:is([data-motion="reduced"], [data-motion="off"]) :is(.desktop-wallpaper, .desktop-wallpaper *, .wallpaper-spider) { animation: none !important; }
+html:is([data-motion="reduced"], [data-motion="off"]) .wallpaper-spider,
 html[data-spider="off"] .wallpaper-spider { display: none; }
-html[data-motion="reduce"] .wallpaper-web path { stroke-dashoffset: 0; }
-html[data-motion="reduce"] .wallpaper-web-dew { opacity: 1; }
+html:is([data-motion="reduced"], [data-motion="off"]) .wallpaper-web path { stroke-dashoffset: 0; }
+html:is([data-motion="reduced"], [data-motion="off"]) .wallpaper-web-dew { opacity: 1; }
 html[data-spider="off"] .wallpaper-web-dew { animation: none !important; opacity: 0 !important; }
 html[data-spider="off"] .wallpaper-web-pulses { opacity: 0; }
-/* Safety net if the head script never ran (blocked by an extension or a future CSP): data-motion is missing,
-   so the system preference alone decides. Only selectors scoped to html:not([data-motion]) may live here. */
-@media (prefers-reduced-motion: reduce) {
-  html:not([data-motion]), html:not([data-motion]) *, html:not([data-motion]) *::before, html:not([data-motion]) *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
-}
 
 .document-window { width: min(1180px, calc(100% - 170px)); height: min(760px, calc(100% - 42px)); }
 .document-app { position: relative; height: calc(100% - 46px); background: #f6f7f6; }

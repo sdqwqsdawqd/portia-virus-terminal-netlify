@@ -30,13 +30,13 @@ test("[STAB-BASE-02] visitor settings persist across a real reload", async ({ pa
   await desktop.openApp("Настройки");
 
   await desktop.chooseSetting("Анимации", "Выключены");
-  await expect(page.locator("html")).toHaveAttribute("data-motion", "reduce");
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "off");
 
   await page.reload();
   await desktop.desktop.waitFor();
   await desktop.openApp("Настройки");
   await expect(desktop.setting("Анимации", "Выключены")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("html")).toHaveAttribute("data-motion", "reduce");
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "off");
 });
 
 test("[STAB-BASE-02] Promotion exposes a safe participant identity gate", async ({ page }) => {

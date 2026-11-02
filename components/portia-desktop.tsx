@@ -669,10 +669,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     try { window.localStorage.setItem(desktopSettingsStorageKey, JSON.stringify(desktopSettings)); } catch {}
   }, [desktopSettings, desktopSettingsLoaded]);
 
-  // Same rule as the head script: animations are on unless the visitor turned them off.
+  // Same rule as the head script: full unless the visitor chose reduced or off.
   useEffect(() => {
     if (!desktopSettingsLoaded) return;
-    document.documentElement.dataset.motion = desktopSettings.motion === "off" ? "reduce" : "full";
+    document.documentElement.dataset.motion = desktopSettings.motion === "off" ? "off" : desktopSettings.motion === "reduced" ? "reduced" : "full";
   }, [desktopSettings, desktopSettingsLoaded]);
 
   const showSettingsSaved = useCallback(() => {
@@ -896,8 +896,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         .sort((a, b) => windows[b].z - windows[a].z)[0];
       setActiveApp(fallback ?? "archive");
     }
-    // Reduced motion still gets a short fade, so the window visibly leaves instead of vanishing.
-    const duration = document.documentElement.dataset.motion === "reduce" ? WINDOW_FADE_OUT_MS : kind === "close" ? WINDOW_CLOSE_MS : WINDOW_MINIMIZE_MS;
+    // «Уменьшены» keeps a short fade so the window visibly leaves; «Выключены» removes it at once (the timer keeps one exit path).
+    const motion = document.documentElement.dataset.motion;
+    const duration = motion === "off" ? 0 : motion === "reduced" ? WINDOW_FADE_OUT_MS : kind === "close" ? WINDOW_CLOSE_MS : WINDOW_MINIMIZE_MS;
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], exiting: kind } }));
     // A timer, not animationend: in a hidden tab the animation event may never fire.
     exitTimers.current[appId] = window.setTimeout(() => {
@@ -1410,7 +1411,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               </SettingGroup>
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
-              <SettingGroup title="Анимации" values={[['on','Включены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
+              <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)} />
               <SettingGroup title="Паук" values={[['on','Показывать'],['off','Скрыть']]} current={desktopSettings.spider} onSelect={(value) => updateDesktopSetting("spider", value)} />
               <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2><p>{canEdit ? "Редактируйте вирусы, информацию, сводку, поиск и советы помощника." : "Войдите в разрешённый аккаунт редактора."}</p></div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>

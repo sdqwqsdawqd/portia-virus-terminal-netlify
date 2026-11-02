@@ -28,8 +28,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // SSR default for data-motion is full: without the head script (extension, CSP) the interface stays in «Включены» (D-10).
   return (
-    <html lang="ru" className={`${golos.variable} ${plexSerif.variable} ${plexMono.variable}`} suppressHydrationWarning>
+    <html lang="ru" data-motion="full" className={`${golos.variable} ${plexSerif.variable} ${plexMono.variable}`} suppressHydrationWarning>
       <head>
         <Script id="portia-accent-boot" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: accentBootScript }} />
       </head>
