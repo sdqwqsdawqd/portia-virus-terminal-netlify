@@ -264,11 +264,11 @@ Plans:
   10. Hero/media загружается с корректным приоритетом, offscreen collections lazy, immutable media кэшируется без повторного скачивания, а смена записи, ошибка сети или blocked host не дают stale image, app crash или infinite spinner.
 
 **Acceptance gate**: Staging races/direct denials и полная owner PC/phone UAT «Повышения» обязательны; архивные отметки Phase 14 и preflight не закрывают фазу. Per-app desktop/phone matrix, authenticated editor journeys, search click-through и upload/cache/network evidence должны быть записаны до перехода к финальному CSP.
-**Plans:** 1/14 plans executed
+**Plans:** 2/14 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 19-01-PLAN.md — сквозной срез stale-состояния (D-05) и вердикты владельца по [PROPOSED] и допущениям фазы (STAB-DESK-08, STAB-APP-10)
+- [x] 19-01-PLAN.md — сквозной срез stale-состояния (D-05) и вердикты владельца по [PROPOSED] и допущениям фазы (STAB-DESK-08, STAB-APP-10)
 - [x] 19-02-PLAN.md — upload по реальным байтам без потери черновика и единый URL-контракт (STAB-MEDIA-01, -02, -04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -334,7 +334,7 @@ Plans:
 | 16. Канонический Supabase staging и SQL-истина | 14/14 | Complete    | 2026-11-01 |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 8/8 | Complete    | 2026-11-01 |
 | 18. Рабочий стол, окна и живые анимации | 7/7 | In Progress | - |
-| 19. «Повышение», приложения, редактор, поиск и медиа | 1/14 | In Progress | - |
+| 19. «Повышение», приложения, редактор, поиск и медиа | 2/14 | In Progress | - |
 | 20. Security, accessibility и приёмка релиза | 0/TBD | Not started | - |
 
 ## Coverage
