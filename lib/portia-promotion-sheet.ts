@@ -5,6 +5,7 @@ import {
   type PromotionRosterEntry,
   type PromotionTitleId,
 } from "./portia-promotion.ts";
+import { loadStagingRoster, stagingRosterPath } from "./portia-promotion-staging-roster.ts";
 
 const sheetCsvUrl = "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/gviz/tq?tqx=out:csv&sheet=Portia";
 const accessCsvUrl = `${sheetCsvUrl}&range=B2:B35`;
@@ -139,6 +140,8 @@ async function loadSheetRows(url: string, fetchImpl: typeof fetch) {
 }
 
 export async function loadPromotionAccessRoster(fetchImpl: typeof fetch = fetch): Promise<PromotionAccessResult> {
+  const staging = stagingRosterPath(process.env);
+  if (staging) return (await loadStagingRoster(staging)).access;
   const result = await loadSheetRows(accessCsvUrl, fetchImpl);
   if (result.status !== "ok") return result;
   try {
@@ -150,6 +153,8 @@ export async function loadPromotionAccessRoster(fetchImpl: typeof fetch = fetch)
 
 /** Reads only the promotion range. A failure is never represented as an empty healthy roster. */
 export async function loadPromotionRoster(fetchImpl: typeof fetch = fetch): Promise<PromotionRosterResult> {
+  const staging = stagingRosterPath(process.env);
+  if (staging) return (await loadStagingRoster(staging)).promotion;
   const result = await loadSheetRows(promotionCsvUrl, fetchImpl);
   if (result.status !== "ok") return result;
   try {
