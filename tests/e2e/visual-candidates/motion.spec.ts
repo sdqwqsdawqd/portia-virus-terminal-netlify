@@ -31,19 +31,37 @@ test("[STAB-BASE-03] capture shortcut start, key, interruption, end and rest fra
     animations: "allow",
   });
 
+  // Approved cycle (18-MOTION-APPROVAL item 1): 560ms action, whole cycle <= 700ms (shortcutAnimationMs in portia-desktop-shortcuts.tsx).
+  const cycleMs = 700;
+  const keyMs = 280; // half of the 560ms action
+  const boxes: Array<{ state: string; box: Awaited<ReturnType<typeof shortcut.boundingBox>> }> = [];
+  const noteBox = async (state: string) => boxes.push({ state, box: await shortcut.boundingBox() });
+
   await shortcut.hover();
   await expect(shortcut).toHaveClass(/is-icon-animating/);
-  await capture("motion-shortcut-start", "shortcut animation start; fixed clock 0ms");
-  await page.clock.runFor(260);
-  await capture("motion-shortcut-key", "shortcut animation key frame; fixed clock 260ms");
+  await noteBox("start");
+  await capture("motion-shortcut-start", "unified cycle 700ms; pointer exit does not cut the cycle; start at clock 0ms");
+  await page.clock.runFor(keyMs);
+  await noteBox("key");
+  await capture("motion-shortcut-key", `unified cycle ${cycleMs}ms; pointer exit does not cut the cycle; key frame at clock ${keyMs}ms`);
   await page.mouse.move(720, 450);
   await expect(shortcut).toHaveClass(/is-icon-animating/);
-  await capture("motion-shortcut-interruption", "pointer exited at 260ms; animation continues without moving the shortcut");
-  await page.clock.runFor(500);
+  await noteBox("interruption");
+  await capture("motion-shortcut-interruption", `unified cycle ${cycleMs}ms; pointer exit does not cut the cycle; pointer left at ${keyMs}ms, cycle continues`);
+  await page.clock.runFor(cycleMs + 60 - keyMs);
   await expect(shortcut).not.toHaveClass(/is-icon-animating/);
-  await capture("motion-shortcut-end", "shortcut animation completed at 760ms; static geometry restored");
+  await noteBox("end");
+  // animations "allow": the default "disabled" would fast-forward the cycle and hide a missing end == rest.
+  const endShot = await shortcut.screenshot({ animations: "allow" });
+  await capture("motion-shortcut-end", `unified cycle ${cycleMs}ms; pointer exit does not cut the cycle; end at clock ${cycleMs + 60}ms, class removed`);
   await page.clock.runFor(1_000);
-  await capture("motion-shortcut-rest", "shortcut stable rest frame after completion");
+  await noteBox("rest");
+  const restShot = await shortcut.screenshot({ animations: "allow" });
+  await capture("motion-shortcut-rest", "unified cycle 700ms; pointer exit does not cut the cycle; stable rest frame");
+
+  // D-03: the shortcut frame never moves; D-02: the last frame is the rest frame, byte for byte.
+  for (const { state, box } of boxes) expect(box, `bbox ${state}`).toEqual(boxes[0].box);
+  expect(endShot.equals(restShot), "end frame equals rest frame").toBe(true);
 });
 
 test("[STAB-BASE-03] capture semantic spider, web and Vivian states", async ({ page, browser, determinism }, testInfo) => {
