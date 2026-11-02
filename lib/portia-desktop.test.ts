@@ -294,7 +294,7 @@ test("the five refreshed shortcut icons animate semantic parts except in «Вы�
     assert.ok(!styles.includes(`@keyframes ${retired}`), `retired animation ${retired} is still shipped`);
   }
   // Explicitly excluded by the owner: employees, charter, sheet and trash retain their established gestures.
-  for (const kept of ["icon-hop", "icon-lift", "icon-stamp", "icon-write-16", "icon-lid"]) assert.ok(styles.includes(`@keyframes ${kept}`), kept);
+  for (const kept of ["icon-hop", "icon-lift", "icon-stamp", "icon-write-32", "icon-lid"]) assert.ok(styles.includes(`@keyframes ${kept}`), kept);
 });
 
 test("the virus shortcut uses a contained diagnostic scan and returns to its exact resting artwork", () => {
@@ -401,6 +401,57 @@ const shortcutIcons = ["search", "virus", "employees", "broadcasts", "info", "gu
 test("shortcut cycle: all 12 icons follow the approved system and end on the resting frame", () => {
   for (const icon of shortcutIcons) assertIconCycle(icon);
   assert.deepEqual(iconCycles("settings").map((cycle) => cycle.delay).sort((a, b) => a - b), [0, 0, 45, 90]);
+});
+
+// Frames of one @keyframes body as { at: 0..100, declarations }, "from"/"to" read as 0/100.
+function keyframeFrames(name: string) {
+  return [...keyframesBody(name).matchAll(/([^{}]+)\{([^}]*)\}/g)].flatMap((match) =>
+    match[1].split(",").map((selector) => selector.trim()).map((selector) => ({ at: selector === "from" ? 0 : selector === "to" ? 100 : parseFloat(selector), declarations: match[2] })));
+}
+const cycleKeyframeNames = () => [...new Set(shortcutIcons.flatMap((icon) => iconCycles(icon).map((cycle) => cycle.name)))];
+
+test("shortcut cycle: the segment into the resting frame runs on the rule's --ease-out, so the icon settles instead of clicking into place (quick 261102-d7r)", () => {
+  for (const name of cycleKeyframeNames()) {
+    const frames = keyframeFrames(name);
+    const inner = frames.filter((frame) => frame.at > 0 && frame.at < 100).sort((a, b) => b.at - a.at);
+    if (inner.length) assert.ok(frames.some((frame) => frame.at === 100), `${name}: has intermediate frames but no explicit 100% / to`);
+    const last = [...frames.filter((frame) => frame.at < 100)].sort((a, b) => b.at - a.at)[0];
+    assert.ok(last, `${name}: no frames`);
+    assert.ok(!last.declarations.includes("animation-timing-function: var(--ease-in)"), `${name}: the last frame before the rest (${last.at}%) is on --ease-in`);
+  }
+});
+
+test("shortcut cycle: write-on lines are drawn in full before the class is removed (quick 261102-d7r)", () => {
+  // stroke-dasharray is discrete: inside keyframes it flips mid-cycle instead of animating.
+  for (const name of cycleKeyframeNames()) assert.doesNotMatch(keyframesBody(name), /stroke-dasharray/, `${name}: dasharray inside keyframes`);
+  // non-scaling-stroke makes dashes count in screen px; the largest shortcut symbol sets the worst case.
+  const widths = [...styles.matchAll(/\.desktop-icon-symbol\s*\{[^}]*?\bwidth:\s*(\d+)px/g)].map((match) => Number(match[1]));
+  const screenPerUnit = (Math.max(...widths) * 0.58) / 24;
+  assert.ok(Math.max(...widths) >= 62);
+  // Longest sub-path of the animated element in viewBox units (components/portia-icons.tsx): sheet `M4 9h16M4 14h16M10 9v11`, editor `v16`, info `h7`.
+  const longest: Record<string, number> = { sheet: 16, editor: 16, info: 7 };
+  for (const [icon, units] of Object.entries(longest)) {
+    const dashed = iconCycles(icon).filter((cycle) => /stroke-dasharray:\s*\d+/.test(cycle.line));
+    assert.ok(dashed.length > 0, `${icon}: no dashed write-on rule`);
+    for (const cycle of dashed) {
+      const length = Number(/stroke-dasharray:\s*(\d+)/.exec(cycle.line)![1]);
+      assert.ok(length >= units && length >= units * screenPerUnit, `${icon}: dasharray ${length} does not cover ${units} units / ${(units * screenPerUnit).toFixed(1)}px`);
+      const start = keyframeFrames(cycle.name).find((frame) => frame.at === 0);
+      assert.match(start?.declarations ?? "", new RegExp(`stroke-dashoffset:\\s*${length}\\b`), `${cycle.name}: starts fully undrawn`);
+      assert.match(keyframeFrames(cycle.name).find((frame) => frame.at === 100)?.declarations ?? "", /stroke-dashoffset:\s*0/, `${cycle.name}: ends fully drawn`);
+    }
+  }
+});
+
+test("«База вирусов» is about 0.86 of the other shortcut icons on the desktop and in «Пуск» (size only, artwork untouched)", () => {
+  const desktop = /\.desktop-icon-symbol\[data-icon="virus"\] svg\s*\{([^}]*)\}/.exec(styles)?.[1] ?? "";
+  const start = /\.start-panel-icon\[data-icon="virus"\] svg\s*\{([^}]*)\}/.exec(styles)?.[1] ?? "";
+  for (const side of ["width", "height"]) {
+    const percent = Number(new RegExp(`${side}:\\s*([\\d.]+)%`).exec(desktop)?.[1]);
+    const pixels = Number(new RegExp(`${side}:\\s*([\\d.]+)px`).exec(start)?.[1]);
+    assert.ok(percent >= 46 && percent <= 52, `desktop ${side} ${percent}% (others 58%)`);
+    assert.ok(pixels >= 15 && pixels <= 18, `start panel ${side} ${pixels}px (others 19px)`);
+  }
 });
 
 test("shortcut animation timer outlasts the longest cycle and does not depend on animationend", () => {
