@@ -80,7 +80,7 @@ test("bank commands accept only canonical ranks, UUID-scoped items, and bounded 
 
 test("bank count limits report the exact authoritative pool shortage", () => {
   assert.equal(taskBankLimitError(2, 2, true), null);
-  assert.equal(taskBankLimitError(3, 2, true), "Нужно 3, активно 2.");
+  assert.equal(taskBankLimitError(3, 2, true), "В банке недостаточно активных вопросов: нужно 3, есть 2.");
   assert.equal(taskBankLimitError(1, 0, false), null, "initial bank creation must remain possible");
 
   const pools = { single: 2, multiple: 1, freeText: 0 };
@@ -167,4 +167,46 @@ test("bank route settles commands only with an authoritative state and returns p
   assert.match(route, /Response\.json\(\{ preview, expiresAt: new Date\(expiresAt\)\.toISOString\(\), version: bank\.version, items \}/);
   assert.ok(route.includes("taskBankLimitError"));
   assert.ok(route.includes("qualificationBankLimitError"));
+});
+
+test("task bank blocks exactly one short of required, including empty and all-disabled banks", () => {
+  assert.equal(taskBankLimitError(3, 3, true), null);
+  assert.equal(taskBankLimitError(3, 2, true), "В банке недостаточно активных вопросов: нужно 3, есть 2.");
+  const disabledOnly = [{ id: "a", text: "A", active: false, sortOrder: 0, updatedAt: "2026-10-27T00:00:00Z" }];
+  assert.equal(taskBankLimitError(1, 0, true), "В банке недостаточно активных вопросов: нужно 1, есть 0.");
+  assert.throws(() => selectTaskPreview(disabledOnly, 1, { random: () => 0 }), /insufficient/i);
+  assert.throws(() => selectTaskPreview([], 1, { random: () => 0 }), /insufficient/i);
+});
+
+test("task preview order is stable: sortOrder, then id, with no duplicates", () => {
+  const stamp = "2026-10-27T00:00:00Z";
+  const items = [
+    { id: "z", text: "Z", active: true, sortOrder: 1, updatedAt: stamp },
+    { id: "b", text: "B", active: true, sortOrder: 1, updatedAt: stamp },
+    { id: "m", text: "M", active: true, sortOrder: 0, updatedAt: stamp },
+    { id: "off", text: "Off", active: false, sortOrder: 0, updatedAt: stamp },
+  ];
+  for (const input of [items, [...items].reverse()]) {
+    assert.deepEqual(selectTaskPreview(input, 3, { random: () => 0 }).map((item) => item.id), ["m", "b", "z"]);
+    assert.deepEqual(selectTaskPreview(input, 2, { random: () => 0 }).map((item) => item.id), ["m", "b"]);
+  }
+  const picked = selectTaskPreview(items, 3, { random: () => 0.99 }).map((item) => item.id);
+  assert.equal(new Set(picked).size, picked.length);
+  assert.deepEqual(picked, ["m", "b", "z"]);
+});
+
+test("qualification quotas of zero need no questions of that type and all-zero quotas block", () => {
+  const pools = { single: 1, multiple: 0, freeText: 0 };
+  assert.equal(qualificationBankLimitError({ single: 1, multiple: 0, freeText: 0 }, pools, true), null);
+  assert.ok(qualificationBankLimitError({ single: 0, multiple: 0, freeText: 0 }, pools, true));
+  assert.deepEqual(selectQualificationPreview(questions, { single: 0, multiple: 0, freeText: 1 }, { random: () => 0 }).map((item) => item.id), ["f1"]);
+});
+
+test("question text length counts code points like Postgres length()", () => {
+  const draft = (text: string) => validateQuestionDraft({ type: "free-text", text, answer: "ok" });
+  assert.ok(draft("😀".repeat(4000)));
+  assert.equal(draft("😀".repeat(4001)), null);
+  assert.ok(draft("a".repeat(4000)));
+  assert.equal(draft("a".repeat(4001)), null);
+  assert.equal(validateQuestionDraft({ type: "single", text: "Q", options: ["😀".repeat(1001), "B"], answer: 0 }), null);
 });

@@ -51,7 +51,7 @@ test("owner/admin can reset a binding by exact nickname while selected reset kee
 
 test("bank workspace exposes preview replacement and immutable confirmation", () => {
   const editors = ordinary + qualification;
-  for (const label of ["ПЕРЕСОБРАТЬ", "ЗАМЕНИТЬ", "ПОДТВЕРДИТЬ НАБОР", "Недостаточно активных"]) assert.ok(editors.includes(label), label);
+  for (const label of ["ПЕРЕСОБРАТЬ", "ЗАМЕНИТЬ", "ПОДТВЕРДИТЬ НАБОР"]) assert.ok(editors.includes(label), label);
   assert.ok(main.includes("PortiaPromotionOrdinaryEditor"));
   assert.ok(main.includes("PortiaPromotionQualificationEditor"));
   assert.ok(ordinary.includes("save-task-item"));
@@ -226,4 +226,40 @@ test("confirmations name the action being declined and never use a generic cance
   for (const label of ["Удалить запрос", "Не удалять", "Снять claim", "Не снимать"]) assert.ok(main.includes(label), label);
   for (const label of ["Удалить вопрос", "Оставить вопрос", "Вопрос будет удалён из банка. Это нельзя отменить."]) assert.ok(qualification.includes(label), label);
   assert.equal([...(all.match(/requestConfirm\(\{|setConfirm\(\{|onConfirm\(\{/g) ?? [])].length, [...(all.match(/cancelLabel: "/g) ?? [])].length);
+});
+
+test("bank editors explain a blocked confirmation next to an aria-disabled button", () => {
+  for (const editor of [ordinary, qualification]) {
+    assert.ok(editor.includes('className="promotion-bank-reason"'));
+    assert.ok(editor.includes('id="promotion-bank-reason"'));
+    assert.ok(editor.includes('aria-describedby={disabledReason ? "promotion-bank-reason" : undefined}'));
+    assert.ok(editor.includes("aria-disabled={Boolean(disabledReason) || busy}"));
+    assert.doesNotMatch(editor, /title=\{disabledReason\}/);
+  }
+  assert.doesNotMatch(ordinary, /Недостаточно активных заданий\./);
+});
+
+test("any bank mutation shows the stale-preview banner until the set is rebuilt", () => {
+  for (const editor of [ordinary, qualification]) {
+    assert.ok(editor.includes("Набор изменился — пересоберите превью"));
+    assert.ok(editor.includes("previewStale"));
+    assert.ok(editor.includes("setPreviewStale(true)"));
+    assert.ok(editor.includes("setPreviewStale(false)"));
+  }
+});
+
+test("a save response never overwrites newer edits of counts and quotas", () => {
+  assert.ok(ordinary.includes("submittedCount"));
+  assert.ok(ordinary.includes("current[transition.targetTitleId] === submittedCount"));
+  assert.ok(qualification.includes("submittedQuotas"));
+  assert.ok(qualification.includes("JSON.stringify(current[transition.transitionId]) === JSON.stringify(submittedQuotas)"));
+});
+
+test("a failed save keeps the typed draft and reports the network failure in Russian", () => {
+  assert.ok(main.includes("Нет связи с сервером. Черновик сохранён в форме — повторите попытку."));
+  for (const editor of [ordinary, qualification]) {
+    const afterFailure = editor.slice(editor.indexOf("if (!result?.state)"), editor.indexOf("setPreview(null);"));
+    assert.ok(afterFailure.includes('phase: "error"'));
+    assert.ok(afterFailure.includes("return null"));
+  }
 });
