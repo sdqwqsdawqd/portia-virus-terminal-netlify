@@ -507,7 +507,9 @@ test("the fatal panel and the skeleton are exported once, with one retry label a
   assert.equal(count(statesSource, "Повторить загрузку"), 1);
   assert.ok(statesSource.includes("Загружаем…"));
   // role="alert" sits on the heading and body, not on the button, so a retry never re-announces the panel.
-  assert.equal(count(statesSource, 'role="alert"'), 1);
+  const fatal = statesSource.slice(statesSource.indexOf("export function AppFatalPanel"), statesSource.indexOf("export function AppDeniedPanel"));
+  assert.equal(count(fatal, 'role="alert"'), 1);
+  assert.ok(fatal.indexOf('role="alert"') < fatal.indexOf("<button") && fatal.indexOf("</div>") < fatal.indexOf("<button"), "the alert closes before the retry button");
   assert.match(statesSource, /aria-busy="true"/);
   assert.ok(statesSource.includes("failureCopy") && statesSource.includes("iframeFailureCopy"));
 });

@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { findGuide, portiaTextKey, type GuideBlock, type GuideSection, type PortiaContent } from "@/lib/portia-content";
 import { PortiaIllustration } from "@/components/portia-icons";
-import { emptyCopy } from "@/lib/app-state";
-import { FormattedText, LoadingState } from "@/components/portia-desktop-dossier";
+import { emptyCopy, iframeLoadTimeoutMs } from "@/lib/app-state";
+import { FormattedText } from "@/components/portia-desktop-dossier";
+import { AppFatalPanel, AppSkeleton } from "@/components/portia-desktop-states";
 
 // D-19: one permission set for every third-party frame. Scripts and same-origin let the viewers run, popups escape the sandbox so links open as normal tabs;
 // no top-navigation flag, so a frame can never move the PORTIA tab. If a device needs more, add only that one flag.
@@ -17,7 +18,8 @@ const zoomModifier = (event: { ctrlKey: boolean; metaKey: boolean }) => event.ct
 export function EmbeddedDocument({ src, external, title }: { src: string; external: string; title: string }) {
   const [zoom, setZoom] = useState(1);
   const [ctrlHeld, setCtrlHeld] = useState(false);
-  const [frameLoading, setFrameLoading] = useState(true);
+  const [frameState, setFrameState] = useState<"loading" | "loaded" | "failed">("loading");
+  const [frameKey, setFrameKey] = useState(0);
   const frameRef = useRef<HTMLDivElement>(null);
   const step = useCallback((direction: 1 | -1) => setZoom((current) => {
     const index = zoomSteps.findIndex((value) => value >= current - 0.001);
@@ -42,6 +44,13 @@ export function EmbeddedDocument({ src, external, title }: { src: string; extern
     };
   }, []);
 
+  // A cross-origin frame never reports a load error, so no onLoad within iframeLoadTimeoutMs counts as failed; a late onLoad still wins (STAB-APP-06).
+  useEffect(() => {
+    if (frameState !== "loading") return;
+    const timer = window.setTimeout(() => setFrameState("failed"), iframeLoadTimeoutMs);
+    return () => window.clearTimeout(timer);
+  }, [frameState, frameKey]);
+
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
@@ -57,8 +66,10 @@ export function EmbeddedDocument({ src, external, title }: { src: string; extern
 
   return <div className="document-app" ref={frameRef}>
     <div className="document-app-viewport">
-      <iframe src={src} title={title} loading="lazy" sandbox={embedSandbox} referrerPolicy="no-referrer" onLoad={() => setFrameLoading(false)} style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})` }} />
-      {frameLoading && <LoadingState label="Загрузка документа…" />}
+      <iframe key={frameKey} src={src} title={title} loading="lazy" sandbox={embedSandbox} referrerPolicy="no-referrer" onLoad={() => setFrameState("loaded")} style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})` }} />
+      {frameState === "loading" && <AppSkeleton shape="document" />}
+      {/* Retry remounts the frame (new key) and goes back to the skeleton; the external link stays as the way out. */}
+      {frameState === "failed" && <AppFatalPanel failure="iframe" illustration="microscope" extra={<a className="app-state-action" href={external} target="_blank" rel="noreferrer">Открыть отдельно</a>} retrying={false} onRetry={() => { setFrameKey((key) => key + 1); setFrameState("loading"); }} />}
       {/* A lost keyup (Ctrl+key shortcut that moved focus, a context menu) clears on the first move or press instead of leaving the document blocked (01-WR-03). */}
       {ctrlHeld && <div className="document-app-zoom-layer" aria-hidden="true" onPointerMove={(event) => { if (!zoomModifier(event)) setCtrlHeld(false); }} onPointerDown={(event) => { if (!zoomModifier(event)) setCtrlHeld(false); }} />}
     </div>

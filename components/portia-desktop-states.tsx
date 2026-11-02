@@ -30,6 +30,16 @@ export function AppFatalPanel({ failure, retrying, onRetry, illustration, extra 
   );
 }
 
+// D-07: nothing but the fixed heading (and one optional fixed line from the caller); no buttons, no reasons.
+export function AppDeniedPanel({ detail }: { detail?: string }) {
+  return (
+    <div className="empty-state app-denied-panel" role="alert">
+      <strong>Доступ закрыт</strong>
+      {detail ? <span>{detail}</span> : null}
+    </div>
+  );
+}
+
 const skeletonShapes = {
   archive: { block: "skeleton-row", count: 6 },
   employees: { block: "skeleton-row", count: 8 },
