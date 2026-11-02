@@ -60,7 +60,6 @@ export function WallpaperSpider() {
     const element = wrapper.current, overlay = waves.current, layer = element?.parentElement;
     if (!element || !overlay || !layer) return;
     const root = document.documentElement;
-    const reduceQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const legs = Array.from(element.querySelectorAll<SVGGElement>("[data-leg]"));
     const ids = legs.map((leg) => leg.dataset.leg ?? "L1");
     const pulsePaths = Array.from(overlay.querySelectorAll("path"));
@@ -209,7 +208,7 @@ export function WallpaperSpider() {
       legsNeutral = gait === 0 && !probing;
     };
 
-    const motionOn = () => (root.dataset.motion ? root.dataset.motion === "full" : !reduceQuery.matches);
+    const motionOn = () => root.dataset.motion !== "reduced" && root.dataset.motion !== "off";
     const spiderOn = () => root.dataset.spider !== "off";
     let wasSpiderOn = spiderOn();
     if (wasSpiderOn) {
@@ -243,14 +242,12 @@ export function WallpaperSpider() {
     const watcher = new MutationObserver(sync);
     watcher.observe(root, { attributes: true, attributeFilter: ["data-motion", "data-spider"] });
     document.addEventListener("visibilitychange", sync);
-    reduceQuery.addEventListener("change", sync);
     sync();
     return () => {
       cancelAnimationFrame(frame);
       watcher.disconnect();
       sizer.disconnect();
       document.removeEventListener("visibilitychange", sync);
-      reduceQuery.removeEventListener("change", sync);
     };
   }, []);
 

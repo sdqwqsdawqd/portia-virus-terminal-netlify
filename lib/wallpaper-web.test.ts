@@ -52,6 +52,9 @@ test("the wallpaper spider starts randomly beside threads and relocates after an
   assert.match(source, /element\.style\.opacity = "0"/);
   assert.match(source, /rest = 6 \+ rand\(\) \* 4/g);
   assert.ok(source.includes('attributeFilter: ["data-motion", "data-spider"]'));
+  // The mode comes only from html[data-motion]; a missing attribute means full (D-10).
+  assert.ok(!source.includes("matchMedia("));
+  assert.ok(source.includes('const motionOn = () => root.dataset.motion !== "reduced" && root.dataset.motion !== "off";'));
 });
 
 test("the spider palette follows the readable interface accent with logo-like black and pale parts", () => {

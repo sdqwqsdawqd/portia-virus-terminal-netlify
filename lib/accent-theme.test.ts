@@ -256,6 +256,17 @@ test("the boot animation plays once per browser session", () => {
   assert.match(desktopSource, /sessionStorage\.setItem\(bootSeenStorageKey,/);
 });
 
+test("no source file reads the system reduced-motion preference (D-10)", () => {
+  const root = new URL("../", import.meta.url);
+  const files = ["components", "lib", "app"].flatMap((dir) => readdirSync(new URL(`${dir}/`, root), { recursive: true, encoding: "utf8" })
+    .map((name) => name.replaceAll("\\", "/"))
+    .filter((name) => /\.(tsx?|css)$/.test(name) && !name.endsWith(".test.ts"))
+    .map((name) => `${dir}/${name}`));
+  assert.ok(files.length > 20 && files.includes("app/portia.css") && files.includes("components/portia-wallpaper-spider.tsx"));
+  const needle = ["prefers", "reduced", "motion"].join("-");
+  for (const file of files) assert.ok(!readFileSync(new URL(file, root), "utf8").includes(needle), `${file} reads the system motion preference`);
+});
+
 test("the boot screen plays only in full mode; reduced and off skip it, the failsafe stays (D-12, D-13, T-18-03)", () => {
   assert.match(desktopSource, /const bootSkipped = bootSeen \|\| document\.documentElement\.dataset\.motion !== "full";/);
   assert.match(desktopSource, /bootSkipped \? 0 : 1650/);

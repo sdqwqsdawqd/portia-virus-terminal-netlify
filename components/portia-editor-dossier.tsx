@@ -52,7 +52,7 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
     if (!previous || previous.index === index || previous.top === top) return;
     // Mirrors the CSS motion switch, which cannot clamp Web Animations started from script.
     const motion = document.documentElement.dataset.motion;
-    if (motion === undefined ? matchMedia("(prefers-reduced-motion: reduce)").matches : motion !== "full") return;
+    if (motion === "reduced" || motion === "off") return;
     const easing = getComputedStyle(document.documentElement).getPropertyValue("--ease-out").trim() || "ease-out";
     row.animate([{ transform: `translateY(${previous.top - top}px)` }, { transform: "none" }], { duration: 160, easing });
   });
