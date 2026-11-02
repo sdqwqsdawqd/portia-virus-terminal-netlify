@@ -251,11 +251,11 @@ test("shortcut motion is uniform, opt-in, and the guide has its own animation", 
   assert.doesNotMatch(base, /transition:/, "base shortcut must not move when animations are disabled");
 });
 
-test("the five refreshed shortcut icons animate semantic parts only in full motion", () => {
+test("the five refreshed shortcut icons animate semantic parts except in «Выключены»", () => {
   for (const part of ["icon-virus-core", "icon-broadcast-signal-inner", "icon-info-lines", "icon-guide-front", "icon-settings-knob-a"]) {
     assert.ok(icons.includes(part), `missing semantic icon part ${part}`);
     const animationLine = styles.split("\n").find((line) => line.includes(`.${part}`) && line.includes("animation:")) ?? "";
-    assert.ok(animationLine.startsWith('  html[data-motion="full"]') || animationLine.startsWith('html:not([data-motion="off"])'), `${part} is not gated by motion`);
+    assert.ok(animationLine.startsWith('html:not([data-motion="off"])'), `${part} is not gated by html:not([data-motion="off"])`);
   }
   for (const retired of ["icon-turn", "icon-spike", "icon-ripple", "icon-blink", "icon-folder-index", "icon-slide-left", "icon-slide-right"]) {
     assert.ok(!styles.includes(`@keyframes ${retired}`), `retired animation ${retired} is still shipped`);
@@ -276,7 +276,7 @@ test("promotion shortcut builds momentum through its levels before the arrow lau
   for (const part of ["icon-promotion-base", "icon-promotion-level-low", "icon-promotion-level-high", "icon-promotion-arrow"]) {
     assert.ok(icons.includes(part), `missing semantic promotion part ${part}`);
     const animationLine = styles.split("\n").find((line) => line.includes(`.${part}`) && line.includes("animation:")) ?? "";
-    assert.ok(animationLine.startsWith('  html[data-motion="full"]'), `${part} is not gated by full motion`);
+    assert.ok(animationLine.startsWith('html:not([data-motion="off"])'), `${part} is not gated by html:not([data-motion="off"])`);
   }
   assert.ok(styles.includes("@keyframes icon-promotion-launch"));
   assert.ok(!styles.includes("@keyframes icon-promotion-rise"));
@@ -357,14 +357,16 @@ function assertIconCycle(icon: string) {
         assert.ok(rest[property]?.includes(value), `${cycle.name}: 100% frame ${property}: ${value} is not the resting frame`);
       }
     }
-    if (/\d+%\s*\{/.test(body.replace(/100%\s*\{/, "")) && !/\bfrom\b/.test(body)) {
+    if (/(?<![\d.])(?!0%|100%)\d+%\s*\{/.test(body)) {
       assert.ok(body.includes("animation-timing-function: var(--ease-in)"), `${cycle.name}: return segment must use --ease-in`);
     }
   }
 }
 
-test("shortcut cycle: settings follows the approved system and ends on the resting frame", () => {
-  assertIconCycle("settings");
+const shortcutIcons = ["search", "virus", "employees", "broadcasts", "info", "guide", "settings", "promotion", "charter", "sheet", "trash", "editor"];
+
+test("shortcut cycle: all 12 icons follow the approved system and end on the resting frame", () => {
+  for (const icon of shortcutIcons) assertIconCycle(icon);
   assert.deepEqual(iconCycles("settings").map((cycle) => cycle.delay).sort((a, b) => a - b), [0, 0, 45, 90]);
 });
 
@@ -372,7 +374,7 @@ test("shortcut animation timer outlasts the longest cycle and does not depend on
   const timer = /const shortcutAnimationMs = (\d+);/.exec(shortcutsSource)?.[1];
   assert.equal(timer, String(shortcutMaxMs));
   assert.doesNotMatch(shortcutsSource, /onAnimationEnd|addEventListener\("animationend"/);
-  for (const icon of ["settings"]) for (const cycle of iconCycles(icon)) assert.ok(cycle.duration + cycle.delay <= Number(timer));
+  for (const icon of shortcutIcons) for (const cycle of iconCycles(icon)) assert.ok(cycle.duration + cycle.delay <= Number(timer));
 });
 
 test("the soft-motion blanket rule leaves shortcut icon artwork alone so the cycle plays in Уменьшены", () => {
@@ -382,5 +384,31 @@ test("the soft-motion blanket rule leaves shortcut icon artwork alone so the cyc
   for (const target of ["*", "*::before", "*::after"]) {
     const selector = target.replace("*", `*${exclusion}`);
     assert.ok(soft.includes(`html[data-motion="reduced"] ${selector}`), `soft rule is missing the shortcut exclusion on ${target}`);
+  }
+});
+
+test("shortcut rules sit outside any hover media query and keep no private easing curves", () => {
+  const from = styles.indexOf("/* Hover, keyboard focus and touch on app icons");
+  const to = styles.indexOf("@keyframes icon-scan");
+  assert.ok(from > 0 && to > from);
+  const block = styles.slice(from, to);
+  assert.doesNotMatch(block, /@media/);
+  assert.doesNotMatch(block, /cubic-bezier/);
+  assert.doesNotMatch(block, /^\s+html\[data-motion/m, "no indented (media-wrapped) or full-only shortcut rules");
+  assert.ok(block.includes('html:not([data-motion="off"]) :is(.desktop-icon-symbol, .start-panel-icon) svg > * { transform-box: fill-box; transform-origin: center; }'));
+  for (const retired of ["cubic-bezier(.2,.72,.25,1)", "cubic-bezier(.2,.85,.25,1)"]) assert.ok(!styles.includes(retired));
+});
+
+test("the promotion arrow is not silenced by the soft-mode rule: it plays in Уменьшены and is static only in Выключены", () => {
+  const rule = styles.split("\n").find((line) => line.startsWith('html:is([data-motion="reduced"], [data-motion="off"]) :is(.promotion-card')) ?? "";
+  assert.ok(rule);
+  assert.ok(!rule.includes("icon-promotion-arrow"));
+  assert.ok(iconCycles("promotion").some((cycle) => cycle.name === "icon-promotion-launch"));
+});
+
+test("shortcut artwork is not redrawn: the cycle animates only translate/scale/rotate/opacity/dash offset", () => {
+  for (const icon of shortcutIcons) for (const cycle of iconCycles(icon)) {
+    const body = keyframesBody(cycle.name);
+    assert.doesNotMatch(body, /(?<![\w-])(filter|transform|viewBox|d):/, `${cycle.name} must not touch filter, transform or geometry`);
   }
 });
