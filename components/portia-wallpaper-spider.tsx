@@ -5,7 +5,7 @@
 // it reads no layout and sets no React state.
 
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
-import { REST_NODE, createPulsePool, emitPulse, gaitPhase, legPose, planSpawn, planWalk, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
+import { REST_NODE, createPulsePool, emitPulse, footfallThreads, gaitPhase, legPose, planSpawn, planWalk, pulseShape, seeded, stepPulses, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
 
 type LegId = "L1" | "L2" | "L3" | "L4" | "R1" | "R2" | "R3" | "R4";
 
@@ -148,11 +148,16 @@ export function WallpaperSpider() {
         y += (targetY - y) * laneFollow;
         gaitDistance += Math.max(0, pose.distance - pathDistance);
         pathDistance = pose.distance;
-        // A group plants its feet when the gait phase passes 0 (group A) or 0.5 (group B): a pulse runs both ways from the spider.
+        // A group plants its feet when the gait phase passes 0 (group A) or 0.5 (group B). The feet land on both sides of the
+        // body, so a wave runs both ways along the nearest thread on each side. A busy pool refuses silently, which caps the cost.
         const before = phase, after = gaitPhase(gaitDistance);
         if (after < before || (before < 0.5 && after >= 0.5)) {
-          emitPulse(pool, pose.edge, pose.at, 1, STEP_PEAK, time);
-          emitPulse(pool, pose.edge, pose.at, -1, STEP_PEAK, time);
+          const sides = footfallThreads(x, y, heading);
+          for (const side of [sides.left, sides.right]) {
+            if (!side) continue;
+            emitPulse(pool, side.edge, side.at, 1, STEP_PEAK, time);
+            emitPulse(pool, side.edge, side.at, -1, STEP_PEAK, time);
+          }
         }
         if (pose.done) {
           x = targetX;

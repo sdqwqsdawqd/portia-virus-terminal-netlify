@@ -260,12 +260,13 @@ export function planSpawn(visible: number[], previous: number, rand: () => numbe
 }
 
 // Waves along the threads (D-05): a pulse is a 120-unit stretch of one thread that runs away from its start at 260 units/s
-// and fades over 1.2 s. The pool has a fixed number of slots, so a step allocates nothing and the cost has a ceiling.
+// and fades over 0.9 s. The pool has a fixed number of slots, so a step allocates nothing and the cost has a ceiling.
 const PULSE_SPEED = 260;
 const PULSE_LENGTH = 120;
-const PULSE_LIFE = 1.2;
+const PULSE_LIFE = 0.9; // a wave dies out within 0.9s (UI-SPEC: at most 900ms)
 const PULSE_POINTS = 8;
 const PULSE_MIN_PEAK = 0.04;
+const FOOTFALL_STEP = 8; // sampling step (units) when searching a thread for the point nearest the body
 
 // at = distance from the edge's a end; dir 1 runs toward b, -1 toward a; times are in seconds.
 export type Pulse = { alive: boolean; edge: number; at: number; dir: 1 | -1; peak: number; born: number; spawned: boolean };
@@ -304,6 +305,30 @@ export function stepPulses(pool: PulsePool, now: number): void {
     // Each crossing halves the wave; below the floor it stops spreading, so invisible echoes never hold the pool.
     if (pulse.peak / 2 >= PULSE_MIN_PEAK) emitAtCrossing(pool, pulse.dir === 1 ? thread.b : thread.a, pulse.peak / 2, now, pulse.edge);
   }
+}
+
+export type Footfall = { edge: number; at: number } | null;
+
+// Waves run along the threads on both sides of the body (D-08): the nearest thread point within reach strictly left (cross product > 0) and right (< 0) of the heading.
+export function footfallThreads(x: number, y: number, heading: number, reach = 120): { left: Footfall; right: Footfall } {
+  const found: { left: Footfall; right: Footfall } = { left: null, right: null };
+  let bestLeft = Infinity, bestRight = Infinity;
+  const cos = Math.cos(heading), sin = Math.sin(heading);
+  webEdges.forEach((thread, index) => {
+    const origin = nodes[thread.a];
+    // Cheap reject: a thread whose start is farther than reach + length cannot have a point within reach.
+    if (Math.hypot(origin[0] - x, origin[1] - y) > reach + thread.length) return;
+    for (let at = 0; at < thread.length + FOOTFALL_STEP; at += FOOTFALL_STEP) {
+      const along = Math.min(at, thread.length);
+      const [px, py] = pointOnEdge(thread, parameterAt(index, along));
+      const dx = px - x, dy = py - y, distance = Math.hypot(dx, dy);
+      if (distance > reach) continue;
+      const cross = cos * dy - sin * dx;
+      if (cross > 0 && distance < bestLeft) { bestLeft = distance; found.left = { edge: index, at: along }; }
+      else if (cross < 0 && distance < bestRight) { bestRight = distance; found.right = { edge: index, at: along }; }
+    }
+  });
+  return found;
 }
 
 // What to draw for a pulse now: 8 points on the thread over the stretch behind its head, clipped to the thread.

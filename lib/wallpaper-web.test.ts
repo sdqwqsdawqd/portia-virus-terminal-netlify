@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, emitPulse, gaitPhase, legPose, planSpawn, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
+import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, emitPulse, footfallThreads, gaitPhase, legPose, planSpawn, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
 
 const near = (a: Point, b: Point, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
 // Distance from a point to the thread drawn as a 400-piece polyline.
@@ -17,6 +17,18 @@ const distanceToEdge = (point: Point, index: number) => {
     from = to;
   }
   return best;
+};
+const pointOnEdgeAt = (index: number, at: number): Point => {
+  // The point `at` units along a thread, found by a fine polyline walk (independent of the module's arc table).
+  let travelled = 0, last = pointOnEdge(webEdges[index], 0);
+  if (at <= 0) return last;
+  for (let sample = 1; sample <= 2000; sample += 1) {
+    const point = pointOnEdge(webEdges[index], sample / 2000);
+    travelled += Math.hypot(point[0] - last[0], point[1] - last[1]);
+    if (travelled >= at) return point;
+    last = point;
+  }
+  return last;
 };
 const edgeBetween = (u: number, v: number) => webEdges.findIndex((edge) => (edge.a === u && edge.b === v) || (edge.a === v && edge.b === u));
 
@@ -236,7 +248,7 @@ test("planWalk with fewer than 6 visible crossings uses any of them", () => {
   assert.deepEqual(planWalk(REST_NODE, -1, [], rand), []);
 });
 
-test("the pulse pool never holds more than 8 and a pulse dies by 1.2 s", () => {
+test("the pulse pool never holds more than 8 and a pulse dies by 0.9 s", () => {
   const pool = createPulsePool();
   assert.equal(pool.slots.length, 8);
   const rand = seeded(3);
@@ -253,9 +265,9 @@ test("the pulse pool never holds more than 8 and a pulse dies by 1.2 s", () => {
   const single = createPulsePool();
   emitPulse(single, 0, 1, 1, 0.6, 0);
   // The first pulse reaches a crossing and spawns half-strength children in other slots; it is slot 0 that must die on time.
-  stepPulses(single, 1.19);
+  stepPulses(single, 0.89);
   assert.equal(single.slots[0].alive, true);
-  stepPulses(single, 1.21);
+  stepPulses(single, 0.91);
   assert.equal(single.slots[0].alive, false);
 });
 
@@ -289,7 +301,7 @@ test("pulseShape draws a 120-unit window on the thread with fading opacity and w
   assert.ok(length > 118 && length <= 120.01, `window is ${length} long`);
   assert.ok(Math.abs(start.opacity - 0.6) < 1e-9);
   assert.ok(Math.abs(start.width - 1.8) < 1e-9);
-  const end = pulseShape(pulse, 1.2);
+  const end = pulseShape(pulse, 0.9);
   assert.ok(Math.abs(end.opacity) < 1e-9);
   assert.ok(Math.abs(end.width - 1) < 1e-9);
 });
@@ -312,4 +324,43 @@ test("waves die out: with no new footfalls every slot is free again within 10 s,
     for (let now = 0; now <= 10; now += 1 / 60) stepPulses(pool, now);
     assert.equal(pool.slots.filter((slot) => slot.alive).length, 0, `edge ${edge} still has live pulses`);
   }
+});
+
+test("footfallThreads finds the nearest thread on each side of the body, strictly left and right of the heading", () => {
+  const spoke = edgesAt(REST_NODE).find((index) => webEdges[index].kind === "spoke") as number;
+  const [x0, y0] = webGeometry.nodes[REST_NODE];
+  const other = webEdges[spoke].a === REST_NODE ? webGeometry.nodes[webEdges[spoke].b] : webGeometry.nodes[webEdges[spoke].a];
+  const heading = Math.atan2(other[1] - y0, other[0] - x0);
+  const x = x0 + Math.cos(heading + Math.PI / 2) * 30, y = y0 + Math.sin(heading + Math.PI / 2) * 30;
+  const { left, right } = footfallThreads(x, y, heading, 120);
+  assert.ok(left && right, "both sides have a thread within reach");
+  for (const [side, found] of [[1, left], [-1, right]] as const) {
+    assert.ok(found.at >= 0 && found.at <= webEdges[found.edge].length);
+    const onThread = pointOnEdgeAt(found.edge, found.at);
+    const cross = Math.cos(heading) * (onThread[1] - y) - Math.sin(heading) * (onThread[0] - x);
+    assert.ok(cross * side > 0, `side ${side} thread lies on the ${side > 0 ? "left" : "right"} (${cross})`);
+  }
+  assert.ok(left.edge !== right.edge || left.at !== right.at, "the two sides are different points");
+});
+
+test("footfallThreads finds nothing for a point far outside the web", () => {
+  assert.deepEqual(footfallThreads(-5000, -5000, 1.2, 120), { left: null, right: null });
+});
+
+test("a footfall wave is gone 0.9 s after it was born", () => {
+  const pool = createPulsePool();
+  emitPulse(pool, 0, 5, 1, 0.34, 2);
+  stepPulses(pool, 2.89);
+  assert.equal(pool.slots[0].alive, true);
+  assert.ok(pulseShape(pool.slots[0], 2.9).opacity < 1e-9, "fully transparent at +0.9 s");
+  stepPulses(pool, 2.901);
+  assert.equal(pool.slots[0].alive, false);
+});
+
+test("each footfall of the spider waves the nearest thread on both sides of the body", () => {
+  const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
+  assert.match(source, /footfallThreads\(/);
+  assert.match(source, /emitPulse\(pool, side\.edge, side\.at, 1, STEP_PEAK, time\)/);
+  assert.match(source, /emitPulse\(pool, side\.edge, side\.at, -1, STEP_PEAK, time\)/);
+  assert.doesNotMatch(source, /emitPulse\(pool, pose\.edge/);
 });
