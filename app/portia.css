@@ -1,3 +1,10 @@
+/* Shortcut cycle (18-MOTION-APPROVAL item 1): 560ms per part, offsets up to 90ms, --ease-out on the action and --ease-in on the return, last frame = resting frame.
+   Class-driven (hover, focus, touch), so no hover media query; plays in «Включены» and «Уменьшены», never in «Выключены». */
+/* Settings: a short calibration pass moves each knob by a different amount. */
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="settings"] .icon-settings-rails { animation: icon-settings-rails 560ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="settings"] .icon-settings-knob-a { animation: icon-settings-a 560ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="settings"] .icon-settings-knob-b { animation: icon-settings-b 560ms 45ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="settings"] .icon-settings-knob-c { animation: icon-settings-c 560ms 90ms var(--ease-out) both; }
 :root {
   color-scheme: dark;
   --bg: oklch(.163 calc(.014 * var(--accent-chroma)) var(--accent-hue));
@@ -1370,7 +1377,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
 /* Motion switch: html[data-motion] is "full", "reduced" or "off", resolved from «Анимации» (lib/accent-boot.ts); the OS setting is not read (D-10).
    «Уменьшены» is the soft mode: keyframe motion stops, but the short authored transitions (colour, opacity, small hover
    lifts, all under 400ms) stay so the interface does not snap. «Выключены» makes everything static. */
-html[data-motion="reduced"], html[data-motion="reduced"] *, html[data-motion="reduced"] *::before, html[data-motion="reduced"] *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+/* Shortcut icon artwork is exempt: in «Уменьшены» the icon cycle is a short response and stays (D-11). */
+html[data-motion="reduced"], html[data-motion="reduced"] *:not(:is(.desktop-icon-symbol, .start-panel-icon) svg, :is(.desktop-icon-symbol, .start-panel-icon) svg *), html[data-motion="reduced"] *:not(:is(.desktop-icon-symbol, .start-panel-icon) svg, :is(.desktop-icon-symbol, .start-panel-icon) svg *)::before, html[data-motion="reduced"] *:not(:is(.desktop-icon-symbol, .start-panel-icon) svg, :is(.desktop-icon-symbol, .start-panel-icon) svg *)::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 /* Animations with a fill-mode jump to their last frame, so a drawn web and visible layers do not vanish. */
 html[data-motion="off"], html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="off"] *::after { scroll-behavior: auto !important; animation-duration: 0s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; transition-delay: 0s !important; }
 /* «Анимации: Уменьшены / Выключены» show every wallpaper still and fully drawn (D-07). */
@@ -1576,11 +1584,6 @@ html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg > * { 
   /* Guide: the folder opens — its back rises while the front flap tips down and returns. */
   html[data-motion="full"] :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="guide"] .icon-guide-back { animation: icon-guide-back 520ms var(--ease-out) both; }
   html[data-motion="full"] :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="guide"] .icon-guide-front { transform-origin: center bottom; animation: icon-guide-front 520ms var(--ease-out) both; }
-  /* Settings: a short calibration pass moves each knob by a different amount. */
-  html[data-motion="full"] :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="settings"] .icon-settings-rails { animation: icon-settings-rails 540ms var(--ease-out) both; }
-  html[data-motion="full"] :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="settings"] .icon-settings-knob-a { animation: icon-settings-a 540ms var(--ease-out) both; }
-  html[data-motion="full"] :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="settings"] .icon-settings-knob-b { animation: icon-settings-b 540ms 45ms var(--ease-out) both; }
-  html[data-motion="full"] :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="settings"] .icon-settings-knob-c { animation: icon-settings-c 540ms 90ms var(--ease-out) both; }
   /* Promotion: the foundation locks in, both levels rise, then the arrow clears them decisively. */
   html[data-motion="full"] :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="promotion"] .icon-promotion-base { animation: icon-promotion-base 520ms var(--ease-out) both; }
   html[data-motion="full"] :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="promotion"] .icon-promotion-level-low { animation: icon-promotion-level 520ms 35ms var(--ease-out) both; }
@@ -1612,10 +1615,10 @@ html[data-motion="full"] :is(.desktop-icon-symbol, .start-panel-icon) svg > * { 
 @keyframes icon-info-line { 0% { stroke-dasharray: 8; stroke-dashoffset: 8; opacity: .25; } 100% { stroke-dashoffset: 0; opacity: 1; } }
 @keyframes icon-guide-back { 42% { translate: 0 -1.1px; } 72% { translate: 0 .15px; } 100% { translate: 0 0; } }
 @keyframes icon-guide-front { 42% { translate: 0 1.1px; scale: 1 .82; } 72% { translate: 0 -.15px; scale: 1 1.02; } 100% { translate: 0 0; scale: 1; } }
-@keyframes icon-settings-rails { 45% { opacity: .72; } 100% { opacity: 1; } }
-@keyframes icon-settings-a { 42% { translate: -2.2px 0; } 72% { translate: .25px 0; } 100% { translate: 0 0; } }
-@keyframes icon-settings-b { 42% { translate: 2.6px 0; } 72% { translate: -.25px 0; } 100% { translate: 0 0; } }
-@keyframes icon-settings-c { 42% { translate: -2.8px 0; } 72% { translate: .3px 0; } 100% { translate: 0 0; } }
+@keyframes icon-settings-rails { 45% { animation-timing-function: var(--ease-in); opacity: .72; } 100% { opacity: 1; } }
+@keyframes icon-settings-a { 42% { animation-timing-function: var(--ease-in); translate: -2.2px 0; } 72% { translate: .25px 0; } 100% { translate: 0 0; } }
+@keyframes icon-settings-b { 42% { animation-timing-function: var(--ease-in); translate: 2.6px 0; } 72% { translate: -.25px 0; } 100% { translate: 0 0; } }
+@keyframes icon-settings-c { 42% { animation-timing-function: var(--ease-in); translate: -2.8px 0; } 72% { translate: .3px 0; } 100% { translate: 0 0; } }
 @keyframes icon-promotion-base { 35% { scale: 1.12 1; opacity: 1; } 70% { scale: .98 1; } 100% { scale: 1; opacity: 1; } }
 @keyframes icon-promotion-level { 0% { translate: 0 2px; opacity: .12; } 55% { translate: 0 -.45px; opacity: .9; } 100% { translate: 0 0; } }
 @keyframes icon-promotion-launch { 0% { translate: 0 2.2px; opacity: .35; } 48% { translate: 0 -2.8px; opacity: 1; } 72% { translate: 0 .35px; } 100% { translate: 0 0; opacity: 1; } }

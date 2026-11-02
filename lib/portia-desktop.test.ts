@@ -209,7 +209,7 @@ test("Vivian follows the interface accent without painful overexposure or greyin
 });
 
 test("shortcut motion survives pointer exit until every delayed icon part reaches its terminal frame", () => {
-  assert.ok(source.includes("const shortcutAnimationMs = 760"));
+  assert.ok(source.includes("const shortcutAnimationMs = 700"));
   assert.ok(source.includes("function useShortcutAnimation()"));
   assert.ok(source.includes('iconAnimation.playing ? " is-icon-animating"'));
   assert.ok(source.includes("<StartPanelButton"));
@@ -255,7 +255,7 @@ test("the five refreshed shortcut icons animate semantic parts only in full moti
   for (const part of ["icon-virus-core", "icon-broadcast-signal-inner", "icon-info-lines", "icon-guide-front", "icon-settings-knob-a"]) {
     assert.ok(icons.includes(part), `missing semantic icon part ${part}`);
     const animationLine = styles.split("\n").find((line) => line.includes(`.${part}`) && line.includes("animation:")) ?? "";
-    assert.ok(animationLine.startsWith('  html[data-motion="full"]'), `${part} is not gated by full motion`);
+    assert.ok(animationLine.startsWith('  html[data-motion="full"]') || animationLine.startsWith('html:not([data-motion="off"])'), `${part} is not gated by motion`);
   }
   for (const retired of ["icon-turn", "icon-spike", "icon-ripple", "icon-blink", "icon-folder-index", "icon-slide-left", "icon-slide-right"]) {
     assert.ok(!styles.includes(`@keyframes ${retired}`), `retired animation ${retired} is still shipped`);
@@ -313,4 +313,74 @@ test("guide sections start folded and the compact back control does not cover ca
   assert.match(back, /margin:\s*0 0 16px/);
   assert.doesNotMatch(back, /position:\s*(sticky|absolute|fixed)/);
   assert.doesNotMatch(back, /margin:\s*-/);
+});
+
+// ---- Shortcut cycle system (Phase 18-03, 18-MOTION-APPROVAL.md item 1) ----
+const shortcutCycleMs = 560; // approved cycle
+const shortcutStaggerMs = 90; // max offset between parts
+const shortcutMaxMs = 700; // whole cycle incl. offsets
+const shortcutsSource = readFileSync(new URL("../components/portia-desktop-shortcuts.tsx", import.meta.url), "utf8");
+const cyclePrefix = 'html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)';
+
+// Every animation declaration that targets one shortcut icon: line, keyframes name, duration/delay (ms), easing token.
+function iconCycles(icon: string) {
+  return styles.split("\n").filter((line) => line.includes(`[data-icon="${icon}"]`) && line.includes("animation:")).map((line) => {
+    const tokens = /animation:([^;}]*)/.exec(line)![1].trim().split(/\s+/);
+    const ms = tokens.filter((token) => /^\d+ms$/.test(token)).map((token) => parseInt(token, 10));
+    return { line, name: tokens[0], duration: ms[0], delay: ms[1] ?? 0, easing: tokens.find((token) => token.startsWith("var(--ease") || token.startsWith("cubic-bezier")), tokens };
+  });
+}
+
+function keyframesBody(name: string) {
+  const open = styles.indexOf("{", styles.indexOf(`@keyframes ${name} {`));
+  return styles.slice(open + 1, closingBrace(styles, open));
+}
+
+function assertIconCycle(icon: string) {
+  const cycles = iconCycles(icon);
+  assert.ok(cycles.length > 0, `${icon}: no cycle rules`);
+  for (const cycle of cycles) {
+    assert.ok(cycle.line.startsWith(cyclePrefix), `${icon}: rule is not gated by html:not([data-motion="off"]) at top level: ${cycle.name}`);
+    assert.equal(cycle.duration, shortcutCycleMs, `${icon}/${cycle.name}: duration`);
+    assert.ok(cycle.delay <= shortcutStaggerMs, `${icon}/${cycle.name}: offset ${cycle.delay}ms`);
+    assert.ok(cycle.duration + cycle.delay <= shortcutMaxMs, `${icon}/${cycle.name}: whole cycle`);
+    assert.equal(cycle.easing, "var(--ease-out)", `${icon}/${cycle.name}: easing must be the token`);
+    const body = keyframesBody(cycle.name);
+    assert.ok(body, `${icon}: missing @keyframes ${cycle.name}`);
+    const final = /(?:100%|to)\s*\{([^}]*)\}/.exec(body)?.[1];
+    if (final !== undefined) {
+      // The last frame is the resting frame (the virus scan layer rests invisible).
+      const rest: Record<string, string[]> = { translate: ["0 0"], opacity: cycle.name === "icon-virus-scan" ? ["0"] : ["1"], scale: ["1", "1 1"], rotate: ["0deg"], "stroke-dashoffset": ["0"] };
+      for (const declaration of final.split(";").map((part) => part.trim()).filter(Boolean)) {
+        const [property, value] = declaration.split(/:\s*/);
+        if (cycle.name === "icon-virus-scan" && property !== "opacity") continue;
+        assert.ok(rest[property]?.includes(value), `${cycle.name}: 100% frame ${property}: ${value} is not the resting frame`);
+      }
+    }
+    if (/\d+%\s*\{/.test(body.replace(/100%\s*\{/, "")) && !/\bfrom\b/.test(body)) {
+      assert.ok(body.includes("animation-timing-function: var(--ease-in)"), `${cycle.name}: return segment must use --ease-in`);
+    }
+  }
+}
+
+test("shortcut cycle: settings follows the approved system and ends on the resting frame", () => {
+  assertIconCycle("settings");
+  assert.deepEqual(iconCycles("settings").map((cycle) => cycle.delay).sort((a, b) => a - b), [0, 0, 45, 90]);
+});
+
+test("shortcut animation timer outlasts the longest cycle and does not depend on animationend", () => {
+  const timer = /const shortcutAnimationMs = (\d+);/.exec(shortcutsSource)?.[1];
+  assert.equal(timer, String(shortcutMaxMs));
+  assert.doesNotMatch(shortcutsSource, /onAnimationEnd|addEventListener\("animationend"/);
+  for (const icon of ["settings"]) for (const cycle of iconCycles(icon)) assert.ok(cycle.duration + cycle.delay <= Number(timer));
+});
+
+test("the soft-motion blanket rule leaves shortcut icon artwork alone so the cycle plays in Уменьшены", () => {
+  const soft = styles.split("\n").find((line) => line.startsWith('html[data-motion="reduced"], html[data-motion="reduced"] *')) ?? "";
+  assert.ok(soft, "soft-motion blanket rule not found");
+  const exclusion = ":not(:is(.desktop-icon-symbol, .start-panel-icon) svg, :is(.desktop-icon-symbol, .start-panel-icon) svg *)";
+  for (const target of ["*", "*::before", "*::after"]) {
+    const selector = target.replace("*", `*${exclusion}`);
+    assert.ok(soft.includes(`html[data-motion="reduced"] ${selector}`), `soft rule is missing the shortcut exclusion on ${target}`);
+  }
 });

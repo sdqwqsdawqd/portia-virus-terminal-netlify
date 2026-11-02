@@ -52,7 +52,8 @@ export function DesktopIcon({ app, onOpen, position, onMove, className = "", bad
   return <DraggableDesktopIcon shortcutId={app} label={appMeta[app].label} icon={appMeta[app].icon} position={position} onMove={onMove} onActivate={(origin) => onOpen(app, origin)} className={className} badge={badge} />;
 }
 
-const shortcutAnimationMs = 760;
+// Not shorter than the longest cycle (560 + 90ms offset); a timer, not animationend, because a hidden tab may never deliver the event (D-02).
+const shortcutAnimationMs = 700;
 
 function useShortcutAnimation() {
   const [playing, setPlaying] = useState(false);
