@@ -43,3 +43,11 @@ test("every /api/uploads response is no-store and uses the refusal catalogue (T-
   assert.ok(route.includes("file.size > MAX_UPLOAD_BYTES"));
   assert.ok(!route.includes("4 * 1024 * 1024"));
 });
+
+test("uploads get a fresh immutable path and never read the content revision (STAB-MEDIA-01/04)", () => {
+  assert.match(route, /`recycle\/\$\{crypto\.randomUUID\(\)\}\.\$\{detectedExtension\}`/);
+  assert.ok(route.includes("upsert: false"));
+  assert.ok(route.includes('cacheControl: "31536000"'));
+  assert.ok(route.includes("getPublicUrl(path)"));
+  assert.ok(!/revision/i.test(route));
+});
