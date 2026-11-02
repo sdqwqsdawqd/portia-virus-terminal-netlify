@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PortiaIcon, type PortiaIconName } from "@/components/portia-icons";
 import { appMeta, type AppId } from "@/components/portia-desktop-window";
 import { originOf, type OpenOrigin } from "@/lib/window-open";
+import { clampShortcutPosition, type Rect } from "@/lib/shortcut-layout";
 
 export type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "promotion" | "settings" | "charter" | "sheet" | "trash";
 export type ShortcutPosition = { x: number; y: number };
@@ -39,10 +40,11 @@ function shortcutLayout({ left, top, right, bottom }: { left?: number; top?: num
   };
 }
 
+// Room for the large 110x~120px shortcut plus the 8px inset, so after a reload or viewport change the whole shortcut stays in the zone.
 function savedShortcutLayout(position: ShortcutPosition): ShortcutLayoutStyle {
   return {
-    "--shortcut-left": `max(0px, min(${position.x}px, calc(100% - 100px)))`,
-    "--shortcut-top": `max(0px, min(${position.y}px, calc(100% - 110px)))`,
+    "--shortcut-left": `max(8px, min(${position.x}px, calc(100% - 118px)))`,
+    "--shortcut-top": `max(8px, min(${position.y}px, calc(100% - 128px)))`,
     "--shortcut-right": "auto",
     "--shortcut-bottom": "auto",
   };
@@ -87,7 +89,7 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
   className?: string;
   badge?: boolean;
 }) {
-  const dragRef = useRef<null | { pointerId: number; startX: number; startY: number; originX: number; originY: number; workspace: HTMLElement; target: HTMLElement; moved: boolean }>(null);
+  const dragRef = useRef<null | { pointerId: number; startX: number; startY: number; originX: number; originY: number; workspace: HTMLElement; target: HTMLElement; moved: boolean; last: ShortcutPosition }>(null);
   const suppressActivation = useRef(false);
   const dropTimer = useRef<number | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -100,7 +102,8 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
 
   const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {
     iconAnimation.play();
-    if (window.innerWidth <= 520 || event.button !== 0) return;
+    // Same breakpoint as windows: the phone grid has no free drag.
+    if (window.matchMedia("(max-width: 900px)").matches || event.button !== 0) return;
     if (dropTimer.current !== null) window.clearTimeout(dropTimer.current);
     setDropping(false);
     const workspace = event.currentTarget.closest<HTMLElement>(".workspace");
@@ -117,6 +120,7 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
       workspace,
       target: event.currentTarget,
       moved: false,
+      last: { x: iconRect.left - workspaceRect.left, y: iconRect.top - workspaceRect.top },
     };
   };
 
@@ -129,12 +133,12 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
     operation.moved = true;
     setDragging(true);
     event.preventDefault();
-    const maximumX = Math.max(8, operation.workspace.clientWidth - operation.target.offsetWidth - 8);
-    const maximumY = Math.max(8, operation.workspace.clientHeight - operation.target.offsetHeight - 8);
-    onMove(shortcutId, {
-      x: Math.min(maximumX, Math.max(8, operation.originX + deltaX)),
-      y: Math.min(maximumY, Math.max(8, operation.originY + deltaY)),
-    });
+    operation.last = clampShortcutPosition(
+      { x: operation.originX + deltaX, y: operation.originY + deltaY },
+      { width: operation.target.offsetWidth, height: operation.target.offsetHeight },
+      { width: operation.workspace.clientWidth, height: operation.workspace.clientHeight },
+    );
+    onMove(shortcutId, operation.last);
   };
 
   const finishDrag = (event: React.PointerEvent<HTMLElement>) => {
@@ -142,6 +146,18 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
     if (!operation || operation.pointerId !== event.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     if (operation.moved) {
+      // On drop the shortcut also leaves the assistant and the format button free.
+      const workspaceRect = operation.workspace.getBoundingClientRect();
+      const obstacles = Array.from(document.querySelectorAll<HTMLElement>(".desktop-assistant, .global-format-launch")).map((element): Rect => {
+        const rect = element.getBoundingClientRect();
+        return { x: rect.left - workspaceRect.left, y: rect.top - workspaceRect.top, width: rect.width, height: rect.height };
+      });
+      onMove(shortcutId, clampShortcutPosition(
+        operation.last,
+        { width: operation.target.offsetWidth, height: operation.target.offsetHeight },
+        { width: operation.workspace.clientWidth, height: operation.workspace.clientHeight },
+        obstacles,
+      ));
       suppressActivation.current = true;
       window.setTimeout(() => { suppressActivation.current = false; }, 0);
       setDropping(true);

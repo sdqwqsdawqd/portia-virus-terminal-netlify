@@ -150,7 +150,7 @@ test("every desktop shortcut owns a default position and saved positions overrid
     assert.match(layout, new RegExp(`\\n  ${id}: shortcutLayout\\(`), `missing independent layout for ${id}`);
   }
   assert.ok(source.includes("position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId]"));
-  assert.ok(source.includes('"--shortcut-left": `max(0px, min(${position.x}px, calc(100% - 100px)))`'));
+  assert.ok(source.includes('"--shortcut-left": `max(8px, min(${position.x}px, calc(100% - 118px)))`'));
   assert.doesNotMatch(styles, /\.desktop-icon\[data-shortcut=/);
   assert.ok(source.includes('const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3"'));
 });
