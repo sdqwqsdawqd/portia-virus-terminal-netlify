@@ -17,7 +17,7 @@ import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuests
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
 import { DesktopIcon, StartPanelButton, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
-import { AppStaleBanner } from "@/components/portia-desktop-states";
+import { AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/components/portia-desktop-states";
 import { appViewState, contentSyncFailed, contentSyncSucceeded, failureFromResponse, type AppFailure, type ContentSync } from "@/lib/app-state";
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-desktop-documents";
@@ -209,6 +209,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [contentSync, setContentSync] = useState<ContentSync>({ lastGoodAt: null, failure: null, retrying: false });
   const lastGoodRef = useRef<string | null>(null);
   const retryBusy = useRef(false);
+  // Only the newest /api/content request may start a failure: a late timeout must not put a stale strip over data a newer request just delivered.
+  const contentRequestSeq = useRef(0);
   const [broadcastTab, setBroadcastTab] = useState<BroadcastTab>("news");
   const [canEdit, setCanEdit] = useState(false);
   const [canManageEditors, setCanManageEditors] = useState(false);
@@ -321,6 +323,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   // Served from the CDN cache (s-maxage 300, purged only by deployed saves, never from next dev), so it can be older than this tab's copy; such answers are dropped (uat-03-owner-broadcast-vanishes).
   const fetchContent = useCallback(async () => {
     const savesAtSend = savesStarted.current;
+    const requestSeq = ++contentRequestSeq.current;
     // Any answer that is not an authoritative copy of the content is a failure for the stale banner (D-05); a good one, even an unchanged revision, is a success.
     let failure: AppFailure | null = null;
     let responded = false;
@@ -357,7 +360,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         const at = new Date().toISOString();
         lastGoodRef.current = at;
         setContentSync((sync) => contentSyncSucceeded(sync, at));
-      } else {
+      } else if (requestSeq === contentRequestSeq.current) {
         const reason = failure;
         setContentSync((sync) => contentSyncFailed(sync, reason, lastGoodRef.current));
       }
@@ -448,6 +451,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             const savedAt = (parsed as { savedAt?: unknown }).savedAt;
             // A savedAt that does not parse is ignored (T-19-01): no time is better than "Invalid Date".
             if (!lastGoodRef.current && typeof savedAt === "string" && !Number.isNaN(new Date(savedAt).getTime())) lastGoodRef.current = savedAt;
+            // Cached data counts as loaded for appViewState even when its time is unknown ("").
+            setContentSync((sync) => sync.lastGoodAt !== null ? sync : { ...sync, lastGoodAt: lastGoodRef.current ?? "" });
             setContentReady(true);
           }
         }
@@ -1028,6 +1033,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const virusListbox = contentReady && filteredViruses.length > 0;
   // D-05: the dossier area shows the stale strip only while last-good records are on screen; the other apps join in 19-08.
   const archiveStale = appViewState({ denied: false, ready: contentReady, hasData: contentSync.lastGoodAt !== null, count: content.viruses.length, failure: contentSync.failure }) === "stale";
+  const guideView = appViewState({ denied: false, ready: contentReady, hasData: contentSync.lastGoodAt !== null, count: content.guideSections.length, failure: contentSync.failure });
   const selectedInfoEntry = findInfo(content.infoSections, selectedInfoId)
     ?? (content.infoSections[0] ? { section: content.infoSections[0], subsection: null } : null);
   const selectedInfo = selectedInfoEntry?.section;
@@ -1373,7 +1379,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="guide" state={windows.guide} active={activeApp === "guide"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window guide-window" meta="СПРАВОЧНИК">
-            {!contentReady ? <LoadingState label="Загрузка справочника…" /> : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={setGuideCardId} />}
+            {guideView === "loading" ? <div className="app-state-body"><AppSkeleton shape="guide" /></div>
+              : guideView === "fatal" && contentSync.failure ? <div className="app-state-body"><AppFatalPanel failure={contentSync.failure} retrying={contentSync.retrying} onRetry={() => void retryContent()} illustration="microscope" /></div>
+              : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={setGuideCardId}
+                banner={guideView === "stale" && contentSync.lastGoodAt !== null ? <AppStaleBanner lastGoodAt={contentSync.lastGoodAt} retrying={contentSync.retrying} onRetry={() => void retryContent()} /> : null} />}
           </AppWindow>
 
           <AppWindow app="promotion" state={windows.promotion} active={activeApp === "promotion"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window promotion-window" meta="Повышение" locked={qualificationLocked}>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { findGuide, portiaTextKey, type GuideBlock, type GuideSection, type PortiaContent } from "@/lib/portia-content";
 import { PortiaIllustration } from "@/components/portia-icons";
+import { emptyCopy } from "@/lib/app-state";
 import { FormattedText, LoadingState } from "@/components/portia-desktop-dossier";
 
 // D-19: one permission set for every third-party frame. Scripts and same-origin let the viewers run, popups escape the sandbox so links open as normal tabs;
@@ -76,11 +77,12 @@ export function EmbeddedDocument({ src, external, title }: { src: string; extern
 const guideCollapsedStorageKey = "portia-guide-collapsed-v2";
 
 // «Справочник»: the grid and the card page are one derived view of openCardId; a card that vanished simply means the grid (D-00d).
-export function GuideApp({ sections, formattedText, openCardId, onOpenCard }: {
+export function GuideApp({ sections, formattedText, openCardId, onOpenCard, banner }: {
   sections: GuideSection[];
   formattedText: PortiaContent["formattedText"];
   openCardId: string;
   onOpenCard: (id: string) => void;
+  banner?: ReactNode;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const page = useRef<HTMLElement>(null);
@@ -137,6 +139,7 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard }: {
   };
 
   return <div className="guide-app" ref={scroller} tabIndex={-1}>
+    {banner}
     {found && card ? <>
       <div className="guide-back-bar"><button type="button" aria-label="Назад к списку карточек" onClick={() => { backIntent.current = true; onOpenCard(""); }}><span aria-hidden="true">←</span><span className="guide-back-label">Назад</span></button></div>
       <article className="guide-page" tabIndex={-1} ref={page}>
@@ -145,7 +148,7 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard }: {
         {!card.blocks.length && <p className="guide-section-empty">В карточке пока нет содержимого</p>}
         <div className="guide-blocks">{card.blocks.map((block) => <GuideBlockView key={block.id} block={block} formattedText={formattedText} cardTitle={card.title} />)}</div>
       </article>
-    </> : !sections.length ? <div className="guide-empty empty-state"><PortiaIllustration name="flask" /><strong>Справочник пока пуст</strong><span>Карточки появятся здесь, когда редакторы их добавят.</span></div>
+    </> : !sections.length ? <div className="guide-empty empty-state"><PortiaIllustration name="microscope" /><strong>{emptyCopy.guide.heading}</strong><span>{emptyCopy.guide.body}</span></div>
     : sections.map((section) => {
       const folded = collapsed.includes(section.id);
       const gridId = `guide-grid-${section.id}`;

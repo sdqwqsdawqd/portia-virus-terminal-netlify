@@ -16,6 +16,21 @@ export function failureFromResponse(status: number | null, timedOut: boolean): A
   return status >= 500 ? "unavailable" : "unexpected";
 }
 
+// A cross-origin iframe never reports an error, so «Таблица» and «Устав» give it this long to fire onLoad before the fatal panel (STAB-APP-06).
+export const iframeFailureCopy = { heading: "Не удалось загрузить", body: "Повторите или откройте во внешней вкладке." };
+export const iframeLoadTimeoutMs = 15_000;
+
+// Empty states (D-08): a successful load with 0 records. No button, calm tone.
+export const emptyCopy: Record<"archive" | "employees" | "news" | "quests" | "info" | "guide" | "trash", { heading: string; body: string }> = {
+  archive: { heading: "В базе пока нет записей", body: "Новые записи появятся здесь после публикации." },
+  employees: { heading: "Список сотрудников пуст", body: "Сотрудники появятся здесь, когда таблица будет заполнена." },
+  news: { heading: "Новостей пока нет", body: "Опубликованные материалы появятся здесь." },
+  quests: { heading: "Заданий пока нет", body: "Опубликованные материалы появятся здесь." },
+  info: { heading: "В «Информации» пока нет статей", body: "Разделы появятся здесь после публикации." },
+  guide: { heading: "В «Справочнике» пока нет карточек", body: "Карточки появятся здесь после публикации." },
+  trash: { heading: "Корзина пуста", body: "Удалённые записи появятся здесь." },
+};
+
 const clockFormat = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
 const dayFormat = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" });
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -39,9 +54,10 @@ export function appViewState(input: { denied: boolean; ready: boolean; hasData: 
 export type ContentSync = { lastGoodAt: string | null; failure: AppFailure | null; retrying: boolean };
 
 // The same failure again keeps the very same object, so a repeated bad poll neither redraws the banner nor moves the time. While already failing, only the reason may change.
+// lastGoodAt "" means data is on screen (device cache) but its time is unknown; a failure never discards a time the state already knows.
 export function contentSyncFailed(sync: ContentSync, failure: AppFailure, lastGoodAt: string | null): ContentSync {
   if (sync.failure === failure) return sync;
-  return { ...sync, failure, lastGoodAt: sync.failure === null ? lastGoodAt : sync.lastGoodAt };
+  return { ...sync, failure, lastGoodAt: sync.failure === null ? lastGoodAt ?? sync.lastGoodAt : sync.lastGoodAt };
 }
 
 // A quiet success (nothing failing, a time already known) returns the same object, so every poll does not redraw the desktop.
