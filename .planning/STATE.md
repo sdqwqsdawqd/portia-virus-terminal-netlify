@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 18
 current_phase_name: Рабочий стол, окна и живые анимации
 status: executing
-stopped_at: Completed 18-01-PLAN.md
-last_updated: "2026-11-02T03:17:26.670Z"
+stopped_at: Completed 18-02-PLAN.md
+last_updated: "2026-11-02T03:23:21.485Z"
 last_activity: 2026-11-02
 last_activity_desc: Phase PORTIA-18 execution started
-state_head: 857fb2ec0ae160aa965fa650e1a530d68061d9e8
+state_head: bb61f83b2cc5f0ae95e457c6574176bc02c09747
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 49
-  completed_plans: 43
+  completed_plans: 44
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-18 (Рабочий стол, окна и живые анимации) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Executing Phase PORTIA-18
 Last activity: 2026-11-02 — Phase PORTIA-18 execution started
 
@@ -88,6 +88,7 @@ Progress: [█████░░░░░] 50% of Phase 15 plans (phase gaps_fou
 | Phase 16 P13 | ~2h | 3 tasks | 15 files |
 | Phase 16 P14 | 40min | 3 tasks | 10 files |
 | Phase PORTIA-18 P01 | n/a | 3 tasks | 8 files |
+| Phase 18 P02 | not measured | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 16]: 16-13: клиентский бандл редактора не должен импортировать node:crypto (CSP eval); HMAC-токены предпросмотра вынесены в lib/portia-promotion-preview-token.ts
 - [Phase 16]: 16-14: production DRIFT (sequence ACL + two legacy promo RPC overloads) closed by forward-only migrations 20261101000100/20261101000200; NOT applied to production (owner decides, D5). STAB-SEC-04 stays Pending, STAB-REL-04 Complete.
 - [Phase PORTIA-18]: 18-01: owner approved all motion [PROPOSED] values (7=A drag inside 8px, 8=A Vivian hidden on phone with open window); STAB-MEDIA-06 stays BLOCKED until owner traces
+- [Phase 18]: 18-02: заставка только в режиме full; в reduced и off не рендерится (п. 6 утверждён)
 
 ### Pending Todos
 
@@ -162,8 +164,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-02T03:17:26.531Z
-Stopped at: Completed 18-01-PLAN.md
+Last session: 2026-11-02T03:23:21.332Z
+Stopped at: Completed 18-02-PLAN.md
 Resume file: None
 
 ## Operator Next Step
