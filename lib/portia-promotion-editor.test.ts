@@ -282,7 +282,7 @@ test("a missing server part is not shown as an empty queue", () => {
   assert.ok(main.includes("Серверная часть раздела не обновлена."));
   assert.ok(main.includes('queueStatus === "loading"'));
   assert.ok(main.includes('queueStatus === "ready"'));
-  assert.ok(main.includes('banksStatus === "ready"'));
+  assert.ok(main.includes('banksStatus !== "ready"'));
   assert.ok(main.includes("promotion-skeleton"));
   assert.ok(main.includes("НОВЫХ ЗАПРОСОВ НЕТ"));
   assert.ok(main.includes("ОЧЕРЕДЬ НЕ ЗАГРУЖЕНА"));

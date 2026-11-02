@@ -1931,6 +1931,8 @@ html:is([data-motion="reduced"], [data-motion="off"]) :is(.promotion-card, .prom
 .promotion-grade-controls button { min-width: 92px; min-height: 40px; border: 1px solid var(--line); background: transparent; font: 700 11px var(--sans); }
 .promotion-grade-controls button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .promotion-grade-label { font: 700 11px/1.25 var(--sans); }
+.promotion-skeleton { display: grid; gap: 8px; }
+.promotion-skeleton span { display: block; min-height: 56px; border-radius: 7px; background: rgba(255,255,255,.04); }
 .promotion-bank-reason { grid-column: 1 / -1; margin: 8px 0 0; color: #efaaa3; font: 400 12px/1.45 var(--doc); overflow-wrap: anywhere; }
 .promotion-grade-controls button.correct.active { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
 .promotion-grade-controls button.incorrect.active { border-color: var(--danger); background: rgba(224,125,116,.08); color: #efaaa3; }
