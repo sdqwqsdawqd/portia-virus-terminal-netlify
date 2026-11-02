@@ -1442,10 +1442,10 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       {dialog === "delete" && selectedRecycledVirus && (
         <ConfirmDialog
           title="УДАЛИТЬ НАВСЕГДА"
-          text={`Удалить «${selectedRecycledVirus.name}» навсегда вместе с оформлением? Это действие нельзя отменить.`}
+          text={`Удалить «${selectedRecycledVirus.name}» вместе с оформлением? Запись будет удалена навсегда, её не восстановить.`}
           actions={[
             { label: "УДАЛИТЬ НАВСЕГДА", tone: "danger", onClick: () => { setDialog(null); deleteSelectedRecycledVirus(); } },
-            { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+            { label: "Не удалять", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
           ]}
           onCancel={() => setDialog(null)}
         />
@@ -1453,10 +1453,10 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       {dialog === "delete-file" && selectedRecycleFile && (
         <ConfirmDialog
           title="УДАЛИТЬ НАВСЕГДА"
-          text={`Удалить «${selectedRecycleFile.name}» навсегда вместе с оформлением? Это действие нельзя отменить.`}
+          text={`Удалить «${selectedRecycleFile.name}» вместе с оформлением? Запись будет удалена навсегда, её не восстановить.`}
           actions={[
             { label: "УДАЛИТЬ НАВСЕГДА", tone: "danger", onClick: () => { setDialog(null); deleteSelectedRecycleFile(); } },
-            { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+            { label: "Не удалять", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
           ]}
           onCancel={() => setDialog(null)}
         />

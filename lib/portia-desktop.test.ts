@@ -526,10 +526,12 @@ test("«Справочник» body picks its render by appViewState: skeleton, 
   const start = desktopMain.indexOf('<AppWindow app="guide"');
   const body = desktopMain.slice(start, desktopMain.indexOf("</AppWindow>", start));
   assert.ok(body.includes('<AppSkeleton shape="guide"'));
-  assert.ok(body.includes("<AppFatalPanel"));
-  assert.ok(body.includes("retryContent"));
-  assert.ok(body.includes("<AppStaleBanner"));
+  assert.match(body, /<AppFatalPanel|contentFatal\(/);
+  assert.match(body, /<AppStaleBanner|contentStaleBanner/);
   assert.ok(!body.includes("Загрузка справочника"));
+  // the shared fatal panel and stale strip of the content apps both retry through retryContent
+  assert.match(desktopMain, /const contentStaleBanner = .*retryContent\(\)/);
+  assert.match(desktopMain, /const contentFatal = .*retryContent\(\)/);
   assert.ok(desktopMain.includes("const guideView = appViewState("));
 });
 
@@ -545,15 +547,15 @@ test("every data window picks skeleton, fatal panel, stale strip and the shared 
     ["archive", "archive", ["archive"]],
     ["employees", "employees", ["employees"]],
     ["info", "info", ["info"]],
-    ["broadcasts", "broadcasts", ["news", "quests"]],
+    ["broadcasts", "broadcasts", ["[broadcastTab]"]],
     ["trash", "trash", ["trash"]],
   ];
   for (const [app, shape, keys] of rows) {
     const body = windowBody(app);
     assert.ok(body.includes(`<AppSkeleton shape="${shape}"`), `${app} skeleton`);
-    assert.ok(body.includes("<AppFatalPanel"), `${app} fatal`);
-    assert.ok(body.includes("<AppStaleBanner"), `${app} stale`);
-    for (const key of keys) assert.ok(body.includes(`emptyCopy.${key}`), `${app} empty ${key}`);
+    assert.match(body, /<AppFatalPanel|contentFatal\(/, `${app} fatal`);
+    assert.match(body, /<AppStaleBanner|contentStaleBanner/, `${app} stale`);
+    for (const key of keys) assert.ok(body.includes(key.startsWith("[") ? `emptyCopy${key}` : `emptyCopy.${key}`), `${app} empty ${key}`);
     assert.ok(!body.includes("<LoadingState"), `${app} no spinner loader`);
   }
   assert.ok(!desktopMain.includes("В базе пока нет вирусов") && !desktopMain.includes("Квестов и задач пока нет"));
@@ -566,7 +568,7 @@ test("a failed roster fetch writes employeesSync and never touches the roster; o
   assert.ok(failed.includes("failureFromResponse(response.status"));
   assert.ok(!failed.includes("setEmployees("));
   assert.ok(body.includes("contentSyncFailed(") && body.includes("contentSyncSucceeded("));
-  assert.ok(/degraded === false/.test(body));
+  assert.ok(/degraded !== false/.test(body), "only degraded === false is a complete roster");
   // the last good roster survives in the same state the failure leaves untouched
   assert.equal(count(body, "setEmployees("), 1);
   assert.ok(desktopMain.includes("retryEmployees"));
