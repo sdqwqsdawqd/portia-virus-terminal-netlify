@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { changedDossierTabs, changedSections, deniedSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
 import { closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
+import { uploadRefusal } from "@/lib/image-upload";
 import { dropFields, mergeFragments, removeFragmentAt } from "@/lib/format-fragments";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
 import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
@@ -380,6 +381,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   // The Recycle selection is one of two ids; the other stays "" (the render and the row highlight rely on it).
   const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycleFiles.length ? "" : content.recycledViruses?.[0]?.id ?? "");
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">("idle");
+  const [uploadMessage, setUploadMessage] = useState("");
   const [dialog, setDialog] = useState<"discard" | "recycle" | "delete" | "delete-file" | null>(null);
   // A request made before this mount is not replayed; the dialog shows while a newer one is unanswered.
   const [handledCloseRequest, setHandledCloseRequest] = useState(closeRequest);
@@ -724,18 +726,27 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   };
 
   const uploadImage = async (file: File, onUploaded: (url: string) => void) => {
+    if (uploadState === "uploading") return;
     setUploadState("uploading");
+    setUploadMessage("");
+    // A refusal never calls onUploaded, so the field and the draft keep their value (D-16).
+    const refuse = (message: string) => { setUploadMessage(message); setUploadState("error"); };
+    let response: Response;
     try {
       const body = new FormData();
       body.set("file", file);
-      const response = await fetch("/api/uploads", { method: "POST", body });
-      const payload = (await response.json()) as { url?: string; error?: string };
-      if (!response.ok || !payload.url) throw new Error(payload.error ?? "upload failed");
-      onUploaded(payload.url);
-      setUploadState("idle");
+      response = await fetch("/api/uploads", { method: "POST", body });
     } catch {
-      setUploadState("error");
+      refuse(uploadRefusal.network);
+      return;
     }
+    const payload = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!response.ok || !payload.url) {
+      refuse(typeof payload.error === "string" ? payload.error : uploadRefusal.server);
+      return;
+    }
+    onUploaded(payload.url);
+    setUploadState("idle");
   };
 
   // Read after an awaited save, when the closure that started it is renders old.
@@ -958,7 +969,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
                 <Field label="Название"><input value={selectedVirus.name} onChange={(event) => updateVirus((virus) => { virus.name = event.target.value; })} /></Field>
                 <Field label="Код"><input value={selectedVirus.code} onChange={(event) => updateVirus((virus) => { virus.code = event.target.value; })} /></Field>
                 <Field label="Статус"><input value={selectedVirus.status} onChange={(event) => updateVirus((virus) => { virus.status = event.target.value; })} /></Field>
-                <ImageEditorField label="Фото или GIF после заражения" value={selectedVirus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} onChange={(value) => updateVirus((virus) => { virus.infectedImage = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { virus.infectedImage = url; }))} />
+                <ImageEditorField label="Фото или GIF после заражения" value={selectedVirus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} uploadMessage={uploadMessage} onChange={(value) => updateVirus((virus) => { virus.infectedImage = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { virus.infectedImage = url; }))} />
               </EditorGroup>}
 
               {dossierTab === "text" && <EditorGroup title="Описание">
@@ -988,7 +999,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
                     <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => updateById(next.viruses, selectedVirus.id, (virus) => removeMutation(next, virus, index))); }}>Удалить</button></div>
                     <Field label="Название"><input value={mutation.name} onChange={(event) => updateVirus((virus) => { virus.mutations[index].name = event.target.value; })} /></Field>
                     <FormattedTextarea area="mutation" label="Описание" value={mutation.description} document={draft.formattedText[portiaTextKey.mutation(selectedVirus.id, index)]} formatKey={portiaTextKey.mutation(selectedVirus.id, index)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.mutation(selectedVirus.id, index), value, document, (next, text) => updateById(next.viruses, selectedVirus.id, (virus) => { const item = virus.mutations[index]; if (item) item.description = text; }))} />
-                    <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => updateVirus((virus) => { virus.mutations[index].image = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { const item = virus.mutations[index]; if (item) item.image = url; }))} />
+                    <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} uploadMessage={uploadMessage} onChange={(value) => updateVirus((virus) => { virus.mutations[index].image = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { const item = virus.mutations[index]; if (item) item.image = url; }))} />
                   </div>
                 ))}
                 <button className="secondary-control" type="button" onClick={() => updateVirus((virus) => virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }))}>+ ДОБАВИТЬ МУТАЦИЮ</button>
@@ -1039,7 +1050,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
                           actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.infoBlock(block.id)); changeDraft((next) => removeInfoBlock(next, subsection.id, block.id)); }} disabled={block.type === "photo" && uploadState === "uploading"}>Удалить</button></div>}>
                           {block.type === "text" && <FormattedTextarea area="info" label="Текст" tall value={block.text} document={draft.formattedText[portiaTextKey.infoBlock(block.id)]} formatKey={portiaTextKey.infoBlock(block.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.infoBlock(block.id), value, document, (next, text) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "text") item.text = text; }); })} />}
                           {block.type === "video" && <YoutubeField videoId={block.videoId} onChange={(videoId) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "video") item.videoId = videoId; }); })} />}
-                          {block.type === "photo" && <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="На странице: до 820 px в ширину" uploadState={uploadState} onChange={(value) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = value; }); })} onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = url; }); }))} />}
+                          {block.type === "photo" && <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="На странице: до 820 px в ширину" uploadState={uploadState} uploadMessage={uploadMessage} onChange={(value) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = value; }); })} onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = url; }); }))} />}
                           {block.type === "table" && <TableBlockEditor blockId={block.id} rows={block.rows} onEdit={(edit) => changeDraft((next) => editTableRows(next, subsection.id, block.id, edit))} />}
                         </CollapsibleCard>
                       ))}
@@ -1076,7 +1087,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
               handle={<OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.guideSections, from, to))} />}
               actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить раздел «${section.title || "Без названия"}» вместе с карточками`} onClick={() => { closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)))); changeDraft((next) => removeGuideSection(next, section.id)); }}>Удалить</button></div>}>
               <Field label="Заголовок раздела"><input maxLength={300} value={section.title} onChange={(event) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
-              <ImageEditorField label="Фото раздела" value={section.photo} placement="guide" maxHint="За заголовком раздела: низкая полоса во всю ширину" removeLabel="Убрать фото" uploadState={uploadState}
+              <ImageEditorField label="Фото раздела" value={section.photo} placement="guide" maxHint="За заголовком раздела: низкая полоса во всю ширину" removeLabel="Убрать фото" uploadState={uploadState} uploadMessage={uploadMessage}
                 onChange={(value) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = value; }))}
                 onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = url; })))} />
               <div className="info-subsection-list" data-sort-group="guide-cards" data-group-id={section.id}>
@@ -1094,7 +1105,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
                     }} />}
                     actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить карточку «${card.title || "Без названия"}»`} onClick={() => { closeFormatterFor(...card.blocks.map((block) => portiaTextKey.guideBlock(block.id))); changeDraft((next) => removeGuideCard(next, card.id)); }}>Удалить</button></div>}>
                     <Field label="Заголовок карточки"><input maxLength={300} value={card.title} onChange={(event) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.title = event.target.value; })} /></Field>
-                    <ImageEditorField label="Обложка" value={card.cover} placement="guide" maxHint="На плитке: 4:3, края обрезаются" removeLabel="Убрать обложку" uploadState={uploadState}
+                    <ImageEditorField label="Обложка" value={card.cover} placement="guide" maxHint="На плитке: 4:3, края обрезаются" removeLabel="Убрать обложку" uploadState={uploadState} uploadMessage={uploadMessage}
                       onChange={(value) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.cover = value; })}
                       onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.cover = url; }))} />
                     <div className="info-block-list">
@@ -1107,7 +1118,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
                           {block.type === "table" && <TableBlockEditor blockId={block.id} rows={block.rows} onEdit={(edit) => changeDraft((next) => editGuideTableRows(next, card.id, block.id, edit))} />}
                           {block.type === "photo" && (
                             <>
-                              <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="На странице: во всю ширину, до 820 px" uploadState={uploadState}
+                              <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="На странице: во всю ширину, до 820 px" uploadState={uploadState} uploadMessage={uploadMessage}
                                 onChange={(value) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.url = value; })}
                                 onUpload={(file) => uploadImage(file, (url) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.url = url; }))} />
                               <Field label="Подпись"><input maxLength={300} value={block.caption} onChange={(event) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.caption = event.target.value; })} /></Field>
@@ -1240,7 +1251,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
             <ArchivedVirusEditor
               virus={selectedRecycledVirus}
               dossierChanged={archivedDossierChanged}
-              uploadState={uploadState}
+              uploadState={uploadState} uploadMessage={uploadMessage}
               onUpload={uploadImage}
               onChange={updateRecycledVirus}
               // Index-keyed formatting shifts on delete, so the target is cleared as in the live list.
@@ -1288,7 +1299,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
 
               {selectedRecycleFile.kind === "image" && (
                 <EditorGroup title="Фотография" stack>
-                  <ImageEditorField label="Фотография или GIF" value={selectedRecycleFile.image} placement="recycle" maxHint="На странице: максимум 800 × 720 px" uploadState={uploadState} onChange={(value) => updateRecycleFile((file) => { file.image = value; })} onUpload={(upload) => uploadImage(upload, (url) => updateRecycleFile((file) => {
+                  <ImageEditorField label="Фотография или GIF" value={selectedRecycleFile.image} placement="recycle" maxHint="На странице: максимум 800 × 720 px" uploadState={uploadState} uploadMessage={uploadMessage} onChange={(value) => updateRecycleFile((file) => { file.image = value; })} onUpload={(upload) => uploadImage(upload, (url) => updateRecycleFile((file) => {
                     file.image = url;
                     if (!file.name || file.name === "НОВЫЙ_ФАЙЛ.txt") file.name = upload.name;
                   }))} />
@@ -1357,7 +1368,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
         </div>
       )}
 
-      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
+      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
 
       {tab === "promo" && openTabs.includes("promo") && <PromotionEditor visible={active && !minimized} canManageEditors={canManageEditors} />}
 
@@ -1484,10 +1495,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
 
 const detailsOf = (employee: PortiaEmployee) => ({ title: employee.title, rank: employee.rank, callsign: employee.callsign });
 
-function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onDirtyChange, leaving, onLeave }: {
+function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage, onUpload, onDirtyChange, leaving, onLeave }: {
   onSaved: (employee: PortiaEmployee) => void;
   onRemoved: (id: string) => void;
   uploadState: "idle" | "uploading" | "error";
+  uploadMessage?: string;
   onUpload: (file: File, onUploaded: (url: string) => void) => void;
   onDirtyChange: (dirty: boolean) => void;
   /** The editor wants to leave this tab or close; the unsaved draft has to be answered first. */
@@ -1791,7 +1803,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
           <Field label="Позывной"><input value={details.callsign} maxLength={64} onChange={(event) => setDetails((current) => ({ ...current, callsign: event.target.value }))} /></Field>
         </>}
         {employeeRatings.map(({ key, label }) => <Field key={key} label={`${label} — от 1 до 10`}><select value={draft[key] ?? ""} onChange={(event) => setDraft((current) => current && ({ ...current, [key]: event.target.value === "" ? null : Number(event.target.value) }))}><option value="">—</option>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>)}
-        <ImageEditorField label="Фото сотрудника" value={draft.photoUrl} placement="employee" maxHint="Пусто — используется аватар Roblox" uploadState={uploadState} onChange={(value) => setDraft((current) => current && ({ ...current, photoUrl: value }))} onUpload={(file) => { const startedFor = selected.id; onUpload(file, (url) => { if (selectedIdRef.current === startedFor) setDraft((current) => current && ({ ...current, photoUrl: url })); }); }} />
+        <ImageEditorField label="Фото сотрудника" value={draft.photoUrl} placement="employee" maxHint="Пусто — используется аватар Roblox" uploadState={uploadState} uploadMessage={uploadMessage} onChange={(value) => setDraft((current) => current && ({ ...current, photoUrl: value }))} onUpload={(file) => { const startedFor = selected.id; onUpload(file, (url) => { if (selectedIdRef.current === startedFor) setDraft((current) => current && ({ ...current, photoUrl: url })); }); }} />
         <Field label="Биография" wide><textarea className="tall-textarea" value={draft.biography} onChange={(event) => setDraft((current) => current && ({ ...current, biography: event.target.value }))} /></Field>
       </EditorGroup>
       {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}

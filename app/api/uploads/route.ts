@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
-import { imageExtensionFromSignature } from "@/lib/image-upload";
+import { imageExtensionFromSignature, MAX_UPLOAD_BYTES, uploadRefusal } from "@/lib/image-upload";
 import { noStoreHeaders } from "@/lib/portia-cdn";
 
 export const dynamic = "force-dynamic";
@@ -19,26 +19,26 @@ export async function POST(request: Request) {
     const access = await getEditorAccess(supabase, authData.user);
     // The owner always has every tab; an editor needs at least one open.
     if (!authData.user || !access.canEdit || access.openTabs.length === 0) {
-      return Response.json({ error: "У вас нет доступа к загрузке." }, { status: 403 });
+      return Response.json({ error: uploadRefusal.forbidden }, { status: 403, headers: noStoreHeaders });
     }
 
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {
-      return Response.json({ error: "Файл не выбран." }, { status: 400 });
+      return Response.json({ error: uploadRefusal.missing }, { status: 400, headers: noStoreHeaders });
     }
 
     const declaredExtension = allowedTypes.get(file.type);
     if (!declaredExtension) {
-      return Response.json({ error: "Поддерживаются PNG, JPG, WEBP и GIF." }, { status: 415 });
+      return Response.json({ error: uploadRefusal.format }, { status: 415, headers: noStoreHeaders });
     }
-    if (file.size > 4 * 1024 * 1024) {
-      return Response.json({ error: "Файл должен быть меньше 4 МБ." }, { status: 413 });
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return Response.json({ error: uploadRefusal.size }, { status: 413, headers: noStoreHeaders });
     }
 
     const detectedExtension = imageExtensionFromSignature(new Uint8Array(await file.slice(0, 16).arrayBuffer()));
     if (!detectedExtension || detectedExtension !== declaredExtension) {
-      return Response.json({ error: "Содержимое файла не соответствует формату изображения." }, { status: 415, headers: noStoreHeaders });
+      return Response.json({ error: uploadRefusal.signature }, { status: 415, headers: noStoreHeaders });
     }
 
     const path = `recycle/${crypto.randomUUID()}.${detectedExtension}`;
@@ -54,6 +54,6 @@ export async function POST(request: Request) {
     return Response.json({ url: data.publicUrl }, { headers: noStoreHeaders });
   } catch (error) {
     console.error("PORTIA media upload failed", error);
-    return Response.json({ error: "Не удалось загрузить изображение." }, { status: 500 });
+    return Response.json({ error: uploadRefusal.server }, { status: 500, headers: noStoreHeaders });
   }
 }

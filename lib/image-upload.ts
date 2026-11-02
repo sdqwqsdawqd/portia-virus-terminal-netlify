@@ -1,5 +1,18 @@
 export type SupportedImageExtension = "png" | "jpg" | "webp" | "gif";
 
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+
+// Fixed Russian refusal texts shared by /api/uploads and the editor (UI-SPEC "Поле загрузки в редакторе").
+export const uploadRefusal = {
+  forbidden: "У вас нет доступа к загрузке.",
+  missing: "Файл не выбран.",
+  format: "Поддерживаются PNG, JPG, WEBP и GIF.",
+  size: "Файл должен быть меньше 4 МБ.",
+  signature: "Содержимое файла не соответствует формату изображения.",
+  server: "Не удалось загрузить изображение.",
+  network: "Нет связи с сервером. Файл не загружен, текущая ссылка сохранена.",
+} as const;
+
 const startsWith = (bytes: Uint8Array, signature: readonly number[]) =>
   signature.every((byte, index) => bytes[index] === byte);
 

@@ -197,10 +197,11 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
   ><span aria-hidden="true">≡</span></button>;
 }
 
-export function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRemoveMutation, onRestore, onDelete, dossierChanged, restoreBlocked }: {
+export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUpload, onChange, onRemoveMutation, onRestore, onDelete, dossierChanged, restoreBlocked }: {
   restoreBlocked: boolean;
   virus: Virus;
   uploadState: "idle" | "uploading" | "error";
+  uploadMessage?: string;
   onUpload: (file: File, onUploaded: (url: string) => void) => void;
   onChange: (updater: (virus: Virus) => void) => void;
   onRemoveMutation: (index: number) => void;
@@ -216,7 +217,7 @@ export function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, on
       <Field label="Название"><input value={virus.name} onChange={(event) => onChange((item) => { item.name = event.target.value; })} /></Field>
       <Field label="Код"><input value={virus.code} onChange={(event) => onChange((item) => { item.code = event.target.value; })} /></Field>
       <Field label="Статус"><input value={virus.status} onChange={(event) => onChange((item) => { item.status = event.target.value; })} /></Field>
-      <ImageEditorField label="Фото или GIF после заражения" value={virus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.infectedImage = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.infectedImage = url; }))} />
+      <ImageEditorField label="Фото или GIF после заражения" value={virus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} uploadMessage={uploadMessage} onChange={(value) => onChange((item) => { item.infectedImage = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.infectedImage = url; }))} />
     </EditorGroup>}
     {dossierTab === "text" && <EditorGroup title="Описание" stack>
       <Field label="Внешние характеристики" wide><textarea value={virus.external} onChange={(event) => onChange((item) => { item.external = event.target.value; })} /></Field>
@@ -236,7 +237,7 @@ export function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, on
         <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => onRemoveMutation(index)}>Удалить</button></div>
         <Field label="Название"><input value={mutation.name} onChange={(event) => onChange((item) => { item.mutations[index].name = event.target.value; })} /></Field>
         <Field label="Описание" wide><textarea value={mutation.description} onChange={(event) => onChange((item) => { item.mutations[index].description = event.target.value; })} /></Field>
-        <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.mutations[index].image = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { const target = item.mutations[index]; if (target) target.image = url; }))} />
+        <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} uploadMessage={uploadMessage} onChange={(value) => onChange((item) => { item.mutations[index].image = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { const target = item.mutations[index]; if (target) target.image = url; }))} />
       </div>)}
       <button className="secondary-control" type="button" onClick={() => onChange((item) => { item.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }); })}>+ ДОБАВИТЬ МУТАЦИЮ</button>
     </EditorGroup>}
@@ -339,7 +340,7 @@ export function Field({ label, children, wide = false, error, errorId }: { label
   return <label className={`editor-field${wide ? " wide" : ""}${error ? " is-invalid" : ""}`}><span>{label}</span>{children}{error && <small id={errorId} className="editor-field-error" aria-hidden="true">{error}</small>}</label>;
 }
 
-export function ImageEditorField({ label, value, placement, maxHint, removeLabel, uploadState = "idle", onChange, onUpload }: {
+export function ImageEditorField({ label, value, placement, maxHint, removeLabel, uploadState = "idle", uploadMessage = "", onChange, onUpload }: {
   label: string;
   value: string;
   placement: ImagePlacement;
@@ -347,26 +348,35 @@ export function ImageEditorField({ label, value, placement, maxHint, removeLabel
   // When set and the field holds an image, a button with this text clears it.
   removeLabel?: string;
   uploadState?: "idle" | "uploading" | "error";
+  // Server or network refusal text, shown under the field; the value itself is never touched on refusal.
+  uploadMessage?: string;
   onChange: (value: string) => void;
   onUpload?: (file: File) => void;
 }) {
   const [failedPreviewUrl, setFailedPreviewUrl] = useState("");
   const previewFailed = Boolean(value) && failedPreviewUrl === value;
 
+  // Shown only where a file was picked, so a refusal is not repeated under every image field on the page.
+  const [picked, setPicked] = useState(false);
+  const uploading = uploadState === "uploading";
+
   const receiveFile = (file: File | undefined) => {
+    if (uploading) return;
+    if (file) setPicked(true);
     if (file && onUpload) onUpload(file);
   };
+  const refusal = picked && uploadState === "error" ? uploadMessage : "";
 
   return <div className={`editor-field wide image-editor-field image-placement-${placement}`}>
     <span>{label}</span>
     <input value={value} inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="Вставьте прямую HTTPS-ссылку на изображение или .gif" onChange={(event) => onChange(event.target.value)} onBlur={(event) => onChange(mediaUrlFromText(event.currentTarget.value))} onPaste={(event) => { const text = event.clipboardData.getData("text"); const url = mediaUrlFromText(text); if (url && url !== text) { event.preventDefault(); onChange(url); } }} />
     <small className="editor-media-hint">{maxHint}. GIF запускается автоматически. Для Tenor используйте ссылку с <b>media.tenor.com</b>, а не адрес страницы просмотра.</small>
-    {onUpload && <label className="editor-dropzone" onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event) => { event.preventDefault(); receiveFile(event.dataTransfer.files?.[0]); }}>
+    {onUpload && <label className="editor-dropzone" aria-disabled={uploading || undefined} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event) => { event.preventDefault(); receiveFile(event.dataTransfer.files?.[0]); }}>
       <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => { receiveFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
-      <strong>ВЫБРАТЬ ФАЙЛ С КОМПЬЮТЕРА</strong>
+      <strong>{uploading ? "ЗАГРУЖАЕМ…" : "ВЫБРАТЬ ФАЙЛ С КОМПЬЮТЕРА"}</strong>
       <small>или перетащите изображение сюда · PNG, JPG, WEBP, GIF · до 4 МБ</small>
     </label>}
-    <span className={`editor-upload-status ${uploadState}`}>{uploadState === "uploading" ? "ЗАГРУЗКА…" : uploadState === "error" ? "НЕ УДАЛОСЬ ЗАГРУЗИТЬ" : ""}</span>
+    {refusal && <span className="editor-media-error" role="alert">{refusal}</span>}
     {value && !previewFailed && <figure className={`editor-image-preview ${placement}`}><img src={value} alt={`Предпросмотр: ${label}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedPreviewUrl(value)} /></figure>}
     {value && removeLabel && <button type="button" className="secondary-control" onClick={() => onChange("")}>{removeLabel}</button>}
     {value && previewFailed && <span className="editor-media-error">Не удалось открыть ссылку. Нужна прямая HTTPS-ссылка на файл изображения или GIF.</span>}
