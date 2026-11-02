@@ -8,6 +8,8 @@ import { componentFamily } from "./component-source.ts";
 type Rgb = [number, number, number];
 
 const css = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+const cssRaw = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
+const layoutSource = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
 const desktopSource = componentFamily("portia-desktop").map((part) => part.text).join("\n");
 const spiderSource = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
 
@@ -248,7 +250,7 @@ test("the boot animation plays once per browser session", () => {
   assert.equal(runBoot(saved, false, () => null).boot, undefined);
   const blocked = runBoot(saved, false, () => { throw new Error("storage blocked"); });
   assert.equal(blocked.boot, undefined);
-  assert.equal(blocked.motion, "reduce");
+  assert.equal(blocked.motion, "off");
   assert.equal(blocked.accent, "ice");
   assert.ok(/(^|,)\s*html\[data-boot="seen"\] \.boot-screen\s*(,[^{]*)?\{[^}]*display:\s*none/m.test(css), "no html[data-boot=\"seen\"] .boot-screen { display: none }");
   assert.match(desktopSource, /sessionStorage\.setItem\(bootSeenStorageKey,/);
@@ -269,16 +271,42 @@ test("the boot script applies only a whitelisted saved accent", () => {
   for (const id of ["ice", "amber", "red"]) assert.ok(themes[id].size > 0, `no html[data-accent="${id}"] block`);
 });
 
-test("animations are on by default and off only by the setting, whatever the system says", () => {
-  const saved = (motion?: string) => () => JSON.stringify({ accent: "teal", motion });
+test("animations are full by default; reduced and off only by the saved setting, whatever the system says (D-10, D-11)", () => {
+  const saved = (motion?: unknown) => () => JSON.stringify({ accent: "teal", motion });
   assert.equal(runBoot(saved(), true).motion, "full");
   assert.equal(runBoot(saved(), false).motion, "full");
-  assert.equal(runBoot(saved("system"), true).motion, "full");
   assert.equal(runBoot(saved("on"), true).motion, "full");
-  assert.equal(runBoot(saved("off"), false).motion, "reduce");
-  assert.equal(runBoot(() => { throw new Error("storage blocked"); }, true).motion, "full");
-  // The attribute is the switch. The media query may only hold the fallback for a page where the head
-  // script never ran, so every selector inside it must be scoped to html:not([data-motion]).
+  assert.equal(runBoot(saved("reduced"), false).motion, "reduced");
+  assert.equal(runBoot(saved("reduced"), true).motion, "reduced");
+  assert.equal(runBoot(saved("off"), false).motion, "off");
+  assert.equal(runBoot(saved("off"), true).motion, "off");
+  // Unknown, legacy and corrupted values fall back to full; only the two literals switch anything.
+  for (const bad of ["system", "reduce", 123, null, "", "OFF", ["off"]]) assert.equal(runBoot(saved(bad), true).motion, "full", `value ${JSON.stringify(bad)}`);
+  assert.equal(runBoot(() => null).motion, "full");
+  assert.equal(runBoot(() => "{not json").motion, "full");
+  // E1: unreadable storage renders the defaults (motion full, spider on, no accent).
+  const blocked = runBoot(() => { throw new Error("storage blocked"); }, true);
+  assert.equal(blocked.motion, "full");
+  assert.equal(blocked.spider, "on");
+  assert.equal(blocked.accent, undefined);
+  // E1 partial: a corrupted field resets only itself.
+  const partial = runBoot(() => JSON.stringify({ motion: "invalid", spider: "off", accent: "ice" }));
+  assert.equal(partial.motion, "full");
+  assert.equal(partial.spider, "off");
+  assert.equal(partial.accent, "ice");
+  // The system preference is not read by the head script (D-10).
+  assert.doesNotMatch(accentBootScript, /matchMedia|prefers-reduced/);
+  // The motion switch block must not carry any system-preference media query (D-10).
+  const switchStart = cssRaw.indexOf("/* Motion switch");
+  const switchBlock = cssRaw.slice(switchStart, cssRaw.indexOf(".document-window", switchStart));
+  assert.ok(switchStart > -1 && switchBlock.includes("html[data-motion="), "Motion switch block not found");
+  assert.doesNotMatch(switchBlock, /prefers-reduced-motion/);
+  // «Выключены» zeroes durations and delays globally so every animation lands on its last frame.
+  assert.match(switchBlock, /html\[data-motion="off"\] \*[^{]*\{[^}]*animation-duration:\s*0s !important;[^}]*animation-delay:\s*0s !important;[^}]*transition-duration:\s*0s !important;[^}]*transition-delay:\s*0s !important;/);
+  assert.match(switchBlock, /html\[data-motion="reduced"\] \*/);
+  // Without the head script the SSR attribute is the safe state.
+  assert.match(layoutSource, /<html[^>]*data-motion="full"/);
+  // Any media query that remains must stay scoped to the missing-attribute fallback.
   for (const [, body] of css.matchAll(/@media\s*\(prefers-reduced-motion[^)]*\)\s*\{((?:[^{}]*\{[^{}]*\})*[^{}]*)\}/g)) {
     for (const [, selectors] of body.matchAll(/([^{}]+)\{[^{}]*\}/g)) {
       for (const selector of selectors.split(",")) assert.match(selector.trim(), /^html:not\(\[data-motion\]\)/, `unscoped motion rule: ${selector.trim()}`);
@@ -286,7 +314,9 @@ test("animations are on by default and off only by the setting, whatever the sys
   }
   const group = desktopSource.match(/title="Анимации" values=\{(\[\[.*?\]\])\}/)?.[1];
   assert.ok(group, "«Анимации» SettingGroup not found");
+  assert.deepEqual([...motionModes], ["on", "reduced", "off"]);
   assert.deepEqual([...motionModes], [...group.matchAll(/\['(\w+)',/g)].map((m) => m[1]));
+  assert.deepEqual([...group.matchAll(/'([^']+)'\]/g)].map((m) => m[1]), ["Включены", "Уменьшены", "Выключены"]);
 });
 
 const rgbToHex = (rgb: Rgb) => "#" + rgb.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("");
@@ -505,7 +535,7 @@ test("the spider has an independent saved switch and disappears with animations"
   const group = desktopSource.match(/title="Паук" values=\{(\[\[.*?\]\])\}/)?.[1];
   assert.ok(group, "«Паук» SettingGroup not found");
   assert.deepEqual([...spiderModes], [...group.matchAll(/\['(\w+)',/g)].map((m) => m[1]));
-  assert.match(css, /html\[data-motion="reduce"\] \.wallpaper-spider,\s*html\[data-spider="off"\] \.wallpaper-spider\s*\{\s*display:\s*none;/);
+  assert.match(css, /html:is\(\[data-motion="reduced"\], \[data-motion="off"\]\) \.wallpaper-spider,\s*html\[data-spider="off"\] \.wallpaper-spider\s*\{\s*display:\s*none;/);
   assert.match(css, /\.wallpaper-spider\s*\{[^}]*opacity:\s*1;/);
   assert.match(spiderSource, /attributeFilter:\s*\["data-motion", "data-spider"\]/);
 });
