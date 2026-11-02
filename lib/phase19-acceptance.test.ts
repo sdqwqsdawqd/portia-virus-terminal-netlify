@@ -319,3 +319,76 @@ describe("acceptance-shift", () => {
     assert.equal(await acceptanceShift({} as never, "x", "penalty", [], ctx.deps), 2);
   });
 });
+
+describe("acceptance-residual and acceptance-teardown", () => {
+  async function populated() {
+    const ctx = await seeded();
+    const { rows, world } = ctx.fake;
+    const mine = ctx.manifest.nicknames["p-retake"];
+    ctx.clock.ms += 3_600_000;
+    const inside = new Date(ctx.clock.ms).toISOString();
+    rows("portia_promo_qualification_requests").push({ id: "rq-mine", nickname_key: mine }, { id: "rq-theirs", nickname_key: "__portia_live_zz9_deadbeef_p1" });
+    rows("portia_promo_attempts").push({ id: "a-mine", request_id: "rq-mine" }, { id: "a-theirs", request_id: "rq-theirs" });
+    rows("portia_promo_answers").push({ id: "ans-mine", attempt_id: "a-mine" }, { id: "ans-theirs", attempt_id: "a-theirs" });
+    rows("portia_promo_requests").push({ id: "pr-mine", nickname_key: mine }, { id: "pr-theirs", nickname_key: "__portia_live_zz9_deadbeef_p2" });
+    rows("portia_promo_task_banks").push({ id: "old-bank", target_title_id: "scientist", created_at: old, updated_at: old }, { id: "window-bank", target_title_id: "virologist-specialist", created_at: inside, updated_at: inside });
+    rows("portia_promo_attempt_buckets").push({ bucket_key: "in-window", updated_at: inside }, { bucket_key: "before", updated_at: old });
+    rows("portia_content").push({ id: "keep-1" }, { id: `${ctx.run().prefix}_content` });
+    world.users.push({ id: "foreign-user", email: "x@example.invalid", app_metadata: { portia_run: "zz9_deadbeef" } }, { id: "plain-user", email: "y@example.invalid", app_metadata: {} });
+    world.log.length = 0;
+    ctx.lines.out.length = 0;
+    return ctx;
+  }
+  const lastJson = (ctx: { lines: { out: string[] } }) => JSON.parse(ctx.lines.out.at(-1)!);
+
+  test("residual only reads and counts run rows, banks, window buckets and attempts", async () => {
+    const ctx = await populated();
+    assert.equal(await main(["acceptance-residual", ctx.manifest.runId], ctx.deps), 0, ctx.lines.err.join(""));
+    assert.ok(ctx.fake.world.log.every((entry) => entry.startsWith("select:")), ctx.fake.world.log.join());
+    const { residual } = lastJson(ctx);
+    assert.deepEqual(
+      [residual.promo, residual.authUsers, residual.content, residual.banks, residual.buckets, residual.attempts, residual.answers],
+      [2, 2, 1, 5, 1, 1, 1],
+    );
+  });
+
+  test("teardown removes only the run and its window, leaves чужие записи in place and proves zero residual", async () => {
+    const ctx = await populated();
+    assert.equal(await main(["acceptance-teardown", ctx.manifest.runId], ctx.deps), 0, ctx.lines.err.join(""));
+    const { residual, errors } = lastJson(ctx);
+    assert.deepEqual(errors, []);
+    assert.ok(Object.values<number>(residual).every((count) => count === 0), JSON.stringify(residual));
+
+    const { rows, world } = ctx.fake;
+    assert.deepEqual(world.users.map((user) => user.id), ["foreign-user", "plain-user"]);
+    assert.deepEqual(rows("portia_promo_requests").map((row) => row.id), ["pr-theirs"]);
+    assert.deepEqual(rows("portia_promo_qualification_requests").map((row) => row.id), ["rq-theirs"]);
+    assert.deepEqual(rows("portia_promo_attempts").map((row) => row.id), ["a-theirs"]);
+    assert.deepEqual(rows("portia_promo_answers").map((row) => row.id), ["ans-theirs"]);
+    assert.deepEqual(rows("portia_promo_task_banks").map((row) => row.id), ["old-bank"]);
+    assert.deepEqual(rows("portia_promo_attempt_buckets").map((row) => row.bucket_key), ["before"]);
+    assert.deepEqual(rows("portia_content").map((row) => row.id), ["keep-1"]);
+    for (const child of ["portia_promo_task_items", "portia_promo_qualification_banks", "portia_promo_qualification_questions", "portia_promo_qualification_options"]) {
+      assert.equal(rows(child).length, 0, child);
+    }
+    assert.equal(existsSync(ctx.manifest.rosterPath), false, "temp roster and credentials are removed");
+  });
+
+  test("a bank that survives the deletion gives exit 1 and a non-zero banks counter", async () => {
+    const ctx = await populated();
+    ctx.fake.world.failures.add("delete:portia_promo_task_banks");
+    assert.equal(await main(["acceptance-teardown", ctx.manifest.runId], ctx.deps), 1);
+    const { residual, errors } = lastJson(ctx);
+    assert.ok(residual.banks > 0);
+    assert.ok(errors.length > 0);
+    assert.deepEqual(ctx.fake.rows("portia_promo_qualification_banks"), [], "later steps still ran");
+    assert.equal(existsSync(ctx.manifest.rosterPath), true, "temp files stay while anything is left");
+  });
+
+  test("a manifest of another run is refused", async () => {
+    const ctx = await populated();
+    assert.equal(await main(["acceptance-teardown", "abc_00000000"], ctx.deps), 1);
+    assert.ok(ctx.lines.err.join("").includes("acceptance-manifest-mismatch"));
+    assert.ok(ctx.fake.world.log.length === 0);
+  });
+});
