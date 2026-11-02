@@ -133,3 +133,14 @@ export function promotionEligibility(
   }
   return { status: "eligible", copyKey: "promotion.eligible", kind: options.kind, targetTitleId: entry.nextTitleId };
 }
+
+const availabilityDate = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+const availabilityTime = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+/** Device-time "next request" line; null when there is no valid future moment, so the caller renders nothing. */
+export function promotionAvailabilityText(iso: string | undefined, now: Date): string | null {
+  const at = iso ? Date.parse(iso) : Number.NaN;
+  if (!Number.isFinite(at) || at <= now.getTime()) return null;
+  const date = new Date(at);
+  return `Следующая заявка будет доступна ${availabilityDate.format(date)} в ${availabilityTime.format(date)}`;
+}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { parseRetakeLedger, updateRetakeLedger, type RetakeLedger, type RetakeNotification } from "@/lib/portia-promotion-notifications";
+import { promotionAvailabilityText } from "@/lib/portia-promotion";
 import { QUALIFICATION_HEARTBEAT_MS } from "@/lib/portia-qualification";
 
 type RequestKind = "ordinary" | "qualification";
@@ -33,16 +34,10 @@ const statusPollMs = 5_000;
 const terminalRecheckMs = 5_000;
 const retakeLedgerStorageKey = "portia.promotion.retake-ledger.v1";
 const dateTime = new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Moscow" });
-const calendarDate = new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeZone: "Europe/Moscow" });
 
 function formatDate(value?: string) {
   if (!value || !Number.isFinite(Date.parse(value))) return "по решению проверяющего";
   return `${dateTime.format(new Date(value))} МСК`;
-}
-
-function formatCalendarDate(value?: string) {
-  if (!value || !Number.isFinite(Date.parse(value))) return "после обновления таблицы";
-  return calendarDate.format(new Date(value)).replace(/\.$/, "");
 }
 
 function publicError(value: unknown, fallback: string) {
@@ -251,12 +246,12 @@ function activeCopy(kind: RequestKind, active: NonNullable<ActiveState>) {
   if (active.status === "testing") return "Квалификационная проверка начата.";
   if (active.status === "grading") return "Ответы переданы проверяющему.";
   if (active.status === "passed") return "Квалификация пройдена. Теперь отдельно запросите задания на повышение.";
-  if (active.status === "failed") return `Повторная проверка доступна ${formatDate(active.availableAt)}.`;
+  if (active.status === "failed") return promotionAvailabilityText(active.availableAt, new Date()) ?? "Повторная проверка будет доступна по решению проверяющего.";
   return "Состояние запроса обновляется.";
 }
 
 function eligibilityCopy(kind: RequestKind, eligibility: Eligibility) {
-  if (eligibility.status === "cooldown") return `Доступно с ${formatCalendarDate(eligibility.availableAt)}.`;
+  if (eligibility.status === "cooldown") return promotionAvailabilityText(eligibility.availableAt, new Date()) ?? "Повышение сейчас недоступно.";
   if (eligibility.status === "awaiting-sheet-change") return "Ожидается изменение звания в таблице.";
   if (eligibility.status === "special-task") return "Особое задание для звания «Эксперт вирусолог» выдаёт проверяющий.";
   if (eligibility.status === "qualification-required") return kind === "ordinary"

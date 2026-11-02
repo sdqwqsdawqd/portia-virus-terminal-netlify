@@ -29,21 +29,20 @@ test("admitted employees without a promotion row get a truthful disabled state",
   assert.ok(source.includes("Запись о повышении пока не заведена"));
 });
 
-test("promotion calendar cooldowns avoid fake midnight precision while exact retakes stay in Moscow time", () => {
+test("cooldown and retake deadlines come from promotionAvailabilityText in device time, history stays in Moscow time", () => {
+  assert.ok(source.includes('import { promotionAvailabilityText } from "@/lib/portia-promotion"'));
+  assert.ok(source.includes("promotionAvailabilityText(eligibility.availableAt, new Date())"));
+  assert.ok(source.includes("promotionAvailabilityText(active.availableAt, new Date())"));
+  assert.ok(source.includes("Повторная проверка будет доступна по решению проверяющего."));
+  assert.ok(!source.includes("formatCalendarDate"));
+  assert.doesNotMatch(source, /\.replace\(\/\\.\$\//);
+  assert.ok(!source.includes("Доступно с"));
   assert.ok(source.includes('timeZone: "Europe/Moscow"'));
-  assert.ok(source.includes("МСК"));
-  assert.ok(source.includes("formatCalendarDate"));
-  assert.ok(source.includes("Доступно с ${formatCalendarDate(eligibility.availableAt)}"));
-  assert.ok(source.includes("Повторная проверка доступна ${formatDate(active.availableAt)}"));
-  const localized = new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeZone: "Europe/Moscow" })
-    .format(new Date("2026-11-11T00:00:00.000Z"));
-  assert.equal(`${localized.replace(/\.$/, "")}.`, "11 ноября 2026 г.");
-  assert.match(source, /calendarDate\.format\(new Date\(value\)\)\.replace\(\/\\\.\$\//);
 });
 
 test("participant eligibility matrix always exposes either one action or one stable reason", () => {
   const reasons = [
-    "Доступно с",
+    "promotionAvailabilityText(eligibility.availableAt",
     "Ожидается изменение звания в таблице",
     "Особое задание для звания",
     "Сначала необходимо пройти квалификацию",
@@ -86,7 +85,7 @@ test("polling runs only for a visible window and a stale response preserves safe
 });
 
 test("participant states cover cooldown, sheet wait, special task and compact history", () => {
-  for (const copy of ["Доступно с", "Ожидается изменение звания в таблице", "Особое задание", "Последние результаты"]) {
+  for (const copy of ["promotionAvailabilityText(", "Ожидается изменение звания в таблице", "Особое задание", "Последние результаты"]) {
     assert.ok(source.includes(copy), copy);
   }
   assert.ok(source.includes(".slice(0, 3)"));
