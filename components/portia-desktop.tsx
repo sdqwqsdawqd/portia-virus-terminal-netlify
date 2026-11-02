@@ -14,7 +14,7 @@ import { exitedWindow, openedWindow, originOf, visibleWindowCount, windowAppears
 import { acceptFetchedContent } from "@/lib/content-sync";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
-import { AppWindow, appMeta, minimumWindowSize, type AppId } from "@/components/portia-desktop-window";
+import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
 import { DesktopIcon, StartPanelButton, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
@@ -841,6 +841,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const openApp = (appId: AppId, origin?: OpenOrigin) => {
     if (qualificationLocked && appId !== "promotion") return;
     if (windowAppears(windows[appId])) bounceTaskbarEntry(appId);
+    else if (!qualificationLocked) nodWindow(appId);
     // Re-opening a window while it closes or minimises cancels the exit and keeps it.
     const pendingExit = exitTimers.current[appId];
     if (pendingExit) {

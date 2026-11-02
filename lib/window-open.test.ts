@@ -180,3 +180,22 @@ test("state kept when a window is closed lives in PortiaDesktop, state reset on 
   assert.ok(source.includes("if (!state.open) return null;"));
   assert.ok(!/if \([^)\n]*minimized[^)\n]*\) return null/.test(source));
 });
+
+test("re-opening a visible window nods it only without the qualification lock, and only through Web Animations (D-14, T-18-07)", () => {
+  const open = bodyAfter("const openApp = (appId: AppId, origin?: OpenOrigin) => {");
+  const bounce = "if (windowAppears(windows[appId])) bounceTaskbarEntry(appId);\n    else if (!qualificationLocked) nodWindow(appId);";
+  assert.ok(open.trimStart().startsWith(lockGuard));
+  assert.ok(open.includes(bounce), "nodWindow must follow bounceTaskbarEntry as its else branch");
+  assert.equal(source.split("nodWindow(").length - 1, 2, "one declaration and one call");
+  const nod = bodyAfter("export function nodWindow(app: AppId) {");
+  assert.ok(nod.includes('motion === "reduced" || motion === "off"'));
+  assert.ok(nod.includes('[data-window-app="${app}"]'));
+  assert.ok(nod.includes("--ease-out"));
+  const frames = nod.slice(nod.indexOf("animate(")).match(/\{ translate: [^}]+\}/g) ?? [];
+  assert.equal(frames.length, 3);
+  assert.ok(!/\b(width|height|top|left)\b\s*:/.test(nod.slice(nod.indexOf("animate("))));
+  assert.ok(!nod.includes("setWindows") && !nod.includes("onGeometry"), "the nod must not touch window state");
+  const duration = Number(source.match(/export const WINDOW_NOD_MS = (\d+);/)?.[1]);
+  assert.ok(duration > 0 && duration <= 240);
+  assert.equal(source.split("data-window-app={app}").length - 1, 1);
+});
