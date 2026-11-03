@@ -99,6 +99,27 @@ Guide и broadcast на этой цели не проверены: записе�
 | [STAB-MEDIA-03] the picture box keeps its size from loading to error (CLS 0 for this element) | passed | passed |
 | [STAB-MEDIA-03] switching A -> B -> A always shows the current record's own picture | passed | passed |
 
+## CR-01: регрессия свёрнутых кадров (19-15)
+
+- Код: `14e04c6` (хук и фрейм — `d642673`); Node `v22.13.1`; цель — изолированный staging, зафиксированный в предыдущем прогоне с `refHash 01d085e7b9f0`. Visitor preflight этого прогона: `ready`. Повторная аттестация refHash здесь не выполнялась.
+- Целевой прогон: `npm.cmd exec playwright -- test tests/e2e/specs/media-offscreen.spec.ts tests/e2e/specs/media-states.spec.ts --project=chromium-desktop --project=chromium-phone --workers=2` → **14 тестов: 12 passed, 2 skipped, 0 failed**. Оба skipped относятся только к обложкам «Справочника» и записаны ниже как BLOCKED (DATA).
+- Регрессия фреймов: `npm.cmd exec playwright -- test tests/e2e/specs/app-states.spec.ts --grep=STAB-APP-06 --project=chromium-desktop --project=chromium-phone --workers=2` → **4 passed, 0 skipped, 0 failed**.
+- Собственные `/api` не подменялись. Spec удерживает внешний хост фрейма или перехватывает только запросы картинок к чужим хостам; fixture `assertNoOwnApiFulfilled` проверяет это в каждом тесте.
+
+| Тест | chromium-desktop | chromium-phone |
+|---|---|---|
+| [CR-01] свёрнутый «Устав»: 16 s без ложного fatal, затем 15 s видимости и retry | passed | passed |
+| [CR-01] портрет «Сотрудников»: 16 s в свёрнутом окне, затем 15 s видимости | passed | passed |
+| [CR-01] обложки свёрнутого раздела «Справочника» | BLOCKED (DATA): цель не отдаёт карточку с обложкой; доказывается в 19-19 на засеянных данных | BLOCKED (DATA): цель не отдаёт карточку с обложкой; доказывается в 19-19 на засеянных данных |
+| [STAB-MEDIA-02] портрет с ответом 404 | passed | passed |
+| [STAB-MEDIA-03] медленный портрет: заглушка через 15 s | passed | passed |
+| [STAB-MEDIA-03] размер портрета при loading/error | passed | passed |
+| [STAB-MEDIA-03] смена записи A → B → A | passed | passed |
+| [STAB-APP-06] «Таблица»: fatal через 15 s и retry | passed | passed |
+| [STAB-APP-06] «Устав»: fatal через 15 s и retry | passed | passed |
+
+STAB-MEDIA-02/-03/-05 в `REQUIREMENTS.md` остаются Pending до проверки обложек на засеянных данных в 19-19. Результат BLOCKED (DATA) не засчитан как passed.
+
 ## Лишние проекты (справочно, не входят в проходной критерий плана)
 
 - `webkit-phone`, `@smoke` из `visitor.spec.ts` на этой цели: 2 passed (12 секунд). Раньше `DesktopPage.goto()` на webkit-phone не проходил даже для @smoke; в этом прогоне проходит.
