@@ -1,27 +1,27 @@
 {
   "schema": "portia-acceptance-run-v1",
-  "runId": "mvz5fqgv_c40b449b",
+  "runId": "mw0rbyf6_72424cdc",
   "refHash": "01d085e7b9f0",
-  "createdAt": "2026-11-02T11:01:51.781Z",
+  "createdAt": "2026-11-03T14:02:32.943Z",
   "nicknames": {
-    "p-ordinary": "__portia_live_mvz5fqgv_c40b449b_p-ordinary",
-    "p-qual3": "__portia_live_mvz5fqgv_c40b449b_p-qual3",
-    "p-qual5": "__portia_live_mvz5fqgv_c40b449b_p-qual5",
-    "p-qual7": "__portia_live_mvz5fqgv_c40b449b_p-qual7",
-    "p-retake": "__portia_live_mvz5fqgv_c40b449b_p-retake",
-    "p-cooldown": "__portia_live_mvz5fqgv_c40b449b_p-cooldown"
+    "p-ordinary": "__portia_live_mw0rbyf6_72424cdc_p-ordinary",
+    "p-qual3": "__portia_live_mw0rbyf6_72424cdc_p-qual3",
+    "p-qual5": "__portia_live_mw0rbyf6_72424cdc_p-qual5",
+    "p-qual7": "__portia_live_mw0rbyf6_72424cdc_p-qual7",
+    "p-retake": "__portia_live_mw0rbyf6_72424cdc_p-retake",
+    "p-cooldown": "__portia_live_mw0rbyf6_72424cdc_p-cooldown"
   },
   "bankIds": {
     "ordinary": [
-      "bd3384f1-970b-466e-af0d-06e7ba5e4875"
+      "6f71e76a-72ca-4d99-9e91-8d7922a6e2fb"
     ],
     "qualification": [
-      "6876a559-1641-4d7d-99d6-395ca4f5b755",
-      "69fca7d3-4b23-43f1-a9f6-fc6f30890bb9",
-      "76b4c29a-208f-4ef0-92f2-93f25bdd15cf"
+      "119ccf29-07fd-4877-ab46-622988a30820",
+      "8263c736-19b4-43c0-b00a-c4caad4823f6",
+      "5753dbc6-8056-49c6-b1d7-db69435fadde"
     ]
   },
   "shiftedBucketKeys": [],
-  "rosterPath": "C:\\Users\\User\\AppData\\Local\\Temp\\portia-acceptance-mvz5fqgv_c40b449b\\roster.json",
-  "credentialsPath": "C:\\Users\\User\\AppData\\Local\\Temp\\portia-acceptance-mvz5fqgv_c40b449b\\credentials.json"
+  "rosterPath": "C:\\Users\\User\\AppData\\Local\\Temp\\portia-acceptance-mw0rbyf6_72424cdc\\roster.json",
+  "credentialsPath": "C:\\Users\\User\\AppData\\Local\\Temp\\portia-acceptance-mw0rbyf6_72424cdc\\credentials.json"
 }
