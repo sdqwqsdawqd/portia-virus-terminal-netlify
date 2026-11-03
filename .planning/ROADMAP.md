@@ -264,7 +264,7 @@ Plans:
   10. Hero/media загружается с корректным приоритетом, offscreen collections lazy, immutable media кэшируется без повторного скачивания, а смена записи, ошибка сети или blocked host не дают stale image, app crash или infinite spinner.
 
 **Acceptance gate**: Staging races/direct denials и полная owner PC/phone UAT «Повышения» обязательны; архивные отметки Phase 14 и preflight не закрывают фазу. Per-app desktop/phone matrix, authenticated editor journeys, search click-through и upload/cache/network evidence должны быть записаны до перехода к финальному CSP.
-**Plans:** 7/14 plans executed
+**Plans:** 12/14 plans executed
 
 Plans:
 **Wave 1**
@@ -284,19 +284,19 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 19-07-PLAN.md — teardown только помеченных данных приёмки после «принято» (STAB-PROM-13, -15)
-- [ ] 19-09-PLAN.md — покой иконок ярлыков = конечный кадр (D-17, хвост STAB-MOTION-05)
+- [x] 19-09-PLAN.md — покой иконок ярлыков = конечный кадр (D-17, хвост STAB-MOTION-05)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 19-10-PLAN.md — медиа: скелетон, заглушка «Изображение недоступно», приоритеты загрузки (STAB-MEDIA-02, -03, -05)
+- [x] 19-10-PLAN.md — медиа: скелетон, заглушка «Изображение недоступно», приоритеты загрузки (STAB-MEDIA-02, -03, -05)
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 19-11-PLAN.md — глобальный поиск: allowlist-индекс, открытие точной записи с подсветкой, клавиатура (STAB-SEARCH-01..04)
+- [x] 19-11-PLAN.md — глобальный поиск: allowlist-индекс, открытие точной записи с подсветкой, клавиатура (STAB-SEARCH-01..04)
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 19-12-PLAN.md — редактор: единый статус, конфликт ревизии, частичное сохранение (STAB-APP-07)
+- [x] 19-12-PLAN.md — редактор: единый статус, конфликт ревизии, частичное сохранение (STAB-APP-07)
 
 **Wave 9** *(blocked on Wave 8 completion)*
-- [ ] 19-13-PLAN.md — редактор: rebase при фоновом обновлении, fail-closed по правам, WYSIWYG и прокрутка (STAB-APP-07..09)
+- [x] 19-13-PLAN.md — редактор: rebase при фоновом обновлении, fail-closed по правам, WYSIWYG и прокрутка (STAB-APP-07..09)
 
 **Wave 10** *(blocked on Wave 9 completion)*
 - [ ] 19-14-PLAN.md — browser-матрица приложений, editor journeys, search click-through, upload/cache evidence и вердикт владельца PC/phone
@@ -334,7 +334,7 @@ Plans:
 | 16. Канонический Supabase staging и SQL-истина | 14/14 | Complete    | 2026-11-01 |
 | 17. Обратимая декомпозиция рабочего стола и редактора | 8/8 | Complete    | 2026-11-01 |
 | 18. Рабочий стол, окна и живые анимации | 7/7 | In Progress | - |
-| 19. «Повышение», приложения, редактор, поиск и медиа | 7/14 | In Progress | - |
+| 19. «Повышение», приложения, редактор, поиск и медиа | 12/14 | In Progress | - |
 | 20. Security, accessibility и приёмка релиза | 0/TBD | Not started | - |
 
 ## Coverage
