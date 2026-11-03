@@ -103,7 +103,7 @@ describe("resolveStagingTarget fails closed before any spawn or fetch", () => {
     ["db url direct wrong user", { ...env, PORTIA_STAGING_DB_URL: `postgresql://postgres.${ref}:x@db.${ref}.supabase.co:5432/postgres` }, "db-url-target-mismatch"],
     ["db url protocol", { ...env, PORTIA_STAGING_DB_URL: dbUrl.replace("postgresql:", "mysql:") }, "db-url-target-mismatch"],
     ["db url garbage", { ...env, PORTIA_STAGING_DB_URL: "not a url" }, "db-url-target-mismatch"],
-    ...["?host=db.example.supabase.co", "?hostaddr=1.2.3.4", "?user=x", "?dbname=x", "?service=x", "#fragment"].map((suffix): [string, Record<string, string | undefined>, string] => [
+    ...["?host=db.example.supabase.co", "?hostaddr=1.2.3.4", "?user=x", "?dbname=x", "?service=x", "?", "#fragment", "#"].map((suffix): [string, Record<string, string | undefined>, string] => [
       `db url rejects ${suffix}`, { ...env, PORTIA_STAGING_DB_URL: `${dbUrl}${suffix}` }, "db-url-target-mismatch",
     ]),
     ["db url wrong database", { ...env, PORTIA_STAGING_DB_URL: dbUrl.replace("/postgres", "/other") }, "db-url-target-mismatch"],

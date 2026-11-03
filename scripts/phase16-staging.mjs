@@ -43,7 +43,7 @@ function parseDbUrl(raw, ref) {
   } catch {
     throw bad();
   }
-  if (!["postgres:", "postgresql:"].includes(url.protocol) || url.port !== "5432" || url.search || url.hash || !["", "/postgres"].includes(url.pathname)) throw bad();
+  if (!["postgres:", "postgresql:"].includes(url.protocol) || url.port !== "5432" || url.search || url.hash || raw.includes("?") || raw.includes("#") || !["", "/postgres"].includes(url.pathname)) throw bad();
   const host = url.hostname.toLowerCase();
   const user = decodeURIComponent(url.username);
   const direct = host === `db.${ref}.supabase.co` && user === "postgres";
