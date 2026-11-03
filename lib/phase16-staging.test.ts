@@ -103,6 +103,10 @@ describe("resolveStagingTarget fails closed before any spawn or fetch", () => {
     ["db url direct wrong user", { ...env, PORTIA_STAGING_DB_URL: `postgresql://postgres.${ref}:x@db.${ref}.supabase.co:5432/postgres` }, "db-url-target-mismatch"],
     ["db url protocol", { ...env, PORTIA_STAGING_DB_URL: dbUrl.replace("postgresql:", "mysql:") }, "db-url-target-mismatch"],
     ["db url garbage", { ...env, PORTIA_STAGING_DB_URL: "not a url" }, "db-url-target-mismatch"],
+    ...["?host=db.example.supabase.co", "?hostaddr=1.2.3.4", "?user=x", "?dbname=x", "?service=x", "#fragment"].map((suffix): [string, Record<string, string | undefined>, string] => [
+      `db url rejects ${suffix}`, { ...env, PORTIA_STAGING_DB_URL: `${dbUrl}${suffix}` }, "db-url-target-mismatch",
+    ]),
+    ["db url wrong database", { ...env, PORTIA_STAGING_DB_URL: dbUrl.replace("/postgres", "/other") }, "db-url-target-mismatch"],
   ];
   for (const [name, input, code] of cases) {
     test(name, () => {
@@ -121,8 +125,10 @@ describe("resolveStagingTarget fails closed before any spawn or fetch", () => {
   test("accepts pooler and direct DB URLs of the attested ref", () => {
     const { deps } = spies();
     assert.equal(resolveStagingTarget(env, deps).projectId, ref);
+    assert.equal(resolveStagingTarget(env, deps).dbUrl, dbUrl);
     const direct = { ...env, PORTIA_STAGING_DB_URL: `postgresql://postgres:x@db.${ref}.supabase.co:5432/postgres` };
     assert.equal(resolveStagingTarget(direct, deps).url, `https://${ref}.supabase.co`);
+    assert.equal(resolveStagingTarget(direct, deps).dbUrl, direct.PORTIA_STAGING_DB_URL);
   });
 
   test("error messages never contain values", () => {

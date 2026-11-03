@@ -3,6 +3,8 @@ import * as nodeFs from "node:fs";
 import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { EventEmitter } from "node:events";
+import { createHash } from "node:crypto";
 import { after, describe, test } from "node:test";
 
 import { main } from "../scripts/phase16-staging.mjs";
@@ -29,6 +31,103 @@ const env: Record<string, string | undefined> = {
   PORTIA_STAGING_DB_URL: dbUrl,
   PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY: adminKey,
 };
+
+describe("acceptance-serve staging binding", () => {
+  const runId = "abc_12345678";
+  const refHash = createHash("sha256").update(ref).digest("hex").slice(0, 12);
+  function serveCase(overrides: Record<string, unknown> = {}) {
+    const root = mkdtempSync(path.join(scratch, "serve-"));
+    const manifestFile = path.join(root, "manifest.json");
+    const rosterPath = path.join(root, "roster.json");
+    nodeFs.writeFileSync(rosterPath, "{}");
+    nodeFs.writeFileSync(manifestFile, JSON.stringify({ schema: "portia-acceptance-run-v2", runId, refHash, rosterPath, nicknames: { probe: `__portia_live_${runId}_probe` } }));
+    const calls = { spawn: [] as unknown[], fetch: [] as string[], killed: 0, out: [] as string[], err: [] as string[] };
+    const child = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; kill: () => void };
+    child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
+    child.kill = () => { calls.killed++; child.emit("exit", 0); };
+    const deps = {
+      env, root, tmpdir: root, manifestFile, fs: nodeFs,
+      portInUse: async () => false,
+      spawn: (...args: unknown[]) => { calls.spawn.push(args); return child; },
+      waitForChild: async () => 0,
+      fetchLocal: async (url: string) => {
+        calls.fetch.push(url);
+        if (url.includes("/api/promotion/status")) {
+          const nick = new URL(url).searchParams.get("nickname");
+          return nick?.endsWith("_absent") ? { status: 404 } : { status: 200, json: async () => ({ nickname: nick }) };
+        }
+        if (url.endsWith("/owner-login")) return { status: 200, text: async () => `<script src="/_next/static/app.js"></script>` };
+        if (url.endsWith("/_next/static/app.js")) return { status: 200, text: async () => `${ref}.supabase.co` };
+        return { status: 200, text: async () => "ready" };
+      },
+      networkInterfaces: () => ({ lan: [{ address: "192.0.2.4", family: "IPv4", internal: false }] }),
+      out: (value: string) => calls.out.push(value), err: (value: string) => calls.err.push(value),
+      ...overrides,
+    };
+    return { deps, calls, child, manifestFile, rosterPath };
+  }
+
+  test("guard rejects missing or production environment before spawning", async () => {
+    for (const badEnv of [{}, { ...env, PORTIA_E2E_PRODUCTION_PROJECT_IDS: `${prod},${ref}`, PORTIA_E2E_ISOLATED_PROJECT_IDS: prod }]) {
+      const ctx = serveCase({ env: badEnv });
+      assert.equal(await main(["acceptance-serve", runId], ctx.deps), 1);
+      assert.equal(ctx.calls.spawn.length, 0);
+      assert.equal(ctx.calls.fetch.length, 0);
+    }
+  });
+  test("ref mismatch and port-busy refuse before spawn", async () => {
+    const mismatch = serveCase();
+    nodeFs.writeFileSync(mismatch.manifestFile, JSON.stringify({ schema: "portia-acceptance-run-v2", runId, refHash: "000000000000", rosterPath: mismatch.rosterPath, nicknames: { probe: "probe" } }));
+    assert.equal(await main(["acceptance-serve", runId], mismatch.deps), 1);
+    assert.match(mismatch.calls.err.join(""), /acceptance-serve-ref-mismatch/u);
+    assert.equal(mismatch.calls.spawn.length, 0);
+    const busy = serveCase({ portInUse: async () => true });
+    assert.equal(await main(["acceptance-serve", runId], busy.deps), 1);
+    assert.match(busy.calls.err.join(""), /port-busy/u);
+    assert.equal(busy.calls.spawn.length, 0);
+  });
+  test("server-not-staging kills child when probe returns 404", async () => {
+    const ctx = serveCase({ fetchLocal: async (url: string) => url.includes("/api/promotion/status") ? { status: 404 } : { status: 200 } });
+    assert.equal(await main(["acceptance-serve", runId], ctx.deps), 1);
+    assert.match(ctx.calls.err.join(""), /server-not-staging/u);
+    assert.equal(ctx.calls.killed, 1);
+    assert.equal(ctx.calls.out.length, 0);
+  });
+  test("production-ref-in-bundle and client-binding-unproven kill child", async () => {
+    for (const [bundle, code] of [[`${prod}.supabase.co`, "production-ref-in-bundle"], ["no project host", "client-binding-unproven"]]) {
+      const base = serveCase();
+      const fetchLocal = async (url: string) => url.endsWith("/_next/static/app.js") ? { status: 200, text: async () => bundle } : base.deps.fetchLocal(url);
+      const ctx = serveCase({ fetchLocal });
+      assert.equal(await main(["acceptance-serve", runId], ctx.deps), 1);
+      assert.match(ctx.calls.err.join(""), new RegExp(code, "u"));
+      assert.equal(ctx.calls.killed, 1);
+      assert.equal(ctx.calls.out.length, 0);
+    }
+  });
+  test("bound server receives staging env and prints one safe STAGING-BOUND line", async () => {
+    const ctx = serveCase();
+    assert.equal(await main(["acceptance-serve", runId, "--https"], ctx.deps), 0);
+    const [bin, args, opts] = ctx.calls.spawn[0] as [string, string[], { env: Record<string, string>; shell: boolean }];
+    assert.equal(bin, process.execPath);
+    assert.deepEqual(args.slice(-7), ["dev", "--hostname", "0.0.0.0", "--port", "3000", "--experimental-https"].slice(-7));
+    assert.equal(opts.shell, false);
+    assert.equal(opts.env.NEXT_PUBLIC_SUPABASE_URL, `https://${ref}.supabase.co`);
+    assert.equal(opts.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, publishableKey);
+    assert.equal(opts.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, publishableKey);
+    assert.equal(opts.env.PORTIA_PROMOTION_STAGING_ROSTER, ctx.rosterPath);
+    assert.match(opts.env.PORTIA_PROMOTION_DEVICE_SECRET, /^[a-f0-9]{64}$/u);
+    assert.equal(opts.env.PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY, "");
+    assert.equal(opts.env.PORTIA_STAGING_DB_URL, "");
+    const line = ctx.calls.out.join("");
+    assert.deepEqual(JSON.parse(line), { status: "STAGING-BOUND", refHash, serverBound: true, clientBound: true, urls: ["https://localhost:3000", "https://192.0.2.4:3000"] });
+    for (const secret of [ref, prod, adminKey, publishableKey, dbUrl, opts.env.PORTIA_PROMOTION_DEVICE_SECRET]) assert.ok(!line.includes(secret));
+    assert.equal(ctx.calls.err.join(""), "");
+    const second = serveCase({ tmpdir: ctx.deps.tmpdir });
+    assert.equal(await main(["acceptance-serve", runId], second.deps), 0);
+    const secondOpts = (second.calls.spawn[0] as [unknown, unknown, { env: Record<string, string> }])[2];
+    assert.equal(secondOpts.env.PORTIA_PROMOTION_DEVICE_SECRET, opts.env.PORTIA_PROMOTION_DEVICE_SECRET);
+  });
+});
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), "portia-acceptance-test-"));
 after(() => rmSync(scratch, { recursive: true, force: true }));
