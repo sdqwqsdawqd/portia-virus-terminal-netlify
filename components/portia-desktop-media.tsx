@@ -18,6 +18,8 @@ function prioritizeImage(src: string) {
   } catch { /* mediaSource rejects malformed links before they reach this surface. */ }
 }
 
+const unavailableLabel = "Изображение недоступно";
+
 type ImageState = "loading" | "loaded" | "failed";
 
 type PortiaImageProps = {
@@ -70,9 +72,9 @@ function PortiaImageFrame({ link, alt, priority, icon = "microscope", className,
           onError={() => setState((current) => (current === "loaded" ? current : "failed"))}
         />
       </>}
-      {state === "failed" && <span className="portia-image-placeholder">
+      {state === "failed" && <span className="portia-image-placeholder" title={unavailableLabel}>
         {isIllustration(icon) ? <PortiaIllustration name={icon} /> : <PortiaIcon name={icon} />}
-        <span className="portia-image-placeholder-label">Изображение недоступно</span>
+        <span className="portia-image-placeholder-label">{unavailableLabel}</span>
       </span>}
     </span>
     {trimmedCaption && <span className="portia-image-caption">{caption}</span>}

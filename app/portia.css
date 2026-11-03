@@ -428,6 +428,8 @@ html[data-motion="full"] .portia-image-skeleton { background: linear-gradient(10
 .portia-image-placeholder-label { font: 700 11px/1.25 var(--sans); overflow-wrap: anywhere; }
 .portia-image.is-compact .portia-image-placeholder { gap: 4px; padding: 4px; }
 .portia-image.is-compact .portia-image-placeholder svg { width: 24px; height: 24px; }
+/* A thumbnail too narrow for the 11px label keeps it for screen readers and shows it as a tooltip (title). */
+.portia-image.is-icon-only .portia-image-placeholder-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .portia-image.is-quiet .portia-image-placeholder { border: 0; }
 .portia-image.is-quiet .portia-image-placeholder > * { display: none; }
 .portia-image-caption { display: block; margin-top: 8px; font: 400 11px/1.5 var(--sans); overflow-wrap: anywhere; }
