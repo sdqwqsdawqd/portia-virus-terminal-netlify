@@ -24,7 +24,7 @@ export type PromotionAccessResult =
   | { status: "unavailable"; reason: "network" | "http" }
   | { status: "invalid-source"; reason: "invalid-data" };
 
-function normalizedNickname(value: string) {
+export function normalizedNickname(value: string) {
   return value.trim().normalize("NFKC").toLocaleLowerCase("en-US");
 }
 

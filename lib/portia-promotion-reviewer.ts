@@ -1,5 +1,6 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { getEditorAccess, type EditorAccess } from "./editor-access.ts";
+import { normalizedNickname } from "./portia-promotion-sheet.ts";
 import {
   ordinaryPromotionTransitions,
   qualificationPromotionTransitions,
@@ -27,7 +28,6 @@ export async function requirePromotionReviewer(supabase: SupabaseClient): Promis
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const keyPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 const requestActions = new Set(["claim", "release", "force-release", "reject", "delete-request", "approve-task"]);
 const attemptActions = new Set(["override-failure", "release-retake"]);
 
@@ -110,8 +110,10 @@ export function parsePromotionReviewerCommand(value: unknown): PromotionReviewer
       : null;
   }
   if (body.action === "reset-device") {
-    const nicknameKey = typeof body.nicknameKey === "string" ? body.nicknameKey.trim().toLocaleLowerCase("en-US") : "";
-    return keyPattern.test(nicknameKey) ? { action: "reset-device", nicknameKey } : null;
+    const nicknameKey = typeof body.nicknameKey === "string" ? normalizedNickname(body.nicknameKey) : "";
+    return nicknameKey.length >= 1 && nicknameKey.length <= 64 && !/[\u0000-\u001f\u007f]/u.test(nicknameKey)
+      ? { action: "reset-device", nicknameKey }
+      : null;
   }
   return null;
 }
