@@ -899,3 +899,67 @@ test("a failed check replaces the editor body by «Доступ закрыт» w
   assert.match(save, /if \(accessFailed\) return false;/);
   assert.match(editorSource, /if \(!active \|\| dialog \|\| closeAsked \|\| accessFailed\) return;/);
 });
+
+// ---- Phase 19-13 (STAB-APP-08, UI E3): the format panel keeps the selection; the editor lists scroll inside ----
+test("dragging the panel (mouse or touch) never reads or moves the field selection; the range lives in the target (STAB-APP-08)", () => {
+  const drag = editorSource.slice(editorSource.indexOf("const beginDrag"), editorSource.indexOf("// Arrow keys move the panel"));
+  assert.ok(drag.includes("const moveDrag") && drag.includes("const endDrag"));
+  assert.doesNotMatch(drag, /selection|restoreSelection|removeAllRanges|\.focus\(|getSelection/i);
+  // Pointer events cover the mouse and the touch with one path; the header takes no browser pan on a touch screen.
+  assert.match(editorSource, /onPointerDown=\{beginDrag\} onPointerMove=\{moveDrag\} onPointerUp=\{endDrag\} onPointerCancel=\{endDrag\}/);
+  assert.match(styles, /\.floating-text-format > header \{[^}]*touch-action:\s*none/);
+  // The panel never takes focus from the field, so the browser keeps its selection while the panel is pressed or dragged.
+  assert.match(editorSource, /onPointerDown=\{keepFieldFocus\} onMouseDown=\{keepFieldFocus\}/);
+  // The controls read the stored range, not whatever the DOM holds after a tap.
+  assert.match(editorSource, /resolveRange\([^)]*target\.selection\)/);
+  // Leaving the panel hands the stored selection back to the field.
+  assert.ok((editorSource.match(/restoreSelection\(field, target\.selection\)/g) ?? []).length >= 2, "Escape and the phone close restore the range");
+});
+
+test("saving with the format panel open does not close it or replace its target (STAB-APP-08)", () => {
+  const start = lf(editorSource).indexOf("const save = async");
+  const body = lf(editorSource).slice(start, lf(editorSource).indexOf("// D-10: after a partial save the first refused section's tab takes the focus"));
+  assert.ok(body.length > 500, "the save body was found");
+  assert.doesNotMatch(body, /setFormatTarget|setFormatterOpen/);
+});
+
+test("the editable area uses the font rule of the viewer in every area (STAB-APP-08 typography)", () => {
+  for (const area of ["lead", "metric", "mutation", "scientist", "info", "broadcast", "trash", "caption", "search"]) {
+    const rule = styles.split("\n").find((line) => line.includes(`.formatted-rich-input[data-area="${area}"]`) && /\{[^}]*\bfont:/.test(line));
+    assert.ok(rule, `${area}: a font rule`);
+    const selectors = rule.slice(0, rule.indexOf("{")).split(",").map((selector) => selector.trim());
+    assert.ok(selectors.some((selector) => !selector.includes("formatted-rich-input")), `${area}: the viewer selector shares the rule`);
+  }
+});
+
+test("every long editor list scrolls inside its own pane (UI E3 overflow)", () => {
+  assert.match(styles, /\.content-editor\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.content-editor\s*\{\s*min-height:\s*0;/);
+  assert.match(styles, /\.editor-record-list\s*\{[^}]*max-height:[^;}]+;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain/);
+  assert.match(styles, /\.employee-editor-layout > \.editor-record-list\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.employee-editor-layout > \.employee-profile-editor\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.promotion-request-list, \.promotion-bank-list\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.promotion-bank-editor, \.promotion-preview\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto/);
+});
+
+test("sticky and floating editor layers never cover the content: notices are in the flow, the one sticky chip sits under the panel (UI E3 overflow)", () => {
+  const rules = styles.split("\n").filter((line) => /^\.[^{]*\{/.test(line));
+  const stickyEditor = rules.filter((line) => /position:\s*sticky/.test(line) && /editor/.test(line.slice(0, line.indexOf("{")))).map((line) => line.slice(0, line.indexOf("{")).trim());
+  assert.deepEqual(stickyEditor, [".editor-save-chip"]);
+  for (const notice of [".editor-conflict-panel", ".editor-stale-banner", ".editor-their-edits", ".editor-section-error"]) {
+    const rule = rules.find((line) => line.startsWith(`${notice} {`));
+    if (!rule) continue;
+    assert.doesNotMatch(rule, /position:\s*(sticky|fixed|absolute)/, notice);
+  }
+  const z = (selector: string) => Number(new RegExp(`${selector.replace(/[.\[\]]/g, "\\$&")} \\{[^}]*z-index:\\s*(\\d+)`).exec(styles)?.[1] ?? NaN);
+  assert.ok(z(".floating-text-format") > z(".editor-save-chip"), "the format panel is above the save chip");
+  assert.match(styles, /\.editor-save-chip\s*\{[^}]*bottom:\s*12px/);
+});
+
+test("the stale banner is a warning strip in the flow with wrapping text (D-11)", () => {
+  const rule = styles.split("\n").find((line) => line.startsWith(".editor-stale-banner {")) ?? "";
+  assert.ok(rule, "rule found");
+  assert.match(rule, /font:\s*400 13px/);
+  assert.match(rule, /overflow-wrap:\s*anywhere/);
+  assert.match(rule, /oklch\(\.58 \.08 80 \/ \.55\)/);
+});

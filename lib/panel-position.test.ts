@@ -64,3 +64,28 @@ test("without an editor window the first place is the default corner", () => {
 test("the first place always passes through the clamp", () => {
   assert.equal(initialPanelOffset({ right: 1120, bottom: 2000 }, panel, bounds).bottom, -236);
 });
+
+test("a drag by mouse or touch, with fractional pointer coordinates, always lands on whole pixels inside the limits (STAB-APP-08)", () => {
+  const minRight = 64 - panel.width;
+  const maxRight = bounds.width - 64;
+  for (let start = -3000; start <= 5000; start += 137.3) {
+    const placed = clampPanelOffset({ right: start, bottom: start / 2 }, panel, bounds);
+    assert.ok(Number.isInteger(placed.right) && Number.isInteger(placed.bottom), String(start));
+    assert.ok(placed.right >= minRight && placed.right <= maxRight, `right at ${start}`);
+    assert.ok(placed.bottom >= 64 - panel.height && placed.bottom <= bounds.height - panel.height, `bottom at ${start}`);
+  }
+});
+
+test("moving the panel again from a clamped place does not move it (STAB-APP-08)", () => {
+  for (const offset of [{ right: -9999, bottom: 9999 }, { right: 9999, bottom: -9999 }, { right: 100.6, bottom: 120.4 }]) {
+    const once = clampPanelOffset(offset, panel, bounds);
+    assert.deepEqual(clampPanelOffset(once, panel, bounds), once);
+  }
+});
+
+test("a panel wider than the screen still keeps 64px of its header reachable (STAB-APP-08)", () => {
+  const phone = { width: 360, height: 640 };
+  const placed = clampPanelOffset({ right: -9999, bottom: 120 }, panel, phone);
+  assert.equal(placed.right, 64 - panel.width);
+  assert.ok(phone.width - (placed.right + panel.width) >= 0);
+});
