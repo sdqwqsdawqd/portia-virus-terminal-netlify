@@ -77,10 +77,10 @@
 ## Медиа и производительность
 
 - [x] **STAB-MEDIA-01**: Upload проверяет реальные bytes, размер и поддерживаемый формат; отказ не стирает URL/draft, успех возвращает безопасный UUID URL.
-- [x] **STAB-MEDIA-02**: Normalization, SQL constraint и rendering используют один URL-contract; unsafe scheme/path отклоняется, invalid legacy value даёт fallback.
-- [x] **STAB-MEDIA-03**: Активное hero/media имеет приоритет, offscreen collections lazy, initial request storm отсутствует, при смене записи старое изображение не показывается как новое.
+- [ ] **STAB-MEDIA-02**: Normalization, SQL constraint и rendering используют один URL-contract; unsafe scheme/path отклоняется, invalid legacy value даёт fallback.
+- [ ] **STAB-MEDIA-03**: Активное hero/media имеет приоритет, offscreen collections lazy, initial request storm отсутствует, при смене записи старое изображение не показывается как новое.
 - [ ] **STAB-MEDIA-04**: Immutable UUID media кэшируется повторно без скачивания, новый upload получает новый URL, content revision invalidation не ломает media cache.
-- [x] **STAB-MEDIA-05**: Broken, slow или blocked external media сохраняет читаемый текст/caption и стабильный layout без app crash или infinite spinner.
+- [ ] **STAB-MEDIA-05**: Broken, slow или blocked external media сохраняет читаемый текст/caption и стабильный layout без app crash или infinite spinner.
 - [ ] **STAB-MEDIA-06**: До оптимизации записаны воспроизводимые owner PC/phone traces; после изменений interaction, drag, wallpaper и app-open не хуже утверждённого baseline и проходят согласованные budgets.
 - [ ] **STAB-MEDIA-07**: Внешние media hosts инвентаризированы; CSP проходит report-only до enforcement, approved images/YouTube продолжают работать, rejected host показывает fallback.
 
@@ -177,10 +177,10 @@
 | STAB-SEARCH-03 | Phase 19 | Complete |
 | STAB-SEARCH-04 | Phase 19 | Pending |
 | STAB-MEDIA-01 | Phase 19 | Complete |
-| STAB-MEDIA-02 | Phase 19 | Complete |
-| STAB-MEDIA-03 | Phase 19 | Complete |
+| STAB-MEDIA-02 | Phase 19 | Pending |
+| STAB-MEDIA-03 | Phase 19 | Pending |
 | STAB-MEDIA-04 | Phase 19 | Pending |
-| STAB-MEDIA-05 | Phase 19 | Complete |
+| STAB-MEDIA-05 | Phase 19 | Pending |
 | STAB-MEDIA-06 | Phase 18 | Pending |
 | STAB-MEDIA-07 | Phase 20 | Pending |
 | STAB-A11Y-01 | Phase 20 | Pending |
