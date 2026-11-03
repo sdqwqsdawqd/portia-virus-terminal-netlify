@@ -365,8 +365,9 @@ test("PortiaImage checks the link first, mounts per record, times out and cleans
   assert.ok(media.includes("mediaSource(src)"), "the link goes through mediaSource before any <img>");
   assert.ok(media.includes("key={`${recordId}|${link}`}"), "a new record or link mounts a fresh frame");
   assert.ok(media.includes('referrerPolicy="no-referrer"'), "no Referer to image hosts");
-  assert.match(media, /window\.setTimeout\([\s\S]*MEDIA_SLOW_MS\)/);
-  assert.match(media, /return \(\) => window\.clearTimeout\(timer\)/, "the 15s timer dies with the frame");
+  assert.match(media, /useVisibleTimeout\(frameRef, state, MEDIA_SLOW_MS,/);
+  assert.ok(media.includes('data-media-armed={String(visible && state === "loading")}'));
+  assert.ok(!media.includes("window.setTimeout(() => setState"), "the image has no mount-time timeout");
   assert.match(media, /onError=\{\(\) => setState\(\(current\) => \(current === "loaded" \? current : "failed"\)\)\}/, "a late error never flips a loaded picture");
   assert.match(media, /state !== "failed" && /, "a failed frame renders no <img>");
   assert.equal((media.match(/Изображение недоступно/g) ?? []).length, 1);
