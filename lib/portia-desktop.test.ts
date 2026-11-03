@@ -223,6 +223,14 @@ test("every result type opens its owner and marks its record; a vanished record 
   }
 });
 
+test("device copies of content and roster are stamped with their data source and foreign copies are dropped (owner UAT 19-14)", () => {
+  assert.equal((source.match(/setItem\(contentCacheStorageKey, JSON\.stringify\(stampCacheSource\(/g) ?? []).length, 2, "both content writes are stamped");
+  assert.ok(source.includes("setItem(employeesCacheStorageKey, JSON.stringify(stampCacheSource(payload, deviceCacheSource())))"));
+  assert.ok(/!cacheMatchesSource\(JSON\.parse\(cached\), cacheSource\)\) \{ window\.localStorage\.removeItem\(contentCacheStorageKey\)/.test(source));
+  assert.ok(/!cacheMatchesSource\(JSON\.parse\(employeeCache\), cacheSource\)\) \{ window\.localStorage\.removeItem\(employeesCacheStorageKey\)/.test(source));
+  assert.ok(!/setItem\(contentCacheStorageKey, JSON\.stringify\(\{/.test(source), "no unstamped content write");
+});
+
 test("on a phone the trash list grows with its rows and scrolls with the page, like the virus archive (owner UAT 19-14)", () => {
   // iOS (Firefox/Safari on iPhone 16) could not scroll the nested overflow:auto list. The first attempt only dropped the
   // clipping, but `flex: 1 1 370px` kept the box at 370px and rows spilled over its border; the box must not flex.

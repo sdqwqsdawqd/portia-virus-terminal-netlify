@@ -12,6 +12,7 @@ import { CustomColorPicker } from "@/components/custom-color-picker";
 import { fitGeometry, type WindowGeometry } from "@/lib/window-geometry";
 import { exitedWindow, openedWindow, originOf, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "@/lib/window-open";
 import { acceptFetchedContent } from "@/lib/content-sync";
+import { cacheMatchesSource, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
 import { networkSaveError, parseRefusedSections, SaveConflictError, SectionClosedError } from "@/lib/editor-save-status";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
@@ -348,12 +349,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       setGuideCardId((current) => findGuide(fetched.guideSections, current)?.card ? current : "");
       setRevision(fetchedRevision);
       try {
-        window.localStorage.setItem(contentCacheStorageKey, JSON.stringify({
+        window.localStorage.setItem(contentCacheStorageKey, JSON.stringify(stampCacheSource({
           content: fetched,
           revision: fetchedRevision,
           updatedAt: payload.updatedAt ?? null,
           savedAt: new Date().toISOString(),
-        }));
+        }, deviceCacheSource())));
       } catch {}
     } catch (error) {
       // The last copy saved on this device keeps the terminal usable while offline; the banner only says so.
@@ -446,7 +447,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       setEmployeesSyncedAt(payload.syncedAt ?? null);
       setSelectedEmployeeId((current) => merged.employees.some((employee) => employee.id === current) ? current : merged.employees[0]?.id ?? "");
       // A degraded answer never replaces the device cache (D-07).
-      if (merged.cacheable) try { window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify(payload)); } catch {}
+      if (merged.cacheable) try { window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify(stampCacheSource(payload, deviceCacheSource()))); } catch {}
       if (payload.degraded !== false) { failure = "unavailable"; shownAt = payload.syncedAt ?? new Date().toISOString(); }
     } catch (error) {
       // The last successful personnel snapshot remains visible on this device.
@@ -481,7 +482,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   useEffect(() => {
     const cacheTimer = window.setTimeout(() => {
       try {
-        const cached = window.localStorage.getItem(contentCacheStorageKey);
+        const cacheSource = deviceCacheSource();
+        let cached = window.localStorage.getItem(contentCacheStorageKey);
+        // A copy from another data source (or unstamped) is dropped, never shown: its revision is unrelated (owner UAT 19-14).
+        if (cached && !cacheMatchesSource(JSON.parse(cached), cacheSource)) { window.localStorage.removeItem(contentCacheStorageKey); cached = null; }
         if (cached) {
           const parsed = JSON.parse(cached) as { content?: unknown; revision?: number };
           // The cache is device-editable and may predate any field, so it gets the same normalizer as the network (D-20, D-22).
@@ -502,7 +506,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             setContentReady(true);
           }
         }
-        const employeeCache = window.localStorage.getItem(employeesCacheStorageKey);
+        let employeeCache = window.localStorage.getItem(employeesCacheStorageKey);
+        if (employeeCache && !cacheMatchesSource(JSON.parse(employeeCache), cacheSource)) { window.localStorage.removeItem(employeesCacheStorageKey); employeeCache = null; }
         if (employeeCache) {
           const parsed = JSON.parse(employeeCache) as { employees?: PortiaEmployee[]; syncedAt?: string | null; profilesRead?: boolean };
           if (Array.isArray(parsed.employees)) {
@@ -1074,12 +1079,12 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       setGuideCardId((current) => findGuide(next.guideSections, current)?.card ? current : "");
       setRevision(savedRevision);
       try {
-        window.localStorage.setItem(contentCacheStorageKey, JSON.stringify({
+        window.localStorage.setItem(contentCacheStorageKey, JSON.stringify(stampCacheSource({
           content: next,
           revision: savedRevision,
           updatedAt: new Date().toISOString(),
           savedAt: new Date().toISOString(),
-        }));
+        }, deviceCacheSource())));
       } catch {}
       setSaveState("saved");
       saveStateTimer.current = window.setTimeout(() => setSaveState("idle"), 4000);
