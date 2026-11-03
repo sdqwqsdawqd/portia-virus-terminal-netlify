@@ -44,8 +44,12 @@ export type PromotionRosterEntry = {
   nextTitleId: PromotionTitleId | null;
   /** Human-readable sheet formula/status from column D. Never accepted as a timestamp. */
   antiSpeedrun: string;
-  /** Normalized server-readable timestamp from column E. */
-  promotedAt: string;
+  /**
+   * Normalized server-readable timestamp from column E: the Moscow midnight from which the next
+   * promotion is available. The sheet already includes the anti-speedrun wait (column D counts down
+   * to it), so no title cooldown is added on top (UAT 19-06 defect 1).
+   */
+  availableFrom: string;
 };
 
 export type PromotionEligibility =
@@ -57,7 +61,6 @@ export type PromotionEligibility =
   | { status: "not-listed"; copyKey: "promotion.notListed" };
 
 const qualificationLevels = new Set([2, 4, 6]);
-const millisecondsPerDay = 24 * 60 * 60 * 1_000;
 
 function titleKey(value: string) {
   return value
@@ -102,10 +105,9 @@ export function promotionEligibility(
   }
 
   const title = promotionTitle(entry.titleId);
-  const promotedAt = Date.parse(entry.promotedAt);
-  if (!Number.isFinite(promotedAt)) throw new TypeError("Promotion roster date must be normalized before eligibility.");
+  const availableAtMs = Date.parse(entry.availableFrom);
+  if (!Number.isFinite(availableAtMs)) throw new TypeError("Promotion roster date must be normalized before eligibility.");
   if (title.cooldownDays !== null) {
-    const availableAtMs = promotedAt + title.cooldownDays * millisecondsPerDay;
     if (options.now.getTime() < availableAtMs) {
       return {
         status: "cooldown",

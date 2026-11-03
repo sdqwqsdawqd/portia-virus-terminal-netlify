@@ -21,7 +21,7 @@ test("canonical promotion transitions are derived from the eight-rank ladder", (
   assert.equal(ordinaryPromotionTransitions[0].label, "Академик → Стажёр");
 });
 
-function rosterEntry(title: string, promotedAt = "2026-10-01T00:00:00.000Z"): PromotionRosterEntry {
+function rosterEntry(title: string, availableFrom = "2026-10-01T00:00:00.000Z"): PromotionRosterEntry {
   const normalized = normalizePromotionTitle(title);
   assert.ok(normalized, `test title must normalize: ${title}`);
   const current = promotionTitles.find((item) => item.id === normalized);
@@ -35,9 +35,21 @@ function rosterEntry(title: string, promotedAt = "2026-10-01T00:00:00.000Z"): Pr
     nextTitle: next?.label ?? "",
     nextTitleId: next?.id ?? null,
     antiSpeedrun: "Ожидание",
-    promotedAt,
+    availableFrom,
   };
 }
+
+test("sheet column E is the date promotion becomes available, so no cooldown is added on top (UAT 19-06 defect 1)", () => {
+  // Live row: Стажер | Лаборант | 3 дн. | 06.11.2026, checked on 03.11.2026. The sheet promises 06.11, not 09.11.
+  const entry = { ...rosterEntry("Стажёр"), antiSpeedrun: "3 дн.", availableFrom: "2026-11-05T21:00:00.000Z" };
+  const result = promotionEligibility(entry, { kind: "ordinary", now: new Date("2026-11-03T12:00:00.000Z"), qualificationPassed: true });
+  assert.equal(result.status, "cooldown");
+  assert.equal(result.status === "cooldown" ? result.availableAt : null, "2026-11-05T21:00:00.000Z");
+  assert.equal(
+    promotionEligibility(entry, { kind: "ordinary", now: new Date("2026-11-05T21:00:00.000Z"), qualificationPassed: true }).status,
+    "eligible",
+  );
+});
 
 test("promotion title ladder normalizes all eight titles and ё/е spelling", () => {
   assert.deepEqual(
@@ -58,18 +70,11 @@ test("promotion title ladder normalizes all eight titles and ё/е spelling", ()
   assert.equal(normalizePromotionTitle("неизвестное звание"), null);
 });
 
-test("promotion ordinary cooldowns use Moscow midnight and flip at every exact boundary", () => {
-  const cases = [
-    ["Академик", 7],
-    ["Стажёр", 3],
-    ["Лаборант", 4],
-    ["Исследователь", 6],
-    ["Ассистент", 8],
-    ["Научный сотрудник", 10],
-  ] as const;
-  for (const [title, cooldownDays] of cases) {
+test("promotion ordinary waits end exactly at the sheet availability date for every title", () => {
+  const cases = ["Академик", "Стажёр", "Лаборант", "Исследователь", "Ассистент", "Научный сотрудник"] as const;
+  for (const title of cases) {
     const entry = rosterEntry(title);
-    const availableAt = Date.parse(entry.promotedAt) + cooldownDays * day;
+    const availableAt = Date.parse(entry.availableFrom);
     const before = promotionEligibility(entry, { kind: "ordinary", now: new Date(availableAt - 1), qualificationPassed: true });
     assert.equal(before.status, "cooldown", title);
     assert.equal(before.availableAt, new Date(availableAt).toISOString(), title);
@@ -83,8 +88,8 @@ test("promotion ordinary cooldowns use Moscow midnight and flip at every exact b
 });
 
 test("promotion cooldown flips immediately around the true Moscow deadline", () => {
-  const entry = rosterEntry("Академик", "2026-09-30T21:00:00.000Z");
-  const deadline = Date.parse("2026-10-07T21:00:00.000Z");
+  const entry = rosterEntry("Академик", "2026-10-07T21:00:00.000Z");
+  const deadline = Date.parse(entry.availableFrom);
   assert.equal(promotionEligibility(entry, { kind: "ordinary", now: new Date(deadline - 1), qualificationPassed: true }).status, "cooldown");
   assert.equal(promotionEligibility(entry, { kind: "ordinary", now: new Date(deadline), qualificationPassed: true }).status, "eligible");
   assert.equal(promotionEligibility(entry, { kind: "ordinary", now: new Date(deadline + 1), qualificationPassed: true }).status, "eligible");
@@ -116,8 +121,8 @@ test("promotion ordinary request at a rank ceiling requires a passed qualificati
   }
 });
 
-test("promotion to Expert Virologist is represented as a special task after 18 days", () => {
-  const entry = rosterEntry("Специалист вирусолог");
+test("promotion to Expert Virologist is represented as a special task once the sheet date arrives", () => {
+  const entry = rosterEntry("Специалист вирусолог", "2026-10-19T00:00:00.000Z");
   const before = promotionEligibility(entry, { kind: "ordinary", now: new Date("2026-10-18T23:59:59.999Z") });
   assert.equal(before.status, "cooldown");
   const ready = promotionEligibility(entry, { kind: "ordinary", now: new Date("2026-10-19T00:00:00.000Z") });

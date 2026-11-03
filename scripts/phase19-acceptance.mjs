@@ -38,6 +38,7 @@ export class AcceptanceError extends Error {
 }
 
 // label -> source title and how long ago it was promoted; p-cooldown is promoted yesterday and is therefore in cooldown.
+// The sheet date (column E) is the day the next promotion becomes available: promotion day + title cooldown.
 const PARTICIPANTS = [
   { label: "p-ordinary", titleId: "academic", daysAgo: 60 },
   { label: "p-qual3", titleId: "trainee", daysAgo: 60 },
@@ -177,7 +178,7 @@ export async function acceptanceSeed(target, deps = {}) {
     fs.writeFileSync(rosterFile, JSON.stringify({
       access: PARTICIPANTS.map((p) => [nicknames[p.label]]),
       promotion: [SHEET_HEADERS, ...PARTICIPANTS.map((p) => [
-        nicknames[p.label], titleOf(p.titleId).label, nextTitleOf(p.titleId)?.label ?? "", "нет", isoDate(nowOf(deps) - p.daysAgo * DAY),
+        nicknames[p.label], titleOf(p.titleId).label, nextTitleOf(p.titleId)?.label ?? "", "нет", isoDate(nowOf(deps) + ((titleOf(p.titleId).cooldownDays ?? 0) - p.daysAgo) * DAY),
       ])],
     }));
     // Passwords live only here, outside the repository.
@@ -239,9 +240,8 @@ export async function acceptanceShift(target, runId, kind, args = [], deps = {})
   let updated = 0;
   if (kind === "cooldown") {
     editRoster(manifest, runId, deps, label, (row) => {
-      // the cooldown length belongs to the row's current title; the date moves one day past it, the rule itself is untouched
-      const cooldownDays = promotionTitles.find((title) => title.label === row[1])?.cooldownDays ?? 0;
-      row[4] = isoDate(nowOf(deps) - (cooldownDays + 1) * DAY);
+      // column E is the availability date, so ending the wait moves it to yesterday; the rule itself is untouched
+      row[4] = isoDate(nowOf(deps) - DAY);
     });
     updated = 1;
   } else if (kind === "rank") {

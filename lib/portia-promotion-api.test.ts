@@ -21,7 +21,7 @@ const roster: PromotionRosterResult = { status: "ok", roster: [{
   nextTitle: "Стажёр",
   nextTitleId: "trainee",
   antiSpeedrun: "доступно",
-  promotedAt: "2026-10-01T00:00:00.000Z",
+  availableFrom: "2026-10-01T00:00:00.000Z",
 }] };
 const emptyProjection: PromotionWorkflowProjection = {
   binding: "allowed",
@@ -131,7 +131,7 @@ test("a bound-device conflict is neutral and progressive without revealing the o
 });
 
 test("an ineligible or active request writes nothing", async () => {
-  const cooldownRoster: PromotionRosterResult = { status: "ok", roster: [{ ...roster.roster[0], promotedAt: "2026-10-26T00:00:00.000Z" }] };
+  const cooldownRoster: PromotionRosterResult = { status: "ok", roster: [{ ...roster.roster[0], availableFrom: "2026-11-02T00:00:00.000Z" }] };
   const cooldown = dependencies({ loadRoster: async () => cooldownRoster });
   assert.equal((await submitPromotionRequest({ nickname: "Alice", kind: "ordinary", token: "B".repeat(43), headers: new Headers() }, cooldown.deps)).status, 409);
   assert.equal(cooldown.calls.submit, 0);
@@ -144,7 +144,7 @@ test("an ineligible or active request writes nothing", async () => {
 });
 
 test("qualification retake waits until the server date and then permits a new request", async () => {
-  const entry = { ...roster.roster[0], title: "Стажёр", titleId: "trainee" as const, nextTitle: "Лаборант", nextTitleId: "laboratory-assistant" as const, promotedAt: "2026-10-01T00:00:00.000Z" };
+  const entry = { ...roster.roster[0], title: "Стажёр", titleId: "trainee" as const, nextTitle: "Лаборант", nextTitleId: "laboratory-assistant" as const, availableFrom: "2026-10-01T00:00:00.000Z" };
   const future = dependencies({
     loadRoster: async () => ({ status: "ok", roster: [entry] }),
     workflowStatus: async () => ({ status: "ok", projection: {

@@ -38,7 +38,7 @@ test("promotion sheet parses quoted CSV and preserves display spelling", async (
   if (result.status !== "ok") return;
   assert.equal(result.roster[0]?.nickname, "Portia,User");
   assert.equal(result.roster[0]?.nicknameKey, "portia,user");
-  assert.equal(result.roster[0]?.promotedAt, "2026-09-30T21:00:00.000Z");
+  assert.equal(result.roster[0]?.availableFrom, "2026-09-30T21:00:00.000Z");
   assert.match(request?.url ?? "", /range=A61:E85/);
   assert.equal(request?.init?.cache, "no-store");
   assert.ok(request?.init?.signal instanceof AbortSignal);

@@ -109,11 +109,11 @@ export function promotionRosterFromRows(rows: string[][]): PromotionRosterEntry[
     const nextTitle = cleanCell(row[2], 64);
     const nextTitleId = nextTitle ? normalizePromotionTitle(nextTitle) : null;
     const antiSpeedrun = cleanCell(row[3], 128);
-    const promotedAt = parseSheetDate(cleanCell(row[4], 32));
+    const availableFrom = parseSheetDate(cleanCell(row[4], 32));
     if (!titleId || nextTitleId !== expectedNextTitle(titleId) || !antiSpeedrun) {
       throw new Error("The promotion sheet row is invalid.");
     }
-    return [{ nickname, nicknameKey, title, titleId, nextTitle, nextTitleId, antiSpeedrun, promotedAt }];
+    return [{ nickname, nicknameKey, title, titleId, nextTitle, nextTitleId, antiSpeedrun, availableFrom }];
   });
 }
 

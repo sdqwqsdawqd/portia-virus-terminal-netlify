@@ -258,9 +258,9 @@ describe("acceptance-shift", () => {
     const ctx = await seeded();
     const nick = ctx.manifest.nicknames["p-cooldown"];
     const entry = () => promotionRosterFromRows(ctx.roster().promotion).find((item) => item.nickname === nick)!;
-    assert.ok(Date.parse(entry().promotedAt) > ctx.clock.ms - 2 * 86_400_000);
+    assert.ok(Date.parse(entry().availableFrom) > ctx.clock.ms + 5 * 86_400_000, "promoted yesterday as academic: available in 6 days");
     assert.equal(await main(["acceptance-shift", ctx.manifest.runId, "cooldown", "p-cooldown"], ctx.deps), 0, ctx.lines.err.join(""));
-    assert.ok(ctx.clock.ms - Date.parse(entry().promotedAt) > 7 * 86_400_000, "academic cooldown is 7 days");
+    assert.ok(Date.parse(entry().availableFrom) < ctx.clock.ms, "the wait is over after the shift");
     assert.equal(await main(["acceptance-shift", ctx.manifest.runId, "rank", "p-ordinary", "trainee"], ctx.deps), 0);
     const ordinary = promotionRosterFromRows(ctx.roster().promotion).find((item) => item.nickname === ctx.manifest.nicknames["p-ordinary"])!;
     assert.deepEqual([ordinary.titleId, ordinary.nextTitleId], ["trainee", "laboratory-assistant"]);
