@@ -264,7 +264,7 @@ Plans:
   10. Hero/media загружается с корректным приоритетом, offscreen collections lazy, immutable media кэшируется без повторного скачивания, а смена записи, ошибка сети или blocked host не дают stale image, app crash или infinite spinner.
 
 **Acceptance gate**: Staging races/direct denials и полная owner PC/phone UAT «Повышения» обязательны; архивные отметки Phase 14 и preflight не закрывают фазу. Per-app desktop/phone matrix, authenticated editor journeys, search click-through и upload/cache/network evidence должны быть записаны до перехода к финальному CSP.
-**Plans:** 14/14 plans executed
+**Plans:** 14/22 plans executed (8 gap-closure plans 19-15..19-22)
 
 Plans:
 **Wave 1**
@@ -300,6 +300,28 @@ Plans:
 
 **Wave 10** *(blocked on Wave 9 completion)*
 - [x] 19-14-PLAN.md — browser-матрица приложений, editor journeys, search click-through, upload/cache evidence и вердикт владельца PC/phone
+
+**Gap closure** (19-VERIFICATION.md, gaps_found 3/10)
+
+**Gap Wave 1**
+- [ ] 19-15-PLAN.md — CR-01: таймеры картинок и фреймов только при видимости, браузерная регрессия свёрнутых кадров (STAB-MEDIA-02, -03, -05, STAB-APP-06)
+- [ ] 19-16-PLAN.md — WR-04 (опрос статуса не сбрасывает попытку) и WR-06 (reset-device для ников приёмки и кириллицы) (STAB-PROM-07, -09, -14)
+- [ ] 19-17-PLAN.md — acceptance-serve: сервер UAT только с доказанной привязкой к staging; WR-01, WR-02, seed v2 с никами PC/phone (STAB-PROM-13, -15)
+
+**Gap Wave 2** *(blocked on Gap Wave 1)*
+- [ ] 19-18-PLAN.md — решение владельца по источнику «Сотрудников», guarded matrix-run для пустых и заполненных данных staging (STAB-DESK-08, STAB-APP-01..05, -10)
+
+**Gap Wave 3**
+- [ ] 19-19-PLAN.md — прогон матрицы на базовых, populated и empty данных, CR-01 на свёрнутом «Справочнике», WR-07, статусы и disposition
+
+**Gap Wave 4**
+- [ ] 19-20-PLAN.md — решение по run mw0rbyf6, повторные receipts, свежий acceptance-seed v2 и чек-лист с шагом 0 (STAB-PROM-01..15)
+
+**Gap Wave 5**
+- [ ] 19-21-PLAN.md — STAGING-BOUND, owner UAT шагов 0-11 и F9-F12 на PC и phone, вердикты (STAB-PROM-01..15)
+
+**Gap Wave 6**
+- [ ] 19-22-PLAN.md — teardown run повторной приёмки с residual 0 и итог STAB-PROM-15 (STAB-PROM-13, -15)
 
 **UI hint**: yes
 
