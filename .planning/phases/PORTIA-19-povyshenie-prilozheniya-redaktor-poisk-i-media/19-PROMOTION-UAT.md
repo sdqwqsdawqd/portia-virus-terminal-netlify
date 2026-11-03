@@ -99,3 +99,7 @@ Read-only `acceptance-residual` для run `mvz5fqgv_c40b449b` (staging, refHash
 ```
 
 Что удалит teardown (только записи run, банки манифеста и строки окна run): 2 editors и 2 authUsers (временные учётные записи run), 4 банка манифеста (1 обычный и 3 квалификационных). Остальные категории (promo, storage, content, buckets, attempts, answers) уже 0. Записи без маркера run и вне окна run не затрагиваются. Это one-way (D-04).
+
+## Teardown — решение владельца
+
+Решение teardown: удалить (владелец, 2026-11-03; ответ дословно: «удалить»). Прежнее решение «19-07 held» отменено владельцем этим ответом.
