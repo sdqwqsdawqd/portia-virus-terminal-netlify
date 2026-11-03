@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { componentFamily } from "./component-source.ts";
+import { componentFamily, lf } from "./component-source.ts";
 
 const desktopFamily = componentFamily("portia-desktop");
 const editorFamily = componentFamily("portia-editor");
 const source = desktopFamily.map((part) => part.text).join("\n");
 const editorSource = editorFamily.map((part) => part.text).join("\n");
-const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
+const styles = lf(readFileSync(new URL("../app/portia.css", import.meta.url), "utf8"));
 const icons = readFileSync(new URL("../components/portia-icons.tsx", import.meta.url), "utf8");
 
 // Index of the "}" that closes the "{" at `open`; braces inside strings or template literals are not special-cased.
@@ -104,7 +104,7 @@ test("the editor imports rich-text-style once and ships no joke or empty labels 
 });
 
 test("component families start with the full main file", () => {
-  const mainFile = (name: string) => readFileSync(new URL(`../components/${name}.tsx`, import.meta.url), "utf8");
+  const mainFile = (name: string) => lf(readFileSync(new URL(`../components/${name}.tsx`, import.meta.url), "utf8"));
   assert.equal(desktopFamily[0].text, mainFile("portia-desktop"));
   assert.equal(editorFamily[0].text, mainFile("portia-editor"));
 });
