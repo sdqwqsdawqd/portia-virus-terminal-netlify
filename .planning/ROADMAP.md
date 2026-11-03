@@ -346,7 +346,7 @@ Plans:
   12. В «Повышении» доступна кнопка «Создать шаблон», открывающая отдельный конструктор карточки досье вируса для текста и локальных изображений. Участник скачивает самодостаточные PNG или HTML для передачи проверяющему вне сайта; файлы и изображения не записываются в реальные записи архива, Supabase database/storage или `/api/uploads`.
 
 **Acceptance gate**: Неполное локальное покрытие отмечается явно; незакрытый high finding блокирует релиз согласно config. Фаза не закрывается без согласованного визуального контракта и принятия переработанного вида владельцем, физической owner PC/phone UAT, точного evidence ledger и отсутствия pending high-severity blocker.
-**Plans**: 15 plans
+**Plans**: 18 plans
 **UI hint**: yes
 
 Plans:
@@ -354,11 +354,13 @@ Plans:
 - [ ] 20-01-PLAN.md — сквозной локальный конструктор и автономный HTML
 - [ ] 20-08-PLAN.md — CSP report-only, media hosts и fallback
 - [ ] 20-09-PLAN.md — participant projection и no-store
+- [ ] 20-17-PLAN.md — D-33: WR-03 uploads 503/ранний size gate, WR-05 тексты и двойная отправка, IN-03 подтверждение «ОТОЗВАТЬ»
+- [ ] 20-18-PLAN.md — D-33: IN-01 GIF в тексте, IN-02/IN-04 скрипт приёмки, IN-05 disposition
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 20-02-PLAN.md — локальные изображения, PNG и ошибки экспорта
-- [ ] 20-03-PLAN.md — новый паук и паутина, режимы движения
-- [ ] 20-10-PLAN.md — security matrix, dependency audit и риски
+- [ ] 20-03-PLAN.md — новый паук и паутина, плотное тёмное тело с контуром (D-25..D-27), режимы движения
+- [ ] 20-10-PLAN.md — security matrix, dependency audit, риски и статусы находок 19-REVIEW (D-33)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 20-04-PLAN.md — выбираемый фон лабораторных колб
@@ -368,21 +370,24 @@ Plans:
 - [ ] 20-06-PLAN.md — participant/reviewer переработка «Повышения»
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 20-07-PLAN.md — клавиатура, touch, labels и motion
+- [ ] 20-16-PLAN.md — «Информация» на телефоне: список-навигация, «←», «Далее», раскрытие из поиска (D-28..D-32)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 20-11-PLAN.md — владельческое одобрение визуальных кандидатов
+- [ ] 20-07-PLAN.md — клавиатура, touch, labels и motion
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 20-12-PLAN.md — утверждённые visual baselines
+- [ ] 20-11-PLAN.md — владельческое одобрение визуальных кандидатов (паук на трёх акцентах, D-26)
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 20-13-PLAN.md — clean-checkout техническая репетиция
+- [ ] 20-12-PLAN.md — утверждённые visual baselines
 
 **Wave 9** *(blocked on Wave 8 completion)*
-- [ ] 20-14-PLAN.md — физическая owner UAT на PC и phone
+- [ ] 20-13-PLAN.md — clean-checkout техническая репетиция
 
 **Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 20-14-PLAN.md — физическая owner UAT на PC и phone (+ «Информация» на телефоне, регрессия стабилизации, D-34)
+
+**Wave 11** *(blocked on Wave 10 completion)*
 - [ ] 20-15-PLAN.md — final commit, повтор gates и честная reconciliation
 
 ## Progress
