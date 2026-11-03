@@ -343,6 +343,17 @@ test("profiles-unavailable: a newcomer is not written when the stored profiles c
   assert.equal(db.profiles.upserts.length, 0);
 });
 
+test("the staff sheet is read only in its own rows, so the rank column is not typed by the promotion dates below (owner UAT 19-14)", async (t) => {
+  // Column E holds text ranks in rows 2-35 and promotion dates in rows 61-85. A whole-sheet gviz export types E as a
+  // date column and silently blanks every text rank, so the staff read must carry its own range.
+  const calls = stubSheet(t, ['"1","Fox","Лис","Доктор","Профессор"']);
+  const db = fakeDb(fakeTable(true, []), manualTable());
+  const loaded = await loadEmployees(db.client);
+  const sheetCall = calls.find((url) => url.includes("docs.google.com"));
+  assert.match(sheetCall ?? "", /[?&]range=A1:Z35(&|$)/);
+  assert.equal(loaded.employees[0].rank, "Профессор");
+});
+
 test("loadEmployees still reads the sheet, profiles and manual rows, and throws on a non-OK sheet", async (t) => {
   stubSheet(t, ['"1","Fox","Лис","Доктор","2"']);
   const db = fakeDb(fakeTable(true, [{ employee_id: "nick-fox", nickname: "Fox", biography: "old", photo_url: "", knowledge_rating: 1 }]), manualTable({ rows: [manualRow(50, "Gamma_x")] }));

@@ -149,7 +149,9 @@ type ProfileRow = ProfileColumns & { employee_id: string; nickname: string };
 type RobloxProfile = { id: number; name: string; avatarUrl: string; fullAvatarUrl: string };
 export type ProfileIndex = { byId: Map<string, EmployeeProfile>; robloxIdByNickname: Map<string, number> };
 
-const sheetCsvUrl = "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/gviz/tq?tqx=out:csv&sheet=Portia";
+// Staff rows only (header + rows 2-35, matching staffRowsEnd). gviz types each column from the whole requested range:
+// column E also holds the promotion dates in rows 61-85, and a whole-sheet export blanks every text rank (owner UAT 19-14).
+const sheetCsvUrl = "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/gviz/tq?tqx=out:csv&sheet=Portia&range=A1:Z35";
 // The sheet has exactly 34 numbered staff places (rows 2-35); row 36 onwards holds totals and notes.
 // The owner confirmed (2026-10-20) rows after the 34th are never filled, so the limit is not raised and nothing warns.
 // If the sheet ever grows, change this constant and this comment together.
