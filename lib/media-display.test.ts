@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { MEDIA_SLOW_MS, mediaLoadingAttrs, mediaSource } from "./media-display.ts";
 
 test("mediaSource sends empty and disallowed URLs straight to the placeholder (no request)", () => {
-  for (const bad of ["", undefined, "   ", "javascript:alert(1)", "data:image/png;base64,AAAA", "//host/a.png", "/\host/a.png", "http://a/b.png", "https://a/\nb.png", "/\t/host/a.png"]) {
+  for (const bad of ["", undefined, "   ", "javascript:alert(1)", "data:image/png;base64,AAAA", "//host/a.png", "/\\host/a.png", "http://a/b.png", "https://a/\nb.png", "/\t/host/a.png"]) {
     assert.deepEqual(mediaSource(bad), { kind: "placeholder" }, String(bad));
   }
 });

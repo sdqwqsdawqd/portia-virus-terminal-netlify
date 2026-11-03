@@ -254,7 +254,37 @@ test("shortcut motion survives pointer exit until every delayed icon part reache
 test("active remote media receives connection and fetch priority while background collections stay lazy", () => {
   assert.match(source, /import \{ preconnect, preload \} from "react-dom"/);
   assert.match(source, /preload\(src, \{ as: "image", fetchPriority: "high", referrerPolicy: "no-referrer" \}\)/);
-  assert.match(source, /function LoadingMedia[\s\S]*loading="eager"[\s\S]*fetchPriority="high"/);
+  // Priority lives in one place: mediaLoadingAttrs, applied by PortiaImage.
+  assert.match(source, /export function PortiaImage/);
+  assert.match(source, /\{\.\.\.mediaLoadingAttrs\(priority\)\}/);
+  assert.match(source, /function LoadingMedia[\s\S]*<PortiaImage[\s\S]*priority=\{priority\}/);
+});
+
+test("PortiaImage checks the link first, mounts per record, times out and cleans up (D-15, STAB-MEDIA-03)", () => {
+  const media = desktopFamily.find((part) => part.file === "portia-desktop-media.tsx")?.text ?? "";
+  assert.ok(media.includes("mediaSource(src)"), "the link goes through mediaSource before any <img>");
+  assert.ok(media.includes("key={`${recordId}|${link}`}"), "a new record or link mounts a fresh frame");
+  assert.ok(media.includes('referrerPolicy="no-referrer"'), "no Referer to image hosts");
+  assert.match(media, /window\.setTimeout\([\s\S]*MEDIA_SLOW_MS\)/);
+  assert.match(media, /return \(\) => window\.clearTimeout\(timer\)/, "the 15s timer dies with the frame");
+  assert.match(media, /onError=\{\(\) => setState\(\(current\) => \(current === "loaded" \? current : "failed"\)\)\}/, "a late error never flips a loaded picture");
+  assert.match(media, /state !== "failed" && /, "a failed frame renders no <img>");
+  assert.equal((media.match(/Изображение недоступно/g) ?? []).length, 1);
+  // prioritizeImage is private to PortiaImage and only runs for the hero.
+  assert.match(media, /if \(link && priority === "hero"\) prioritizeImage\(link\)/);
+  assert.equal(source.split("prioritizeImage(").length - 1, 2, "one definition, one call, both in portia-desktop-media.tsx");
+  assert.ok(!desktopFamily.some((part) => part.file !== "portia-desktop-media.tsx" && part.text.includes("prioritizeImage(")));
+});
+
+test("PortiaImage sizes the box before the picture and keeps motion under the motion contract (UI E5)", () => {
+  assert.match(styles, /\.portia-image \{[^}]*aspect-ratio: var\(--portia-image-ratio, 4 \/ 3\)/);
+  assert.match(styles, /\.portia-image-placeholder \{[^}]*background: var\(--panel-2\); border: 1px solid var\(--line\)/);
+  assert.match(styles, /\.portia-image-placeholder svg \{[^}]*width: 40px; height: 40px/);
+  assert.match(styles, /\.portia-image-placeholder-label \{ font: 700 11px\/1\.25 var\(--sans\)/);
+  assert.match(styles, /\.portia-image-skeleton \{[^}]*animation: loader-appear 1ms linear 150ms forwards/);
+  assert.match(styles, /html\[data-motion="full"\] \.portia-image-skeleton \{[^}]*personnel-image-loading/);
+  assert.doesNotMatch(styles.replace(/html\[data-motion="full"\] \.portia-image-skeleton \{[^}]*\}/, ""), /\.portia-image-skeleton[^{]*\{[^}]*personnel-image-loading/, "shimmer only under data-motion=full");
+  assert.match(styles, /html\[data-motion\]:not\(\[data-motion="off"\]\) \.portia-image img \{ transition: opacity var\(--motion-fast\)/);
 });
 
 test("window drag uses the live frame width and symmetric workspace bounds", () => {

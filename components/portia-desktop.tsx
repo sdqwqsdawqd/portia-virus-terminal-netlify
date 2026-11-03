@@ -21,7 +21,8 @@ import { AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/components/portia-
 import { appViewState, contentSyncFailed, contentSyncSucceeded, emptyCopy, failureFromResponse, type AppFailure, type ContentSync } from "@/lib/app-state";
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-desktop-documents";
-import { FormattedText, LoadingState, prioritizeImage, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
+import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
+import { PortiaImage } from "@/components/portia-desktop-media";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -1365,8 +1366,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 {employeesView === "loading" ? <AppSkeleton shape="document" /> : employeesView === "fatal" && employeesSync.failure ? <AppFatalPanel failure={employeesSync.failure} retrying={employeesSync.retrying} onRetry={() => void retryEmployees()} illustration="dish" /> : employeesView === "empty" || !selectedEmployee ? <div className="editor-empty empty-state"><PortiaIllustration name="dish" /><strong>{emptyCopy.employees.heading}</strong><span>{emptyCopy.employees.body}</span></div> : <div className="personnel-profile-body content-fade" key={selectedEmployee.id}>
                   <header className="personnel-profile-head">
                     <div className="personnel-avatar-stage">
-                      <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} fallbackClassName="personnel-fallback" /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
-                      {selectedEmployee.robloxUserId ? <a className="personnel-portrait" href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer" aria-label={`Профиль Roblox: ${selectedEmployee.nickname}`} title={`Профиль Roblox: ${selectedEmployee.nickname}`}><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></a> : <figure className="personnel-portrait"><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></figure>}
+                      <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <PortiaImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} recordId={`${selectedEmployee.id}:avatar`} priority="hero" icon="employees" className="is-fill" /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
+                      {selectedEmployee.robloxUserId ? <a className="personnel-portrait" href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer" aria-label={`Профиль Roblox: ${selectedEmployee.nickname}`} title={`Профиль Roblox: ${selectedEmployee.nickname}`}><PortiaImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} recordId={`${selectedEmployee.id}:portrait`} priority="hero" icon="employees" className="is-fill is-compact" /></a> : <figure className="personnel-portrait"><PortiaImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} recordId={`${selectedEmployee.id}:portrait`} priority="hero" icon="employees" className="is-fill is-compact" /></figure>}
                     </div>
                     <div className="personnel-profile-identity"><h2>{selectedEmployee.nickname}</h2>{selectedEmployee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<p className="personnel-callsign">{selectedEmployee.callsign || "Без позывного"}</p></div>
                   </header>
@@ -1576,23 +1577,6 @@ function BootScreen({ visible }: { visible: boolean }) {
     <span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong>
     <div className="boot-lines">{bootLines.map((line, index) => <p key={line} style={{ animationDelay: `${200 + index * 280}ms` }}>{line}</p>)}</div>
   </div></div>;
-}
-
-// A new src (a corrected photo) starts a fresh load instead of keeping the old failed state.
-function EmployeeImage(props: { src: string; alt: string; fallbackClassName?: string }) {
-  return <EmployeeImageInner key={props.src} {...props} />;
-}
-
-function EmployeeImageInner({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-  // A failed URL shows the PORTIA fallback, never a broken image; if the fallback fails too, the skeleton still stops (D-09 #7).
-  const fallback = !src || failed;
-  if (!fallback) prioritizeImage(src);
-  return <div className={`personnel-image-loader${loaded ? " is-loaded" : ""}`}>
-    <span className="personnel-image-skeleton" aria-hidden="true" />
-    <img src={fallback ? "/assets/portia-logo.png" : src} alt={alt} className={fallback ? fallbackClassName : ""} loading="eager" decoding="async" fetchPriority="high" referrerPolicy="no-referrer" onLoad={() => setLoaded(true)} onError={() => fallback ? setLoaded(true) : setFailed(true)} />
-  </div>;
 }
 
 // In the archive list the badges stand alone, so each one names its term for screen readers and on hover.
