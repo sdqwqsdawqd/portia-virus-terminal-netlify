@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MEDIA_SLOW_MS, mediaLoadingAttrs, mediaSource } from "./media-display.ts";
+import { MEDIA_SLOW_MS, mediaLoadingAttrs, mediaSource, visibleTimerRunning } from "./media-display.ts";
+
+test("visible media alone runs its pending timeout", () => {
+  assert.equal(visibleTimerRunning("loading", true), true);
+  assert.equal(visibleTimerRunning("loading", false), false);
+  assert.equal(visibleTimerRunning("loaded", true), false);
+  assert.equal(visibleTimerRunning("failed", true), false);
+});
 
 test("mediaSource sends empty and disallowed URLs straight to the placeholder (no request)", () => {
   for (const bad of ["", undefined, "   ", "javascript:alert(1)", "data:image/png;base64,AAAA", "//host/a.png", "/\\host/a.png", "http://a/b.png", "https://a/\nb.png", "/\t/host/a.png"]) {

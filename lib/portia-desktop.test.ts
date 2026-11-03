@@ -759,9 +759,9 @@ test("«Таблица» and «Устав»: skeleton until onLoad, fatal panel 
   assert.ok(embedded.includes("sandbox={embedSandbox}"));
   assert.equal(count(documents, "sandbox={embedSandbox}"), 2, "the document frame and the YouTube frame");
   assert.match(embedded, /useState<"loading" \| "loaded" \| "failed">\("loading"\)/);
-  // The timer is armed only while loading, fires after iframeLoadTimeoutMs and is cleared on unmount, on load and on retry.
-  assert.match(embedded, /window\.setTimeout\(\(\) => setFrameState\("failed"\), iframeLoadTimeoutMs\)/);
-  assert.match(embedded, /return \(\) => window\.clearTimeout\(/);
+  assert.match(embedded, /useVisibleTimeout\(viewportRef, frameState, iframeLoadTimeoutMs,/);
+  assert.ok(!embedded.includes("window.setTimeout("), "a hidden frame cannot time out");
+  assert.ok(embedded.includes('data-frame-armed={String(visible && frameState === "loading")}'));
   assert.match(embedded, /onLoad=\{\(\) => setFrameState\("loaded"\)\}/);
   assert.ok(embedded.includes('<AppSkeleton shape="document"'));
   assert.match(embedded, /<AppFatalPanel failure="iframe"[^>]*extra=\{/);
