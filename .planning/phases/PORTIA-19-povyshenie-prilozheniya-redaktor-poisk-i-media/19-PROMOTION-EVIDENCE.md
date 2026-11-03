@@ -1,12 +1,24 @@
 # 19-06: доказательства «Повышения» (матрица STAB-PROM)
 
-Дата: 2026-11-03. Статус документа: промежуточный, ждёт owner UAT (Task 3). Ни один BLOCKED не записан как PASS.
+Дата: 2026-11-03. Статус документа: итоговый для плана 19-06 (owner UAT завершён вариантом 2, см. «Вердикт владельца»). Ни один BLOCKED не записан как PASS. UI-часть требований НЕ подтверждена на staging.
+
+## Вердикт владельца и его границы
+
+Владелец выбрал вариант 2: принять без повторного прохождения шагов 1–9 на staging. Фактически:
+
+- Шаги 2–8 чек-листа (PC и phone) пройдены владельцем на PRODUCTION `production-проект (ref начинается на wqiy…)`, а не на staging: dev-сервер владельца читал `.env.local` с production URL (инцидент, `19-PROMOTION-UAT.md`, дефекты, строка 2). Агенты production не трогали. Эти прохождения НЕ зачтены как доказательство на staging.
+- На staging `изолированный staging (refHash 01d085e7b9f0)` владелец подтвердил только шаг 10 (editor без `promo`): PASS. Серверная часть этого же отказа доказана receipts (см. ниже).
+- Шаги 1, 9, 11 на staging не проводились. Финальный read-only residual staging: promo 0, editors 2, storage 0, content 0, authUsers 2, banks 4, buckets 0, attempts 0, answers 0 (данные run нетронуты); в логе staging-сервера нет submit-ов.
+- Вердикты PC и phone записаны в `19-PROMOTION-UAT.md` как принятые по production-прогону и явно НЕ закрывающие STAB-PROM-15.
+
+Поэтому ячейки «ожидает 19-PROMOTION-UAT» ниже заменены на «не подтверждено на staging (вердикт владельца по production-прогону, вариант 2)». Это не PASS и не FAIL: доказательства на изолированном проекте нет.
 
 ## Прогон
 
 | Поле | Значение |
 |------|----------|
 | Commit прогонов | `66116036389ca50352da57e33026206ef0abc6d2` (поле `commit` во всех receipts этого прогона; код фазы 19 не менялся после `1f2d1b6`, дальше только evidence) |
+| Код после прогонов | `4d2a3e9` (дефект 1, столбец E листа = дата доступности); receipts выше сняты ДО этой правки, серверная часть (RPC/RLS/гонки) её не затрагивает, юнит-тесты после правки зелёные |
 | Цель | изолированный проект, refHash `01d085e7b9f0`, `attest` = ATTESTED перед прогонами |
 | Node | 22.13.1 |
 | Run приёмки | `mvz5fqgv_c40b449b` (манифест `evidence/19-ACCEPTANCE-RUN.json`); после обоих прогонов `acceptance-residual`: banks 4, authUsers 2, editors 2, buckets/attempts/answers 0, то есть данные приёмки не затронуты |
@@ -40,41 +52,46 @@
 
 ## Матрица требований
 
-«Серверная часть» = граница сервера/БД, доказанная live receipt с residual 0. «UI/поток» = то, что доказывается только owner UAT; юнит-тесты (`lib/portia-promotion-*.test.ts`, `lib/app-state.test.ts`) перечислены как поддержка и вердикта не заменяют.
+«Серверная часть» = граница сервера/БД, доказанная live receipt с residual 0 на staging. «UI/поток» = то, что доказывается только owner UAT на staging; юнит-тесты (`lib/portia-promotion-*.test.ts`, `lib/app-state.test.ts`) перечислены как поддержка и вердикта не заменяют. Формулировка «не подтверждено на staging» везде означает: «вердикт владельца по production-прогону, вариант 2», то есть не PASS.
 
 | Требование | Доказательство (suite/test или шаг UAT) | Вердикт |
 |------------|------------------------------------------|---------|
-| STAB-PROM-01 | live role matrix (anon/outsider: таблицы, RPC, Storage закрыты); promotion-live `promo reviewers succeed while anon and non-promo users cannot read or invoke reviewer state`; юнит `portia-promotion-api` (safe projection, sheet outage отличается от «не найден»), `portia-promotion-staging-roster`. Шаг UAT: participant | Серверная часть PASS; поток и закрытие доступа удалением строки таблицы: ожидает 19-PROMOTION-UAT |
-| STAB-PROM-02 | юнит `portia-promotion-ui` (матрица eligibility, cooldown в device time). Шаги UAT: participant, ordinary, qualification, retake (сдвиг `cooldown`) | ожидает 19-PROMOTION-UAT |
-| STAB-PROM-03 | concurrency `admission-same-nickname-n6-r10`, `admission-split-device-n6-r10`; promotion-live `atomic admission creates one request and cannot split one device across two nicknames`; юнит `portia-promotion-api` (rejected submit не сохраняет токен). Шаг UAT: participant (reload, чужой ник, повторный submit) | Серверная часть (один binding и один request, отклонённый submit без следов) PASS; UI: ожидает 19-PROMOTION-UAT |
-| STAB-PROM-04 | те же admission-гонки (не более одного активного запроса на ник, partial unique); юнит `portia-promotion-db` (уникальные частичные индексы), `portia-promotion-api` (порядок device, throttle, active request; нейтральный отказ без раскрытия ника). Шаги UAT: сдвиг `penalty`, границы 5/15/60 минут | Серверная часть PASS; границы ожидания и нейтральный текст: ожидает 19-PROMOTION-UAT |
-| STAB-PROM-05 | юнит `portia-promotion-reviewer` (active-only, без дублей, порядок, блокировка при нехватке банка), `portia-promotion-security` (stale/tampered preview). Шаг UAT: bank CRUD, ordinary | ожидает 19-PROMOTION-UAT |
-| STAB-PROM-06 | promotion-live `deployed Promotion RPC inventory matches participant, reviewer and bank routes`; юнит `portia-promotion-security` (текущий вопрос публичен, ключи нет). Шаг UAT: qualification (3, 5, 7 по ролям p-qual3/5/7) | Инвентарь RPC PASS; поток: ожидает 19-PROMOTION-UAT |
-| STAB-PROM-07 | concurrency `answer-cas-n6-r10`, `heartbeat-vs-expire-n6-r10`, `start-test-client-mode-n6-r10`; promotion-live `answer CAS advances once...` и `client mode is immutable and an expired heartbeat lease fails the attempt`. Шаги UAT: reload во время попытки, сдвиг `deadline` | Серверная часть PASS; видимое поведение: ожидает 19-PROMOTION-UAT |
-| STAB-PROM-08 | concurrency `start-test-client-mode-n6-r10` (режим фиксируется сервером, неизменяем); юнит `portia-promotion-ui` (тексты предупреждений PC/phone, не «hardware attestation»). Шаги UAT: потеря focus на PC, переключение вкладки на phone | Серверная часть PASS; поведение на устройствах: ожидает 19-PROMOTION-UAT |
-| STAB-PROM-09 | Playwright `staging-authz`: API-матрица `/api/promotion/reviewer` x 5 ролей, revoke `promo` на открытой сессии (70 PASS, receipts run1..run5); concurrency `claim-n6-r10`, `release-reject-delete-vs-claim-n6-r10`; promotion-live `parallel claim produces exactly one assignee`; role matrix (promo-reviewer, editor-full/restricted) | Серверная часть PASS; badges и видимая очередь: ожидает 19-PROMOTION-UAT |
-| STAB-PROM-10 | юнит `portia-promotion-editor` (drafts, правильные ответы рядом с вариантами, инвалидация preview). Шаг UAT: bank CRUD на PC и phone | ожидает 19-PROMOTION-UAT |
-| STAB-PROM-11 | юнит `portia-promotion-editor`, `portia-promotion-reviewer` (оценка по ответам, итог вручную), `portia-promotion-api` (участник без keys, notes, reviewer). Шаг UAT: reviewer | ожидает 19-PROMOTION-UAT |
-| STAB-PROM-12 | юнит `portia-promotion-notifications` (одно тихое уведомление), `portia-promotion-editor` (2 дня, изменить/продлить/снять). Шаги UAT: retake (сдвиг `retake`) | ожидает 19-PROMOTION-UAT |
-| STAB-PROM-13 | concurrency `cleanup-vs-admission-n6-r10`; юнит `portia-promotion-security` (close prunes history, cleanup не трогает непроверенный flow). Шаги UAT: cleanup (сдвиг `cleanup`), активный flow другого участника run остаётся | Серверная часть (гонка очистки и допуска) PASS; payload закрытых попыток, три результата, подсказка: ожидает 19-PROMOTION-UAT |
-| STAB-PROM-14 | promotion-live `deployed Promotion RPC inventory matches...`; юнит `portia-promotion-api` (missing RPC, database failure, sheet outage дают разные коды), `portia-promotion-ui` (текст «принята» только после создания). Шаг UAT: participant | Серверная часть PASS; UI-состояния: ожидает 19-PROMOTION-UAT |
+| STAB-PROM-01 | live role matrix (anon/outsider: таблицы, RPC, Storage закрыты); promotion-live `promo reviewers succeed while anon and non-promo users cannot read or invoke reviewer state`; юнит `portia-promotion-api` (safe projection, sheet outage отличается от «не найден»), `portia-promotion-staging-roster`. Шаг UAT: participant | Серверная часть PASS; поток и закрытие доступа удалением строки таблицы: не подтверждено на staging (вердикт владельца по production-прогону, вариант 2) |
+| STAB-PROM-02 | юнит `portia-promotion-ui` (матрица eligibility, cooldown в device time; после 4d2a3e9 столбец E = дата доступности, cooldown звания не прибавляется). Шаги UAT: participant, ordinary, qualification, retake (сдвиг `cooldown`) | UI: не подтверждено на staging (вердикт владельца по production-прогону, вариант 2); дефект 1 исправлен и покрыт тестами, повторного прохождения на staging нет |
+| STAB-PROM-03 | concurrency `admission-same-nickname-n6-r10`, `admission-split-device-n6-r10`; promotion-live `atomic admission creates one request and cannot split one device across two nicknames`; юнит `portia-promotion-api` (rejected submit не сохраняет токен). Шаг UAT: participant (reload, чужой ник, повторный submit) | Серверная часть (один binding и один request, отклонённый submit без следов) PASS; UI: не подтверждено на staging (вердикт владельца по production-прогону, вариант 2) |
+| STAB-PROM-04 | те же admission-гонки (не более одного активного запроса на ник, partial unique); юнит `portia-promotion-db` (уникальные частичные индексы), `portia-promotion-api` (порядок device, throttle, active request; нейтральный отказ без раскрытия ника). Шаги UAT: сдвиг `penalty`, границы 5/15/60 минут | Серверная часть PASS; границы ожидания и нейтральный текст: не подтверждено на staging (вердикт владельца по production-прогону, вариант 2); сдвиги `cooldown`/`penalty` через wrapper не запрашивались |
+| STAB-PROM-05 | юнит `portia-promotion-reviewer` (active-only, без дублей, порядок, блокировка при нехватке банка), `portia-promotion-security` (stale/tampered preview). Шаг UAT: bank CRUD, ordinary | не подтверждено на staging (вердикт владельца по production-прогону, вариант 2) |
+| STAB-PROM-06 | promotion-live `deployed Promotion RPC inventory matches participant, reviewer and bank routes`; юнит `portia-promotion-security` (текущий вопрос публичен, ключей нет). Шаг UAT: qualification (3, 5, 7 по ролям p-qual3/5/7) | Инвентарь RPC PASS; поток: не подтверждено на staging (вердикт владельца по production-прогону, вариант 2) |
+| STAB-PROM-07 | concurrency `answer-cas-n6-r10`, `heartbeat-vs-expire-n6-r10`, `start-test-client-mode-n6-r10`; promotion-live `answer CAS advances once...` и `client mode is immutable and an expired heartbeat lease fails the attempt`. Шаги UAT: reload во время попытки, сдвиг `deadline` | Серверная часть PASS; видимое поведение: не подтверждено на staging (вердикт владельца по production-прогону, вариант 2) |
+| STAB-PROM-08 | concurrency `start-test-client-mode-n6-r10` (режим фиксируется сервером, неизменяем); юнит `portia-promotion-ui` (тексты предупреждений PC/phone, не «hardware attestation»). Шаги UAT: потеря focus на PC, переключение вкладки на phone | Серверная часть PASS; поведение на устройствах: не подтверждено на staging (вердикт владельца по production-прогону, вариант 2) |
+| STAB-PROM-09 | Playwright `staging-authz`: API-матрица `/api/promotion/reviewer` x 5 ролей, revoke `promo` на открытой сессии (70 PASS, receipts run1..run5); concurrency `claim-n6-r10`, `release-reject-delete-vs-claim-n6-r10`; promotion-live `parallel claim produces exactly one assignee`; role matrix (promo-reviewer, editor-full/restricted). Шаг UAT 10 (direct denial): PASS владельцем на staging, editor без promo | Серверная часть PASS; direct denial (шаг 10) PASS на staging; badges и видимая очередь (шаг 3): не подтверждено на staging (вердикт владельца по production-прогону, вариант 2) |
+| STAB-PROM-10 | юнит `portia-promotion-editor` (drafts, правильные ответы рядом с вариантами, инвалидация preview). Шаг UAT: bank CRUD на PC и phone | не подтверждено на staging (вердикт владельца по production-прогону, вариант 2) |
+| STAB-PROM-11 | юнит `portia-promotion-editor`, `portia-promotion-reviewer` (оценка по ответам, итог вручную), `portia-promotion-api` (участник без keys, notes, reviewer). Шаг UAT: reviewer | не подтверждено на staging (вердикт владельца по production-прогону, вариант 2) |
+| STAB-PROM-12 | юнит `portia-promotion-notifications` (одно тихое уведомление), `portia-promotion-editor` (2 дня, изменить/продлить/снять). Шаги UAT: retake (сдвиг `retake`) | не подтверждено на staging (вердикт владельца по production-прогону, вариант 2) |
+| STAB-PROM-13 | concurrency `cleanup-vs-admission-n6-r10`; юнит `portia-promotion-security` (close prunes history, cleanup не трогает непроверенный flow). Шаги UAT: cleanup (сдвиг `cleanup`) | Серверная часть (гонка очистки и допуска) PASS; payload закрытых попыток, три результата, подсказка: не подтверждено на staging, шаг 9 не проводился нигде (даже на production) |
+| STAB-PROM-14 | promotion-live `deployed Promotion RPC inventory matches...`; юнит `portia-promotion-api` (missing RPC, database failure, sheet outage дают разные коды), `portia-promotion-ui` (текст «принята» только после создания). Шаг UAT: participant, состояния ошибок (шаг 11) | Серверная часть PASS; UI-состояния: не подтверждено на staging (вердикт владельца по production-прогону, вариант 2); шаг 11 не проводился |
 
 ## Edge-истины плана 19-06
 
 | Истина | Чем доказана сейчас | Статус |
 |--------|---------------------|--------|
-| Edge STAB-PROM-03 idempotency / concurrency | admission-same-nickname и admission-split-device (receipt concurrency PASS), promotion-live atomic admission | серверная часть PASS; шаг UAT participant ожидает |
+| Edge STAB-PROM-03 idempotency / concurrency | admission-same-nickname и admission-split-device (receipt concurrency PASS), promotion-live atomic admission | серверная часть PASS; шаг UAT participant: не подтверждено на staging |
 | Edge STAB-PROM-04 concurrency / idempotency | те же admission-гонки, partial unique индексы (юнит `portia-promotion-db`) | серверная часть PASS |
-| Edge STAB-PROM-04 adjacency (граница blocked_until) | acceptance-shift `penalty` + UAT | ожидает 19-PROMOTION-UAT |
-| Edge STAB-PROM-04 empty (ник без попыток, нейтральный текст) | юнит `portia-promotion-api` (нейтральный отказ); UAT | ожидает 19-PROMOTION-UAT |
-| Edge STAB-PROM-04 ordering (ordinary и qualification независимы; device, throttle, active request) | юнит `portia-promotion-api` (порядок проверок); UAT | ожидает 19-PROMOTION-UAT |
-| Edge STAB-PROM-13 concurrency | concurrency `cleanup-vs-admission-n6-r10` PASS; cleanup на живом run: UAT | серверная часть PASS; UAT ожидает |
+| Edge STAB-PROM-04 adjacency (граница blocked_until) | acceptance-shift `penalty` + UAT | не подтверждено на staging (сдвиг `penalty` не запрашивался) |
+| Edge STAB-PROM-04 empty (ник без попыток, нейтральный текст) | юнит `portia-promotion-api` (нейтральный отказ); UAT | не подтверждено на staging |
+| Edge STAB-PROM-04 ordering (ordinary и qualification независимы; device, throttle, active request) | юнит `portia-promotion-api` (порядок проверок); UAT | не подтверждено на staging |
+| Edge STAB-PROM-13 concurrency | concurrency `cleanup-vs-admission-n6-r10` PASS; cleanup на живом run: шаг 9 не проводился | серверная часть PASS; UAT: не подтверждено |
 
 ## STAB-PROM-15
 
-Статус: **BLOCKED**. Нужен записанный вердикт владельца для физического PC и физического phone (`19-PROMOTION-UAT.md`, строки «Вердикт PC:» и «Вердикт phone:»). Частичный прогон gate не закрывает. До вердикта PASS не записывается.
+Статус: **BLOCKED / открыт**. Вердикты PC и phone записаны, но касаются production-прогона шагов 1–8 и единственного staging-шага 10. Полный сквозной прогон «participant → reviewer → bank CRUD → ordinary → qualification → retake → cleanup → direct denial» на изолированном staging с временными данными НЕ выполнен (шаги 1–9 и 11 на staging нет; шаг 9 не проводился нигде). Допущение плана «gate закрывает только полный прогон без unresolved failures» не выполнено. Долг: живая приёмка на staging переносится в 19-14 / Phase 20.
+
+## Дефект 1 (шаг 6) и инцидент production
+
+- Дефект 1: живая таблица содержит в столбце E дату окончания ожидания, а код прибавлял к ней cooldown звания. Исправлено в `4d2a3e9` (столбец E = дата доступности, cooldown не прибавляется), юнит-тесты зелёные; ростер run: `p-cooldown` E `2026-11-01` → `2026-11-08`. Владелец записал повтор шага 6 как PASS, но на production, поэтому для staging он не зачтён.
+- Инцидент 2026-11-03: dev-сервер владельца брал `.env.local` с production `production-проект (ref начинается на wqiy…)`; шаги 2–8 изменяли production (заявки и привязки живых ников, claim, банки, итоги, штрафы), очистка шага 9 не запускалась. Агенты production не трогали (все wrapper-команды только на staging `изолированный staging (refHash 01d085e7b9f0)`, refHash `01d085e7b9f0`). Оценка и возможная правка изменений на production — решение владельца.
 
 ## Что не доказано этим документом
 
-- Authenticated roles на физических устройствах, UI на PC и phone, deadline и cooldown на реальных часах: только через owner UAT.
+- Authenticated roles на физических устройствах на staging, UI на PC и phone на staging, deadline и cooldown на реальных часах на staging: не подтверждено.
 - Удаление строки живой Google-таблицы не проверяется (мутация production-источника запрещена CLAUDE.md); ростер приёмки берётся из временного файла.

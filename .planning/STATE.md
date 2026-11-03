@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 19
 current_phase_name: «Повышение», приложения, редактор, поиск и медиа
 status: executing
-stopped_at: Completed 19-08-PLAN.md
-last_updated: "2026-11-02T10:58:55.795Z"
-last_activity: 2026-11-02
-last_activity_desc: Phase 19 execution started
-state_head: ea728b15a7e5dfe196e6cd0f58b099e80bce26d9
+stopped_at: Completed 19-06-PLAN.md (owner variant 2; STAB-PROM-15 open)
+last_updated: "2026-11-03T10:57:56.593Z"
+last_activity: 2026-11-03
+last_activity_desc: Phase PORTIA-19 execution started
+state_head: 4d2a3e934de41f4fd9e6db45120085d141b2e851
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 63
-  completed_plans: 55
+  completed_plans: 56
   percent: 50
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-29)
 
 **Core value:** Сделать существующий PORTIA OS доказуемо устойчивым, безопасным и визуально последовательным, сохранив его текущую художественную основу.
-**Current focus:** Phase 19 — «Повышение», приложения, редактор, поиск и медиа
+**Current focus:** Phase PORTIA-19 — «Повышение», приложения, редактор, поиск и медиа
 
 ## Current Position
 
-Phase: 19 («Повышение», приложения, редактор, поиск и медиа) — EXECUTING
+Phase: PORTIA-19 («Повышение», приложения, редактор, поиск и медиа) — EXECUTING
 Plan: 7 of 14
-Status: Ready to execute
-Last activity: 2026-11-02 — Phase 19 execution started
+Status: Plan 19-06 complete under owner deviation (variant 2); STAB-PROM-15 open; next 19-07 teardown
+Last activity: 2026-11-03 — Plan 19-06 completed (owner variant 2)
 
 Progress: [█████░░░░░] 50% of Phase 15 plans (phase gaps_found, not complete)
 
@@ -100,6 +100,7 @@ Progress: [█████░░░░░] 50% of Phase 15 plans (phase gaps_fou
 | Phase 19 P04 | 30min | 3 tasks | 8 files |
 | Phase 19 P05 | 40min | 3 tasks | 9 files |
 | Phase 19 P08 | single session | 3 tasks | 9 files |
+| Phase 19 P06 | n/a (multi-session) | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -151,6 +152,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 19]: 19-04: submit success requires response.ok plus a string requestId; PC/phone warning texts per owner verdict 11; server refusal texts unchanged (verdict 10 A)
 - [Phase 19]: 19-05: access revocation = HTTP 403 without error code; per-command 403s keep their code and do not wipe reviewer state
 - [Phase 19]: 19-08: device-cached data counts as loaded (lastGoodAt = cache time or empty string) and only the newest /api/content request may start a failure; a degraded roster answer is shown with the stale strip
+- [Phase 19]: 19-06: sheet column E of the promotion roster is the availability date; rank cooldown is no longer added on top (defect 1, 4d2a3e9)
+- [Phase 19]: 19-06: owner variant 2 - accept without re-running steps 1-9 on staging; steps 2-8 ran on production (incident); recorded as deviation, does NOT close STAB-PROM-15
 
 ### Pending Todos
 
@@ -164,6 +167,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 16] Dedicated isolated Supabase project/branch, credentials and disposable fixtures are not yet proven available.
 - [Phase 20] Security closure uses deep GSD review and the local auth/API/RLS/header/CSP/dependency/secret matrix with no external runtime prerequisite.
 - [Phase 20] Physical owner PC (including DPR 1.25) and phone UAT has not occurred and blocks milestone completion.
+- [Phase 19] STAB-PROM-15 stays open: live acceptance on isolated staging (steps 1-9, 11, PC and phone) is debt for 19-14 / Phase 20; owner steps 2-8 mutated production, review of those changes is the owner's decision. 19-07 teardown of run mvz5fqgv_c40b449b is permitted by the owner's acceptance.
+- [Phase 20] register_attempt RPC is granted to anon but has no caller - decide revoke or confirm purpose in the security review.
 
 ### Quick Tasks Completed
 
@@ -187,8 +192,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-02T10:58:55.622Z
-Stopped at: Completed 19-08-PLAN.md
+Last session: 2026-11-03T10:57:56.143Z
+Stopped at: Completed 19-06-PLAN.md (owner variant 2; STAB-PROM-15 open)
 Resume file: None
 
 ## Operator Next Step
