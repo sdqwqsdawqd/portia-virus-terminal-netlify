@@ -18,7 +18,9 @@ export type HistoryAction<T> =
   | { type: "discard" }
   | { type: "undo" }
   | { type: "redo" }
-  | { type: "saved"; normalized: T; savedFrom: T }
+  // keep: what the draft becomes when nothing was typed meanwhile (a partial save keeps the refused sections' edits there instead of dropping them).
+  // rebase: applied to an edited draft, so a draft typed during the request can follow the stored copy for the sections the save took from the server.
+  | { type: "saved"; normalized: T; savedFrom: T; keep?: T; rebase?: (present: T) => T }
   | { type: "sync"; content: T }
   | { type: "restrict"; project: (content: T) => T };
 
@@ -58,7 +60,8 @@ export function historyReducer<T>(state: EditorHistory<T>, action: HistoryAction
     case "saved": {
       const saved = { ...state, baseline: action.normalized, source: action.normalized };
       // Edits typed while the request ran keep their draft and history; otherwise history ends at the save.
-      return state.present === action.savedFrom ? { ...saved, present: action.normalized, past: [], future: [], key: null } : saved;
+      if (state.present === action.savedFrom) return { ...saved, present: action.keep ?? action.normalized, past: [], future: [], key: null };
+      return action.rebase ? { ...saved, present: action.rebase(state.present) } : saved;
     }
     case "sync":
       return action.content === state.source ? state : initHistory(action.content, clone);

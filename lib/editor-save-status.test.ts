@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { partialSave, saveStatusText } from "./editor-save-status.ts";
+import { draftEdits, networkSaveError, partialSave, saveStatusText, SaveConflictError } from "./editor-save-status.ts";
+import { historyReducer, initHistory } from "./editor-history.ts";
+import { defaultPortiaContent, type PortiaContent } from "./portia-content.ts";
 
 const editor = readFileSync(new URL("../components/portia-editor.tsx", import.meta.url), "utf8");
 const desktop = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8");
+const fixture = (): PortiaContent => structuredClone(defaultPortiaContent);
+const cloneOf = <T,>(value: T): T => structuredClone(value);
 const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
 
 test("saveStatusText is the one vocabulary of the save status (UI E3)", () => {
@@ -54,4 +58,136 @@ test("the status is shown only after the server answered: saved needs saveState 
 test("the status styles exist: dirty and partial warn, error and conflict stay red", () => {
   assert.match(styles, /\.editor-save-status\.dirty[^{]*\{[^}]*var\(--warning\)/);
   assert.match(styles, /\.editor-save-status\.partial[^{]*\{[^}]*var\(--warning\)/);
+});
+
+const infoWithTextBlock = (): PortiaContent => {
+  const content = fixture();
+  content.infoSections = [{ id: "info-1", title: "Раздел", body: "", subsections: [{ id: "sub-1", title: "Подраздел", blocks: [{ id: "block-1", type: "text", text: "Старый текст" }] }] }];
+  return content;
+};
+
+test("draftEdits lists a changed virus title and a changed info block text with a section path, a label and the new value (D-09)", () => {
+  const baseline = infoWithTextBlock();
+  const present = cloneOf(baseline);
+  present.viruses[0].name = "НОВОЕ ИМЯ";
+  const block = present.infoSections[0].subsections[0].blocks[0];
+  if (block.type === "text") block.text = "Новый текст";
+  const edits = draftEdits(baseline, present);
+  assert.equal(edits.length, 2);
+  const virus = edits.find((edit) => edit.section === "viruses");
+  const info = edits.find((edit) => edit.section === "info");
+  assert.ok(virus && info);
+  assert.equal(virus.value, "НОВОЕ ИМЯ");
+  assert.equal(info.value, "Новый текст");
+  assert.ok(virus.path.includes(present.viruses[0].id) && virus.path.endsWith("name"));
+  assert.ok(info.path.includes("block-1"));
+  assert.ok(virus.label.includes("База вирусов") && virus.label.includes("НОВОЕ ИМЯ"));
+  assert.ok(info.label.includes("Информация"));
+});
+
+test("draftEdits skips untouched fields and matches array items by id, so a reorder alone is not an edit", () => {
+  const baseline = fixture();
+  assert.deepEqual(draftEdits(baseline, cloneOf(baseline)), []);
+  const reordered = cloneOf(baseline);
+  reordered.viruses.reverse();
+  assert.deepEqual(draftEdits(baseline, reordered), []);
+  const edited = cloneOf(baseline);
+  edited.viruses.reverse();
+  edited.viruses[0].code = "X-1";
+  const edits = draftEdits(baseline, edited);
+  assert.equal(edits.length, 1);
+  assert.equal(edits[0].value, "X-1");
+});
+
+test("draftEdits has the edits in editorSections order and leaves out an emptied field", () => {
+  const baseline = fixture();
+  const present = cloneOf(baseline);
+  present.searchRecommendations = [...present.searchRecommendations, "новая подсказка"];
+  present.viruses[0].name = "Имя";
+  present.viruses[0].code = "";
+  const edits = draftEdits(baseline, present);
+  assert.deepEqual(edits.map((edit) => edit.section), ["viruses", "search"]);
+});
+
+test("SaveConflictError is distinguishable from a plain failure", () => {
+  assert.ok(new SaveConflictError() instanceof Error);
+  assert.ok(new SaveConflictError() instanceof SaveConflictError);
+  assert.ok(!(new Error("x") instanceof SaveConflictError));
+});
+
+test("loading their version keeps the user's edits only in draftEdits: sync replaces the draft, the list was taken first (D-09)", () => {
+  const server = cloneOf(fixture());
+  server.viruses[0].name = "ИХ ИМЯ";
+  let state = initHistory(fixture(), cloneOf);
+  state = historyReducer(state, { type: "change", updater: (next) => { next.viruses[0].name = "МОЁ ИМЯ"; }, key: null, now: 1 }, cloneOf);
+  const mine = draftEdits(state.baseline, state.present);
+  state = historyReducer(state, { type: "sync", content: server }, cloneOf);
+  assert.equal(state.present.viruses[0].name, "ИХ ИМЯ");
+  assert.equal(state.baseline, state.present);
+  assert.deepEqual(mine.map((edit) => edit.value), ["МОЁ ИМЯ"]);
+});
+
+test("conflict panel: «Запись изменили до вас» with two labelled choices and no «обновите страницу» text (D-09, item 5)", () => {
+  assert.match(editor, /Запись изменили до вас/);
+  assert.match(editor, /Ваши правки не потеряны\. Выберите, какую версию оставить\./);
+  assert.match(editor, /Загрузить их версию/);
+  assert.match(editor, /Заменить своей/);
+  assert.match(editor, /Их изменения будут перезаписаны\./);
+  assert.match(editor, /role="alert"/);
+  assert.doesNotMatch(editor, /ОБНОВИТЕ СТРАНИЦУ|СКОПИРУЙТЕ ПРАВКИ/);
+  // Item 5, variant A: no separate confirmation window for the replacement.
+  assert.doesNotMatch(editor, /dialog === "replace"/);
+});
+
+test("their version shows beside the user's edits: a closed <details> «Ваши правки» with a copy button per field (D-09)", () => {
+  assert.match(editor, /<details[^>]*className="editor-their-edits"/);
+  assert.match(editor, /Ваши правки/);
+  assert.match(editor, /navigator\.clipboard/);
+  assert.match(editor, /draftEdits\(history\.baseline, history\.present\)/);
+  assert.doesNotMatch(editor, /<details[^>]*className="editor-their-edits"[^>]* open/);
+});
+
+test("«Заменить своей» sends with the revision of the latest server copy; a repeated 409 reopens the panel (D-09)", () => {
+  assert.match(editor, /baseRevision\.current = revision/);
+  assert.match(editor, /catch \(error\)[\s\S]*?SaveConflictError/);
+  assert.match(desktop, /throw new SaveConflictError\(\)/);
+  assert.match(desktop, /setSaveState\("conflict"\);[\s\S]{0,200}void fetchContent\(\)/);
+});
+
+test("the conflict panel styles: warning border, 16px heading, 13px text, 44px buttons on phone, danger button (UI E3)", () => {
+  assert.match(styles, /\.editor-conflict-panel\s*\{[^}]*padding:\s*16px[^}]*var\(--warning\)/);
+  assert.match(styles, /\.editor-conflict-panel h2\s*\{[^}]*16px/);
+  assert.match(styles, /\.editor-conflict-panel p\s*\{[^}]*13px/);
+  assert.match(styles, /@media \(max-width: 900px\)\s*\{[^@]*\.editor-conflict-panel button\s*\{[^}]*min-height:\s*44px/);
+  assert.match(styles, /\.editor-conflict-panel \.danger-control\s*\{[^}]*var\(--danger\)[^}]*#e07d74/);
+});
+
+test("a save that arrives after new edits keeps the new edits unsaved and can rebase unrelated sections (concurrency)", () => {
+  let state = initHistory(fixture(), cloneOf);
+  state = historyReducer(state, { type: "change", updater: (next) => { next.viruses[0].name = "A"; }, key: null, now: 1 }, cloneOf);
+  const savedFrom = state.present;
+  state = historyReducer(state, { type: "change", updater: (next) => { next.viruses[0].name = "AB"; }, key: null, now: 5000 }, cloneOf);
+  const outgoing = cloneOf(savedFrom);
+  state = historyReducer(state, { type: "saved", normalized: outgoing, savedFrom }, cloneOf);
+  assert.equal(state.present.viruses[0].name, "AB");
+  assert.equal(state.baseline.viruses[0].name, "A");
+});
+
+test("a network failure has its own text, set before the error is rethrown so the draft stays in the fields (UI E3)", () => {
+  assert.equal(networkSaveError, "Нет связи с сервером. Попробуйте ещё раз.");
+  assert.match(desktop, /setSaveError\(networkSaveError\);\s*throw error;/);
+});
+
+test("rebase: a draft typed during a replacing save follows the stored copy only where the user did not type meanwhile (D-09, D-12)", () => {
+  let state = initHistory(fixture(), cloneOf);
+  state = historyReducer(state, { type: "change", updater: (next) => { next.viruses[0].name = "МОЁ"; }, key: null, now: 1 }, cloneOf);
+  const savedFrom = state.present;
+  state = historyReducer(state, { type: "change", updater: (next) => { next.viruses[0].name = "МОЁ+"; next.searchRecommendations = ["набрано во время запроса"]; }, key: null, now: 9000 }, cloneOf);
+  const outgoing = cloneOf(savedFrom);
+  outgoing.infoSections = [{ id: "i", title: "ИХ раздел", body: "", subsections: [] }];
+  state = historyReducer(state, { type: "saved", normalized: outgoing, savedFrom, rebase: (latest) => ({ ...latest, infoSections: outgoing.infoSections }) }, cloneOf);
+  assert.equal(state.present.viruses[0].name, "МОЁ+");
+  assert.deepEqual(state.present.searchRecommendations, ["набрано во время запроса"]);
+  assert.equal(state.present.infoSections[0].title, "ИХ раздел");
+  assert.equal(state.baseline, outgoing);
 });

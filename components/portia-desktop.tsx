@@ -12,6 +12,7 @@ import { CustomColorPicker } from "@/components/custom-color-picker";
 import { fitGeometry, type WindowGeometry } from "@/lib/window-geometry";
 import { exitedWindow, openedWindow, originOf, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "@/lib/window-open";
 import { acceptFetchedContent } from "@/lib/content-sync";
+import { networkSaveError, SaveConflictError } from "@/lib/editor-save-status";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
@@ -1016,16 +1017,25 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     setSaveState("saving");
     try {
       // Up to MAX_CONTENT_BODY_BYTES (5 MB, lib/content-limits.ts) plus auth, upsert and CDN purge: aborting after the server committed would turn the retry into a false conflict.
-      const response = await fetchWithTimeout("/api/content", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content: next, revision: baseRevision }),
-      }, 30_000);
+      let response: Response;
+      try {
+        response = await fetchWithTimeout("/api/content", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content: next, revision: baseRevision }),
+        }, 30_000);
+      } catch (error) {
+        // UI E3: no answer at all is told apart from a refusal; the draft stays in the fields.
+        setSaveError(networkSaveError);
+        throw error;
+      }
       if (response.status === 409) {
         // The server is authoritative after a conflict: a cached revision ahead of it (row reset, fresh project) would otherwise drop every poll for good.
         knownRevision.current = -1;
         setSaveState("conflict");
-        throw new Error("PORTIA content changed by another editor");
+        // D-09: the editor needs the other side's copy and revision for «Загрузить их версию» and «Заменить своей».
+        void fetchContent();
+        throw new SaveConflictError();
       }
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { error?: unknown } | null;

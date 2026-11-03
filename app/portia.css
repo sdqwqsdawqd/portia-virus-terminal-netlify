@@ -507,6 +507,20 @@ html[data-motion="full"] .portia-image-skeleton { background: linear-gradient(10
 .editor-save-status.saved { color: var(--teal); }
 .editor-save-status.dirty, .editor-save-status.partial { color: var(--warning); }
 .editor-save-status.error, .editor-save-status.conflict { color: #e07d74; white-space: normal; }
+.editor-conflict-panel { display: grid; gap: 8px; margin: 0 0 12px; padding: 16px; border: 1px solid var(--warning); background: rgba(239,184,78,.06); }
+.editor-conflict-panel h2 { margin: 0; color: var(--warning); font: 700 16px/1.2 var(--sans); }
+.editor-conflict-panel p { margin: 0; color: oklch(.812 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font: 400 13px/1.5 var(--sans); }
+.editor-conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.editor-conflict-panel .danger-control { border-color: var(--danger); color: #e07d74; }
+.editor-their-edits { margin: 0 0 12px; padding: 12px; border: 1px solid oklch(.5 calc(.04 * var(--accent-chroma)) var(--accent-hue)); font: 400 13px/1.5 var(--sans); }
+.editor-their-edits summary { font: 700 13px/1.5 var(--sans); cursor: pointer; }
+.editor-their-edits ul { display: grid; gap: 12px; margin: 8px 0; padding: 0; list-style: none; }
+.editor-their-edits li { display: grid; gap: 4px; justify-items: start; min-width: 0; }
+.editor-their-edit-label { color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .04em; }
+.editor-their-edit-value { box-sizing: border-box; max-width: 100%; max-height: 160px; margin: 0; overflow: auto; font: 400 13px/1.5 var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .editor-their-edits button, .editor-conflict-panel button { min-height: 44px; }
+}
 .editor-save-chip { position: sticky; z-index: 120; bottom: 12px; align-self: flex-end; margin: auto -16px 0 0; display: flex; }
 .editor-save-chip > button { min-width: 32px; min-height: 32px; padding: 0 8px; border: 1px solid oklch(.5 calc(.04 * var(--accent-chroma)) var(--accent-hue)); border-radius: 4px; background: oklch(.208 calc(.02 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .04em; box-shadow: 0 6px 18px rgba(0,0,0,.35); cursor: pointer; }
 .editor-save-chip[data-dirty] > button { border-color: var(--warning); color: var(--warning); }
