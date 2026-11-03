@@ -23,6 +23,7 @@ import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-desktop-documents";
 import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { PortiaImage } from "@/components/portia-desktop-media";
+import { broadcastType, buildSearchIndex, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, type SearchItem } from "@/lib/search-index";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -54,6 +55,8 @@ const settingValues: Record<Exclude<keyof DesktopSettings, "customAccent">, read
 };
 
 const globalSearchAppIds: AppId[] = ["archive", "employees", "info", "guide", "broadcasts", "trash", "promotion", "settings", "sheet", "charter"];
+// The one access filter of the index (D-07): every listed app is open to every visitor; «Редактор» is gated by canEdit and is not in the list. «Устав» is found by its name only (owner verdict 8).
+const globalSearchApps = globalSearchAppIds.map((id) => ({ id, label: appMeta[id].label, path: appMeta[id].path }));
 
 const initialWindows: Record<AppId, WindowState> = {
   archive: { open: false, minimized: false, maximized: false, z: 11 },
@@ -101,7 +104,6 @@ function workspaceBounds() {
   return { width: workspace?.width ?? window.innerWidth, height: workspace?.height ?? window.innerHeight - 88 };
 }
 
-const escapeSearch = (value: string) => value.toLocaleLowerCase("ru").replace(/ё/g, "е");
 const broadcastReadStorageKey = "portia-broadcasts-read-signature-v1";
 const questSeenStorageKey = "portia-quests-seen-v1";
 const contentCacheStorageKey = "portia-content-last-success-v1";
@@ -181,27 +183,6 @@ function richTextLine(document: RichTextDocument | undefined, lines: string[], i
   return sliceRichText(document, start, start + (lines[index]?.length ?? 0));
 }
 
-const recycleFileType = (kind: RecycleFile["kind"]) => kind === "virus" ? "Документ вируса" : kind === "image" ? "Изображение" : "Текстовый документ";
-
-function recycleFileBody(file: RecycleFile, viruses: Virus[]) {
-  if (file.kind !== "virus") return file.content;
-  const virus = viruses.find((item) => item.id === file.virusId);
-  if (!virus) return file.content;
-  const dossier = [
-    "PORTIA / АРХИВНАЯ КОПИЯ",
-    `ОБЪЕКТ: ${virus.name}`,
-    `КОД: ${virus.code}`,
-    `СТАТУС: ${virus.status}`,
-    "",
-    "ВНЕШНИЕ ХАРАКТЕРИСТИКИ:",
-    virus.external,
-    "",
-    "ФИЗИОЛОГИЯ:",
-    virus.physiology,
-  ].join("\n");
-  return file.content.trim() ? `${dossier}\n\n${file.content}` : dossier;
-}
-
 export function PortiaDesktop({ initialContent }: { initialContent: PortiaContent }) {
   const [content, setContent] = useState<PortiaContent>(initialContent);
   // False until the cached copy or the first /api/content answer arrives; until then content windows show a loader, not defaults.
@@ -239,6 +220,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [activeVirusId, setActiveVirusId] = useState(initialContent.viruses[0]?.id ?? "");
   const [virusQuery, setVirusQuery] = useState("");
   const [globalQuery, setGlobalQuery] = useState("");
+  // D-14: the record a search result named, highlighted in its owner app until the timer or the next click there.
+  const [searchHit, setSearchHit] = useState<{ appId: AppId; type: string; id: string } | null>(null);
+  const [unavailableResults, setUnavailableResults] = useState<{ item: SearchItem; position: number }[]>([]);
+  const [searchFocusIndex, setSearchFocusIndex] = useState(0);
+  const [searchFocusTick, setSearchFocusTick] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchResultsRef = useRef<HTMLDivElement>(null);
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [selectedInfoId, setSelectedInfoId] = useState(initialContent.infoSections[0]?.id ?? "");
   const [guideCardId, setGuideCardId] = useState("");
@@ -1068,7 +1056,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   };
 
   const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
-  const filteredViruses = content.viruses.filter((virus) => escapeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(escapeSearch(virusQuery)));
+  const filteredViruses = content.viruses.filter((virus) => normalizeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(normalizeSearch(virusQuery)));
   const virusListbox = contentReady && filteredViruses.length > 0;
   // D-05: the dossier area shows the stale strip only while last-good records are on screen; the other apps join in 19-08.
   // One appViewState rule for every app (D-05..D-08); the window bodies below only choose what to draw.
@@ -1102,7 +1090,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const activeTrashVirus = activeTrashFileId?.startsWith("virus:")
     ? recycledViruses.find((virus) => virus.id === activeTrashFileId.slice(6)) ?? null
     : null;
-  const filteredEmployees = employees.filter((employee) => escapeSearch(`${employee.nickname} ${employee.callsign} ${employee.title} ${employee.rank}`).includes(escapeSearch(employeeQuery)));
+  const filteredEmployees = employees.filter((employee) => normalizeSearch(`${employee.nickname} ${employee.callsign} ${employee.title} ${employee.rank}`).includes(normalizeSearch(employeeQuery)));
   const selectedEmployee = employees.find((employee) => employee.id === selectedEmployeeId) ?? employees[0] ?? null;
 
   const openTrashFile = (file: RecycleFile) => {
@@ -1199,62 +1187,122 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     assistantTipTimer.current = window.setTimeout(() => setAssistantTipVisible(false), 5200);
   };
 
-  const searchResults = useMemo(() => {
-    const query = escapeSearch(globalQuery.trim());
-    const items: Array<{ id: string; type: "virus" | "employee" | "info" | "guide" | "broadcast" | "file" | "app"; title: string; meta: string; body: string; parts?: string[] }> = [
-      ...globalSearchAppIds.map((id) => ({ id, type: "app" as const, title: appMeta[id].label, meta: "ПРИЛОЖЕНИЕ", body: `${appMeta[id].path} ${id}` })),
-      ...content.viruses.map((virus) => ({ id: virus.id, type: "virus" as const, title: virus.name, meta: virus.code, body: `${virus.status} ${virus.external} ${virus.physiology} ${Object.values(virus.classification).join(" ")} ${virus.mutations.map((mutation) => `${mutation.name} ${mutation.description}`).join(" ")}` })),
-      ...employees.map((employee) => ({ id: employee.id, type: "employee" as const, title: employee.nickname, meta: "СОТРУДНИКИ", body: `${employee.callsign} ${employee.title} ${employee.rank} ${employee.biography}` })),
-      ...content.infoSections.flatMap((section) => [
-        { id: section.id, type: "info" as const, title: section.title, meta: "ИНФОРМАЦИЯ", body: section.body },
-        ...section.subsections.map((sub) => ({
-          id: sub.id,
-          type: "info" as const,
-          title: sub.title,
-          meta: `ИНФОРМАЦИЯ · ${section.title}`,
-          body: sub.blocks.map((block) => block.type === "text" ? block.text : block.type === "table" ? block.rows.map((row) => `${row.key} ${row.value}`).join(" ") : "").join(" "),
-        })),
-      ]),
-      // D-15: a card is found by its title, any block text and its section title; the section title sits in meta, so a section match lists every card of it.
-      ...content.guideSections.flatMap((section) => section.cards.map((card) => {
-        const parts = card.blocks.map((block) => block.type === "heading" || block.type === "text" ? block.text : block.type === "table" ? block.rows.map((row) => `${row.key} ${row.value}`).join(" ") : block.type === "photo" ? block.caption : block.type === "callout" ? `${block.label} ${block.text}` : "").filter(Boolean);
-        return { id: card.id, type: "guide" as const, title: card.title || "Без названия", meta: `СПРАВОЧНИК · ${section.title || "Без названия"}`, body: parts.join(" "), parts };
-      })),
-      ...content.broadcasts.filter((item) => item.published).map((item) => ({ id: item.id, type: "broadcast" as const, title: item.title, meta: broadcastType(item.type), body: item.body })),
-      ...content.recycleFiles.map((file) => ({ id: file.id, type: "file" as const, title: file.name, meta: recycleFileType(file.kind), body: recycleFileBody(file, [...content.viruses, ...recycledViruses]) })),
-      ...recycledViruses.map((virus) => ({ id: `virus:${virus.id}`, type: "file" as const, title: virus.name, meta: "ВИРУС В КОРЗИНЕ", body: `${virus.code} ${virus.status} ${virus.external} ${virus.physiology}` })),
-    ];
-    if (!query) return items.slice(0, 8);
-    // The 2-line preview of a card starts at the first block that holds the query; matching itself is unchanged.
-    return items.filter((item) => escapeSearch(`${item.title} ${item.meta} ${item.body}`).includes(query)).map((item) => {
-      const at = item.parts ? item.parts.findIndex((part) => escapeSearch(part).includes(query)) : -1;
-      return at > 0 && item.parts ? { ...item, body: [...item.parts.slice(at), ...item.parts.slice(0, at)].join(" ") } : item;
-    });
-  }, [content, employees, globalQuery, recycledViruses]);
+  // D-13: the index is rebuilt from the content on screen by one pure allowlist function, so a record the next poll removes leaves the results with it.
+  // A roster that failed with no last-good copy stays out of the index; the degraded line says so.
+  const rosterOutOfSearch = employeesSync.failure !== null && employeesSync.lastGoodAt === null;
+  const searchIndex = useMemo(() => buildSearchIndex({
+    apps: globalSearchApps,
+    viruses: content.viruses,
+    employees: rosterOutOfSearch ? [] : employees,
+    infoSections: content.infoSections,
+    guideSections: content.guideSections,
+    broadcasts: content.broadcasts,
+    recycleFiles: content.recycleFiles,
+    recycledViruses,
+  }), [content, employees, recycledViruses, rosterOutOfSearch]);
+  const searchResults = useMemo(() => matchSearch(searchIndex, globalQuery), [searchIndex, globalQuery]);
 
-  const openSearchResult = (result: (typeof searchResults)[number]) => {
+  const isSearchHit = (type: string, id: string) => searchHit?.type === type && searchHit.id === id;
+  const hitClass = (type: string, id: string) => isSearchHit(type, id) ? " search-hit" : "";
+  const hitAttrs = (type: string, id: string) => isSearchHit(type, id) ? { "data-search-hit": "true", "aria-current": "true" as const } : {};
+
+  // D-14: scroll the named record to the middle, then drop the highlight after 2400ms or at the next click or focus inside its app.
+  useEffect(() => {
+    if (!searchHit) return;
+    const startedAt = window.performance.now();
+    const selector = `.app-window[data-window-app="${searchHit.appId}"]`;
+    const clear = () => setSearchHit(null);
+    const timer = window.setTimeout(clear, 2400);
+    // Opening the app focuses it; only a later click or focus counts as the visitor moving on.
+    const onInteract = (event: Event) => {
+      if (window.performance.now() - startedAt < 400) return;
+      if (event.target instanceof Element && event.target.closest(selector)) clear();
+    };
+    document.addEventListener("pointerdown", onInteract, true);
+    document.addEventListener("focusin", onInteract, true);
+    let frame = 0;
+    let tries = 0;
+    let marked: Element | null = null;
+    const reveal = () => {
+      const appWindow = document.querySelector(selector);
+      if (searchHit.type === "app") {
+        // An application has no record inside it: its own window carries the mark.
+        if (appWindow) { appWindow.setAttribute("data-search-hit", "true"); marked = appWindow; }
+        return;
+      }
+      const target = appWindow?.querySelector('[data-search-hit="true"]');
+      if (target) {
+        target.scrollIntoView({ block: "center", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" });
+        return;
+      }
+      tries += 1;
+      if (tries < 12) frame = window.requestAnimationFrame(reveal);
+    };
+    frame = window.requestAnimationFrame(reveal);
+    return () => {
+      window.clearTimeout(timer);
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("pointerdown", onInteract, true);
+      document.removeEventListener("focusin", onInteract, true);
+      marked?.removeAttribute("data-search-hit");
+    };
+  }, [searchHit]);
+
+  const searchOwnerApp = (result: SearchItem): AppId => result.type === "virus" ? "archive" : result.type === "employee" ? "employees" : result.type === "info" ? "info" : result.type === "guide" ? "guide" : result.type === "broadcast" ? "broadcasts" : result.type === "file" ? "trash" : (result.id as AppId);
+
+  // The record may be gone between the search and the click (a poll replaced the content): the app still opens, nothing is selected.
+  const searchTargetExists = (result: SearchItem) => {
+    if (result.type === "virus") return content.viruses.some((item) => item.id === result.id);
+    if (result.type === "employee") return employees.some((item) => item.id === result.id);
+    if (result.type === "info") return findInfo(content.infoSections, result.id) !== null;
+    if (result.type === "guide") return Boolean(findGuide(content.guideSections, result.id)?.card);
+    if (result.type === "broadcast") return content.broadcasts.some((item) => item.id === result.id && item.published);
+    if (result.type === "file") return result.id.startsWith("virus:") ? recycledViruses.some((item) => item.id === result.id.slice(6)) : content.recycleFiles.some((item) => item.id === result.id);
+    return globalSearchApps.some((app) => app.id === result.id);
+  };
+
+  // D-14: the search window is never closed, minimised or made modal here; only the owner app opens and the record is marked.
+  const openSearchResult = (result: SearchItem, position = 0) => {
+    const owner = searchOwnerApp(result);
+    if (qualificationLocked && owner !== "promotion") return;
+    if (!searchTargetExists(result)) {
+      setSearchHit(null);
+      setUnavailableResults([{ item: result, position }]);
+      openApp(owner);
+      return;
+    }
+    setUnavailableResults([]);
     if (result.type === "virus") {
+      setVirusQuery("");
       setActiveVirusId(result.id);
       setOpenLog(null);
       openApp("archive");
+      setSearchHit({ appId: "archive", type: "virus", id: result.id });
     } else if (result.type === "employee") {
+      setEmployeeQuery("");
       setSelectedEmployeeId(result.id);
       openApp("employees");
+      setSearchHit({ appId: "employees", type: "employee", id: result.id });
     } else if (result.type === "info") {
       setSelectedInfoId(result.id);
       openApp("info");
+      setSearchHit({ appId: "info", type: "info", id: result.id });
     } else if (result.type === "guide") {
       setGuideCardId(result.id);
       openApp("guide");
+      setSearchHit({ appId: "guide", type: "guide", id: result.id });
     } else if (result.type === "broadcast") {
       const found = content.broadcasts.find((item) => item.id === result.id);
       if (found) setBroadcastTab(broadcastTabOf(found.type));
       openApp("broadcasts");
+      setSearchHit({ appId: "broadcasts", type: "broadcast", id: result.id });
     } else if (result.type === "app") {
       openApp(result.id as AppId);
+      setSearchHit({ appId: result.id as AppId, type: "app", id: result.id });
     } else {
       setActiveTrashFileId(result.id);
       openApp("trash");
+      setSearchHit({ appId: "trash", type: "file", id: result.id });
     }
   };
 
@@ -1330,7 +1378,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <div className="virus-list" role={virusListbox ? "listbox" : undefined} aria-label={virusListbox ? "Записи вирусов" : undefined}>
                   {archiveView === "loading" ? <AppSkeleton shape="archive" /> : <>
                   {filteredViruses.map((virus, index) => (
-                    <button key={virus.id} type="button" role="option" aria-selected={virus.id === activeVirus?.id} className={`virus-row${virus.id === activeVirus?.id ? " active" : ""}`} onClick={() => { setActiveVirusId(virus.id); setOpenLog(null); }}>
+                    <button key={virus.id} type="button" role="option" aria-selected={virus.id === activeVirus?.id} className={`virus-row${virus.id === activeVirus?.id ? " active" : ""}${hitClass("virus", virus.id)}`} {...hitAttrs("virus", virus.id)} onClick={() => { setActiveVirusId(virus.id); setOpenLog(null); }}>
                       <span className="row-index">{String(index + 1).padStart(2, "0")}</span>
                       <span className="row-main"><strong>{virus.name}</strong><small>{virus.code}</small><RowBadges virus={virus} /></span>
                       <span className="row-status">{virus.status}</span>
@@ -1388,7 +1436,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <div className="global-search-results">
                 {!contentReady ? <LoadingState label="Загрузка архива…" /> : <>
                 {searchResults.map((result) => (
-                  <button key={`${result.type}-${result.id}`} type="button" className="global-result" onClick={() => openSearchResult(result)}>
+                  <button key={result.key} type="button" className="global-result" onClick={() => openSearchResult(result)}>
                     <span className="global-result-mark">{result.type === "virus" ? "VIS" : result.type === "employee" ? "EMP" : result.type === "info" ? "INF" : result.type === "guide" ? "REF" : result.type === "file" ? "FILE" : result.type === "app" ? "APP" : "MSG"}</span>
                     <span className="global-result-main"><span className="global-result-heading"><strong>{result.title || "БЕЗ НАЗВАНИЯ"}</strong><small>{result.meta}</small></span><span className="global-result-preview">{result.body}</span></span>
                   </button>
@@ -1648,6 +1696,3 @@ function SettingGroup({ title, values, current, onSelect, children }: { title: s
   return <section className="settings-section"><h2>{title}</h2><div className={`setting-options${title === "Цвет интерфейса" ? " color-options" : ""}`}>{values.map(([value, label]) => <button key={value} type="button" className={current === value ? "selected" : ""} aria-pressed={current === value} onClick={() => onSelect(value)}>{title === "Цвет интерфейса" && <i className={`swatch ${value}`} />}<span>{label}</span></button>)}{children}</div></section>;
 }
 
-function broadcastType(type: "quest" | "task" | "news") {
-  return type === "quest" ? "ЕЖЕНЕДЕЛЬНЫЙ КВЕСТ" : type === "task" ? "ЗАДАЧА" : "НОВОСТЬ";
-}

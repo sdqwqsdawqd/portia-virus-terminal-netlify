@@ -123,8 +123,9 @@ test("every desktop icon, start panel button and search result opens its window 
   const buttons = source.match(/<StartPanelButton [^\n]*\/>/g) ?? [];
   assert.equal(buttons.length, 5);
   for (const button of buttons) assert.ok(button.includes("openApp("), button.slice(0, 60));
-  const search = bodyAfter("const openSearchResult = (result: (typeof searchResults)[number]) => {");
-  assert.equal(search.split("openApp(").length - 1, 7);
+  const search = bodyAfter("const openSearchResult = (result: SearchItem, position = 0) => {");
+  // Seven record types plus the branch of a record that vanished: each opens its owner through openApp.
+  assert.equal(search.split("openApp(").length - 1, 8);
   assert.ok(!/setWindows|open: true/.test(search));
 });
 

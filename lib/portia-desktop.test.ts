@@ -167,14 +167,39 @@ test("promotion is a standalone desktop application with its own window geometry
   assert.ok(!source.includes('meta="Portia Promotion"'));
 });
 
-test("global search covers applications, employees and every existing content collection", () => {
+test("global search is built by buildSearchIndex from every existing collection and opens the owner app (D-13, D-14)", () => {
   assert.ok(source.includes("globalSearchAppIds.map"));
-  assert.ok(source.includes('type: "employee" as const'));
-  assert.ok(source.includes('type: "app" as const'));
+  assert.ok(source.includes("buildSearchIndex({"));
+  assert.ok(source.includes("matchSearch(searchIndex, globalQuery)"));
+  assert.ok(!source.includes("const escapeSearch"), "one normalisation: normalizeSearch from lib/search-index");
   assert.ok(source.includes('openApp("employees")'));
-  for (const collection of ["content.viruses", "content.infoSections", "content.guideSections", "content.broadcasts", "content.recycleFiles", "recycledViruses"]) {
+  for (const collection of ["content.viruses", "content.infoSections", "content.guideSections", "content.broadcasts", "content.recycleFiles", "recycledViruses", "employees"]) {
     assert.ok(source.includes(collection), collection);
   }
+});
+
+// Text of a block that opens at `header` and closes with its matching brace.
+function blockAt(header: string) {
+  const at = source.indexOf(header);
+  assert.ok(at >= 0, header);
+  const open = source.indexOf("{", at + header.length - 1);
+  return source.slice(open, closingBrace(source, open) + 1);
+}
+
+test("search result opens its owner app, marks the record and never touches the search window (D-14, STAB-SEARCH-02)", () => {
+  const open = blockAt("const openSearchResult = (result: SearchItem, position = 0) => {");
+  assert.ok(open.includes('setSearchHit({ appId: "archive", type: "virus", id: result.id })'));
+  assert.ok(open.includes('openApp("archive")'));
+  assert.ok(!/closeApp|minimizeApp|requestExit|setWindows|setActiveApp|modal/.test(open), "the search window stays open, not minimised, not modal");
+  assert.ok(source.includes('{...hitAttrs("virus", virus.id)}'));
+  assert.ok(/"data-search-hit": "true", "aria-current": "true"/.test(source));
+  const effect = source.slice(source.indexOf("if (!searchHit) return;"), source.indexOf("}, [searchHit]);"));
+  assert.ok(effect.length > 200);
+  assert.ok(effect.includes("window.setTimeout(clear, 2400)"));
+  assert.ok(effect.includes('scrollIntoView({ block: "center", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" })'));
+  assert.ok(effect.includes('"pointerdown"') && effect.includes('"focusin"'));
+  assert.ok(/\.search-hit[^{]*\{[^}]*outline: 1px solid var\(--teal\)/.test(styles));
+  assert.ok(/\.search-hit[^{]*\{[^}]*var\(--teal-soft\)/.test(styles));
 });
 
 test("editor collections scroll inside bounded panes and the table of contents no longer follows the page", () => {

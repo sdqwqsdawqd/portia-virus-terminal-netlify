@@ -2086,3 +2086,8 @@ html:is([data-motion="reduced"], [data-motion="off"]) :is(.promotion-card, .prom
   .promotion-final-actions { grid-column: 1; display: grid; }
   .promotion-final-actions button, .promotion-request-actions .primary-control, .promotion-preview .primary-control, .promotion-bank-editor > button { min-height: 44px; }
 }
+
+/* D-14: the record a search result named. The component drops it after 2400ms; under motion "full" the frame fades over the last --motion-fast (160ms of 2400ms), otherwise it leaves at once. The tint is an image layer, so the row keeps its own background. */
+.search-hit, .app-window[data-search-hit="true"] { outline: 1px solid var(--teal); outline-offset: -1px; background-image: linear-gradient(var(--teal-soft), var(--teal-soft)); }
+@keyframes search-hit-fade { 0%, 93.3% { outline-color: var(--teal); } 100% { outline-color: transparent; } }
+html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear forwards; }
