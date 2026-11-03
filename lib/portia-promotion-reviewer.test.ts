@@ -61,6 +61,22 @@ test("promotion reviewer commands accept only typed bounded payloads", () => {
   assert.equal(parsePromotionReviewerCommand({ action: "reset-device", nicknameKey: "x".repeat(65) }), null);
 });
 
+test("reset-device accepts the exact normalized keys used by the promotion roster", () => {
+  for (const [nicknameKey, expected] of [
+    ["__portia_live_mw0rbyf6_72424cdc_p-ordinary", "__portia_live_mw0rbyf6_72424cdc_p-ordinary"],
+    ["Ёжик Учёный", "ёжик учёный"],
+    ["ＡＢＣ", "abc"],
+  ]) {
+    assert.deepEqual(parsePromotionReviewerCommand({ action: "reset-device", nicknameKey }), { action: "reset-device", nicknameKey: expected });
+  }
+});
+
+test("reset-device rejects empty, overlong and control-character keys", () => {
+  for (const nicknameKey of ["", "   ", "x".repeat(65), "a\u0007b", "a\u007fb"]) {
+    assert.equal(parsePromotionReviewerCommand({ action: "reset-device", nicknameKey }), null);
+  }
+});
+
 test("bank commands accept only canonical ranks, UUID-scoped items, and bounded quotas", () => {
   const bankId = "550e8400-e29b-41d4-a716-446655440000";
   const itemId = "550e8400-e29b-41d4-a716-446655440001";
