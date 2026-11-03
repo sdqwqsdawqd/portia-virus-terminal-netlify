@@ -89,3 +89,13 @@
 
 Вердикт PC: принято владельцем 2026-11-03 по прогону на production `production-проект (ref начинается на wqiy…)` (шаги 1–8 PC/phone); повтор на staging не выполнен (вариант 2 владельца). На staging подтверждён только шаг 10. Это НЕ закрывает STAB-PROM-15: живая приёмка на staging остаётся долгом (19-14 / Phase 20).
 Вердикт phone: принято владельцем 2026-11-03 по прогону на production `production-проект (ref начинается на wqiy…)` (шаги 1–8 PC/phone); повтор на staging не выполнен (вариант 2 владельца). На staging подтверждён только шаг 10. Это НЕ закрывает STAB-PROM-15: живая приёмка на staging остаётся долгом (19-14 / Phase 20).
+
+## Teardown — до удаления
+
+Read-only `acceptance-residual` для run `mvz5fqgv_c40b449b` (staging, refHash 01d085e7b9f0, attest = ATTESTED), снято 2026-11-03 перед решением владельца. Ничего не удалялось.
+
+```json
+{"residual":{"promo":0,"editors":2,"storage":0,"content":0,"authUsers":2,"banks":4,"buckets":0,"attempts":0,"answers":0}}
+```
+
+Что удалит teardown (только записи run, банки манифеста и строки окна run): 2 editors и 2 authUsers (временные учётные записи run), 4 банка манифеста (1 обычный и 3 квалификационных). Остальные категории (promo, storage, content, buckets, attempts, answers) уже 0. Записи без маркера run и вне окна run не затрагиваются. Это one-way (D-04).
