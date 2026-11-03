@@ -12,16 +12,19 @@ import { CustomColorPicker } from "@/components/custom-color-picker";
 import { fitGeometry, type WindowGeometry } from "@/lib/window-geometry";
 import { exitedWindow, openedWindow, originOf, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "@/lib/window-open";
 import { acceptFetchedContent } from "@/lib/content-sync";
+import { networkSaveError, parseRefusedSections, SaveConflictError, SectionClosedError } from "@/lib/editor-save-status";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
 import { DesktopIcon, StartPanelButton, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
-import { AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/components/portia-desktop-states";
-import { appViewState, contentSyncFailed, contentSyncSucceeded, emptyCopy, failureFromResponse, type AppFailure, type ContentSync } from "@/lib/app-state";
+import { AppDeniedPanel, AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/components/portia-desktop-states";
+import { accessCheckFailedText, appViewState, contentSyncFailed, contentSyncSucceeded, emptyCopy, failureFromResponse, type AppFailure, type ContentSync } from "@/lib/app-state";
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-desktop-documents";
-import { FormattedText, LoadingState, prioritizeImage, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
+import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
+import { PortiaImage } from "@/components/portia-desktop-media";
+import { broadcastType, buildSearchIndex, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, rosterDegradedText, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -53,6 +56,8 @@ const settingValues: Record<Exclude<keyof DesktopSettings, "customAccent">, read
 };
 
 const globalSearchAppIds: AppId[] = ["archive", "employees", "info", "guide", "broadcasts", "trash", "promotion", "settings", "sheet", "charter"];
+// The one access filter of the index (D-07): every listed app is open to every visitor; «Редактор» is gated by canEdit and is not in the list. «Устав» is found by its name only (owner verdict 8).
+const globalSearchApps = globalSearchAppIds.map((id) => ({ id, label: appMeta[id].label, path: appMeta[id].path }));
 
 const initialWindows: Record<AppId, WindowState> = {
   archive: { open: false, minimized: false, maximized: false, z: 11 },
@@ -100,7 +105,6 @@ function workspaceBounds() {
   return { width: workspace?.width ?? window.innerWidth, height: workspace?.height ?? window.innerHeight - 88 };
 }
 
-const escapeSearch = (value: string) => value.toLocaleLowerCase("ru").replace(/ё/g, "е");
 const broadcastReadStorageKey = "portia-broadcasts-read-signature-v1";
 const questSeenStorageKey = "portia-quests-seen-v1";
 const contentCacheStorageKey = "portia-content-last-success-v1";
@@ -180,27 +184,6 @@ function richTextLine(document: RichTextDocument | undefined, lines: string[], i
   return sliceRichText(document, start, start + (lines[index]?.length ?? 0));
 }
 
-const recycleFileType = (kind: RecycleFile["kind"]) => kind === "virus" ? "Документ вируса" : kind === "image" ? "Изображение" : "Текстовый документ";
-
-function recycleFileBody(file: RecycleFile, viruses: Virus[]) {
-  if (file.kind !== "virus") return file.content;
-  const virus = viruses.find((item) => item.id === file.virusId);
-  if (!virus) return file.content;
-  const dossier = [
-    "PORTIA / АРХИВНАЯ КОПИЯ",
-    `ОБЪЕКТ: ${virus.name}`,
-    `КОД: ${virus.code}`,
-    `СТАТУС: ${virus.status}`,
-    "",
-    "ВНЕШНИЕ ХАРАКТЕРИСТИКИ:",
-    virus.external,
-    "",
-    "ФИЗИОЛОГИЯ:",
-    virus.physiology,
-  ].join("\n");
-  return file.content.trim() ? `${dossier}\n\n${file.content}` : dossier;
-}
-
 export function PortiaDesktop({ initialContent }: { initialContent: PortiaContent }) {
   const [content, setContent] = useState<PortiaContent>(initialContent);
   // False until the cached copy or the first /api/content answer arrives; until then content windows show a loader, not defaults.
@@ -219,6 +202,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [saveError, setSaveError] = useState("");
   const canEditRef = useRef(false);
   useEffect(() => { canEditRef.current = canEdit; });
+  // STAB-APP-09 fail-closed: "failed" means the rights could not be checked. The editor then shows «Доступ закрыт» and takes no edits, whatever the last good answer said.
+  const [accessState, setAccessState] = useState<"ok" | "failed">("ok");
+  const accessFailedRef = useRef(false);
+  useEffect(() => { accessFailedRef.current = accessState === "failed"; });
+  // An answer sent before one already applied is dropped, so a late reply never brings back a tab the newer one closed.
+  const accessRequestSeq = useRef(0);
+  const accessAppliedSeq = useRef(0);
   const [revision, setRevision] = useState(0);
   // Read by the async GET: the newest revision this tab knows (cache, GET or its own save) and how many saves it started.
   const knownRevision = useRef(0);
@@ -238,6 +228,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [activeVirusId, setActiveVirusId] = useState(initialContent.viruses[0]?.id ?? "");
   const [virusQuery, setVirusQuery] = useState("");
   const [globalQuery, setGlobalQuery] = useState("");
+  // D-14: the record a search result named, highlighted in its owner app until the timer or the next click there.
+  const [searchHit, setSearchHit] = useState<{ appId: AppId; type: string; id: string } | null>(null);
+  const [unavailableResults, setUnavailableResults] = useState<{ item: SearchItem; position: number }[]>([]);
+  const [searchFocusIndex, setSearchFocusIndex] = useState(0);
+  const [searchFocusTick, setSearchFocusTick] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchResultsRef = useRef<HTMLDivElement>(null);
+  // A phone takes over Enter alone (owner verdict 3 gives the keyboard model to the desktop); SSR and the first paint assume the desktop.
+  const [searchKeyScope, setSearchKeyScope] = useState<"full" | "enter-only">("full");
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [selectedInfoId, setSelectedInfoId] = useState(initialContent.infoSections[0]?.id ?? "");
   const [guideCardId, setGuideCardId] = useState("");
@@ -387,16 +386,29 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   }, [fetchContent]);
 
   const fetchAccess = useCallback(async () => {
+    const seq = ++accessRequestSeq.current;
+    const markFailed = () => {
+      if (seq < accessAppliedSeq.current) return;
+      accessAppliedSeq.current = seq;
+      setAccessState("failed");
+    };
     try {
       const response = await fetchWithTimeout("/api/access", { cache: "no-store" });
-      if (!response.ok) return;
-      const access = await response.json() as { canEdit?: boolean; canManageEditors?: boolean; openTabs?: unknown };
+      // 401 and 403 are an answer: this account may not edit. Any other failure means the check itself failed.
+      const denied = response.status === 401 || response.status === 403;
+      if (!response.ok && !denied) { markFailed(); return; }
+      const access: { canEdit?: boolean; canManageEditors?: boolean; openTabs?: unknown } = denied ? {} : await response.json();
+      if (seq < accessAppliedSeq.current) return;
+      accessAppliedSeq.current = seq;
+      setAccessState("ok");
       setCanEdit(Boolean(access.canEdit));
       setCanManageEditors(Boolean(access.canManageEditors));
       const ids = Array.isArray(access.openTabs) ? access.openTabs.filter((id): id is string => typeof id === "string") : [];
       // Same ids keep the same array, so the editor's effects do not re-run on every poll.
       setOpenTabs((current) => current.length === ids.length && current.every((id, index) => id === ids[index]) ? current : ids);
-    } catch {}
+    } catch {
+      markFailed();
+    }
   }, []);
 
   // Keeps the Personnel window in step with the editor without waiting for the next sync.
@@ -526,8 +538,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const initialFetchTimer = window.setTimeout(() => { void fetchContent(); void fetchAccess(); }, 0);
     const initialEmployeesTimer = window.setTimeout(() => void fetchEmployees(), 0);
     // /api/content is CDN-shared and cannot carry per-user data, so the tab list is polled separately and only for someone who may edit.
-    const syncTimer = window.setInterval(() => { if (document.visibilityState === "visible") { void fetchContent(); if (canEditRef.current) void fetchAccess(); } }, contentSyncMs);
-    const onVisible = () => { if (document.visibilityState === "visible") { void fetchContent(); if (canEditRef.current) void fetchAccess(); } };
+    const syncTimer = window.setInterval(() => { if (document.visibilityState === "visible") { void fetchContent(); if (canEditRef.current || accessFailedRef.current) void fetchAccess(); } }, contentSyncMs);
+    const onVisible = () => { if (document.visibilityState === "visible") { void fetchContent(); if (canEditRef.current || accessFailedRef.current) void fetchAccess(); } };
     document.addEventListener("visibilitychange", onVisible);
     // Cheap: answered by the CDN, so other visitors see profile edits within minutes.
     const employeeSyncTimer = window.setInterval(fetchEmployees, 5 * 60 * 1000);
@@ -1025,22 +1037,34 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     setSaveState("saving");
     try {
       // Up to MAX_CONTENT_BODY_BYTES (5 MB, lib/content-limits.ts) plus auth, upsert and CDN purge: aborting after the server committed would turn the retry into a false conflict.
-      const response = await fetchWithTimeout("/api/content", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content: next, revision: baseRevision }),
-      }, 30_000);
+      let response: Response;
+      try {
+        response = await fetchWithTimeout("/api/content", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content: next, revision: baseRevision }),
+        }, 30_000);
+      } catch (error) {
+        // UI E3: no answer at all is told apart from a refusal; the draft stays in the fields.
+        setSaveError(networkSaveError);
+        throw error;
+      }
       if (response.status === 409) {
         // The server is authoritative after a conflict: a cached revision ahead of it (row reset, fresh project) would otherwise drop every poll for good.
         knownRevision.current = -1;
         setSaveState("conflict");
-        throw new Error("PORTIA content changed by another editor");
+        // D-09: the editor needs the other side's copy and revision for «Загрузить их версию» and «Заменить своей».
+        void fetchContent();
+        throw new SaveConflictError();
       }
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { error?: unknown } | null;
         if (typeof body?.error === "string") setSaveError(body.error);
         // A refusal usually means the tab list changed: read it now instead of at the next poll (D-15).
         if (response.status === 403) void fetchAccess();
+        // D-10: a refusal of some sections lets the editor save the others; the API answer is unchanged.
+        const refusedSections = response.status === 403 ? parseRefusedSections(body) : null;
+        if (refusedSections) throw new SectionClosedError(refusedSections, typeof body?.error === "string" ? body.error : "section closed");
         throw new Error("save failed");
       }
       const payload = (await response.json()) as { revision?: number };
@@ -1058,7 +1082,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         }));
       } catch {}
       setSaveState("saved");
-      saveStateTimer.current = window.setTimeout(() => setSaveState("idle"), 1800);
+      saveStateTimer.current = window.setTimeout(() => setSaveState("idle"), 4000);
       return savedRevision;
     } catch (error) {
       setSaveState((current) => current === "conflict" ? current : "error");
@@ -1067,7 +1091,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   };
 
   const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
-  const filteredViruses = content.viruses.filter((virus) => escapeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(escapeSearch(virusQuery)));
+  const filteredViruses = content.viruses.filter((virus) => normalizeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(normalizeSearch(virusQuery)));
   const virusListbox = contentReady && filteredViruses.length > 0;
   // D-05: the dossier area shows the stale strip only while last-good records are on screen; the other apps join in 19-08.
   // One appViewState rule for every app (D-05..D-08); the window bodies below only choose what to draw.
@@ -1101,7 +1125,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const activeTrashVirus = activeTrashFileId?.startsWith("virus:")
     ? recycledViruses.find((virus) => virus.id === activeTrashFileId.slice(6)) ?? null
     : null;
-  const filteredEmployees = employees.filter((employee) => escapeSearch(`${employee.nickname} ${employee.callsign} ${employee.title} ${employee.rank}`).includes(escapeSearch(employeeQuery)));
+  const filteredEmployees = employees.filter((employee) => normalizeSearch(`${employee.nickname} ${employee.callsign} ${employee.title} ${employee.rank}`).includes(normalizeSearch(employeeQuery)));
   const selectedEmployee = employees.find((employee) => employee.id === selectedEmployeeId) ?? employees[0] ?? null;
 
   const openTrashFile = (file: RecycleFile) => {
@@ -1198,62 +1222,201 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     assistantTipTimer.current = window.setTimeout(() => setAssistantTipVisible(false), 5200);
   };
 
-  const searchResults = useMemo(() => {
-    const query = escapeSearch(globalQuery.trim());
-    const items: Array<{ id: string; type: "virus" | "employee" | "info" | "guide" | "broadcast" | "file" | "app"; title: string; meta: string; body: string; parts?: string[] }> = [
-      ...globalSearchAppIds.map((id) => ({ id, type: "app" as const, title: appMeta[id].label, meta: "ПРИЛОЖЕНИЕ", body: `${appMeta[id].path} ${id}` })),
-      ...content.viruses.map((virus) => ({ id: virus.id, type: "virus" as const, title: virus.name, meta: virus.code, body: `${virus.status} ${virus.external} ${virus.physiology} ${Object.values(virus.classification).join(" ")} ${virus.mutations.map((mutation) => `${mutation.name} ${mutation.description}`).join(" ")}` })),
-      ...employees.map((employee) => ({ id: employee.id, type: "employee" as const, title: employee.nickname, meta: "СОТРУДНИКИ", body: `${employee.callsign} ${employee.title} ${employee.rank} ${employee.biography}` })),
-      ...content.infoSections.flatMap((section) => [
-        { id: section.id, type: "info" as const, title: section.title, meta: "ИНФОРМАЦИЯ", body: section.body },
-        ...section.subsections.map((sub) => ({
-          id: sub.id,
-          type: "info" as const,
-          title: sub.title,
-          meta: `ИНФОРМАЦИЯ · ${section.title}`,
-          body: sub.blocks.map((block) => block.type === "text" ? block.text : block.type === "table" ? block.rows.map((row) => `${row.key} ${row.value}`).join(" ") : "").join(" "),
-        })),
-      ]),
-      // D-15: a card is found by its title, any block text and its section title; the section title sits in meta, so a section match lists every card of it.
-      ...content.guideSections.flatMap((section) => section.cards.map((card) => {
-        const parts = card.blocks.map((block) => block.type === "heading" || block.type === "text" ? block.text : block.type === "table" ? block.rows.map((row) => `${row.key} ${row.value}`).join(" ") : block.type === "photo" ? block.caption : block.type === "callout" ? `${block.label} ${block.text}` : "").filter(Boolean);
-        return { id: card.id, type: "guide" as const, title: card.title || "Без названия", meta: `СПРАВОЧНИК · ${section.title || "Без названия"}`, body: parts.join(" "), parts };
-      })),
-      ...content.broadcasts.filter((item) => item.published).map((item) => ({ id: item.id, type: "broadcast" as const, title: item.title, meta: broadcastType(item.type), body: item.body })),
-      ...content.recycleFiles.map((file) => ({ id: file.id, type: "file" as const, title: file.name, meta: recycleFileType(file.kind), body: recycleFileBody(file, [...content.viruses, ...recycledViruses]) })),
-      ...recycledViruses.map((virus) => ({ id: `virus:${virus.id}`, type: "file" as const, title: virus.name, meta: "ВИРУС В КОРЗИНЕ", body: `${virus.code} ${virus.status} ${virus.external} ${virus.physiology}` })),
-    ];
-    if (!query) return items.slice(0, 8);
-    // The 2-line preview of a card starts at the first block that holds the query; matching itself is unchanged.
-    return items.filter((item) => escapeSearch(`${item.title} ${item.meta} ${item.body}`).includes(query)).map((item) => {
-      const at = item.parts ? item.parts.findIndex((part) => escapeSearch(part).includes(query)) : -1;
-      return at > 0 && item.parts ? { ...item, body: [...item.parts.slice(at), ...item.parts.slice(0, at)].join(" ") } : item;
-    });
-  }, [content, employees, globalQuery, recycledViruses]);
+  // Ctrl/Cmd+K opens the search and focuses its field; an open search only takes the focus (owner verdict 3). The latest closure is kept in a ref so the listener is bound once.
+  const focusSearchRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    focusSearchRef.current = () => {
+      const visible = windows.search.open && !windows.search.minimized && !windows.search.exiting;
+      if (visible) focusApp("search");
+      else openApp("search");
+      setSearchFocusTick((tick) => tick + 1);
+    };
+  });
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || qualificationLockedRef.current) return;
+      if (window.matchMedia("(max-width: 900px)").matches) return;
+      const action = searchKeyAction(searchKeyContext(event, { inInput: false, query: "", index: -1, count: 0 }));
+      if (action !== "focus-input") return;
+      event.preventDefault();
+      focusSearchRef.current();
+    };
+    window.document.addEventListener("keydown", onKeyDown);
+    return () => window.document.removeEventListener("keydown", onKeyDown);
+  }, []);
+  useEffect(() => {
+    if (searchFocusTick) searchInputRef.current?.focus();
+  }, [searchFocusTick]);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 900px)");
+    const update = () => setSearchKeyScope(query.matches ? "enter-only" : "full");
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
 
-  const openSearchResult = (result: (typeof searchResults)[number]) => {
+  // D-13: the index is rebuilt from the content on screen by one pure allowlist function, so a record the next poll removes leaves the results with it.
+  // A roster that failed with no last-good copy stays out of the index; the degraded line says so.
+  const rosterOutOfSearch = employeesSync.failure !== null && employeesSync.lastGoodAt === null;
+  const searchIndex = useMemo(() => buildSearchIndex({
+    apps: globalSearchApps,
+    viruses: content.viruses,
+    employees: rosterOutOfSearch ? [] : employees,
+    infoSections: content.infoSections,
+    guideSections: content.guideSections,
+    broadcasts: content.broadcasts,
+    recycleFiles: content.recycleFiles,
+    recycledViruses,
+  }), [content, employees, recycledViruses, rosterOutOfSearch]);
+  const searchResults = useMemo(() => matchSearch(searchIndex, globalQuery), [searchIndex, globalQuery]);
+
+  const isSearchHit = (type: string, id: string) => searchHit?.type === type && searchHit.id === id;
+  const hitClass = (type: string, id: string) => isSearchHit(type, id) ? " search-hit" : "";
+  const hitAttrs = (type: string, id: string) => isSearchHit(type, id) ? { "data-search-hit": "true", "aria-current": "true" as const } : {};
+
+  // D-14: scroll the named record to the middle, then drop the highlight after 2400ms or at the next click or focus inside its app.
+  useEffect(() => {
+    if (!searchHit) return;
+    const startedAt = window.performance.now();
+    const selector = `.app-window[data-window-app="${searchHit.appId}"]`;
+    const clear = () => setSearchHit(null);
+    const timer = window.setTimeout(clear, 2400);
+    // Opening the app focuses it; only a later click or focus counts as the visitor moving on.
+    const onInteract = (event: Event) => {
+      if (window.performance.now() - startedAt < 400) return;
+      if (event.target instanceof Element && event.target.closest(selector)) clear();
+    };
+    document.addEventListener("pointerdown", onInteract, true);
+    document.addEventListener("focusin", onInteract, true);
+    let frame = 0;
+    let tries = 0;
+    let marked: Element | null = null;
+    const reveal = () => {
+      const appWindow = document.querySelector(selector);
+      if (searchHit.type === "app") {
+        // An application has no record inside it: its own window carries the mark.
+        if (appWindow) { appWindow.setAttribute("data-search-hit", "true"); marked = appWindow; }
+        return;
+      }
+      const target = appWindow?.querySelector('[data-search-hit="true"]');
+      if (target) {
+        target.scrollIntoView({ block: "center", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" });
+        return;
+      }
+      tries += 1;
+      if (tries < 12) frame = window.requestAnimationFrame(reveal);
+    };
+    frame = window.requestAnimationFrame(reveal);
+    return () => {
+      window.clearTimeout(timer);
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("pointerdown", onInteract, true);
+      document.removeEventListener("focusin", onInteract, true);
+      marked?.removeAttribute("data-search-hit");
+    };
+  }, [searchHit]);
+
+  const searchOwnerApp = (result: SearchItem): AppId => result.type === "virus" ? "archive" : result.type === "employee" ? "employees" : result.type === "info" ? "info" : result.type === "guide" ? "guide" : result.type === "broadcast" ? "broadcasts" : result.type === "file" ? "trash" : (result.id as AppId);
+
+  // The record may be gone between the search and the click (a poll replaced the content): the app still opens, nothing is selected.
+  const searchTargetExists = (result: SearchItem) => {
+    if (result.type === "virus") return content.viruses.some((item) => item.id === result.id);
+    if (result.type === "employee") return employees.some((item) => item.id === result.id);
+    if (result.type === "info") return findInfo(content.infoSections, result.id) !== null;
+    if (result.type === "guide") return Boolean(findGuide(content.guideSections, result.id)?.card);
+    if (result.type === "broadcast") return content.broadcasts.some((item) => item.id === result.id && item.published);
+    if (result.type === "file") return result.id.startsWith("virus:") ? recycledViruses.some((item) => item.id === result.id.slice(6)) : content.recycleFiles.some((item) => item.id === result.id);
+    return globalSearchApps.some((app) => app.id === result.id);
+  };
+
+  // D-14: the search window is never closed, minimised or made modal here; only the owner app opens and the record is marked.
+  const openSearchResult = (result: SearchItem, position = 0) => {
+    const owner = searchOwnerApp(result);
+    if (qualificationLocked && owner !== "promotion") return;
+    if (!searchTargetExists(result)) {
+      setSearchHit(null);
+      setUnavailableResults([{ item: result, position }]);
+      openApp(owner);
+      return;
+    }
+    setUnavailableResults([]);
     if (result.type === "virus") {
+      setVirusQuery("");
       setActiveVirusId(result.id);
       setOpenLog(null);
       openApp("archive");
+      setSearchHit({ appId: "archive", type: "virus", id: result.id });
     } else if (result.type === "employee") {
+      setEmployeeQuery("");
       setSelectedEmployeeId(result.id);
       openApp("employees");
+      setSearchHit({ appId: "employees", type: "employee", id: result.id });
     } else if (result.type === "info") {
       setSelectedInfoId(result.id);
       openApp("info");
+      setSearchHit({ appId: "info", type: "info", id: result.id });
     } else if (result.type === "guide") {
       setGuideCardId(result.id);
       openApp("guide");
+      setSearchHit({ appId: "guide", type: "guide", id: result.id });
     } else if (result.type === "broadcast") {
       const found = content.broadcasts.find((item) => item.id === result.id);
       if (found) setBroadcastTab(broadcastTabOf(found.type));
       openApp("broadcasts");
+      setSearchHit({ appId: "broadcasts", type: "broadcast", id: result.id });
     } else if (result.type === "app") {
       openApp(result.id as AppId);
+      setSearchHit({ appId: result.id as AppId, type: "app", id: result.id });
     } else {
       setActiveTrashFileId(result.id);
       openApp("trash");
+      setSearchHit({ appId: "trash", type: "file", id: result.id });
+    }
+  };
+
+  // A vanished record leaves its row for a moment as «Запись недоступна», in the place it had; the next input, click or a few seconds remove it.
+  const searchRows = useMemo(() => {
+    const rows = searchResults.map((item) => ({ item, unavailable: false }));
+    for (const { item, position } of unavailableResults) {
+      if (!searchResults.some((result) => result.key === item.key)) rows.splice(Math.min(position, rows.length), 0, { item, unavailable: true });
+    }
+    return rows;
+  }, [searchResults, unavailableResults]);
+  useEffect(() => {
+    if (!unavailableResults.length) return;
+    const timer = window.setTimeout(() => setUnavailableResults([]), 3200);
+    return () => window.clearTimeout(timer);
+  }, [unavailableResults]);
+
+  const rosterNote = rosterDegradedText(employeesSync, new Date());
+  const searchRoving = searchKeyScope === "full";
+  const searchActiveIndex = Math.min(searchFocusIndex, Math.max(searchRows.length - 1, 0));
+  const focusSearchResult = (index: number) => {
+    const rows = searchResultsRef.current?.querySelectorAll<HTMLElement>(".global-result[data-result-index]");
+    if (!rows?.length) return;
+    rows[Math.min(Math.max(index, 0), rows.length - 1)]?.focus();
+  };
+
+  // One handler for the whole search window: the pure searchKeyAction decides, this only carries it out (owner verdict 3).
+  const onSearchKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    const target = event.target as HTMLElement;
+    const resultElement = target.closest<HTMLElement>(".global-result[data-result-index]");
+    const inInput = target === searchInputRef.current;
+    if (!inInput && !resultElement && event.key !== "Escape") return;
+    const index = resultElement ? Number(resultElement.dataset.resultIndex) : -1;
+    const action = searchKeyAction(searchKeyContext(event, { inInput: !resultElement, query: globalQuery, index, count: searchRows.length, scope: searchKeyScope }));
+    if (!action) return;
+    event.preventDefault();
+    if (action === "focus-input") searchInputRef.current?.focus();
+    else if (action === "next") focusSearchResult(resultElement ? index + 1 : 0);
+    else if (action === "prev") focusSearchResult(resultElement ? index - 1 : searchRows.length - 1);
+    else if (action === "clear") { setGlobalQuery(""); setUnavailableResults([]); setSearchFocusIndex(0); searchInputRef.current?.focus(); }
+    else if (action === "close") closeApp("search");
+    else {
+      const at = resultElement ? index : 0;
+      const row = searchRows[at];
+      if (row && !row.unavailable) openSearchResult(row.item, at);
     }
   };
 
@@ -1329,7 +1492,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <div className="virus-list" role={virusListbox ? "listbox" : undefined} aria-label={virusListbox ? "Записи вирусов" : undefined}>
                   {archiveView === "loading" ? <AppSkeleton shape="archive" /> : <>
                   {filteredViruses.map((virus, index) => (
-                    <button key={virus.id} type="button" role="option" aria-selected={virus.id === activeVirus?.id} className={`virus-row${virus.id === activeVirus?.id ? " active" : ""}`} onClick={() => { setActiveVirusId(virus.id); setOpenLog(null); }}>
+                    <button key={virus.id} type="button" role="option" aria-selected={virus.id === activeVirus?.id} className={`virus-row${virus.id === activeVirus?.id ? " active" : ""}${hitClass("virus", virus.id)}`} {...hitAttrs("virus", virus.id)} onClick={() => { setActiveVirusId(virus.id); setOpenLog(null); }}>
                       <span className="row-index">{String(index + 1).padStart(2, "0")}</span>
                       <span className="row-main"><strong>{virus.name}</strong><small>{virus.code}</small><RowBadges virus={virus} /></span>
                       <span className="row-status">{virus.status}</span>
@@ -1354,7 +1517,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск сотрудника</span><input type="search" value={employeeQuery} onChange={(event) => setEmployeeQuery(event.target.value)} placeholder="Ник, позывной, звание" /></label>
                 <div className="personnel-list">
                   {employeesView === "loading" ? <AppSkeleton shape="employees" /> : <>
-                  {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={employee.id === selectedEmployee?.id ? "active" : ""} onClick={() => setSelectedEmployeeId(employee.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+                  {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={`${employee.id === selectedEmployee?.id ? "active" : ""}${hitClass("employee", employee.id)}`} {...hitAttrs("employee", employee.id)} onClick={() => setSelectedEmployeeId(employee.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
                   {!filteredEmployees.length && employees.length > 0 && <div className="list-empty">Сотрудники не найдены</div>}
                   </>}
                 </div>
@@ -1365,8 +1528,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 {employeesView === "loading" ? <AppSkeleton shape="document" /> : employeesView === "fatal" && employeesSync.failure ? <AppFatalPanel failure={employeesSync.failure} retrying={employeesSync.retrying} onRetry={() => void retryEmployees()} illustration="dish" /> : employeesView === "empty" || !selectedEmployee ? <div className="editor-empty empty-state"><PortiaIllustration name="dish" /><strong>{emptyCopy.employees.heading}</strong><span>{emptyCopy.employees.body}</span></div> : <div className="personnel-profile-body content-fade" key={selectedEmployee.id}>
                   <header className="personnel-profile-head">
                     <div className="personnel-avatar-stage">
-                      <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <EmployeeImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} fallbackClassName="personnel-fallback" /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
-                      {selectedEmployee.robloxUserId ? <a className="personnel-portrait" href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer" aria-label={`Профиль Roblox: ${selectedEmployee.nickname}`} title={`Профиль Roblox: ${selectedEmployee.nickname}`}><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></a> : <figure className="personnel-portrait"><EmployeeImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} fallbackClassName="personnel-fallback" /></figure>}
+                      <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <PortiaImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} recordId={`${selectedEmployee.id}:avatar`} priority="hero" icon="employees" className="is-fill" /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
+                      {selectedEmployee.robloxUserId ? <a className="personnel-portrait" href={`https://www.roblox.com/users/${selectedEmployee.robloxUserId}/profile`} target="_blank" rel="noreferrer" aria-label={`Профиль Roblox: ${selectedEmployee.nickname}`} title={`Профиль Roblox: ${selectedEmployee.nickname}`}><PortiaImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} recordId={`${selectedEmployee.id}:portrait`} priority="hero" icon="employees" className="is-fill is-compact is-icon-only" /></a> : <figure className="personnel-portrait"><PortiaImage src={selectedEmployee.photoUrl || selectedEmployee.robloxAvatarUrl} alt={`Портрет ${selectedEmployee.nickname}`} recordId={`${selectedEmployee.id}:portrait`} priority="hero" icon="employees" className="is-fill is-compact is-icon-only" /></figure>}
                     </div>
                     <div className="personnel-profile-identity"><h2>{selectedEmployee.nickname}</h2>{selectedEmployee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<p className="personnel-callsign">{selectedEmployee.callsign || "Без позывного"}</p></div>
                   </header>
@@ -1379,20 +1542,25 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="search" state={windows.search} active={activeApp === "search"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="global-search-window" meta="ГЛОБАЛЬНЫЙ ПОИСК">
-            <div className="global-search-app">
+            <div className="global-search-app" onKeyDown={onSearchKeyDown}>
               <header className="global-search-header"><h1>Глобальный поиск</h1><p>Поиск по приложениям, сотрудникам и материалам PORTIA.</p></header>
-              <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input value={globalQuery} onChange={(event) => setGlobalQuery(event.target.value)} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
-              <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{content.searchRecommendations.map((item, index) => <button key={`${item}-${index}`} type="button" onClick={() => setGlobalQuery(item)}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>)}</div></div>
-              <div className="global-search-summary"><span>{globalQuery ? `Результаты для «${globalQuery}»` : "Доступные записи"}</span><strong>{String(searchResults.length).padStart(2, "0")}</strong></div>
-              <div className="global-search-results">
-                {!contentReady ? <LoadingState label="Загрузка архива…" /> : <>
-                {searchResults.map((result) => (
-                  <button key={`${result.type}-${result.id}`} type="button" className="global-result" onClick={() => openSearchResult(result)}>
+              <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input ref={searchInputRef} value={globalQuery} onChange={(event) => { setGlobalQuery(event.target.value); setUnavailableResults([]); setSearchFocusIndex(0); }} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
+              <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{content.searchRecommendations.map((item, index) => <button key={`${item}-${index}`} type="button" onClick={() => { setGlobalQuery(item); setUnavailableResults([]); setSearchFocusIndex(0); }}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>)}</div></div>
+              <div className="global-search-summary"><span>{!contentReady ? "Ищем…" : globalQuery ? `Результаты для «${globalQuery}»` : "Доступные записи"}</span>{contentReady && <strong>{String(searchResults.length).padStart(2, "0")}</strong>}</div>
+              {contentReady && rosterNote && <p className="global-search-degraded" role="status">{rosterNote}</p>}
+              <div className="global-search-results" ref={searchResultsRef} aria-busy={!contentReady}>
+                {!contentReady ? <>
+                <span className="sr-only" role="status">Ищем…</span>
+                {[0, 1, 2].map((slot) => <div key={slot} className="global-result global-result-skeleton skeleton-block" aria-hidden="true" />)}
+                </> : <>
+                {searchRows.map(({ item: result, unavailable }, index) => (
+                  <button key={result.key} type="button" className={`global-result${unavailable ? " is-unavailable" : ""}`} data-result-index={index} aria-disabled={unavailable || undefined} tabIndex={searchRoving ? (index === searchActiveIndex ? 0 : -1) : undefined} onFocus={() => setSearchFocusIndex(index)} onClick={() => { if (!unavailable) openSearchResult(result, index); }}>
                     <span className="global-result-mark">{result.type === "virus" ? "VIS" : result.type === "employee" ? "EMP" : result.type === "info" ? "INF" : result.type === "guide" ? "REF" : result.type === "file" ? "FILE" : result.type === "app" ? "APP" : "MSG"}</span>
                     <span className="global-result-main"><span className="global-result-heading"><strong>{result.title || "БЕЗ НАЗВАНИЯ"}</strong><small>{result.meta}</small></span><span className="global-result-preview">{result.body}</span></span>
+                    {unavailable && <span className="global-result-status" role="status">Запись недоступна</span>}
                   </button>
                 ))}
-                {!searchResults.length && <div className="global-search-empty empty-state"><PortiaIllustration name="microscope" /><strong>Совпадений нет</strong><span>Измените запрос или выберите рекомендацию.</span></div>}
+                {!searchRows.length && <div className="global-search-empty empty-state"><PortiaIllustration name="microscope" /><strong>Совпадений нет</strong><span>Измените запрос или выберите рекомендацию.</span></div>}
                 </>}
               </div>
             </div>
@@ -1407,8 +1575,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 const open = section.id === selectedInfo?.id;
                 return (
                   <div key={section.id}>
-                    <button type="button" className={`${open && !selectedSubsection ? "active" : ""}${section.subsections.length ? " has-subsections" : ""}`} aria-expanded={section.subsections.length ? open : undefined} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span>{section.subsections.length ? <em className="info-sub-marker" aria-label={`Подразделов: ${section.subsections.length}`}>{open ? "▾" : "▸"} {section.subsections.length}</em> : null}</button>
-                    {open && section.subsections.length ? <div className="info-subsections">{section.subsections.map((sub, subIndex) => <button key={sub.id} type="button" className={sub.id === selectedSubsection?.id ? "active" : ""} title={sub.title || "БЕЗ НАЗВАНИЯ"} onClick={() => setSelectedInfoId(sub.id)}><small>{String(index + 1).padStart(2, "0")}.{subIndex + 1}</small><span>{sub.title || "БЕЗ НАЗВАНИЯ"}</span></button>)}</div> : null}
+                    <button type="button" className={`${open && !selectedSubsection ? "active" : ""}${section.subsections.length ? " has-subsections" : ""}${hitClass("info", section.id)}`} {...hitAttrs("info", section.id)} aria-expanded={section.subsections.length ? open : undefined} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span>{section.subsections.length ? <em className="info-sub-marker" aria-label={`Подразделов: ${section.subsections.length}`}>{open ? "▾" : "▸"} {section.subsections.length}</em> : null}</button>
+                    {open && section.subsections.length ? <div className="info-subsections">{section.subsections.map((sub, subIndex) => <button key={sub.id} type="button" className={`${sub.id === selectedSubsection?.id ? "active" : ""}${hitClass("info", sub.id)}`} {...hitAttrs("info", sub.id)} title={sub.title || "БЕЗ НАЗВАНИЯ"} onClick={() => setSelectedInfoId(sub.id)}><small>{String(index + 1).padStart(2, "0")}.{subIndex + 1}</small><span>{sub.title || "БЕЗ НАЗВАНИЯ"}</span></button>)}</div> : null}
                   </div>
                 );
               })}</aside>
@@ -1421,7 +1589,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                       // nocookie embed, id validated by normalizePortiaContent (D-09); default referrer policy, YouTube refuses embeds without a Referer.
                       ? <YoutubeFigure key={block.id} videoId={block.videoId} title={selectedSubsection.title} />
                       : block.type === "photo" && block.url
-                        ? <figure key={block.id} className="info-block-photo"><img src={block.url} alt={`Иллюстрация: ${selectedSubsection.title}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" /></figure>
+                        ? <figure key={block.id} className="info-block-photo"><PortiaImage src={block.url} alt={`Иллюстрация: ${selectedSubsection.title}`} recordId={block.id} priority="lazy" icon="info" /></figure>
                         : null)}</div></div>
                 : <div className="content-fade" key={selectedInfo.id}><h1>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} /></div>
               ) : null}</article>
@@ -1431,7 +1599,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <AppWindow app="guide" state={windows.guide} active={activeApp === "guide"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window guide-window" meta="СПРАВОЧНИК">
             {guideView === "loading" ? <div className="app-state-body"><AppSkeleton shape="guide" /></div>
               : guideView === "fatal" ? <div className="app-state-body">{contentFatal("microscope")}</div>
-              : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={setGuideCardId} banner={guideView === "stale" ? contentStaleBanner : null} />}
+              : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={setGuideCardId} hitId={searchHit?.type === "guide" ? searchHit.id : ""} banner={guideView === "stale" ? contentStaleBanner : null} />}
           </AppWindow>
 
           <AppWindow app="promotion" state={windows.promotion} active={activeApp === "promotion"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window promotion-window" meta="Повышение" locked={qualificationLocked}>
@@ -1452,7 +1620,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   // D-19: a quest or task never shows ВАЖНО, whatever the stored data says.
                   const important = item.type === "news" && item.important;
                   const badge = state === "active" ? "АКТИВЕН" : state === "upcoming" ? `СКОРО · с ${formatQuestDay(item.startsAt).slice(0, 5)}` : "ЗАВЕРШЁН";
-                  return <article className={`broadcast-card ${item.type}${important ? " important" : ""}${state ? ` state-${state}` : ""}`} key={item.id}><span>{broadcastType(item.type)}{important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
+                  return <article className={`broadcast-card ${item.type}${important ? " important" : ""}${state ? ` state-${state}` : ""}${hitClass("broadcast", item.id)}`} {...hitAttrs("broadcast", item.id)} key={item.id}><span>{broadcastType(item.type)}{important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
                 })}
                 {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>{emptyCopy[broadcastTab].heading}</strong><span>{emptyCopy[broadcastTab].body}</span></div>}
               </div></>}
@@ -1472,10 +1640,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   {trashOrder.map((key) => {
                     if (key.startsWith("virus:")) {
                       const virus = recycledViruses.find((item) => item.id === key.slice(6));
-                      return virus ? <button className={`trash-file-row${activeTrashFileId === `virus:${virus.id}` ? " active" : ""}`} type="button" key={key} onClick={() => openTrashVirus(virus)}><span className="trash-file-name"><i className="trash-file-icon virus">V</i><strong>{virus.name}</strong></span><span>C:\PORTIA\VIRUS_ARCHIVE</span><span>Вирус в корзине</span></button> : null;
+                      return virus ? <button className={`trash-file-row${activeTrashFileId === `virus:${virus.id}` ? " active" : ""}${hitClass("file", `virus:${virus.id}`)}`} {...hitAttrs("file", `virus:${virus.id}`)} type="button" key={key} onClick={() => openTrashVirus(virus)}><span className="trash-file-name"><i className="trash-file-icon virus">V</i><strong>{virus.name}</strong></span><span>C:\PORTIA\VIRUS_ARCHIVE</span><span>Вирус в корзине</span></button> : null;
                     }
                     const file = trashFiles.find((item) => item.id === key.slice(5));
-                    return file ? <button className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}`} type="button" key={key} onClick={() => openTrashFile(file)}><span className="trash-file-name"><i className={`trash-file-icon ${file.kind}`}>{file.kind === "virus" ? "V" : file.kind === "image" ? "IMG" : "TXT"}</i><strong>{file.name}</strong></span><span>{file.location}</span><span>{recycleFileType(file.kind)}</span></button> : null;
+                    return file ? <button className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}${hitClass("file", file.id)}`} {...hitAttrs("file", file.id)} type="button" key={key} onClick={() => openTrashFile(file)}><span className="trash-file-name"><i className={`trash-file-icon ${file.kind}`}>{file.kind === "virus" ? "V" : file.kind === "image" ? "IMG" : "TXT"}</i><strong>{file.name}</strong></span><span>{file.location}</span><span>{recycleFileType(file.kind)}</span></button> : null;
                   })}
                   {trashView === "empty" && <div className="editor-empty empty-state"><PortiaIllustration name="dish" /><strong>{emptyCopy.trash.heading}</strong><span>{emptyCopy.trash.body}</span></div>}
                 </div>
@@ -1485,7 +1653,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   <div className="trash-viewer-body doc-print">
                     {activeTrashFile.kind === "image" ? (
                       <figure className="trash-image-document">
-                        {activeTrashFile.image ? <img src={activeTrashFile.image} alt={activeTrashFile.name} decoding="async" referrerPolicy="no-referrer" /> : <div className="trash-image-missing">ИЗОБРАЖЕНИЕ НЕДОСТУПНО</div>}
+                        <PortiaImage src={activeTrashFile.image} alt={activeTrashFile.name} recordId={activeTrashFile.id} priority="lazy" icon="trash" />
                         {activeTrashFile.content && <figcaption><FormattedText text={activeTrashFile.content} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} /></figcaption>}
                       </figure>
                     ) : (
@@ -1520,7 +1688,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="editor" state={windows.editor} active={activeApp === "editor"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="editor-window" meta="ДОСТУП ВЛАДЕЛЬЦА">
-            {canEdit ? <PortiaEditor content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} openTabs={openTabs} active={activeApp === "editor" && !windows.editor.minimized} minimized={windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} saveError={saveError} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
+            {accessState === "failed" && !canEdit ? <div className="app-state-body"><AppDeniedPanel detail={accessCheckFailedText} /></div> : canEdit ? <PortiaEditor accessFailed={accessState === "failed"} content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} openTabs={openTabs} active={activeApp === "editor" && !windows.editor.minimized} minimized={windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} saveError={saveError} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
           </AppWindow>
         </main>
 
@@ -1576,23 +1744,6 @@ function BootScreen({ visible }: { visible: boolean }) {
     <span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong>
     <div className="boot-lines">{bootLines.map((line, index) => <p key={line} style={{ animationDelay: `${200 + index * 280}ms` }}>{line}</p>)}</div>
   </div></div>;
-}
-
-// A new src (a corrected photo) starts a fresh load instead of keeping the old failed state.
-function EmployeeImage(props: { src: string; alt: string; fallbackClassName?: string }) {
-  return <EmployeeImageInner key={props.src} {...props} />;
-}
-
-function EmployeeImageInner({ src, alt, fallbackClassName = "" }: { src: string; alt: string; fallbackClassName?: string }) {
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-  // A failed URL shows the PORTIA fallback, never a broken image; if the fallback fails too, the skeleton still stops (D-09 #7).
-  const fallback = !src || failed;
-  if (!fallback) prioritizeImage(src);
-  return <div className={`personnel-image-loader${loaded ? " is-loaded" : ""}`}>
-    <span className="personnel-image-skeleton" aria-hidden="true" />
-    <img src={fallback ? "/assets/portia-logo.png" : src} alt={alt} className={fallback ? fallbackClassName : ""} loading="eager" decoding="async" fetchPriority="high" referrerPolicy="no-referrer" onLoad={() => setLoaded(true)} onError={() => fallback ? setLoaded(true) : setFailed(true)} />
-  </div>;
 }
 
 // In the archive list the badges stand alone, so each one names its term for screen readers and on hover.
@@ -1664,6 +1815,3 @@ function SettingGroup({ title, values, current, onSelect, children }: { title: s
   return <section className="settings-section"><h2>{title}</h2><div className={`setting-options${title === "Цвет интерфейса" ? " color-options" : ""}`}>{values.map(([value, label]) => <button key={value} type="button" className={current === value ? "selected" : ""} aria-pressed={current === value} onClick={() => onSelect(value)}>{title === "Цвет интерфейса" && <i className={`swatch ${value}`} />}<span>{label}</span></button>)}{children}</div></section>;
 }
 
-function broadcastType(type: "quest" | "task" | "news") {
-  return type === "quest" ? "ЕЖЕНЕДЕЛЬНЫЙ КВЕСТ" : type === "task" ? "ЗАДАЧА" : "НОВОСТЬ";
-}

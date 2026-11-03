@@ -2,8 +2,9 @@
 
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { changedDossierTabs, changedSections, deniedSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
-import { closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
+import { changedDossierTabs, changedSections, deniedSections, editorSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
+import { draftEdits, partialSave, rebaseDecision, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
+import { closedMessage, closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { uploadRefusal } from "@/lib/image-upload";
 import { dropFields, mergeFragments, removeFragmentAt } from "@/lib/format-fragments";
@@ -29,6 +30,8 @@ import { compactRuns, expandStyles } from "@/lib/rich-text-style";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 import { ActiveFormatContext, FloatingTextFormatPanel, FormattedTextarea, findFormatField, replaceRichText, type EditorPreviewSurface, type FormatTarget } from "@/components/portia-editor-rich-text";
 import { PromotionEditor } from "@/components/portia-promotion-editor";
+import { AppDeniedPanel } from "@/components/portia-desktop-states";
+import { accessCheckFailedText } from "@/lib/app-state";
 import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
 
 type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "promo" | "access";
@@ -42,6 +45,8 @@ type Props = {
   // Ids of the registry tabs the owner left open for this editor (GET /api/access); the owner gets all of them.
   openTabs: readonly string[];
   active: boolean;
+  // STAB-APP-09: the rights check failed. The body shows «Доступ закрыт»; the draft stays in memory and nothing is saved until the check passes again (owner items 4 and 7).
+  accessFailed: boolean;
   // True while the window manager has the editor window minimized; the format panel is hidden then and comes back on restore (D-06).
   minimized: boolean;
   onDirtyChange: (dirty: boolean) => void;
@@ -346,7 +351,7 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, revision, saveState, canManageEditors, openTabs, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved, saveError }: Props) {
+export function PortiaEditor({ accessFailed, content, revision, saveState, canManageEditors, openTabs, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved, saveError }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
   // The revision the draft's baseline came from; a stale draft then gets the 409 instead of overwriting newer content (uat-03-owner-broadcast-vanishes).
   const baseRevision = useRef(revision);
@@ -375,6 +380,17 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   // Closed sections are never shown; a D-13 move still counts in `dirty`.
   const shownChanged = changed.filter((section) => !closedSections.includes(section));
   const [closureNotice, setClosureNotice] = useState("");
+  // D-09: the revision the refused save was based on; the panel shows while the draft is dirty and the 409 is the last answer. Null once the user chose.
+  const [conflictBase, setConflictBase] = useState<number | null>(null);
+  // D-09: the user's own values from before «Загрузить их версию», kept beside the server's version until closed or saved.
+  const [theirEdits, setTheirEdits] = useState<DraftEdit[]>([]);
+  const [copiedEdit, setCopiedEdit] = useState("");
+  // D-10: the sections the server refused in the last save and the N of M it reported; both stay until the next edit or a save that takes everything.
+  const [refusedSections, setRefusedSections] = useState<EditorSection[]>([]);
+  const [partialResult, setPartialResult] = useState<{ saved: number; total: number; sections: EditorSection[] } | null>(null);
+  // The first refused section gets the focus once the partial result is rendered.
+  const focusRequest = useRef<EditorSection | null>(null);
+  const errorIdBase = useId();
   const tab: EditorTab = stripTabs.some(([id]) => id === pickedTab) ? pickedTab : stripTabs[0]?.[0] ?? pickedTab;
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
@@ -431,15 +447,38 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
     setSelectedRecycledVirusId((current) => (current === "" || next.recycledViruses?.some((virus) => virus.id === current) ? current : next.recycledViruses?.[0]?.id ?? ""));
   };
 
+  // D-11: the timer below fires after render, so it reads the latest history and tab from here.
+  const syncRef = useRef({ history, tab });
+  useEffect(() => { syncRef.current = { history, tab }; });
+  // D-11: a newer stored copy overlaps the unsaved edits or the open section; the draft stays as typed and the save resolves it.
+  const [stale, setStale] = useState(false);
+
   useEffect(() => {
-    if (dirty) return;
     const syncTimer = window.setTimeout(() => {
-      dispatch({ type: "sync", content });
+      if (!dirty) {
+        dispatch({ type: "sync", content });
+        baseRevision.current = revision;
+        repairSelections(content);
+        setStale(false);
+        return;
+      }
+      // D-11: with unsaved edits a background update never replaces the draft. Sections nobody edited here follow the server; the section of the open tab (a field may be under the cursor) and the edited ones keep the draft.
+      if (revision <= baseRevision.current) return;
+      const { history: live, tab: shown } = syncRef.current;
+      const decision = rebaseDecision(live.baseline, live.present, content, editorSections.filter((section) => section === shown));
+      if (decision.kind === "conflict") {
+        setStale(true);
+        return;
+      }
       baseRevision.current = revision;
-      repairSelections(content);
+      setStale(false);
+      if (decision.kind === "none") return;
+      const theirs = changedSections(live.baseline, content);
+      dispatch({ type: "rebase", baseline: content, source: content, project: (entry) => revertSections(content, entry, theirs) });
+      repairSelections(decision.present);
     }, 0);
     return () => window.clearTimeout(syncTimer);
-  }, [content, dirty, revision]);
+  }, [content, dirty, revision, tab]);
 
   // D-15, D-16: when the owner closes a section, its unsaved edits go back to the stored copy, in the history too, so Ctrl+Z cannot bring them back.
   const closureRef = useRef({ history, employeeDirty });
@@ -507,6 +546,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   const batchKey = useRef<string | null>(null);
   const changeDraft = (updater: (next: PortiaContent) => void) => {
     editCount.current += 1;
+    setPartialResult(null);
     dispatch({ type: "change", updater, key: batchKey.current ?? editKeyFor(document.activeElement), now: Date.now() });
   };
   const runBatch = (id: string, run: () => void) => {
@@ -525,6 +565,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
     const change = categoryChange(draft.broadcasts, target.broadcasts);
     if (change) revealCard(change.id, "type", change.tab);
     editCount.current += 1;
+    setPartialResult(null);
     dispatch({ type: kind });
   };
 
@@ -752,13 +793,20 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   // Read after an awaited save, when the closure that started it is renders old.
   const latest = useRef({ closeAsked, onCloseApproved });
   useEffect(() => { latest.current = { closeAsked, onCloseApproved }; });
+  // Set synchronously when a save starts, so a second click in the same frame cannot send a second request before saveState reaches this component (idempotency).
+  const inflight = useRef(false);
 
   // Resolves true only when nothing is left unsaved: the draft was clean, or the save succeeded and nothing was typed meanwhile.
-  const save = async (): Promise<boolean> => {
+  // mode "replace" is «Заменить своей» (D-09): the user's sections go over the latest server copy under its revision.
+  const save = async (mode: "mine" | "replace" = "mine"): Promise<boolean> => {
     if (!dirty) return true;
+    // STAB-APP-09: no save on a stale answer about the rights; the draft stays where it is.
+    if (accessFailed) return false;
     // D-23: the server would answer 413; the savebar already shows why.
     if (saveBlocked) return false;
-    if (saveState === "saving") return false;
+    if (saveState === "saving" || inflight.current) return false;
+    inflight.current = true;
+    if (mode === "replace") baseRevision.current = revision;
     // The reducer compares this very object after the request to tell whether the owner kept typing meanwhile.
     const savedFrom = draft;
     const editsBefore = editCount.current;
@@ -796,17 +844,75 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       }
       normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, MAX_SCIENTIST_LOGS); });
       // Closed sections go exactly as stored, so the normalization above can never look like an edit of them (RESEARCH P4).
-      const outgoing = closedSections.length ? revertSections(history.baseline, normalized, closedSections) : normalized;
-      baseRevision.current = await onSave(outgoing, baseRevision.current);
-      const clean = editCount.current === editsBefore;
+      // Replacing: the sections the user did not touch come from the latest server copy, so only the user's own sections overwrite theirs (T-19-26: closed ones follow the server too).
+      const serverBase = mode === "replace" ? content : history.baseline;
+      const taken = mode === "replace" ? editorSections.filter((section) => !changed.includes(section)) : [];
+      const reverted = [...new Set([...taken, ...closedSections])];
+      const wanted = reverted.length ? revertSections(serverBase, normalized, reverted) : normalized;
+      let outgoing = wanted;
+      // D-10: sections the server refuses stay drafts; the rest is sent once more without them.
+      let refused: EditorSection[] = [];
+      try {
+        baseRevision.current = await onSave(outgoing, baseRevision.current);
+      } catch (error) {
+        if (!(error instanceof SectionClosedError)) throw error;
+        refused = error.refusedSections.filter((section) => changed.includes(section));
+        if (!refused.length || !partialSave(changed, refused).send.length) throw error;
+        outgoing = revertSections(serverBase, wanted, refused);
+        baseRevision.current = await onSave(outgoing, baseRevision.current);
+      }
+      const clean = editCount.current === editsBefore && refused.length === 0;
       setClosureNotice("");
-      dispatch({ type: "saved", normalized: outgoing, savedFrom });
+      setConflictBase(null);
+      setStale(false);
+      setTheirEdits([]);
+      setRefusedSections(refused);
+      if (refused.length) {
+        const result = partialSave(changed, refused);
+        setPartialResult({ saved: result.saved, total: result.total, sections: result.send });
+        const first = editorSections.find((section) => refused.includes(section)) ?? null;
+        focusRequest.current = first;
+        if (first && stripTabs.some(([id]) => id === first)) setTab(first);
+      } else setPartialResult(null);
+      // A draft typed during the request follows the server copy for the sections this save took from it, except where the user typed meanwhile.
+      const rebase = taken.length ? (latest: PortiaContent) => {
+        const typed = changedSections(savedFrom, latest);
+        return revertSections(outgoing, latest, taken.filter((section) => !typed.includes(section)));
+      } : undefined;
+      // The refused sections stay in the draft: when nothing was typed meanwhile the draft becomes the full copy, not the reduced one that was stored.
+      dispatch({ type: "saved", normalized: outgoing, savedFrom, keep: refused.length ? wanted : undefined, rebase });
       return clean;
-    } catch {
+    } catch (error) {
       // Keep the local draft marked as changed so a temporary network error
       // can never discard the owner's work.
+      if (error instanceof SaveConflictError) setConflictBase(baseRevision.current);
       return false;
+    } finally {
+      inflight.current = false;
     }
+  };
+
+  // D-10: after a partial save the first refused section's tab takes the focus (its error text is linked from the tab).
+  useEffect(() => {
+    const section = focusRequest.current;
+    if (!section) return;
+    focusRequest.current = null;
+    tabsRef.current?.querySelector<HTMLElement>(`[data-tab-id="${section}"]`)?.focus();
+  });
+
+  // D-09 «Загрузить их версию»: the form shows the server's copy and the user's values stay in «Ваши правки».
+  const loadTheirVersion = () => {
+    setTheirEdits(draftEdits(history.baseline, history.present));
+    setConflictBase(null);
+    setStale(false);
+    baseRevision.current = revision;
+    repairSelections(content);
+    dispatch({ type: "sync", content });
+  };
+  const copyEdit = (edit: DraftEdit) => {
+    try {
+      void navigator.clipboard?.writeText(edit.value).then(() => setCopiedEdit(edit.path), () => {});
+    } catch {}
   };
 
   // save and step are new functions every render; the listeners read the latest pair through a ref instead of re-subscribing.
@@ -815,7 +921,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
 
   // Window-level shortcuts only while this window is the active, non-minimized one and no dialog is open (D-10, D-11).
   useEffect(() => {
-    if (!active || dialog || closeAsked) return;
+    if (!active || dialog || closeAsked || accessFailed) return;
     // Сотрудники and Доступ are saved separately; their fields keep the browser's native undo.
     const historyTab = tab !== "employees" && tab !== "promo" && tab !== "access";
     const onKeyDown = (event: KeyboardEvent) => {
@@ -839,7 +945,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("beforeinput", onBeforeInput);
     };
-  }, [active, dialog, closeAsked, tab]);
+  }, [active, dialog, closeAsked, accessFailed, tab]);
 
   // The desktop asks on × only while this is true, so a dirty employee draft counts too (D-02).
   useEffect(() => { onDirtyChange(dirty || employeeDirty); }, [dirty, employeeDirty, onDirtyChange]);
@@ -874,22 +980,28 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   }, [popoverOpen]);
 
   // Only a save starts a new saveState, so after ОТМЕНИТЬ or undo back to clean the conflict text would sit over a current editor.
-  const conflict = saveState === "conflict" && dirty;
+  const conflict = saveState === "conflict" && dirty && conflictBase !== null;
+  const refusedShown = refusedSections.filter((section) => changed.includes(section));
   // The chip stays while anything is unsaved, so a compact chip never hides unsaved work (D-09).
   const chipVisible = dirty || saveState === "saving" || saveState === "saved";
   // Derived reset: the popover only lists unsaved sections, so it closes when the draft is clean.
   if (popoverOpen && !dirty) setPopoverOpen(false);
   // A blocked, failed or conflicting save turns the chip red, so a compact chip never hides a failed save (D-10).
-  const alarm = dirty && (saveBlocked || saveState === "error" || conflict);
-  const chipLabel = saveState === "saving" ? "Сохранение…"
+  const alarm = dirty && (saveBlocked || saveState === "error" || conflict || refusedShown.length > 0);
+  const chipLabel = saveState === "saving" ? saveStatusText("saving")
     : dirty ? `Не сохранено разделов: ${shownChanged.length}${alarm ? (saveBlocked ? ", сохранение невозможно" : ", ошибка сохранения") : ""}`
-    : "Сохранено";
+    : saveStatusText("saved");
   const chipText = saveState === "saving" ? "…" : dirty ? `${alarm ? "!" : ""}${shownChanged.length}` : "✓";
-  const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
-    : conflict ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
-    : saveState === "error" ? (saveError || "ОШИБКА")
-    : saveState === "saved" && !dirty ? "СОХРАНЕНО"
-    : "";
+  // UI E3: «Сохранено» only once the server answered (saveState "saved") and nothing was typed since; the text of a failure is the server's reason beside the status.
+  const partial = partialResult !== null && dirty ? partialResult : null;
+  const status: SaveStatus = saveState === "saving" ? "saving"
+    : conflict ? "conflict"
+    : saveState === "error" ? "error"
+    : partial ? "partial"
+    : saveState === "saved" && !dirty ? "saved"
+    : dirty ? "dirty"
+    : "clean";
+  const statusText = saveStatusText(status, partial ?? undefined);
 
   const header = (
     <header className="editor-header">
@@ -900,6 +1012,26 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       </div>
     </header>
   );
+  // STAB-APP-09 fail-closed: whatever the last answer said, no section is shown while the rights are unchecked. The editor stays mounted, so the content draft survives until the check passes or the window closes.
+  if (accessFailed) {
+    return (
+      <div className="content-editor">
+        {header}
+        <AppDeniedPanel detail={accessCheckFailedText} />
+        {closeAsked && (
+          <ConfirmDialog
+            title="Закрыть редактор?"
+            text={`Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}. Права не проверены, сохранить сейчас нельзя.`}
+            actions={[
+              { label: "НЕ СОХРАНЯТЬ", tone: "danger", onClick: () => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },
+              { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setHandledCloseRequest(closeRequest) },
+            ]}
+            onCancel={() => setHandledCloseRequest(closeRequest)}
+          />
+        )}
+      </div>
+    );
+  }
   // D-17: the window stays; nothing of the sections is rendered.
   if (noTabs) return <div className="content-editor">{header}<div className="editor-empty">Владелец пока не открыл вам ни одного раздела</div></div>;
 
@@ -911,14 +1043,39 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       <nav className="editor-tabs" aria-label="Разделы редактора" ref={tabsRef}>
         {stripTabs.map(([id, label]) => {
           const unsaved = shownChanged.some((section) => section === id);
+          const failed = refusedShown.some((section) => section === id);
+          const savedNow = partial?.sections.some((section) => section === id) ?? false;
           return (
-            <button key={id} type="button" className={tab === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => switchTab(id)}>
-              {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}
+            <button key={id} type="button" data-tab-id={id} data-save-error={failed || undefined} className={tab === id ? "active" : ""} aria-describedby={failed ? `${errorIdBase}-${id}` : undefined} aria-label={failed ? `${label}, не сохранено` : unsaved ? `${label}, есть несохранённые правки` : savedNow ? `${label}, сохранено` : undefined} onClick={() => switchTab(id)}>
+              {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}{savedNow && !unsaved && <i className="tab-saved" aria-hidden="true">✓</i>}
             </button>
           );
         })}
       </nav>
+      {refusedShown.map((section) => <p key={section} id={`${errorIdBase}-${section}`} className="editor-section-error" role="alert">{closedMessage([section])} Правки остались в черновике.</p>)}
       {closureNotice && <p className="editor-guidance" role="status">{closureNotice}</p>}
+      {stale && dirty && !conflict && (
+        <div className="editor-stale-banner" role="status">
+          <strong>Запись изменили</strong>
+          <span>Показаны ваши правки. Конфликт решится при сохранении.</span>
+        </div>
+      )}
+      {conflict && <ConflictPanel ready={revision !== conflictBase} onLoadTheirs={loadTheirVersion} onReplace={() => void save("replace")} />}
+      {theirEdits.length > 0 && (
+        <details className="editor-their-edits">
+          <summary>Ваши правки ({theirEdits.length})</summary>
+          <ul>
+            {theirEdits.map((edit) => (
+              <li key={edit.path}>
+                <span className="editor-their-edit-label">{edit.label}</span>
+                <pre className="editor-their-edit-value">{edit.value}</pre>
+                <button type="button" className="secondary-control" onClick={() => copyEdit(edit)}>{copiedEdit === edit.path ? "Скопировано" : "Копировать"}</button>
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="secondary-control" onClick={() => setTheirEdits([])}>Закрыть</button>
+        </details>
+      )}
 
       <div className="global-format-launch">
         <button
@@ -1374,7 +1531,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={runBatch} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
-      <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? ` Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>
+      <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? `${status === "dirty" ? ":" : ". Не сохранено:"} ${shownChanged.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>
       {chipVisible && (
         <div
           className="editor-save-chip"
@@ -1394,14 +1551,15 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
             <div className="editor-save-popover" id={popoverId} role="dialog" aria-label="Несохранённые изменения">
               <strong>НЕ СОХРАНЕНО</strong>
               <ul>{shownChanged.map((id) => <li key={id} title={sectionLabels[id]}>{sectionLabels[id]}</li>)}</ul>
-              {statusText && <span className={`editor-save-status ${saveState}`}>{statusText}</span>}
+              {statusText && <span className={`editor-save-status ${status}`}>{statusText}</span>}
+              {status === "error" && saveError && <span className="editor-save-reason">{saveError}</span>}
               {oversize.length > 0 && <span className="editor-save-reason">{oversizeMessage(oversize)}</span>}
               {bodyMessage && <span className="editor-save-status error">{bodyMessage}</span>}
               {badQuest && <button type="button" className="editor-save-fix" onClick={() => { setPopoverOpen(false); revealCard(badQuest.id, "endsAt", "quests"); }}>{dateMessage}</button>}
               <div className="editor-save-actions">
                 <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
-                <button type="button" className="secondary-control" disabled={!dirty || saveState === "saving"} onClick={() => setDialog("discard")}>ОТМЕНИТЬ</button>
-                <button type="button" className="primary-control" disabled={!dirty || saveState === "saving" || saveBlocked} onClick={() => void save()}>СОХРАНИТЬ</button>
+                <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>
+                <button type="button" className="primary-control" disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>
               </div>
             </div>
           )}
@@ -1490,6 +1648,23 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       )}
     </div>
     </ActiveFormatContext.Provider>
+  );
+}
+
+// D-09: not a modal and not a toast; the choice between the two labelled buttons is the explicit decision (owner item 5, variant A: no extra confirmation window).
+function ConflictPanel({ ready, onLoadTheirs, onReplace }: { ready: boolean; onLoadTheirs: () => void; onReplace: () => void }) {
+  const noteId = useId();
+  return (
+    <section className="editor-conflict-panel" role="alert">
+      <h2>Запись изменили до вас</h2>
+      <p>Ваши правки не потеряны. Выберите, какую версию оставить.</p>
+      <div className="editor-conflict-actions">
+        <button type="button" className="primary-control" aria-disabled={!ready || undefined} onClick={() => { if (ready) onLoadTheirs(); }}>Загрузить их версию</button>
+        <button type="button" className="danger-control" aria-describedby={noteId} aria-disabled={!ready || undefined} onClick={() => { if (ready) onReplace(); }}>Заменить своей</button>
+      </div>
+      <p id={noteId}>Их изменения будут перезаписаны.</p>
+      {!ready && <p>Загружаем их версию…</p>}
+    </section>
   );
 }
 
@@ -1651,7 +1826,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
         setDetailsPending(Boolean(payload.detailsPending));
       }
       setState("saved");
-      savedTimer.current = window.setTimeout(() => setState("idle"), 1800);
+      savedTimer.current = window.setTimeout(() => setState("idle"), 4000);
       // A draft typed during the save stays dirty and unsaved; no automatic second save (D-04). No await from here to the return (A4).
       const typedMeanwhile = stillOpen && (Object.keys(changedFields(sentProfile, draftRef.current ?? sentProfile)).length > 0 || Object.keys(changedDetails(sentDetails, detailsRef.current)).length > 0);
       resolveQueued(!typedMeanwhile);
@@ -1809,7 +1984,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
       {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
       {detailsPending && <p className="editor-guidance" role="status">Профиль сохранён, но звание, ранг и позывной — нет: база данных ещё не обновлена.</p>}
       {selected.source === "manual" && <button type="button" className="danger-control employee-remove" disabled={state === "saving" || deleting} onClick={() => setDeleteAsked(true)}>УДАЛИТЬ СОТРУДНИКА</button>}
-      <div className="employee-editor-save"><span className={`editor-save-status ${saveStatus}`}>{saveStatus === "saving" ? "СОХРАНЕНИЕ…" : saveStatus === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
+      <div className="employee-editor-save"><span className={`editor-save-status ${saveStatus}`}>{saveStatus === "saving" ? saveStatusText("saving") : saveStatus === "saved" ? saveStatusText("saved") : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
       </> : <div className="editor-empty">Сотрудников пока нет. Добавьте человека вне таблицы кнопкой «+ ВНЕ ТАБЛИЦЫ».</div>}
     </div>
     {deleteAsked && selected?.source === "manual" && (

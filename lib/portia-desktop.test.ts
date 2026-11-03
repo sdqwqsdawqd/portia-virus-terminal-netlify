@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { componentFamily } from "./component-source.ts";
+import { componentFamily, lf } from "./component-source.ts";
+import { accessCheckFailedText } from "./app-state.ts";
 
 const desktopFamily = componentFamily("portia-desktop");
 const editorFamily = componentFamily("portia-editor");
 const source = desktopFamily.map((part) => part.text).join("\n");
 const editorSource = editorFamily.map((part) => part.text).join("\n");
-const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
+const styles = lf(readFileSync(new URL("../app/portia.css", import.meta.url), "utf8"));
 const icons = readFileSync(new URL("../components/portia-icons.tsx", import.meta.url), "utf8");
 
 // Index of the "}" that closes the "{" at `open`; braces inside strings or template literals are not special-cased.
@@ -104,7 +105,7 @@ test("the editor imports rich-text-style once and ships no joke or empty labels 
 });
 
 test("component families start with the full main file", () => {
-  const mainFile = (name: string) => readFileSync(new URL(`../components/${name}.tsx`, import.meta.url), "utf8");
+  const mainFile = (name: string) => lf(readFileSync(new URL(`../components/${name}.tsx`, import.meta.url), "utf8"));
   assert.equal(desktopFamily[0].text, mainFile("portia-desktop"));
   assert.equal(editorFamily[0].text, mainFile("portia-editor"));
 });
@@ -112,7 +113,8 @@ test("component families start with the full main file", () => {
 test("component families import only their own seams and the known shared components", () => {
   const allowed = {
     "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion"],
-    "portia-editor": ["custom-color-picker", "portia-promotion-editor"],
+    // portia-desktop-states: the shared «Доступ закрыт» panel the editor shows when the rights check fails (STAB-APP-09).
+    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states"],
   } as const;
   for (const [main, family] of [["portia-desktop", desktopFamily], ["portia-editor", editorFamily]] as const) {
     const members = family.map((part) => part.file.replace(/\.tsx$/, ""));
@@ -167,14 +169,85 @@ test("promotion is a standalone desktop application with its own window geometry
   assert.ok(!source.includes('meta="Portia Promotion"'));
 });
 
-test("global search covers applications, employees and every existing content collection", () => {
+test("global search is built by buildSearchIndex from every existing collection and opens the owner app (D-13, D-14)", () => {
   assert.ok(source.includes("globalSearchAppIds.map"));
-  assert.ok(source.includes('type: "employee" as const'));
-  assert.ok(source.includes('type: "app" as const'));
+  assert.ok(source.includes("buildSearchIndex({"));
+  assert.ok(source.includes("matchSearch(searchIndex, globalQuery)"));
+  assert.ok(!source.includes("const escapeSearch"), "one normalisation: normalizeSearch from lib/search-index");
   assert.ok(source.includes('openApp("employees")'));
-  for (const collection of ["content.viruses", "content.infoSections", "content.guideSections", "content.broadcasts", "content.recycleFiles", "recycledViruses"]) {
+  for (const collection of ["content.viruses", "content.infoSections", "content.guideSections", "content.broadcasts", "content.recycleFiles", "recycledViruses", "employees"]) {
     assert.ok(source.includes(collection), collection);
   }
+});
+
+// Text of a block that opens at `header` and closes with its matching brace.
+function blockAt(header: string) {
+  const at = source.indexOf(header);
+  assert.ok(at >= 0, header);
+  const open = source.indexOf("{", at + header.length - 1);
+  return source.slice(open, closingBrace(source, open) + 1);
+}
+
+test("search result opens its owner app, marks the record and never touches the search window (D-14, STAB-SEARCH-02)", () => {
+  const open = blockAt("const openSearchResult = (result: SearchItem, position = 0) => {");
+  assert.ok(open.includes('setSearchHit({ appId: "archive", type: "virus", id: result.id })'));
+  assert.ok(open.includes('openApp("archive")'));
+  assert.ok(!/closeApp|minimizeApp|requestExit|setWindows|setActiveApp|modal/.test(open), "the search window stays open, not minimised, not modal");
+  assert.ok(source.includes('{...hitAttrs("virus", virus.id)}'));
+  assert.ok(/"data-search-hit": "true", "aria-current": "true"/.test(source));
+  const effect = source.slice(source.indexOf("if (!searchHit) return;"), source.indexOf("}, [searchHit]);"));
+  assert.ok(effect.length > 200);
+  assert.ok(effect.includes("window.setTimeout(clear, 2400)"));
+  assert.ok(effect.includes('scrollIntoView({ block: "center", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" })'));
+  assert.ok(effect.includes('"pointerdown"') && effect.includes('"focusin"'));
+  assert.ok(/\.search-hit[^{]*\{[^}]*outline: 1px solid var\(--teal\)/.test(styles));
+  assert.ok(/\.search-hit[^{]*\{[^}]*var\(--teal-soft\)/.test(styles));
+});
+
+test("every result type opens its owner and marks its record; a vanished record opens the app without a selection (D-14, STAB-SEARCH-02)", () => {
+  const open = blockAt("const openSearchResult = (result: SearchItem, position = 0) => {");
+  for (const [appId, type] of [["archive", "virus"], ["employees", "employee"], ["info", "info"], ["guide", "guide"], ["broadcasts", "broadcast"], ["trash", "file"]]) {
+    assert.ok(open.includes(`setSearchHit({ appId: "${appId}", type: "${type}", id: result.id })`), type);
+  }
+  assert.ok(open.includes('setSearchHit({ appId: result.id as AppId, type: "app", id: result.id })'));
+  assert.ok((source.match(/setSearchHit\(/g) ?? []).length >= 7);
+  // The missing-record branch comes first, opens the owner and selects nothing.
+  const missing = open.slice(open.indexOf("if (!searchTargetExists(result))"), open.indexOf("setUnavailableResults([]);\n    if (result.type"));
+  assert.ok(missing.includes("setSearchHit(null)") && missing.includes("setUnavailableResults([{ item: result, position }])") && missing.includes("openApp(owner)"));
+  assert.ok(!/setActiveVirusId|setSelectedEmployeeId|setSelectedInfoId|setGuideCardId|setActiveTrashFileId/.test(missing));
+  assert.ok(source.includes("Запись недоступна") && source.includes("aria-disabled={unavailable || undefined}"));
+  assert.ok(!/toast|assistant|Vivian|Вивьян/i.test(open), "no assistant or toast message for a vanished record");
+  // Every owner list carries the mark.
+  for (const mark of ['hitAttrs("employee", employee.id)', 'hitAttrs("info", section.id)', 'hitAttrs("info", sub.id)', 'hitAttrs("broadcast", item.id)', 'hitAttrs("file", file.id)', 'hitAttrs("file", `virus:${virus.id}`)', 'hitId={searchHit?.type === "guide"']) {
+    assert.ok(source.includes(mark), mark);
+  }
+});
+
+test("search states: loading rows with aria-busy, distinct empty text, roster line, long meta wraps (UI E4)", () => {
+  const window = source.slice(source.indexOf('<AppWindow app="search"'), source.indexOf('<AppWindow app="info"'));
+  assert.ok(window.includes("Ищем…") && window.includes("aria-busy={!contentReady}"));
+  assert.ok(window.includes("[0, 1, 2].map") && window.includes("global-result global-result-skeleton skeleton-block"));
+  assert.ok(window.includes("Совпадений нет") && window.includes("Измените запрос или выберите рекомендацию."));
+  assert.ok(window.includes('className="global-search-degraded"') && window.includes("rosterNote"));
+  assert.ok(source.includes("rosterOutOfSearch ? [] : employees"), "no last-good roster: no employees in the index");
+  assert.ok(/\.global-search-degraded\s*\{[^}]*var\(--warning\)[^}]*font: 11px/.test(styles));
+  assert.ok(/\.global-result-heading small\s*\{[^}]*overflow-wrap: anywhere/.test(styles));
+  assert.ok(/\.global-result-skeleton\s*\{[^}]*min-height: 78px/.test(styles));
+});
+
+test("search keyboard follows owner verdict 3: one window handler and one Ctrl/Cmd+K listener, Tab untouched, a phone keeps Enter only", () => {
+  const handler = blockAt("const onSearchKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {");
+  assert.ok(handler.includes("searchKeyAction(searchKeyContext(event, {"));
+  assert.ok(handler.includes("scope: searchKeyScope"));
+  assert.ok(!handler.includes('"Tab"'), "Tab keeps the native order");
+  for (const action of ["focus-input", "next", "prev", "clear", "close"]) assert.ok(handler.includes(`"${action}"`), action);
+  assert.ok(handler.includes('closeApp("search")'), "Escape on an empty field closes the window");
+  assert.ok(source.includes('className="global-search-app" onKeyDown={onSearchKeyDown}'));
+  assert.equal((source.match(/searchKeyAction\(searchKeyContext\(event, \{/g) ?? []).length, 2, "the window handler and the global shortcut");
+  assert.ok(source.includes('if (window.matchMedia("(max-width: 900px)").matches) return;'), "a phone intercepts no Ctrl+K");
+  assert.ok(source.includes("qualificationLockedRef.current) return;"), "the shortcut does not break through a qualification");
+  assert.ok(source.includes("tabIndex={searchRoving ?"), "roving tabindex over the results");
+  assert.ok(source.includes('focusApp("search")'), "an open search only takes the focus");
 });
 
 test("editor collections scroll inside bounded panes and the table of contents no longer follows the page", () => {
@@ -254,7 +327,66 @@ test("shortcut motion survives pointer exit until every delayed icon part reache
 test("active remote media receives connection and fetch priority while background collections stay lazy", () => {
   assert.match(source, /import \{ preconnect, preload \} from "react-dom"/);
   assert.match(source, /preload\(src, \{ as: "image", fetchPriority: "high", referrerPolicy: "no-referrer" \}\)/);
-  assert.match(source, /function LoadingMedia[\s\S]*loading="eager"[\s\S]*fetchPriority="high"/);
+  // Priority lives in one place: mediaLoadingAttrs, applied by PortiaImage.
+  assert.match(source, /export function PortiaImage/);
+  assert.match(source, /\{\.\.\.mediaLoadingAttrs\(priority\)\}/);
+  assert.match(source, /function LoadingMedia[\s\S]*<PortiaImage[\s\S]*priority=\{priority\}/);
+});
+
+test("PortiaImage checks the link first, mounts per record, times out and cleans up (D-15, STAB-MEDIA-03)", () => {
+  const media = desktopFamily.find((part) => part.file === "portia-desktop-media.tsx")?.text ?? "";
+  assert.ok(media.includes("mediaSource(src)"), "the link goes through mediaSource before any <img>");
+  assert.ok(media.includes("key={`${recordId}|${link}`}"), "a new record or link mounts a fresh frame");
+  assert.ok(media.includes('referrerPolicy="no-referrer"'), "no Referer to image hosts");
+  assert.match(media, /window\.setTimeout\([\s\S]*MEDIA_SLOW_MS\)/);
+  assert.match(media, /return \(\) => window\.clearTimeout\(timer\)/, "the 15s timer dies with the frame");
+  assert.match(media, /onError=\{\(\) => setState\(\(current\) => \(current === "loaded" \? current : "failed"\)\)\}/, "a late error never flips a loaded picture");
+  assert.match(media, /state !== "failed" && /, "a failed frame renders no <img>");
+  assert.equal((media.match(/Изображение недоступно/g) ?? []).length, 1);
+  // prioritizeImage is private to PortiaImage and only runs for the hero.
+  assert.match(media, /if \(link && priority === "hero"\) prioritizeImage\(link\)/);
+  assert.equal(source.split("prioritizeImage(").length - 1, 2, "one definition, one call, both in portia-desktop-media.tsx");
+  assert.ok(!desktopFamily.some((part) => part.file !== "portia-desktop-media.tsx" && part.text.includes("prioritizeImage(")));
+});
+
+const NL = String.fromCharCode(10);
+test("every record picture goes through PortiaImage with its record id and the right priority (STAB-MEDIA-03, D-15)", () => {
+  const part = (file: string) => desktopFamily.find((entry) => entry.file === file)?.text ?? "";
+  const all = desktopFamily.flatMap((entry) => [...entry.text.matchAll(/<PortiaImage(?= )[^>]*>/g)].map((match) => ({ file: entry.file, tag: match[0] })));
+  assert.ok(all.length >= 8, "portraits, dossier, information, trash and the reference book are all ported");
+  for (const { tag } of all) {
+    assert.match(tag, /recordId=\{/, tag);
+    // LoadingMedia forwards the priority its MediaBlock caller chose; every other call site names it literally.
+    assert.match(tag, /priority="(?:hero|lazy)"|priority=\{priority\}/, tag);
+  }
+  assert.ok(part("portia-desktop-dossier.tsx").includes('recordId={`${virus.id}:infected`} priority="hero"'));
+  const heroes = all.filter(({ tag }) => tag.includes('priority="hero"')).map(({ tag }) => tag);
+  assert.equal(heroes.length, 3, "selected employee avatar and the portrait (its linked and plain variants); the dossier hero is checked above");
+  assert.ok(heroes.every((tag) => /:avatar`|:portrait`|:infected`/.test(tag)));
+  // Collections stay lazy.
+  const lazyOf = (file: string) => all.filter((entry) => entry.file === file).map((entry) => entry.tag);
+  assert.ok(lazyOf("portia-desktop-documents.tsx").length >= 3 && lazyOf("portia-desktop-documents.tsx").every((tag) => tag.includes('priority="lazy"')));
+  assert.ok(lazyOf("portia-desktop.tsx").filter((tag) => tag.includes('priority="lazy"')).length >= 2, "information photo and trash image");
+  assert.ok(part("portia-desktop-dossier.tsx").includes('recordId={`${virus.id}:mutation:${index}`} priority="lazy"'));
+  // No loading policy outside PortiaImage; the one fetchPriority left is the PORTIA mark of the boot screen.
+  assert.ok(!source.includes('loading="eager"'));
+  for (const line of source.split(NL).filter((entry) => entry.includes('fetchPriority="high"'))) assert.ok(line.includes("portia-logo.png"), line);
+  // No raw record <img> left in the ported modules: the documents module has none, the dossier keeps only the GIF embed and the PORTIA mark.
+  assert.ok(!part("portia-desktop-documents.tsx").includes("<img"));
+  const dossierImages = [...part("portia-desktop-dossier.tsx").matchAll(/<img[\s\S]*?(?:\/>|>)/g)].map((match) => match[0]);
+  assert.ok(dossierImages.every((tag) => tag.includes("embedded-rich-media") || tag.includes("portia-logo.png")), dossierImages.join(NL));
+  assert.ok(!source.includes("trash-image-missing") && !source.includes("EmployeeImage"));
+});
+
+test("PortiaImage sizes the box before the picture and keeps motion under the motion contract (UI E5)", () => {
+  assert.match(styles, /\.portia-image \{[^}]*aspect-ratio: var\(--portia-image-ratio, 4 \/ 3\)/);
+  assert.match(styles, /\.portia-image-placeholder \{[^}]*background: var\(--panel-2\); border: 1px solid var\(--line\)/);
+  assert.match(styles, /\.portia-image-placeholder svg \{[^}]*width: 40px; height: 40px/);
+  assert.match(styles, /\.portia-image-placeholder-label \{ font: 700 11px\/1\.25 var\(--sans\)/);
+  assert.match(styles, /\.portia-image-skeleton \{[^}]*animation: loader-appear 1ms linear 150ms forwards/);
+  assert.match(styles, /html\[data-motion="full"\] \.portia-image-skeleton \{[^}]*personnel-image-loading/);
+  assert.doesNotMatch(styles.replace(/html\[data-motion="full"\] \.portia-image-skeleton \{[^}]*\}/, ""), /\.portia-image-skeleton[^{]*\{[^}]*personnel-image-loading/, "shimmer only under data-motion=full");
+  assert.match(styles, /html\[data-motion\]:not\(\[data-motion="off"\]\) \.portia-image img \{ transition: opacity var\(--motion-fast\)/);
 });
 
 test("window drag uses the live frame width and symmetric workspace bounds", () => {
@@ -431,10 +563,11 @@ test("shortcut cycle: write-on lines are drawn in full before the class is remov
   // Longest sub-path of the animated element in viewBox units (components/portia-icons.tsx): sheet `M4 9h16M4 14h16M10 9v11`, editor `v16`, info `h7`.
   const longest: Record<string, number> = { sheet: 16, editor: 16, info: 7 };
   for (const [icon, units] of Object.entries(longest)) {
-    const dashed = iconCycles(icon).filter((cycle) => /stroke-dasharray:\s*\d+/.test(cycle.line));
+    // D-17: the dasharray lives in the rest rule (outside the animating selector), so it is the same before, during and after the cycle.
+    const dashed = cycleParts(icon).filter(({ part }) => /^\d+$/.test(restRule(icon, part).get("stroke-dasharray") ?? ""));
     assert.ok(dashed.length > 0, `${icon}: no dashed write-on rule`);
-    for (const cycle of dashed) {
-      const length = Number(/stroke-dasharray:\s*(\d+)/.exec(cycle.line)![1]);
+    for (const { cycle, part } of dashed) {
+      const length = Number(restRule(icon, part).get("stroke-dasharray"));
       assert.ok(length >= units && length >= units * screenPerUnit, `${icon}: dasharray ${length} does not cover ${units} units / ${(units * screenPerUnit).toFixed(1)}px`);
       const start = keyframeFrames(cycle.name).find((frame) => frame.at === 0);
       assert.match(start?.declarations ?? "", new RegExp(`stroke-dashoffset:\\s*${length}\\b`), `${cycle.name}: starts fully undrawn`);
@@ -479,7 +612,9 @@ test("shortcut rules sit outside any hover media query and keep no private easin
   assert.doesNotMatch(block, /@media/);
   assert.doesNotMatch(block, /cubic-bezier/);
   assert.doesNotMatch(block, /^\s+html\[data-motion/m, "no indented (media-wrapped) or full-only shortcut rules");
-  assert.ok(block.includes('html:not([data-motion="off"]) :is(.desktop-icon-symbol, .start-panel-icon) svg > * { transform-box: fill-box; transform-origin: center; }'));
+  // D-17: the origin of every part is constant, never gated by the motion mode and never tied to the animating class.
+  assert.ok(block.split(/\r?\n/).includes(':is(.desktop-icon-symbol, .start-panel-icon) svg > * { transform-box: fill-box; transform-origin: center; }'));
+  assert.ok(!block.includes('html:not([data-motion="off"]) :is(.desktop-icon-symbol, .start-panel-icon) svg > *'));
   for (const retired of ["cubic-bezier(.2,.72,.25,1)", "cubic-bezier(.2,.85,.25,1)"]) assert.ok(!styles.includes(retired));
 });
 
@@ -615,4 +750,216 @@ test("AppDeniedPanel shows only «Доступ закрыт» (and one fixed cal
   const panel = statesSource.slice(start, statesSource.indexOf("\n}\n", start));
   assert.ok(panel.includes("Доступ закрыт") && panel.includes('role="alert"') && panel.includes("detail"));
   assert.ok(!panel.includes("<button") && !panel.includes("onClick"));
+});
+
+// ---- Phase 19-09 (D-17): the resting frame of every shortcut icon is its last keyframe ----
+const restHost = ":is(.desktop-icon-symbol, .start-panel-icon)";
+
+function ruleParts(line: string) {
+  const open = line.indexOf("{");
+  const declarations = new Map<string, string>();
+  for (const declaration of line.slice(open + 1, line.lastIndexOf("}")).split(";").map((part) => part.trim()).filter(Boolean)) {
+    const colon = declaration.indexOf(":");
+    declarations.set(declaration.slice(0, colon).trim(), declaration.slice(colon + 1).trim());
+  }
+  return { selector: line.slice(0, open).trim(), declarations };
+}
+
+// The cycle rule for one part: only `animation`, so nothing but the animation disappears when the class is removed.
+function cycleParts(icon: string) {
+  return iconCycles(icon).map((cycle) => {
+    const { selector, declarations } = ruleParts(cycle.line);
+    const part = selector.slice(cyclePrefix.length + `[data-icon="${icon}"]`.length);
+    return { cycle, part, declarations };
+  });
+}
+
+// The rest rule for the same part, declared outside the animating selector and outside html:not([data-motion="off"]).
+function restRule(icon: string, part: string) {
+  const line = styles.split("\n").find((candidate) => candidate.startsWith(`${restHost}[data-icon="${icon}"]${part} {`));
+  assert.ok(line, `${icon}${part}: no rest rule outside the animating selector`);
+  return ruleParts(line).declarations;
+}
+
+function assertIconRest(icon: string) {
+  for (const { cycle, part, declarations } of cycleParts(icon)) {
+    assert.deepEqual([...declarations.keys()], ["animation"], `${icon}${part}: the animating rule may only carry \`animation\` (everything else is rest)`);
+    const rest = restRule(icon, part);
+    const last = keyframeFrames(cycle.name).find((frame) => frame.at === 100);
+    assert.ok(last, `${cycle.name}: no 100% frame`);
+    for (const declaration of last.declarations.split(";").map((item) => item.trim()).filter(Boolean)) {
+      const colon = declaration.indexOf(":");
+      const property = declaration.slice(0, colon).trim();
+      const value = declaration.slice(colon + 1).trim();
+      if (property === "animation-timing-function") continue;
+      // The virus scan layer is invisible at rest; only its opacity is the resting frame.
+      if (cycle.name === "icon-virus-scan" && property !== "opacity") continue;
+      assert.equal(rest.get(property), value, `${icon}${part}: rest ${property} must equal the ${cycle.name} 100% frame`);
+    }
+    if (/stroke-dashoffset/.test(keyframesBody(cycle.name))) {
+      assert.match(rest.get("stroke-dasharray") ?? "", /^\d+$/, `${icon}${part}: write-on part keeps its dasharray at rest`);
+      assert.equal(rest.get("stroke-dashoffset"), "0");
+    }
+  }
+}
+
+test("shortcut rest (D-17, tracer): «Информация» rests on its last keyframe, outside the animating selector", () => {
+  assertIconRest("info");
+  assert.equal(restRule("info", " .icon-info-fold").get("transform-origin"), "right top");
+  for (const index of [1, 2, 3]) assert.equal(restRule("info", ` .icon-info-lines > :nth-child(${index})`).get("stroke-dasharray"), "16");
+});
+
+test("shortcut rest (D-17): all 12 icons rest on their last keyframe, outside the animating selector", () => {
+  for (const icon of shortcutIcons) assertIconRest(icon);
+  // The «Повышение» levels carry opacity=".65" in the artwork, but the cycle holds opacity 1 (animation-fill both): the rest must be that last frame.
+  for (const part of [" .icon-promotion-level-low", " .icon-promotion-level-high"]) assert.equal(restRule("promotion", part).get("opacity"), "1");
+});
+
+test("shortcut rest (D-17): the animating selector carries nothing but `animation`, and no line outside a cycle is gated by is-icon-animating", () => {
+  const animating = styles.split("\n").filter((line) => line.includes("is-icon-animating") && line.includes("{") && !line.startsWith("/*") && !line.includes("@"));
+  assert.ok(animating.length >= 30);
+  for (const line of animating) {
+    const { declarations } = ruleParts(line);
+    if (!line.includes("[data-icon=")) continue; // hover bookkeeping rules of the shortcut itself are not icon parts
+    assert.deepEqual([...declarations.keys()], ["animation"], line.slice(0, 160));
+  }
+});
+
+test("shortcut rest (D-17): parts with their own origin keep it constant, in the same rule as their transform-box", () => {
+  const origins: Array<[string, string, string, string]> = [
+    ["virus", " .icon-virus-scan", "view-box", "12px 12px"],
+    ["virus", " .icon-virus-spikes", "view-box", "12px 12px"],
+    ["virus", " .icon-virus-tips", "view-box", "12px 12px"],
+    ["broadcasts", " .icon-broadcast-signal", "view-box", "12px 11px"],
+  ];
+  for (const [icon, part, box, origin] of origins) {
+    const rest = restRule(icon, part);
+    assert.equal(rest.get("transform-box"), box, `${icon}${part}`);
+    assert.equal(rest.get("transform-origin"), origin, `${icon}${part}`);
+  }
+  // fill-box parts only override the origin: the box itself comes from the constant `svg > *` rule.
+  assert.equal(restRule("info", " .icon-info-fold").get("transform-origin"), "right top");
+  assert.equal(restRule("guide", " .icon-guide-front").get("transform-origin"), "center bottom");
+  assert.equal(restRule("trash", " svg > :nth-child(1)").get("transform-origin"), "left bottom");
+  // No animating rule keeps an origin or a box any more.
+  assert.doesNotMatch(styles.split("\n").filter((line) => line.startsWith(cyclePrefix)).join("\n"), /transform-(origin|box)/);
+});
+
+test("shortcut rest (D-17): shape-rendering and will-change are constant on both hosts and never toggle with the class", () => {
+  assert.match(styles, /\.desktop-icon-symbol svg[^{]*\{[^}]*shape-rendering:\s*geometricPrecision/);
+  assert.match(/\.start-panel-icon svg\s*\{([^}]*)\}/.exec(styles)?.[1] ?? "", /shape-rendering:\s*geometricPrecision/);
+  for (const line of styles.split("\n")) {
+    if (line.includes("is-icon-animating") && line.includes("{")) assert.doesNotMatch(line, /will-change/, "will-change must not follow the animating class");
+  }
+  // will-change names exactly the composited properties each part animates (translate/rotate/scale/opacity), so rest and last frame share one raster path.
+  const composited = ["translate", "rotate", "scale", "opacity"];
+  for (const icon of shortcutIcons) for (const { cycle, part } of cycleParts(icon)) {
+    const animated = new Set([...keyframesBody(cycle.name).matchAll(/(?<![\w-])(translate|rotate|scale|opacity)\s*:/g)].map((match) => match[1]));
+    const declared = new Set((restRule(icon, part).get("will-change") ?? "").split(",").map((item) => item.trim()).filter(Boolean));
+    assert.deepEqual([...declared].sort(), composited.filter((property) => animated.has(property)).sort(), `${icon}${part}: will-change`);
+  }
+});
+
+// ---- Phase 19-13 (STAB-APP-09, T-19-27): a failed rights check closes the editor ----
+const fetchAccessBody = (() => {
+  const start = source.indexOf("const fetchAccess = useCallback");
+  return source.slice(start, source.indexOf("\n  }, []);", start));
+})();
+
+test("fetchAccess fails closed: a failed or unreadable answer sets accessState failed, 401/403 mean no access (STAB-APP-09)", () => {
+  assert.match(source, /useState<"ok" \| "failed">\("ok"\)/);
+  assert.doesNotMatch(fetchAccessBody, /if \(!response\.ok\) return;/);
+  assert.match(fetchAccessBody, /response\.status === 401 \|\| response\.status === 403/);
+  assert.match(fetchAccessBody, /if \(!response\.ok && !denied\) \{ markFailed\(\); return; \}/);
+  assert.ok((fetchAccessBody.match(/setAccessState\("failed"\)/g) ?? []).length >= 1, "failure path");
+  assert.match(fetchAccessBody, /catch \{[^}]*(markFailed|setAccessState\("failed"\))/);
+  assert.match(fetchAccessBody, /setAccessState\("ok"\)/);
+  // The access poll goes on while the check is failed, so the editor can come back.
+  assert.match(source, /canEditRef\.current \|\| accessFailedRef\.current/);
+});
+
+test("an access answer sent before one already applied is dropped, so a late answer cannot bring back a revoked tab (STAB-APP-09 concurrency)", () => {
+  assert.match(source, /const accessRequestSeq = useRef\(0\)/);
+  assert.match(source, /const accessAppliedSeq = useRef\(0\)/);
+  assert.match(fetchAccessBody, /const seq = \+\+accessRequestSeq\.current/);
+  assert.ok((fetchAccessBody.match(/seq < accessAppliedSeq\.current/g) ?? []).length >= 2, "every outcome checks the order");
+  assert.ok((fetchAccessBody.match(/accessAppliedSeq\.current = seq/g) ?? []).length >= 2);
+});
+
+test("a failed check replaces the editor body by «Доступ закрыт» with the verdict-4 line and keeps the draft mounted (owner items 4 and 7)", () => {
+  assert.equal(accessCheckFailedText, "Не удалось проверить права. Повторите позже.");
+  assert.match(source, /<AppDeniedPanel detail=\{accessCheckFailedText\}/);
+  assert.match(source, /accessFailed=\{accessState === "failed"\}/);
+  assert.match(editorSource, /accessFailed/);
+  assert.match(editorSource, /<AppDeniedPanel detail=\{accessCheckFailedText\}/);
+  // The editor is not unmounted and not told "no tabs": a [] list would revert the draft instead of keeping it in memory.
+  assert.doesNotMatch(source, /openTabs=\{accessState/);
+  // A failed check takes the save and the shortcuts away.
+  const save = editorSource.slice(editorSource.indexOf("const save = async"), editorSource.indexOf("inflight.current = true;"));
+  assert.match(save, /if \(accessFailed\) return false;/);
+  assert.match(editorSource, /if \(!active \|\| dialog \|\| closeAsked \|\| accessFailed\) return;/);
+});
+
+// ---- Phase 19-13 (STAB-APP-08, UI E3): the format panel keeps the selection; the editor lists scroll inside ----
+test("dragging the panel (mouse or touch) never reads or moves the field selection; the range lives in the target (STAB-APP-08)", () => {
+  const drag = editorSource.slice(editorSource.indexOf("const beginDrag"), editorSource.indexOf("// Arrow keys move the panel"));
+  assert.ok(drag.includes("const moveDrag") && drag.includes("const endDrag"));
+  assert.doesNotMatch(drag, /selection|restoreSelection|removeAllRanges|\.focus\(|getSelection/i);
+  // Pointer events cover the mouse and the touch with one path; the header takes no browser pan on a touch screen.
+  assert.match(editorSource, /onPointerDown=\{beginDrag\} onPointerMove=\{moveDrag\} onPointerUp=\{endDrag\} onPointerCancel=\{endDrag\}/);
+  assert.match(styles, /\.floating-text-format > header \{[^}]*touch-action:\s*none/);
+  // The panel never takes focus from the field, so the browser keeps its selection while the panel is pressed or dragged.
+  assert.match(editorSource, /onPointerDown=\{keepFieldFocus\} onMouseDown=\{keepFieldFocus\}/);
+  // The controls read the stored range, not whatever the DOM holds after a tap.
+  assert.match(editorSource, /resolveRange\([^)]*target\.selection\)/);
+  // Leaving the panel hands the stored selection back to the field.
+  assert.ok((editorSource.match(/restoreSelection\(field, target\.selection\)/g) ?? []).length >= 2, "Escape and the phone close restore the range");
+});
+
+test("saving with the format panel open does not close it or replace its target (STAB-APP-08)", () => {
+  const start = lf(editorSource).indexOf("const save = async");
+  const body = lf(editorSource).slice(start, lf(editorSource).indexOf("// D-10: after a partial save the first refused section's tab takes the focus"));
+  assert.ok(body.length > 500, "the save body was found");
+  assert.doesNotMatch(body, /setFormatTarget|setFormatterOpen/);
+});
+
+test("the editable area uses the font rule of the viewer in every area (STAB-APP-08 typography)", () => {
+  for (const area of ["lead", "metric", "mutation", "scientist", "info", "broadcast", "trash", "caption", "search"]) {
+    const rule = styles.split("\n").find((line) => line.includes(`.formatted-rich-input[data-area="${area}"]`) && /\{[^}]*\bfont:/.test(line));
+    assert.ok(rule, `${area}: a font rule`);
+    const selectors = rule.slice(0, rule.indexOf("{")).split(",").map((selector) => selector.trim());
+    assert.ok(selectors.some((selector) => !selector.includes("formatted-rich-input")), `${area}: the viewer selector shares the rule`);
+  }
+});
+
+test("every long editor list scrolls inside its own pane (UI E3 overflow)", () => {
+  assert.match(styles, /\.content-editor\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.content-editor\s*\{\s*min-height:\s*0;/);
+  assert.match(styles, /\.editor-record-list\s*\{[^}]*max-height:[^;}]+;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain/);
+  assert.match(styles, /\.employee-editor-layout > \.editor-record-list\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.employee-editor-layout > \.employee-profile-editor\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.promotion-request-list, \.promotion-bank-list\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.promotion-bank-editor, \.promotion-preview\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto/);
+});
+
+test("sticky and floating editor layers never cover the content: notices are in the flow, the one sticky chip sits under the panel (UI E3 overflow)", () => {
+  const rules = styles.split("\n").filter((line) => /^\.[^{]*\{/.test(line));
+  const stickyEditor = rules.filter((line) => /position:\s*sticky/.test(line) && /editor/.test(line.slice(0, line.indexOf("{")))).map((line) => line.slice(0, line.indexOf("{")).trim());
+  assert.deepEqual(stickyEditor, [".editor-save-chip"]);
+  for (const notice of [".editor-conflict-panel", ".editor-stale-banner", ".editor-their-edits", ".editor-section-error"]) {
+    const rule = rules.find((line) => line.startsWith(`${notice} {`));
+    if (!rule) continue;
+    assert.doesNotMatch(rule, /position:\s*(sticky|fixed|absolute)/, notice);
+  }
+  const z = (selector: string) => Number(new RegExp(`${selector.replace(/[.\[\]]/g, "\\$&")} \\{[^}]*z-index:\\s*(\\d+)`).exec(styles)?.[1] ?? NaN);
+  assert.ok(z(".floating-text-format") > z(".editor-save-chip"), "the format panel is above the save chip");
+  assert.match(styles, /\.editor-save-chip\s*\{[^}]*bottom:\s*12px/);
+});
+
+test("the stale banner is a warning strip in the flow with wrapping text (D-11)", () => {
+  const rule = styles.split("\n").find((line) => line.startsWith(".editor-stale-banner {")) ?? "";
+  assert.ok(rule, "rule found");
+  assert.match(rule, /font:\s*400 13px/);
+  assert.match(rule, /overflow-wrap:\s*anywhere/);
+  assert.match(rule, /oklch\(\.58 \.08 80 \/ \.55\)/);
 });

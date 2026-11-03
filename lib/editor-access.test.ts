@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { getEditorAccess, noAccess } from "./editor-access.ts";
+import { getEditorAccess, noAccess, normalizeEditorEmail } from "./editor-access.ts";
 import { tabRegistry } from "./editor-tabs.ts";
 
 const allRegistryTabs = tabRegistry.map((tab) => tab.id);
@@ -98,4 +98,21 @@ test("login wiring sends unconfirmed users to the D-19 message (SEC-01)", () => 
   assert.ok(actions.split("error=unconfirmed").length - 1 >= 2);
   assert.ok(page.includes("Почта не подтверждена. Откройте письмо от Supabase и войдите снова"));
   assert.match(page, /\[[^\]]*"unconfirmed"[^\]]*\]\.includes\(error\)/);
+});
+
+test("normalizeEditorEmail trims and lowercases, so spelling variants meet one grants row (STAB-APP-09 encoding)", () => {
+  assert.equal(normalizeEditorEmail("  Editor@Example.COM "), "editor@example.com");
+  assert.equal(normalizeEditorEmail("EDITOR@example.com\t"), normalizeEditorEmail("editor@EXAMPLE.com"));
+  assert.equal(normalizeEditorEmail(""), "");
+});
+
+test("the grants row is looked up by the normalized email, so a padded or upper-case login still finds its row", async () => {
+  const seen: unknown[] = [];
+  const client = {
+    rpc: async (name: string) => ({ data: name === "portia_can_edit", error: null }),
+    from: () => ({ select: () => ({ eq: (_column: string, value: unknown) => { seen.push(value); return { maybeSingle: async () => ({ data: { closed_tabs: ["info"], granted_tabs: [] }, error: null }) }; } }) }),
+  } as unknown as SupabaseClient;
+  const access = await getEditorAccess(client, { email: "  Ed@Example.COM ", email_confirmed_at: "2026-01-01T00:00:00Z" } as User);
+  assert.deepEqual(seen, ["ed@example.com"]);
+  assert.ok(!access.openTabs.includes("info") && access.openTabs.includes("viruses"));
 });
