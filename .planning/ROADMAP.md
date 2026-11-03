@@ -346,8 +346,44 @@ Plans:
   12. В «Повышении» доступна кнопка «Создать шаблон», открывающая отдельный конструктор карточки досье вируса для текста и локальных изображений. Участник скачивает самодостаточные PNG или HTML для передачи проверяющему вне сайта; файлы и изображения не записываются в реальные записи архива, Supabase database/storage или `/api/uploads`.
 
 **Acceptance gate**: Неполное локальное покрытие отмечается явно; незакрытый high finding блокирует релиз согласно config. Фаза не закрывается без согласованного визуального контракта и принятия переработанного вида владельцем, физической owner PC/phone UAT, точного evidence ledger и отсутствия pending high-severity blocker.
-**Plans**: TBD
+**Plans**: 15 plans
 **UI hint**: yes
+
+Plans:
+**Wave 1**
+- [ ] 20-01-PLAN.md — сквозной локальный конструктор и автономный HTML
+- [ ] 20-08-PLAN.md — CSP report-only, media hosts и fallback
+- [ ] 20-09-PLAN.md — participant projection и no-store
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 20-02-PLAN.md — локальные изображения, PNG и ошибки экспорта
+- [ ] 20-03-PLAN.md — новый паук и паутина, режимы движения
+- [ ] 20-10-PLAN.md — security matrix, dependency audit и риски
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 20-04-PLAN.md — выбираемый фон лабораторных колб
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 20-05-PLAN.md — адресные SVG пустых состояний
+- [ ] 20-06-PLAN.md — participant/reviewer переработка «Повышения»
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 20-07-PLAN.md — клавиатура, touch, labels и motion
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 20-11-PLAN.md — владельческое одобрение визуальных кандидатов
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 20-12-PLAN.md — утверждённые visual baselines
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 20-13-PLAN.md — clean-checkout техническая репетиция
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 20-14-PLAN.md — физическая owner UAT на PC и phone
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 20-15-PLAN.md — final commit, повтор gates и честная reconciliation
 
 ## Progress
 

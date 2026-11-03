@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v1.3
 milestone_name: «Стабилизация PORTIA OS»
-current_phase: 19
-current_phase_name: «Повышение», приложения, редактор, поиск и медиа
-status: executing
-stopped_at: Phase 20 UI-SPEC approved
-last_updated: "2026-11-03T17:29:29.272Z"
+current_phase: 20
+current_phase_name: Security, accessibility и приёмка релиза
+status: planned
+stopped_at: Phase 20 plans verified; execution not started
+last_updated: "2026-11-03T18:52:53.515Z"
 last_activity: 2026-11-03
-last_activity_desc: Phase PORTIA-19 execution started
-state_head: f29e7f0a9da1c7a1fee8194d224c10486d3c6288
+last_activity_desc: Phase PORTIA-20 planned and verified
+state_head: aeb2e11a27378f9d1c62df4eab4b479a96a1fa18
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 71
+  total_plans: 86
   completed_plans: 63
   percent: 50
 ---
@@ -29,12 +29,12 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 ## Current Position
 
-Phase: PORTIA-19 («Повышение», приложения, редактор, поиск и медиа) — READY TO EXECUTE
-Plan: 14 of 14
-Status: 19-14 complete (14/14 plans have SUMMARY). Owner UAT 19-UAT.md: 11 PASS, 2 BLOCKED; D physical, F9-F12 and STAB-PROM-15 are carried debts. Next: phase verification (orchestrator)
-Last activity: 2026-11-03 — Plan 19-14 completed (owner verdict recorded)
+Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
+Plan: 0 of 15
+Status: Phase 20 plans verified; execution not started. Phase 19 remains gaps_found: CR-01, STAB-PROM-15 staging owner UAT and data-backed checks remain open.
+Last activity: 2026-11-03 - Phase 20 plans created and checked
 
-Progress: [█████░░░░░] 50% of Phase 15 plans (phase gaps_found, not complete)
+Progress: 0/15 Phase 20 plans executed; 3/6 milestone phases complete
 
 ## Performance Metrics
 
