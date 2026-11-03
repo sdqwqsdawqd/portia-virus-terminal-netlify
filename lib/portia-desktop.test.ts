@@ -429,7 +429,7 @@ test("shortcut cycle: write-on lines are drawn in full before the class is remov
   const screenPerUnit = (Math.max(...widths) * 0.58) / 24;
   assert.ok(Math.max(...widths) >= 62);
   // Longest sub-path of the animated element in viewBox units (components/portia-icons.tsx): sheet `M4 9h16M4 14h16M10 9v11`, editor `v16`, info `h7`.
-  const longest: Record<string, number> = { sheet: 16, editor: 16, info: 7 };
+  const longest: Record<string, number> = { sheet: 16, editor: 16 }; // info: its dasharray moved to the rest rule (D-17 tracer test below)
   for (const [icon, units] of Object.entries(longest)) {
     const dashed = iconCycles(icon).filter((cycle) => /stroke-dasharray:\s*\d+/.test(cycle.line));
     assert.ok(dashed.length > 0, `${icon}: no dashed write-on rule`);
@@ -479,7 +479,9 @@ test("shortcut rules sit outside any hover media query and keep no private easin
   assert.doesNotMatch(block, /@media/);
   assert.doesNotMatch(block, /cubic-bezier/);
   assert.doesNotMatch(block, /^\s+html\[data-motion/m, "no indented (media-wrapped) or full-only shortcut rules");
-  assert.ok(block.includes('html:not([data-motion="off"]) :is(.desktop-icon-symbol, .start-panel-icon) svg > * { transform-box: fill-box; transform-origin: center; }'));
+  // D-17: the origin of every part is constant, never gated by the motion mode and never tied to the animating class.
+  assert.ok(block.split(/\r?\n/).includes(':is(.desktop-icon-symbol, .start-panel-icon) svg > * { transform-box: fill-box; transform-origin: center; }'));
+  assert.ok(!block.includes('html:not([data-motion="off"]) :is(.desktop-icon-symbol, .start-panel-icon) svg > *'));
   for (const retired of ["cubic-bezier(.2,.72,.25,1)", "cubic-bezier(.2,.85,.25,1)"]) assert.ok(!styles.includes(retired));
 });
 
@@ -615,4 +617,63 @@ test("AppDeniedPanel shows only «Доступ закрыт» (and one fixed cal
   const panel = statesSource.slice(start, statesSource.indexOf("\n}\n", start));
   assert.ok(panel.includes("Доступ закрыт") && panel.includes('role="alert"') && panel.includes("detail"));
   assert.ok(!panel.includes("<button") && !panel.includes("onClick"));
+});
+
+// ---- Phase 19-09 (D-17): the resting frame of every shortcut icon is its last keyframe ----
+const restHost = ":is(.desktop-icon-symbol, .start-panel-icon)";
+
+function ruleParts(line: string) {
+  const open = line.indexOf("{");
+  const declarations = new Map<string, string>();
+  for (const declaration of line.slice(open + 1, line.lastIndexOf("}")).split(";").map((part) => part.trim()).filter(Boolean)) {
+    const colon = declaration.indexOf(":");
+    declarations.set(declaration.slice(0, colon).trim(), declaration.slice(colon + 1).trim());
+  }
+  return { selector: line.slice(0, open).trim(), declarations };
+}
+
+// The cycle rule for one part: only `animation`, so nothing but the animation disappears when the class is removed.
+function cycleParts(icon: string) {
+  return iconCycles(icon).map((cycle) => {
+    const { selector, declarations } = ruleParts(cycle.line);
+    const part = selector.slice(cyclePrefix.length + `[data-icon="${icon}"]`.length);
+    return { cycle, part, declarations };
+  });
+}
+
+// The rest rule for the same part, declared outside the animating selector and outside html:not([data-motion="off"]).
+function restRule(icon: string, part: string) {
+  const line = styles.split("\n").find((candidate) => candidate.startsWith(`${restHost}[data-icon="${icon}"]${part} {`));
+  assert.ok(line, `${icon}${part}: no rest rule outside the animating selector`);
+  return ruleParts(line).declarations;
+}
+
+function assertIconRest(icon: string) {
+  for (const { cycle, part, declarations } of cycleParts(icon)) {
+    assert.deepEqual([...declarations.keys()], ["animation"], `${icon}${part}: the animating rule may only carry \`animation\` (everything else is rest)`);
+    const rest = restRule(icon, part);
+    const last = keyframeFrames(cycle.name).find((frame) => frame.at === 100);
+    assert.ok(last, `${cycle.name}: no 100% frame`);
+    for (const declaration of last.declarations.split(";").map((item) => item.trim()).filter(Boolean)) {
+      const colon = declaration.indexOf(":");
+      const property = declaration.slice(0, colon).trim();
+      const value = declaration.slice(colon + 1).trim();
+      if (property === "animation-timing-function") continue;
+      // The virus scan layer is invisible at rest; only its opacity is the resting frame.
+      if (cycle.name === "icon-virus-scan" && property !== "opacity") continue;
+      assert.equal(rest.get(property), value, `${icon}${part}: rest ${property} must equal the ${cycle.name} 100% frame`);
+    }
+    if (/stroke-dashoffset/.test(keyframesBody(cycle.name))) {
+      assert.match(rest.get("stroke-dasharray") ?? "", /^\d+$/, `${icon}${part}: write-on part keeps its dasharray at rest`);
+      assert.equal(rest.get("stroke-dashoffset"), "0");
+    }
+  }
+}
+
+test("shortcut rest (D-17, tracer): «Информация» rests on its last keyframe, outside the animating selector", () => {
+  assertIconRest("info");
+  assert.equal(restRule("info", " .icon-info-fold").get("transform-origin"), "right top");
+  for (const index of [1, 2, 3]) assert.equal(restRule("info", ` .icon-info-lines > :nth-child(${index})`).get("stroke-dasharray"), "16");
+  // Longest info line is `h7` = 7 units (measured with getTotalLength, 19-ICON-REST.md); the rest dasharray covers it.
+  for (const index of [1, 2, 3]) assert.ok(Number(restRule("info", ` .icon-info-lines > :nth-child(${index})`).get("stroke-dasharray")) >= 7);
 });

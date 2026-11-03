@@ -1566,7 +1566,15 @@ html[data-motion="full"] .taskbar-app.is-bouncing .mini-app-icon { animation: ta
 
 /* Hover, keyboard focus and touch on app icons: each icon acts out what it depicts, once per trigger.
    Class-driven, so any pointer type; «Включены» and «Уменьшены», not «Выключены». Parts are addressed by their order in components/portia-icons.tsx. */
-html:not([data-motion="off"]) :is(.desktop-icon-symbol, .start-panel-icon) svg > * { transform-box: fill-box; transform-origin: center; }
+/* Resting frame (D-17, 19-09): every animated part declares its last keyframe here, outside the animating selector and outside html:not([data-motion="off"]),
+   so removing is-icon-animating changes nothing. will-change is constant (never toggled with the class): the cycle composites a part while it animates, and a part that is
+   rasterised differently at rest than on its last frame jumps when the class goes. Keyframes, timings and artwork are untouched. */
+:is(.desktop-icon-symbol, .start-panel-icon) svg > * { transform-box: fill-box; transform-origin: center; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="info"] .icon-info-page { translate: 0 0; will-change: translate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="info"] .icon-info-fold { transform-origin: right top; scale: 1; translate: 0 0; will-change: translate, scale; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(1) { stroke-dasharray: 16; stroke-dashoffset: 0; opacity: 1; will-change: opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(2) { stroke-dasharray: 16; stroke-dashoffset: 0; opacity: 1; will-change: opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(3) { stroke-dasharray: 16; stroke-dashoffset: 0; opacity: 1; will-change: opacity; }
 /* Search: the lens sweeps the field, the crosshair turns into focus. */
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="search"] svg { animation: icon-scan 560ms var(--ease-out); }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="search"] svg > :nth-child(3) { animation: icon-focus 560ms var(--ease-out); }
@@ -1586,10 +1594,10 @@ html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-signal-outer { animation: icon-broadcast-wave 560ms 90ms var(--ease-out) both; }
 /* Information: the sheet settles, its corner flexes, then the rows resolve in sequence. */
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="info"] .icon-info-page { animation: icon-info-page 560ms var(--ease-out) both; }
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="info"] .icon-info-fold { transform-origin: right top; animation: icon-info-fold 560ms var(--ease-out) both; }
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(1) { stroke-dasharray: 16; animation: icon-info-line 560ms 30ms var(--ease-out) both; }
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(2) { stroke-dasharray: 16; animation: icon-info-line 560ms 60ms var(--ease-out) both; }
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(3) { stroke-dasharray: 16; animation: icon-info-line 560ms 90ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="info"] .icon-info-fold { animation: icon-info-fold 560ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(1) { animation: icon-info-line 560ms 30ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(2) { animation: icon-info-line 560ms 60ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(3) { animation: icon-info-line 560ms 90ms var(--ease-out) both; }
 /* Guide: the folder opens — its back rises while the front flap tips down and returns. */
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="guide"] .icon-guide-back { animation: icon-guide-back 560ms var(--ease-out) both; }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="guide"] .icon-guide-front { transform-origin: center bottom; animation: icon-guide-front 560ms var(--ease-out) both; }
