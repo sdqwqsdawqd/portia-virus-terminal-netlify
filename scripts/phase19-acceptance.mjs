@@ -12,10 +12,10 @@ import { promotionTitles, qualificationPromotionTransitions } from "../lib/porti
 
 // Temporary acceptance data for the Promotion flow (Phase 19, D-01/D-03/D-04). Every function takes the target already
 // resolved by resolveStagingTarget in phase16-staging.mjs; nothing here reads env files or prints keys or passwords.
-// Only rows of one run are touched: the `__portia_live_<runId>` prefix, users with the portia_run marker, the banks recorded
-// in the manifest, and rows created inside the run window (>= manifest.createdAt) on the isolated project.
+// Scope: run-prefixed rows, users with the portia_run marker, manifest bank IDs, and rows created within the DB-clock
+// run window after subtracting the pre-seed snapshot. v1 manifests retain the legacy time-window rule.
 
-export const MANIFEST_SCHEMA = "portia-acceptance-run-v1";
+export const MANIFEST_SCHEMA = "portia-acceptance-run-v2";
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MANIFEST_FILE = path.join(
   REPO_ROOT, ".planning", "phases", "PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media", "evidence", "19-ACCEPTANCE-RUN.json",
@@ -40,16 +40,16 @@ export class AcceptanceError extends Error {
   }
 }
 
-// label -> source title and how long ago it was promoted; p-cooldown is promoted yesterday and is therefore in cooldown.
+// PC and phone get independent participants; each device can complete the same acceptance flow without reusing a nickname.
 // The sheet date (column E) is the day the next promotion becomes available: promotion day + title cooldown.
-const PARTICIPANTS = [
-  { label: "p-ordinary", titleId: "academic", daysAgo: 60 },
-  { label: "p-qual3", titleId: "trainee", daysAgo: 60 },
-  { label: "p-qual5", titleId: "researcher", daysAgo: 60 },
-  { label: "p-qual7", titleId: "scientist", daysAgo: 60 },
-  { label: "p-retake", titleId: "trainee", daysAgo: 60 },
-  { label: "p-cooldown", titleId: "academic", daysAgo: 1 },
-];
+const PARTICIPANTS = ["pc", "ph"].flatMap((device) => [
+  { label: `${device}-ordinary`, titleId: "academic", daysAgo: 60 },
+  { label: `${device}-qual3`, titleId: "trainee", daysAgo: 60 },
+  { label: `${device}-qual5`, titleId: "researcher", daysAgo: 60 },
+  { label: `${device}-qual7`, titleId: "scientist", daysAgo: 60 },
+  { label: `${device}-retake`, titleId: "trainee", daysAgo: 60 },
+  { label: `${device}-cooldown`, titleId: "academic", daysAgo: 1 },
+]).concat([{ label: "probe", titleId: "academic", daysAgo: 60 }]);
 
 const titleOf = (id) => promotionTitles.find((title) => title.id === id);
 const nextTitleOf = (id) => promotionTitles.at(titleOf(id).level);
@@ -92,6 +92,14 @@ async function selectColumn(query, label, column) {
   return (data ?? []).map((row) => row[column]);
 }
 
+async function snapshotColumn(admin, table, column) {
+  const { data, count, error } = await admin.from(table).select(column, { count: "exact" });
+  check(error, `snapshot ${table}`);
+  // PostgREST may cap a page at 1000 rows. Refuse to seed if the snapshot would omit any preexisting row.
+  if (count === null || count !== (data?.length ?? 0)) throw new AcceptanceError("acceptance-snapshot-incomplete", [table]);
+  return (data ?? []).map((row) => row[column]);
+}
+
 function readManifest(runId, deps) {
   let manifest;
   try {
@@ -102,7 +110,12 @@ function readManifest(runId, deps) {
   if (!["portia-acceptance-run-v1", "portia-acceptance-run-v2"].includes(manifest?.schema) || manifest.runId !== runId) {
     throw new AcceptanceError("acceptance-manifest-mismatch", ["19-ACCEPTANCE-RUN.json"]);
   }
-  return manifest;
+  if (manifest.schema === MANIFEST_SCHEMA && (
+    manifest.createdAtSource !== "db" ||
+    !["bucketKeys", "taskBankIds", "qualificationBankIds"].every((key) =>
+      Array.isArray(manifest.preexisting?.[key]) && manifest.preexisting[key].every((value) => typeof value === "string"))
+  )) throw new AcceptanceError("acceptance-manifest-mismatch", ["19-ACCEPTANCE-RUN.json"]);
+  return { ...manifest, legacy: manifest.schema === "portia-acceptance-run-v1" };
 }
 
 const refHashOf = (projectId) => createHash("sha256").update(projectId).digest("hex").slice(0, 12);
@@ -296,6 +309,22 @@ async function seedBanks(admin, ordinaryTargets, transitions, bankIds) {
   }
 }
 
+async function dbNowOf(target, deps) {
+  let date;
+  try {
+    if (deps.dbNow) date = await deps.dbNow();
+    else {
+      const response = await (deps.fetch ?? fetch)(`${target.url}/auth/v1/settings`, { headers: { apikey: target.publishableKey }, redirect: "error" });
+      if (response.ok) date = response.headers.get("date");
+    }
+  } catch {
+    // A network failure is the same fail-closed result as a missing Date header.
+  }
+  const millis = typeof date === "string" ? Date.parse(date) : NaN;
+  if (!Number.isFinite(millis)) throw new AcceptanceError("acceptance-db-time-unavailable", ["isolated project Date"]);
+  return new Date(millis).toISOString();
+}
+
 export async function acceptanceSeed(target, deps = {}) {
   const fs = fsOf(deps);
   const live = liveOf(target);
@@ -305,14 +334,20 @@ export async function acceptanceSeed(target, deps = {}) {
   const ordinaryTargets = [...new Set(PARTICIPANTS.filter((p) => !qualificationSources.has(p.titleId)).map((p) => nextTitleOf(p.titleId).id))];
   const transitions = qualificationPromotionTransitions.map((transition) => transition.transitionId);
 
+  // Date is taken from the isolated project's HTTP response before any write, so window comparisons use server time.
+  const createdAt = await dbNowOf(target, deps);
+  const preexisting = {
+    bucketKeys: await snapshotColumn(admin, BUCKETS, "bucket_key"),
+    taskBankIds: await snapshotColumn(admin, TASK_BANKS, "id"),
+    qualificationBankIds: await snapshotColumn(admin, QUALIFICATION_BANKS, "id"),
+  };
+
   // Refuse before creating anything: an existing bank belongs to someone else and must not be touched or replaced.
   for (const [table, column, values] of [[TASK_BANKS, "target_title_id", ordinaryTargets], [QUALIFICATION_BANKS, "transition_id", transitions]]) {
     const found = await selectColumn(admin.from(table).select(column).in(column, values), `select ${table}`, column);
     if (found.length > 0) throw new AcceptanceError("acceptance-preexisting-bank", [table]);
   }
 
-  // shortcut: createdAt is the local clock, the window compares it with DB time; skew of seconds is tolerated, banks are also tracked by id.
-  const createdAt = new Date(nowOf(deps)).toISOString();
   const bankIds = { ordinary: [], qualification: [] };
   const dir = workDirOf(run.runId, deps);
   try {
@@ -334,7 +369,7 @@ export async function acceptanceSeed(target, deps = {}) {
     fs.writeFileSync(credentialsFile, JSON.stringify({ reviewer: run.credentials("reviewer"), editor: run.credentials("editor") }), { mode: 0o600 });
 
     writeManifest({
-      schema: MANIFEST_SCHEMA, runId: run.runId, refHash: run.refHash, createdAt, nicknames, bankIds,
+      schema: MANIFEST_SCHEMA, runId: run.runId, refHash: run.refHash, createdAt, createdAtSource: "db", preexisting, nicknames, bankIds,
       shiftedBucketKeys: [], rosterPath: rosterFile, credentialsPath: credentialsFile,
     }, deps);
     outOf(deps)(`${JSON.stringify({ runId: run.runId, nicknames, rosterPath: rosterFile, credentialsPath: credentialsFile })}\n`);
@@ -402,17 +437,25 @@ export async function acceptanceShift(target, runId, kind, args = [], deps = {})
   } else {
     const admin = adminOf(target, deps);
     if (kind === "penalty") {
-      const { data, error } = await admin.from(BUCKETS).update({ blocked_until: past }).gte("updated_at", manifest.createdAt).not("blocked_until", "is", null).select("bucket_key");
-      check(error, `update ${BUCKETS}`);
-      updated = data?.length ?? 0;
+      const keys = await selectColumn(admin.from(BUCKETS).select("bucket_key").gte("updated_at", manifest.createdAt).not("blocked_until", "is", null), `select ${BUCKETS}`, "bucket_key");
+      const allowed = keys.filter((key) => manifest.legacy || !manifest.preexisting.bucketKeys.includes(key));
+      if (allowed.length > 0) {
+        const { data, error } = await admin.from(BUCKETS).update({ blocked_until: past }).in("bucket_key", allowed).select("bucket_key");
+        check(error, `update ${BUCKETS}`);
+        updated = data?.length ?? 0;
+      }
     } else if (kind === "cleanup") {
       // portia_promo_cleanup prunes buckets older than 3 days: age the window's buckets past that and remember their keys.
       const aged = new Date(nowOf(deps) - 4 * DAY).toISOString();
-      const { data, error } = await admin.from(BUCKETS).update({ updated_at: aged }).gte("updated_at", manifest.createdAt).select("bucket_key");
-      check(error, `update ${BUCKETS}`);
-      const keys = (data ?? []).map((row) => row.bucket_key);
-      writeManifest({ ...manifest, shiftedBucketKeys: [...new Set([...manifest.shiftedBucketKeys, ...keys])] }, deps);
-      updated = keys.length;
+      const keys = await selectColumn(admin.from(BUCKETS).select("bucket_key").gte("updated_at", manifest.createdAt), `select ${BUCKETS}`, "bucket_key");
+      const allowed = keys.filter((key) => manifest.legacy || !manifest.preexisting.bucketKeys.includes(key));
+      if (allowed.length > 0) {
+        const { data, error } = await admin.from(BUCKETS).update({ updated_at: aged }).in("bucket_key", allowed).select("bucket_key");
+        check(error, `update ${BUCKETS}`);
+        const shifted = (data ?? []).map((row) => row.bucket_key);
+        writeManifest({ ...manifest, shiftedBucketKeys: [...new Set([...manifest.shiftedBucketKeys, ...shifted])] }, deps);
+        updated = shifted.length;
+      }
     } else {
       const column = kind === "deadline" ? "deadline_at" : "retake_at";
       const attemptIds = await attemptIdsOf(admin, runId, manifest, label);
@@ -431,12 +474,22 @@ const union = (...lists) => new Set(lists.flat());
 
 async function bankState(admin, manifest) {
   const result = {};
-  for (const [table, ids] of [[TASK_BANKS, manifest.bankIds.ordinary], [QUALIFICATION_BANKS, manifest.bankIds.qualification]]) {
+  for (const [table, ids, snapshot] of [
+    [TASK_BANKS, manifest.bankIds.ordinary, manifest.preexisting?.taskBankIds ?? []],
+    [QUALIFICATION_BANKS, manifest.bankIds.qualification, manifest.preexisting?.qualificationBankIds ?? []],
+  ]) {
     const byId = ids.length > 0 ? await selectColumn(admin.from(table).select("id").in("id", ids), `select ${table}`, "id") : [];
     const byWindow = await selectColumn(admin.from(table).select("id").gte("created_at", manifest.createdAt), `select ${table}`, "id");
-    result[table] = union(byId, byWindow);
+    result[table] = new Set([...union(byId, byWindow)].filter((id) => manifest.legacy || !snapshot.includes(id)));
   }
   return result;
+}
+
+async function bucketState(admin, manifest) {
+  const keys = manifest.shiftedBucketKeys;
+  const byWindow = await selectColumn(admin.from(BUCKETS).select("bucket_key").gte("updated_at", manifest.createdAt), `select ${BUCKETS}`, "bucket_key");
+  const byShift = keys.length > 0 ? await selectColumn(admin.from(BUCKETS).select("bucket_key").in("bucket_key", keys), `select ${BUCKETS}`, "bucket_key") : [];
+  return new Set([...union(byWindow, byShift)].filter((key) => manifest.legacy || !manifest.preexisting.bucketKeys.includes(key)));
 }
 
 // Read-only. Extends the harness counters with the banks, buckets and attempts that purgeRun does not count.
@@ -444,11 +497,7 @@ async function residualAll(target, runId, manifest, deps) {
   const admin = adminOf(target, deps);
   const base = await residualOf(liveOf(target), runId, harnessDeps(deps));
   const banks = await bankState(admin, manifest);
-  const keys = manifest.shiftedBucketKeys;
-  const bucketKeys = union(
-    await selectColumn(admin.from(BUCKETS).select("bucket_key").gte("updated_at", manifest.createdAt), `select ${BUCKETS}`, "bucket_key"),
-    keys.length > 0 ? await selectColumn(admin.from(BUCKETS).select("bucket_key").in("bucket_key", keys), `select ${BUCKETS}`, "bucket_key") : [],
-  );
+  const bucketKeys = await bucketState(admin, manifest);
   const attemptIds = await attemptIdsOf(admin, runId, manifest);
   const answers = attemptIds.length > 0
     ? await selectColumn(admin.from("portia_promo_answers").select("id").in("attempt_id", attemptIds), "select portia_promo_answers", "id")
@@ -468,7 +517,7 @@ export async function acceptanceResidual(target, runId, deps = {}) {
     return 2;
   }
   const manifest = readManifest(runId, deps);
-  outOf(deps)(`${JSON.stringify({ residual: await residualAll(target, runId, manifest, deps) })}\n`);
+  outOf(deps)(`${JSON.stringify({ residual: await residualAll(target, runId, manifest, deps), legacyWindow: manifest.legacy })}\n`);
   return 0;
 }
 
@@ -481,6 +530,8 @@ export async function acceptanceTeardown(target, runId, deps = {}) {
   const admin = adminOf(target, deps);
   const errors = [];
   const deleted = { run: null, banks: 0, buckets: 0 };
+  const banks = await bankState(admin, manifest);
+  const buckets = await bucketState(admin, manifest);
   const step = async (label, work) => {
     try {
       await work();
@@ -501,19 +552,18 @@ export async function acceptanceTeardown(target, runId, deps = {}) {
     errors.push(...result.errors);
   });
   // Deleting a bank cascades to its items, questions and options.
-  for (const [table, ids] of [[TASK_BANKS, manifest.bankIds.ordinary], [QUALIFICATION_BANKS, manifest.bankIds.qualification]]) {
-    if (ids.length > 0) await step(`${table} by id`, async () => { deleted.banks += await remove(`delete ${table}`, admin.from(table).delete({ count: "exact" }).in("id", ids)); });
-    await step(`${table} window`, async () => { deleted.banks += await remove(`delete ${table}`, admin.from(table).delete({ count: "exact" }).gte("created_at", manifest.createdAt)); });
+  for (const table of [TASK_BANKS, QUALIFICATION_BANKS]) {
+    const ids = [...banks[table]];
+    if (ids.length > 0) await step(`${table} ids`, async () => { deleted.banks += await remove(`delete ${table}`, admin.from(table).delete({ count: "exact" }).in("id", ids)); });
   }
-  await step("buckets window", async () => { deleted.buckets += await remove(`delete ${BUCKETS}`, admin.from(BUCKETS).delete({ count: "exact" }).gte("updated_at", manifest.createdAt)); });
-  if (manifest.shiftedBucketKeys.length > 0) {
-    await step("buckets shifted", async () => { deleted.buckets += await remove(`delete ${BUCKETS}`, admin.from(BUCKETS).delete({ count: "exact" }).in("bucket_key", manifest.shiftedBucketKeys)); });
+  if (buckets.size > 0) {
+    await step("buckets keys", async () => { deleted.buckets += await remove(`delete ${BUCKETS}`, admin.from(BUCKETS).delete({ count: "exact" }).in("bucket_key", [...buckets])); });
   }
 
   let residual = null;
   await step("residual", async () => { residual = await residualAll(target, runId, manifest, deps); });
   const clean = residual !== null && Object.values(residual).every((count) => count === 0) && errors.length === 0;
-  outOf(deps)(`${JSON.stringify({ residual, deleted, errors })}\n`);
+  outOf(deps)(`${JSON.stringify({ residual, deleted, errors, legacyWindow: manifest.legacy })}\n`);
   if (clean) fsOf(deps).rmSync(workDirOf(runId, deps), { recursive: true, force: true });
   return clean ? 0 : 1;
 }

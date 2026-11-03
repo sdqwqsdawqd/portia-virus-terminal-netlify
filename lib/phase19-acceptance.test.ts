@@ -40,7 +40,7 @@ describe("acceptance-serve staging binding", () => {
     const manifestFile = path.join(root, "manifest.json");
     const rosterPath = path.join(root, "roster.json");
     nodeFs.writeFileSync(rosterPath, "{}");
-    nodeFs.writeFileSync(manifestFile, JSON.stringify({ schema: "portia-acceptance-run-v2", runId, refHash, rosterPath, nicknames: { probe: `__portia_live_${runId}_probe` } }));
+    nodeFs.writeFileSync(manifestFile, JSON.stringify({ schema: "portia-acceptance-run-v2", runId, refHash, rosterPath, createdAtSource: "db", preexisting: { bucketKeys: [], taskBankIds: [], qualificationBankIds: [] }, nicknames: { probe: `__portia_live_${runId}_probe` } }));
     const calls = { spawn: [] as unknown[], fetch: [] as string[], killed: 0, out: [] as string[], err: [] as string[] };
     const child = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; kill: () => void };
     child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
@@ -77,7 +77,7 @@ describe("acceptance-serve staging binding", () => {
   });
   test("ref mismatch and port-busy refuse before spawn", async () => {
     const mismatch = serveCase();
-    nodeFs.writeFileSync(mismatch.manifestFile, JSON.stringify({ schema: "portia-acceptance-run-v2", runId, refHash: "000000000000", rosterPath: mismatch.rosterPath, nicknames: { probe: "probe" } }));
+    nodeFs.writeFileSync(mismatch.manifestFile, JSON.stringify({ schema: "portia-acceptance-run-v2", runId, refHash: "000000000000", rosterPath: mismatch.rosterPath, createdAtSource: "db", preexisting: { bucketKeys: [], taskBankIds: [], qualificationBankIds: [] }, nicknames: { probe: "probe" } }));
     assert.equal(await main(["acceptance-serve", runId], mismatch.deps), 1);
     assert.match(mismatch.calls.err.join(""), /acceptance-serve-ref-mismatch/u);
     assert.equal(mismatch.calls.spawn.length, 0);
@@ -127,6 +127,20 @@ describe("acceptance-serve staging binding", () => {
     assert.equal(await main(["acceptance-serve", runId], second.deps), 0);
     const secondOpts = (second.calls.spawn[0] as [unknown, unknown, { env: Record<string, string> }])[2];
     assert.equal(secondOpts.env.PORTIA_PROMOTION_DEVICE_SECRET, opts.env.PORTIA_PROMOTION_DEVICE_SECRET);
+  });
+  test("v1 manifest probes its p-cooldown nickname", async () => {
+    const ctx = serveCase();
+    const nickname = `__portia_live_${runId}_p-cooldown`;
+    nodeFs.writeFileSync(ctx.manifestFile, JSON.stringify({ schema: "portia-acceptance-run-v1", runId, refHash, rosterPath: ctx.rosterPath, nicknames: { "p-cooldown": nickname } }));
+    assert.equal(await main(["acceptance-serve", runId], ctx.deps), 0);
+    assert.ok(ctx.calls.fetch.some((url) => url.includes(encodeURIComponent(nickname))));
+  });
+  test("malformed v2 manifest cannot authorize a server", async () => {
+    const ctx = serveCase();
+    nodeFs.writeFileSync(ctx.manifestFile, JSON.stringify({ schema: "portia-acceptance-run-v2", runId, refHash, rosterPath: ctx.rosterPath, nicknames: { probe: "probe" } }));
+    assert.equal(await main(["acceptance-serve", runId], ctx.deps), 1);
+    assert.match(ctx.calls.err.join(""), /acceptance-manifest-mismatch/u);
+    assert.equal(ctx.calls.spawn.length, 0);
   });
 });
 
