@@ -106,14 +106,21 @@
 - [ ] **STAB-REL-05**: Owner принимает Promotion на PC/phone с временными данными и без destructive production testing.
 - [ ] **STAB-REL-06**: Owner после clean reload принимает window bounds, spider lifecycle/gait/palette, shortcut handoff, Vivian accent, qualification lock, search coverage и bounded editor layout на PC/phone.
 - [ ] **STAB-REL-07**: Roadmap, requirements, summaries, verification и deployed evidence описывают итоговый release commit/state; UAT фиксирует проверенный commit для каждого устройства. После исправления только phone-дефекта допускается сохранить прежний PC-вердикт с его commit, повторить полную phone UAT на новом commit и повторить технические gates на итоговом release commit; объём изменения и причина сохранения PC-вердикта документированы. Carried risks перечислены, blocked verification не помечен complete.
-- [ ] **STAB-REL-08**: Финальный review подтверждает сохранение PORTIA OS; новый SVG, motion-язык или font допускается только отдельным owner approval, PNG-паук и принятый out-of-scope сохранены.
+- [ ] **STAB-REL-08**: Финальный review подтверждает целостность PORTIA OS после согласованной в Phase 20 визуальной переработки; новый font или motion-язык требуют отдельного owner approval, а новые SVG-рисунки и визуал паука/фона проходят владельческое одобрение до принятия baseline.
+
+## Визуальная переработка Phase 20
+
+- [ ] **STAB-VIS-01**: Внешний вид паука и паутины переработан по утверждённому владельцем визуальному направлению; движение, режимы full/reduced/off, читаемость и производительность проверены на PC/phone. Формат графического ресурса определяется при проектировании.
+- [ ] **STAB-VIS-02**: Фон и обои переработаны для согласованного вида PORTIA OS на PC/phone; настройки, читаемость окон и контента, контраст и скорость остаются проверяемыми.
+- [ ] **STAB-VIS-03**: SVG-рисунки и иллюстрации в согласованном объёме переработаны как целостная система; до замены составлен реестр затрагиваемых ресурсов, новые варианты и visual baselines утверждены владельцем.
+- [ ] **STAB-VIS-04**: Вкладка «Повышение» в редакторе и внутреннее приложение «Повышение» полностью переработаны по внешнему виду и удобству использования на PC/phone без потери participant/reviewer flow, прав, состояний сохранения и безопасных ошибок; итог принят владельцем.
 
 ## Out of Scope
 
-- Полный редизайн или смена художественной основы PORTIA OS.
+- Полный редизайн поверхностей вне согласованной визуальной переработки Phase 20 или смена художественной основы PORTIA OS без отдельного решения владельца.
 - Новый generic/schema-driven app shell или переписывание modular monolith на другую архитектуру.
 - Motion/Framer Motion, другой test runner, package manager, BaaS, database или hosting platform.
-- SVG-паук, новый font/icon system или массовая замена SVG без отдельного решения владельца.
+- Новый font/icon system и массовая замена SVG за пределами утверждённого реестра Phase 20 без отдельного решения владельца.
 - Desktop-виджет «Сводка» и свободная общая расстановка ярлыков.
 - Загрузка доказательств повышения на сайт и автоматический pass/fail по проценту.
 - Показ участнику конкретных ошибок, правильных ответов, notes или личности reviewer.
@@ -201,6 +208,10 @@
 | STAB-REL-06 | Phase 20 | Pending |
 | STAB-REL-07 | Phase 20 | Pending |
 | STAB-REL-08 | Phase 20 | Pending |
+| STAB-VIS-01 | Phase 20 | Pending |
+| STAB-VIS-02 | Phase 20 | Pending |
+| STAB-VIS-03 | Phase 20 | Pending |
+| STAB-VIS-04 | Phase 20 | Pending |
 
 ---
-*Last updated: 2026-10-30 after v1.3 roadmap creation (76/76 uniquely mapped)*
+*Last updated: 2026-11-03 after owner expanded Phase 20 visual scope (80/80 uniquely mapped)*
