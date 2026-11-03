@@ -508,6 +508,9 @@ html[data-motion="full"] .portia-image-skeleton { background: linear-gradient(10
 .editor-save-status.dirty, .editor-save-status.partial { color: var(--warning); }
 .editor-save-status.error, .editor-save-status.conflict { color: #e07d74; white-space: normal; }
 .editor-conflict-panel { display: grid; gap: 8px; margin: 0 0 12px; padding: 16px; border: 1px solid var(--warning); background: rgba(239,184,78,.06); }
+.editor-stale-banner { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0 0 12px; padding: 8px 12px; border: 1px solid oklch(.58 .08 80 / .55); background: oklch(.3 .04 80 / .18); color: oklch(.82 .07 80); font: 400 13px/1.5 var(--doc); overflow-wrap: anywhere; }
+.editor-stale-banner strong { font: 700 13px/1.5 var(--sans); }
+.editor-stale-banner span { min-width: 0; flex: 1 1 200px; }
 .editor-conflict-panel h2 { margin: 0; color: var(--warning); font: 700 16px/1.2 var(--sans); }
 .editor-conflict-panel p { margin: 0; color: oklch(.812 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font: 400 13px/1.5 var(--sans); }
 .editor-conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; }

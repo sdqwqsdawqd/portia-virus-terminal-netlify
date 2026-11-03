@@ -22,6 +22,8 @@ export type HistoryAction<T> =
   // rebase: applied to an edited draft, so a draft typed during the request can follow the stored copy for the sections the save took from the server.
   | { type: "saved"; normalized: T; savedFrom: T; keep?: T; rebase?: (present: T) => T }
   | { type: "sync"; content: T }
+  // rebase: a background update of sections the draft did not touch (D-11). baseline and source become the stored copy; project takes those sections from it in the draft and in every history entry, so undo cannot bring the old stored value back.
+  | { type: "rebase"; baseline: T; source: T; project: (content: T) => T }
   | { type: "restrict"; project: (content: T) => T };
 
 export function initHistory<T>(content: T, clone: (value: T) => T): EditorHistory<T> {
@@ -65,6 +67,10 @@ export function historyReducer<T>(state: EditorHistory<T>, action: HistoryAction
     }
     case "sync":
       return action.content === state.source ? state : initHistory(action.content, clone);
+    case "rebase": {
+      const projected = historyReducer(state, { type: "restrict", project: action.project }, clone);
+      return { ...projected, baseline: action.baseline, source: action.source };
+    }
     case "restrict": {
       // D-16: project every entry so undo cannot bring back an edit the projection removed. project must return a new object.
       const same = (a: T, b: T) => a === b || JSON.stringify(a) === JSON.stringify(b);

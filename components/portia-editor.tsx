@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { changedDossierTabs, changedSections, deniedSections, editorSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
-import { draftEdits, partialSave, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
+import { draftEdits, partialSave, rebaseDecision, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
 import { closedMessage, closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { uploadRefusal } from "@/lib/image-upload";
@@ -443,15 +443,38 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
     setSelectedRecycledVirusId((current) => (current === "" || next.recycledViruses?.some((virus) => virus.id === current) ? current : next.recycledViruses?.[0]?.id ?? ""));
   };
 
+  // D-11: the timer below fires after render, so it reads the latest history and tab from here.
+  const syncRef = useRef({ history, tab });
+  useEffect(() => { syncRef.current = { history, tab }; });
+  // D-11: a newer stored copy overlaps the unsaved edits or the open section; the draft stays as typed and the save resolves it.
+  const [stale, setStale] = useState(false);
+
   useEffect(() => {
-    if (dirty) return;
     const syncTimer = window.setTimeout(() => {
-      dispatch({ type: "sync", content });
+      if (!dirty) {
+        dispatch({ type: "sync", content });
+        baseRevision.current = revision;
+        repairSelections(content);
+        setStale(false);
+        return;
+      }
+      // D-11: with unsaved edits a background update never replaces the draft. Sections nobody edited here follow the server; the section of the open tab (a field may be under the cursor) and the edited ones keep the draft.
+      if (revision <= baseRevision.current) return;
+      const { history: live, tab: shown } = syncRef.current;
+      const decision = rebaseDecision(live.baseline, live.present, content, editorSections.filter((section) => section === shown));
+      if (decision.kind === "conflict") {
+        setStale(true);
+        return;
+      }
       baseRevision.current = revision;
-      repairSelections(content);
+      setStale(false);
+      if (decision.kind === "none") return;
+      const theirs = changedSections(live.baseline, content);
+      dispatch({ type: "rebase", baseline: content, source: content, project: (entry) => revertSections(content, entry, theirs) });
+      repairSelections(decision.present);
     }, 0);
     return () => window.clearTimeout(syncTimer);
-  }, [content, dirty, revision]);
+  }, [content, dirty, revision, tab]);
 
   // D-15, D-16: when the owner closes a section, its unsaved edits go back to the stored copy, in the history too, so Ctrl+Z cannot bring them back.
   const closureRef = useRef({ history, employeeDirty });
@@ -835,6 +858,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       const clean = editCount.current === editsBefore && refused.length === 0;
       setClosureNotice("");
       setConflictBase(null);
+      setStale(false);
       setTheirEdits([]);
       setRefusedSections(refused);
       if (refused.length) {
@@ -874,6 +898,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   const loadTheirVersion = () => {
     setTheirEdits(draftEdits(history.baseline, history.present));
     setConflictBase(null);
+    setStale(false);
     baseRevision.current = revision;
     repairSelections(content);
     dispatch({ type: "sync", content });
@@ -1003,6 +1028,12 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       </nav>
       {refusedShown.map((section) => <p key={section} id={`${errorIdBase}-${section}`} className="editor-section-error" role="alert">{closedMessage([section])} Правки остались в черновике.</p>)}
       {closureNotice && <p className="editor-guidance" role="status">{closureNotice}</p>}
+      {stale && dirty && !conflict && (
+        <div className="editor-stale-banner" role="status">
+          <strong>Запись изменили</strong>
+          <span>Показаны ваши правки. Конфликт решится при сохранении.</span>
+        </div>
+      )}
       {conflict && <ConflictPanel ready={revision !== conflictBase} onLoadTheirs={loadTheirVersion} onReplace={() => void save("replace")} />}
       {theirEdits.length > 0 && (
         <details className="editor-their-edits">

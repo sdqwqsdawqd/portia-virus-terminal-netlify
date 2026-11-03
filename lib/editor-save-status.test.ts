@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { draftEdits, networkSaveError, parseRefusedSections, partialSave, saveStatusText, SaveConflictError, SectionClosedError } from "./editor-save-status.ts";
+import { draftEdits, networkSaveError, parseRefusedSections, partialSave, rebaseDecision, saveStatusText, SaveConflictError, SectionClosedError } from "./editor-save-status.ts";
+import { lf } from "./component-source.ts";
 import { historyReducer, initHistory } from "./editor-history.ts";
 import { defaultPortiaContent, type PortiaContent } from "./portia-content.ts";
 import { changedSections, revertSections } from "./editor-changes.ts";
@@ -258,4 +259,72 @@ test("the status after a partial save is «Сохранено N из M» and is 
 test("the REST contract of PUT /api/content is untouched by this plan", () => {
   const route = readFileSync(new URL("../app/api/content/route.ts", import.meta.url), "utf8");
   assert.match(route, /code: refusal\.code, sections: refusal\.sections/);
+});
+
+test("rebaseDecision: nothing changed on the server is «none» (D-11)", () => {
+  const baseline = fixture();
+  const present = cloneOf(baseline);
+  present.viruses[0].name = "МОЁ";
+  assert.deepEqual(rebaseDecision(baseline, present, cloneOf(baseline), ["viruses"]), { kind: "none" });
+});
+
+test("rebaseDecision: my «viruses» edit and their «info» change rebase silently: both kept, baseline = their copy (STAB-APP-07 adjacency)", () => {
+  const baseline = fixture();
+  const present = cloneOf(baseline);
+  present.viruses[0].name = "МОЁ ИМЯ";
+  const incoming = cloneOf(baseline);
+  incoming.infoSections[0].title = "ИХ ЗАГОЛОВОК";
+  const before = JSON.stringify([baseline, present, incoming]);
+  const decision = rebaseDecision(baseline, present, incoming, []);
+  assert.equal(JSON.stringify([baseline, present, incoming]), before, "no input is mutated");
+  assert.equal(decision.kind, "rebase");
+  if (decision.kind !== "rebase") return;
+  assert.equal(decision.baseline, incoming);
+  assert.equal(decision.present.infoSections[0].title, "ИХ ЗАГОЛОВОК");
+  assert.equal(decision.present.viruses[0].name, "МОЁ ИМЯ");
+  assert.deepEqual(changedSections(decision.baseline, decision.present), ["viruses"]);
+});
+
+test("rebaseDecision: both changed «info» is a conflict (the save then gets the 409)", () => {
+  const baseline = fixture();
+  const present = cloneOf(baseline);
+  present.infoSections[0].title = "МОЁ";
+  const incoming = cloneOf(baseline);
+  incoming.infoSections[0].body = "ИХ ТЕКСТ";
+  assert.deepEqual(rebaseDecision(baseline, present, incoming, []), { kind: "conflict" });
+});
+
+test("rebaseDecision: their change in the protected section (the field under the cursor) is a conflict even when I did not edit it (D-11)", () => {
+  const baseline = fixture();
+  const present = cloneOf(baseline);
+  present.viruses[0].name = "МОЁ";
+  const incoming = cloneOf(baseline);
+  incoming.infoSections[0].title = "ИХ";
+  assert.deepEqual(rebaseDecision(baseline, present, incoming, ["info"]), { kind: "conflict" });
+  assert.equal(rebaseDecision(baseline, present, incoming, ["viruses"]).kind, "rebase");
+});
+
+test("rebaseDecision: their formatted text follows its section, so a «viruses» edit of mine stays and the text becomes theirs", () => {
+  const baseline = fixture();
+  const present = cloneOf(baseline);
+  present.viruses[0].name = "МОЁ";
+  const incoming = cloneOf(baseline);
+  const textKey = `info:${incoming.infoSections[0].id}:body`;
+  incoming.formattedText = { ...incoming.formattedText, [textKey]: { version: 1, blocks: [] } as never };
+  const decision = rebaseDecision(baseline, present, incoming, []);
+  assert.equal(decision.kind, "rebase");
+  if (decision.kind !== "rebase") return;
+  assert.equal(decision.present.viruses[0].name, "МОЁ");
+  assert.deepEqual(decision.present.formattedText[textKey], incoming.formattedText[textKey]);
+  assert.deepEqual(changedSections(decision.baseline, decision.present), ["viruses"]);
+});
+
+test("the editor sync effect asks rebaseDecision when the draft is dirty and shows the stale banner on a conflict (D-11)", () => {
+  const source = lf(editor);
+  assert.match(source, /rebaseDecision\(/);
+  assert.match(source, /className="editor-stale-banner" role="status"/);
+  assert.match(source, /Запись изменили/);
+  assert.match(source, /Показаны ваши правки\. Конфликт решится при сохранении\./);
+  assert.match(source, /type: "rebase"/);
+  assert.match(lf(styles), /\.editor-stale-banner\s*\{/);
 });

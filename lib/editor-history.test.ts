@@ -247,3 +247,18 @@ test("after restrict no undo or redo brings the dropped value back", () => {
   for (let step = 0; step < 8; step += 1) { state = reduce(state, { type: "redo" }); seen.push(state.present.n); }
   assert.deepEqual([...new Set(seen)], [0]);
 });
+
+test("rebase takes the stored copy as the baseline, projects present, past and future, and keeps the draft (D-11)", () => {
+  const edited = [edit("b", null, 1000), setN(5, 5000)].reduce(reduce, start());
+  const incoming = { text: "a", n: 7 };
+  const undone = reduce(edited, { type: "undo" });
+  assert.equal(undone.future.length, 1);
+  const state = reduce(undone, { type: "rebase", baseline: incoming, source: incoming, project: (doc) => ({ ...doc, n: 7 }) });
+  assert.equal(state.baseline, incoming);
+  assert.equal(state.source, incoming);
+  assert.equal(state.present.text, "b");
+  assert.equal(state.present.n, 7);
+  // Undo and redo never bring the old stored value of the projected field back.
+  assert.ok([...state.past, ...state.future].every((doc) => doc.n === 7));
+  assert.equal(reduce(state, { type: "sync", content: incoming }), state, "the rebased content is already the source");
+});

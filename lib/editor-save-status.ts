@@ -1,4 +1,4 @@
-import { editorSections, sectionLabels, sectionOfKey, type EditorSection } from "./editor-changes.ts";
+import { changedSections, editorSections, revertSections, sectionLabels, sectionOfKey, type EditorSection } from "./editor-changes.ts";
 import type { PortiaContent } from "./portia-content.ts";
 
 // UI E3: one vocabulary for the save status of the content editor and the employee editor.
@@ -116,4 +116,22 @@ export function draftEdits(baseline: PortiaContent, present: PortiaContent): Dra
     walk(before[key], after[key], section, [key], "", fieldLabels[key] ?? key);
   }
   return editorSections.flatMap((section) => found.get(section) ?? []);
+}
+
+export type RebaseDecision =
+  | { kind: "rebase"; baseline: PortiaContent; present: PortiaContent }
+  | { kind: "conflict" }
+  | { kind: "none" };
+
+// D-11: a background update arrived while the draft has unsaved edits.
+// none: the update changed no section. rebase: it changed only sections the user did not touch and that are not protected
+// (the section of the active tab, where a field may be under the cursor), so it is taken into the draft and the stored copy.
+// conflict: it touches a section the user edited or a protected one; the draft stays as typed and the save resolves it (409, D-09).
+// No input is mutated.
+export function rebaseDecision(baseline: PortiaContent, present: PortiaContent, incoming: PortiaContent, protectedSections: readonly EditorSection[]): RebaseDecision {
+  const theirs = changedSections(baseline, incoming);
+  if (!theirs.length) return { kind: "none" };
+  const mine = changedSections(baseline, present);
+  if (theirs.some((section) => mine.includes(section) || protectedSections.includes(section))) return { kind: "conflict" };
+  return { kind: "rebase", baseline: incoming, present: revertSections(incoming, present, theirs) };
 }
