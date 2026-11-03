@@ -72,6 +72,8 @@ export function PortiaImage({ src, recordId, ...rest }: PortiaImageProps) {
 function PortiaImageFrame({ link, alt, priority, icon = "microscope", className, caption }: Omit<PortiaImageProps, "src" | "recordId"> & { link: string }) {
   const [state, setState] = useState<ImageState>(link ? "loading" : "failed");
   const image = useRef<HTMLImageElement>(null);
+  const frameRef = useRef<HTMLSpanElement>(null);
+  const visible = useVisibleTimeout(frameRef, state, MEDIA_SLOW_MS, () => setState((current) => current === "loading" ? "failed" : current));
   if (link && priority === "hero") prioritizeImage(link);
 
   useEffect(() => {
@@ -81,14 +83,11 @@ function PortiaImageFrame({ link, alt, priority, icon = "microscope", className,
       setState("loaded");
       return;
     }
-    // The timer dies with the frame or with the first answer, so a late callback cannot flip a settled picture.
-    const timer = window.setTimeout(() => setState((current) => (current === "loading" ? "failed" : current)), MEDIA_SLOW_MS);
-    return () => window.clearTimeout(timer);
   }, [state]);
 
   const trimmedCaption = caption?.trim() ?? "";
   return <>
-    <span className={`portia-image is-${state}${className ? ` ${className}` : ""}`} data-media-state={state}>
+    <span ref={frameRef} className={`portia-image is-${state}${className ? ` ${className}` : ""}`} data-media-state={state} data-media-armed={String(visible && state === "loading")}>
       {state !== "failed" && <>
         <span className="portia-image-skeleton" aria-hidden="true" />
         <img
