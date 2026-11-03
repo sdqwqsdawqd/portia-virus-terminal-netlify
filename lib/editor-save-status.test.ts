@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { draftEdits, networkSaveError, partialSave, saveStatusText, SaveConflictError } from "./editor-save-status.ts";
+import { draftEdits, networkSaveError, parseRefusedSections, partialSave, saveStatusText, SaveConflictError, SectionClosedError } from "./editor-save-status.ts";
 import { historyReducer, initHistory } from "./editor-history.ts";
 import { defaultPortiaContent, type PortiaContent } from "./portia-content.ts";
+import { changedSections, revertSections } from "./editor-changes.ts";
+import { contentRefusal } from "./editor-tabs.ts";
 
 const editor = readFileSync(new URL("../components/portia-editor.tsx", import.meta.url), "utf8");
 const desktop = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8");
@@ -190,4 +192,70 @@ test("rebase: a draft typed during a replacing save follows the stored copy only
   assert.deepEqual(state.present.searchRecommendations, ["набрано во время запроса"]);
   assert.equal(state.present.infoSections[0].title, "ИХ раздел");
   assert.equal(state.baseline, outgoing);
+});
+
+test("parseRefusedSections reads only a section-closed refusal and returns its sections in editorSections order (D-10)", () => {
+  assert.deepEqual(parseRefusedSections({ error: "x", code: "section-closed", sections: ["info", "viruses"] }), ["viruses", "info"]);
+  assert.equal(parseRefusedSections({ error: "x", code: "other", sections: ["info"] }), null);
+  assert.equal(parseRefusedSections({ error: "x" }), null);
+  assert.equal(parseRefusedSections({ code: "section-closed", sections: [] }), null);
+  assert.equal(parseRefusedSections({ code: "section-closed", sections: ["nope"] }), null);
+  assert.equal(parseRefusedSections(null), null);
+  const error = new SectionClosedError(["info"], "Раздел закрыт");
+  assert.deepEqual(error.refusedSections, ["info"]);
+  assert.ok(error instanceof Error && error instanceof SectionClosedError);
+});
+
+test("the desktop save passes the refused sections up without changing the API; the editor retries once without them (D-10)", () => {
+  assert.match(desktop, /parseRefusedSections\(body\)/);
+  assert.match(desktop, /throw new SectionClosedError\(refusedSections/);
+  assert.match(desktop, /refusedSections/);
+  assert.match(editor, /error instanceof SectionClosedError/);
+  assert.match(editor, /partialSave\(/);
+  assert.match(editor, /revertSections\(serverBase, wanted, refused\)/);
+  assert.equal((editor.match(/await onSave\(/g) ?? []).length, 2, "one save and exactly one retry");
+  assert.match(editor, /data-save-error=/);
+  assert.match(editor, /className="editor-section-error" role="alert"/);
+  assert.match(editor, /aria-describedby=\{failed \?/);
+  assert.match(editor, /focusRequest\.current/);
+});
+
+test("the partial save, end to end on the real helpers: the rest is stored, the refused section stays a draft, a retry sends only it (D-10)", () => {
+  const baseline = infoWithTextBlock();
+  const draft = cloneOf(baseline);
+  draft.viruses[0].name = "ИЗМЕНЁН";
+  draft.infoSections[0].title = "Раздел изменён";
+  const changed = changedSections(baseline, draft);
+  assert.deepEqual(changed, ["viruses", "info"]);
+  // The server's rule refuses «Информация» for this editor; the real rule produces the answer.
+  const refusal = contentRefusal(baseline, draft, ["viruses"]);
+  assert.equal(refusal?.code, "section-closed");
+  const refused = parseRefusedSections({ code: refusal?.code, sections: refusal?.sections }) ?? [];
+  assert.deepEqual(refused, ["info"]);
+  const plan = partialSave(changed, refused);
+  assert.deepEqual(plan, { send: ["viruses"], saved: 1, total: 2 });
+  const outgoing = revertSections(baseline, draft, refused);
+  assert.equal(contentRefusal(baseline, outgoing, ["viruses"]), null, "the second request is accepted");
+  assert.deepEqual(changedSections(baseline, outgoing), ["viruses"]);
+
+  let state = initHistory(baseline, cloneOf);
+  state = historyReducer(state, { type: "change", updater: (next) => { next.viruses[0].name = "ИЗМЕНЁН"; next.infoSections[0].title = "Раздел изменён"; }, key: null, now: 1 }, cloneOf);
+  state = historyReducer(state, { type: "saved", normalized: outgoing, savedFrom: state.present, keep: draft }, cloneOf);
+  assert.deepEqual(changedSections(state.baseline, state.present), ["info"], "only the refused section is still a draft");
+  assert.equal(state.baseline.viruses[0].name, "ИЗМЕНЁН");
+  assert.equal(state.present.infoSections[0].title, "Раздел изменён");
+  // The retry sends only what is still different from the stored copy.
+  assert.deepEqual(partialSave(changedSections(state.baseline, state.present), []).send, ["info"]);
+});
+
+test("the status after a partial save is «Сохранено N из M» and is held until the next edit; the order is editorSections order (D-10)", () => {
+  assert.match(editor, /saveStatusText\(status, partial \?\? undefined\)/);
+  assert.match(editor, /setPartialResult\(null\)/);
+  assert.equal(saveStatusText("partial", { saved: 1, total: 2 }), "Сохранено 1 из 2");
+  assert.deepEqual(partialSave(["assistant", "viruses", "guide"], ["guide"]).send, ["viruses", "assistant"]);
+});
+
+test("the REST contract of PUT /api/content is untouched by this plan", () => {
+  const route = readFileSync(new URL("../app/api/content/route.ts", import.meta.url), "utf8");
+  assert.match(route, /code: refusal\.code, sections: refusal\.sections/);
 });

@@ -37,6 +37,26 @@ export class SaveConflictError extends Error {
   }
 }
 
+// D-10: the server refused only some sections (403 code "section-closed" with the list). Thrown by the desktop save, caught by the editor, which sends the rest again.
+export class SectionClosedError extends Error {
+  refusedSections: EditorSection[];
+  constructor(refusedSections: EditorSection[], message: string) {
+    super(message);
+    this.name = "SectionClosedError";
+    this.refusedSections = refusedSections;
+  }
+}
+
+// The sections of a PUT /api/content refusal body, in editorSections order; null when the body is not a section-closed refusal.
+export function parseRefusedSections(body: unknown): EditorSection[] | null {
+  if (typeof body !== "object" || body === null) return null;
+  const { code, sections } = body as { code?: unknown; sections?: unknown };
+  if (code !== "section-closed" || !Array.isArray(sections)) return null;
+  if (!sections.every((entry) => typeof entry === "string" && (editorSections as string[]).includes(entry))) return null;
+  const found = editorSections.filter((section) => sections.includes(section));
+  return found.length ? found : null;
+}
+
 export type DraftEdit = { section: EditorSection; path: string; label: string; value: string };
 
 const fieldLabels: Record<string, string> = {

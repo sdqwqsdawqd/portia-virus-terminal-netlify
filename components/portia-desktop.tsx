@@ -12,7 +12,7 @@ import { CustomColorPicker } from "@/components/custom-color-picker";
 import { fitGeometry, type WindowGeometry } from "@/lib/window-geometry";
 import { exitedWindow, openedWindow, originOf, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "@/lib/window-open";
 import { acceptFetchedContent } from "@/lib/content-sync";
-import { networkSaveError, SaveConflictError } from "@/lib/editor-save-status";
+import { networkSaveError, parseRefusedSections, SaveConflictError, SectionClosedError } from "@/lib/editor-save-status";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
@@ -1042,6 +1042,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         if (typeof body?.error === "string") setSaveError(body.error);
         // A refusal usually means the tab list changed: read it now instead of at the next poll (D-15).
         if (response.status === 403) void fetchAccess();
+        // D-10: a refusal of some sections lets the editor save the others; the API answer is unchanged.
+        const refusedSections = response.status === 403 ? parseRefusedSections(body) : null;
+        if (refusedSections) throw new SectionClosedError(refusedSections, typeof body?.error === "string" ? body.error : "section closed");
         throw new Error("save failed");
       }
       const payload = (await response.json()) as { revision?: number };

@@ -3,8 +3,8 @@
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { changedDossierTabs, changedSections, deniedSections, editorSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
-import { draftEdits, SaveConflictError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
-import { closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
+import { draftEdits, partialSave, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
+import { closedMessage, closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { uploadRefusal } from "@/lib/image-upload";
 import { dropFields, mergeFragments, removeFragmentAt } from "@/lib/format-fragments";
@@ -381,6 +381,12 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   // D-09: the user's own values from before «Загрузить их версию», kept beside the server's version until closed or saved.
   const [theirEdits, setTheirEdits] = useState<DraftEdit[]>([]);
   const [copiedEdit, setCopiedEdit] = useState("");
+  // D-10: the sections the server refused in the last save and the N of M it reported; both stay until the next edit or a save that takes everything.
+  const [refusedSections, setRefusedSections] = useState<EditorSection[]>([]);
+  const [partialResult, setPartialResult] = useState<{ saved: number; total: number; sections: EditorSection[] } | null>(null);
+  // The first refused section gets the focus once the partial result is rendered.
+  const focusRequest = useRef<EditorSection | null>(null);
+  const errorIdBase = useId();
   const tab: EditorTab = stripTabs.some(([id]) => id === pickedTab) ? pickedTab : stripTabs[0]?.[0] ?? pickedTab;
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
@@ -513,6 +519,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   const batchKey = useRef<string | null>(null);
   const changeDraft = (updater: (next: PortiaContent) => void) => {
     editCount.current += 1;
+    setPartialResult(null);
     dispatch({ type: "change", updater, key: batchKey.current ?? editKeyFor(document.activeElement), now: Date.now() });
   };
   const runBatch = (id: string, run: () => void) => {
@@ -531,6 +538,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
     const change = categoryChange(draft.broadcasts, target.broadcasts);
     if (change) revealCard(change.id, "type", change.tab);
     editCount.current += 1;
+    setPartialResult(null);
     dispatch({ type: kind });
   };
 
@@ -811,18 +819,38 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       const serverBase = mode === "replace" ? content : history.baseline;
       const taken = mode === "replace" ? editorSections.filter((section) => !changed.includes(section)) : [];
       const reverted = [...new Set([...taken, ...closedSections])];
-      const outgoing = reverted.length ? revertSections(serverBase, normalized, reverted) : normalized;
-      baseRevision.current = await onSave(outgoing, baseRevision.current);
-      const clean = editCount.current === editsBefore;
+      const wanted = reverted.length ? revertSections(serverBase, normalized, reverted) : normalized;
+      let outgoing = wanted;
+      // D-10: sections the server refuses stay drafts; the rest is sent once more without them.
+      let refused: EditorSection[] = [];
+      try {
+        baseRevision.current = await onSave(outgoing, baseRevision.current);
+      } catch (error) {
+        if (!(error instanceof SectionClosedError)) throw error;
+        refused = error.refusedSections.filter((section) => changed.includes(section));
+        if (!refused.length || !partialSave(changed, refused).send.length) throw error;
+        outgoing = revertSections(serverBase, wanted, refused);
+        baseRevision.current = await onSave(outgoing, baseRevision.current);
+      }
+      const clean = editCount.current === editsBefore && refused.length === 0;
       setClosureNotice("");
       setConflictBase(null);
       setTheirEdits([]);
+      setRefusedSections(refused);
+      if (refused.length) {
+        const result = partialSave(changed, refused);
+        setPartialResult({ saved: result.saved, total: result.total, sections: result.send });
+        const first = editorSections.find((section) => refused.includes(section)) ?? null;
+        focusRequest.current = first;
+        if (first && stripTabs.some(([id]) => id === first)) setTab(first);
+      } else setPartialResult(null);
       // A draft typed during the request follows the server copy for the sections this save took from it, except where the user typed meanwhile.
       const rebase = taken.length ? (latest: PortiaContent) => {
         const typed = changedSections(savedFrom, latest);
         return revertSections(outgoing, latest, taken.filter((section) => !typed.includes(section)));
       } : undefined;
-      dispatch({ type: "saved", normalized: outgoing, savedFrom, rebase });
+      // The refused sections stay in the draft: when nothing was typed meanwhile the draft becomes the full copy, not the reduced one that was stored.
+      dispatch({ type: "saved", normalized: outgoing, savedFrom, keep: refused.length ? wanted : undefined, rebase });
       return clean;
     } catch (error) {
       // Keep the local draft marked as changed so a temporary network error
@@ -833,6 +861,14 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       inflight.current = false;
     }
   };
+
+  // D-10: after a partial save the first refused section's tab takes the focus (its error text is linked from the tab).
+  useEffect(() => {
+    const section = focusRequest.current;
+    if (!section) return;
+    focusRequest.current = null;
+    tabsRef.current?.querySelector<HTMLElement>(`[data-tab-id="${section}"]`)?.focus();
+  });
 
   // D-09 «Загрузить их версию»: the form shows the server's copy and the user's values stay in «Ваши правки».
   const loadTheirVersion = () => {
@@ -914,24 +950,27 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
 
   // Only a save starts a new saveState, so after ОТМЕНИТЬ or undo back to clean the conflict text would sit over a current editor.
   const conflict = saveState === "conflict" && dirty && conflictBase !== null;
+  const refusedShown = refusedSections.filter((section) => changed.includes(section));
   // The chip stays while anything is unsaved, so a compact chip never hides unsaved work (D-09).
   const chipVisible = dirty || saveState === "saving" || saveState === "saved";
   // Derived reset: the popover only lists unsaved sections, so it closes when the draft is clean.
   if (popoverOpen && !dirty) setPopoverOpen(false);
   // A blocked, failed or conflicting save turns the chip red, so a compact chip never hides a failed save (D-10).
-  const alarm = dirty && (saveBlocked || saveState === "error" || conflict);
+  const alarm = dirty && (saveBlocked || saveState === "error" || conflict || refusedShown.length > 0);
   const chipLabel = saveState === "saving" ? saveStatusText("saving")
     : dirty ? `Не сохранено разделов: ${shownChanged.length}${alarm ? (saveBlocked ? ", сохранение невозможно" : ", ошибка сохранения") : ""}`
     : saveStatusText("saved");
   const chipText = saveState === "saving" ? "…" : dirty ? `${alarm ? "!" : ""}${shownChanged.length}` : "✓";
   // UI E3: «Сохранено» only once the server answered (saveState "saved") and nothing was typed since; the text of a failure is the server's reason beside the status.
+  const partial = partialResult !== null && dirty ? partialResult : null;
   const status: SaveStatus = saveState === "saving" ? "saving"
     : conflict ? "conflict"
     : saveState === "error" ? "error"
+    : partial ? "partial"
     : saveState === "saved" && !dirty ? "saved"
     : dirty ? "dirty"
     : "clean";
-  const statusText = saveStatusText(status);
+  const statusText = saveStatusText(status, partial ?? undefined);
 
   const header = (
     <header className="editor-header">
@@ -953,13 +992,16 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       <nav className="editor-tabs" aria-label="Разделы редактора" ref={tabsRef}>
         {stripTabs.map(([id, label]) => {
           const unsaved = shownChanged.some((section) => section === id);
+          const failed = refusedShown.some((section) => section === id);
+          const savedNow = partial?.sections.some((section) => section === id) ?? false;
           return (
-            <button key={id} type="button" className={tab === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => switchTab(id)}>
-              {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}
+            <button key={id} type="button" data-tab-id={id} data-save-error={failed || undefined} className={tab === id ? "active" : ""} aria-describedby={failed ? `${errorIdBase}-${id}` : undefined} aria-label={failed ? `${label}, не сохранено` : unsaved ? `${label}, есть несохранённые правки` : savedNow ? `${label}, сохранено` : undefined} onClick={() => switchTab(id)}>
+              {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}{savedNow && !unsaved && <i className="tab-saved" aria-hidden="true">✓</i>}
             </button>
           );
         })}
       </nav>
+      {refusedShown.map((section) => <p key={section} id={`${errorIdBase}-${section}`} className="editor-section-error" role="alert">{closedMessage([section])} Правки остались в черновике.</p>)}
       {closureNotice && <p className="editor-guidance" role="status">{closureNotice}</p>}
       {conflict && <ConflictPanel ready={revision !== conflictBase} onLoadTheirs={loadTheirVersion} onReplace={() => void save("replace")} />}
       {theirEdits.length > 0 && (
