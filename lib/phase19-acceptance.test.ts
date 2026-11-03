@@ -109,7 +109,8 @@ describe("acceptance-serve staging binding", () => {
     assert.equal(await main(["acceptance-serve", runId, "--https"], ctx.deps), 0);
     const [bin, args, opts] = ctx.calls.spawn[0] as [string, string[], { env: Record<string, string>; shell: boolean }];
     assert.equal(bin, process.execPath);
-    assert.deepEqual(args.slice(-7), ["dev", "--hostname", "0.0.0.0", "--port", "3000", "--experimental-https"].slice(-7));
+    assert.ok(args[0].endsWith(path.join("node_modules", "next", "dist", "bin", "next")));
+    assert.deepEqual(args.slice(1), ["dev", "--hostname", "0.0.0.0", "--port", "3000", "--experimental-https"]);
     assert.equal(opts.shell, false);
     assert.equal(opts.env.NEXT_PUBLIC_SUPABASE_URL, `https://${ref}.supabase.co`);
     assert.equal(opts.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, publishableKey);

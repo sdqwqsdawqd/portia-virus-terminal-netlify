@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { canonicalize, extractFingerprint, inventory } from "./phase16-fingerprint-compare.mjs";
-import { acceptanceResidual, acceptanceSeed, acceptanceShift, acceptanceTeardown } from "./phase19-acceptance.mjs";
+import { acceptanceResidual, acceptanceSeed, acceptanceServe, acceptanceShift, acceptanceTeardown } from "./phase19-acceptance.mjs";
 import { createRun } from "../tests/e2e/fixtures/staging-harness.ts";
 import { assertAppBoundToTarget } from "../tests/e2e/fixtures/target-attestation.ts";
 import { requireSafeMutationTargetFromEnvironment } from "../tests/e2e/fixtures/target-guard.ts";
@@ -43,13 +43,14 @@ function parseDbUrl(raw, ref) {
   } catch {
     throw bad();
   }
-  if (!["postgres:", "postgresql:"].includes(url.protocol) || url.port !== "5432") throw bad();
+  if (!["postgres:", "postgresql:"].includes(url.protocol) || url.port !== "5432" || url.search || url.hash || !["", "/postgres"].includes(url.pathname)) throw bad();
   const host = url.hostname.toLowerCase();
   const user = decodeURIComponent(url.username);
   const direct = host === `db.${ref}.supabase.co` && user === "postgres";
   const pooler = /^aws-\d+-[a-z0-9-]+\.pooler\.supabase\.com$/u.test(host) && user === `postgres.${ref}`;
   if (!direct && !pooler) throw bad();
-  return { password: decodeURIComponent(url.password) };
+  const password = decodeURIComponent(url.password);
+  return { password, dbUrl: `${url.protocol}//${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:5432/postgres` };
 }
 
 // Runs before any spawn/fetch. The guard also fails closed on an empty production list (production-list-missing).
@@ -60,7 +61,7 @@ export function resolveStagingTarget(env, deps = {}) {
   const missing = [ADMIN_KEY_VAR, PUBLISHABLE_KEY_VAR, DB_URL_VAR].filter((name) => !present(env[name]));
   if (missing.length > 0) throw new StagingError("missing-environment", missing);
   if (env.PORTIA_PROMO_LIVE_CONFIRM !== LIVE_CONFIRM) throw new StagingError("live-confirm", ["PORTIA_PROMO_LIVE_CONFIRM"]);
-  const { password } = parseDbUrl(env[DB_URL_VAR], target.projectId);
+  const { password, dbUrl } = parseDbUrl(env[DB_URL_VAR], target.projectId);
   // A linked CLI project would let a bare command reach whatever it points at.
   if (fs.existsSync(path.join(deps.root ?? REPO_ROOT, "supabase", ".temp", "project-ref"))) {
     throw new StagingError("linked-project-present", ["supabase/.temp/project-ref"]);
@@ -70,7 +71,7 @@ export function resolveStagingTarget(env, deps = {}) {
     url: `https://${target.projectId}.supabase.co`,
     adminKey: env[ADMIN_KEY_VAR],
     publishableKey: env[PUBLISHABLE_KEY_VAR],
-    dbUrl: env[DB_URL_VAR],
+    dbUrl,
     dbPassword: password,
   });
 }
@@ -407,6 +408,7 @@ export async function main(argv, deps = {}) {
       "acceptance-shift": [(t, d) => acceptanceShift(t, rest[0], rest[1], rest.slice(2), d), rest.length >= 2 && rest.length <= 4],
       "acceptance-residual": [(t, d) => acceptanceResidual(t, rest[0], d), rest.length === 1],
       "acceptance-teardown": [(t, d) => acceptanceTeardown(t, rest[0], d), rest.length === 1],
+      "acceptance-serve": [(t, d) => acceptanceServe(t, rest[0], { https: rest[1] === "--https" }, d), rest.length === 1 || (rest.length === 2 && rest[1] === "--https")],
     }[command];
     if (acceptance?.[1]) {
       const target = resolveStagingTarget(env, deps);
@@ -432,7 +434,7 @@ export async function main(argv, deps = {}) {
     err(`${redact(error instanceof Error ? error.message : "[PORTIA_STAGING:internal]", secrets)}\n`);
     return 1;
   }
-  err("[PORTIA_STAGING:usage] Subcommands: attest | self-test-production-block | scan-evidence <dir> | cli-help <words...> | push | fingerprint <label> | teardown | upgrade-ladder | acceptance-seed | acceptance-shift <runId> <kind> [label] [value] | acceptance-residual <runId> | acceptance-teardown <runId>\n");
+  err("[PORTIA_STAGING:usage] Subcommands: attest | self-test-production-block | scan-evidence <dir> | cli-help <words...> | push | fingerprint <label> | teardown | upgrade-ladder | acceptance-seed | acceptance-shift <runId> <kind> [label] [value] | acceptance-residual <runId> | acceptance-teardown <runId> | acceptance-serve <runId> [--https]\n");
   return 2;
 }
 

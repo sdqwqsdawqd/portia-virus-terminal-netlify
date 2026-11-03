@@ -1,5 +1,8 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import * as nodeFs from "node:fs";
+import { spawn as spawnProcess } from "node:child_process";
+import { get as httpsGet } from "node:https";
+import { connect } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -96,10 +99,156 @@ function readManifest(runId, deps) {
   } catch {
     throw new AcceptanceError("acceptance-manifest-missing", ["19-ACCEPTANCE-RUN.json"]);
   }
-  if (manifest?.schema !== MANIFEST_SCHEMA || manifest.runId !== runId) {
+  if (!["portia-acceptance-run-v1", "portia-acceptance-run-v2"].includes(manifest?.schema) || manifest.runId !== runId) {
     throw new AcceptanceError("acceptance-manifest-mismatch", ["19-ACCEPTANCE-RUN.json"]);
   }
   return manifest;
+}
+
+const refHashOf = (projectId) => createHash("sha256").update(projectId).digest("hex").slice(0, 12);
+
+function portInUse() {
+  return new Promise((resolve) => {
+    const socket = connect({ host: "127.0.0.1", port: 3000 });
+    socket.setTimeout(1000);
+    socket.once("connect", () => { socket.destroy(); resolve(true); });
+    socket.once("error", () => { socket.destroy(); resolve(false); });
+    socket.once("timeout", () => { socket.destroy(); resolve(true); });
+  });
+}
+
+function httpsLocal(url) {
+  return new Promise((resolve, reject) => {
+    const request = httpsGet(url, { rejectUnauthorized: false, timeout: 5000 }, (response) => {
+      const parts = [];
+      response.on("data", (chunk) => parts.push(chunk));
+      response.on("end", () => {
+        const body = Buffer.concat(parts).toString("utf8");
+        resolve({ status: response.statusCode, text: async () => body, json: async () => JSON.parse(body) });
+      });
+    });
+    request.on("timeout", () => request.destroy(new Error("timeout")));
+    request.on("error", reject);
+  });
+}
+
+function safeOutput(value, secrets) {
+  let result = String(value);
+  for (const [label, secret] of secrets) {
+    if (typeof secret === "string" && secret) for (const form of new Set([secret, encodeURIComponent(secret)])) result = result.split(form).join(`[REDACTED:${label}]`);
+  }
+  return result;
+}
+
+function relay(stream, write, secrets) {
+  let pending = "";
+  stream?.on("data", (chunk) => {
+    pending += String(chunk);
+    const last = pending.lastIndexOf("\n");
+    if (last >= 0) {
+      write(safeOutput(pending.slice(0, last + 1), secrets));
+      pending = pending.slice(last + 1);
+    }
+  });
+  stream?.on("end", () => { if (pending) write(safeOutput(pending, secrets)); });
+}
+
+function childExit(child) {
+  return new Promise((resolve) => {
+    child.once("exit", (code) => resolve(typeof code === "number" ? code : 1));
+    child.once("error", () => resolve(1));
+  });
+}
+
+export async function acceptanceServe(target, runId, options = {}, deps = {}) {
+  if (!runIdPattern.test(runId ?? "")) throw new AcceptanceError("usage", ["acceptance-serve <runId> [--https]"]);
+  const manifest = readManifest(runId, deps);
+  const refHash = refHashOf(target.projectId);
+  if (manifest.refHash !== refHash) throw new AcceptanceError("acceptance-serve-ref-mismatch", ["manifest refHash"]);
+  if (await (deps.portInUse ?? portInUse)(3000)) throw new AcceptanceError("port-busy", ["port 3000"]);
+
+  const fs = fsOf(deps);
+  const dir = workDirOf(runId, deps);
+  const secretFile = path.join(dir, "device-secret");
+  fs.mkdirSync(dir, { recursive: true });
+  let deviceSecret;
+  if (fs.existsSync(secretFile)) {
+    deviceSecret = fs.readFileSync(secretFile, "utf8").trim();
+    if (!/^[a-f0-9]{64,}$/u.test(deviceSecret)) throw new AcceptanceError("device-secret-invalid", ["device-secret"]);
+  } else {
+    deviceSecret = randomBytes(32).toString("hex");
+    fs.writeFileSync(secretFile, deviceSecret, { mode: 0o600, flag: "wx" });
+  }
+
+  const productionRefs = (deps.env ?? process.env).PORTIA_E2E_PRODUCTION_PROJECT_IDS.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
+  const childEnv = {
+    ...(deps.env ?? process.env),
+    NEXT_PUBLIC_SUPABASE_URL: target.url,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: target.publishableKey,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: target.publishableKey,
+    PORTIA_PROMOTION_STAGING_ROSTER: manifest.rosterPath,
+    PORTIA_PROMOTION_DEVICE_SECRET: deviceSecret,
+    PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY: "",
+    PORTIA_STAGING_DB_URL: "",
+    CONTEXT: "",
+  };
+  const args = [path.join(deps.root ?? REPO_ROOT, "node_modules", "next", "dist", "bin", "next"), "dev", "--hostname", "0.0.0.0", "--port", "3000"];
+  if (options.https) args.push("--experimental-https");
+  const secrets = [
+    ["admin-key", target.adminKey], ["publishable-key", target.publishableKey], ["db-url", target.dbUrl],
+    ["db-password", target.dbPassword], ["device-secret", deviceSecret], ["ref", target.projectId],
+    ["host", `${target.projectId}.supabase.co`], ...productionRefs.map((item) => ["production-ref", item]),
+  ];
+  let child;
+  try {
+    child = (deps.spawn ?? spawnProcess)(process.execPath, args, { cwd: deps.root ?? REPO_ROOT, env: childEnv, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  } catch {
+    throw new AcceptanceError("server-not-ready", ["next dev"]);
+  }
+  relay(child.stdout, errOf(deps), secrets);
+  relay(child.stderr, errOf(deps), secrets);
+  const waitForChild = (deps.waitForChild ?? childExit)(child);
+  const base = `${options.https ? "https" : "http"}://127.0.0.1:3000`;
+  const fetchLocal = deps.fetchLocal ?? (options.https ? httpsLocal : fetch);
+  const get = (suffix) => fetchLocal(`${base}${suffix}`);
+  try {
+    let ready = false;
+    const deadline = Date.now() + 120_000;
+    while (Date.now() < deadline) {
+      try { ready = (await get("/")).status === 200; } catch { ready = false; }
+      if (ready) break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    if (!ready) throw new AcceptanceError("server-not-ready", ["GET /"]);
+    const probe = manifest.nicknames.probe ?? manifest.nicknames["p-cooldown"];
+    if (!probe) throw new AcceptanceError("server-not-staging", ["probe nickname"]);
+    const status = await get(`/api/promotion/status?nickname=${encodeURIComponent(probe)}`);
+    const body = status.status === 200 ? await status.json().catch(() => null) : null;
+    const absent = await get(`/api/promotion/status?nickname=${encodeURIComponent(`${runPrefix(runId)}_absent`)}`);
+    if (status.status !== 200 || body?.nickname !== probe || absent.status !== 404) throw new AcceptanceError("server-not-staging", ["promotion status"]);
+    const ownerPage = await get("/owner-login");
+    if (ownerPage.status !== 200) throw new AcceptanceError("client-binding-unproven", ["owner-login"]);
+    const html = await ownerPage.text();
+    const scriptUrls = [...html.matchAll(/<script\b[^>]*\bsrc=["'](\/_next\/[^"']+)["']/giu)].map((match) => match[1]);
+    const scripts = await Promise.all(scriptUrls.map(async (url) => {
+      const response = await get(url);
+      if (response.status !== 200) throw new AcceptanceError("client-binding-unproven", ["owner-login scripts"]);
+      return response.text();
+    }));
+    const content = [html, ...scripts].join("\n").toLowerCase();
+    if (productionRefs.some((item) => content.includes(item))) throw new AcceptanceError("production-ref-in-bundle", ["owner-login scripts"]);
+    if (!content.includes(`${target.projectId}.supabase.co`)) throw new AcceptanceError("client-binding-unproven", ["owner-login scripts"]);
+    const interfaces = (deps.networkInterfaces ?? os.networkInterfaces)();
+    const lan = Object.values(interfaces).flat().filter((entry) => entry && entry.family === "IPv4" && !entry.internal).map((entry) => entry.address);
+    const protocol = options.https ? "https" : "http";
+    const urls = [`${protocol}://localhost:3000`, ...new Set(lan).values()].map((item) => item.includes("://") ? item : `${protocol}://${item}:3000`);
+    outOf(deps)(`${JSON.stringify({ status: "STAGING-BOUND", refHash, serverBound: true, clientBound: true, urls })}\n`);
+    return await waitForChild;
+  } catch (error) {
+    child.kill();
+    if (error instanceof AcceptanceError) throw error;
+    throw new AcceptanceError("server-not-ready", ["binding probe"]);
+  }
 }
 
 const writeManifest = (manifest, deps) => {
