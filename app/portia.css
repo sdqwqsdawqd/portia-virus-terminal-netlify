@@ -1355,10 +1355,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .settings-footer { align-items: flex-start; flex-direction: column; }
   .trash-app { padding: 18px 12px 40px; }
   .trash-layout { min-height: 390px; }
-  /* The list scrolls with the page, like the virus archive: iOS Safari kept the gesture in the empty nested scroller (owner UAT 19-14). */
-  .trash-app:not(.is-viewing) { height: auto; overflow: visible; }
-  .trash-app:not(.is-viewing) .trash-layout { overflow: visible; max-height: none; }
-  .trash-app:not(.is-viewing) .trash-files { height: auto; overflow: visible; }
   .trash-app.is-viewing .trash-layout { min-height: calc(100svh - 140px); }
   .trash-list-head { display: none; }
   .trash-file-row { min-width: 0; grid-template-columns: 1fr; gap: 5px; padding: 13px; }
