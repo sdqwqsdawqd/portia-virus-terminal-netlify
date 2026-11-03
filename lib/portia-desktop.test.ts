@@ -202,6 +202,52 @@ test("search result opens its owner app, marks the record and never touches the 
   assert.ok(/\.search-hit[^{]*\{[^}]*var\(--teal-soft\)/.test(styles));
 });
 
+test("every result type opens its owner and marks its record; a vanished record opens the app without a selection (D-14, STAB-SEARCH-02)", () => {
+  const open = blockAt("const openSearchResult = (result: SearchItem, position = 0) => {");
+  for (const [appId, type] of [["archive", "virus"], ["employees", "employee"], ["info", "info"], ["guide", "guide"], ["broadcasts", "broadcast"], ["trash", "file"]]) {
+    assert.ok(open.includes(`setSearchHit({ appId: "${appId}", type: "${type}", id: result.id })`), type);
+  }
+  assert.ok(open.includes('setSearchHit({ appId: result.id as AppId, type: "app", id: result.id })'));
+  assert.ok((source.match(/setSearchHit\(/g) ?? []).length >= 7);
+  // The missing-record branch comes first, opens the owner and selects nothing.
+  const missing = open.slice(open.indexOf("if (!searchTargetExists(result))"), open.indexOf("setUnavailableResults([]);\n    if (result.type"));
+  assert.ok(missing.includes("setSearchHit(null)") && missing.includes("setUnavailableResults([{ item: result, position }])") && missing.includes("openApp(owner)"));
+  assert.ok(!/setActiveVirusId|setSelectedEmployeeId|setSelectedInfoId|setGuideCardId|setActiveTrashFileId/.test(missing));
+  assert.ok(source.includes("Запись недоступна") && source.includes("aria-disabled={unavailable || undefined}"));
+  assert.ok(!/toast|assistant|Vivian|Вивьян/i.test(open), "no assistant or toast message for a vanished record");
+  // Every owner list carries the mark.
+  for (const mark of ['hitAttrs("employee", employee.id)', 'hitAttrs("info", section.id)', 'hitAttrs("info", sub.id)', 'hitAttrs("broadcast", item.id)', 'hitAttrs("file", file.id)', 'hitAttrs("file", `virus:${virus.id}`)', 'hitId={searchHit?.type === "guide"']) {
+    assert.ok(source.includes(mark), mark);
+  }
+});
+
+test("search states: loading rows with aria-busy, distinct empty text, roster line, long meta wraps (UI E4)", () => {
+  const window = source.slice(source.indexOf('<AppWindow app="search"'), source.indexOf('<AppWindow app="info"'));
+  assert.ok(window.includes("Ищем…") && window.includes("aria-busy={!contentReady}"));
+  assert.ok(window.includes("[0, 1, 2].map") && window.includes("global-result global-result-skeleton skeleton-block"));
+  assert.ok(window.includes("Совпадений нет") && window.includes("Измените запрос или выберите рекомендацию."));
+  assert.ok(window.includes('className="global-search-degraded"') && window.includes("rosterNote"));
+  assert.ok(source.includes("rosterOutOfSearch ? [] : employees"), "no last-good roster: no employees in the index");
+  assert.ok(/\.global-search-degraded\s*\{[^}]*var\(--warning\)[^}]*font: 11px/.test(styles));
+  assert.ok(/\.global-result-heading small\s*\{[^}]*overflow-wrap: anywhere/.test(styles));
+  assert.ok(/\.global-result-skeleton\s*\{[^}]*min-height: 78px/.test(styles));
+});
+
+test("search keyboard follows owner verdict 3: one window handler and one Ctrl/Cmd+K listener, Tab untouched, a phone keeps Enter only", () => {
+  const handler = blockAt("const onSearchKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {");
+  assert.ok(handler.includes("searchKeyAction(searchKeyContext(event, {"));
+  assert.ok(handler.includes("scope: searchKeyScope"));
+  assert.ok(!handler.includes('"Tab"'), "Tab keeps the native order");
+  for (const action of ["focus-input", "next", "prev", "clear", "close"]) assert.ok(handler.includes(`"${action}"`), action);
+  assert.ok(handler.includes('closeApp("search")'), "Escape on an empty field closes the window");
+  assert.ok(source.includes('className="global-search-app" onKeyDown={onSearchKeyDown}'));
+  assert.equal((source.match(/searchKeyAction\(searchKeyContext\(event, \{/g) ?? []).length, 2, "the window handler and the global shortcut");
+  assert.ok(source.includes('if (window.matchMedia("(max-width: 900px)").matches) return;'), "a phone intercepts no Ctrl+K");
+  assert.ok(source.includes("qualificationLockedRef.current) return;"), "the shortcut does not break through a qualification");
+  assert.ok(source.includes("tabIndex={searchRoving ?"), "roving tabindex over the results");
+  assert.ok(source.includes('focusApp("search")'), "an open search only takes the focus");
+});
+
 test("editor collections scroll inside bounded panes and the table of contents no longer follows the page", () => {
   assert.match(styles, /\.editor-record-list\s*\{[^}]*max-height:[^;}]+;[^}]*overflow-y:\s*auto/);
   assert.match(styles, /\.editor-record-list\s*\{[^}]*overflow-x:\s*hidden/);

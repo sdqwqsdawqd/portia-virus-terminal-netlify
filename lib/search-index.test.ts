@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSearchIndex, matchSearch, normalizeSearch, searchKeyAction, type SearchIndexInput, type SearchKeyContext } from "./search-index.ts";
+import { buildSearchIndex, matchSearch, normalizeSearch, rosterDegradedText, searchKeyAction, type SearchIndexInput, type SearchKeyContext } from "./search-index.ts";
 
 const virus = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
   id, code: `V-${id}`, name, status: "Изучен", external: "Серый", physiology: "Без особенностей",
@@ -139,4 +139,14 @@ test("scope enter-only (a refusal of the keyboard verdict, and the phone) takes 
   assert.equal(searchKeyAction(ctx({ key: "Enter", inInput: false, index: 0, scope: "enter-only" })), "open");
   for (const key of ["ArrowDown", "ArrowUp", "Escape"]) assert.equal(searchKeyAction(ctx({ key, scope: "enter-only" })), null, key);
   assert.equal(searchKeyAction(ctx({ key: "k", ctrlKey: true, scope: "enter-only" })), null);
+});
+
+test("the roster line: absent while healthy, saved time with a last-good copy, plain unavailable without one", () => {
+  const now = new Date(2026, 10, 3, 18, 0);
+  const today = new Date(2026, 10, 3, 14, 5).toISOString();
+  assert.equal(rosterDegradedText({ lastGoodAt: today, failure: null }, now), null);
+  assert.equal(rosterDegradedText({ lastGoodAt: null, failure: null }, now), null);
+  assert.equal(rosterDegradedText({ lastGoodAt: today, failure: "offline" }, now), "Сотрудники: показаны сохранённые данные на 14:05");
+  assert.equal(rosterDegradedText({ lastGoodAt: null, failure: "offline" }, now), "Сотрудники сейчас недоступны");
+  assert.equal(rosterDegradedText({ lastGoodAt: "not a date", failure: "offline" }, now), "Сотрудники: показаны сохранённые данные");
 });
