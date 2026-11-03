@@ -84,6 +84,18 @@ test("polling runs only for a visible window and a stale response preserves safe
   assert.ok(source.includes("disabled={busy || stale}"));
 });
 
+test("status poll routes refusals through the decision and only resets the gate on reset", () => {
+  const loadStart = source.indexOf("const loadStatus = useCallback");
+  const loadEnd = source.indexOf("\n  }, [status]);", loadStart);
+  const load = source.slice(loadStart, loadEnd);
+  assert.ok(load.includes("statusPollOutcome("));
+  assert.match(load, /if \(outcome === "keep-stale"\)[\s\S]*setStale\(true\)/);
+  assert.match(load, /if \(outcome === "ignore"\) return/);
+  assert.match(load, /if \(outcome === "reset"\)[\s\S]*setStatus\(null\)/);
+  assert.equal((source.match(/setStatus\(null\)/g) ?? []).length, 1);
+  assert.match(load, /catch[\s\S]*if \(status\) \{ setStale\(true\); setError\(""\); \}/);
+});
+
 test("participant states cover cooldown, sheet wait, special task and compact history", () => {
   for (const copy of ["promotionAvailabilityText(", "Ожидается изменение звания в таблице", "Особое задание", "Последние результаты"]) {
     assert.ok(source.includes(copy), copy);
