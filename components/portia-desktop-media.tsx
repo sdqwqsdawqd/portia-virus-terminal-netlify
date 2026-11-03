@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { preconnect, preload } from "react-dom";
-import { MEDIA_SLOW_MS, mediaLoadingAttrs, mediaSource } from "@/lib/media-display";
+import { MEDIA_SLOW_MS, mediaLoadingAttrs, mediaSource, visibleTimerRunning } from "@/lib/media-display";
 import { PortiaIcon, PortiaIllustration, type PortiaIconName, type PortiaIllustrationName } from "@/components/portia-icons";
 
 export type PortiaImageIcon = PortiaIconName | PortiaIllustrationName;
@@ -21,6 +21,35 @@ function prioritizeImage(src: string) {
 const unavailableLabel = "Изображение недоступно";
 
 type ImageState = "loading" | "loaded" | "failed";
+
+export function useVisibleTimeout(target: RefObject<Element | null>, state: ImageState, ms: number, onTimeout: () => void): boolean {
+  const [visible, setVisible] = useState(false);
+  const callback = useRef(onTimeout);
+  useEffect(() => { callback.current = onTimeout; }, [onTimeout]);
+
+  useEffect(() => {
+    const element = target.current;
+    if (!element) return;
+    if (typeof IntersectionObserver === "undefined") {
+      let active = true;
+      queueMicrotask(() => { if (active) setVisible(true); });
+      return () => { active = false; };
+    }
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), {
+      root: null, rootMargin: "0px", threshold: 0,
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [target]);
+
+  useEffect(() => {
+    if (!visibleTimerRunning(state, visible)) return;
+    const timer = window.setTimeout(() => callback.current(), ms);
+    return () => window.clearTimeout(timer);
+  }, [state, visible, ms]);
+
+  return visible;
+}
 
 type PortiaImageProps = {
   src: string | undefined;

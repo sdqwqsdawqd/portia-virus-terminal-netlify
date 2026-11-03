@@ -3,6 +3,10 @@ import { isAllowedMediaUrl } from "./media-url.ts";
 // How long a picture may stay on its skeleton before the placeholder replaces it (UI-SPEC E5: no endless spinner).
 export const MEDIA_SLOW_MS = 15_000;
 
+export function visibleTimerRunning(state: "loading" | "loaded" | "failed", visible: boolean): boolean {
+  return state === "loading" && visible;
+}
+
 export type MediaSource = { kind: "image"; src: string } | { kind: "placeholder" };
 
 // The one gate between a stored image link and an <img>: an empty or disallowed link never reaches the network.

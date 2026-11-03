@@ -5,7 +5,7 @@ import { findGuide, portiaTextKey, type GuideBlock, type GuideSection, type Port
 import { PortiaIllustration } from "@/components/portia-icons";
 import { emptyCopy, iframeLoadTimeoutMs } from "@/lib/app-state";
 import { FormattedText } from "@/components/portia-desktop-dossier";
-import { PortiaImage } from "@/components/portia-desktop-media";
+import { PortiaImage, useVisibleTimeout } from "@/components/portia-desktop-media";
 import { AppFatalPanel, AppSkeleton } from "@/components/portia-desktop-states";
 
 // D-19: one permission set for every third-party frame. Scripts and same-origin let the viewers run, popups escape the sandbox so links open as normal tabs;
@@ -22,6 +22,8 @@ export function EmbeddedDocument({ src, external, title }: { src: string; extern
   const [frameState, setFrameState] = useState<"loading" | "loaded" | "failed">("loading");
   const [frameKey, setFrameKey] = useState(0);
   const frameRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const visible = useVisibleTimeout(viewportRef, frameState, iframeLoadTimeoutMs, () => setFrameState((current) => current === "loading" ? "failed" : current));
   const step = useCallback((direction: 1 | -1) => setZoom((current) => {
     const index = zoomSteps.findIndex((value) => value >= current - 0.001);
     return zoomSteps[Math.min(zoomSteps.length - 1, Math.max(0, index + direction))];
@@ -45,13 +47,6 @@ export function EmbeddedDocument({ src, external, title }: { src: string; extern
     };
   }, []);
 
-  // A cross-origin frame never reports a load error, so no onLoad within iframeLoadTimeoutMs counts as failed; a late onLoad still wins (STAB-APP-06).
-  useEffect(() => {
-    if (frameState !== "loading") return;
-    const timer = window.setTimeout(() => setFrameState("failed"), iframeLoadTimeoutMs);
-    return () => window.clearTimeout(timer);
-  }, [frameState, frameKey]);
-
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
@@ -65,8 +60,8 @@ export function EmbeddedDocument({ src, external, title }: { src: string; extern
     return () => frame.removeEventListener("wheel", wheel);
   }, [step]);
 
-  return <div className="document-app" ref={frameRef}>
-    <div className="document-app-viewport">
+  return <div className="document-app" ref={frameRef} data-frame-state={frameState} data-frame-armed={String(visible && frameState === "loading")}>
+    <div className="document-app-viewport" ref={viewportRef}>
       <iframe key={frameKey} src={src} title={title} loading="lazy" sandbox={embedSandbox} referrerPolicy="no-referrer" onLoad={() => setFrameState("loaded")} style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})` }} />
       {frameState === "loading" && <AppSkeleton shape="document" />}
       {/* Retry remounts the frame (new key) and goes back to the skeleton; the external link stays as the way out. */}
