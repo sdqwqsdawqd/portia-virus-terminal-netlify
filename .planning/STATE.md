@@ -155,6 +155,9 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 19]: 19-06: sheet column E of the promotion roster is the availability date; rank cooldown is no longer added on top (defect 1, 4d2a3e9)
 - [Phase 19]: 19-06: owner variant 2 - accept without re-running steps 1-9 on staging; steps 2-8 ran on production (incident); recorded as deviation, does NOT close STAB-PROM-15
 
+- [Phase 19]: 2026-11-03 owner: promotion icon level strokes stay at full brightness at rest (19-09 rule 4, opacity 1); no keyframe change
+- [Phase 19]: 2026-11-03 owner: production state after the mistaken UAT steps 2–8 reviewed by owner — «всё нормально», no revert list needed
+
 ### Pending Todos
 
 - Five legacy pending todo artifacts remain under `.planning/todos/pending/`; classify them during Phase 15 without silently folding them into scope.
