@@ -20,6 +20,9 @@ export function failureFromResponse(status: number | null, timedOut: boolean): A
 export const iframeFailureCopy = { heading: "Не удалось загрузить", body: "Повторите или откройте во внешней вкладке." };
 export const iframeLoadTimeoutMs = 15_000;
 
+// Owner item 4 (STAB-APP-09): the one line allowed beside «Доступ закрыт», so a failed check reads differently from a real refusal.
+export const accessCheckFailedText = "Не удалось проверить права. Повторите позже.";
+
 // Empty states (D-08): a successful load with 0 records. No button, calm tone.
 export const emptyCopy: Record<"archive" | "employees" | "news" | "quests" | "info" | "guide" | "trash", { heading: string; body: string }> = {
   archive: { heading: "В базе пока нет записей", body: "Новые записи появятся здесь после публикации." },

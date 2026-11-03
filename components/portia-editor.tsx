@@ -30,6 +30,8 @@ import { compactRuns, expandStyles } from "@/lib/rich-text-style";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 import { ActiveFormatContext, FloatingTextFormatPanel, FormattedTextarea, findFormatField, replaceRichText, type EditorPreviewSurface, type FormatTarget } from "@/components/portia-editor-rich-text";
 import { PromotionEditor } from "@/components/portia-promotion-editor";
+import { AppDeniedPanel } from "@/components/portia-desktop-states";
+import { accessCheckFailedText } from "@/lib/app-state";
 import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
 
 type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "promo" | "access";
@@ -43,6 +45,8 @@ type Props = {
   // Ids of the registry tabs the owner left open for this editor (GET /api/access); the owner gets all of them.
   openTabs: readonly string[];
   active: boolean;
+  // STAB-APP-09: the rights check failed. The body shows «Доступ закрыт»; the draft stays in memory and nothing is saved until the check passes again (owner items 4 and 7).
+  accessFailed: boolean;
   // True while the window manager has the editor window minimized; the format panel is hidden then and comes back on restore (D-06).
   minimized: boolean;
   onDirtyChange: (dirty: boolean) => void;
@@ -347,7 +351,7 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, revision, saveState, canManageEditors, openTabs, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved, saveError }: Props) {
+export function PortiaEditor({ accessFailed, content, revision, saveState, canManageEditors, openTabs, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved, saveError }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
   // The revision the draft's baseline came from; a stale draft then gets the 409 instead of overwriting newer content (uat-03-owner-broadcast-vanishes).
   const baseRevision = useRef(revision);
@@ -796,6 +800,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   // mode "replace" is «Заменить своей» (D-09): the user's sections go over the latest server copy under its revision.
   const save = async (mode: "mine" | "replace" = "mine"): Promise<boolean> => {
     if (!dirty) return true;
+    // STAB-APP-09: no save on a stale answer about the rights; the draft stays where it is.
+    if (accessFailed) return false;
     // D-23: the server would answer 413; the savebar already shows why.
     if (saveBlocked) return false;
     if (saveState === "saving" || inflight.current) return false;
@@ -915,7 +921,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
 
   // Window-level shortcuts only while this window is the active, non-minimized one and no dialog is open (D-10, D-11).
   useEffect(() => {
-    if (!active || dialog || closeAsked) return;
+    if (!active || dialog || closeAsked || accessFailed) return;
     // Сотрудники and Доступ are saved separately; their fields keep the browser's native undo.
     const historyTab = tab !== "employees" && tab !== "promo" && tab !== "access";
     const onKeyDown = (event: KeyboardEvent) => {
@@ -939,7 +945,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("beforeinput", onBeforeInput);
     };
-  }, [active, dialog, closeAsked, tab]);
+  }, [active, dialog, closeAsked, accessFailed, tab]);
 
   // The desktop asks on × only while this is true, so a dirty employee draft counts too (D-02).
   useEffect(() => { onDirtyChange(dirty || employeeDirty); }, [dirty, employeeDirty, onDirtyChange]);
@@ -1006,6 +1012,26 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       </div>
     </header>
   );
+  // STAB-APP-09 fail-closed: whatever the last answer said, no section is shown while the rights are unchecked. The editor stays mounted, so the content draft survives until the check passes or the window closes.
+  if (accessFailed) {
+    return (
+      <div className="content-editor">
+        {header}
+        <AppDeniedPanel detail={accessCheckFailedText} />
+        {closeAsked && (
+          <ConfirmDialog
+            title="Закрыть редактор?"
+            text={`Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}. Права не проверены, сохранить сейчас нельзя.`}
+            actions={[
+              { label: "НЕ СОХРАНЯТЬ", tone: "danger", onClick: () => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },
+              { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setHandledCloseRequest(closeRequest) },
+            ]}
+            onCancel={() => setHandledCloseRequest(closeRequest)}
+          />
+        )}
+      </div>
+    );
+  }
   // D-17: the window stays; nothing of the sections is rendered.
   if (noTabs) return <div className="content-editor">{header}<div className="editor-empty">Владелец пока не открыл вам ни одного раздела</div></div>;
 

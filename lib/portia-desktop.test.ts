@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { componentFamily, lf } from "./component-source.ts";
+import { accessCheckFailedText } from "./app-state.ts";
 
 const desktopFamily = componentFamily("portia-desktop");
 const editorFamily = componentFamily("portia-editor");
@@ -112,7 +113,8 @@ test("component families start with the full main file", () => {
 test("component families import only their own seams and the known shared components", () => {
   const allowed = {
     "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion"],
-    "portia-editor": ["custom-color-picker", "portia-promotion-editor"],
+    // portia-desktop-states: the shared «Доступ закрыт» panel the editor shows when the rights check fails (STAB-APP-09).
+    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states"],
   } as const;
   for (const [main, family] of [["portia-desktop", desktopFamily], ["portia-editor", editorFamily]] as const) {
     const members = family.map((part) => part.file.replace(/\.tsx$/, ""));
@@ -856,4 +858,44 @@ test("shortcut rest (D-17): shape-rendering and will-change are constant on both
     const declared = new Set((restRule(icon, part).get("will-change") ?? "").split(",").map((item) => item.trim()).filter(Boolean));
     assert.deepEqual([...declared].sort(), composited.filter((property) => animated.has(property)).sort(), `${icon}${part}: will-change`);
   }
+});
+
+// ---- Phase 19-13 (STAB-APP-09, T-19-27): a failed rights check closes the editor ----
+const fetchAccessBody = (() => {
+  const start = source.indexOf("const fetchAccess = useCallback");
+  return source.slice(start, source.indexOf("\n  }, []);", start));
+})();
+
+test("fetchAccess fails closed: a failed or unreadable answer sets accessState failed, 401/403 mean no access (STAB-APP-09)", () => {
+  assert.match(source, /useState<"ok" \| "failed">\("ok"\)/);
+  assert.doesNotMatch(fetchAccessBody, /if \(!response\.ok\) return;/);
+  assert.match(fetchAccessBody, /response\.status === 401 \|\| response\.status === 403/);
+  assert.match(fetchAccessBody, /if \(!response\.ok && !denied\) \{ markFailed\(\); return; \}/);
+  assert.ok((fetchAccessBody.match(/setAccessState\("failed"\)/g) ?? []).length >= 1, "failure path");
+  assert.match(fetchAccessBody, /catch \{[^}]*(markFailed|setAccessState\("failed"\))/);
+  assert.match(fetchAccessBody, /setAccessState\("ok"\)/);
+  // The access poll goes on while the check is failed, so the editor can come back.
+  assert.match(source, /canEditRef\.current \|\| accessFailedRef\.current/);
+});
+
+test("an access answer sent before one already applied is dropped, so a late answer cannot bring back a revoked tab (STAB-APP-09 concurrency)", () => {
+  assert.match(source, /const accessRequestSeq = useRef\(0\)/);
+  assert.match(source, /const accessAppliedSeq = useRef\(0\)/);
+  assert.match(fetchAccessBody, /const seq = \+\+accessRequestSeq\.current/);
+  assert.ok((fetchAccessBody.match(/seq < accessAppliedSeq\.current/g) ?? []).length >= 2, "every outcome checks the order");
+  assert.ok((fetchAccessBody.match(/accessAppliedSeq\.current = seq/g) ?? []).length >= 2);
+});
+
+test("a failed check replaces the editor body by «Доступ закрыт» with the verdict-4 line and keeps the draft mounted (owner items 4 and 7)", () => {
+  assert.equal(accessCheckFailedText, "Не удалось проверить права. Повторите позже.");
+  assert.match(source, /<AppDeniedPanel detail=\{accessCheckFailedText\}/);
+  assert.match(source, /accessFailed=\{accessState === "failed"\}/);
+  assert.match(editorSource, /accessFailed/);
+  assert.match(editorSource, /<AppDeniedPanel detail=\{accessCheckFailedText\}/);
+  // The editor is not unmounted and not told "no tabs": a [] list would revert the draft instead of keeping it in memory.
+  assert.doesNotMatch(source, /openTabs=\{accessState/);
+  // A failed check takes the save and the shortcuts away.
+  const save = editorSource.slice(editorSource.indexOf("const save = async"), editorSource.indexOf("inflight.current = true;"));
+  assert.match(save, /if \(accessFailed\) return false;/);
+  assert.match(editorSource, /if \(!active \|\| dialog \|\| closeAsked \|\| accessFailed\) return;/);
 });

@@ -186,3 +186,34 @@ test("an auth network blip makes /api/access answer 503, not canEdit:false (CR-0
   const route = routeText("access");
   assert.ok(route.indexOf("isAuthRetryableFetchError(") > 0 && route.indexOf("isAuthRetryableFetchError(") < route.indexOf("getEditorAccess(supabase"));
 });
+
+test("openTabIds: tab ids are exact strings, so a case or whitespace variant neither closes a tab nor grants Повышение (STAB-APP-09 encoding)", () => {
+  assert.deepEqual(openTabIds(["Info", " info", "INFO"], []), regularTabs);
+  assert.ok(!openTabIds([], ["Promo", " promo", "promo "]).includes("promo"));
+  assert.ok(openTabIds([], ["promo"]).includes("promo"));
+});
+
+test("an editor with no grants and no closures gets every regular tab and no Повышение; an empty list refuses content and uploads (STAB-APP-09 empty)", () => {
+  const open = openTabIds([], []);
+  assert.deepEqual(open, regularTabs);
+  assert.ok(!open.includes("promo"));
+  assert.equal(contentRefusal(defaultPortiaContent, defaultPortiaContent, open), null);
+  const none = openTabIds(regularTabs, []);
+  assert.deepEqual(none, []);
+  // No tab at all: the content save is refused as a whole and the upload route answers by the same empty list.
+  assert.equal(contentRefusal(defaultPortiaContent, defaultPortiaContent, none)?.status, 403);
+  assert.match(readFileSync(new URL("../app/api/uploads/route.ts", import.meta.url), "utf8"), /access\.openTabs\.length === 0/);
+});
+
+test("a tab revoked while editing: the next access answer drops it and the same save is refused for that section only (STAB-APP-09 concurrency)", () => {
+  const before = openTabIds([], []);
+  const after = openTabIds(["info"], []);
+  assert.ok(before.includes("info") && !after.includes("info"));
+  const edited = structuredClone(defaultPortiaContent) as PortiaContent;
+  edited.infoSections[0].title = "Правка раздела, закрытого во время ввода";
+  edited.viruses[0].name = "Правка открытого раздела";
+  assert.equal(contentRefusal(defaultPortiaContent, edited, before), null);
+  const refusal = contentRefusal(defaultPortiaContent, edited, after);
+  assert.equal(refusal?.code, "section-closed");
+  assert.deepEqual(refusal?.sections, ["info"]);
+});
