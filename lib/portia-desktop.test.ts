@@ -223,6 +223,17 @@ test("every result type opens its owner and marks its record; a vanished record 
   }
 });
 
+test("on a phone the trash list grows with its rows and scrolls with the page, like the virus archive (owner UAT 19-14)", () => {
+  // iOS (Firefox/Safari on iPhone 16) could not scroll the nested overflow:auto list. The first attempt only dropped the
+  // clipping, but `flex: 1 1 370px` kept the box at 370px and rows spilled over its border; the box must not flex.
+  const phone = styles.slice(styles.indexOf("@media (max-width: 900px) {"), styles.indexOf("@media (max-width: 520px) {"));
+  assert.match(phone, /\.trash-app:not\(\.is-viewing\)\s*\{[^}]*height:\s*auto[^}]*max-height:\s*none[^}]*overflow:\s*visible/);
+  assert.match(phone, /\.trash-app:not\(\.is-viewing\) \.trash-layout\s*\{[^}]*flex:\s*0 0 auto[^}]*max-height:\s*none[^}]*overflow:\s*visible/);
+  assert.match(phone, /\.trash-app:not\(\.is-viewing\) \.trash-files\s*\{[^}]*height:\s*auto[^}]*overflow:\s*visible/);
+  // An opened file keeps its own scrolling viewer.
+  assert.match(styles, /\.trash-viewer-body\s*\{[^}]*overflow:\s*auto/);
+});
+
 test("search-hit attributes never precede key, so list rows keep the jsx runtime (owner UAT 19-14: trash key warning)", () => {
   // `{...spread} key={…}` compiles to createElement with a children array, and React then demands keys on the inner spans.
   for (const match of source.matchAll(/<(\w+)\b([^>]*?)\{\.\.\.hitAttrs\(/g)) {
