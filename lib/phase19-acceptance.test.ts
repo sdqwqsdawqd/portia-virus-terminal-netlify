@@ -261,6 +261,7 @@ function setup() {
     tmpdir: root,
     manifestFile: path.join(root, "manifest.json"),
     createClient: fake.createClient,
+    dbNow: async () => new Date(clock.ms).toUTCString(),
     harness: { now: () => clock.ms, random: (n: number) => Buffer.alloc(n, ++counter) },
     createRun: (live: Parameters<typeof createRun>[0], harness: Parameters<typeof createRun>[1]) => (run = createRun(live, harness)),
     out: (text: string) => lines.out.push(text),
@@ -293,15 +294,19 @@ describe("acceptance-seed", () => {
     assert.deepEqual(editors.map((row) => row.granted_tabs), [["promo"], []]);
 
     const manifest = ctx.manifest();
-    assert.equal(manifest.schema, "portia-acceptance-run-v1");
+    assert.equal(manifest.schema, "portia-acceptance-run-v2");
     assert.equal(manifest.runId, run.runId);
-    assert.equal(Object.keys(manifest.nicknames).length, 6);
-    for (const nick of Object.values<string>(manifest.nicknames)) assert.ok(nick.startsWith(`${run.prefix}_p-`) && nick.length <= 64);
+    assert.equal(manifest.createdAtSource, "db");
+    assert.deepEqual(manifest.preexisting, { bucketKeys: [], taskBankIds: [], qualificationBankIds: [] });
+    assert.equal(Object.keys(manifest.nicknames).length, 13);
+    for (const nick of Object.values<string>(manifest.nicknames)) assert.ok(nick.startsWith(`${run.prefix}_`) && nick.length <= 64);
 
     const roster = JSON.parse(readFileSync(manifest.rosterPath, "utf8"));
-    assert.equal(accessRosterFromRows(roster.access).length, 6);
+    assert.equal(accessRosterFromRows(roster.access).length, 13);
     const entries = promotionRosterFromRows(roster.promotion);
-    assert.deepEqual(entries.map((entry) => entry.titleId), ["academic", "trainee", "researcher", "scientist", "trainee", "academic"]);
+    assert.deepEqual(entries.map((entry) => entry.titleId), ["academic", "trainee", "researcher", "scientist", "trainee", "academic", "academic", "trainee", "researcher", "scientist", "trainee", "academic", "academic"]);
+    assert.ok(["pc-ordinary", "ph-ordinary", "probe"].every((label) => manifest.nicknames[label]));
+    assert.notEqual(manifest.nicknames["pc-ordinary"], manifest.nicknames["ph-ordinary"]);
 
     assert.deepEqual(rows("portia_promo_task_banks").map((row) => row.target_title_id), ["trainee"]);
     assert.deepEqual(rows("portia_promo_qualification_banks").map((row) => row.transition_id), ["laboratory-assistant", "assistant", "virologist-specialist"]);
@@ -351,18 +356,26 @@ describe("acceptance-seed", () => {
     assert.equal(code, 1);
     assert.equal(ctx.fake.world.clients, 0);
   });
+
+  test("missing DB Date refuses seed before any creation", async () => {
+    const ctx = setup();
+    assert.equal(await main(["acceptance-seed"], { ...ctx.deps, dbNow: async () => null }), 1);
+    assert.match(ctx.lines.err.join(""), /acceptance-db-time-unavailable/u);
+    assert.equal(ctx.fake.world.users.length, 0);
+    assert.equal(ctx.fake.rows("portia_promo_task_banks").length, 0);
+  });
 });
 
 describe("acceptance-shift", () => {
   test("cooldown moves the roster date past the cooldown of the row's title and rank changes the title", async () => {
     const ctx = await seeded();
-    const nick = ctx.manifest.nicknames["p-cooldown"];
+    const nick = ctx.manifest.nicknames["pc-cooldown"];
     const entry = () => promotionRosterFromRows(ctx.roster().promotion).find((item) => item.nickname === nick)!;
     assert.ok(Date.parse(entry().availableFrom) > ctx.clock.ms + 5 * 86_400_000, "promoted yesterday as academic: available in 6 days");
-    assert.equal(await main(["acceptance-shift", ctx.manifest.runId, "cooldown", "p-cooldown"], ctx.deps), 0, ctx.lines.err.join(""));
+    assert.equal(await main(["acceptance-shift", ctx.manifest.runId, "cooldown", "pc-cooldown"], ctx.deps), 0, ctx.lines.err.join(""));
     assert.ok(Date.parse(entry().availableFrom) < ctx.clock.ms, "the wait is over after the shift");
-    assert.equal(await main(["acceptance-shift", ctx.manifest.runId, "rank", "p-ordinary", "trainee"], ctx.deps), 0);
-    const ordinary = promotionRosterFromRows(ctx.roster().promotion).find((item) => item.nickname === ctx.manifest.nicknames["p-ordinary"])!;
+    assert.equal(await main(["acceptance-shift", ctx.manifest.runId, "rank", "pc-ordinary", "trainee"], ctx.deps), 0);
+    const ordinary = promotionRosterFromRows(ctx.roster().promotion).find((item) => item.nickname === ctx.manifest.nicknames["pc-ordinary"])!;
     assert.deepEqual([ordinary.titleId, ordinary.nextTitleId], ["trainee", "laboratory-assistant"]);
     assert.equal(ctx.fake.world.log.length, 0, "roster shifts do not touch the database");
   });
@@ -389,7 +402,7 @@ describe("acceptance-shift", () => {
 
   test("deadline and retake move only attempts of this run", async () => {
     const ctx = await seeded();
-    const prefix = ctx.manifest.nicknames["p-retake"];
+    const prefix = ctx.manifest.nicknames["pc-retake"];
     const future = "2027-01-01T00:00:00.000Z";
     ctx.fake.rows("portia_promo_qualification_requests").push(
       { id: "mine", nickname_key: prefix }, { id: "theirs", nickname_key: "__portia_live_zz9_deadbeef_p1" },
@@ -399,7 +412,7 @@ describe("acceptance-shift", () => {
       { id: "a-theirs", request_id: "theirs", deadline_at: future, retake_at: future },
     );
     assert.equal(await main(["acceptance-shift", ctx.manifest.runId, "deadline"], ctx.deps), 0);
-    assert.equal(await main(["acceptance-shift", ctx.manifest.runId, "retake", "p-retake"], ctx.deps), 0);
+    assert.equal(await main(["acceptance-shift", ctx.manifest.runId, "retake", "pc-retake"], ctx.deps), 0);
     const [mine, theirs] = ctx.fake.rows("portia_promo_attempts");
     assert.ok(mine.deadline_at < future && mine.retake_at < future);
     assert.deepEqual([theirs.deadline_at, theirs.retake_at], [future, future]);
@@ -409,9 +422,9 @@ describe("acceptance-shift", () => {
     const ctx = await seeded();
     const id = ctx.manifest.runId;
     for (const argv of [
-      ["acceptance-shift", id, "explode"], ["acceptance-shift", "not-a-run-id", "penalty"], ["acceptance-shift", id, "rank", "p-ordinary", "king"],
+      ["acceptance-shift", id, "explode"], ["acceptance-shift", "not-a-run-id", "penalty"], ["acceptance-shift", id, "rank", "pc-ordinary", "king"],
       ["acceptance-shift", id, "cooldown"], ["acceptance-shift", id, "penalty", "x"], ["acceptance-shift", id, "deadline", "Bad Label"],
-      ["acceptance-shift", id, "cooldown", "p-nobody"],
+      ["acceptance-shift", id, "cooldown", "pc-nobody"],
     ]) {
       assert.equal(await main(argv, ctx.deps), 2, argv.join(" "));
     }
@@ -424,7 +437,7 @@ describe("acceptance-residual and acceptance-teardown", () => {
   async function populated() {
     const ctx = await seeded();
     const { rows, world } = ctx.fake;
-    const mine = ctx.manifest.nicknames["p-retake"];
+    const mine = ctx.manifest.nicknames["pc-retake"];
     ctx.clock.ms += 3_600_000;
     const inside = new Date(ctx.clock.ms).toISOString();
     rows("portia_promo_qualification_requests").push({ id: "rq-mine", nickname_key: mine }, { id: "rq-theirs", nickname_key: "__portia_live_zz9_deadbeef_p1" });
@@ -483,6 +496,42 @@ describe("acceptance-residual and acceptance-teardown", () => {
     assert.ok(errors.length > 0);
     assert.deepEqual(ctx.fake.rows("portia_promo_qualification_banks"), [], "later steps still ran");
     assert.equal(existsSync(ctx.manifest.rosterPath), true, "temp files stay while anything is left");
+  });
+
+  test("preexisting bucket in the window is neither shifted nor deleted", async () => {
+    const ctx = setup();
+    const future = "2027-01-01T00:00:00.000Z";
+    ctx.fake.rows("portia_promo_attempt_buckets").push({ bucket_key: "foreign", blocked_until: future, updated_at: old });
+    ctx.fake.rows("portia_promo_task_banks").push({ id: "foreign-bank", target_title_id: "scientist", created_at: old, updated_at: old });
+    assert.equal(await main(["acceptance-seed"], ctx.deps), 0, ctx.lines.err.join(""));
+    const manifest = ctx.manifest();
+    assert.deepEqual(manifest.preexisting, { bucketKeys: ["foreign"], taskBankIds: ["foreign-bank"], qualificationBankIds: [] });
+    const inWindow = new Date(ctx.clock.ms + 60_000).toISOString();
+    ctx.fake.rows("portia_promo_attempt_buckets")[0].updated_at = inWindow;
+    ctx.fake.rows("portia_promo_task_banks")[0].created_at = inWindow;
+    ctx.fake.rows("portia_promo_attempt_buckets").push({ bucket_key: "mine", blocked_until: future, updated_at: inWindow });
+    ctx.fake.rows("portia_promo_task_banks").push({ id: "window-bank", target_title_id: "scientist", created_at: inWindow, updated_at: inWindow });
+    assert.equal(await main(["acceptance-shift", manifest.runId, "penalty"], ctx.deps), 0);
+    assert.equal(await main(["acceptance-shift", manifest.runId, "cleanup"], ctx.deps), 0);
+    assert.equal(ctx.fake.rows("portia_promo_attempt_buckets")[0].blocked_until, future);
+    assert.equal(ctx.fake.rows("portia_promo_attempt_buckets")[0].updated_at, inWindow);
+    assert.notEqual(ctx.fake.rows("portia_promo_attempt_buckets")[1].blocked_until, future);
+    assert.equal(await main(["acceptance-residual", manifest.runId], ctx.deps), 0);
+    const before = lastJson(ctx).residual;
+    assert.equal(before.buckets, 1);
+    assert.equal(before.banks, 5);
+    assert.equal(await main(["acceptance-teardown", manifest.runId], ctx.deps), 0);
+    assert.deepEqual(ctx.fake.rows("portia_promo_attempt_buckets").map((row) => row.bucket_key), ["foreign"]);
+    assert.deepEqual(ctx.fake.rows("portia_promo_task_banks").map((row) => row.id), ["foreign-bank"]);
+    assert.equal(lastJson(ctx).residual.buckets, 0);
+    assert.equal(lastJson(ctx).residual.banks, 0);
+  });
+
+  test("v1 manifest keeps legacy window behavior and reports legacyWindow", async () => {
+    const ctx = await populated();
+    nodeFs.writeFileSync(ctx.deps.manifestFile, JSON.stringify({ ...ctx.manifest, schema: "portia-acceptance-run-v1", preexisting: undefined }));
+    assert.equal(await main(["acceptance-residual", ctx.manifest.runId], ctx.deps), 0);
+    assert.equal(lastJson(ctx).legacyWindow, true);
   });
 
   test("a manifest of another run is refused", async () => {
