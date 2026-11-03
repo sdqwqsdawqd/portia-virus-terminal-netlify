@@ -5,7 +5,7 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 19
 current_phase_name: «Повышение», приложения, редактор, поиск и медиа
 status: executing
-stopped_at: Merged 19-09..19-13 (c073339); next 19-07
+stopped_at: Completed 19-07-PLAN.md (teardown, residual 0); next 19-14
 last_updated: "2026-11-03T10:57:56.593Z"
 last_activity: 2026-11-03
 last_activity_desc: Phase PORTIA-19 execution started
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-19 («Повышение», приложения, редактор, поиск и медиа) — EXECUTING
-Plan: 12 of 14
-Status: 19-06 closed under owner deviation (variant 2; STAB-PROM-15 open); 19-09..19-13 merged (c073339; npm test 1059/0 fail, tsc 0, build ok); next 19-07 teardown (needs owner go), then 19-14
-Last activity: 2026-11-03 — Plan 19-06 completed (owner variant 2)
+Plan: 13 of 14
+Status: 19-06 closed under owner deviation (variant 2; STAB-PROM-15 open); 19-09..19-13 merged (c073339; npm test 1059/0 fail, tsc 0, build ok); 19-07 teardown done on owner «удалить» (residual 0, STAB-PROM-15 still open); next 19-14
+Last activity: 2026-11-03 — Plan 19-07 completed (teardown, residual 0)
 
 Progress: [█████░░░░░] 50% of Phase 15 plans (phase gaps_found, not complete)
 
@@ -158,7 +158,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 19]: 2026-11-03 owner: promotion icon level strokes stay at full brightness at rest (19-09 rule 4, opacity 1); no keyframe change
 - [Phase 19]: 2026-11-03 owner: production state after the mistaken UAT steps 2–8 reviewed by owner — «всё нормально», no revert list needed
 
-- [Phase 19]: 2026-11-03 owner: 19-07 teardown of staging run mvz5fqgv_c40b449b NOT run for now («не надо запускать»); acceptance data stays on isolated staging, 19-07 remains open
+- [Phase 19]: 2026-11-03 owner: 19-07 teardown of staging run mvz5fqgv_c40b449b: earlier hold («не надо запускать») REVERSED by owner with «удалить»; run executed, residual 0 on all categories, 19-07 closed
 
 ### Pending Todos
 
@@ -198,7 +198,7 @@ Full decision history: `.planning/PROJECT.md`.
 ## Session Continuity
 
 Last session: 2026-11-03T10:57:56.143Z
-Stopped at: Merged 19-09..19-13 (c073339); next 19-07 teardown after owner confirmation
+Stopped at: Completed 19-07-PLAN.md (teardown, residual 0); next 19-14
 Resume file: None
 
 ## Operator Next Step
