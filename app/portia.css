@@ -505,6 +505,7 @@ html[data-motion="full"] .portia-image-skeleton { background: linear-gradient(10
 .editor-header p { margin: 0; color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font-size: 13px; line-height: 1.55; }
 .editor-save-status { color: oklch(.604 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); letter-spacing: .07em; white-space: nowrap; }
 .editor-save-status.saved { color: var(--teal); }
+.editor-save-status.dirty, .editor-save-status.partial { color: var(--warning); }
 .editor-save-status.error, .editor-save-status.conflict { color: #e07d74; white-space: normal; }
 .editor-save-chip { position: sticky; z-index: 120; bottom: 12px; align-self: flex-end; margin: auto -16px 0 0; display: flex; }
 .editor-save-chip > button { min-width: 32px; min-height: 32px; padding: 0 8px; border: 1px solid oklch(.5 calc(.04 * var(--accent-chroma)) var(--accent-hue)); border-radius: 4px; background: oklch(.208 calc(.02 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .04em; box-shadow: 0 6px 18px rgba(0,0,0,.35); cursor: pointer; }
@@ -562,7 +563,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
   .broadcast-grid > .broadcast-empty { grid-column: 1 / -1; }
 }
 .primary-control, .secondary-control, .danger-control { padding: 11px 14px; border: 1px solid var(--teal-dim); background: var(--teal-soft); color: var(--teal); font: 700 11px var(--sans); letter-spacing: .04em; cursor: pointer; }
-.primary-control:disabled, .secondary-control:disabled, .danger-control:disabled { opacity: .4; cursor: not-allowed; }
+.primary-control:disabled, .secondary-control:disabled, .danger-control:disabled, .primary-control[aria-disabled="true"], .secondary-control[aria-disabled="true"], .danger-control[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
 .secondary-control { background: transparent; color: oklch(.812 calc(.02 * var(--accent-chroma)) var(--accent-hue)); }
 .danger-control { border-color: #79453f; background: rgba(174,64,54,.08); color: #df8a81; }
 .editor-tabs { display: flex; gap: 4px; margin: 20px 0; overflow-x: auto; }

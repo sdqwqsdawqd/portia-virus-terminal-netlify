@@ -1049,7 +1049,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         }));
       } catch {}
       setSaveState("saved");
-      saveStateTimer.current = window.setTimeout(() => setSaveState("idle"), 1800);
+      saveStateTimer.current = window.setTimeout(() => setSaveState("idle"), 4000);
       return savedRevision;
     } catch (error) {
       setSaveState((current) => current === "conflict" ? current : "error");

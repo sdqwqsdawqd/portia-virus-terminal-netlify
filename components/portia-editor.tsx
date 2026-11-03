@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { changedDossierTabs, changedSections, deniedSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
+import { saveStatusText, type SaveStatus } from "@/lib/editor-save-status";
 import { closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { uploadRefusal } from "@/lib/image-upload";
@@ -752,13 +753,16 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   // Read after an awaited save, when the closure that started it is renders old.
   const latest = useRef({ closeAsked, onCloseApproved });
   useEffect(() => { latest.current = { closeAsked, onCloseApproved }; });
+  // Set synchronously when a save starts, so a second click in the same frame cannot send a second request before saveState reaches this component (idempotency).
+  const inflight = useRef(false);
 
   // Resolves true only when nothing is left unsaved: the draft was clean, or the save succeeded and nothing was typed meanwhile.
   const save = async (): Promise<boolean> => {
     if (!dirty) return true;
     // D-23: the server would answer 413; the savebar already shows why.
     if (saveBlocked) return false;
-    if (saveState === "saving") return false;
+    if (saveState === "saving" || inflight.current) return false;
+    inflight.current = true;
     // The reducer compares this very object after the request to tell whether the owner kept typing meanwhile.
     const savedFrom = draft;
     const editsBefore = editCount.current;
@@ -806,6 +810,8 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
       // Keep the local draft marked as changed so a temporary network error
       // can never discard the owner's work.
       return false;
+    } finally {
+      inflight.current = false;
     }
   };
 
@@ -881,15 +887,18 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
   if (popoverOpen && !dirty) setPopoverOpen(false);
   // A blocked, failed or conflicting save turns the chip red, so a compact chip never hides a failed save (D-10).
   const alarm = dirty && (saveBlocked || saveState === "error" || conflict);
-  const chipLabel = saveState === "saving" ? "Сохранение…"
+  const chipLabel = saveState === "saving" ? saveStatusText("saving")
     : dirty ? `Не сохранено разделов: ${shownChanged.length}${alarm ? (saveBlocked ? ", сохранение невозможно" : ", ошибка сохранения") : ""}`
-    : "Сохранено";
+    : saveStatusText("saved");
   const chipText = saveState === "saving" ? "…" : dirty ? `${alarm ? "!" : ""}${shownChanged.length}` : "✓";
-  const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
-    : conflict ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
-    : saveState === "error" ? (saveError || "ОШИБКА")
-    : saveState === "saved" && !dirty ? "СОХРАНЕНО"
-    : "";
+  // UI E3: «Сохранено» only once the server answered (saveState "saved") and nothing was typed since; the text of a failure is the server's reason beside the status.
+  const status: SaveStatus = saveState === "saving" ? "saving"
+    : conflict ? "conflict"
+    : saveState === "error" ? "error"
+    : saveState === "saved" && !dirty ? "saved"
+    : dirty ? "dirty"
+    : "clean";
+  const statusText = saveStatusText(status);
 
   const header = (
     <header className="editor-header">
@@ -1374,7 +1383,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={runBatch} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
-      <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? ` Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>
+      <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? `${status === "dirty" ? ":" : ". Не сохранено:"} ${shownChanged.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>
       {chipVisible && (
         <div
           className="editor-save-chip"
@@ -1394,14 +1403,15 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, o
             <div className="editor-save-popover" id={popoverId} role="dialog" aria-label="Несохранённые изменения">
               <strong>НЕ СОХРАНЕНО</strong>
               <ul>{shownChanged.map((id) => <li key={id} title={sectionLabels[id]}>{sectionLabels[id]}</li>)}</ul>
-              {statusText && <span className={`editor-save-status ${saveState}`}>{statusText}</span>}
+              {statusText && <span className={`editor-save-status ${status}`}>{statusText}</span>}
+              {status === "error" && saveError && <span className="editor-save-reason">{saveError}</span>}
               {oversize.length > 0 && <span className="editor-save-reason">{oversizeMessage(oversize)}</span>}
               {bodyMessage && <span className="editor-save-status error">{bodyMessage}</span>}
               {badQuest && <button type="button" className="editor-save-fix" onClick={() => { setPopoverOpen(false); revealCard(badQuest.id, "endsAt", "quests"); }}>{dateMessage}</button>}
               <div className="editor-save-actions">
                 <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
-                <button type="button" className="secondary-control" disabled={!dirty || saveState === "saving"} onClick={() => setDialog("discard")}>ОТМЕНИТЬ</button>
-                <button type="button" className="primary-control" disabled={!dirty || saveState === "saving" || saveBlocked} onClick={() => void save()}>СОХРАНИТЬ</button>
+                <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>
+                <button type="button" className="primary-control" disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>
               </div>
             </div>
           )}
@@ -1651,7 +1661,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
         setDetailsPending(Boolean(payload.detailsPending));
       }
       setState("saved");
-      savedTimer.current = window.setTimeout(() => setState("idle"), 1800);
+      savedTimer.current = window.setTimeout(() => setState("idle"), 4000);
       // A draft typed during the save stays dirty and unsaved; no automatic second save (D-04). No await from here to the return (A4).
       const typedMeanwhile = stillOpen && (Object.keys(changedFields(sentProfile, draftRef.current ?? sentProfile)).length > 0 || Object.keys(changedDetails(sentDetails, detailsRef.current)).length > 0);
       resolveQueued(!typedMeanwhile);
@@ -1809,7 +1819,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
       {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
       {detailsPending && <p className="editor-guidance" role="status">Профиль сохранён, но звание, ранг и позывной — нет: база данных ещё не обновлена.</p>}
       {selected.source === "manual" && <button type="button" className="danger-control employee-remove" disabled={state === "saving" || deleting} onClick={() => setDeleteAsked(true)}>УДАЛИТЬ СОТРУДНИКА</button>}
-      <div className="employee-editor-save"><span className={`editor-save-status ${saveStatus}`}>{saveStatus === "saving" ? "СОХРАНЕНИЕ…" : saveStatus === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
+      <div className="employee-editor-save"><span className={`editor-save-status ${saveStatus}`}>{saveStatus === "saving" ? saveStatusText("saving") : saveStatus === "saved" ? saveStatusText("saved") : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
       </> : <div className="editor-empty">Сотрудников пока нет. Добавьте человека вне таблицы кнопкой «+ ВНЕ ТАБЛИЦЫ».</div>}
     </div>
     {deleteAsked && selected?.source === "manual" && (
