@@ -105,7 +105,7 @@
 - [x] **STAB-REL-04**: Fresh isolated Supabase строится canonical migrations; role/RLS/RPC и concurrent claim/admission/CAS/cleanup tests проходят на disposable fixtures. (Доказано: `evidence/16-FINGERPRINT-CALIBRATION.md`, `16-UPGRADE-LADDER.md`, `16-LIVE-RUN.md`, receipts `receipt-roles*.json`, `receipt-concurrency*.json`, `receipt-playwright.json`, residual 0.)
 - [ ] **STAB-REL-05**: Owner принимает Promotion на PC/phone с временными данными и без destructive production testing.
 - [ ] **STAB-REL-06**: Owner после clean reload принимает window bounds, spider lifecycle/gait/palette, shortcut handoff, Vivian accent, qualification lock, search coverage и bounded editor layout на PC/phone.
-- [ ] **STAB-REL-07**: Roadmap, requirements, summaries, verification и UAT описывают один commit/state; carried risks перечислены, blocked verification не помечен complete.
+- [ ] **STAB-REL-07**: Roadmap, requirements, summaries, verification и deployed evidence описывают итоговый release commit/state; UAT фиксирует проверенный commit для каждого устройства. После исправления только phone-дефекта допускается сохранить прежний PC-вердикт с его commit, повторить полную phone UAT на новом commit и повторить технические gates на итоговом release commit; объём изменения и причина сохранения PC-вердикта документированы. Carried risks перечислены, blocked verification не помечен complete.
 - [ ] **STAB-REL-08**: Финальный review подтверждает сохранение PORTIA OS; новый SVG, motion-язык или font допускается только отдельным owner approval, PNG-паук и принятый out-of-scope сохранены.
 
 ## Out of Scope

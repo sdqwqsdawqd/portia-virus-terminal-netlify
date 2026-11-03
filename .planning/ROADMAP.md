@@ -305,7 +305,7 @@ Plans:
 
 ### Phase 20: Security, accessibility и приёмка релиза
 
-**Goal**: Подтверждённые accessibility/security/dependency риски закрыты или честно оформлены как release blockers/waivers, не ломая одобренный контент и интерфейс; один и тот же release commit проходит чистую репетицию, безопасную проверку инфраструктуры и окончательную владельческую приёмку без скрытых или переименованных пробелов.
+**Goal**: Подтверждённые accessibility/security/dependency риски закрыты или честно оформлены как release blockers/waivers, не ломая одобренный контент и интерфейс; release commit проходит чистую репетицию и безопасную проверку инфраструктуры, а окончательная владельческая приёмка PC/phone имеет точную привязку к проверенному commit каждого устройства без скрытых или переименованных пробелов.
 **Depends on**: Phase 19 (and therefore all prior v1.3 phases)
 **Requirements**: STAB-MEDIA-07, STAB-A11Y-01, STAB-A11Y-02, STAB-A11Y-03, STAB-A11Y-04, STAB-SEC-02, STAB-SEC-03, STAB-SEC-05, STAB-SEC-06, STAB-REL-01, STAB-REL-02, STAB-REL-03, STAB-REL-05, STAB-REL-06, STAB-REL-07, STAB-REL-08
 **Merged**: 2026-11-02 по решению владельца из бывших Phase 21 («Закрытие security, accessibility, CSP и зависимостей») и Phase 22 («Репетиция релиза и приёмка владельца»).
@@ -317,7 +317,7 @@ Plans:
   5. Локальная security matrix даёт проверяемый отчёт; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, а lockfile меняется отдельным проверяемым increment.
   6. Из clean checkout на release commit воспроизводимо проходят tests, typecheck, production build, full lint, production audit, Playwright, approved visuals, axe, keyboard journeys и zero-unexpected-console policy без скрытого retry-pass и без production mutations.
   7. Владелец на физическом PC/phone после clean reload принимает полный «Повышение», window bounds, qualification lock, PNG-паука, паутину, ярлыки, Вивьян, поиск и bounded editor layout с временными безопасными данными.
-  8. Roadmap, requirements, summaries, verification, UAT и deployed evidence описывают один commit/state; blocked live check остаётся blocked, а не complete.
+  8. Roadmap, requirements, summaries, verification и deployed evidence описывают итоговый release commit/state, а UAT отдельно фиксирует проверенный commit для PC и phone. Если после полной PC/phone UAT исправлен только phone-дефект, прежний PC-вердикт сохраняется с его commit, полная phone UAT повторяется на новом commit, а технические gates повторяются на итоговом release commit. Blocked live check остаётся blocked, а не complete.
   9. Финальный review подтверждает сохранение PORTIA OS и принятых out-of-scope; release notes честно перечисляют spoofable mode/device binding, остальные accepted risks и все waivers без обещания hardware attestation.
 
 **Acceptance gate**: Неполное локальное покрытие отмечается явно; незакрытый high finding блокирует релиз согласно config. Фаза не закрывается без физической owner PC/phone UAT, точного evidence ledger и отсутствия pending high-severity blocker.
