@@ -158,6 +158,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 19]: 2026-11-03 owner: promotion icon level strokes stay at full brightness at rest (19-09 rule 4, opacity 1); no keyframe change
 - [Phase 19]: 2026-11-03 owner: production state after the mistaken UAT steps 2–8 reviewed by owner — «всё нормально», no revert list needed
 
+- [Phase 19]: 2026-11-03 owner: 19-07 teardown of staging run mvz5fqgv_c40b449b NOT run for now («не надо запускать»); acceptance data stays on isolated staging, 19-07 remains open
+
 ### Pending Todos
 
 - Five legacy pending todo artifacts remain under `.planning/todos/pending/`; classify them during Phase 15 without silently folding them into scope.
