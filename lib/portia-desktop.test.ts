@@ -429,12 +429,13 @@ test("shortcut cycle: write-on lines are drawn in full before the class is remov
   const screenPerUnit = (Math.max(...widths) * 0.58) / 24;
   assert.ok(Math.max(...widths) >= 62);
   // Longest sub-path of the animated element in viewBox units (components/portia-icons.tsx): sheet `M4 9h16M4 14h16M10 9v11`, editor `v16`, info `h7`.
-  const longest: Record<string, number> = { sheet: 16, editor: 16 }; // info: its dasharray moved to the rest rule (D-17 tracer test below)
+  const longest: Record<string, number> = { sheet: 16, editor: 16, info: 7 };
   for (const [icon, units] of Object.entries(longest)) {
-    const dashed = iconCycles(icon).filter((cycle) => /stroke-dasharray:\s*\d+/.test(cycle.line));
+    // D-17: the dasharray lives in the rest rule (outside the animating selector), so it is the same before, during and after the cycle.
+    const dashed = cycleParts(icon).filter(({ part }) => /^\d+$/.test(restRule(icon, part).get("stroke-dasharray") ?? ""));
     assert.ok(dashed.length > 0, `${icon}: no dashed write-on rule`);
-    for (const cycle of dashed) {
-      const length = Number(/stroke-dasharray:\s*(\d+)/.exec(cycle.line)![1]);
+    for (const { cycle, part } of dashed) {
+      const length = Number(restRule(icon, part).get("stroke-dasharray"));
       assert.ok(length >= units && length >= units * screenPerUnit, `${icon}: dasharray ${length} does not cover ${units} units / ${(units * screenPerUnit).toFixed(1)}px`);
       const start = keyframeFrames(cycle.name).find((frame) => frame.at === 0);
       assert.match(start?.declarations ?? "", new RegExp(`stroke-dashoffset:\\s*${length}\\b`), `${cycle.name}: starts fully undrawn`);
@@ -674,6 +675,55 @@ test("shortcut rest (D-17, tracer): «Информация» rests on its last k
   assertIconRest("info");
   assert.equal(restRule("info", " .icon-info-fold").get("transform-origin"), "right top");
   for (const index of [1, 2, 3]) assert.equal(restRule("info", ` .icon-info-lines > :nth-child(${index})`).get("stroke-dasharray"), "16");
-  // Longest info line is `h7` = 7 units (measured with getTotalLength, 19-ICON-REST.md); the rest dasharray covers it.
-  for (const index of [1, 2, 3]) assert.ok(Number(restRule("info", ` .icon-info-lines > :nth-child(${index})`).get("stroke-dasharray")) >= 7);
+});
+
+test("shortcut rest (D-17): all 12 icons rest on their last keyframe, outside the animating selector", () => {
+  for (const icon of shortcutIcons) assertIconRest(icon);
+  // The «Повышение» levels carry opacity=".65" in the artwork, but the cycle holds opacity 1 (animation-fill both): the rest must be that last frame.
+  for (const part of [" .icon-promotion-level-low", " .icon-promotion-level-high"]) assert.equal(restRule("promotion", part).get("opacity"), "1");
+});
+
+test("shortcut rest (D-17): the animating selector carries nothing but `animation`, and no line outside a cycle is gated by is-icon-animating", () => {
+  const animating = styles.split("\n").filter((line) => line.includes("is-icon-animating") && line.includes("{") && !line.startsWith("/*") && !line.includes("@"));
+  assert.ok(animating.length >= 30);
+  for (const line of animating) {
+    const { declarations } = ruleParts(line);
+    if (!line.includes("[data-icon=")) continue; // hover bookkeeping rules of the shortcut itself are not icon parts
+    assert.deepEqual([...declarations.keys()], ["animation"], line.slice(0, 160));
+  }
+});
+
+test("shortcut rest (D-17): parts with their own origin keep it constant, in the same rule as their transform-box", () => {
+  const origins: Array<[string, string, string, string]> = [
+    ["virus", " .icon-virus-scan", "view-box", "12px 12px"],
+    ["virus", " .icon-virus-spikes", "view-box", "12px 12px"],
+    ["virus", " .icon-virus-tips", "view-box", "12px 12px"],
+    ["broadcasts", " .icon-broadcast-signal", "view-box", "12px 11px"],
+  ];
+  for (const [icon, part, box, origin] of origins) {
+    const rest = restRule(icon, part);
+    assert.equal(rest.get("transform-box"), box, `${icon}${part}`);
+    assert.equal(rest.get("transform-origin"), origin, `${icon}${part}`);
+  }
+  // fill-box parts only override the origin: the box itself comes from the constant `svg > *` rule.
+  assert.equal(restRule("info", " .icon-info-fold").get("transform-origin"), "right top");
+  assert.equal(restRule("guide", " .icon-guide-front").get("transform-origin"), "center bottom");
+  assert.equal(restRule("trash", " svg > :nth-child(1)").get("transform-origin"), "left bottom");
+  // No animating rule keeps an origin or a box any more.
+  assert.doesNotMatch(styles.split("\n").filter((line) => line.startsWith(cyclePrefix)).join("\n"), /transform-(origin|box)/);
+});
+
+test("shortcut rest (D-17): shape-rendering and will-change are constant on both hosts and never toggle with the class", () => {
+  assert.match(styles, /\.desktop-icon-symbol svg[^{]*\{[^}]*shape-rendering:\s*geometricPrecision/);
+  assert.match(/\.start-panel-icon svg\s*\{([^}]*)\}/.exec(styles)?.[1] ?? "", /shape-rendering:\s*geometricPrecision/);
+  for (const line of styles.split("\n")) {
+    if (line.includes("is-icon-animating") && line.includes("{")) assert.doesNotMatch(line, /will-change/, "will-change must not follow the animating class");
+  }
+  // will-change names exactly the composited properties each part animates (translate/rotate/scale/opacity), so rest and last frame share one raster path.
+  const composited = ["translate", "rotate", "scale", "opacity"];
+  for (const icon of shortcutIcons) for (const { cycle, part } of cycleParts(icon)) {
+    const animated = new Set([...keyframesBody(cycle.name).matchAll(/(?<![\w-])(translate|rotate|scale|opacity)\s*:/g)].map((match) => match[1]));
+    const declared = new Set((restRule(icon, part).get("will-change") ?? "").split(",").map((item) => item.trim()).filter(Boolean));
+    assert.deepEqual([...declared].sort(), composited.filter((property) => animated.has(property)).sort(), `${icon}${part}: will-change`);
+  }
 });

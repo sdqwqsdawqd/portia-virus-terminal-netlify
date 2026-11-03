@@ -1115,7 +1115,7 @@ html[data-motion="full"] .boot-lines p { clip-path: inset(0 100% 0 0); animation
 .start-panel > button:hover, .start-panel-link:hover { background: var(--teal-soft); border-color: rgba(var(--desktop-glow), .22); }
 .start-panel > button:focus-visible, .start-panel-link:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .start-panel-icon { flex: 0 0 auto; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid oklch(.383 calc(.037 * var(--accent-chroma)) var(--accent-hue)); border-radius: 10px; background: oklch(.199 calc(.021 * var(--accent-chroma)) var(--accent-hue)); color: var(--teal); }
-.start-panel-icon svg { width: 19px; height: 19px; }
+.start-panel-icon svg { width: 19px; height: 19px; shape-rendering: geometricPrecision; }
 .start-panel-icon[data-icon="virus"] svg { width: 16px; height: 16px; }
 .start-panel-link-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .start-panel-link-copy strong { font: 600 13px var(--sans); }
@@ -1570,26 +1570,54 @@ html[data-motion="full"] .taskbar-app.is-bouncing .mini-app-icon { animation: ta
    so removing is-icon-animating changes nothing. will-change is constant (never toggled with the class): the cycle composites a part while it animates, and a part that is
    rasterised differently at rest than on its last frame jumps when the class goes. Keyframes, timings and artwork are untouched. */
 :is(.desktop-icon-symbol, .start-panel-icon) svg > * { transform-box: fill-box; transform-origin: center; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="search"] svg { translate: 0 0; will-change: translate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="search"] svg > :nth-child(3) { rotate: 0deg; scale: 1; will-change: rotate, scale; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="virus"] .icon-virus-scan { transform-box: view-box; transform-origin: 12px 12px; opacity: 0; will-change: rotate, scale, opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="virus"] .icon-virus-core { scale: 1; will-change: scale; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="virus"] .icon-virus-spikes { transform-box: view-box; transform-origin: 12px 12px; rotate: 0deg; scale: 1; will-change: rotate, scale; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="virus"] .icon-virus-tips { transform-box: view-box; transform-origin: 12px 12px; scale: 1; opacity: 1; will-change: scale, opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="virus"] .icon-virus-detail { translate: 0 0; opacity: 1; will-change: translate, opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="employees"] svg > :nth-child(-n+2) { translate: 0 0; will-change: translate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="employees"] svg > :nth-child(n+3) { translate: 0 0; will-change: translate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-beacon { scale: 1; will-change: scale; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-signal { transform-box: view-box; transform-origin: 12px 11px; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-signal-inner { scale: 1; opacity: 1; will-change: scale, opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-signal-outer { scale: 1; opacity: 1; will-change: scale, opacity; }
 :is(.desktop-icon-symbol, .start-panel-icon)[data-icon="info"] .icon-info-page { translate: 0 0; will-change: translate; }
 :is(.desktop-icon-symbol, .start-panel-icon)[data-icon="info"] .icon-info-fold { transform-origin: right top; scale: 1; translate: 0 0; will-change: translate, scale; }
 :is(.desktop-icon-symbol, .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(1) { stroke-dasharray: 16; stroke-dashoffset: 0; opacity: 1; will-change: opacity; }
 :is(.desktop-icon-symbol, .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(2) { stroke-dasharray: 16; stroke-dashoffset: 0; opacity: 1; will-change: opacity; }
 :is(.desktop-icon-symbol, .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(3) { stroke-dasharray: 16; stroke-dashoffset: 0; opacity: 1; will-change: opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="guide"] .icon-guide-back { translate: 0 0; will-change: translate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="guide"] .icon-guide-front { transform-origin: center bottom; translate: 0 0; scale: 1; will-change: translate, scale; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="settings"] .icon-settings-rails { opacity: 1; will-change: opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="settings"] .icon-settings-knob-a { translate: 0 0; will-change: translate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="settings"] .icon-settings-knob-b { translate: 0 0; will-change: translate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="settings"] .icon-settings-knob-c { translate: 0 0; will-change: translate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="promotion"] .icon-promotion-base { scale: 1; opacity: 1; will-change: scale, opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="promotion"] .icon-promotion-level-low { translate: 0 0; opacity: 1; will-change: translate, opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="promotion"] .icon-promotion-level-high { translate: 0 0; opacity: 1; will-change: translate, opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="promotion"] .icon-promotion-arrow { translate: 0 0; opacity: 1; will-change: translate, opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="charter"] svg > :nth-child(2) { translate: 0 0; will-change: translate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="charter"] svg > :nth-child(4) { scale: 1; opacity: 1; will-change: scale, opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="sheet"] svg > :nth-child(2) { stroke-dasharray: 32; stroke-dashoffset: 0; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="trash"] svg > :nth-child(1) { transform-origin: left bottom; translate: 0 0; rotate: 0deg; will-change: translate, rotate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="editor"] svg > :nth-child(2) { translate: 0 0; will-change: translate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="editor"] svg > :nth-child(1) { stroke-dasharray: 32; stroke-dashoffset: 0; }
 /* Search: the lens sweeps the field, the crosshair turns into focus. */
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="search"] svg { animation: icon-scan 560ms var(--ease-out); }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="search"] svg > :nth-child(3) { animation: icon-focus 560ms var(--ease-out); }
 /* Virus archive: a contained diagnostic sweep reads the specimen, then every vector returns exactly to rest. */
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="virus"] .icon-virus-scan { transform-box: view-box; transform-origin: 12px 12px; animation: icon-virus-scan 560ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="virus"] .icon-virus-scan { animation: icon-virus-scan 560ms var(--ease-out) both; }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="virus"] .icon-virus-core { animation: icon-virus-core 560ms var(--ease-out) both; }
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="virus"] .icon-virus-spikes { transform-box: view-box; transform-origin: 12px 12px; animation: icon-virus-spikes 560ms 30ms var(--ease-out) both; }
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="virus"] .icon-virus-tips { transform-box: view-box; transform-origin: 12px 12px; animation: icon-virus-tips 560ms 65ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="virus"] .icon-virus-spikes { animation: icon-virus-spikes 560ms 30ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="virus"] .icon-virus-tips { animation: icon-virus-tips 560ms 65ms var(--ease-out) both; }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="virus"] .icon-virus-detail { animation: icon-virus-detail 560ms 45ms var(--ease-out) both; }
 /* Employees: the two people hop one after the other. */
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="employees"] svg > :nth-child(-n+2) { animation: icon-hop 560ms var(--ease-out); }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="employees"] svg > :nth-child(n+3) { animation: icon-hop 560ms 90ms var(--ease-out) backwards; }
 /* Broadcasts: one transmission travels from the beacon through both signal rings. */
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-beacon { animation: icon-broadcast-beacon 560ms var(--ease-out) both; }
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-signal { transform-box: view-box; transform-origin: 12px 11px; }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-signal-inner { animation: icon-broadcast-wave 560ms 45ms var(--ease-out) both; }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="broadcasts"] .icon-broadcast-signal-outer { animation: icon-broadcast-wave 560ms 90ms var(--ease-out) both; }
 /* Information: the sheet settles, its corner flexes, then the rows resolve in sequence. */
@@ -1600,7 +1628,7 @@ html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="info"] .icon-info-lines > :nth-child(3) { animation: icon-info-line 560ms 90ms var(--ease-out) both; }
 /* Guide: the folder opens — its back rises while the front flap tips down and returns. */
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="guide"] .icon-guide-back { animation: icon-guide-back 560ms var(--ease-out) both; }
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="guide"] .icon-guide-front { transform-origin: center bottom; animation: icon-guide-front 560ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="guide"] .icon-guide-front { animation: icon-guide-front 560ms var(--ease-out) both; }
 /* Promotion: the foundation locks in, both levels rise, then the arrow clears them decisively. */
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="promotion"] .icon-promotion-base { animation: icon-promotion-base 560ms var(--ease-out) both; }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="promotion"] .icon-promotion-level-low { animation: icon-promotion-level 560ms 30ms var(--ease-out) both; }
@@ -1610,12 +1638,12 @@ html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="charter"] svg > :nth-child(2) { animation: icon-lift 560ms var(--ease-out); }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="charter"] svg > :nth-child(4) { animation: icon-stamp 560ms 90ms var(--ease-out) backwards; }
 /* Sheet: the grid draws itself in. */
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="sheet"] svg > :nth-child(2) { stroke-dasharray: 32; animation: icon-write-32 560ms var(--ease-out); }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="sheet"] svg > :nth-child(2) { animation: icon-write-32 560ms var(--ease-out); }
 /* Trash: the lid tips open and drops back. */
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="trash"] svg > :nth-child(1) { transform-origin: left bottom; animation: icon-lid 560ms var(--ease-out); }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="trash"] svg > :nth-child(1) { animation: icon-lid 560ms var(--ease-out); }
 /* Editor: the pen scribbles while the lines write in. */
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="editor"] svg > :nth-child(2) { animation: icon-scribble 560ms var(--ease-out); }
-html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="editor"] svg > :nth-child(1) { stroke-dasharray: 32; animation: icon-write-32 560ms var(--ease-out); }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="editor"] svg > :nth-child(1) { animation: icon-write-32 560ms var(--ease-out); }
 @keyframes icon-scan { 30% { translate: -1.6px -1px; } 65% { animation-timing-function: var(--ease-in); translate: 1.6px .6px; } 85% { translate: -.2px -.1px; } 100% { translate: 0 0; } }
 @keyframes icon-focus { 50% { animation-timing-function: var(--ease-in); rotate: 45deg; scale: .7; } 85% { rotate: -4deg; scale: 1.03; } 100% { rotate: 0deg; scale: 1; } }
 @keyframes icon-virus-scan { 0% { opacity: 0; rotate: -18deg; scale: .82; } 38% { animation-timing-function: var(--ease-in); opacity: .78; } 72% { opacity: .28; } 100% { opacity: 0; rotate: 54deg; scale: 1.12; } }
