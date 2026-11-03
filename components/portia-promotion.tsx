@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { parseRetakeLedger, updateRetakeLedger, type RetakeLedger, type RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { promotionAvailabilityText } from "@/lib/portia-promotion";
 import { QUALIFICATION_HEARTBEAT_MS } from "@/lib/portia-qualification";
+import { statusPollOutcome } from "@/lib/portia-promotion-poll";
 
 type RequestKind = "ordinary" | "qualification";
 type SubmitPhase = "idle" | "submitting" | "error" | "success";
@@ -325,10 +326,13 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
       const response = await fetch(value ? `/api/promotion/status?nickname=${encodeURIComponent(value)}` : "/api/promotion/status", { cache: "no-store" });
       const body: unknown = await response.json();
       if (!response.ok) {
-        if (response.status === 503 && status) { setStale(true); setError(""); return; }
-        if (restore) return;
-        setStatus(null);
-        setError(publicError(body, "Не удалось проверить ник. Попробуйте позже."));
+        const outcome = statusPollOutcome({ httpStatus: response.status, hasStatus: Boolean(status), explicit, restore });
+        if (outcome === "keep-stale") { setStale(true); setError(""); return; }
+        if (outcome === "ignore") return;
+        if (outcome === "reset") {
+          setStatus(null);
+          setError(publicError(body, "Не удалось проверить ник. Попробуйте позже."));
+        }
         return;
       }
       const next = body as PromotionStatus;
