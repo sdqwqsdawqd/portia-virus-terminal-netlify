@@ -1,6 +1,7 @@
 // Global search index (D-13): one pure function that builds every searchable item from an explicit allowlist of fields per source.
 // A field that is not named here can never be found, whatever the source object carries (drafts, editor notes, reviewer fields, answer keys).
 import type { Broadcast, InfoBlock, GuideBlock, RecycleFile } from "./portia-content.ts";
+import { syncTimeText } from "./app-state.ts";
 
 export type SearchItemType = "virus" | "employee" | "info" | "guide" | "broadcast" | "file" | "app";
 
@@ -119,6 +120,14 @@ export function matchSearch(items: readonly SearchItem[], query: string, limit =
   });
 }
 
+// Partial: the roster failed. With a last-good copy the results still list employees (from that copy); without one they list none, and the line says so.
+export function rosterDegradedText(sync: { lastGoodAt: string | null; failure: unknown }, now: Date): string | null {
+  if (!sync.failure) return null;
+  const when = sync.lastGoodAt ? syncTimeText(sync.lastGoodAt, now) : null;
+  if (!sync.lastGoodAt) return "Сотрудники сейчас недоступны";
+  return when ? `Сотрудники: показаны сохранённые данные на ${when}` : "Сотрудники: показаны сохранённые данные";
+}
+
 export type SearchKeyAction = "focus-input" | "next" | "prev" | "open" | "clear" | "close";
 export type SearchKeyContext = {
   key: string;
@@ -136,6 +145,13 @@ export type SearchKeyContext = {
   /** "enter-only": nothing but Enter is taken over (a phone has no hardware keyboard to serve). */
   scope?: "full" | "enter-only";
 };
+
+type KeyEventLike = { key: string; code: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean };
+
+// Copies the key and its modifiers from a keyboard event, so the component never reads the modifiers itself.
+export function searchKeyContext(event: KeyEventLike, rest: Omit<SearchKeyContext, "key" | "code" | "ctrlKey" | "metaKey" | "altKey">): SearchKeyContext {
+  return { key: event.key, code: event.code, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, ...rest };
+}
 
 // Owner verdict 19-OWNER-DECISIONS #3 (2026-11-02): Ctrl/Cmd+K, arrows between field and results, Enter opens, Escape clears then closes. Tab keeps its native order.
 export function searchKeyAction(ctx: SearchKeyContext): SearchKeyAction | null {

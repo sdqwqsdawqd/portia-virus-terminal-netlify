@@ -23,7 +23,7 @@ import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-desktop-documents";
 import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { PortiaImage } from "@/components/portia-desktop-media";
-import { broadcastType, buildSearchIndex, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, type SearchItem } from "@/lib/search-index";
+import { broadcastType, buildSearchIndex, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, rosterDegradedText, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -227,6 +227,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [searchFocusTick, setSearchFocusTick] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchResultsRef = useRef<HTMLDivElement>(null);
+  // A phone takes over Enter alone (owner verdict 3 gives the keyboard model to the desktop); SSR and the first paint assume the desktop.
+  const [searchKeyScope, setSearchKeyScope] = useState<"full" | "enter-only">("full");
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [selectedInfoId, setSelectedInfoId] = useState(initialContent.infoSections[0]?.id ?? "");
   const [guideCardId, setGuideCardId] = useState("");
@@ -1187,6 +1189,39 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     assistantTipTimer.current = window.setTimeout(() => setAssistantTipVisible(false), 5200);
   };
 
+  // Ctrl/Cmd+K opens the search and focuses its field; an open search only takes the focus (owner verdict 3). The latest closure is kept in a ref so the listener is bound once.
+  const focusSearchRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    focusSearchRef.current = () => {
+      const visible = windows.search.open && !windows.search.minimized && !windows.search.exiting;
+      if (visible) focusApp("search");
+      else openApp("search");
+      setSearchFocusTick((tick) => tick + 1);
+    };
+  });
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || qualificationLockedRef.current) return;
+      if (window.matchMedia("(max-width: 900px)").matches) return;
+      const action = searchKeyAction(searchKeyContext(event, { inInput: false, query: "", index: -1, count: 0 }));
+      if (action !== "focus-input") return;
+      event.preventDefault();
+      focusSearchRef.current();
+    };
+    window.document.addEventListener("keydown", onKeyDown);
+    return () => window.document.removeEventListener("keydown", onKeyDown);
+  }, []);
+  useEffect(() => {
+    if (searchFocusTick) searchInputRef.current?.focus();
+  }, [searchFocusTick]);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 900px)");
+    const update = () => setSearchKeyScope(query.matches ? "enter-only" : "full");
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
   // D-13: the index is rebuilt from the content on screen by one pure allowlist function, so a record the next poll removes leaves the results with it.
   // A roster that failed with no last-good copy stays out of the index; the degraded line says so.
   const rosterOutOfSearch = employeesSync.failure !== null && employeesSync.lastGoodAt === null;
@@ -1306,6 +1341,52 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     }
   };
 
+  // A vanished record leaves its row for a moment as «Запись недоступна», in the place it had; the next input, click or a few seconds remove it.
+  const searchRows = useMemo(() => {
+    const rows = searchResults.map((item) => ({ item, unavailable: false }));
+    for (const { item, position } of unavailableResults) {
+      if (!searchResults.some((result) => result.key === item.key)) rows.splice(Math.min(position, rows.length), 0, { item, unavailable: true });
+    }
+    return rows;
+  }, [searchResults, unavailableResults]);
+  useEffect(() => {
+    if (!unavailableResults.length) return;
+    const timer = window.setTimeout(() => setUnavailableResults([]), 3200);
+    return () => window.clearTimeout(timer);
+  }, [unavailableResults]);
+
+  const rosterNote = rosterDegradedText(employeesSync, new Date());
+  const searchRoving = searchKeyScope === "full";
+  const searchActiveIndex = Math.min(searchFocusIndex, Math.max(searchRows.length - 1, 0));
+  const focusSearchResult = (index: number) => {
+    const rows = searchResultsRef.current?.querySelectorAll<HTMLElement>(".global-result[data-result-index]");
+    if (!rows?.length) return;
+    rows[Math.min(Math.max(index, 0), rows.length - 1)]?.focus();
+  };
+
+  // One handler for the whole search window: the pure searchKeyAction decides, this only carries it out (owner verdict 3).
+  const onSearchKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    const target = event.target as HTMLElement;
+    const resultElement = target.closest<HTMLElement>(".global-result[data-result-index]");
+    const inInput = target === searchInputRef.current;
+    if (!inInput && !resultElement && event.key !== "Escape") return;
+    const index = resultElement ? Number(resultElement.dataset.resultIndex) : -1;
+    const action = searchKeyAction(searchKeyContext(event, { inInput: !resultElement, query: globalQuery, index, count: searchRows.length, scope: searchKeyScope }));
+    if (!action) return;
+    event.preventDefault();
+    if (action === "focus-input") searchInputRef.current?.focus();
+    else if (action === "next") focusSearchResult(resultElement ? index + 1 : 0);
+    else if (action === "prev") focusSearchResult(resultElement ? index - 1 : searchRows.length - 1);
+    else if (action === "clear") { setGlobalQuery(""); setUnavailableResults([]); setSearchFocusIndex(0); searchInputRef.current?.focus(); }
+    else if (action === "close") closeApp("search");
+    else {
+      const at = resultElement ? index : 0;
+      const row = searchRows[at];
+      if (row && !row.unavailable) openSearchResult(row.item, at);
+    }
+  };
+
   const idlePhrases = content.assistantIdlePhrases?.length
     ? content.assistantIdlePhrases
     : ["Вы давно ничего не делали. Я всё ещё здесь."];
@@ -1403,7 +1484,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск сотрудника</span><input type="search" value={employeeQuery} onChange={(event) => setEmployeeQuery(event.target.value)} placeholder="Ник, позывной, звание" /></label>
                 <div className="personnel-list">
                   {employeesView === "loading" ? <AppSkeleton shape="employees" /> : <>
-                  {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={employee.id === selectedEmployee?.id ? "active" : ""} onClick={() => setSelectedEmployeeId(employee.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+                  {filteredEmployees.map((employee, index) => <button key={employee.id} type="button" className={`${employee.id === selectedEmployee?.id ? "active" : ""}${hitClass("employee", employee.id)}`} {...hitAttrs("employee", employee.id)} onClick={() => setSelectedEmployeeId(employee.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
                   {!filteredEmployees.length && employees.length > 0 && <div className="list-empty">Сотрудники не найдены</div>}
                   </>}
                 </div>
@@ -1428,20 +1509,25 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           </AppWindow>
 
           <AppWindow app="search" state={windows.search} active={activeApp === "search"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="global-search-window" meta="ГЛОБАЛЬНЫЙ ПОИСК">
-            <div className="global-search-app">
+            <div className="global-search-app" onKeyDown={onSearchKeyDown}>
               <header className="global-search-header"><h1>Глобальный поиск</h1><p>Поиск по приложениям, сотрудникам и материалам PORTIA.</p></header>
-              <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input value={globalQuery} onChange={(event) => setGlobalQuery(event.target.value)} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
-              <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{content.searchRecommendations.map((item, index) => <button key={`${item}-${index}`} type="button" onClick={() => setGlobalQuery(item)}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>)}</div></div>
-              <div className="global-search-summary"><span>{globalQuery ? `Результаты для «${globalQuery}»` : "Доступные записи"}</span><strong>{String(searchResults.length).padStart(2, "0")}</strong></div>
-              <div className="global-search-results">
-                {!contentReady ? <LoadingState label="Загрузка архива…" /> : <>
-                {searchResults.map((result) => (
-                  <button key={result.key} type="button" className="global-result" onClick={() => openSearchResult(result)}>
+              <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input ref={searchInputRef} value={globalQuery} onChange={(event) => { setGlobalQuery(event.target.value); setUnavailableResults([]); setSearchFocusIndex(0); }} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
+              <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{content.searchRecommendations.map((item, index) => <button key={`${item}-${index}`} type="button" onClick={() => { setGlobalQuery(item); setUnavailableResults([]); setSearchFocusIndex(0); }}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>)}</div></div>
+              <div className="global-search-summary"><span>{!contentReady ? "Ищем…" : globalQuery ? `Результаты для «${globalQuery}»` : "Доступные записи"}</span>{contentReady && <strong>{String(searchResults.length).padStart(2, "0")}</strong>}</div>
+              {contentReady && rosterNote && <p className="global-search-degraded" role="status">{rosterNote}</p>}
+              <div className="global-search-results" ref={searchResultsRef} aria-busy={!contentReady}>
+                {!contentReady ? <>
+                <span className="sr-only" role="status">Ищем…</span>
+                {[0, 1, 2].map((slot) => <div key={slot} className="global-result global-result-skeleton skeleton-block" aria-hidden="true" />)}
+                </> : <>
+                {searchRows.map(({ item: result, unavailable }, index) => (
+                  <button key={result.key} type="button" className={`global-result${unavailable ? " is-unavailable" : ""}`} data-result-index={index} aria-disabled={unavailable || undefined} tabIndex={searchRoving ? (index === searchActiveIndex ? 0 : -1) : undefined} onFocus={() => setSearchFocusIndex(index)} onClick={() => { if (!unavailable) openSearchResult(result, index); }}>
                     <span className="global-result-mark">{result.type === "virus" ? "VIS" : result.type === "employee" ? "EMP" : result.type === "info" ? "INF" : result.type === "guide" ? "REF" : result.type === "file" ? "FILE" : result.type === "app" ? "APP" : "MSG"}</span>
                     <span className="global-result-main"><span className="global-result-heading"><strong>{result.title || "БЕЗ НАЗВАНИЯ"}</strong><small>{result.meta}</small></span><span className="global-result-preview">{result.body}</span></span>
+                    {unavailable && <span className="global-result-status" role="status">Запись недоступна</span>}
                   </button>
                 ))}
-                {!searchResults.length && <div className="global-search-empty empty-state"><PortiaIllustration name="microscope" /><strong>Совпадений нет</strong><span>Измените запрос или выберите рекомендацию.</span></div>}
+                {!searchRows.length && <div className="global-search-empty empty-state"><PortiaIllustration name="microscope" /><strong>Совпадений нет</strong><span>Измените запрос или выберите рекомендацию.</span></div>}
                 </>}
               </div>
             </div>
@@ -1456,8 +1542,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                 const open = section.id === selectedInfo?.id;
                 return (
                   <div key={section.id}>
-                    <button type="button" className={`${open && !selectedSubsection ? "active" : ""}${section.subsections.length ? " has-subsections" : ""}`} aria-expanded={section.subsections.length ? open : undefined} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span>{section.subsections.length ? <em className="info-sub-marker" aria-label={`Подразделов: ${section.subsections.length}`}>{open ? "▾" : "▸"} {section.subsections.length}</em> : null}</button>
-                    {open && section.subsections.length ? <div className="info-subsections">{section.subsections.map((sub, subIndex) => <button key={sub.id} type="button" className={sub.id === selectedSubsection?.id ? "active" : ""} title={sub.title || "БЕЗ НАЗВАНИЯ"} onClick={() => setSelectedInfoId(sub.id)}><small>{String(index + 1).padStart(2, "0")}.{subIndex + 1}</small><span>{sub.title || "БЕЗ НАЗВАНИЯ"}</span></button>)}</div> : null}
+                    <button type="button" className={`${open && !selectedSubsection ? "active" : ""}${section.subsections.length ? " has-subsections" : ""}${hitClass("info", section.id)}`} {...hitAttrs("info", section.id)} aria-expanded={section.subsections.length ? open : undefined} onClick={() => setSelectedInfoId(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span>{section.subsections.length ? <em className="info-sub-marker" aria-label={`Подразделов: ${section.subsections.length}`}>{open ? "▾" : "▸"} {section.subsections.length}</em> : null}</button>
+                    {open && section.subsections.length ? <div className="info-subsections">{section.subsections.map((sub, subIndex) => <button key={sub.id} type="button" className={`${sub.id === selectedSubsection?.id ? "active" : ""}${hitClass("info", sub.id)}`} {...hitAttrs("info", sub.id)} title={sub.title || "БЕЗ НАЗВАНИЯ"} onClick={() => setSelectedInfoId(sub.id)}><small>{String(index + 1).padStart(2, "0")}.{subIndex + 1}</small><span>{sub.title || "БЕЗ НАЗВАНИЯ"}</span></button>)}</div> : null}
                   </div>
                 );
               })}</aside>
@@ -1480,7 +1566,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <AppWindow app="guide" state={windows.guide} active={activeApp === "guide"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window guide-window" meta="СПРАВОЧНИК">
             {guideView === "loading" ? <div className="app-state-body"><AppSkeleton shape="guide" /></div>
               : guideView === "fatal" ? <div className="app-state-body">{contentFatal("microscope")}</div>
-              : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={setGuideCardId} banner={guideView === "stale" ? contentStaleBanner : null} />}
+              : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={setGuideCardId} hitId={searchHit?.type === "guide" ? searchHit.id : ""} banner={guideView === "stale" ? contentStaleBanner : null} />}
           </AppWindow>
 
           <AppWindow app="promotion" state={windows.promotion} active={activeApp === "promotion"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window promotion-window" meta="Повышение" locked={qualificationLocked}>
@@ -1501,7 +1587,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   // D-19: a quest or task never shows ВАЖНО, whatever the stored data says.
                   const important = item.type === "news" && item.important;
                   const badge = state === "active" ? "АКТИВЕН" : state === "upcoming" ? `СКОРО · с ${formatQuestDay(item.startsAt).slice(0, 5)}` : "ЗАВЕРШЁН";
-                  return <article className={`broadcast-card ${item.type}${important ? " important" : ""}${state ? ` state-${state}` : ""}`} key={item.id}><span>{broadcastType(item.type)}{important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
+                  return <article className={`broadcast-card ${item.type}${important ? " important" : ""}${state ? ` state-${state}` : ""}${hitClass("broadcast", item.id)}`} {...hitAttrs("broadcast", item.id)} key={item.id}><span>{broadcastType(item.type)}{important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
                 })}
                 {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>{emptyCopy[broadcastTab].heading}</strong><span>{emptyCopy[broadcastTab].body}</span></div>}
               </div></>}
@@ -1521,10 +1607,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   {trashOrder.map((key) => {
                     if (key.startsWith("virus:")) {
                       const virus = recycledViruses.find((item) => item.id === key.slice(6));
-                      return virus ? <button className={`trash-file-row${activeTrashFileId === `virus:${virus.id}` ? " active" : ""}`} type="button" key={key} onClick={() => openTrashVirus(virus)}><span className="trash-file-name"><i className="trash-file-icon virus">V</i><strong>{virus.name}</strong></span><span>C:\PORTIA\VIRUS_ARCHIVE</span><span>Вирус в корзине</span></button> : null;
+                      return virus ? <button className={`trash-file-row${activeTrashFileId === `virus:${virus.id}` ? " active" : ""}${hitClass("file", `virus:${virus.id}`)}`} {...hitAttrs("file", `virus:${virus.id}`)} type="button" key={key} onClick={() => openTrashVirus(virus)}><span className="trash-file-name"><i className="trash-file-icon virus">V</i><strong>{virus.name}</strong></span><span>C:\PORTIA\VIRUS_ARCHIVE</span><span>Вирус в корзине</span></button> : null;
                     }
                     const file = trashFiles.find((item) => item.id === key.slice(5));
-                    return file ? <button className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}`} type="button" key={key} onClick={() => openTrashFile(file)}><span className="trash-file-name"><i className={`trash-file-icon ${file.kind}`}>{file.kind === "virus" ? "V" : file.kind === "image" ? "IMG" : "TXT"}</i><strong>{file.name}</strong></span><span>{file.location}</span><span>{recycleFileType(file.kind)}</span></button> : null;
+                    return file ? <button className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}${hitClass("file", file.id)}`} {...hitAttrs("file", file.id)} type="button" key={key} onClick={() => openTrashFile(file)}><span className="trash-file-name"><i className={`trash-file-icon ${file.kind}`}>{file.kind === "virus" ? "V" : file.kind === "image" ? "IMG" : "TXT"}</i><strong>{file.name}</strong></span><span>{file.location}</span><span>{recycleFileType(file.kind)}</span></button> : null;
                   })}
                   {trashView === "empty" && <div className="editor-empty empty-state"><PortiaIllustration name="dish" /><strong>{emptyCopy.trash.heading}</strong><span>{emptyCopy.trash.body}</span></div>}
                 </div>

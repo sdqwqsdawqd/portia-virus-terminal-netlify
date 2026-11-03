@@ -35,12 +35,17 @@ const clockFormat = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: 
 const dayFormat = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" });
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
+// The time of the last good load as the banners write it: the clock for today, the day and clock otherwise; null when the date does not parse (T-19-01).
+export function syncTimeText(lastGoodAt: string, now: Date): string | null {
+  const at = new Date(lastGoodAt);
+  if (!lastGoodAt || Number.isNaN(at.getTime())) return null;
+  return sameDay(at, now) ? clockFormat.format(at) : `${dayFormat.format(at)}, ${clockFormat.format(at)}`;
+}
+
 // Only the fixed phrase and a time: no status code or error message reaches the page (T-19-02). A cache date that does not parse (T-19-01) drops the time instead of printing "Invalid Date".
 export function staleBannerText(lastGoodAt: string, now: Date): string {
-  const at = new Date(lastGoodAt);
-  if (!lastGoodAt || Number.isNaN(at.getTime())) return "Не удалось обновить — показаны сохранённые данные";
-  const when = sameDay(at, now) ? clockFormat.format(at) : `${dayFormat.format(at)}, ${clockFormat.format(at)}`;
-  return `Не удалось обновить — показаны данные на ${when}`;
+  const when = syncTimeText(lastGoodAt, now);
+  return when === null ? "Не удалось обновить — показаны сохранённые данные" : `Не удалось обновить — показаны данные на ${when}`;
 }
 
 // denied > loading > fatal > stale > empty > populated. `hasData` means data that really came from the cache or the server: the built-in defaults never count.

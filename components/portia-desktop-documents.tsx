@@ -89,11 +89,13 @@ export function EmbeddedDocument({ src, external, title }: { src: string; extern
 const guideCollapsedStorageKey = "portia-guide-collapsed-v2";
 
 // «Справочник»: the grid and the card page are one derived view of openCardId; a card that vanished simply means the grid (D-00d).
-export function GuideApp({ sections, formattedText, openCardId, onOpenCard, banner }: {
+export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitId = "", banner }: {
   sections: GuideSection[];
   formattedText: PortiaContent["formattedText"];
   openCardId: string;
   onOpenCard: (id: string) => void;
+  /** The card a search result named (D-14): marked on its page, or on its tile while the grid shows. */
+  hitId?: string;
   banner?: ReactNode;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -156,7 +158,8 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, bann
       <div className="guide-back-bar"><button type="button" aria-label="Назад к списку карточек" onClick={() => { backIntent.current = true; onOpenCard(""); }}><span aria-hidden="true">←</span><span className="guide-back-label">Назад</span></button></div>
       <article className="guide-page" tabIndex={-1} ref={page}>
         <span className="eyebrow">{found.section.title || "Без названия"}</span>
-        <h1>{card.title || "Без названия"}</h1>
+        {/* The title carries the mark: a long page centred as a whole would hide its top. */}
+        <h1 className={hitId === card.id ? "search-hit" : undefined} {...(hitId === card.id ? { "data-search-hit": "true", "aria-current": "true" as const } : {})}>{card.title || "Без названия"}</h1>
         {!card.blocks.length && <p className="guide-section-empty">В карточке пока нет содержимого</p>}
         <div className="guide-blocks">{card.blocks.map((block) => <GuideBlockView key={block.id} block={block} formattedText={formattedText} cardTitle={card.title} />)}</div>
       </article>
@@ -172,7 +175,7 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, bann
         </button>
         <div className="guide-grid" id={gridId} hidden={folded}>
           {!section.cards.length && <p className="guide-section-empty">В разделе пока нет карточек</p>}
-          {section.cards.map((item) => <button key={item.id} type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}`} data-card-id={item.id} onClick={() => openTile(item.id)}>
+          {section.cards.map((item) => <button key={item.id} type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}${hitId === item.id ? " search-hit" : ""}`} data-card-id={item.id} {...(hitId === item.id ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => openTile(item.id)}>
             {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" /></span>}
             <span className="guide-tile-title">{item.title || "Без названия"}</span>
           </button>)}
