@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 19
 current_phase_name: «Повышение», приложения, редактор, поиск и медиа
 status: executing
-stopped_at: Phase 20 context updated (D-25..D-34)
-last_updated: "2026-11-03T19:26:38.498Z"
+stopped_at: Completed 19-17-PLAN.md
+last_updated: "2026-11-03T19:33:34.119Z"
 last_activity: 2026-11-03
 last_activity_desc: Phase PORTIA-19 execution started
-state_head: d2dfe25f34275064da454dd8ba0709f38a97b2e3
+state_head: 36148f7b4de29ac8c0d8bc901264772540b4f127
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 86
-  completed_plans: 65
+  completed_plans: 66
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-19 («Повышение», приложения, редактор, поиск и медиа) — EXECUTING
-Plan: 17 of 22
+Plan: 18 of 22
 Status: Executing Phase PORTIA-19
 Last activity: 2026-11-03 — Phase PORTIA-19 execution started
 
@@ -103,6 +103,7 @@ Progress: [█████░░░░░] 50%
 | Phase 19 P06 | n/a (multi-session) | 3 tasks | 12 files |
 | Phase 19 P15 | 15min | 3 tasks | 9 files |
 | Phase 19 P16 | 8min | 2 tasks | 7 files |
+| Phase PORTIA-19 P17 | 15min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -164,6 +165,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-19]: 19-14: owner verdict from 19-UAT.md recorded; D physical, F9-F12 and STAB-PROM-15 stay BLOCKED (debt); only STAB-MEDIA-01..05 and STAB-SEARCH-03 marked complete, other 19-14 requirements left Pending
 - [Phase 19]: 19-15: visibility-gated media timeout passed on Chromium desktop and phone; folded guide covers remain BLOCKED (DATA) until 19-19
 - [Phase 19]: 19-16: failed initial restore ignores all HTTP refusals before 404/423 reset; live role and owner UAT evidence remains Pending
+- [Phase PORTIA-19]: 19-17: v2 acceptance snapshot uses staging DB Date and preserves preexisting rows; STAB-PROM-13/15 remain Pending until live staging and owner devices
 
 ### Pending Todos
 
@@ -202,9 +204,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-03T19:26:38.061Z
-Stopped at: Phase 20 context updated (D-25..D-34)
-Resume file: .planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-CONTEXT.md
+Last session: 2026-11-03T19:33:33.545Z
+Stopped at: Completed 19-17-PLAN.md
+Resume file: None
 
 ## Operator Next Step
 
