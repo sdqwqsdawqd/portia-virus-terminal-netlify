@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.3
 milestone_name: «Стабилизация PORTIA OS»
-current_phase: 20
-current_phase_name: Security, accessibility и приёмка релиза
-status: planned
-stopped_at: Phase 20 plans verified; execution not started
-last_updated: "2026-11-03T18:52:53.515Z"
+current_phase: 19
+current_phase_name: «Повышение», приложения, редактор, поиск и медиа
+status: executing
+stopped_at: Phase 20 context updated (D-25..D-34)
+last_updated: "2026-11-03T19:26:38.498Z"
 last_activity: 2026-11-03
-last_activity_desc: Phase PORTIA-20 planned and verified
-state_head: aeb2e11a27378f9d1c62df4eab4b479a96a1fa18
+last_activity_desc: Phase PORTIA-19 execution started
+state_head: d2dfe25f34275064da454dd8ba0709f38a97b2e3
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 86
-  completed_plans: 63
+  completed_plans: 65
   percent: 50
 ---
 
@@ -29,12 +29,12 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 ## Current Position
 
-Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 0 of 15
-Status: Phase 20 plans verified; execution not started. Phase 19 remains gaps_found: CR-01, STAB-PROM-15 staging owner UAT and data-backed checks remain open.
-Last activity: 2026-11-03 - Phase 20 plans created and checked
+Phase: PORTIA-19 («Повышение», приложения, редактор, поиск и медиа) — EXECUTING
+Plan: 17 of 22
+Status: Executing Phase PORTIA-19
+Last activity: 2026-11-03 — Phase PORTIA-19 execution started
 
-Progress: 0/15 Phase 20 plans executed; 3/6 milestone phases complete
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -101,6 +101,8 @@ Progress: 0/15 Phase 20 plans executed; 3/6 milestone phases complete
 | Phase 19 P05 | 40min | 3 tasks | 9 files |
 | Phase 19 P08 | single session | 3 tasks | 9 files |
 | Phase 19 P06 | n/a (multi-session) | 3 tasks | 12 files |
+| Phase 19 P15 | 15min | 3 tasks | 9 files |
+| Phase 19 P16 | 8min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -160,6 +162,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 - [Phase 19]: 2026-11-03 owner: 19-07 teardown of staging run mvz5fqgv_c40b449b: earlier hold («не надо запускать») REVERSED by owner with «удалить»; run executed, residual 0 on all categories, 19-07 closed
 - [Phase PORTIA-19]: 19-14: owner verdict from 19-UAT.md recorded; D physical, F9-F12 and STAB-PROM-15 stay BLOCKED (debt); only STAB-MEDIA-01..05 and STAB-SEARCH-03 marked complete, other 19-14 requirements left Pending
+- [Phase 19]: 19-15: visibility-gated media timeout passed on Chromium desktop and phone; folded guide covers remain BLOCKED (DATA) until 19-19
+- [Phase 19]: 19-16: failed initial restore ignores all HTTP refusals before 404/423 reset; live role and owner UAT evidence remains Pending
 
 ### Pending Todos
 
@@ -198,9 +202,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-03T16:14:59.532Z
-Stopped at: Phase 20 UI-SPEC approved
-Resume file: .planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-UI-SPEC.md
+Last session: 2026-11-03T19:26:38.061Z
+Stopped at: Phase 20 context updated (D-25..D-34)
+Resume file: .planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-CONTEXT.md
 
 ## Operator Next Step
 
