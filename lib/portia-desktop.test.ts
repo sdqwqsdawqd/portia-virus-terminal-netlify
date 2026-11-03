@@ -223,6 +223,14 @@ test("every result type opens its owner and marks its record; a vanished record 
   }
 });
 
+test("search-hit attributes never precede key, so list rows keep the jsx runtime (owner UAT 19-14: trash key warning)", () => {
+  // `{...spread} key={…}` compiles to createElement with a children array, and React then demands keys on the inner spans.
+  for (const match of source.matchAll(/<(\w+)\b([^>]*?)\{\.\.\.hitAttrs\(/g)) {
+    const rest = source.slice(match.index + match[0].length, source.indexOf(">", match.index + match[0].length + 40));
+    assert.ok(!/\bkey=/.test(rest), `key must come before {...hitAttrs(...)} in <${match[1]}${match[2].slice(0, 60)}`);
+  }
+});
+
 test("search states: loading rows with aria-busy, distinct empty text, roster line, long meta wraps (UI E4)", () => {
   const window = source.slice(source.indexOf('<AppWindow app="search"'), source.indexOf('<AppWindow app="info"'));
   assert.ok(window.includes("Ищем…") && window.includes("aria-busy={!contentReady}"));
