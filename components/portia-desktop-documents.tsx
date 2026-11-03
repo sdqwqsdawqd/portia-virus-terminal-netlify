@@ -5,6 +5,7 @@ import { findGuide, portiaTextKey, type GuideBlock, type GuideSection, type Port
 import { PortiaIllustration } from "@/components/portia-icons";
 import { emptyCopy, iframeLoadTimeoutMs } from "@/lib/app-state";
 import { FormattedText } from "@/components/portia-desktop-dossier";
+import { PortiaImage } from "@/components/portia-desktop-media";
 import { AppFatalPanel, AppSkeleton } from "@/components/portia-desktop-states";
 
 // D-19: one permission set for every third-party frame. Scripts and same-origin let the viewers run, popups escape the sandbox so links open as normal tabs;
@@ -165,14 +166,14 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, bann
       const gridId = `guide-grid-${section.id}`;
       return <section className="guide-section" key={section.id}>
         <button type="button" className={`guide-section-head${section.photo ? " has-photo" : ""}`} aria-expanded={!folded} aria-controls={gridId} onClick={() => setCollapsed((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}>
-          {section.photo && <img className="guide-section-band" src={section.photo} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.hidden = true; }} />}
+          {section.photo && <PortiaImage src={section.photo} alt="" recordId={`${section.id}:band`} priority="lazy" icon="guide" className="guide-section-band is-fill is-quiet" />}
           <span className="guide-section-title">{section.title || "Без названия"}</span>
           <span className="guide-section-chevron" aria-hidden="true" />
         </button>
         <div className="guide-grid" id={gridId} hidden={folded}>
           {!section.cards.length && <p className="guide-section-empty">В разделе пока нет карточек</p>}
           {section.cards.map((item) => <button key={item.id} type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}`} data-card-id={item.id} onClick={() => openTile(item.id)}>
-            {item.cover && <span className="guide-tile-cover"><img src={item.cover} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.hidden = true; }} /></span>}
+            {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" /></span>}
             <span className="guide-tile-title">{item.title || "Без названия"}</span>
           </button>)}
         </div>
@@ -185,7 +186,7 @@ function GuideBlockView({ block, formattedText, cardTitle }: { block: GuideBlock
   if (block.type === "heading") return block.text.trim() ? <h2 className="guide-heading">{block.text}</h2> : null;
   if (block.type === "text") return <FormattedText className="info-document-copy" text={block.text} document={formattedText[portiaTextKey.guideBlock(block.id)]} />;
   if (block.type === "table") return <div className="guide-table"><dl className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row) => <div key={row.id}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl></div>;
-  if (block.type === "photo") return block.url ? <GuidePhoto key={block.url} url={block.url} caption={block.caption} /> : null;
+  if (block.type === "photo") return block.url ? <GuidePhoto url={block.url} caption={block.caption} recordId={block.id} /> : null;
   if (block.type === "video") return block.videoId ? <YoutubeFigure videoId={block.videoId} title={cardTitle || "Без названия"} /> : null;
   return <aside className="guide-callout">
     {block.label.trim() && <span className="guide-callout-label">{block.label}</span>}
@@ -193,13 +194,10 @@ function GuideBlockView({ block, formattedText, cardTitle }: { block: GuideBlock
   </aside>;
 }
 
-// A page photo is full width, not a link and has no zoom; a failed image is said so in words, never a broken icon (A11Y-03).
-function GuidePhoto({ url, caption }: { url: string; caption: string }) {
-  const [failed, setFailed] = useState(false);
+// A page photo is full width, not a link and has no zoom; a failed image is said so in words by the placeholder, never a broken icon (A11Y-03).
+function GuidePhoto({ url, caption, recordId }: { url: string; caption: string; recordId: string }) {
   return <figure className="info-block-photo guide-photo">
-    {failed
-      ? <p className="guide-photo-error">Фото не загрузилось</p>
-      : <img src={url} alt={caption} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />}
+    <PortiaImage src={url} alt={caption} recordId={recordId} priority="lazy" icon="guide" />
     {caption.trim() && <figcaption>{caption}</figcaption>}
   </figure>;
 }

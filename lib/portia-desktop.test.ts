@@ -276,6 +276,35 @@ test("PortiaImage checks the link first, mounts per record, times out and cleans
   assert.ok(!desktopFamily.some((part) => part.file !== "portia-desktop-media.tsx" && part.text.includes("prioritizeImage(")));
 });
 
+const NL = String.fromCharCode(10);
+test("every record picture goes through PortiaImage with its record id and the right priority (STAB-MEDIA-03, D-15)", () => {
+  const part = (file: string) => desktopFamily.find((entry) => entry.file === file)?.text ?? "";
+  const all = desktopFamily.flatMap((entry) => [...entry.text.matchAll(/<PortiaImage(?= )[^>]*>/g)].map((match) => ({ file: entry.file, tag: match[0] })));
+  assert.ok(all.length >= 8, "portraits, dossier, information, trash and the reference book are all ported");
+  for (const { tag } of all) {
+    assert.match(tag, /recordId=\{/, tag);
+    // LoadingMedia forwards the priority its MediaBlock caller chose; every other call site names it literally.
+    assert.match(tag, /priority="(?:hero|lazy)"|priority=\{priority\}/, tag);
+  }
+  assert.ok(part("portia-desktop-dossier.tsx").includes('recordId={`${virus.id}:infected`} priority="hero"'));
+  const heroes = all.filter(({ tag }) => tag.includes('priority="hero"')).map(({ tag }) => tag);
+  assert.equal(heroes.length, 3, "selected employee avatar and the portrait (its linked and plain variants); the dossier hero is checked above");
+  assert.ok(heroes.every((tag) => /:avatar`|:portrait`|:infected`/.test(tag)));
+  // Collections stay lazy.
+  const lazyOf = (file: string) => all.filter((entry) => entry.file === file).map((entry) => entry.tag);
+  assert.ok(lazyOf("portia-desktop-documents.tsx").length >= 3 && lazyOf("portia-desktop-documents.tsx").every((tag) => tag.includes('priority="lazy"')));
+  assert.ok(lazyOf("portia-desktop.tsx").filter((tag) => tag.includes('priority="lazy"')).length >= 2, "information photo and trash image");
+  assert.ok(part("portia-desktop-dossier.tsx").includes('recordId={`${virus.id}:mutation:${index}`} priority="lazy"'));
+  // No loading policy outside PortiaImage; the one fetchPriority left is the PORTIA mark of the boot screen.
+  assert.ok(!source.includes('loading="eager"'));
+  for (const line of source.split(NL).filter((entry) => entry.includes('fetchPriority="high"'))) assert.ok(line.includes("portia-logo.png"), line);
+  // No raw record <img> left in the ported modules: the documents module has none, the dossier keeps only the GIF embed and the PORTIA mark.
+  assert.ok(!part("portia-desktop-documents.tsx").includes("<img"));
+  const dossierImages = [...part("portia-desktop-dossier.tsx").matchAll(/<img[\s\S]*?(?:\/>|>)/g)].map((match) => match[0]);
+  assert.ok(dossierImages.every((tag) => tag.includes("embedded-rich-media") || tag.includes("portia-logo.png")), dossierImages.join(NL));
+  assert.ok(!source.includes("trash-image-missing") && !source.includes("EmployeeImage"));
+});
+
 test("PortiaImage sizes the box before the picture and keeps motion under the motion contract (UI E5)", () => {
   assert.match(styles, /\.portia-image \{[^}]*aspect-ratio: var\(--portia-image-ratio, 4 \/ 3\)/);
   assert.match(styles, /\.portia-image-placeholder \{[^}]*background: var\(--panel-2\); border: 1px solid var\(--line\)/);
