@@ -100,7 +100,15 @@ export function isMissingNotesTable(error: unknown): boolean {
   return code === "42P01" || code === "PGRST205";
 }
 
-// RED stub (20-22): the real rebase lands in the GREEN commit.
-export function rebaseNotes(_before: NotesMap, _mine: NotesMap, _server: NotesMap): NotesMap {
-  return {};
+// After a 409 the editor reloads the notes another editor saved. Its own unsaved changes (edited, added or cleared notes)
+// are put back over that copy, so «Загрузить заметки» never throws typed text away.
+export function rebaseNotes(before: NotesMap, mine: NotesMap, server: NotesMap): NotesMap {
+  const result: NotesMap = { ...server };
+  for (const [key, text] of Object.entries(mine)) {
+    if (before[key] !== text) result[key] = text;
+  }
+  for (const key of Object.keys(before)) {
+    if (!(key in mine)) delete result[key];
+  }
+  return normalizeNotesMap(result);
 }
