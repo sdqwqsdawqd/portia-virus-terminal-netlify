@@ -329,7 +329,7 @@ Plans:
 
 **Goal**: По решению владельца переработаны внешний вид паука и паутины, фон/обои, SVG-рисунки, вкладка редактора и приложение «Повышение», где участник может открыть отдельный конструктор шаблона досье вируса и скачать результат без записи в базу. Подтверждённые accessibility/security/dependency риски закрыты или честно оформлены как release blockers/waivers; release commit проходит чистую репетицию и безопасную проверку инфраструктуры, а окончательная владельческая приёмка PC/phone имеет точную привязку к проверенному commit каждого устройства без скрытых или переименованных пробелов.
 **Depends on**: Phase 19 (and therefore all prior v1.3 phases)
-**Requirements**: STAB-MEDIA-07, STAB-A11Y-01, STAB-A11Y-02, STAB-A11Y-03, STAB-A11Y-04, STAB-SEC-02, STAB-SEC-03, STAB-SEC-05, STAB-SEC-06, STAB-VIS-01, STAB-VIS-02, STAB-VIS-03, STAB-VIS-04, STAB-TMPL-01, STAB-REL-01, STAB-REL-02, STAB-REL-03, STAB-REL-05, STAB-REL-06, STAB-REL-07, STAB-REL-08
+**Requirements**: STAB-MEDIA-07, STAB-A11Y-01, STAB-A11Y-02, STAB-A11Y-03, STAB-A11Y-04, STAB-SEC-02, STAB-SEC-03, STAB-SEC-05, STAB-SEC-06, STAB-VIS-01, STAB-VIS-02, STAB-VIS-03, STAB-VIS-04, STAB-TMPL-01, STAB-REL-01, STAB-REL-02, STAB-REL-03, STAB-REL-05, STAB-REL-06, STAB-REL-07, STAB-REL-08, STAB-SEARCH-05, STAB-SEARCH-06, STAB-SEARCH-07, STAB-CLASS-01, STAB-CLASS-02, STAB-CLASS-03, STAB-CLASS-04, STAB-EDIT-01, STAB-EDIT-02, STAB-EDIT-03, STAB-EDIT-04
 **Merged**: 2026-11-02 по решению владельца из бывших Phase 21 («Закрытие security, accessibility, CSP и зависимостей») и Phase 22 («Репетиция релиза и приёмка владельца»).
 **Success Criteria** (what must be TRUE):
   1. PC controls имеют корректные name/role/state, видимый focus, dialog trap/restore и keyboard alternative; phone actions доступны touch, не перекрываются keyboard/sticky bars и не создают page-level overflow.
@@ -346,7 +346,7 @@ Plans:
   12. В «Повышении» доступна кнопка «Создать шаблон», открывающая отдельный конструктор карточки досье вируса для текста и локальных изображений. Участник скачивает самодостаточные PNG или HTML для передачи проверяющему вне сайта; файлы и изображения не записываются в реальные записи архива, Supabase database/storage или `/api/uploads`.
 
 **Acceptance gate**: Неполное локальное покрытие отмечается явно; незакрытый high finding блокирует релиз согласно config. Фаза не закрывается без согласованного визуального контракта и принятия переработанного вида владельцем, физической owner PC/phone UAT, точного evidence ledger и отсутствия pending high-severity blocker.
-**Plans**: 23 plans
+**Plans**: 24 plans
 **UI hint**: yes
 
 Plans:
@@ -371,6 +371,7 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 20-05-PLAN.md — адресные SVG пустых состояний
 - [ ] 20-06-PLAN.md — participant/reviewer переработка «Повышения»
+- [ ] 20-24-PLAN.md — приватное хранилище заметок редактора: таблица с RLS по вкладкам, /api/content/notes, решение владельца, только изолированный staging (D-47)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 20-16-PLAN.md — «Информация» на телефоне: список-навигация, «←», «Далее», раскрытие из поиска (D-28..D-32)
@@ -380,11 +381,11 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 20-11-PLAN.md — владельческое одобрение визуальных кандидатов (паук на трёх акцентах, D-26; паук в покое, D-45; иконки классов, D-39)
-- [ ] 20-22-PLAN.md — редактор: колонки «Информации» по 5, закреплённое «Добавить раздел» и заметки «Справочника», перетаскивание (D-40..D-42)
+- [ ] 20-22-PLAN.md — редактор: колонки «Информации» по 5, закреплённое «Добавить раздел» и приватные заметки «Справочника», перетаскивание (D-40..D-42, D-47)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 - [ ] 20-12-PLAN.md — утверждённые visual baselines
-- [ ] 20-23-PLAN.md — редактор: разделы и подразделы «Сводки» и «Рекомендаций» с обратной совместимостью (D-41, D-42)
+- [ ] 20-23-PLAN.md — редактор: разделы и подразделы «Сводки» и «Рекомендаций» с обратной совместимостью и приватными заметками (D-41, D-42, D-47)
 
 **Wave 9** *(blocked on Wave 8 completion)*
 - [ ] 20-13-PLAN.md — clean-checkout техническая репетиция
