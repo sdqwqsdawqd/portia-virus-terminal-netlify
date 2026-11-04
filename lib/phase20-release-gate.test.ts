@@ -162,6 +162,13 @@ test("the runner script contains no git clean, reset --hard or stash", () => {
 // --- Task 2: catalogue, Playwright classification, waivers, environment, running gates -----------------------------------
 
 const waiverRegistry = readFileSync(new URL("../.planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-PLAYWRIGHT-WAIVERS.md", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+// The owner accepted PW-10 on 2026-11-04. The pending-waiver rules are proven on a copy of the real
+// registry with PW-10 put back to «ОЖИДАЕТ ВЛАДЕЛЬЦА», so they keep testing real rows, not only fixtures.
+const pendingPw10Registry = (() => {
+  const pending = waiverRegistry.replace(/^(\| PW-10 \|.*)\| принято[^|]*\| [^|]*\|$/m, "$1| ОЖИДАЕТ ВЛАДЕЛЬЦА | - |");
+  assert.notEqual(pending, waiverRegistry, "the PW-10 row must be found to build the pending copy");
+  return pending;
+})();
 
 function pwTest(status: string, extra: Record<string, unknown> = {}) {
   const passed = status === "expected" ? "passed" : status === "skipped" ? "skipped" : "failed";
@@ -254,7 +261,7 @@ test("classifyPlaywright: an empty or missing report is FAIL", () => {
   assert.equal(gate.classifyPlaywright({}).status, "FAIL");
 });
 
-test("readWaivers reads the real registry: PW-07 accepted by the owner, PW-10 still awaiting", () => {
+test("readWaivers reads the real registry: PW-07 and PW-10 accepted by the owner, no waiver pending", () => {
   const rows: { id: string; klass: string; accepted: boolean }[] = gate.readWaivers(waiverRegistry);
   assert.equal(rows.length, 10);
   const byId = new Map(rows.map((row) => [row.id, row]));
@@ -263,10 +270,11 @@ test("readWaivers reads the real registry: PW-07 accepted by the owner, PW-10 st
   assert.equal(pw07.klass, "waiver");
   assert.equal(pw07.accepted, true);
   assert.equal(pw10.klass, "waiver");
-  assert.equal(pw10.accepted, false);
+  assert.equal(pw10.accepted, true);
   assert.equal(byId.get("PW-01")!.klass, "fixed");
   assert.equal(byId.get("PW-02")!.klass, "expected-fault");
-  assert.deepEqual(rows.filter((row) => row.klass === "waiver" && !row.accepted).map((row) => row.id), ["PW-10"]);
+  assert.deepEqual(rows.filter((row) => row.klass === "waiver" && !row.accepted).map((row) => row.id), []);
+  assert.equal(gate.readWaivers(pendingPw10Registry).find((row: { id: string }) => row.id === "PW-10")?.accepted, false);
 });
 
 function registry(verdict: string, date: string, klass = "waiver") {
@@ -294,7 +302,7 @@ test("classifyPlaywright + waivers: a failure under a waiver without the owner's
   const pw10Title = "[STAB-A11Y-01] home desktop and the opened desktop surfaces have no critical or serious axe violations";
   const classified = gate.classifyPlaywright(
     pwReport([{ title: pw10Title, file: "specs/accessibility.spec.ts", tests: [pwTest("unexpected")] }]),
-    gate.readWaivers(waiverRegistry),
+    gate.readWaivers(pendingPw10Registry),
   );
   assert.equal(classified.status, "FAIL");
   assert.equal(classified.waived, false);
@@ -335,7 +343,12 @@ test("aggregate: a waived FAIL gives PASS-WITH-OWNER-WAIVERS, an unwaived one FA
 });
 
 test("aggregate: the registry itself is judged when Playwright gates ran (PW-10 pending is FAIL, PW-07 accepted is a waiver verdict)", () => {
-  const waivers = gate.readWaivers(waiverRegistry);
+  const waivers = gate.readWaivers(pendingPw10Registry);
+  assert.equal(
+    gate.aggregate([result("e2e-full", "PASS"), result("unit", "PASS")], { playwright: true, waivers: gate.readWaivers(waiverRegistry) }).verdict,
+    "PASS-WITH-OWNER-WAIVERS",
+    "real registry: every waiver is accepted by the owner",
+  );
   const allPass = [result("e2e-full", "PASS"), result("unit", "PASS")];
   const pending = gate.aggregate(allPass, { playwright: true, waivers });
   assert.equal(pending.verdict, "FAIL");
@@ -576,7 +589,7 @@ test("runGate Playwright: no results.json is FAIL; a stale report from a previou
 });
 
 test("runGate Playwright: the e2e gate with a waiver registry marks only an owner-accepted failure as waived", () => {
-  const waivers = gate.readWaivers(waiverRegistry);
+  const waivers = gate.readWaivers(pendingPw10Registry);
   const failing = (title: string, file: string, project: string) => (_file: string, _args: string[], worktree: string) => {
     writeReport(worktree, pwReport([{ title, file, tests: [pwTest("unexpected", { projectName: project })] }]));
     return { status: 1 };
