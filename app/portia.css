@@ -858,6 +858,8 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .editor-section-addbar { position: sticky; top: 0; z-index: 4; display: grid; gap: 8px; padding: 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .editor-section-addbar > button { justify-self: start; }
 .editor-section-create { display: grid; gap: 8px; }
+.editor-section-create[hidden] { display: none; }
+.editor-note-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--warning); color: var(--warning); font: 13px/1.45 var(--sans); }
 .editor-section-create .editor-section-create-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .editor-section-create .editor-note-hint, .editor-note-field .editor-note-hint { margin: 4px 0 0; color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 12px/1.45 var(--sans); }
 .editor-guidance { margin: 0 0 6px; color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font-size: 13px; line-height: 1.55; }
