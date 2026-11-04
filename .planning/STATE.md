@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-20-PLAN.md
-last_updated: "2026-11-04T06:39:56.754Z"
+stopped_at: Completed 20-04-PLAN.md
+last_updated: "2026-11-04T07:00:51.687Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: ca585b8353bc2320a2a9c67b144aac3928f08c3e
+state_head: ff47b281e2bef61185efb09a4f7e92ffba26d08b
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 79
+  completed_plans: 80
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 11 of 24
+Plan: 12 of 24
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-04 — Phase PORTIA-20 execution started
 
@@ -117,6 +117,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P03 | 40 min | 3 tasks | 6 files |
 | Phase PORTIA-20 P10 | 35min | 3 tasks | 6 files |
 | Phase PORTIA-20 P20 | 70min | 3 tasks | 8 files |
+| Phase PORTIA-20 P04 | 80 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -193,6 +194,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-03 D-45: resting-spider blur on PC is caused by will-change: transform; will-change now only via .wallpaper-spider[data-spider-walking]; spiderTransform snaps resting shift to 1/dpr and drops scale()
 - [Phase PORTIA-20]: 20-10: no high findings, 9 medium in release ledger; register_attempt has no caller, revoke recommended but not applied; IN-05 stays a D-09 disposition; STAB-SEC-05/06 not marked by 20-10 (ready-ids gate)
 - [Phase PORTIA-20]: 20-20: legacy class names are mapped only inside normalizePortiaContent (D-36a); classificationIconFor resolves via canonicalClassificationName; nine class icons are candidates until 20-11 approval
+- [Phase PORTIA-20]: 20-04: flask wallpaper accent blended 70/30 toward --desktop-base via color-mix (relative colours are forbidden); text contrast asserted over the brightest 8 px square
+- [Phase PORTIA-20]: 20-04: wallpaper save failure keeps the previous wallpaper and shows a message (wallpaper only; other settings unchanged)
 
 ### Pending Todos
 
@@ -231,8 +234,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T06:39:56.291Z
-Stopped at: Completed PORTIA-20-20-PLAN.md
+Last session: 2026-11-04T07:00:51.234Z
+Stopped at: Completed 20-04-PLAN.md
 Resume file: None
 
 ## Operator Next Step
