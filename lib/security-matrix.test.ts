@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
+import * as audit from "../scripts/phase20-audit-check.mjs";
+
 // Structure checks for the Phase 20 security matrix (20-10). The matrix is evidence; this file keeps it honest:
 // no empty matrix, no silent `open`, no unresolved high without a blocker, every medium in the release ledger.
 
@@ -186,4 +188,142 @@ test("fixture: a medium finding outside the release ledger and a ledger row with
 test("fixture: a matrix that omits an area is rejected", () => {
   const problems = matrixProblems(goodMatrix.replace("| secrets | x | y | PASS-local |\n", ""));
   assert.ok(problems.some((problem) => problem.includes('area "secrets" has no coverage row')));
+});
+
+/* ------------------------------------------------------------------ dependency audit evidence (Task 2) */
+
+const COMMIT = "a".repeat(40);
+const finding = (id: string, severity = "moderate", pkg = "minimatch") => ({ id, package: pkg, severity });
+const auditReport = (over: Record<string, unknown> = {}) => ({
+  schema: audit.SCHEMA,
+  commit: COMMIT,
+  lockfileSha256: "lock",
+  packageJsonSha256: "pkg",
+  audits: {
+    production: { command: "npm.cmd audit --omit=dev --json", exitCode: 0, findings: [] as ReturnType<typeof finding>[] },
+    full: { command: "npm.cmd audit --json", exitCode: 1, findings: [finding("GHSA-aaaa-bbbb-cccc"), finding("via:eslint", "moderate", "eslint")] },
+  },
+  ...over,
+});
+const dispositionMarkdown = (rows: string[], commit = COMMIT) => [
+  "# 20 — Dependency audit", "", `Commit: ${commit}`, "", "## Dev disposition", "",
+  "| ID | Package | Severity | Disposition | Rationale | Owner |", "|---|---|---|---|---|---|", ...rows, "", "## Lockfile ledger", "",
+].join("\n");
+const row = (id: string, pkg: string, severity = "moderate", disposition = "accepted", rationale = "dev-only", owner = "owner") =>
+  `| ${id} | ${pkg} | ${severity} | ${disposition} | ${rationale} | ${owner} |`;
+const goodRows = [row("GHSA-aaaa-bbbb-cccc", "minimatch"), row("via:eslint", "eslint")];
+const current = { isAncestor: () => true, lockfileSha256: "lock", packageJsonSha256: "pkg" };
+const auditProblems = (report: unknown, markdown: string, now = current) => audit.verifyAuditReport({ report, markdown, current: now });
+const withFull = (findings: ReturnType<typeof finding>[], exitCode = 1) => {
+  const base = auditReport();
+  return { ...base, audits: { ...base.audits, full: { ...base.audits.full, findings, exitCode } } };
+};
+
+test("the real audit evidence verifies: both audits on one commit, production clean, one disposition per dev advisory", () => {
+  const out: string[] = [];
+  const err: string[] = [];
+  const code = audit.main(["--verify"], { out: (text: string) => out.push(text), err: (text: string) => err.push(text) });
+  assert.equal(code, 0, err.join(""));
+  const report = JSON.parse(read(`${phaseDir}/20-DEPENDENCY-AUDIT.json`));
+  assert.equal(report.audits.production.findings.length, 0);
+  assert.equal(report.audits.production.exitCode, 0);
+  assert.ok(report.audits.full.findings.length > 0, "the full audit result must be stored, not summarised");
+  assert.match(report.commit, /^[0-9a-f]{40}$/);
+});
+
+test("audit fixture: a complete, current report with one disposition per dev advisory is accepted", () => {
+  assert.deepEqual(auditProblems(auditReport(), dispositionMarkdown(goodRows)), []);
+});
+
+test("audit fixture: a dev advisory without a disposition is rejected", () => {
+  const problems = auditProblems(auditReport(), dispositionMarkdown([goodRows[0]]));
+  assert.ok(problems.some((problem) => problem.includes("via:eslint: dev advisory has no disposition")), problems.join("; "));
+});
+
+test("audit fixture: a duplicated disposition is rejected", () => {
+  const problems = auditProblems(auditReport(), dispositionMarkdown([...goodRows, row("via:eslint", "eslint", "moderate", "fixed")]));
+  assert.ok(problems.some((problem) => problem.includes("via:eslint: 2 dispositions")), problems.join("; "));
+});
+
+test("audit fixture: a disposition for an advisory that the report does not list is rejected", () => {
+  const problems = auditProblems(auditReport(), dispositionMarkdown([...goodRows, row("GHSA-zzzz-zzzz-zzzz", "left-pad")]));
+  assert.ok(problems.some((problem) => problem.includes("GHSA-zzzz-zzzz-zzzz: disposition for an advisory that is not in the json report")), problems.join("; "));
+});
+
+test("audit fixture: a stale report is rejected (commit not an ancestor, lockfile or manifest changed, markdown from another commit)", () => {
+  assert.ok(auditProblems(auditReport(), dispositionMarkdown(goodRows), { ...current, isAncestor: () => false }).some((problem) => problem.includes("stale report: commit")));
+  assert.ok(auditProblems(auditReport(), dispositionMarkdown(goodRows), { ...current, lockfileSha256: "other" }).some((problem) => problem.includes("package-lock.json changed")));
+  assert.ok(auditProblems(auditReport(), dispositionMarkdown(goodRows), { ...current, packageJsonSha256: "other" }).some((problem) => problem.includes("package.json changed")));
+  assert.ok(auditProblems(auditReport(), dispositionMarkdown(goodRows, "b".repeat(40))).some((problem) => problem.includes("stale markdown")));
+  assert.ok(auditProblems(auditReport(), dispositionMarkdown(goodRows).replace(/^Commit:.*$/m, "")).some((problem) => problem.includes("no `Commit:` line")));
+});
+
+test("audit fixture: a production advisory or a failing production audit is rejected", () => {
+  const base = auditReport();
+  const withProduction = { ...base, audits: { ...base.audits, production: { ...base.audits.production, exitCode: 1, findings: [finding("GHSA-prod-prod-prod", "high", "next")] } } };
+  const problems = auditProblems(withProduction, dispositionMarkdown([...goodRows]));
+  assert.ok(problems.some((problem) => problem.includes("production audit has 1 finding(s)")), problems.join("; "));
+  assert.ok(problems.some((problem) => problem.includes("production audit exit code is 1")), problems.join("; "));
+});
+
+test("audit fixture: a missing audit, a wrong command or a missing report is rejected", () => {
+  const base = auditReport();
+  const noFull = { ...base, audits: { production: base.audits.production } };
+  assert.ok(auditProblems(noFull, dispositionMarkdown(goodRows)).some((problem) => problem.includes("full audit is missing")));
+  const wrongCommand = { ...base, audits: { ...base.audits, full: { ...base.audits.full, command: "npm.cmd audit --omit=dev --json" } } };
+  assert.ok(auditProblems(wrongCommand, dispositionMarkdown(goodRows)).some((problem) => problem.includes("full audit command is not the exact npm audit command")));
+  assert.deepEqual(auditProblems(null, dispositionMarkdown(goodRows)), ["audit report json is missing or not an object"]);
+  assert.deepEqual(auditProblems(base, ""), ["audit report markdown is missing or empty"]);
+});
+
+test("audit fixture: a high dev advisory is never masked and blocks unless fixed or reassessed with D-12 evidence", () => {
+  const report = withFull([finding("GHSA-high-high-high", "high", "brace-expansion")]);
+  const accepted = auditProblems(report, dispositionMarkdown([row("GHSA-high-high-high", "brace-expansion", "high", "accepted")]));
+  assert.ok(accepted.some((problem) => problem.includes("unresolved high advisory blocks the release")), accepted.join("; "));
+  const blocker = auditProblems(report, dispositionMarkdown([row("GHSA-high-high-high", "brace-expansion", "high", "blocker")]));
+  assert.ok(blocker.some((problem) => problem.includes("unresolved high advisory blocks the release")), blocker.join("; "));
+  const bareReassess = auditProblems(report, dispositionMarkdown([row("GHSA-high-high-high", "brace-expansion", "high", "reassessed", "lower in practice")]));
+  assert.ok(bareReassess.some((problem) => problem.includes("needs an evidence-based D-12 rationale")), bareReassess.join("; "));
+  assert.deepEqual(auditProblems(report, dispositionMarkdown([row("GHSA-high-high-high", "brace-expansion", "high", "fixed", "lockfile 1234567")])), []);
+  assert.deepEqual(auditProblems(report, dispositionMarkdown([row("GHSA-high-high-high", "brace-expansion", "high", "reassessed", "D-12: not reachable, test X")])), []);
+  // The markdown cannot relabel a high advisory as moderate.
+  const masked = auditProblems(report, dispositionMarkdown([row("GHSA-high-high-high", "brace-expansion", "moderate", "accepted")]));
+  assert.ok(masked.some((problem) => problem.includes('markdown severity "moderate" differs from audit severity "high"')), masked.join("; "));
+});
+
+test("audit fixture: an unknown disposition, an empty rationale or an empty owner is rejected", () => {
+  const problems = auditProblems(auditReport(), dispositionMarkdown([row("GHSA-aaaa-bbbb-cccc", "minimatch", "moderate", "ignore", "", ""), goodRows[1]]));
+  assert.ok(problems.some((problem) => problem.includes('disposition "ignore" is not one of')));
+  assert.ok(problems.some((problem) => problem.includes("empty rationale")));
+  assert.ok(problems.some((problem) => problem.includes("empty owner")));
+});
+
+test("audit: --verify fails closed when a report file is missing", () => {
+  const err: string[] = [];
+  const code = audit.main(["--verify"], {
+    fs: { existsSync: () => false, readFileSync: () => { throw new Error("must not read"); } },
+    git: () => ({ status: 0, stdout: COMMIT }),
+    out: () => {}, err: (text: string) => err.push(text),
+  });
+  assert.equal(code, 1);
+  assert.match(err.join(""), /missing-report/);
+  assert.equal(audit.main([], { out: () => {}, err: () => {} }), 2);
+});
+
+test("normalizeAudit: own advisory keeps its GHSA id, propagated packages get via ids and a direct-dependency path", () => {
+  const sample = {
+    vulnerabilities: {
+      eslint: { name: "eslint", severity: "moderate", isDirect: true, via: ["minimatch"], effects: [], nodes: ["node_modules/eslint"], range: ">=1", fixAvailable: { name: "eslint", version: "4.0.0", isSemVerMajor: true } },
+      minimatch: {
+        name: "minimatch", severity: "moderate", isDirect: false, effects: ["eslint"], nodes: ["node_modules/minimatch"], range: "<11.0.1", fixAvailable: false,
+        via: [{ source: 1244012, name: "minimatch", title: "ReDoS", url: "https://github.com/advisories/GHSA-g3hv-75wg-m249", severity: "moderate", range: "<11.0.1", cwe: ["CWE-405"] }],
+      },
+    },
+  };
+  const findings = audit.normalizeAudit(sample);
+  assert.deepEqual(findings.map((item: { id: string }) => item.id), ["via:eslint", "GHSA-g3hv-75wg-m249"]);
+  assert.equal(findings[1].path, "eslint > minimatch");
+  assert.equal(findings[0].fix, "eslint@4.0.0 (semver-major)");
+  assert.deepEqual(audit.normalizeAudit({ vulnerabilities: {} }), []);
+  assert.throws(() => audit.normalizeAudit({ error: { code: "ENOTFOUND" } }), /audit-error/);
 });
