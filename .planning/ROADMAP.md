@@ -346,7 +346,7 @@ Plans:
   12. В «Повышении» доступна кнопка «Создать шаблон», открывающая отдельный конструктор карточки досье вируса для текста и локальных изображений. Участник скачивает самодостаточные PNG или HTML для передачи проверяющему вне сайта; файлы и изображения не записываются в реальные записи архива, Supabase database/storage или `/api/uploads`.
 
 **Acceptance gate**: Неполное локальное покрытие отмечается явно; незакрытый high finding блокирует релиз согласно config. Фаза не закрывается без согласованного визуального контракта и принятия переработанного вида владельцем, физической owner PC/phone UAT, точного evidence ledger и отсутствия pending high-severity blocker.
-**Plans**: 19/31 plans executed (24 + 7 gap closure по 20-VERIFICATION.md)
+**Plans**: 20/31 plans executed (24 + 7 gap closure по 20-VERIFICATION.md)
 **UI hint**: yes
 
 Plans:
@@ -398,7 +398,7 @@ Plans:
 
 **Gap closure (2026-11-04, по 20-VERIFICATION.md; выполняются до владельческого хвоста 20-11..20-15)**
 - Gap Wave 1:
-  - [ ] 20-25-PLAN.md — полный lint без локальных инструментов, webkit-phone [STAB-MEDIA-03] без зависимости от порядка, шум диагностик и реестр 20-PLAYWRIGHT-WAIVERS.md
+  - [x] 20-25-PLAN.md — полный lint без локальных инструментов, webkit-phone [STAB-MEDIA-03] без зависимости от порядка, шум диагностик и реестр 20-PLAYWRIGHT-WAIVERS.md
   - [ ] 20-26-PLAN.md — security matrix на текущем HEAD (12 маршрутов, 5 миграций, свежесть), расследование 97d7abb (банки)
   - [ ] 20-27-PLAN.md — журнал физической приёмки 20-UAT.md и fail-closed валидатор (Task 1 плана 20-14 заранее)
 - Gap Wave 2:
@@ -420,7 +420,7 @@ Plans:
 | 17. Обратимая декомпозиция рабочего стола и редактора | 8/8 | Complete    | 2026-11-01 |
 | 18. Рабочий стол, окна и живые анимации | 7/7 | In Progress | - |
 | 19. «Повышение», приложения, редактор, поиск и медиа | 20/22 | In Progress | - |
-| 20. Security, accessibility и приёмка релиза | 19/31 | In Progress | - |
+| 20. Security, accessibility и приёмка релиза | 20/31 | In Progress | - |
 
 ## Coverage
 

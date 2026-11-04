@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-23-PLAN.md
-last_updated: "2026-11-04T14:10:39.281Z"
+stopped_at: Completed 20-25-PLAN.md
+last_updated: "2026-11-04T15:30:33.412Z"
 last_activity: 2026-11-04
-last_activity_desc: Completed quick task 261104-m6g — mobile viewport and Promotion polish
-state_head: 40dbf9b4f106cffeb928f6aabb3683b2dbe86f3a
+last_activity_desc: Phase 20 execution started
+state_head: 03be5e3b836d26fe1a075bdbc1f44ed954edde57
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 102
-  completed_plans: 90
+  completed_plans: 91
   percent: 50
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-29)
 
 **Core value:** Сделать существующий PORTIA OS доказуемо устойчивым, безопасным и визуально последовательным, сохранив его текущую художественную основу.
-**Current focus:** Phase PORTIA-20 — Security, accessibility и приёмка релиза
+**Current focus:** Phase 20 — Security, accessibility и приёмка релиза
 
 ## Current Position
 
-Phase: 20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 20 of 24
-Status: Executing Phase PORTIA-20
-Last activity: 2026-11-04 — Completed quick task 261104-m6g (mobile viewport and Promotion polish)
+Phase: 20 (Security, accessibility и приёмка релиза) — EXECUTING
+Plan: 12 of 31
+Status: Ready to execute
+Last activity: 2026-11-04 — Phase 20 execution started
 
 Progress: [█████░░░░░] 50%
 
@@ -126,6 +126,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P07 | 3h | 2 tasks | 6 files |
 | Phase PORTIA-20 P22 | not recorded | 3 tasks | 12 files |
 | Phase PORTIA-20 P23 | not recorded | 3 tasks | 10 files |
+| Phase 20 P25 | 77 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -216,6 +217,9 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-23: Sections of Сводка only label entries (sectionId); removing a group sends its entries to Без раздела, broadcasts is never reordered or cut
 - [Phase PORTIA-20]: 20-23: A section that disagrees with the flat list is dropped by normalizePortiaContent, flat list wins
 - [Phase PORTIA-20]: 20-23: The recommendation form does not carry editor-card-columns because the D-15 test pins that class to three forms
+- [Phase 20]: 20-25: webkit-phone [STAB-MEDIA-03] flake was a test defect (running fake clock, 1 s slack); portia-desktop-media.tsx untouched, test parks the clock and proves the request is held
+- [Phase 20]: 20-25: expected faults are per-test DiagnosticLedger.expectFault rules judged at assertion time; global allowlist stays 11 rows; csp/pageerror/hydration never expectable
+- [Phase 20]: 20-25: PW-07 (firefox-desktop page.goto no load, once, unreproducible) is a waiver ОЖИДАЕТ ВЛАДЕЛЬЦА, release gate FAIL until owner verdict; STAB-REL-01..03 and STAB-MEDIA-07 left open
 
 ### Pending Todos
 
@@ -257,8 +261,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T11:15:18.652Z
-Stopped at: Completed PORTIA-20-23-PLAN.md
+Last session: 2026-11-04T15:30:32.932Z
+Stopped at: Completed 20-25-PLAN.md
 Resume file: None
 
 ## Operator Next Step
