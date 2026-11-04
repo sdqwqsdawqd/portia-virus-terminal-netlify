@@ -200,10 +200,98 @@ test("[STAB-SEC-01] promo revoke applies to the open reviewer session without re
 
     const access = (await (await reviewerContext.request.get("/api/access")).json()) as { canEdit: boolean; openTabs: string[] };
     expect(access.openTabs.includes("promo")).toBe(false);
-    expect((await reviewerContext.request.get("/api/promotion/reviewer")).status()).toBe(403);
+    const denied = await reviewerContext.request.get("/api/promotion/reviewer");
+    expect(denied.status()).toBe(403);
+    await expectDeniedWithoutPayload(denied, "revoked reviewer");
   } finally {
     await reviewerContext.close();
     await ownerContext.close();
+  }
+});
+
+// Plan 20-09 (STAB-SEC-02): participant-visible network bodies, no-store and direct denial, judged on response bodies.
+const privilegedMarkers = [
+  "answerKey", "answer_key", "futureQuestions", "questions", "internalNote", "internal_note", "notes", "reviewerId", "reviewer_id",
+  "reviewerName", "reviewerCorrect", "linkedNickname", "tokenHash", "token_hash", "riskBucket", "ipBucket", "bucketKey", "bank", "cleanup", "sourceStatus",
+];
+const participantStatusKeys = new Set([
+  "nickname", "promotionRecord", "workflowAvailable", "currentTitle", "nextTitle", "ordinary", "qualification", "results",
+  "id", "label", "eligibility", "active", "status", "targetTitleId", "attemptId", "availableAt", "percent", "tasks", "text", "sortOrder",
+  "kind", "outcome", "createdAt", "copyKey", "remainingMs",
+]);
+
+function keysOf(value: unknown, into = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) value.forEach((item) => keysOf(item, into));
+  else if (value && typeof value === "object") for (const [key, inner] of Object.entries(value)) { into.add(key); keysOf(inner, into); }
+  return into;
+}
+
+function expectNoStore(response: APIResponse, label: string) {
+  const cacheControl = response.headers()["cache-control"] ?? "";
+  expect(cacheControl, `${label} cache-control`).toContain("no-store");
+}
+
+async function expectDeniedWithoutPayload(response: APIResponse, label: string) {
+  expectNoStore(response, label);
+  const text = await response.text();
+  for (const marker of privilegedMarkers) expect(text, `${label} body must not carry ${marker}`).not.toContain(marker);
+  expect([...keysOf(JSON.parse(text))], `${label} denial carries only an error text`).toEqual(["error"]);
+}
+
+for (const role of ["visitor", "participant"] as const) {
+  test(`[STAB-SEC-02] ${role} direct API requests are denied with no-store and no privileged payload`, async ({ browser, stagingRun, baseURL }, testInfo) => {
+    const base = baseURL ?? fallbackBase;
+    const session = role === "visitor" ? undefined : await sessionOrSkip(stagingRun, role, base, testInfo);
+    if (role === "visitor") {
+      stagingRun.touch();
+      testInfo.skip(!stagingRun.live, "BLOCKED: safe target unavailable");
+    }
+    const context = await contextFor(browser, base, session);
+    try {
+      const expected = route("promotion-reviewer-get").cells[role].status;
+      const read = await context.request.get("/api/promotion/reviewer");
+      expect(read.status(), `${role} reviewer GET`).toBe(expected);
+      await expectDeniedWithoutPayload(read, `${role} reviewer GET`);
+      const write = await context.request.post("/api/promotion/reviewer", { data: { action: "approve-task" } });
+      expect(write.status(), `${role} reviewer POST`).toBe(expected);
+      await expectDeniedWithoutPayload(write, `${role} reviewer POST`);
+
+      const qualification = await context.request.get("/api/promotion/test");
+      expect(qualification.status()).toBe(403);
+      await expectDeniedWithoutPayload(qualification, `${role} qualification test without device token`);
+
+      const status = await context.request.get("/api/promotion/status");
+      expect(status.status()).toBe(404);
+      expectNoStore(status, `${role} status without nickname`);
+      expect(((await status.json()) as { code?: string }).code).toBe("unbound-device");
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test("[STAB-SEC-02] participant status body for a roster nickname is allowlisted, no-store and stable across repeats and parallel reads", async ({ browser, stagingRun, baseURL }, testInfo) => {
+  const nickname = process.env.PORTIA_E2E_PROMO_NICKNAME?.trim();
+  stagingRun.touch();
+  testInfo.skip(!stagingRun.live, "BLOCKED: safe target unavailable");
+  testInfo.skip(!nickname, "BLOCKED(DATA): no promotion roster nickname provided for the isolated project");
+  const context = await contextFor(browser, baseURL ?? fallbackBase);
+  try {
+    const url = `/api/promotion/status?nickname=${encodeURIComponent(nickname ?? "")}`;
+    const responses = await Promise.all([context.request.get(url), context.request.get(url), context.request.get(url)]);
+    const bodies: string[] = [];
+    for (const [index, response] of responses.entries()) {
+      testInfo.skip(response.status() === 404 || response.status() === 503, `BLOCKED(DATA): promotion roster did not resolve the nickname (HTTP ${response.status()})`);
+      expect(response.status()).toBe(200);
+      expectNoStore(response, `status repeat ${index}`);
+      const text = await response.text();
+      for (const marker of privilegedMarkers) expect(text, `status repeat ${index} must not carry ${marker}`).not.toContain(marker);
+      for (const key of keysOf(JSON.parse(text))) expect(participantStatusKeys.has(key), `unexpected key ${key}`).toBe(true);
+      bodies.push(text);
+    }
+    expect(new Set(bodies).size, "repeated and parallel reads do not widen the projection").toBe(1);
+  } finally {
+    await context.close();
   }
 });
 
