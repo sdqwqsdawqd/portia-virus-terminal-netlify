@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-22-PLAN.md
-last_updated: "2026-11-04T11:10:17Z"
+stopped_at: Completed PORTIA-20-23-PLAN.md
+last_updated: "2026-11-04T11:15:19.872Z"
 last_activity: 2026-11-04
 last_activity_desc: Completed quick task 261104-m6g — mobile viewport and Promotion polish
-state_head: 5df2966766c745ce79aba888bd54a23748f4ffa7
+state_head: 397597c4deef213ec5672773235e58c7415c141b
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 89
+  completed_plans: 90
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 19 of 24
+Plan: 20 of 24
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-04 — Completed quick task 261104-m6g (mobile viewport and Promotion polish)
 
@@ -125,6 +125,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P16 | 2h30m | 3 tasks | 7 files |
 | Phase PORTIA-20 P07 | 3h | 2 tasks | 6 files |
 | Phase PORTIA-20 P22 | not recorded | 3 tasks | 12 files |
+| Phase PORTIA-20 P23 | not recorded | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -211,6 +212,10 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-07: tap area measured by elementFromPoint; start button grows only its hit area, window controls drawn at 44, taskbar label hidden by clip not display:none (accessible name kept)
 - [Phase PORTIA-20]: 20-07: colour-contrast defects in Archive/Search/Trash pinned as FAIL until owner verdict D-10, not fixed (would change approved window frames); STAB-A11Y-02/04 stay open
 - [Phase PORTIA-20]: 20-22: section columns of five via columnMajor; pinned add bar uses sticky (-28px PC, overflow: clip + 48px on phone); editor notes only via /api/content/notes, outside content undo; all live checks BLOCKED (ENV)/(OWNER), no requirement closed
+- [Phase PORTIA-20]: 20-23: One tree model for Рекомендации keeps the flat searchRecommendations equal to the expansion of the sections and each line's own styles through write, move and delete
+- [Phase PORTIA-20]: 20-23: Sections of Сводка only label entries (sectionId); removing a group sends its entries to Без раздела, broadcasts is never reordered or cut
+- [Phase PORTIA-20]: 20-23: A section that disagrees with the flat list is dropped by normalizePortiaContent, flat list wins
+- [Phase PORTIA-20]: 20-23: The recommendation form does not carry editor-card-columns because the D-15 test pins that class to three forms
 
 ### Pending Todos
 
@@ -226,6 +231,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 20] Physical owner PC (including DPR 1.25) and phone UAT has not occurred and blocks milestone completion.
 - [Phase 19] STAB-PROM-15 stays open: live acceptance on isolated staging (steps 1-9, 11, PC and phone) is debt for 19-14 / Phase 20; owner steps 2-8 mutated production, review of those changes is the owner's decision. 19-07 teardown of run mvz5fqgv_c40b449b is permitted by the owner's acceptance.
 - [Phase 20] register_attempt RPC is granted to anon but has no caller - decide revoke or confirm purpose in the security review.
+- 20-23: live proof of Сводка/Рекомендации sections is BLOCKED (ENV) (no safe staging target) and the notes steps BLOCKED (OWNER) (portia_editor_notes not applied); STAB-EDIT-02/03/04, STAB-A11Y-01/02, STAB-REL-06 stay open
 
 ### Quick Tasks Completed
 
@@ -251,8 +257,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T10:36:22.402Z
-Stopped at: Completed PORTIA-20-22-PLAN.md
+Last session: 2026-11-04T11:15:18.652Z
+Stopped at: Completed PORTIA-20-23-PLAN.md
 Resume file: None
 
 ## Operator Next Step
