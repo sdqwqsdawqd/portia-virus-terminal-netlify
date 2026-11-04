@@ -58,3 +58,45 @@ test("[STAB-A11Y-02] info-phone-article: the article of the first section withou
   await expect(window.locator(".info-document h1")).toHaveText(plain.title);
   await captureCandidate(context, spec);
 });
+
+// The two frames below exist only after 20-16: they are taken when the library carries data-info-screen, otherwise nothing is recorded.
+async function afterChangeOnly(window: Awaited<ReturnType<typeof openInfo>>) {
+  return (await window.locator(".info-library").getAttribute("data-info-screen")) !== null;
+}
+
+const withSubsections = (sections: Section[]) => sections.find((section) => section.title.trim() && section.subsections.length >= 2);
+
+test("[STAB-A11Y-02] info-phone-expanded: a section with subsections opened in the list", async ({ page, browser, determinism }, testInfo) => {
+  const context = { page, browser, determinism, testInfo };
+  const section = withSubsections(await infoSections(page));
+  const spec = { ...base, id: "info-phone-expanded", state: "expanded", intendedSnapshot };
+  const window = await openInfo(page);
+  if (!(await afterChangeOnly(window))) return;
+  if (!section) {
+    await recordBlockedCandidate(context, spec, { reasonCode: "PUBLIC_STATE_FIXTURE_REQUIRED", recoveryPhase: 20, reason: "BLOCKED (DATA): the target serves no «Информация» section with two or more subsections." });
+    test.skip(true, "BLOCKED (DATA): no section with two or more subsections on this target.");
+    return;
+  }
+  await window.locator(".info-index > div > button[aria-expanded]").filter({ has: page.getByText(section.title, { exact: true }) }).click();
+  await expect(window.locator(`[data-info-id="${section.subsections[0].id}"]`)).toBeVisible();
+  await captureCandidate(context, spec);
+});
+
+test("[STAB-A11Y-02] info-phone-next: the end of the first subsection article with «Далее»", async ({ page, browser, determinism }, testInfo) => {
+  const context = { page, browser, determinism, testInfo };
+  const section = withSubsections(await infoSections(page));
+  const spec = { ...base, id: "info-phone-next", state: "next", intendedSnapshot };
+  const window = await openInfo(page);
+  if (!(await afterChangeOnly(window))) return;
+  if (!section) {
+    await recordBlockedCandidate(context, spec, { reasonCode: "PUBLIC_STATE_FIXTURE_REQUIRED", recoveryPhase: 20, reason: "BLOCKED (DATA): the target serves no «Информация» section with two or more subsections." });
+    test.skip(true, "BLOCKED (DATA): no section with two or more subsections on this target.");
+    return;
+  }
+  await window.locator(".info-index > div > button[aria-expanded]").filter({ has: page.getByText(section.title, { exact: true }) }).click();
+  await window.locator(`[data-info-id="${section.subsections[0].id}"]`).click();
+  const next = window.locator(".info-next button");
+  await expect(next).toBeVisible();
+  await next.scrollIntoViewIfNeeded();
+  await captureCandidate(context, spec);
+});
