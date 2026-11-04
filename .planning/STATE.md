@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed 20-25-PLAN.md
-last_updated: "2026-11-04T15:30:33.412Z"
+stopped_at: Completed PORTIA-20-26-PLAN.md
+last_updated: "2026-11-04T15:38:54.586Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 20 execution started
-state_head: 03be5e3b836d26fe1a075bdbc1f44ed954edde57
+state_head: d818e7800a0e548686204713e51020aedd832a4a
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 102
-  completed_plans: 91
+  completed_plans: 92
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 12 of 31
+Plan: 13 of 31
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 20 execution started
 
@@ -127,6 +127,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P22 | not recorded | 3 tasks | 12 files |
 | Phase PORTIA-20 P23 | not recorded | 3 tasks | 10 files |
 | Phase 20 P25 | 77 min | 3 tasks | 10 files |
+| Phase PORTIA-20 P26 | 32 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -220,6 +221,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 20]: 20-25: webkit-phone [STAB-MEDIA-03] flake was a test defect (running fake clock, 1 s slack); portia-desktop-media.tsx untouched, test parks the clock and proves the request is held
 - [Phase 20]: 20-25: expected faults are per-test DiagnosticLedger.expectFault rules judged at assertion time; global allowlist stays 11 rows; csp/pageerror/hydration never expectable
 - [Phase 20]: 20-25: PW-07 (firefox-desktop page.goto no load, once, unreproducible) is a waiver ОЖИДАЕТ ВЛАДЕЛЬЦА, release gate FAIL until owner verdict; STAB-REL-01..03 and STAB-MEDIA-07 left open
+- [Phase PORTIA-20]: 20-26: 97d7abb is intentional, no bypass; bank route unchanged, STAB-PROM-05 held by preview 409, version-bound token, SQL count check (6 tests)
+- [Phase PORTIA-20]: 20-26: security matrix pinned to commit b88669f; later plans touching the matrix coverage paths must refresh it or lib/security-matrix.test.ts fails with stale matrix
 
 ### Pending Todos
 
@@ -261,8 +264,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T15:30:32.932Z
-Stopped at: Completed 20-25-PLAN.md
+Last session: 2026-11-04T15:38:54.141Z
+Stopped at: Completed PORTIA-20-26-PLAN.md
 Resume file: None
 
 ## Operator Next Step
