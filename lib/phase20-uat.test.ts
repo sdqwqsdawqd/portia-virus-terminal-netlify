@@ -130,12 +130,124 @@ export type UatOptions = {
 };
 
 const deviceLabel = { pc: "PC", phone: "phone" } as const;
+const d15Labels = ["Изменение между коммитами", "Основание сохранения PC-вердикта", "Полный повтор phone"];
+const sameCommit = (a: string, b: string) => hexCommit.test(a) && hexCommit.test(b) && (a.startsWith(b) || b.startsWith(a));
+const isBlocked = (status: string) => status.startsWith("BLOCKED");
+const prerequisiteSatisfied = (status: string) => status === "PASS" || status === "ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ";
+
+function validatePrerequisites(uat: Uat, complete: boolean, errors: string[]): Map<string, Prerequisite> {
+  const byId = new Map<string, Prerequisite>();
+  for (const row of uat.prerequisites) {
+    if (byId.has(row.id)) errors.push(`duplicate ${row.id} in prerequisites`);
+    else byId.set(row.id, row);
+  }
+  for (const id of requiredUatIds.prerequisites) if (!byId.has(id)) errors.push(`missing ${id} on prerequisites`);
+
+  for (const row of uat.prerequisites) {
+    if (!prerequisiteStatuses.includes(row.status)) { errors.push(`${row.id}: unknown status "${row.status}"`); continue; }
+    const ownerMigration = row.id.startsWith("OWNER-MIG-");
+    if (ownerMigration && row.status === "PASS") {
+      // D-36, D-47: production is applied by the owner only; an agent PASS here would be an unverifiable claim.
+      errors.push(`${row.id}: an owner migration row cannot be PASS (the owner records ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ with date and method)`);
+    } else if (row.status === "PASS" && !isoDate.test(row.date)) {
+      errors.push(`${row.id}: PASS needs an ISO date`);
+    }
+    if (row.status === "ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ") {
+      if (!ownerMigration) errors.push(`${row.id}: ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ is only for the OWNER-MIG rows`);
+      else if (!isoDate.test(row.date) || empty(row.note)) errors.push(`${row.id}: applied needs the owner date and method`);
+    }
+    if (isBlocked(row.status) && empty(row.note)) errors.push(`${row.id}: BLOCKED needs a reason`);
+    if (row.status === "FAIL" && empty(row.note)) errors.push(`${row.id}: FAIL needs a note`);
+    if (complete) {
+      if (row.status === "ОЖИДАЕТ") errors.push(`${row.id}: is still ОЖИДАЕТ`);
+      if (row.status === "ОЖИДАЕТ ВЛАДЕЛЬЦА" && !ownerMigration) errors.push(`${row.id}: is still ОЖИДАЕТ ВЛАДЕЛЬЦА`);
+    }
+  }
+  if (complete && byId.has("RELEASE-GATE") && byId.get("RELEASE-GATE")!.status !== "PASS") {
+    errors.push("RELEASE-GATE must be PASS before the owner verdicts count (20-13 gate on the release commit)");
+  }
+  return byId;
+}
+
+function validateSteps(
+  uat: Uat, device: "pc" | "phone", prerequisites: Map<string, Prerequisite>, complete: boolean, commitExists: (commit: string) => boolean, errors: string[],
+) {
+  const label = deviceLabel[device];
+  const required = device === "pc" ? [...requiredUatIds.both, ...requiredUatIds.pcOnly] : [...requiredUatIds.both, ...requiredUatIds.phoneOnly];
+  const foreign = device === "pc" ? requiredUatIds.phoneOnly : requiredUatIds.pcOnly;
+  const seen = new Set<string>();
+  for (const step of uat[device]) {
+    const where = `${step.id} on ${label}`;
+    if (seen.has(step.id)) errors.push(`duplicate ${step.id} on ${label}`);
+    seen.add(step.id);
+    if (foreign.includes(step.id)) errors.push(`${step.id} must not be on ${label}`);
+
+    const dependencies = step.dependsOn.split(/\s*[,;]\s*/).filter((dep) => dep !== "" && dep !== "-");
+    for (const dep of dependencies) if (!prerequisites.has(dep)) errors.push(`${where}: unknown prerequisite ${dep}`);
+    if (!stepStatuses.includes(step.status)) { errors.push(`${where}: unknown status "${step.status}"`); continue; }
+
+    if (step.status === "ОЖИДАЕТ" && complete) errors.push(`${where}: is still ОЖИДАЕТ`);
+    if (isBlocked(step.status) && empty(step.note)) errors.push(`${where}: BLOCKED needs a reason`);
+    if (step.status === "FAIL") {
+      if (empty(step.note)) errors.push(`${where}: FAIL needs a note`);
+      if (empty(step.screenshot)) errors.push(`${where}: FAIL needs a screenshot`);
+      if (complete && !hexCommit.test(step.commit)) errors.push(`${where}: FAIL needs the tested commit`);
+    }
+    if (step.status !== "PASS") continue;
+
+    if (step.device.toLowerCase() !== label.toLowerCase()) errors.push(`${where}: PASS needs the device "${label}", got "${step.device}"`);
+    if (!hexCommit.test(step.commit)) errors.push(`${where}: PASS needs a commit of 7-40 hex characters, got "${step.commit}"`);
+    else if (!commitExists(step.commit)) errors.push(`${where}: commit ${step.commit} does not exist`);
+    if (!isoDate.test(step.date)) errors.push(`${where}: PASS needs an ISO date, got "${step.date}"`);
+    for (const dep of dependencies) {
+      const prerequisite = prerequisites.get(dep);
+      if (prerequisite && !prerequisiteSatisfied(prerequisite.status)) errors.push(`${where}: PASS depends on ${dep} which is ${prerequisite.status}`);
+    }
+  }
+  for (const id of required) if (!seen.has(id)) errors.push(`missing ${id} on ${label}`);
+}
+
+function validateVerdicts(uat: Uat, commitExists: (commit: string) => boolean, complete: boolean, errors: string[]) {
+  for (const device of ["pc", "phone"] as const) {
+    const label = deviceLabel[device];
+    const verdict = uat.verdicts[device];
+    if (!verdict) continue; // the missing line is reported with the structure
+    if (verdict.status === "ОЖИДАЕТ") {
+      if (complete) errors.push(`${label} verdict is still ОЖИДАЕТ`);
+      continue;
+    }
+    if ((verdict.status !== "PASS" && verdict.status !== "FAIL") || !hexCommit.test(verdict.commit)) {
+      errors.push(`${label} verdict needs "PASS (commit <hex>)" or "FAIL (commit <hex>)", got "${verdict.raw}"`);
+      continue;
+    }
+    if (!commitExists(verdict.commit)) errors.push(`${label} verdict commit ${verdict.commit} does not exist`);
+    for (const step of uat[device]) {
+      if (verdict.status === "PASS" && step.status !== "PASS") errors.push(`${label} verdict is PASS but ${step.id} is ${step.status}`);
+      // The verdict is bound to the commit the steps were run on; D-15 is the only way two devices differ.
+      if ((step.status === "PASS" || step.status === "FAIL") && hexCommit.test(step.commit) && !sameCommit(step.commit, verdict.commit)) {
+        errors.push(`${step.id} on ${label}: commit ${step.commit} differs from the ${label} verdict commit ${verdict.commit}`);
+      }
+    }
+  }
+
+  const pc = uat.verdicts.pc;
+  const phone = uat.verdicts.phone;
+  if (pc && phone && hexCommit.test(pc.commit) && hexCommit.test(phone.commit) && !sameCommit(pc.commit, phone.commit)) {
+    for (const label of d15Labels) {
+      const value = uat.d15[label] ?? "";
+      if (empty(value) || /^не требуется/i.test(value)) errors.push(`D-15: "${label}" must be filled when the PC and phone commits differ`);
+    }
+  }
+}
 
 export function validateUat(text: string, options: UatOptions = {}): string[] {
   const errors: string[] = [];
   const uat = parseUat(text);
+  const complete = options.requireComplete === true;
+  const commitExists = (commit: string) => !options.commitExists || options.commitExists(commit);
   errors.push(...uat.problems);
 
+  if (uat.frontmatter.artifact !== "uat-ledger") errors.push('frontmatter artifact must be "uat-ledger"');
   if (uat.headingLine.pc < 0) errors.push("the PC checklist table is missing");
   if (uat.headingLine.phone < 0) errors.push("the phone checklist table is missing");
   if (uat.headingLine.pc >= 0 && uat.headingLine.phone >= 0 && uat.headingLine.phone < uat.headingLine.pc) {
@@ -144,17 +256,20 @@ export function validateUat(text: string, options: UatOptions = {}): string[] {
   if (!uat.verdicts.pc) errors.push("the PC verdict line is missing");
   if (!uat.verdicts.phone) errors.push("the phone verdict line is missing");
 
-  for (const device of ["pc", "phone"] as const) {
-    for (const step of uat[device]) {
-      const where = `${step.id} on ${deviceLabel[device]}`;
-      if (!stepStatuses.includes(step.status)) { errors.push(`${where}: unknown status "${step.status}"`); continue; }
-      if (step.status !== "PASS") continue;
-      if (step.device.toLowerCase() !== deviceLabel[device].toLowerCase()) {
-        errors.push(`${where}: PASS needs the device "${deviceLabel[device]}", got "${step.device}"`);
+  const prerequisites = validatePrerequisites(uat, complete, errors);
+  validateSteps(uat, "pc", prerequisites, complete, commitExists, errors);
+  validateSteps(uat, "phone", prerequisites, complete, commitExists, errors);
+  validateVerdicts(uat, commitExists, complete, errors);
+
+  if (complete) {
+    const release = uat.frontmatter.release_candidate_commit ?? "";
+    const phoneCommit = uat.verdicts.phone?.commit ?? "";
+    if (!hexCommit.test(release)) errors.push(`release_candidate_commit must be a 7-40 hex commit, got "${release}"`);
+    else {
+      if (!commitExists(release)) errors.push(`release_candidate_commit ${release} does not exist`);
+      if (hexCommit.test(phoneCommit) && !sameCommit(release, phoneCommit)) {
+        errors.push(`release_candidate_commit ${release} is not the phone verdict commit ${phoneCommit}`);
       }
-      if (!hexCommit.test(step.commit)) errors.push(`${where}: PASS needs a commit of 7-40 hex characters, got "${step.commit}"`);
-      else if (options.commitExists && !options.commitExists(step.commit)) errors.push(`${where}: commit ${step.commit} does not exist`);
-      if (!isoDate.test(step.date)) errors.push(`${where}: PASS needs an ISO date, got "${step.date}"`);
     }
   }
   return errors;
@@ -247,7 +362,7 @@ function completeLedger(text: string, commits: Commits = { pc: "abcdef1", phone:
 const withVerdict = (text: string, device: "PC" | "phone", value: string) =>
   text.replace(new RegExp(`^Вердикт ${device}: .*$`, "m"), `Вердикт ${device}: ${value}`);
 const allKnown = () => true;
-const noCommit = (_: string) => false;
+const noCommit = () => false;
 const errorsOf = (text: string, options: UatOptions = {}) => validateUat(text, { commitExists: allKnown, ...options });
 
 describe("20-UAT ledger structure (fail-closed)", () => {
