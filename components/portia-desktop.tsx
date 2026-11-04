@@ -185,6 +185,43 @@ function sliceRichText(document: RichTextDocument | undefined, start: number, en
 
 // The seed lives for the page load: a module-level cache read on the client only, never on the server.
 let recommendationSeedOfPage: number | null = null;
+/**
+ * While the qualification window runs, Tab and Shift+Tab wrap inside it. The rest of the desktop is inert, so without the wrap the focus
+ * would leave the page for the browser UI, the window would lose focus and the attempt would be failed on a PC (STAB-A11Y-01).
+ */
+function qualificationTabbables(root: HTMLElement) {
+  const radios = Array.from(root.querySelectorAll<HTMLInputElement>('input[type="radio"]'));
+  return Array.from(root.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, summary, [tabindex]")).filter((element) => {
+    if (element.matches(":disabled") || element.tabIndex < 0 || element.closest("[inert], [hidden]") || element.getClientRects().length === 0) return false;
+    if (element instanceof HTMLInputElement && element.type === "radio" && element.name) {
+      const group = radios.filter((radio) => radio.name === element.name && radio.form === element.form);
+      return (group.find((radio) => radio.checked) ?? group[0]) === element;
+    }
+    return true;
+  });
+}
+
+function trapQualificationTab(event: KeyboardEvent) {
+  if (event.key !== "Tab" || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  const root = document.querySelector<HTMLElement>(".promotion-window");
+  if (!root) return;
+  const items = qualificationTabbables(root);
+  if (items.length === 0) { event.preventDefault(); return; }
+  const active = document.activeElement;
+  const inside = active instanceof HTMLElement && root.contains(active);
+  const following = (item: HTMLElement) => !!active && active !== item && !!(active.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const preceding = (item: HTMLElement) => !!active && active !== item && !!(active.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_PRECEDING);
+  if (!event.shiftKey) {
+    if (inside && items.some(following)) return;
+    event.preventDefault();
+    items[0].focus();
+  } else {
+    if (inside && items.some(preceding)) return;
+    event.preventDefault();
+    items[items.length - 1].focus();
+  }
+}
+
 const subscribeNothing = () => () => {};
 const pageRecommendationSeed = () => (recommendationSeedOfPage ??= newRecommendationSeed());
 const serverRecommendationSeed = () => null;
@@ -910,7 +947,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     const behind = Array.from(document.querySelectorAll<HTMLElement>(".system-bar, .desktop-icons, .app-window:not(.promotion-window), .desktop-assistant, .taskbar, .start-panel, .global-format-launch, .quest-toast"));
     for (const element of behind) element.inert = true;
+    document.addEventListener("keydown", trapQualificationTab);
     return () => {
+      document.removeEventListener("keydown", trapQualificationTab);
       for (const element of behind) element.inert = false;
       const restoreFocus = opener && opener.isConnected ? opener : document.querySelector<HTMLElement>('.promotion-window h1, [data-taskbar-app="promotion"]');
       restoreFocus?.focus({ preventScroll: true });
