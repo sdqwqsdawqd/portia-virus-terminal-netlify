@@ -40,8 +40,29 @@ HEAD пересъёмки: `0929a084c13dc8cd420152c949c3332e82ed7e67`. Набо�
 
 Пересъёмка на HEAD `0929a084c13d`, набор `phase20-refresh-0929a084c13d`. В таблицу попадают строки 20-VISUAL-APPROVAL.md со статусом CANDIDATE; прежний hash сохранён в примечании строки. Кадры «до» (phase20-spider-rest-before, phase20-class-icons-before, phase20-info-phone-before и утверждённые эталоны) не переснимались: это опорные кадры сравнения.
 
-| Набор (был) | Строк | Изменилось | Не изменилось |
-|---|---|---|---|
-| phase15-current-17215b3a8bae (Promotion: участник) | 10 | 10 | 0 |
+| Набор (был) | Что внутри | Строк | Изменилось | Не изменилось |
+|---|---|---|---|---|
+| phase15-current-17215b3a8bae | Promotion: участник (вход, E4 состояния) | 10 | 10 | 0 |
+| phase20-spider-art | Паук: акценты, spider-off, full-walk, mid-step-off (20-03) | 12 | 9 | 3 (все PC) |
+| phase20-spider-rest-after | Паук в покое, «после» (D-45) | 4 | 3 | 1 (PC, Выключены) |
+| phase15-current-f20dac6e8c6a | Фон «Лабораторные колбы» (20-04) | 12 | 6 | 6 (все PC) |
+| phase15-current-6e995e6e2112 | Рисунки пустых состояний: колба и микроскоп (20-05) | 16 | 14 | 2 (PC, статичные) |
+| phase20-class-icons-after | Девять иконок классов, «после» (20-20) | 15 | 6 | 9 (все PC) |
+| phase20-info-phone-after | «Информация» на телефоне, «после» (20-16) | 4 | 4 | 0 |
+| Итого | | 73 | 52 | 21 |
+
+Закономерность: PC-кадры в основном не изменились, phone-кадры изменились почти все. Это согласуется с правилом `max-width: 900px` из 23c1c85, которое действует на телефонную ширину. Кадр spider-full-walk (поза зависит от момента кадра) по hash невоспроизводим и в числе изменившихся не доказывает регрессию.
+
+Старые рисунки для сравнения в строках пустых состояний (empty-art-quests-old-flask и empty-art-search-old-microscope, набор phase15-current-6e995e6e2112) пересняты тем же прогоном: у всех 16 строк их hash изменился; прежний hash записан в примечании. Наборы «до» (phase20-spider-rest-before, phase20-class-icons-before, phase20-info-phone-before) и утверждённые эталоны не переснимались.
+
+Резкость паука «как есть» на новом spider-rest-sharpness.json совпала с прежней «после» (PC: 1.112 Выключены, 1.121 стоит; phone: 1.276 и 1.268); порог 0.9 не менялся.
+
+Команды съёмки (HEAD `0929a084c13d`, сервер на порту 3100): `npm.cmd run test:e2e:candidates -- --retries=0 --project=chromium-desktop --project=chromium-phone tests/e2e/visual-candidates/promotion.spec.ts` и `... --project=webkit-phone tests/e2e/visual-candidates/info-phone.spec.ts` с `PORTIA_VISUAL_SET_ID=phase20-refresh-0929a084c13d`. Скрипт `test:e2e:candidates` уже содержит каталог `tests/e2e/visual-candidates`, поэтому указанный спек не сузил запуск: прошли все спеки каталога на chromium-desktop и chromium-phone (179 passed, 37 skipped, 0 failed) и на webkit-phone (20 passed, 88 skipped, 0 failed). Этого достаточно для пакета: в наборе есть кадры phase20-art, phase20-empty-art, phase20-class-icons, info-phone и promotion.
 
 Строка дрейфа: Кандидаты Promotion пересняты, изменились hash 10 из 10 (ожидаемо: глобальный CSS 23c1c85 и редакторы 97d7abb меняют кадры, включая phone). Строки promotion-participant-cards и promotion-reviewer-* остаются BLOCKED (DATA)/(ENV); указатели ведут на новые `.blocked.json` набора `phase20-refresh-0929a084c13d`.
+
+Строка дрейфа: Кандидаты остальных наборов (паук, колбы, пустые состояния, иконки классов, «Информация» на телефоне) пересняты на том же HEAD; изменились hash 42 из 63. Всего по ledger: изменились 52 из 73 кандидатных строк, 21 без изменений. BLOCKED-строки остались BLOCKED (DATA/ENV/CAPTURE), в том числе иконки классов «Поведение» на телефоне (панель по-прежнему под панелью задач) и все кадры проверяющего.
+
+## Проверка свежести в тесте ledger
+
+`lib/phase20-visual-approval.test.ts`: поле candidates_commit обязательно (40 hex, `git cat-file -e` и `git merge-base --is-ancestor <commit> HEAD` завершаются кодом 0; ненулевой код git это ошибка проверки), а `staleCandidateProblems(commit, { changedSince })` с реализацией `git diff --name-only <commit> HEAD -- app components public lib` (без *.test.ts; ненулевой код git это ошибка) в строгом режиме `PORTIA_REQUIRE_APPROVAL=1` отвергает вердикт сообщением «stale candidates: <файл> changed since <commit>». В обычном режиме результат выводится через `t.diagnostic`. Фикстуры: нет изменений, изменённый components/portia-desktop.tsx, игнорируемые тестовые и внешние файлы, падение git, строгий и обычный режим.

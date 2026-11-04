@@ -88,7 +88,7 @@ export function parseLedger(text: string): { rows: LedgerRow[]; questions: Quest
 }
 
 // Runs git and reports the exit code; status null means git itself could not run.
-export type GitRunner = (args: string[]) => { status: number | null; error?: string };
+export type GitRunner = (args: string[]) => { status: number | null; error?: string; stdout?: string };
 
 export function ledgerFrontmatter(text: string): Record<string, string> {
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -115,10 +115,37 @@ export function candidatesCommitProblems(commit: string | undefined, git?: GitRu
   return [];
 }
 
+// Files changed between the candidate commit and HEAD, limited to the product directories. A non-zero git exit is an error, not an empty list.
+export function changedSinceCommit(commit: string, git: GitRunner): string[] {
+  const result = git(["diff", "--name-only", commit, "HEAD", "--", "app", "components", "public", "lib"]);
+  if (result.status === null) throw new Error(`git could not run: ${result.error ?? "unknown error"}`);
+  if (result.status !== 0) throw new Error(`git diff --name-only ${commit} HEAD failed with exit ${result.status}`);
+  return (result.stdout ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+const productPrefixes = ["app/", "components/", "public/", "lib/"];
+const isTestFile = (file: string) => /\.test\.(ts|tsx|mjs|js)$/.test(file);
+
+// T-20-43: a candidate hash describes the code at candidates_commit. Product code (app, components, public, non-test lib) changed
+// since then makes the candidates stale, so the owner cannot approve an out-of-date hash.
+export function staleCandidateProblems(commit: string, deps: { changedSince: (commit: string) => string[] }): string[] {
+  let changed: string[];
+  try {
+    changed = deps.changedSince(commit);
+  } catch (error) {
+    return [`stale candidates: could not compare with ${commit}: ${error instanceof Error ? error.message : String(error)}`];
+  }
+  return changed
+    .filter((file) => productPrefixes.some((prefix) => file.startsWith(prefix)) && !isTestFile(file))
+    .map((file) => `stale candidates: ${file} changed since ${commit}`);
+}
+
 type Options = {
   requireApproval?: boolean;
   // Checks candidates_commit against the repository. Without it only the field shape is checked.
   git?: GitRunner;
+  // Product files changed since candidates_commit; in the strict mode (requireApproval) any such file makes the candidates stale.
+  changedSince?: (commit: string) => string[];
   // File checks run only for files that exist on this machine (the candidate directory is gitignored). Approval mode makes absence an error.
   fileSha?: (relativePath: string) => string | null;
 };
@@ -134,7 +161,11 @@ export function validateLedger(text: string, options: Options = {}): string[] {
   for (const id of requiredIds) if (!byId.has(id)) errors.push(`${id}: required row is missing`);
   for (const id of requiredQuestions) if (!questions.some((q) => q.id === id)) errors.push(`${id}: required owner question is missing`);
 
-  errors.push(...candidatesCommitProblems(ledgerFrontmatter(text).candidates_commit, options.git));
+  const candidatesCommit = ledgerFrontmatter(text).candidates_commit;
+  errors.push(...candidatesCommitProblems(candidatesCommit, options.git));
+  if (options.requireApproval && options.changedSince && /^[0-9a-f]{40}$/.test(candidatesCommit ?? "")) {
+    errors.push(...staleCandidateProblems(candidatesCommit, { changedSince: options.changedSince }));
+  }
 
   const fileSha = options.fileSha;
   for (const row of rows) {
@@ -186,7 +217,7 @@ const fileSha = (relativePath: string): string | null => {
 
 const realGit: GitRunner = (args) => {
   const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
-  return { status: result.status, error: result.error?.message };
+  return { status: result.status, error: result.error?.message, stdout: result.stdout ?? "" };
 };
 
 const ledger = readFileSync(ledgerPath, "utf8");
@@ -389,6 +420,6 @@ describe("stale candidates (20-29, T-20-43): product code changed after candidat
 
 describe("Task 2 gate: owner verdicts (PORTIA_REQUIRE_APPROVAL=1)", () => {
   test("every captured candidate has an exact positive owner verdict and every owner question an answer", { skip: process.env.PORTIA_REQUIRE_APPROVAL !== "1" ? "run with PORTIA_REQUIRE_APPROVAL=1 after the owner fills the ledger" : false }, () => {
-    assert.deepEqual(validateLedger(ledger, { requireApproval: true, fileSha }), []);
+    assert.deepEqual(validateLedger(ledger, { requireApproval: true, fileSha, git: realGit, changedSince: (commit) => changedSinceCommit(commit, realGit) }), []);
   });
 });
