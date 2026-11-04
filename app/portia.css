@@ -1282,6 +1282,9 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .info-library[data-info-screen="article"] .info-index { display: none; }
   /* D-30: the only control above the text. It stays in the flow: .app-window clips on a phone, so a sticky button could not hold while the page scrolls. */
   .info-phone-back { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: 0 0 18px; padding: 0; border: 1px solid var(--teal-dim); border-radius: 4px; background: var(--panel); color: var(--teal); font: 700 20px var(--sans); cursor: pointer; }
+  /* D-31: «Далее» ends the article in the flow of the document, on the right; it is never fixed, sticky or absolute, so it cannot cover text, links or video. */
+  .info-next { position: static; display: flex; justify-content: flex-end; margin-top: 24px; }
+  .info-next button { position: static; min-height: 44px; max-width: 100%; padding: 10px 14px; border: 1px solid var(--teal-dim); border-radius: 4px; background: var(--teal-soft); color: var(--teal); font: 700 13px/1.35 var(--sans); text-align: right; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
   .info-document { padding: 27px 17px 45px; }
   .info-document h1 { font-size: 29px; }
   .info-document-copy, .info-document-copy p, .formatted-rich-input[data-area="info"] { font-size: 15px; }
