@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -326,4 +327,159 @@ test("normalizeAudit: own advisory keeps its GHSA id, propagated packages get vi
   assert.equal(findings[0].fix, "eslint@4.0.0 (semver-major)");
   assert.deepEqual(audit.normalizeAudit({ vulnerabilities: {} }), []);
   assert.throws(() => audit.normalizeAudit({ error: { code: "ENOTFOUND" } }), /audit-error/);
+});
+
+/* ------------------------------------------------------------------ carried-over 19-REVIEW findings, D-33 (Task 3) */
+
+const d33Ids = ["WR-03", "WR-05", "IN-01", "IN-02", "IN-03", "IN-04", "IN-05"];
+const d33Heading = "Перенесённые находки 19-REVIEW (D-33)";
+const disposition19Path = ".planning/phases/PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media/19-REVIEW-DISPOSITION.md";
+
+type D33Env = { commitExists: (sha: string) => boolean; fileContains: (file: string, text: string) => boolean };
+const backticks = (cell: string) => [...cell.matchAll(/`([^`]+)`/g)].map((match) => match[1]);
+
+/** Rows of the 19-REVIEW disposition table: id -> { status, note }. */
+function disposition19Rows(markdown: string) {
+  const rows = new Map<string, { status: string; note: string }[]>();
+  for (const line of markdown.split("\n")) {
+    if (!line.startsWith("| ")) continue;
+    const [id, , , status, note] = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+    if (!/^(CR|WR|IN)-\d+$/.test(id)) continue;
+    rows.set(id, [...(rows.get(id) ?? []), { status, note: note ?? "" }]);
+  }
+  return rows;
+}
+
+/** Every problem of the D-33 section and of its mirror in 19-REVIEW-DISPOSITION.md. */
+export function d33Problems(matrix: string, disposition19: string, env: D33Env): string[] {
+  const problems: string[] = [];
+  const rows = tableRows(section(matrix, d33Heading));
+  const byId = new Map<string, string[][]>();
+  for (const cells of rows) byId.set(cells[0], [...(byId.get(cells[0]) ?? []), cells]);
+  for (const id of d33Ids) {
+    const count = byId.get(id)?.length ?? 0;
+    if (count === 0) problems.push(`${id}: missing from the D-33 section`);
+    if (count > 1) problems.push(`${id}: ${count} rows in the D-33 section, exactly one is required`);
+  }
+  for (const id of byId.keys()) if (!d33Ids.includes(id)) problems.push(`${id}: unexpected row in the D-33 section`);
+
+  const mirror = disposition19Rows(disposition19);
+  for (const id of d33Ids) {
+    const cells = byId.get(id)?.[0];
+    if (!cells) continue;
+    const [, , , status, commitCell, testCell, rule, rationale] = cells;
+    const commit = backticks(commitCell)[0] ?? "";
+    if (status !== "fixed" && status !== "disposition") {
+      problems.push(`${id}: status "${status}" must be fixed or disposition (open and phase-20 are not allowed)`);
+    } else if (status === "fixed") {
+      if (!/^[0-9a-f]{7,40}$/.test(commit) || !env.commitExists(commit)) problems.push(`${id}: fixed needs an existing fix commit, got "${commitCell}"`);
+      const tokens = backticks(testCell);
+      const file = tokens[0] ?? "";
+      const names = tokens.slice(1).filter((token) => !token.startsWith("node "));
+      const command = tokens.find((token) => token.startsWith("node "));
+      if (!file.endsWith(".test.ts") || names.length === 0) problems.push(`${id}: fixed needs a test file and at least one test name`);
+      else {
+        for (const name of names) if (!env.fileContains(file, name)) problems.push(`${id}: test "${name}" is not in ${file}`);
+        if (!command || !command.includes(file)) problems.push(`${id}: fixed needs the command that runs ${file}`);
+      }
+    } else {
+      if (!/^D-(09|10|11|12)$/.test(rule)) problems.push(`${id}: disposition needs rule D-09..D-12, got "${rule}"`);
+      if (!rationale || rationale.length < 40) problems.push(`${id}: disposition needs a reasoned explanation`);
+    }
+
+    const mirrored = mirror.get(id);
+    if (!mirrored || mirrored.length !== 1) { problems.push(`${id}: ${mirrored?.length ?? 0} rows in 19-REVIEW-DISPOSITION.md, exactly one is required`); continue; }
+    const { status: status19, note } = mirrored[0];
+    if (status19 === "open" || status19 === "phase-20") problems.push(`${id}: 19-REVIEW-DISPOSITION.md still says ${status19}`);
+    else if (status === "fixed" && (status19 !== "fixed" || !note.includes(commit))) problems.push(`${id}: 19-REVIEW-DISPOSITION.md must say fixed with commit ${commit}, got "${status19}"`);
+    else if (status === "disposition" && (status19 !== "disposition-20" || !note.includes("20-SECURITY-MATRIX.md"))) problems.push(`${id}: 19-REVIEW-DISPOSITION.md must say disposition-20 and point to 20-SECURITY-MATRIX.md, got "${status19}"`);
+  }
+  return problems;
+}
+
+const realD33Env: D33Env = {
+  commitExists: (sha) => spawnSync("git", ["cat-file", "-e", `${sha}^{commit}`], { cwd: new URL("..", import.meta.url) }).status === 0,
+  fileContains: (file, text) => existsSync(new URL(`../${file}`, import.meta.url)) && read(file).includes(text),
+};
+const fixtureEnv: D33Env = { commitExists: () => true, fileContains: () => true };
+
+function d33Fixture() {
+  const fixedRow = (id: string) => `| ${id} | Info | \`a.ts\` | fixed | \`abc1234\` | \`lib/x.test.ts\` :: \`name of ${id}\` ; \`node --experimental-strip-types --test lib/x.test.ts\` | — | fixed by test |`;
+  const dispositionRow = (id: string) => `| ${id} | Info | \`a.ts\` | disposition | — | нет теста | D-09 | production is unavailable by project rules, so the fallback stays |`;
+  const matrixRows = d33Ids.map((id) => (id === "IN-05" ? dispositionRow(id) : fixedRow(id)));
+  const matrix = [`## ${d33Heading}`, "", "| ID | S | F | Статус | Коммит | Тест | Правило | Обоснование |", "|---|---|---|---|---|---|---|---|", ...matrixRows, ""].join("\n");
+  const mirrorRows = d33Ids.map((id) => (id === "IN-05"
+    ? `| ${id} | Info | a.ts | disposition-20 | see 20-SECURITY-MATRIX.md |`
+    : `| ${id} | Info | a.ts | fixed | \`abc1234\` (20-17) |`));
+  const disposition = ["| ID | Severity | Файл | Статус | Заметка |", "|----|----|----|----|----|", "| CR-01 | Critical | c.tsx | fixed | `14e04c6` |", ...mirrorRows, ""].join("\n");
+  return { matrix, disposition, matrixRows, mirrorRows, fixedRow };
+}
+
+test("D-33: the real matrix has exactly one row per carried-over finding, each fixed with commit and test or a reasoned disposition", () => {
+  const problems = d33Problems(matrixText(), read(disposition19Path), realD33Env);
+  assert.deepEqual(problems, []);
+  const rows = tableRows(section(matrixText(), d33Heading));
+  assert.equal(rows.length, 7);
+  assert.equal(rows.filter((cells) => cells[3] === "fixed").length, 6);
+  assert.equal(rows.find((cells) => cells[0] === "IN-05")?.[3], "disposition");
+});
+
+test("D-33: 19-REVIEW-DISPOSITION.md has no open or phase-20 status for the seven findings and keeps other rows", () => {
+  const mirror = disposition19Rows(read(disposition19Path));
+  for (const id of d33Ids) {
+    const status = mirror.get(id)?.[0].status;
+    assert.ok(status === "fixed" || status === "disposition-20", `${id}: ${status}`);
+  }
+  for (const id of ["CR-01", "WR-01", "WR-02", "WR-04", "WR-06", "WR-07"]) assert.equal(mirror.get(id)?.[0].status, "fixed", id);
+});
+
+test("D-33 fixture: the well-formed pair is accepted", () => {
+  const { matrix, disposition } = d33Fixture();
+  assert.deepEqual(d33Problems(matrix, disposition, fixtureEnv), []);
+});
+
+test("D-33 fixture: a missing row is rejected", () => {
+  const { matrix, disposition, matrixRows } = d33Fixture();
+  const problems = d33Problems(matrix.replace(`${matrixRows[2]}\n`, ""), disposition, fixtureEnv);
+  assert.ok(problems.some((problem) => problem.startsWith("IN-01: missing from the D-33 section")), problems.join("; "));
+});
+
+test("D-33 fixture: a duplicated row is rejected", () => {
+  const { matrix, disposition, matrixRows } = d33Fixture();
+  const problems = d33Problems(matrix.replace(matrixRows[0], `${matrixRows[0]}\n${matrixRows[0]}`), disposition, fixtureEnv);
+  assert.ok(problems.some((problem) => problem.includes("WR-03: 2 rows in the D-33 section")), problems.join("; "));
+});
+
+test("D-33 fixture: an open or phase-20 row is rejected in the matrix and in 19-REVIEW-DISPOSITION.md", () => {
+  const { matrix, disposition, matrixRows, mirrorRows } = d33Fixture();
+  const openInMatrix = d33Problems(matrix.replace(matrixRows[1], matrixRows[1].replace("| fixed |", "| open |")), disposition, fixtureEnv);
+  assert.ok(openInMatrix.some((problem) => problem.includes("WR-05") && problem.includes("open and phase-20 are not allowed")), openInMatrix.join("; "));
+  for (const stale of ["open", "phase-20"]) {
+    const problems = d33Problems(matrix, disposition.replace(mirrorRows[4], mirrorRows[4].replace("| fixed |", `| ${stale} |`)), fixtureEnv);
+    assert.ok(problems.some((problem) => problem.includes(`IN-03: 19-REVIEW-DISPOSITION.md still says ${stale}`)), problems.join("; "));
+  }
+});
+
+test("D-33 fixture: fixed without a test, without a command or without a real commit is rejected", () => {
+  const { matrix, disposition, matrixRows } = d33Fixture();
+  const noTest = matrixRows[0].replace(/\| `lib\/x\.test\.ts`[^|]*\|/, "| нет теста |");
+  assert.ok(d33Problems(matrix.replace(matrixRows[0], noTest), disposition, fixtureEnv).some((problem) => problem.includes("WR-03: fixed needs a test file")));
+  const noCommand = matrixRows[0].replace(" ; `node --experimental-strip-types --test lib/x.test.ts`", "");
+  assert.ok(d33Problems(matrix.replace(matrixRows[0], noCommand), disposition, fixtureEnv).some((problem) => problem.includes("WR-03: fixed needs the command")));
+  const unknownCommit = d33Problems(matrix, disposition, { ...fixtureEnv, commitExists: () => false });
+  assert.ok(unknownCommit.some((problem) => problem.includes("WR-03: fixed needs an existing fix commit")));
+  const unknownTest = d33Problems(matrix, disposition, { ...fixtureEnv, fileContains: () => false });
+  assert.ok(unknownTest.some((problem) => problem.includes('WR-03: test "name of WR-03" is not in lib/x.test.ts')));
+});
+
+test("D-33 fixture: a disposition without a D-09..D-12 rule or a reason, or one mirrored as fixed, is rejected", () => {
+  const { matrix, disposition, matrixRows, mirrorRows } = d33Fixture();
+  const noRule = d33Problems(matrix.replace(matrixRows[6], matrixRows[6].replace("| D-09 |", "| — |")), disposition, fixtureEnv);
+  assert.ok(noRule.some((problem) => problem.includes("IN-05: disposition needs rule D-09..D-12")), noRule.join("; "));
+  const noReason = d33Problems(matrix.replace(matrixRows[6], matrixRows[6].replace(/\| production is unavailable[^|]*\|/, "| ok |")), disposition, fixtureEnv);
+  assert.ok(noReason.some((problem) => problem.includes("IN-05: disposition needs a reasoned explanation")), noReason.join("; "));
+  const mirroredFixed = d33Problems(matrix, disposition.replace(mirrorRows[6], mirrorRows[6].replace("disposition-20", "fixed")), fixtureEnv);
+  assert.ok(mirroredFixed.some((problem) => problem.includes("IN-05: 19-REVIEW-DISPOSITION.md must say disposition-20")), mirroredFixed.join("; "));
+  const missingMirror = d33Problems(matrix, disposition.replace(`${mirrorRows[3]}\n`, ""), fixtureEnv);
+  assert.ok(missingMirror.some((problem) => problem.includes("IN-02: 0 rows in 19-REVIEW-DISPOSITION.md")), missingMirror.join("; "));
 });
