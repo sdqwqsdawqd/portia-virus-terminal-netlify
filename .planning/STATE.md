@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed 20-21-PLAN.md
-last_updated: "2026-11-04T07:13:09.555Z"
+stopped_at: Completed 20-05-PLAN.md
+last_updated: "2026-11-04T08:24:02.257Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: 08dfc4231e820ddac45af2c698198b5229f8109a
+state_head: cb1d38ea6131e5015b1ca566339866446eb0e14c
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 81
+  completed_plans: 82
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 13 of 24
+Plan: 14 of 24
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-04 — Phase PORTIA-20 execution started
 
@@ -119,6 +119,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P20 | 70min | 3 tasks | 8 files |
 | Phase PORTIA-20 P04 | 80 min | 2 tasks | 4 files |
 | Phase PORTIA-20 P21 | 35m | 3 tasks | 5 files |
+| Phase PORTIA-20 P05 | 105min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -198,6 +199,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-04: flask wallpaper accent blended 70/30 toward --desktop-base via color-mix (relative colours are forbidden); text contrast asserted over the brightest 8 px square
 - [Phase PORTIA-20]: 20-04: wallpaper save failure keeps the previous wallpaper and shows a message (wallpaper only; other settings unchanged)
 - [Phase PORTIA-20]: 20-21: owner chose option a; D-36b migration applied to isolated staging only (fixture verified, residual 0); production left to owner (ОЖИДАЕТ ВЛАДЕЛЬЦА)
+- [Phase PORTIA-20]: 20-05: flaskEmpty/microscopeGuide are additive variants used only by info empty, news empty and guide empty; quests, archive, search, iframe error and all error panels keep the old drawings; info empty and populated news/guide stay BLOCKED (DATA)
 
 ### Pending Todos
 
@@ -236,8 +238,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T07:13:09.105Z
-Stopped at: Completed 20-21-PLAN.md
+Last session: 2026-11-04T08:24:01.807Z
+Stopped at: Completed 20-05-PLAN.md
 Resume file: None
 
 ## Operator Next Step
