@@ -1,6 +1,7 @@
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
-import { imageExtensionFromSignature, MAX_UPLOAD_BYTES, uploadRefusal } from "@/lib/image-upload";
+import { imageExtensionFromSignature, MAX_UPLOAD_BYTES, uploadGate, uploadRefusal } from "@/lib/image-upload";
 import { noStoreHeaders } from "@/lib/portia-cdn";
 
 export const dynamic = "force-dynamic";
@@ -15,12 +16,13 @@ const allowedTypes = new Map([
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient();
-    const { data: authData } = await supabase.auth.getUser();
-    const access = await getEditorAccess(supabase, authData.user);
-    // The owner always has every tab; an editor needs at least one open.
-    if (!authData.user || !access.canEdit || access.openTabs.length === 0) {
-      return Response.json({ error: uploadRefusal.forbidden }, { status: 403, headers: noStoreHeaders });
-    }
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    // A network or 5xx auth failure is not "logged out": it answers 503 so the editor can retry (WR-03).
+    const authRetryable = isAuthRetryableFetchError(authError);
+    const access = authRetryable ? null : await getEditorAccess(supabase, authData.user);
+    // Permission and the declared size are decided before the body is parsed.
+    const refusal = uploadGate({ authRetryable, user: authData.user, access, contentLength: request.headers.get("content-length") });
+    if (refusal) return Response.json({ error: refusal.error }, { status: refusal.status, headers: noStoreHeaders });
 
     const formData = await request.formData();
     const file = formData.get("file");
