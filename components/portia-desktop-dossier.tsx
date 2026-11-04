@@ -93,23 +93,24 @@ function ScientistRichText({ log }: { log: ScientistLog }) {
 }
 
 // An inline image that fails to load is replaced by a short Russian note instead of the browser's broken-image icon (D-07).
-function EmbeddedImage({ src }: { src: string }) {
+function EmbeddedImage({ src, eager = false }: { src: string; eager?: boolean }) {
   const [failed, setFailed] = useState(false);
   if (failed) return <span className="embedded-rich-media-unavailable">Изображение недоступно</span>;
   return <img
     className="embedded-rich-media"
     src={src}
     alt="Анимированное изображение"
-    loading="lazy"
+    loading={eager ? "eager" : "lazy"}
     decoding="async"
     referrerPolicy="no-referrer"
     onError={() => setFailed(true)}
   />;
 }
 
-export function FormattedText({ text, document, className = "" }: { text?: string; document?: RichTextDocument; className?: string }) {
+export function FormattedText({ text, document, className = "", trimLeadingBlankLines = false, eagerMedia = false }: { text?: string; document?: RichTextDocument; className?: string; trimLeadingBlankLines?: boolean; eagerMedia?: boolean }) {
   const runs = document?.runs?.length ? document.runs : [{ text: text ?? "" }];
   const fullText = runs.map((run) => run.text).join("");
+  const contentStart = trimLeadingBlankLines ? (fullText.match(/^(?:[ \t]*\r?\n)+/)?.[0].length ?? 0) : 0;
   const runRanges = runs.map((run, index) => {
     const start = runs.slice(0, index).reduce((total, item) => total + item.text.length, 0);
     return { run, start, end: start + run.text.length };
@@ -131,8 +132,8 @@ export function FormattedText({ text, document, className = "" }: { text?: strin
   };
 
   splitEmbeddedMedia(fullText).forEach((segment, index) => {
-    if (segment.kind === "text") appendStyledText(segment.start, segment.end, `text-${index}`);
-    else nodes.push(<EmbeddedImage key={`media-${index}-${segment.start}`} src={segment.url} />);
+    if (segment.kind === "text") appendStyledText(Math.max(segment.start, contentStart), segment.end, `text-${index}`);
+    else nodes.push(<EmbeddedImage key={`media-${index}-${segment.start}`} src={segment.url} eager={eagerMedia} />);
   });
 
   return <span className={`formatted-content${className ? ` ${className}` : ""}`}>{nodes}</span>;

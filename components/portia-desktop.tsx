@@ -15,6 +15,7 @@ import { acceptFetchedContent } from "@/lib/content-sync";
 import { cacheMatchesSource, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
 import { networkSaveError, parseRefusedSections, SaveConflictError, SectionClosedError } from "@/lib/editor-save-status";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
+import { splitEmbeddedMedia } from "@/lib/rich-text-media";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
 import { DesktopIcon, StartPanelButton, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
@@ -289,6 +290,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [accentDraft, setAccentDraft] = useState<string | null>(null);
   const accentDraftRef = useRef<string | null>(null);
   const customAccentButton = useRef<HTMLButtonElement>(null);
+  const preloadedAssistantMedia = useRef(new Set<string>());
   const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
   const [employeesReady, setEmployeesReady] = useState(false);
@@ -333,6 +335,22 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const assistantAutomaticTimer = useRef<number | null>(null);
   const settingsSavedTimer = useRef<number | null>(null);
   const customTokens = useMemo(() => deriveAccentTokens(accentDraft ?? desktopSettings.customAccent), [accentDraft, desktopSettings.customAccent]);
+  useEffect(() => {
+    const assistantDocuments = [portiaTextKey.assistantOffended, portiaTextKey.assistantIdle, portiaTextKey.assistantActivity, portiaTextKey.assistantAdvice]
+      .map((key) => content.formattedText[key]?.runs.map((run) => run.text).join(""))
+      .filter((value): value is string => Boolean(value));
+    const phrases = [content.assistantOffendedPhrase, ...(content.assistantOffendedPhrases ?? []), ...(content.assistantIdlePhrases ?? []), ...(content.assistantActivityPhrases ?? []), ...content.assistantAdvice, ...assistantDocuments];
+    for (const phrase of phrases) {
+      for (const segment of splitEmbeddedMedia(phrase)) {
+        if (segment.kind !== "media" || !/\.gif(?:[?#]|$)/i.test(segment.url) || preloadedAssistantMedia.current.has(segment.url)) continue;
+        if (preloadedAssistantMedia.current.size >= 32) return;
+        preloadedAssistantMedia.current.add(segment.url);
+        const image = new Image();
+        image.referrerPolicy = "no-referrer";
+        image.src = segment.url;
+      }
+    }
+  }, [content.assistantOffendedPhrase, content.assistantOffendedPhrases, content.assistantIdlePhrases, content.assistantActivityPhrases, content.assistantAdvice, content.formattedText]);
   const exitTimers = useRef<Partial<Record<AppId, number>>>({});
   // The editor reports unsaved edits through a ref: closing is decided inside an event handler, never during render.
   const editorDirtyRef = useRef(false);
@@ -1817,7 +1835,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         </main>
 
         <div className={`desktop-assistant${assistantSpeaking ? " is-speaking" : ""}${assistantOffended ? " is-offended" : ""}${assistantRecovering ? " is-recovering" : ""}`} data-mood={assistantMood || undefined} data-squish={assistantSquish ? (assistantSquish % 2 ? "a" : "b") : undefined} data-auto={assistantAutomaticKind ?? undefined}>
-          {assistantSpeaking && <div className="assistant-bubble" role="status"><span>{assistantMessageHeading}</span><FormattedText className="assistant-formatted-text" text={assistantMessageText} document={assistantMessageDocument} /></div>}
+          {assistantSpeaking && <div className="assistant-bubble" role="status"><span>{assistantMessageHeading}</span><FormattedText className="assistant-formatted-text" text={assistantMessageText} document={assistantMessageDocument} trimLeadingBlankLines eagerMedia /></div>}
           <button className="assistant-button" type="button" onClick={activateAssistant} onContextMenu={(event) => event.preventDefault()} aria-disabled={assistantOffended} aria-label="Получить совет Вивьян"><img src="/assets/portia-assistant.png" alt="" draggable={false} /></button>
           <span className="assistant-label">ВИВЬЯН // ПОМОЩНИК</span>
         </div>
