@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MAX_BLOCK_TEXT, MAX_CONDITIONS, MAX_SCIENTIST_LOGS } from "./content-limits.ts";
-import { defaultPortiaContent, findInfo, type InfoSection } from "./portia-content.ts";
+import { classificationOptions, defaultPortiaContent, findInfo, type InfoSection } from "./portia-content.ts";
+import { contentRefusal } from "./editor-tabs.ts";
 import { normalizeBroadcasts, normalizeGuideSections, normalizeInfoSections, normalizePortiaContent, parseYoutubeId } from "./portia-content-normalize.ts";
 
 test("a save from before Phase 13 reads as an empty guide (D-00f)", () => {
@@ -378,4 +379,105 @@ test("wrong-typed virus fields are coerced and missing records are filled", () =
   assert.equal(virus.scientistLogs[0].lockedLevel, 3);
   assert.equal(once.recycledViruses[0].id, "recycled-0");
   assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
+});
+
+// D-35 / D-36(а): the nine renamed classes. Old saved names must read as the new ones, in both lists.
+const D36_PAIRS = [
+  ["Рубедо", "Люцидиум"], ["Альбедо", "Транзитиум"], ["Нигредо", "Обливиум"],
+  ["Фобус", "Стабилар"], ["Ареус", "Импульсар"], ["Селенус", "Инфернар"],
+  ["Нюктея", "Изоморф"], ["Морфея", "Полиморф"], ["Дедалея", "Ксеноморф"],
+] as const;
+
+function oldVirus(index: number, mind: string, behavior: string, appearance: string) {
+  const virus = structuredClone(defaultPortiaContent.viruses[0]);
+  virus.id = `old-${index}`;
+  virus.classification = { ...virus.classification, mind, behavior, appearance };
+  return virus;
+}
+
+test("D-36 old class names read as the new ones in viruses and recycledViruses", () => {
+  const content = structuredClone(defaultPortiaContent);
+  const olds = D36_PAIRS.map(([old]) => old);
+  content.viruses = [
+    oldVirus(0, olds[0], olds[3], olds[6]),
+    oldVirus(1, olds[1], olds[4], olds[7]),
+    oldVirus(2, olds[2], olds[5], olds[8]),
+    oldVirus(3, "Неизвестный класс", "Стабила́р", "Изомо́рф"),
+  ];
+  content.recycledViruses = [oldVirus(4, olds[0], olds[3], olds[6]), oldVirus(5, olds[2], olds[5], olds[8])];
+  const result = normalizePortiaContent(content);
+  assert.ok(result);
+  const pick = (virus: { classification: Record<string, string> }) => [virus.classification.mind, virus.classification.behavior, virus.classification.appearance];
+  assert.deepEqual(pick(result.viruses[0]), ["Люцидиум", "Стабилар", "Изоморф"]);
+  assert.deepEqual(pick(result.viruses[1]), ["Транзитиум", "Импульсар", "Полиморф"]);
+  assert.deepEqual(pick(result.viruses[2]), ["Обливиум", "Инфернар", "Ксеноморф"]);
+  assert.deepEqual(pick(result.recycledViruses[0]), ["Люцидиум", "Стабилар", "Изоморф"]);
+  assert.deepEqual(pick(result.recycledViruses[1]), ["Обливиум", "Инфернар", "Ксеноморф"]);
+  // Unknown values stay as they are; a value with U+0301 reads without the accent mark (D-37).
+  assert.equal(result.viruses[3].classification.mind, "Неизвестный класс");
+  assert.equal(result.viruses[3].classification.behavior, "Стабилар");
+  assert.equal(result.viruses[3].classification.appearance, "Изоморф");
+  assert.ok(!Object.values(result.viruses[3].classification).some((value) => value.includes("́")));
+  // Other axes and fields stay untouched.
+  const source = content.viruses[0];
+  assert.equal(result.viruses[0].classification.danger, source.classification.danger);
+  assert.equal(result.viruses[0].classification.transmission, source.classification.transmission);
+  assert.equal(result.viruses[0].name, source.name);
+});
+
+test("D-36 an accented value reads as the plain name and an accented old name as the new name", () => {
+  const content = structuredClone(defaultPortiaContent);
+  content.viruses = [
+    oldVirus(0, "Люци́диум", "Стабила́р", "Изомо́рф"),
+    oldVirus(1, "Рубе́до", "Фобус", "Нюктея"),
+  ];
+  const result = normalizePortiaContent(content);
+  assert.ok(result);
+  assert.deepEqual(
+    [result.viruses[0].classification.mind, result.viruses[0].classification.behavior, result.viruses[0].classification.appearance],
+    ["Люцидиум", "Стабилар", "Изоморф"],
+  );
+  assert.equal(result.viruses[1].classification.mind, "Люцидиум");
+});
+
+test("D-36 normalizing twice gives the same content", () => {
+  const content = structuredClone(defaultPortiaContent);
+  content.viruses = [oldVirus(0, "Нигредо", "Селенус", "Дедалея"), oldVirus(1, "Неизвестный класс", "Ареус", "Морфея")];
+  content.recycledViruses = [oldVirus(2, "Альбедо", "Фобус", "Нюктея")];
+  const once = normalizePortiaContent(content);
+  assert.ok(once);
+  assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
+});
+
+test("D-36 prototype member names are not resolved as class names", () => {
+  const content = structuredClone(defaultPortiaContent);
+  content.viruses = [oldVirus(0, "__proto__", "constructor", "toString")];
+  const result = normalizePortiaContent(content);
+  assert.ok(result);
+  assert.deepEqual(
+    [result.viruses[0].classification.mind, result.viruses[0].classification.behavior, result.viruses[0].classification.appearance],
+    ["__proto__", "constructor", "toString"],
+  );
+});
+
+test("D-36 a restricted editor without the viruses tab gets no false refusal from the rename", () => {
+  const stored = structuredClone(defaultPortiaContent);
+  stored.viruses = [oldVirus(0, "Рубедо", "Фобус", "Нюктея")];
+  const baseline = normalizePortiaContent(stored);
+  const draftSource = structuredClone(defaultPortiaContent);
+  draftSource.viruses = [oldVirus(0, "Люцидиум", "Стабилар", "Изоморф")];
+  const draft = normalizePortiaContent(draftSource);
+  assert.ok(baseline && draft);
+  assert.equal(contentRefusal(baseline, draft, ["info", "broadcasts", "guide"]), null);
+});
+
+test("D-36 the three renamed axes keep levels 1, 2, 3 and carry no accent mark (D-35, D-37)", () => {
+  for (const axis of ["mind", "behavior", "appearance"] as const) {
+    const options = classificationOptions[axis];
+    assert.deepEqual(options.map((option) => option.level), [1, 2, 3]);
+    assert.ok(options.every((option) => !option.value.includes("́")));
+  }
+  assert.deepEqual(classificationOptions.mind.map((option) => option.value), ["Люцидиум", "Транзитиум", "Обливиум"]);
+  assert.deepEqual(classificationOptions.behavior.map((option) => option.value), ["Стабилар", "Импульсар", "Инфернар"]);
+  assert.deepEqual(classificationOptions.appearance.map((option) => option.value), ["Изоморф", "Полиморф", "Ксеноморф"]);
 });
