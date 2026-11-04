@@ -56,12 +56,12 @@
 
 ## Остальные приложения и редактор
 
-- [ ] **STAB-APP-01**: «База вирусов» сохраняет поиск, выбор dossier, classification, mutations, logs и locked levels; normal/empty/loading/error различимы, background poll без причины не сбрасывает выбранную запись.
+- [x] **STAB-APP-01**: «База вирусов» сохраняет поиск, выбор dossier, classification, mutations, logs и locked levels; normal/empty/loading/error различимы, background poll без причины не сбрасывает выбранную запись.
 - [ ] **STAB-APP-02**: «Сотрудники» сохраняют 34 места, last-good roster при upstream failure, manual details/ratings и phone usability; portrait открывает Roblox только при валидной ссылке.
-- [ ] **STAB-APP-03**: «Сводка» сохраняет published/important ordering, разделение новостей и квестов, active/upcoming/finished ordering и одно неблокирующее уведомление при live poll.
-- [ ] **STAB-APP-04**: «Информация» и «Справочник» сохраняют порядок sections/cards/blocks и шесть block types; guide начинает свёрнутым, back не перекрывает card, старые данные нормализуются без потерь.
-- [ ] **STAB-APP-05**: «Корзина» показывает записи на рабочей области, восстанавливает только в editor с правами и удаляет необратимо только после ясного подтверждения без порчи соседних records.
-- [ ] **STAB-APP-06**: «Таблица» и «Устав» сохраняют fullscreen, sandbox и +/- zoom; ограничение Ctrl+wheel внутри focused cross-origin iframe остаётся документированной accepted limitation.
+- [x] **STAB-APP-03**: «Сводка» сохраняет published/important ordering, разделение новостей и квестов, active/upcoming/finished ordering и одно неблокирующее уведомление при live poll.
+- [x] **STAB-APP-04**: «Информация» и «Справочник» сохраняют порядок sections/cards/blocks и шесть block types; guide начинает свёрнутым, back не перекрывает card, старые данные нормализуются без потерь.
+- [x] **STAB-APP-05**: «Корзина» показывает записи на рабочей области, восстанавливает только в editor с правами и удаляет необратимо только после ясного подтверждения без порчи соседних records.
+- [x] **STAB-APP-06**: «Таблица» и «Устав» сохраняют fullscreen, sandbox и +/- zoom; ограничение Ctrl+wheel внутри focused cross-origin iframe остаётся документированной accepted limitation.
 - [ ] **STAB-APP-07**: Редактор сохраняет undo/redo, drafts during save, revision conflict, poll suppression, save-all, permissions и per-field errors; success только authoritative, длинные списки прокручиваются внутри и заголовки не закрывают content.
 - [ ] **STAB-APP-08**: WYSIWYG на PC/phone использует typography редактируемой области, применяет формат к selection, сохраняет range при panel drag/touch и сохраняет документ с открытой панелью.
 - [ ] **STAB-APP-09**: Regular tabs соблюдают grants/closed tabs, trusted Promotion закрыта по умолчанию, revoked section нельзя изменить через UI/API, access outage fail-closed с русским сообщением.
@@ -69,8 +69,8 @@
 
 ## Глобальный поиск
 
-- [ ] **STAB-SEARCH-01**: Поиск охватывает apps, employees, viruses, info/subsections, guide cards/blocks, published broadcasts и recycle records по title/code/body/meta с нормализацией регистра и `е/ё`, не индексируя unpublished content.
-- [ ] **STAB-SEARCH-02**: Каждый тип результата открывает точную сущность в приложении-владельце, а search window не остаётся modal blocker.
+- [x] **STAB-SEARCH-01**: Поиск охватывает apps, employees, viruses, info/subsections, guide cards/blocks, published broadcasts и recycle records по title/code/body/meta с нормализацией регистра и `е/ё`, не индексируя unpublished content.
+- [x] **STAB-SEARCH-02**: Каждый тип результата открывает точную сущность в приложении-владельце, а search window не остаётся modal blocker.
 - [x] **STAB-SEARCH-03**: Ctrl/Cmd+K, Tab, arrows, Enter и Escape имеют утверждённое keyboard-first поведение; focus видим, результаты читаемы на phone, loading и zero results различаются.
 - [ ] **STAB-SEARCH-04**: Удалённые records исчезают после poll; private editor data, answer keys и reviewer fields никогда не индексируются; degraded roster показывает safe last-good или явное состояние.
 - [ ] **STAB-SEARCH-05**: При каждой загрузке страницы под строкой поиска показывается случайный набор из 5–10 рекомендаций списка редактора (все, если их меньше 5); набор не меняется до перезагрузки, форматирование рекомендаций сохраняется (Phase 20, D-43).
@@ -80,10 +80,10 @@
 ## Медиа и производительность
 
 - [x] **STAB-MEDIA-01**: Upload проверяет реальные bytes, размер и поддерживаемый формат; отказ не стирает URL/draft, успех возвращает безопасный UUID URL.
-- [ ] **STAB-MEDIA-02**: Normalization, SQL constraint и rendering используют один URL-contract; unsafe scheme/path отклоняется, invalid legacy value даёт fallback.
-- [ ] **STAB-MEDIA-03**: Активное hero/media имеет приоритет, offscreen collections lazy, initial request storm отсутствует, при смене записи старое изображение не показывается как новое.
+- [x] **STAB-MEDIA-02**: Normalization, SQL constraint и rendering используют один URL-contract; unsafe scheme/path отклоняется, invalid legacy value даёт fallback.
+- [x] **STAB-MEDIA-03**: Активное hero/media имеет приоритет, offscreen collections lazy, initial request storm отсутствует, при смене записи старое изображение не показывается как новое.
 - [ ] **STAB-MEDIA-04**: Immutable UUID media кэшируется повторно без скачивания, новый upload получает новый URL, content revision invalidation не ломает media cache.
-- [ ] **STAB-MEDIA-05**: Broken, slow или blocked external media сохраняет читаемый текст/caption и стабильный layout без app crash или infinite spinner.
+- [x] **STAB-MEDIA-05**: Broken, slow или blocked external media сохраняет читаемый текст/caption и стабильный layout без app crash или infinite spinner.
 - [ ] **STAB-MEDIA-06**: До оптимизации записаны воспроизводимые owner PC/phone traces; после изменений interaction, drag, wallpaper и app-open не хуже утверждённого baseline и проходят согласованные budgets.
 - [ ] **STAB-MEDIA-07**: Внешние media hosts инвентаризированы; CSP проходит report-only до enforcement, approved images/YouTube продолжают работать, rejected host показывает fallback.
 
@@ -184,25 +184,25 @@
 | STAB-PROM-13 | Phase 19 | Pending |
 | STAB-PROM-14 | Phase 19 | Pending |
 | STAB-PROM-15 | Phase 19 | Pending |
-| STAB-APP-01 | Phase 19 | Pending |
+| STAB-APP-01 | Phase 19 | Complete |
 | STAB-APP-02 | Phase 19 | Pending |
-| STAB-APP-03 | Phase 19 | Pending |
-| STAB-APP-04 | Phase 19 | Pending |
-| STAB-APP-05 | Phase 19 | Pending |
-| STAB-APP-06 | Phase 19 | Pending |
+| STAB-APP-03 | Phase 19 | Complete |
+| STAB-APP-04 | Phase 19 | Complete |
+| STAB-APP-05 | Phase 19 | Complete |
+| STAB-APP-06 | Phase 19 | Complete |
 | STAB-APP-07 | Phase 19 | Pending |
 | STAB-APP-08 | Phase 19 | Pending |
 | STAB-APP-09 | Phase 19 | Pending |
 | STAB-APP-10 | Phase 19 | Pending |
-| STAB-SEARCH-01 | Phase 19 | Pending |
-| STAB-SEARCH-02 | Phase 19 | Pending |
+| STAB-SEARCH-01 | Phase 19 | Complete |
+| STAB-SEARCH-02 | Phase 19 | Complete |
 | STAB-SEARCH-03 | Phase 19 | Complete |
 | STAB-SEARCH-04 | Phase 19 | Pending |
 | STAB-MEDIA-01 | Phase 19 | Complete |
-| STAB-MEDIA-02 | Phase 19 | Pending |
-| STAB-MEDIA-03 | Phase 19 | Pending |
+| STAB-MEDIA-02 | Phase 19 | Complete |
+| STAB-MEDIA-03 | Phase 19 | Complete |
 | STAB-MEDIA-04 | Phase 19 | Pending |
-| STAB-MEDIA-05 | Phase 19 | Pending |
+| STAB-MEDIA-05 | Phase 19 | Complete |
 | STAB-MEDIA-06 | Phase 18 | Pending |
 | STAB-MEDIA-07 | Phase 20 | Pending |
 | STAB-A11Y-01 | Phase 20 | Pending |

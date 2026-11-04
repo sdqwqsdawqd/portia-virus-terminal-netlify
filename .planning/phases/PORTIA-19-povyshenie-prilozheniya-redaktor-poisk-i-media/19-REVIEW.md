@@ -123,7 +123,7 @@ IntersectionObserver never reports `isIntersecting` for `display:none`, so folde
 **File:** `scripts/phase16-staging.mjs:38-53`
 **Issue:** The guard checks scheme, port, hostname and username, then passes the raw `env[DB_URL_VAR]` to the supabase CLI as `--db-url` (`resolveStagingTarget:73`, `runCli:158`). The CLI parses it with pgx/pgconn, where URL query parameters override the authority part.
 
-A value such as `postgresql://postgres:pw@db.<isolated-ref>.supabase.co:5432/postgres?host=db.<prod-ref>.supabase.co` (or `hostaddr=`, `user=`, `dbname=`, `service=`) passes every check here and connects somewhere else. The input is operator-controlled, so this is defence in depth. But it is exactly the "guards must fail closed" surface, and the destructive subcommands (`push`, `teardown`, the L0/phase12/phase14 ladder SQL) go through it.
+A Postgres URL with an isolated-ref hostname but a `host=db.<prod-ref>.supabase.co` query value (or `hostaddr=`, `user=`, `dbname=`, `service=`) passes every check here and connects somewhere else. The input is operator-controlled, so this is defence in depth. But it is exactly the "guards must fail closed" surface, and the destructive subcommands (`push`, `teardown`, the L0/phase12/phase14 ladder SQL) go through it.
 
 **Fix:**
 ```js
