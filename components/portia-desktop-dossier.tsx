@@ -1,41 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { classificationOptions, portiaTextKey, type PortiaContent, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
 import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
 import { PortiaImage } from "@/components/portia-desktop-media";
+import { splitEmbeddedMedia } from "@/lib/rich-text-media";
 
 const roman = (level: number) => ({ 1: "I", 2: "II", 3: "III", 4: "IV" })[level] ?? String(level);
 
 function classificationLevel(key: keyof Virus["classification"], value: string) {
   const options = classificationOptions[key] as readonly { value: string; level?: number }[];
   return options.find((option) => option.value === value)?.level;
-}
-
-const knownKlipyMedia: Record<string, string> = {
-  "https://klipy.com/gifs/anime-tsundere-6": "https://static2.klipy.com/ii/e293a233a303a98e471f78d04e13a1b0/e0/d8/GIVgKXMP.gif",
-};
-
-function embeddedMediaUrl(value: string) {
-  const trimmed = value.trim().replace(/[),.!?;:]+$/, "");
-  if (!trimmed.startsWith("https://")) return null;
-
-  if (knownKlipyMedia[trimmed]) return knownKlipyMedia[trimmed];
-
-  try {
-    const url = new URL(trimmed);
-    if ((url.hostname === "giphy.com" || url.hostname === "www.giphy.com") && url.pathname.startsWith("/gifs/")) {
-      const id = url.pathname.split("/").filter(Boolean).at(-1)?.split("-").at(-1);
-      return id && /^[a-z0-9]+$/i.test(id) ? `https://media.giphy.com/media/${id}/giphy.gif` : null;
-    }
-    const isDirectImage = /\.(?:gif|png|jpe?g|webp)(?:$|[?#])/i.test(url.href);
-    const isKnownMediaHost = url.hostname === "media.tenor.com"
-      || url.hostname === "media.giphy.com"
-      || url.hostname === "i.giphy.com"
-      || /^(?:static\d*\.)?klipy\.com$/i.test(url.hostname);
-    return isDirectImage || isKnownMediaHost ? url.href : null;
-  } catch {
-    return null;
-  }
 }
 
 export function VirusRecord({ virus, formattedText, onOpenLog }: { virus: Virus; formattedText: PortiaContent["formattedText"]; onOpenLog: (id: string) => void }) {
@@ -117,6 +92,21 @@ function ScientistRichText({ log }: { log: ScientistLog }) {
   return <FormattedText className="scientist-rich-text" text={log.content.join("\n\n")} document={document} />;
 }
 
+// An inline image that fails to load is replaced by a short Russian note instead of the browser's broken-image icon (D-07).
+function EmbeddedImage({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <span className="embedded-rich-media-unavailable">Изображение недоступно</span>;
+  return <img
+    className="embedded-rich-media"
+    src={src}
+    alt="Анимированное изображение"
+    loading="lazy"
+    decoding="async"
+    referrerPolicy="no-referrer"
+    onError={() => setFailed(true)}
+  />;
+}
+
 export function FormattedText({ text, document, className = "" }: { text?: string; document?: RichTextDocument; className?: string }) {
   const runs = document?.runs?.length ? document.runs : [{ text: text ?? "" }];
   const fullText = runs.map((run) => run.text).join("");
@@ -125,7 +115,6 @@ export function FormattedText({ text, document, className = "" }: { text?: strin
     return { run, start, end: start + run.text.length };
   });
   const nodes: React.ReactNode[] = [];
-  const mediaPattern = /https:\/\/[^\s<>"']+/gi;
 
   const appendStyledText = (start: number, end: number, key: string) => {
     runRanges.forEach(({ run, start: runStart, end: runEnd }, runIndex) => {
@@ -141,25 +130,10 @@ export function FormattedText({ text, document, className = "" }: { text?: strin
     });
   };
 
-  let cursor = 0;
-  Array.from(fullText.matchAll(mediaPattern)).forEach((match, index) => {
-    const start = match.index ?? cursor;
-    const matchedText = match[0];
-    const mediaUrl = embeddedMediaUrl(matchedText);
-    if (!mediaUrl) return;
-    appendStyledText(cursor, start, `before-media-${index}`);
-    nodes.push(<img
-      key={`media-${index}-${start}`}
-      className="embedded-rich-media"
-      src={mediaUrl}
-      alt="GIF"
-      loading="lazy"
-      decoding="async"
-      referrerPolicy="no-referrer"
-    />);
-    cursor = start + matchedText.length;
+  splitEmbeddedMedia(fullText).forEach((segment, index) => {
+    if (segment.kind === "text") appendStyledText(segment.start, segment.end, `text-${index}`);
+    else nodes.push(<EmbeddedImage key={`media-${index}-${segment.start}`} src={segment.url} />);
   });
-  appendStyledText(cursor, fullText.length, "after-media");
 
   return <span className={`formatted-content${className ? ` ${className}` : ""}`}>{nodes}</span>;
 }

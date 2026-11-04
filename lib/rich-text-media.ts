@@ -32,6 +32,7 @@ export type EmbeddedMediaSegment =
   | { kind: "media"; url: string; start: number; end: number };
 
 const mediaPattern = /https:\/\/[^\s<>"']+/gi;
+const trailingPunctuation = /[),.!?;:]+$/;
 
 // Splits text into text and media segments covering the whole input in order.
 export function splitEmbeddedMedia(fullText: string): EmbeddedMediaSegment[] {
@@ -42,7 +43,8 @@ export function splitEmbeddedMedia(fullText: string): EmbeddedMediaSegment[] {
     const url = embeddedMediaUrl(match[0]);
     if (!url) continue;
     if (start > cursor) segments.push({ kind: "text", start: cursor, end: start });
-    cursor = start + match[0].length;
+    // Trailing punctuation belongs to the sentence, not to the link: it falls into the next text segment.
+    cursor = start + match[0].replace(trailingPunctuation, "").length;
     segments.push({ kind: "media", url, start, end: cursor });
   }
   if (cursor < fullText.length) segments.push({ kind: "text", start: cursor, end: fullText.length });
