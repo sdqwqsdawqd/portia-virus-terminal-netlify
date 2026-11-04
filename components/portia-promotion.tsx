@@ -244,7 +244,9 @@ export function PromotionIdentityGate({ nickname, busy, error, onNickname, onSub
       {error && <p className="promotion-error" role="alert">{error}</p>}
       {error && !busy && <p className="promotion-next-note">Введённый ник сохранён. Нажмите «Проверить ник», чтобы повторить проверку.</p>}
       {busy && <p className="promotion-next-note" role="status">Проверяем ник. Введённый ник сохранён.</p>}
-      <button className="promotion-action" type="submit" disabled={busy || !nickname.trim()}>{busy ? "ПРОВЕРЯЕМ…" : "ПРОВЕРИТЬ НИК"}</button>
+      {/* The visible cue is the field's label and placeholder; this sentence only gives the disabled button a spoken reason, so the approved lookup frame does not change. */}
+      {!busy && !nickname.trim() && <span id="promotion-nickname-reason" className="sr-only">Кнопка станет доступна, когда вы введёте ник Roblox из таблицы.</span>}
+      <button className="promotion-action" type="submit" disabled={busy || !nickname.trim()} aria-describedby={!busy && !nickname.trim() ? "promotion-nickname-reason" : undefined}>{busy ? "ПРОВЕРЯЕМ…" : "ПРОВЕРИТЬ НИК"}</button>
     </form>
   </div>;
 }

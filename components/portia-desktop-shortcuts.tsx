@@ -50,9 +50,22 @@ function savedShortcutLayout(position: ShortcutPosition): ShortcutLayoutStyle {
   };
 }
 
-export function DesktopIcon({ app, onOpen, position, onMove, className = "", badge = false }: { app: Exclude<AppId, "editor">; onOpen: (app: AppId, origin?: OpenOrigin) => void; position?: ShortcutPosition; onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void; className?: string; badge?: boolean }) {
-  return <DraggableDesktopIcon shortcutId={app} label={appMeta[app].label} icon={appMeta[app].icon} position={position} onMove={onMove} onActivate={(origin) => onOpen(app, origin)} className={className} badge={badge} />;
+export function DesktopIcon({ app, onOpen, position, onMove, onAnnounce, className = "", badge = false }: { app: Exclude<AppId, "editor">; onOpen: (app: AppId, origin?: OpenOrigin) => void; position?: ShortcutPosition; onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void; onAnnounce?: (message: string) => void; className?: string; badge?: boolean }) {
+  return <DraggableDesktopIcon shortcutId={app} label={appMeta[app].label} icon={appMeta[app].icon} position={position} onMove={onMove} onAnnounce={onAnnounce} onActivate={(origin) => onOpen(app, origin)} className={className} badge={badge} />;
 }
+
+// What a moved shortcut must leave free: the assistant and the format button (same set for a drop and for a key press).
+function shortcutObstacles(workspace: HTMLElement): Rect[] {
+  const workspaceRect = workspace.getBoundingClientRect();
+  return Array.from(document.querySelectorAll<HTMLElement>(".desktop-assistant, .global-format-launch")).map((element): Rect => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.left - workspaceRect.left, y: rect.top - workspaceRect.top, width: rect.width, height: rect.height };
+  });
+}
+
+// Alt+Arrow moves a shortcut by this many px (Shift: the large step); the drag it replaces has no other keyboard route.
+const keyboardMoveStep = 16;
+const keyboardMoveLargeStep = 64;
 
 // Not shorter than the longest cycle (560 + 90ms offset); a timer, not animationend, because a hidden tab may never deliver the event (D-02).
 const shortcutAnimationMs = 700;
@@ -79,12 +92,13 @@ export function StartPanelButton({ icon, label, onClick }: { icon: PortiaIconNam
   return <button className={animation.playing ? "is-icon-animating" : undefined} type="button" onPointerEnter={animation.play} onFocus={animation.play} onClick={onClick}><span className="start-panel-icon" data-icon={icon}><PortiaIcon name={icon} /></span>{label}</button>;
 }
 
-function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onActivate, className = "", badge = false }: {
+function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAnnounce, onActivate, className = "", badge = false }: {
   shortcutId: DesktopShortcutId;
   label: string;
   icon: PortiaIconName;
   position?: ShortcutPosition;
   onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void;
+  onAnnounce?: (message: string) => void;
   onActivate?: (origin: OpenOrigin) => void;
   className?: string;
   badge?: boolean;
@@ -147,11 +161,7 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     if (operation.moved) {
       // On drop the shortcut also leaves the assistant and the format button free.
-      const workspaceRect = operation.workspace.getBoundingClientRect();
-      const obstacles = Array.from(document.querySelectorAll<HTMLElement>(".desktop-assistant, .global-format-launch")).map((element): Rect => {
-        const rect = element.getBoundingClientRect();
-        return { x: rect.left - workspaceRect.left, y: rect.top - workspaceRect.top, width: rect.width, height: rect.height };
-      });
+      const obstacles = shortcutObstacles(operation.workspace);
       onMove(shortcutId, clampShortcutPosition(
         operation.last,
         { width: operation.target.offsetWidth, height: operation.target.offsetHeight },
@@ -168,6 +178,28 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
     }
     dragRef.current = null;
     setDragging(false);
+  };
+
+  // The keyboard alternative to the drag (WCAG 2.5.7): Alt+Arrow moves the focused shortcut, Shift makes the step larger. Plain arrows and Enter keep their meaning.
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (!event.altKey || event.ctrlKey || !event.key.startsWith("Arrow")) return;
+    if (window.matchMedia("(max-width: 900px)").matches) return;
+    const workspace = event.currentTarget.closest<HTMLElement>(".workspace");
+    if (!workspace) return;
+    const step = event.shiftKey ? keyboardMoveLargeStep : keyboardMoveStep;
+    const deltaX = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+    const deltaY = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+    if (!deltaX && !deltaY) return;
+    event.preventDefault();
+    const iconRect = event.currentTarget.getBoundingClientRect();
+    const workspaceRect = workspace.getBoundingClientRect();
+    onMove(shortcutId, clampShortcutPosition(
+      { x: iconRect.left - workspaceRect.left + deltaX, y: iconRect.top - workspaceRect.top + deltaY },
+      { width: event.currentTarget.offsetWidth, height: event.currentTarget.offsetHeight },
+      { width: workspace.clientWidth, height: workspace.clientHeight },
+      shortcutObstacles(workspace),
+    ));
+    onAnnounce?.(`Ярлык «${label}» перемещён`);
   };
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -189,6 +221,7 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAct
     onPointerUp: finishDrag,
     onPointerCancel: finishDrag,
     onClick: handleClick,
+    onKeyDown: handleKeyDown,
     onPointerEnter: iconAnimation.play,
     onFocus: iconAnimation.play,
     onDragStart: (event: React.DragEvent<HTMLElement>) => event.preventDefault(),

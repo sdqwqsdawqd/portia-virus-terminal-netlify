@@ -56,6 +56,8 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
   const [confirmClose, setConfirmClose] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const stayRef = useRef<HTMLButtonElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const exportingRef = useRef(false);
   const readTokenRef = useRef(0);
@@ -134,6 +136,22 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
     }
   };
 
+  // The confirmation is modal inside this view: Tab and Shift+Tab cycle over its two buttons and leaving it puts the focus back on the control that opened it.
+  const dismissConfirm = () => {
+    setConfirmClose(false);
+    requestAnimationFrame(() => backRef.current?.focus());
+  };
+  const trapConfirmTab = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Tab") return;
+    const buttons = Array.from(confirmRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled)") ?? []);
+    if (buttons.length === 0) return;
+    const first = buttons[0];
+    const last = buttons[buttons.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !buttons.includes(active as HTMLElement))) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && (active === last || !buttons.includes(active as HTMLElement))) { event.preventDefault(); first.focus(); }
+  };
+
   const requestClose = () => {
     if (busy) return;
     if (dirty) setConfirmClose(true);
@@ -146,7 +164,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
 
   return <div
     className="template-builder promotion-app"
-    onKeyDown={(event) => { if (event.key === "Escape" && confirmClose) { event.stopPropagation(); setConfirmClose(false); } }}
+    onKeyDown={(event) => { if (event.key === "Escape" && confirmClose) { event.stopPropagation(); dismissConfirm(); } }}
   >
     <div className="template-shell">
       <header className="template-header">
@@ -154,20 +172,20 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
           <span className="promotion-eyebrow">ПОВЫШЕНИЕ // ЗАДАНИЕ</span>
           <h1 ref={headingRef} tabIndex={-1}>Шаблон досье</h1>
         </div>
-        <button type="button" className="promotion-action template-back" onClick={requestClose} disabled={busy}>Вернуться к повышению</button>
+        <button ref={backRef} type="button" className="promotion-action template-back" onClick={requestClose} disabled={busy}>Вернуться к повышению</button>
       </header>
       <p className="template-note">Работа скачивается на ваше устройство. Отправьте файл проверяющему вне сайта. Текст и изображение хранятся только в этом сеансе и не отправляются на сервер.</p>
 
-      {confirmClose && <section className="template-confirm" role="alertdialog" aria-labelledby={`${idPrefix}-confirm-title`} aria-describedby={`${idPrefix}-confirm-text`}>
+      {confirmClose && <section ref={confirmRef} onKeyDown={trapConfirmTab} className="template-confirm" role="alertdialog" aria-modal="true" aria-labelledby={`${idPrefix}-confirm-title`} aria-describedby={`${idPrefix}-confirm-text`}>
         <strong id={`${idPrefix}-confirm-title`}>Черновик ещё не скачан</strong>
         <p id={`${idPrefix}-confirm-text`}>Текст и изображение хранятся только в этом сеансе. Если вернуться сейчас, набранное будет потеряно. Данные на сервер не отправляются.</p>
         <div className="template-confirm-actions">
-          <button ref={stayRef} type="button" className="promotion-action" onClick={() => setConfirmClose(false)}>Остаться и скачать</button>
+          <button ref={stayRef} type="button" className="promotion-action" onClick={dismissConfirm}>Остаться и скачать</button>
           <button type="button" className="promotion-action template-discard" onClick={onClose}>Вернуться без скачивания</button>
         </div>
       </section>}
 
-      <div className="template-grid">
+      <div className="template-grid" inert={confirmClose || undefined}>
         <form className="template-form" onSubmit={(event) => event.preventDefault()} aria-label="Поля шаблона">
           {templateFields.map((field) => {
             const id = `${idPrefix}-${field.key}`;

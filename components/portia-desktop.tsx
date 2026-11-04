@@ -241,6 +241,13 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const [activeApp, setActiveApp] = useState<AppId>("archive");
   const [qualificationLocked, setQualificationLocked] = useState(false);
   const qualificationLockedRef = useRef(false);
+  // Result of a keyboard move (shortcut or taskbar entry), read out by a polite status; the flip changes the text so a repeat is announced again.
+  const [layoutAnnouncement, setLayoutAnnouncement] = useState("");
+  const layoutAnnouncementFlip = useRef(false);
+  const announceLayout = useCallback((message: string) => {
+    layoutAnnouncementFlip.current = !layoutAnnouncementFlip.current;
+    setLayoutAnnouncement(layoutAnnouncementFlip.current ? message : `${message}\u200B`);
+  }, []);
   // A ref, not state: computing z inside a state updater made setWindows a side effect of it, and Strict Mode replays updaters (ROB-03).
   const topZ = useRef(20);
   const [activeVirusId, setActiveVirusId] = useState(initialContent.viruses[0]?.id ?? "");
@@ -876,6 +883,19 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     setShortcutPositions((current) => ({ ...current, [shortcutId]: position }));
   };
 
+  // The check window says aria-modal, so the rest of the desktop must neither take focus nor be read while it runs; the focus goes back where it was afterwards.
+  useEffect(() => {
+    if (!qualificationLocked) return;
+    const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    const behind = Array.from(document.querySelectorAll<HTMLElement>(".system-bar, .desktop-icons, .app-window:not(.promotion-window), .desktop-assistant, .taskbar, .start-panel, .global-format-launch, .quest-toast"));
+    for (const element of behind) element.inert = true;
+    return () => {
+      for (const element of behind) element.inert = false;
+      const restoreFocus = opener && opener.isConnected ? opener : document.querySelector<HTMLElement>('.promotion-window h1, [data-taskbar-app="promotion"]');
+      restoreFocus?.focus({ preventScroll: true });
+    };
+  }, [qualificationLocked]);
+
   const focusApp = (appId: AppId) => {
     if (qualificationLocked && appId !== "promotion") return;
     // Every click in a window calls this, so a window already on top keeps its z and z stays far below the format panel's 950 (EDIT-04).
@@ -956,6 +976,24 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       const index = before ? without.indexOf(before) : without.length;
       return [...without.slice(0, index), drag.app, ...without.slice(index)];
     });
+  };
+
+  // The keyboard alternative to the taskbar drag (WCAG 2.5.7): Alt+Left / Alt+Right swaps the focused entry with its neighbour among the open ones.
+  const onTaskbarKeyDown = (app: AppId) => (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!event.altKey || event.ctrlKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+    event.preventDefault();
+    const open = taskbarOrder.filter((id) => windows[id].open);
+    const index = open.indexOf(app);
+    const step = event.key === "ArrowLeft" ? -1 : 1;
+    const neighbour = open[index + step];
+    if (index < 0 || !neighbour) return;
+    const next = open.slice();
+    next[index] = neighbour;
+    next[index + step] = app;
+    setTaskbarOrder((order) => [...next, ...order.filter((id) => !windows[id].open)]);
+    announceLayout(`Кнопка «${appMeta[app].label}» перемещена: позиция ${next.indexOf(app) + 1} из ${next.length}`);
+    // Reordering moves the DOM node and a moved node can lose the focus; give it back after the commit.
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-taskbar-app="${app}"]`)?.focus());
   };
 
   // Dock-style: the taskbar entry hops once when its window appears.
@@ -1546,17 +1584,17 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
         <main className={`workspace${windows[activeApp].open && !windows[activeApp].minimized ? " mobile-app-open" : ""}`}>
           <nav className="desktop-icons" aria-label="Рабочий стол PORTIA" style={desktopSettingsLoaded && shortcutPositionsLoaded ? undefined : { visibility: "hidden" }}>
-            <DesktopIcon app="search" onOpen={openApp} position={shortcutPositions.search} onMove={moveDesktopShortcut} />
-            <DesktopIcon app="archive" onOpen={openApp} position={shortcutPositions.archive} onMove={moveDesktopShortcut} />
-            <DesktopIcon app="employees" onOpen={openApp} position={shortcutPositions.employees} onMove={moveDesktopShortcut} />
-            <DesktopIcon app="broadcasts" onOpen={openApp} position={shortcutPositions.broadcasts} onMove={moveDesktopShortcut} badge={broadcastUnread} />
-            <DesktopIcon app="info" onOpen={openApp} position={shortcutPositions.info} onMove={moveDesktopShortcut} />
-            <DesktopIcon app="guide" onOpen={openApp} position={shortcutPositions.guide} onMove={moveDesktopShortcut} />
-            <DesktopIcon app="promotion" onOpen={openApp} position={shortcutPositions.promotion} onMove={moveDesktopShortcut} />
-            <DesktopIcon app="settings" onOpen={openApp} position={shortcutPositions.settings} onMove={moveDesktopShortcut} />
-            <DesktopIcon app="charter" onOpen={openApp} position={shortcutPositions.charter} onMove={moveDesktopShortcut} />
-            <DesktopIcon app="sheet" onOpen={openApp} position={shortcutPositions.sheet} onMove={moveDesktopShortcut} />
-            <DesktopIcon app="trash" onOpen={openApp} position={shortcutPositions.trash} onMove={moveDesktopShortcut} className="desktop-icon-trash" />
+            <DesktopIcon app="search" onOpen={openApp} position={shortcutPositions.search} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="archive" onOpen={openApp} position={shortcutPositions.archive} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="employees" onOpen={openApp} position={shortcutPositions.employees} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="broadcasts" onOpen={openApp} position={shortcutPositions.broadcasts} onMove={moveDesktopShortcut} onAnnounce={announceLayout} badge={broadcastUnread} />
+            <DesktopIcon app="info" onOpen={openApp} position={shortcutPositions.info} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="guide" onOpen={openApp} position={shortcutPositions.guide} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="promotion" onOpen={openApp} position={shortcutPositions.promotion} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="settings" onOpen={openApp} position={shortcutPositions.settings} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="charter" onOpen={openApp} position={shortcutPositions.charter} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="sheet" onOpen={openApp} position={shortcutPositions.sheet} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="trash" onOpen={openApp} position={shortcutPositions.trash} onMove={moveDesktopShortcut} onAnnounce={announceLayout} className="desktop-icon-trash" />
           </nav>
 
           {qualificationLocked && <div className="qualification-focus-backdrop" aria-hidden="true"><span>ИДЁТ КВАЛИФИКАЦИОННАЯ ПРОВЕРКА</span></div>}
@@ -1752,7 +1790,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <div className="settings-app">
               <header><h1>Настройки рабочего стола</h1><p>Оформление и расположение ярлыков сохраняются на этом устройстве.</p></header>
               <SettingGroup title="Цвет интерфейса" values={[['teal','Portia'],['ice','Холодный'],['amber','Янтарный'],['red','Тревога']]} current={desktopSettings.accent} onSelect={(value) => { closeAccentPicker(); updateDesktopSetting("accent", value); }}>
-                <button type="button" ref={customAccentButton} className={desktopSettings.accent === "custom" ? "selected" : ""} aria-pressed={desktopSettings.accent === "custom"} onClick={chooseCustomAccent}><i className="swatch custom" style={customTokens ? { background: customTokens["--teal"] } : undefined} /><span>Свой</span></button>
+                <button type="button" ref={customAccentButton} className={desktopSettings.accent === "custom" ? "selected" : ""} aria-pressed={desktopSettings.accent === "custom"} onClick={chooseCustomAccent} onKeyDown={(event) => {
+                  // The picker opens without taking the focus, so Escape is also heard on the button that opened it; the focus is already there.
+                  if (event.key === "Escape" && accentPickerOpen) { event.preventDefault(); closeAccentPicker(); }
+                }}><i className="swatch custom" style={customTokens ? { background: customTokens["--teal"] } : undefined} /><span>Свой</span></button>
                 {accentPickerOpen && <div className="accent-picker" onKeyDown={(event) => {
                   if (event.key !== "Escape") return;
                   // preventDefault marks Escape as handled so the document-level quest-notice listener skips it; focus returns to «Свой» because the picker unmounts.
@@ -1784,7 +1825,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         <footer className="taskbar">
           <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
           <div className="taskbar-apps" role="toolbar" aria-label="Открытые программы">
-            {taskbarOrder.filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
+            {taskbarOrder.filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onKeyDown={onTaskbarKeyDown(app)} onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
               if (suppressTaskbarClick.current) { suppressTaskbarClick.current = false; return; }
               // A window on its way out comes back, like a minimised one.
               if (windows[app].minimized || windows[app].exiting) openApp(app, originOf(event.currentTarget, "taskbar"));
@@ -1792,7 +1833,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               else focusApp(app);
             }}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>)}
           </div>
-          
+          <span className="sr-only" role="status" aria-live="polite">{layoutAnnouncement}</span>
         </footer>
 
         {startOpen && <div className="start-panel">
