@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed 19-17-PLAN.md
-last_updated: "2026-11-04T03:13:12.195Z"
+stopped_at: Completed 19-18-PLAN.md
+last_updated: "2026-11-04T03:18:49.520Z"
 last_activity: 2026-11-03
 last_activity_desc: Phase PORTIA-19 execution started
-state_head: a4f542bfbf329df0a0b708e7ea14af232d93baab
+state_head: 59ce72709f620a4635386d6cdf4f1a5dab0837ea
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 66
+  completed_plans: 67
   percent: 50
 ---
 
@@ -104,6 +104,7 @@ Progress: [█████░░░░░] 50%
 | Phase 19 P15 | 15min | 3 tasks | 9 files |
 | Phase 19 P16 | 8min | 2 tasks | 7 files |
 | Phase PORTIA-19 P17 | 15min | 2 tasks | 4 files |
+| Phase 19 P18 | 17min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -166,6 +167,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 19]: 19-15: visibility-gated media timeout passed on Chromium desktop and phone; folded guide covers remain BLOCKED (DATA) until 19-19
 - [Phase 19]: 19-16: failed initial restore ignores all HTTP refusals before 404/423 reset; live role and owner UAT evidence remains Pending
 - [Phase PORTIA-19]: 19-17: v2 acceptance snapshot uses staging DB Date and preserves preexisting rows; STAB-PROM-13/15 remain Pending until live staging and owner devices
+- [Phase 19]: Владелец (Qloxz), 2026-11-04: B — серверный источник «Сотрудников» не менять; Task 2 плана 19-18 пропущена.
 
 ### Pending Todos
 
@@ -204,8 +206,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-03T19:33:33.545Z
-Stopped at: Completed 19-17-PLAN.md
+Last session: 2026-11-04T03:18:48.981Z
+Stopped at: Completed 19-18-PLAN.md
 Resume file: None
 
 ## Operator Next Step
