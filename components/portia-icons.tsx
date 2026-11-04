@@ -201,5 +201,5 @@ const illustrations: Record<PortiaIllustrationName, React.ReactNode> = {
 };
 
 export function PortiaIllustration({ name, ...props }: { name: PortiaIllustrationName } & SVGProps<SVGSVGElement>) {
-  return <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{illustrations[name]}</svg>;
+  return <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-illustration={name} {...props}>{illustrations[name]}</svg>;
 }
