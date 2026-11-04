@@ -77,8 +77,9 @@ export function recycleFileBody(file: Pick<RecycleFile, "kind" | "content" | "vi
 }
 
 // Lowercase in Russian rules and ё = е: «ЁЖ», «ёж» and «еж» are one word, in the query and in the text alike.
+// The combining acute accent (D-37) does not matter either: «Люци́диум» and «Люцидиум» match each other. Only U+0301 goes; «й» and other marks stay.
 export function normalizeSearch(value: string): string {
-  return value.toLocaleLowerCase("ru").replace(/ё/g, "е");
+  return value.toLocaleLowerCase("ru").replace(/ё/g, "е").replace(/\u0301/g, "");
 }
 
 const tableText = (rows: readonly { key: string; value: string }[]) => rows.map((row) => `${row.key} ${row.value}`).join(" ");
