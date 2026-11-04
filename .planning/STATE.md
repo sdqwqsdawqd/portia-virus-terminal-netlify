@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-24-PLAN.md
-last_updated: "2026-11-04T08:49:29.273Z"
+stopped_at: Completed PORTIA-20-16-PLAN.md
+last_updated: "2026-11-04T09:10:31.326Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: 0f9c09b8b1f827a410394359fe903baf28c0a107
+state_head: b51b91406e8d636e5037a00eead73147ec323bf6
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 84
+  completed_plans: 87
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 16 of 24
+Plan: 17 of 24
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-04 — Phase PORTIA-20 execution started
 
@@ -122,6 +122,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P05 | 105min | 2 tasks | 4 files |
 | Phase PORTIA-20 P06 | 105 min | 2 tasks | 4 files |
 | Phase PORTIA-20 P24 | 25m | 3 tasks | 8 files |
+| Phase PORTIA-20 P16 | 2h30m | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -204,6 +205,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-05: flaskEmpty/microscopeGuide are additive variants used only by info empty, news empty and guide empty; quests, archive, search, iframe error and all error panels keep the old drawings; info empty and populated news/guide stay BLOCKED (DATA)
 - [Phase PORTIA-20]: 20-06: Promotion redesign appended as separate CSS blocks; E4 evidence via real-request faults only, populated/reviewer states BLOCKED (DATA/ENV)
 - [Phase PORTIA-20]: 20-24: editor notes migration 20261104000100 (hash e1866a5b) applied nowhere; owner chose option a but staging availability unconfirmed, so staging checks BLOCKED (OWNER), STAB-EDIT-04 open, production ОЖИДАЕТ ВЛАДЕЛЬЦА
+- [Phase PORTIA-20]: 20-16: phone layout of Информация via useSyncExternalStore(matchMedia 900px); back button in flow (not sticky, .app-window clips); expansion/Далее/search reveal BLOCKED (DATA) on target, STAB-A11Y-02/03 stay open
 
 ### Pending Todos
 
@@ -242,8 +244,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T08:49:28.786Z
-Stopped at: Completed PORTIA-20-24-PLAN.md
+Last session: 2026-11-04T09:10:30.854Z
+Stopped at: Completed PORTIA-20-16-PLAN.md
 Resume file: None
 
 ## Operator Next Step
