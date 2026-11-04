@@ -69,11 +69,29 @@ test("the wallpaper spider starts randomly beside threads and relocates after an
   assert.ok(source.includes('const motionOn = () => root.dataset.motion !== "reduced" && root.dataset.motion !== "off";'));
 });
 
-test("the spider palette follows the readable interface accent with logo-like black and pale parts", () => {
+test("D-25/D-26: the spider body and legs are dense dark outlined parts and the accent lives only in small details", () => {
   const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
-  assert.match(styles, /\.wallpaper-spider\s*\{[^}]*color:\s*var\(--teal\)/);
-  assert.match(styles, /\.wallpaper-spider-dark\s*\{[^}]*color-mix\(in oklab, var\(--teal\)[^}]*#020706/);
-  assert.match(styles, /\.wallpaper-spider-pale\s*\{[^}]*color-mix\(in oklab, var\(--teal\)/);
+  const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
+  const rule = (selector: string) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return styles.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+  };
+  const bodyRules = [".wallpaper-spider-dark", ".wallpaper-spider-limb", ".wallpaper-spider-pale"].map((selector) => [selector, rule(selector)] as const);
+  for (const [selector, text] of bodyRules) {
+    assert.match(text, /fill:\s*var\(--panel/, `${selector} is filled from the dark palette`);
+    assert.doesNotMatch(text, /var\(--teal\)|currentColor/, `${selector} does not follow the accent`);
+    assert.doesNotMatch(text, /opacity/, `${selector} is opaque`);
+    assert.doesNotMatch(text, /color-mix/, `${selector} has no translucent mix`);
+  }
+  const stroke = rule(".wallpaper-spider :is(path, circle)");
+  assert.match(stroke, /stroke:\s*#020706/, "body and legs carry a contour darker than the background");
+  assert.doesNotMatch(stroke, /stroke:\s*none|opacity/);
+  assert.doesNotMatch(rule(".wallpaper-spider"), /color:\s*var\(--teal\)|opacity:\s*0?\.\d/, "the spider wrapper does not tint its parts with the accent");
+  const accent = rule(".wallpaper-spider .wallpaper-spider-accent");
+  assert.match(accent, /fill:\s*var\(--teal\)/);
+  assert.match(source, /className="wallpaper-spider-accent"/);
+  assert.doesNotMatch(source, /wallpaper-spider-teal/, "the old solid accent segment class is gone");
+  assert.doesNotMatch(styles, /wallpaper-spider-teal/);
 });
 
 test("the web stands still in every mode, with the spider shown or hidden (owner recall of the D-09 sway, quick 261102-d7r)", () => {

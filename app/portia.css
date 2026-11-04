@@ -1485,12 +1485,15 @@ html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-
    width/1440 and height/900). The loop only adds a transform; legs turn about pivots given in artwork units. The body
    centre (325, 360 of 649.5 x 768) is the anchor that walks on the threads. It lives outside .wallpaper-web, whose rules
    restyle every path inside it. */
-.wallpaper-spider { position: absolute; left: calc(100cqw + (var(--rest-x) - 1440) * max(100cqw / 1440, 100cqh / 900)); top: calc(var(--rest-y) * max(100cqw / 1440, 100cqh / 900)); width: calc(72 * max(100cqw / 1440, 100cqh / 900)); translate: -50% -46.875%; transform-origin: 50% 46.875%; opacity: 1; color: var(--teal); will-change: transform; pointer-events: none; }
+.wallpaper-spider { position: absolute; left: calc(100cqw + (var(--rest-x) - 1440) * max(100cqw / 1440, 100cqh / 900)); top: calc(var(--rest-y) * max(100cqw / 1440, 100cqh / 900)); width: calc(72 * max(100cqw / 1440, 100cqh / 900)); translate: -50% -46.875%; transform-origin: 50% 46.875%; opacity: 1; will-change: transform; pointer-events: none; }
 .wallpaper-spider svg { display: block; width: 100%; height: auto; }
-.wallpaper-spider :is(path, circle) { stroke: none; }
-.wallpaper-spider-teal { fill: currentColor; }
-.wallpaper-spider-dark { fill: color-mix(in oklab, var(--teal) 12%, #020706); }
-.wallpaper-spider-pale { fill: color-mix(in oklab, var(--teal) 14%, #ececec); }
+/* D-25/D-26: body and legs are dense and opaque, filled from the dark PORTIA OS palette and drawn with a contour darker than the
+   background, so nothing shows through them and they do not follow the accent. The accent is only in .wallpaper-spider-accent (eyes). */
+.wallpaper-spider :is(path, circle) { stroke: #020706; stroke-width: 5; stroke-linejoin: round; }
+.wallpaper-spider-dark { fill: var(--panel); }
+.wallpaper-spider-limb { fill: var(--panel-2); }
+.wallpaper-spider-pale { fill: var(--panel-2); }
+.wallpaper-spider .wallpaper-spider-accent { fill: var(--teal); stroke: none; }
 .wallpaper-spider-leg { transform-box: view-box; }
 /* Waves along the threads: no filter, no blur (cost). The svg carries .desktop-wallpaper, so the accent and the reduce gate apply. */
 .wallpaper-web-pulses path { stroke-linecap: round; }
