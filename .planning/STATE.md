@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed 20-28-PLAN.md
-last_updated: "2026-11-04T18:22:20.001Z"
+stopped_at: Completed 20-30-PLAN.md
+last_updated: "2026-11-04T18:38:18.716Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 20 execution started
-state_head: 8b81221e0cf0e6e2020d7a2102d01e0c34835ad8
+state_head: 27e3d1897f2fb8f9ee3f0a675f87c8e9cd6bf625
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 102
-  completed_plans: 94
+  completed_plans: 95
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 15 of 31
+Plan: 16 of 31
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 20 execution started
 
@@ -130,6 +130,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P26 | 32 min | 3 tasks | 3 files |
 | Phase 20 P27 | 35 min | 3 tasks | 2 files |
 | Phase PORTIA-20 P28 | ~5h | 3 tasks | 4 files |
+| Phase 20 P30 | 75 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -227,6 +228,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-26: security matrix pinned to commit b88669f; later plans touching the matrix coverage paths must refresh it or lib/security-matrix.test.ts fails with stale matrix
 - [Phase 20]: 20-27: UAT ledger prepared (20-UAT.md + lib/phase20-uat.test.ts); P19-GAP PASS only with residual-0 SUMMARY evidence (20, 22), others BLOCKED; OWNER-MIG rows never agent PASS; strict PORTIA_REQUIRE_UAT=1 fails until owner fills
 - [Phase PORTIA-20]: 20-28: the stub lane found that Tab left the qualification window (blur failed the PC attempt on Chromium); fixed with a Tab wrap in portia-desktop.tsx. Live run and the editor keyboard-move scenario stay BLOCKED (ENV); PW-10 is a waiver awaiting the owner.
+- [Phase 20]: 20-30: release gate runner is fail-closed (flaky/retry/skip/BLOCKED never PASS; waiver without owner verdict is FAIL, PW-10 pending, PW-07 accepted); first clean-checkout smoke: lint PASS, unit and typecheck FAIL because tracked lib/phase16-guard-boundary.test.ts imports untracked .claude/hooks/guard.mjs (deferred, blocks 20-13 unit/typecheck PASS)
 
 ### Pending Todos
 
@@ -243,6 +245,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 19] STAB-PROM-15 stays open: live acceptance on isolated staging (steps 1-9, 11, PC and phone) is debt for 19-14 / Phase 20; owner steps 2-8 mutated production, review of those changes is the owner's decision. 19-07 teardown of run mvz5fqgv_c40b449b is permitted by the owner's acceptance.
 - [Phase 20] register_attempt RPC is granted to anon but has no caller - decide revoke or confirm purpose in the security review.
 - 20-23: live proof of Сводка/Рекомендации sections is BLOCKED (ENV) (no safe staging target) and the notes steps BLOCKED (OWNER) (portia_editor_notes not applied); STAB-EDIT-02/03/04, STAB-A11Y-01/02, STAB-REL-06 stay open
+- [Phase 20] Clean checkout: lib/phase16-guard-boundary.test.ts imports untracked .claude/hooks/guard.mjs, so unit (1 fail) and tsc (TS2307) fail outside the owner's tree; decision needed before 20-13 Task 2
 
 ### Quick Tasks Completed
 
@@ -268,8 +271,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T18:22:19.548Z
-Stopped at: Completed 20-28-PLAN.md
+Last session: 2026-11-04T18:38:18.170Z
+Stopped at: Completed 20-30-PLAN.md
 Resume file: None
 
 ## Operator Next Step

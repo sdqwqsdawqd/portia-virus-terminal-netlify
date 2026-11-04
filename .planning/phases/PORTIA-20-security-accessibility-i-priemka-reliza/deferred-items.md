@@ -20,3 +20,8 @@
   → 20-25: PW-07, класс waiver, вердикт «ОЖИДАЕТ ВЛАДЕЛЬЦА» (релизный гейт FAIL до решения).
 - `app-states.spec.ts` «[STAB-APP-02] Сотрудники: a reload that cannot reach the roster…» (chromium-desktop, chromium-dpr125): ожидание 5 с короче чтения живой таблицы; таймауты 30 с в populated и STAB-APP-03 для «Сотрудники».
   → 20-25: PW-08 и PW-09, класс fixed.
+
+Найдено при выполнении 20-30 (smoke в clean checkout коммита cf138fc, вне объёма плана, не исправлено):
+
+- `lib/phase16-guard-boundary.test.ts` импортирует `.claude/hooks/guard.mjs`, а каталог `.claude/` исключён локально через `.git/info/exclude` и не отслеживается git. В clean checkout `npm.cmd test` даёт 1 fail из 1423 (1418 pass, 4 skipped), а `npm.cmd exec tsc -- --noEmit` завершается кодом 2 (`TS2307: Cannot find module '../.claude/hooks/guard.mjs'`). В основной копии оба гейта зелёные только потому, что файл лежит рядом.
+  → Блокирует PASS гейтов `unit` и `typecheck` на итоговом commit в 20-13 Task 2. Варианты решения (выбор за владельцем/планировщиком, не агента-исполнителя 20-30): отслеживать `.claude/hooks/guard.mjs`, либо сделать тест и импорт устойчивыми к отсутствию файла (skip как BLOCKED (ENV) и без статического импорта в tsc), либо исключить тест из clean-прогона с записью причины. Полный lint в clean checkout при этом проходит: код 0, 0 errors, 14 warnings.
