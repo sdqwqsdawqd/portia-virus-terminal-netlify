@@ -207,3 +207,9 @@ Pre-flight: STAGING-BOUND 2026-11-04T07:59:51Z refHash 01d085e7b9f0; serverBound
 ### Teardown (повтор) — до удаления
 
 Read-only `acceptance-residual mw1loqa9_c9451c80` 2026-11-04T08:48Z на аттестованном staging (refHash `01d085e7b9f0`): `promo=5, editors=2, storage=0, content=0, authUsers=2, banks=4, buckets=2, attempts=1, answers=5`; `legacyWindow=false`. Эти временные данные пока сохранены. Удаление необратимо и допускается только после отдельного решения владельца по 19-22.
+
+Повторная проверка перед удалением 2026-11-04T08:58Z: `ATTESTED`, refHash `01d085e7b9f0`; `acceptance-residual` повторил те же счётчики и `legacyWindow=false`.
+
+Решение teardown (повтор): удалить (владелец, 2026-11-04T08:58Z; ответ дословно: «удалить временный staging»). Цель — только run `mw1loqa9_c9451c80` из изолированного staging.
+
+Teardown выполнен 2026-11-04T08:59Z командой `acceptance-teardown mw1loqa9_c9451c80`: `errors=[]`, `deleted.run` = promo 16, editors 2, storage 0, content 0, authUsers 2; banks 4, buckets 2. Ответ команды и отдельный вызов `acceptance-residual mw1loqa9_c9451c80` показали все девять счётчиков равными 0 (`legacyWindow=false`). Receipt: `evidence/19-ACCEPTANCE-TEARDOWN-RERUN.json`. Число `deleted.run.promo` — число удалённых строк, включая дочерние записи, и не обязано совпадать с агрегированным `before.promo`.

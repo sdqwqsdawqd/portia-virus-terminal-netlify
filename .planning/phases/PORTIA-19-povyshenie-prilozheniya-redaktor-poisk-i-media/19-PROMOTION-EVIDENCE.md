@@ -128,3 +128,9 @@ Run `mw1loqa9_c9451c80`, refHash `01d085e7b9f0`; receipts 19-20: live 770/770 PA
 | STAB-PROM-15 | 0–11, F9–F12 | PASS по словам владельца | PASS по словам владельца | PASS | Pending: shift receipts отсутствуют; teardown 19-22 ещё не проведён |
 
 Read-only `acceptance-residual mw1loqa9_c9451c80` перед teardown 2026-11-04: `promo=5, editors=2, storage=0, content=0, authUsers=2, banks=4, buckets=2, attempts=1, answers=5`, `legacyWindow=false`. Остаток ещё не удалён. Сводка выше не отменяет исторические выводы о прежнем production-прогоне.
+
+### Teardown повторного run (19-22)
+
+Владелец дословно разрешил «удалить временный staging» 2026-11-04. Перед удалением `attest` вернул refHash `01d085e7b9f0`, read-only residual повторил счётчики выше. Guarded `acceptance-teardown mw1loqa9_c9451c80` завершился без ошибок; отдельный `acceptance-residual` подтвердил нули в promo, editors, storage, content, authUsers, banks, buckets, attempts и answers. Receipt: `evidence/19-ACCEPTANCE-TEARDOWN-RERUN.json`. D-04 (удаление временных данных) PASS.
+
+STAB-PROM-13 и STAB-PROM-15 остаются **Pending**, несмотря на нулевой остаток: владелец сообщил общий PASS шагов 9 и 0–11 на обоих устройствах, но журнал этого run не содержит сдвигов `cleanup`, `deadline`, `retake`, `cooldown`, `penalty`; подробные наблюдения временных границ не представлены. Часть сценариев требует ждать больше времени, чем длился зафиксированный сеанс. Доказательства не восстановлены задним числом. Новый прогон для этих проверок теперь потребует отдельного seed. Ранее записанный физический вердикт владельца сохраняется как его наблюдение, но не подменяет недостающие receipts.
