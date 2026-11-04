@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-02-PLAN.md
-last_updated: "2026-11-04T05:45:53.041Z"
+stopped_at: Completed PORTIA-20-03-PLAN.md
+last_updated: "2026-11-04T06:01:04.235Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: 34d371fe0c1ce5d86aca030799e6946816434be7
+state_head: 2317d72d16e4e20454fd5bdd8e8c463b43fe0fcd
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 76
+  completed_plans: 77
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 8 of 24
+Plan: 9 of 24
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-04 — Phase PORTIA-20 execution started
 
@@ -114,6 +114,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P18 | 25min | 2 tasks | 6 files |
 | Phase PORTIA-20 P19 | 60min | 3 tasks | 8 files |
 | Phase PORTIA-20 P02 | 45min | 2 tasks | 5 files |
+| Phase PORTIA-20 P03 | 40 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -186,6 +187,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-18: IN-05 ratings-column fallback kept as disposition (production unavailable); comment points to baseline migration with removal condition
 - [Phase PORTIA-20]: 20-19: recommendation seed via useSyncExternalStore (module-cached per page load) instead of setState in effect; global keydown uses globalSearchKeyAction (Ctrl/Cmd+K only)
 - [Phase PORTIA-20]: 20-02: local image allow-list PNG/JPEG/WebP (5 MB, 4096 px side, 12 Mpx), SVG/GIF refused; PNG card 1000 px wide, max 8000 px high, longer is refused with an HTML alternative instead of cropping
+- [Phase PORTIA-20]: 20-03: spider restyled (dark opaque fills, #020706 contour, accent only in eye details); D-25 supersedes the quick 261102-d7r no-outline rule
+- [Phase PORTIA-20]: 20-03 D-45: resting-spider blur on PC is caused by will-change: transform; will-change now only via .wallpaper-spider[data-spider-walking]; spiderTransform snaps resting shift to 1/dpr and drops scale()
 
 ### Pending Todos
 
@@ -224,8 +227,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T05:45:52.565Z
-Stopped at: Completed PORTIA-20-02-PLAN.md
+Last session: 2026-11-04T06:01:03.785Z
+Stopped at: Completed PORTIA-20-03-PLAN.md
 Resume file: None
 
 ## Operator Next Step
