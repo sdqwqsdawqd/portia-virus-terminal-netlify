@@ -13,6 +13,11 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // GSD history contains standalone audit scripts, not application source.
     ".planning/**",
+    // Local untracked agent tooling (skills, worktrees). Ignored by git, so it is
+    // absent from a clean checkout; on HEAD all 32 lint errors came from these dirs.
+    ".agents/**",
+    ".claude/**",
+    ".codex/**",
   ]),
 ]);
 
