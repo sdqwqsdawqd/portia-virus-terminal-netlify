@@ -168,3 +168,20 @@ test("D-44 the arrow keys never open the search from outside its window (typing 
   for (const key of ["ArrowUp", "ArrowDown", "Enter", "Escape", "a", "л"]) assert.equal(globalSearchKeyAction(keyEvent({ key })), null, key);
   assert.equal(globalSearchKeyAction(keyEvent({ key: "ArrowUp", shiftKey: true })), null);
 });
+
+test("D-37 normalizeSearch drops the combining acute accent, in query and text alike", () => {
+  assert.equal(normalizeSearch("Люци\u0301диум"), "люцидиум");
+  assert.equal(normalizeSearch("Люцидиум"), "люцидиум");
+  assert.equal(normalizeSearch("ЁЖ"), "еж");
+});
+
+test("D-37 a record with a stressed word is found with or without the accent, and a plain record by an accented query", () => {
+  const items = buildSearchIndex({ ...empty, viruses: [virus("a", "Инферна\u0301р — класс"), virus("b", "Инфернар")] });
+  assert.deepEqual(matchSearch(items, "инфернар").map((entry) => entry.key), ["virus:a", "virus:b"]);
+  assert.deepEqual(matchSearch(items, "Инферна\u0301р").map((entry) => entry.key), ["virus:a", "virus:b"]);
+});
+
+test("D-37 only U+0301 is removed: й and и + breve stay as they are", () => {
+  assert.equal(normalizeSearch("\u0439"), "\u0439");
+  assert.equal(normalizeSearch("\u0438\u0306"), "\u0438\u0306");
+});
