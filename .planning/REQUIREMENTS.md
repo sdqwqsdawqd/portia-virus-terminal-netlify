@@ -40,15 +40,15 @@
 
 - [ ] **STAB-PROM-01**: Участник без аккаунта получает по нику только safe projection; отсутствующий ник не создаёт записей, sheet outage не маскируется как «ник не найден», удаление строки немедленно закрывает доступ и действия.
 - [ ] **STAB-PROM-02**: Для каждого server state видна ровно допустимая ordinary/qualification action либо одна стабильная русская причина; cooldown показывает корректную дату/время без `..`, submit — authoritative success/refusal/error.
-- [ ] **STAB-PROM-03**: Lookup не привязывает устройство; первый успешно принятый запрос атомарно создаёт HttpOnly-backed binding, reload восстанавливает ник, другой ник получает нейтральный отказ, отклонённый submit не оставляет token/binding/request.
+- [x] **STAB-PROM-03**: Lookup не привязывает устройство; первый успешно принятый запрос атомарно создаёт HttpOnly-backed binding, reload восстанавливает ник, другой ник получает нейтральный отказ, отклонённый submit не оставляет token/binding/request.
 - [ ] **STAB-PROM-04**: Одновременно существует не более одного активного запроса каждого вида на ник; ожидания 5/15/60 минут не продлеваются каждым retry и не раскрывают связанный ник; защита не называется hardware attestation.
-- [ ] **STAB-PROM-05**: Ordinary flow выдаёт manual/random active-only, duplicate-free, ordered set; недостаточный банк блокирует подтверждение, preview можно пересобрать, confirmed snapshot неизменяем, новый набор ждёт смены звания в таблице.
-- [ ] **STAB-PROM-06**: Qualification доступна только для переходов 2→3, 4→5 и 6→7; банки и quotas независимы, поддержаны single/multiple/free-text, участник видит по одному вопросу и не получает future questions или keys.
+- [x] **STAB-PROM-05**: Ordinary flow выдаёт manual/random active-only, duplicate-free, ordered set; недостаточный банк блокирует подтверждение, preview можно пересобрать, confirmed snapshot неизменяем, новый набор ждёт смены звания в таблице.
+- [x] **STAB-PROM-06**: Qualification доступна только для переходов 2→3, 4→5 и 6→7; банки и quotas независимы, поддержаны single/multiple/free-text, участник видит по одному вопросу и не получает future questions или keys.
 - [ ] **STAB-PROM-07**: Один серверный 15-минутный deadline начинается после подтверждения reviewer, переживает reload, CAS отклоняет повторный/старый индекс, timeout/offline завершает попытку ровно один раз и сохраняет отправленные ответы.
 - [ ] **STAB-PROM-08**: После ясного предупреждения PC focus/visibility/navigation loss проваливает попытку; phone app/tab switch не проваливает, но offline/deadline проваливают; режим фиксируется сервером, риск spoofing документирован.
-- [ ] **STAB-PROM-09**: Editor без `promo` не видит workspace и получает 403; grant/revoke действует сразу; при двух claims ровно один reviewer становится owner; release/force-release и badges соответствуют ролям и видимой очереди.
-- [ ] **STAB-PROM-10**: На PC и phone сохраняются required counts; add/edit/disable/delete не теряют typed data; save/saved/error/disabled понятны; правильные ответы выбираются рядом с вариантами без zero-based indices; mutation инвалидирует preview.
-- [ ] **STAB-PROM-11**: Reviewer отмечает каждый ответ, процент вычисляется автоматически, но итог выбирается вручную; participant видит только результат и необязательный процент без ошибок, keys, notes и личности reviewer.
+- [x] **STAB-PROM-09**: Editor без `promo` не видит workspace и получает 403; grant/revoke действует сразу; при двух claims ровно один reviewer становится owner; release/force-release и badges соответствуют ролям и видимой очереди.
+- [x] **STAB-PROM-10**: На PC и phone сохраняются required counts; add/edit/disable/delete не теряют typed data; save/saved/error/disabled понятны; правильные ответы выбираются рядом с вариантами без zero-based indices; mutation инвалидирует preview.
+- [x] **STAB-PROM-11**: Reviewer отмечает каждый ответ, процент вычисляется автоматически, но итог выбирается вручную; participant видит только результат и необязательный процент без ошибок, keys, notes и личности reviewer.
 - [ ] **STAB-PROM-12**: После провала предлагаются 2 дня с возможностью изменить, продлить или снять срок; попытки не ограничены; после реально наблюдавшегося ожидания показывается одно тихое quest-style уведомление, открывающее «Повышение».
 - [ ] **STAB-PROM-13**: Закрытие транзакционно удаляет подробные payload, хранит не более трёх компактных результатов; просроченные данные очищаются после трёх дней без удаления активного непроверенного flow; UI показывает ненавязчивую подсказку.
 - [ ] **STAB-PROM-14**: Missing migration/RPC, database/sheet outage, stale response и validation refusal дают разные безопасные состояния; UI не пишет «заявка принята» до authoritative success, retry не дублирует запись.
@@ -171,15 +171,15 @@
 | STAB-MOTION-08 | Phase 18 | Pending |
 | STAB-PROM-01 | Phase 19 | Pending |
 | STAB-PROM-02 | Phase 19 | Pending |
-| STAB-PROM-03 | Phase 19 | Pending |
+| STAB-PROM-03 | Phase 19 | Complete |
 | STAB-PROM-04 | Phase 19 | Pending |
-| STAB-PROM-05 | Phase 19 | Pending |
-| STAB-PROM-06 | Phase 19 | Pending |
+| STAB-PROM-05 | Phase 19 | Complete |
+| STAB-PROM-06 | Phase 19 | Complete |
 | STAB-PROM-07 | Phase 19 | Pending |
 | STAB-PROM-08 | Phase 19 | Pending |
-| STAB-PROM-09 | Phase 19 | Pending |
-| STAB-PROM-10 | Phase 19 | Pending |
-| STAB-PROM-11 | Phase 19 | Pending |
+| STAB-PROM-09 | Phase 19 | Complete |
+| STAB-PROM-10 | Phase 19 | Complete |
+| STAB-PROM-11 | Phase 19 | Complete |
 | STAB-PROM-12 | Phase 19 | Pending |
 | STAB-PROM-13 | Phase 19 | Pending |
 | STAB-PROM-14 | Phase 19 | Pending |

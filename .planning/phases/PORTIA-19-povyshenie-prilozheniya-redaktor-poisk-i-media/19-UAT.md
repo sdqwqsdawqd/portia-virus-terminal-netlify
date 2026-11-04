@@ -61,24 +61,23 @@ coverage_id: 19-14 Lane B (editor-journeys.spec.ts 21/21 PASS, residual 0); фи
 
 ### 12. «Повышение» глазами проверяющего (бэкстоп F9–F12)
 expected: Переносы предупреждений/причин, прокрутка длинной очереди и банков, длинный текст вопроса рядом с ✓/✗, скелетон при первой загрузке очереди.
-result: blocked
-blocked_by: other
-reason: "Нужен аккаунт проверяющего на staging; временные аккаунты 19-06 удалены teardown 19-07. С 2026-11-03 есть новый run mw0rbyf6_72424cdc (credentials в %TEMP%) — тест можно пройти."
+result: pass
+source: "19-21: владелец подтвердил F9–F12 на PC и phone, staging run mw1loqa9_c9451c80, 2026-11-04; подробные наблюдения не переданы"
 
 ### 13. Живая приёмка «Повышения» на staging (STAB-PROM-15)
 expected: Шаги 1–9 и 11 чек-листа 19-PROMOTION-UAT.md на staging, PC и phone.
-result: blocked
-blocked_by: prior-phase
-reason: "Владелец принял по варианту 2 (прогон был на production); повтор на staging требует нового acceptance-seed. Долг на Phase 20."
+result: pass
+source: "19-21: владелец подтвердил шаг 0, шаги 1–11 и F9–F12 на PC и phone, staging run mw1loqa9_c9451c80, 2026-11-04"
+note: "Вердикт физической приёмки PASS; журнал acceptance-shift не заполнен и teardown 19-22 ещё не проведён, поэтому статус STAB-PROM-15 остаётся Pending."
 
 ## Summary
 
 total: 13
-passed: 11
+passed: 13
 issues: 0
 pending: 0
 skipped: 0
-blocked: 2
+blocked: 0
 
 ## Environment Notes
 

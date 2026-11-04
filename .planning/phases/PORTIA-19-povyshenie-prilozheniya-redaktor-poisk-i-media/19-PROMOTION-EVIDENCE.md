@@ -104,3 +104,27 @@
 
 - Authenticated roles на физических устройствах на staging, UI на PC и phone на staging, deadline и cooldown на реальных часах на staging: не подтверждено.
 - Удаление строки живой Google-таблицы не проверяется (мутация production-источника запрещена CLAUDE.md); ростер приёмки берётся из временного файла.
+
+## Повторная приёмка на staging (gap closure, 19-21)
+
+Run `mw1loqa9_c9451c80`, refHash `01d085e7b9f0`; receipts 19-20: live 770/770 PASS, Playwright 70/70 PASS, 7 receipts PASS, residual suite = 0. Перед шагом 0 сервер `acceptance-serve` выдал `STAGING-BOUND` 2026-11-04T07:59:51Z (serverBound/clientBound = true). Владелец 2026-11-04 сообщил «19-21 pass» и подтвердил, что на физическом PC и phone пройдены шаг 0, шаги 1–11 и F9–F12 на этом staging run без FAIL. Подробные наблюдения по шагам не переданы; журнал сдвигов дат для этого run пуст. PASS ниже означает вердикт владельца на устройствах, а не машинный receipt конкретного шага.
+
+| Требование | Шаги | PC | phone | Receipts 19-20 | Итог |
+|---|---|---|---|---|---|
+| STAB-PROM-01 | 1, 2; удаление строки источника | PASS 1–2; удаление не проверялось | PASS 1–2; удаление не проверялось | PASS | Pending: удаление строки не доказано |
+| STAB-PROM-02 | 1, 2, 6–8 | PASS по словам владельца | PASS по словам владельца | PASS | Pending: сдвиги дат не зафиксированы |
+| STAB-PROM-03 | 1–2 | PASS | PASS | PASS | PASS |
+| STAB-PROM-04 | 2, 8 | PASS по словам владельца | PASS по словам владельца | PASS | Pending: границы 5/15/60 без shift receipts |
+| STAB-PROM-05 | 4–5 | PASS | PASS | PASS | PASS |
+| STAB-PROM-06 | 6 | PASS | PASS | PASS | PASS для ролей и типов; deadline отдельно в 07 |
+| STAB-PROM-07 | 6, 11 | PASS по словам владельца | PASS по словам владельца | PASS | Pending: deadline shift не зафиксирован |
+| STAB-PROM-08 | 6, 11 | PASS по словам владельца | PASS по словам владельца | PASS | Pending: phone offline/deadline не подтверждены shift receipt |
+| STAB-PROM-09 | 3, 10 | PASS | PASS | PASS | PASS |
+| STAB-PROM-10 | 4, F9–F12 | PASS | PASS | PASS | PASS |
+| STAB-PROM-11 | 5 | PASS | PASS | PASS | PASS |
+| STAB-PROM-12 | 7 | PASS по словам владельца | PASS по словам владельца | PASS | Pending: retake shift не зафиксирован |
+| STAB-PROM-13 | 9 | PASS по словам владельца | PASS по словам владельца | PASS | Pending: cleanup shift и teardown 19-22 |
+| STAB-PROM-14 | 1, 2, 11 | PASS по словам владельца | PASS по словам владельца | PASS | Pending: missing RPC, БД и sheet outage не имеют отдельных наблюдений |
+| STAB-PROM-15 | 0–11, F9–F12 | PASS по словам владельца | PASS по словам владельца | PASS | Pending: shift receipts отсутствуют; teardown 19-22 ещё не проведён |
+
+Read-only `acceptance-residual mw1loqa9_c9451c80` перед teardown 2026-11-04: `promo=5, editors=2, storage=0, content=0, authUsers=2, banks=4, buckets=2, attempts=1, answers=5`, `legacyWindow=false`. Остаток ещё не удалён. Сводка выше не отменяет исторические выводы о прежнем production-прогоне.
