@@ -6,9 +6,9 @@ current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
 stopped_at: Completed PORTIA-20-22-PLAN.md
-last_updated: "2026-11-04T10:46:49Z"
+last_updated: "2026-11-04T11:10:17Z"
 last_activity: 2026-11-04
-last_activity_desc: Completed quick task 261104-lkn — Promotion editor usability
+last_activity_desc: Completed quick task 261104-m6g — mobile viewport and Promotion polish
 state_head: 5df2966766c745ce79aba888bd54a23748f4ffa7
 progress:
   total_phases: 6
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
 Plan: 19 of 24
 Status: Executing Phase PORTIA-20
-Last activity: 2026-11-04 — Completed quick task 261104-lkn (Promotion editor usability)
+Last activity: 2026-11-04 — Completed quick task 261104-m6g (mobile viewport and Promotion polish)
 
 Progress: [█████░░░░░] 50%
 
@@ -234,6 +234,7 @@ Full decision history: `.planning/PROJECT.md`.
 | 261102-07k | Окна: плитки держат размер, редактор листается целиком и заполняет полный экран, поиск показывает все рекомендации | 2026-11-02 | 5a8045a | [261102-07k-fix-window-resize-and-editor-scroll-layo](./quick/261102-07k-fix-window-resize-and-editor-scroll-layo/) |
 | 261102-d7r | Неподвижная паутина, паук без контура и рывков, мягкое завершение анимаций ярлыков, меньше «База вирусов», плавное появление окна | 2026-11-02 | 6222cf8 | [261102-d7r-spider-web-icons-window-motion-fixes](./quick/261102-d7r-spider-web-icons-window-motion-fixes/) |
 | 261104-lkn | Редактор «Повышения»: очередь, раздельные создание и выдача заданий, прокрутка и мобильная ширина | 2026-11-04 | 97d7abb, 2f54ba9 | [261104-lkn-pererabotat-interfeys-redaktora-povyshen](./quick/261104-lkn-pererabotat-interfeys-redaktora-povyshen/) |
+| 261104-m6g | Мобильная ширина, кнопки и список квалификаций, GIF помощника и свой цвет | 2026-11-04 | 23c1c85, 7e5e17a | [261104-m6g-ispravit-mobilnyy-sdvig-stranitsy-pri-ot](./quick/261104-m6g-ispravit-mobilnyy-sdvig-stranitsy-pri-ot/) |
 
 ### Roadmap Evolution
 
