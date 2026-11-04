@@ -102,17 +102,24 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
   // A row swaps only once the pointer crosses the target's middle in reading order (sideways in a row of columns, downwards otherwise), so rows of unequal height do not flip back and forth.
   const moveTo = (x: number, y: number) => {
     // Nested «Информация» lists must not swap across levels: only rows sharing the dragged row's parent are targets.
-    const parent = button.current?.closest<HTMLElement>("[data-sort-index]")?.parentElement;
+    // D-42: section cards stand in [data-sort-column] columns of one [data-sort-columns] container; there every row of those columns is a target, and nothing nested (subsections, blocks, cards) ever is.
+    const ownRow = button.current?.closest<HTMLElement>("[data-sort-index]");
+    const parent = ownRow?.parentElement;
+    const columns = parent?.hasAttribute("data-sort-column") ? parent.parentElement : null;
     const hits = document.elementsFromPoint(x, y);
     const row = hits
       .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
-      .find((candidate) => candidate && candidate.parentElement === parent);
+      .find((candidate) => candidate && (columns
+        ? candidate.parentElement?.hasAttribute("data-sort-column") && candidate.parentElement.parentElement === columns
+        : candidate.parentElement === parent));
     if (!row) { moveAcross(parent, hits, x, y); return; }
     const target = Number(row.dataset.sortIndex);
     if (!row || !Number.isInteger(target) || target === indexRef.current) return;
     const boxOf = ({ left, top, width, height }: DOMRect): Box => ({ left, top, width, height });
-    const ownRow = button.current?.closest<HTMLElement>("[data-sort-index]");
     if (!ownRow || !passesTarget(boxOf(ownRow.getBoundingClientRect()), boxOf(row.getBoundingClientRect()), { x, y }, target > indexRef.current)) return;
+    // Another column remounts the card and its handle; the new handle takes the drag over, so it stays one gesture and one undo step.
+    const itemId = itemIdRef.current;
+    if (itemId && row.parentElement !== parent) dragHandoff = { itemId, dragId: button.current?.dataset.dragId ?? makeId("drag"), x, y };
     onMoveRef.current(indexRef.current, target);
     indexRef.current = target;
   };
