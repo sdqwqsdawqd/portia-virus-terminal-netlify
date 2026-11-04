@@ -181,8 +181,9 @@ test("bank route settles commands only with an authoritative state and returns p
   const route = readFileSync(new URL("../app/api/promotion/banks/route.ts", import.meta.url), "utf8");
   assert.ok(route.includes("authoritative-state-unavailable"));
   assert.match(route, /Response\.json\(\{ preview, expiresAt: new Date\(expiresAt\)\.toISOString\(\), version: bank\.version, items \}/);
-  assert.ok(route.includes("taskBankLimitError"));
-  assert.ok(route.includes("qualificationBankLimitError"));
+  assert.ok(route.includes("selectTaskPreview"));
+  assert.ok(route.includes("selectQualificationPreview"));
+  assert.ok(!route.includes('code: "insufficient-pool"'), "bank settings must save before the pool is filled");
 });
 
 test("task bank blocks exactly one short of required, including empty and all-disabled banks", () => {

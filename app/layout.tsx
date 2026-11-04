@@ -4,6 +4,7 @@ import { Golos_Text, IBM_Plex_Mono, IBM_Plex_Serif } from "next/font/google";
 import { accentBootScript } from "@/lib/accent-boot";
 import "./globals.css";
 import "./portia.css";
+import "./portia-promotion-editor.css";
 
 // Self-hosted at build time; every loaded face carries Cyrillic for the Russian-only audience.
 const golos = Golos_Text({ subsets: ["latin", "cyrillic"], variable: "--font-golos", display: "swap" });

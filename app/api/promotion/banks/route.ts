@@ -2,12 +2,10 @@ import { noStoreHeaders } from "@/lib/portia-cdn";
 import { promotionDeviceSecret } from "@/lib/portia-device-binding";
 import {
   parsePromotionBankCommand,
-  qualificationBankLimitError,
   replacePreviewItem,
   requirePromotionReviewer,
   selectQualificationPreview,
   selectTaskPreview,
-  taskBankLimitError,
   type QualificationPreviewItem,
   type TaskPreviewItem,
 } from "@/lib/portia-promotion-reviewer";
@@ -100,22 +98,8 @@ export async function POST(request: Request) {
     state = await bankState(supabase);
     if (!state) return Response.json({ error: "Не удалось проверить текущее состояние банка.", code: "authoritative-state-unavailable" }, { status: 503, headers: noStoreHeaders });
   }
-  if (command.action === "save-task-bank") {
-    const bank = state!.taskBanks.find((item) => item.targetTitleId === command.targetTitleId);
-    const activePool = bank?.items.filter((item) => item.active).length ?? 0;
-    const limitError = taskBankLimitError(command.requiredCount, activePool, Boolean(bank));
-    if (limitError) return Response.json({ error: `Количество не сохранено. ${limitError}`, code: "insufficient-pool" }, { status: 409, headers: noStoreHeaders });
-  }
-  if (command.action === "save-qualification-bank") {
-    const bank = state!.qualificationBanks.find((item) => item.transitionId === command.transitionId);
-    const activePools = {
-      single: bank?.items.filter((item) => item.active && "type" in item && item.type === "single").length ?? 0,
-      multiple: bank?.items.filter((item) => item.active && "type" in item && item.type === "multiple").length ?? 0,
-      freeText: bank?.items.filter((item) => item.active && "type" in item && item.type === "free-text").length ?? 0,
-    };
-    const limitError = qualificationBankLimitError(command.quotas, activePools, Boolean(bank));
-    if (limitError) return Response.json({ error: `Квоты не сохранены. ${limitError}`, code: "insufficient-pool" }, { status: 409, headers: noStoreHeaders });
-  }
+  // A bank can be configured before its pool is filled. Pool sufficiency is
+  // enforced when building the exact preview, not while saving the draft quota.
   if ("bankId" in command) {
     const banks = command.action.includes("question") ? state?.qualificationBanks : state?.taskBanks;
     const bank = banks?.find((item) => item.id === command.bankId);
