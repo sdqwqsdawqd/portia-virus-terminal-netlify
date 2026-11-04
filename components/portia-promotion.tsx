@@ -5,6 +5,7 @@ import { parseRetakeLedger, updateRetakeLedger, type RetakeLedger, type RetakeNo
 import { promotionAvailabilityText } from "@/lib/portia-promotion";
 import { QUALIFICATION_HEARTBEAT_MS } from "@/lib/portia-qualification";
 import { statusPollOutcome } from "@/lib/portia-promotion-poll";
+import { PortiaTemplateBuilder } from "@/components/portia-template-builder";
 
 type RequestKind = "ordinary" | "qualification";
 type SubmitPhase = "idle" | "submitting" | "error" | "success";
@@ -271,7 +272,10 @@ function eligibilityCopy(kind: RequestKind, eligibility: Eligibility) {
   return "Повышение сейчас недоступно.";
 }
 
-function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback, feedbackRef, onRequest, visible, onQualificationLockChange, onQualificationFinished }: {
+/** The "create a template" task is recognised by its text; only then the optional builder entry is offered (D-23). */
+const isTemplateTask = (task: PublicTask) => /шаблон/i.test(task.text);
+
+function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback, feedbackRef, onRequest, visible, onQualificationLockChange, onQualificationFinished, onOpenTemplate }: {
   kind: RequestKind;
   active: ActiveState;
   eligibility: Eligibility;
@@ -283,6 +287,7 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback,
   visible?: boolean;
   onQualificationLockChange?: (locked: boolean) => void;
   onQualificationFinished?: () => void;
+  onOpenTemplate?: (trigger: HTMLButtonElement) => void;
 }) {
   const ordinary = kind === "ordinary";
   const canRequest = !active && (eligibility.status === "eligible" || (ordinary && eligibility.status === "special-task"));
@@ -293,7 +298,7 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback,
     {feedback.phase !== "idle" && <p ref={feedbackRef} tabIndex={-1} role={feedback.phase === "error" ? "alert" : "status"} className={`promotion-submit-feedback ${feedback.phase}`}>{feedback.message}</p>}
     {!ordinary && active && !active.attemptId && (active.status === "claimed" || active.status === "approved") && <div className="promotion-test-warning"><strong>15 МИНУТ ПОСЛЕ РАЗРЕШЕНИЯ</strong><p>После разрешения проверяющего начнутся 15 минут.</p><p className="promotion-mode-warning">ПК. {desktopModeWarning}</p><p className="promotion-mode-warning">Телефон. {phoneModeWarning}</p></div>}
     {!ordinary && active?.attemptId && <QualificationRunner attemptId={active.attemptId} visible={visible !== false} onLockChange={onQualificationLockChange ?? (() => undefined)} onFinished={onQualificationFinished ?? (() => undefined)} />}
-    {tasks.length > 0 && <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task) => <li key={task.id}><span>{String(task.sortOrder).padStart(2, "0")}</span><p>{task.text}</p></li>)}</ol></div>}
+    {tasks.length > 0 && <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task) => <li key={task.id}><span>{String(task.sortOrder).padStart(2, "0")}</span><div><p>{task.text}</p>{ordinary && onOpenTemplate && isTemplateTask(task) && <div className="promotion-template-entry"><button className="promotion-action" type="button" onClick={(event) => onOpenTemplate(event.currentTarget)}>Создать шаблон</button><p>Работа скачивается на ваше устройство. Отправьте файл проверяющему вне сайта.</p></div>}</div></li>)}</ol></div>}
     {canRequest && <button className="promotion-action" type="button" disabled={busy || stale} onClick={() => onRequest(kind)}>{busy ? "ОТПРАВЛЯЕМ…" : ordinary ? "ПОДАТЬ ЗАЯВКУ НА ЗАДАНИЯ" : "ЗАПРОСИТЬ КВАЛИФИКАЦИЮ"}</button>}
   </section>;
 }
@@ -318,6 +323,10 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
   const submittingRef = useRef(new Set<RequestKind>());
   const submitFeedbackRefs = useRef<Record<RequestKind, HTMLParagraphElement | null>>({ ordinary: null, qualification: null });
   const retakeLedgerRef = useRef<RetakeLedger>([]);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const templateTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const shellScrollRef = useRef(0);
 
   const loadStatus = useCallback(async (value: string, explicit = false, restore = false) => {
     if (!value && !restore) return;
@@ -423,6 +432,20 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
     if (checkedNickname) void loadStatus(checkedNickname);
   }, [checkedNickname, loadStatus]);
 
+  // The builder replaces the view, not the component: nickname, status, polling and a running qualification stay mounted underneath.
+  const openTemplate = (trigger: HTMLButtonElement) => {
+    templateTriggerRef.current = trigger;
+    shellScrollRef.current = shellRef.current?.scrollTop ?? 0;
+    setTemplateOpen(true);
+  };
+  const closeTemplate = () => {
+    setTemplateOpen(false);
+    requestAnimationFrame(() => {
+      if (shellRef.current) shellRef.current.scrollTop = shellScrollRef.current;
+      templateTriggerRef.current?.focus();
+    });
+  };
+
   if (!status) return <div className="promotion-app"><PromotionIdentityGate nickname={nickname} busy={busy} error={error} onNickname={setNickname} onSubmit={checkNickname} /></div>;
 
   if (status.promotionRecord === null) return <div className="promotion-app"><div className="promotion-shell" aria-live="polite">
@@ -430,7 +453,8 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
     <section className="promotion-empty promotion-no-record"><strong>Запись о повышении пока не заведена</strong><p>Ник найден в основном составе PORTIA. Данные звания и действия появятся после добавления отдельной строки повышения.</p></section>
   </div></div>;
 
-  return <div className="promotion-app">
+  return <>
+  <div className="promotion-app" ref={shellRef} hidden={templateOpen}>
     <div className="promotion-shell" aria-live="polite">
       <header className="promotion-identity">
         <div><span className="promotion-eyebrow">УЧАСТНИК</span><h1 ref={headingRef} tabIndex={-1}>{status.nickname}</h1></div>
@@ -440,11 +464,13 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
       {error && <p className="promotion-error" role="alert">{error}</p>}
       <div className="promotion-flow-list">
         {status.ordinary.eligibility.status === "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
-        <PromotionStatusCard kind="ordinary" active={status.ordinary.active} eligibility={status.ordinary.eligibility} busy={submitState.ordinary.phase === "submitting"} stale={stale} feedback={submitState.ordinary} feedbackRef={(node) => { submitFeedbackRefs.current.ordinary = node; }} onRequest={requestPromotion} />
+        <PromotionStatusCard kind="ordinary" active={status.ordinary.active} eligibility={status.ordinary.eligibility} busy={submitState.ordinary.phase === "submitting"} stale={stale} feedback={submitState.ordinary} feedbackRef={(node) => { submitFeedbackRefs.current.ordinary = node; }} onRequest={requestPromotion} onOpenTemplate={openTemplate} />
         {status.ordinary.eligibility.status !== "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
       </div>
       <p className="promotion-cleanup-hint">Подробные данные проверки удаляются после закрытия. Хранятся три последних результата.</p>
       {status.results.length > 0 && <details className="promotion-history"><summary>Последние результаты <span>{Math.min(status.results.length, 3)}</span></summary><ul>{status.results.slice(0, 3).map((result, index) => <li key={`${result.createdAt}-${index}`}><span>{result.kind === "ordinary" ? "ЗАДАНИЯ" : "КВАЛИФИКАЦИЯ"}</span><strong>{outcomeLabels[result.outcome] ?? "Результат обновлён"}</strong><time dateTime={result.createdAt}>{formatDate(result.createdAt)}</time></li>)}</ul></details>}
     </div>
-  </div>;
+  </div>
+  {templateOpen && <PortiaTemplateBuilder onClose={closeTemplate} />}
+  </>;
 }

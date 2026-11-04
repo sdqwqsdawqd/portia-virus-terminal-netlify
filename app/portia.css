@@ -2122,3 +2122,41 @@ html:is([data-motion="reduced"], [data-motion="off"]) :is(.promotion-card, .prom
 .search-hit, .app-window[data-search-hit="true"] { outline: 1px solid var(--teal); outline-offset: -1px; background-image: linear-gradient(var(--teal-soft), var(--teal-soft)); }
 @keyframes search-hit-fade { 0%, 93.3% { outline-color: var(--teal); } 100% { outline-color: transparent; } }
 html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear forwards; }
+
+/* 20-01: "Создать шаблон" (D-23/D-24). A separate local builder inside Promotion; fonts 11/13/15/18px, targets >= 44px, no hover-only controls. */
+.promotion-template-entry { display: grid; gap: 8px; margin-top: 8px; }
+.promotion-template-entry > p { font: 400 13px/1.5 var(--doc); color: var(--muted); }
+.template-shell { width: min(1040px, 100%); box-sizing: border-box; margin: 0 auto; padding: 24px; display: grid; gap: 16px; }
+.template-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.template-header h1 { margin: 3px 0 0; font: 700 26px/1.15 var(--sans); outline: none; overflow-wrap: anywhere; }
+.template-note { margin: 0; padding-left: 16px; border-left: 2px solid var(--teal); color: var(--muted); font: 400 13px/1.55 var(--doc); }
+.template-confirm { display: grid; gap: 8px; padding: 16px; border: 1px solid oklch(.58 .08 80 / .55); border-radius: 7px; background: oklch(.3 .04 80 / .18); color: oklch(.82 .07 80); }
+.template-confirm strong { font: 700 13px/1.35 var(--sans); letter-spacing: .04em; text-transform: uppercase; }
+.template-confirm p { margin: 0; font: 400 13px/1.5 var(--doc); }
+.template-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.template-discard { border-color: rgba(224,125,116,.5); background: rgba(224,125,116,.08); color: #efaaa3; }
+.template-grid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.template-form { display: grid; gap: 16px; min-width: 0; }
+.template-field { display: grid; gap: 4px; }
+.template-field label { color: oklch(.78 calc(.024 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.template-field :is(input, textarea) { width: 100%; min-height: 44px; box-sizing: border-box; padding: 8px 12px; border: 1px solid var(--line-bright); border-radius: 7px; outline: none; background: oklch(.185 calc(.018 * var(--accent-chroma)) var(--accent-hue)); color: #f3f7f6; font: 400 15px/1.5 var(--doc); overflow-wrap: anywhere; resize: vertical; }
+.template-field :is(input, textarea):focus { border-color: var(--teal); box-shadow: 0 0 0 2px var(--teal-soft); }
+.template-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.template-hint, .template-status { margin: 0; color: var(--muted); font: 400 13px/1.5 var(--doc); }
+.template-status { min-height: 20px; color: var(--teal); }
+.template-preview { min-width: 0; padding: 24px; border: 1px solid var(--paper-2); border-radius: 6px; background: var(--paper); color: var(--ink); font: 400 15px/1.55 var(--doc); }
+.template-preview > header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding-bottom: 16px; border-bottom: 2px solid var(--ink); }
+.template-preview h2 { margin: 4px 0 0; font: 700 26px/1.15 var(--doc); overflow-wrap: anywhere; }
+.template-code, .template-status-badge, .template-kicker, .template-preview dt, .template-preview footer { font: 700 11px/1.35 var(--mono); letter-spacing: .06em; color: var(--ink-soft); overflow-wrap: anywhere; }
+.template-section { margin-top: 24px; }
+.template-kicker { margin-bottom: 8px; }
+.template-kicker span { margin-right: 8px; }
+.template-preview dl { display: grid; gap: 12px; margin: 0; }
+.template-preview dd { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.template-empty { color: var(--ink-soft); font-style: italic; }
+.template-preview footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--paper-2); }
+@media (max-width: 900px) {
+  .template-shell { padding: 16px; }
+  .template-grid { grid-template-columns: minmax(0, 1fr); }
+  .template-actions .promotion-action, .template-back, .template-confirm-actions .promotion-action { min-height: 44px; }
+}
