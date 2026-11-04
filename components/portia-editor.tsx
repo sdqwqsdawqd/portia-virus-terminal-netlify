@@ -6,6 +6,7 @@ import { changedDossierTabs, changedSections, deniedSections, editorSections, re
 import { draftEdits, employeeRequestFailure, partialSave, rebaseDecision, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
 import { closedMessage, closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
+import { columnMajor } from "@/lib/editor-columns";
 import { uploadRefusal } from "@/lib/image-upload";
 import { dropFields, mergeFragments, removeFragmentAt } from "@/lib/format-fragments";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
@@ -252,6 +253,28 @@ function CollapsibleCard({ id, label, title, open, onToggle, sortIndex, handle, 
       <div className="nested-editor-body" id={bodyId} hidden={!open}>{children}</div>
     </div>
   );
+}
+
+// D-40/D-41: section cards run top to bottom in columns of five. Each card keeps its source index in data-sort-index, so ordering, undo and the stored order are unchanged; a card that crosses a column boundary remounts.
+function SectionColumns<T>({ items, render }: { items: readonly T[]; render: (item: T, index: number) => ReactNode }) {
+  return (
+    <div className="editor-section-columns" data-sort-columns>
+      {columnMajor(items).map((column, columnIndex) => (
+        <div className="editor-section-column" data-sort-column key={columnIndex}>
+          {column.map(({ item, index }) => render(item, index))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// A section moved across a column boundary remounts its handle; keep keyboard focus on it so ArrowUp/ArrowDown can continue (D-42).
+function sectionHandle(id: string) {
+  return document.getElementById(`card-${id}`)?.querySelector<HTMLElement>(":scope > .nested-editor-head .order-drag-handle") ?? null;
+}
+function keepSectionHandleFocus(id: string) {
+  const had = sectionHandle(id) === document.activeElement;
+  return () => { if (had) requestAnimationFrame(() => sectionHandle(id)?.focus()); };
 }
 
 type TocItem = { id: string; label: string; depth: 0 | 1 };
@@ -1188,9 +1211,9 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация». Раздел может содержать подразделы, собранные из блоков в любом порядке.</p>
           <EditorToc items={infoTocItems} onJump={jumpInfo} onAll={(open) => setAllOpen(infoCardIds, open)} />
           {draft.infoSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
-          {draft.infoSections.map((section, index) => (
+          <SectionColumns items={draft.infoSections} render={(section, index) => (
             <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${String(index + 1).padStart(2, "0")}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
-              handle={<OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} />}
+              handle={<OrderDragHandle index={index} label={section.title || "раздел"} itemId={section.id} onMove={(from, to) => { const refocus = keepSectionHandleFocus(section.id); changeDraft((next) => moveArrayItem(next.infoSections, from, to)); refocus(); }} />}
               actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id), ...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div>}>
               <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
               <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
@@ -1229,7 +1252,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                 <LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} />
               </div>
             </CollapsibleCard>
-          ))}
+          )} />
           <button className="secondary-control" type="button" onClick={() => { const id = makeId("info"); changeDraft((next) => next.infoSections.push({ id, title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] })); setOpen([id], true); }}>+ ДОБАВИТЬ РАЗДЕЛ</button>
         </div>
       )}

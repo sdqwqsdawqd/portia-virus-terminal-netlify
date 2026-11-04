@@ -844,6 +844,22 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
   .editor-card-columns > :not(.nested-editor-card) { grid-column: 1 / -1; }
   .editor-card-columns > .nested-editor-card + .nested-editor-card { margin-top: 0; }
 }
+/* D-40/D-41: section cards run top to bottom in columns of five; the columns share the window width, so no empty strip is left on the right. A column that does not fit wraps below, never a horizontal scroll. Phone: one column in the source order. */
+.editor-section-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
+.editor-section-column { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-content: start; min-width: 0; }
+.editor-section-column > .nested-editor-card + .nested-editor-card { margin-top: 0; }
+@media (min-width: 901px) {
+  /* The form of a tab with section columns is one track wide: the columns divide the width themselves. */
+  .editor-card-columns:has(> .editor-section-columns) { grid-template-columns: minmax(0, 1fr); }
+  .editor-section-columns { grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--editor-card-width)), 1fr)); gap: 10px; align-items: start; }
+  .editor-section-column { gap: 10px; }
+}
+/* D-41: the add-section bar stays at the top of the «Справочник» tab (above the .editor-toc, z-index 3). */
+.editor-section-addbar { position: sticky; top: 0; z-index: 4; display: grid; gap: 8px; padding: 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.editor-section-addbar > button { justify-self: start; }
+.editor-section-create { display: grid; gap: 8px; }
+.editor-section-create .editor-section-create-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.editor-section-create .editor-note-hint, .editor-note-field .editor-note-hint { margin: 4px 0 0; color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 12px/1.45 var(--sans); }
 .editor-guidance { margin: 0 0 6px; color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font-size: 13px; line-height: 1.55; }
 .publish-toggle { display: flex; align-items: center; gap: 9px; margin-top: 14px; color: oklch(.777 calc(.021 * var(--accent-chroma)) var(--accent-hue)); font-size: 13px; }
 .publish-toggle input { width: 17px; height: 17px; accent-color: var(--teal); }

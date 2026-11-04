@@ -975,7 +975,12 @@ test("every long editor list scrolls inside its own pane (UI E3 overflow)", () =
 test("sticky and floating editor layers never cover the content: notices are in the flow, the one sticky chip sits under the panel (UI E3 overflow)", () => {
   const rules = styles.split("\n").filter((line) => /^\.[^{]*\{/.test(line));
   const stickyEditor = rules.filter((line) => /position:\s*sticky/.test(line) && /editor/.test(line.slice(0, line.indexOf("{")))).map((line) => line.slice(0, line.indexOf("{")).trim());
-  assert.deepEqual(stickyEditor, [".editor-save-chip"]);
+  // 20-22 (D-41): the «Справочник» add-section bar is the one other sticky editor layer. It sits in the flow at the top of the tab, above the TOC, on an opaque panel.
+  assert.deepEqual(stickyEditor, [".editor-save-chip", ".editor-section-addbar"]);
+  const addbar = rules.find((line) => line.startsWith(".editor-section-addbar {")) ?? "";
+  assert.match(addbar, /top:\s*0/);
+  assert.match(addbar, /background:\s*var\(--panel\)/);
+  assert.ok(Number(/z-index:\s*(\d+)/.exec(addbar)?.[1]) > Number(/\.editor-toc \{[^}]*z-index:\s*(\d+)/.exec(styles)?.[1]), "the add bar is above the TOC");
   for (const notice of [".editor-conflict-panel", ".editor-stale-banner", ".editor-their-edits", ".editor-section-error"]) {
     const rule = rules.find((line) => line.startsWith(`${notice} {`));
     if (!rule) continue;
