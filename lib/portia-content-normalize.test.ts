@@ -142,7 +142,7 @@ test("line breaks inside text survive normalization", () => {
 
 test("broadcasts saved before 03.2 normalize to not important and keep their fields", () => {
   const old = { id: "a", type: "quest", title: "T", body: "B", published: true };
-  assert.deepEqual(normalizeBroadcasts([old]), [{ ...old, important: false, startsAt: "", endsAt: "", conditions: "" }]);
+  assert.deepEqual(normalizeBroadcasts([old]), [{ ...old, important: false, startsAt: "", endsAt: "", conditions: "", sectionId: "" }]);
 });
 
 test("important is a strict boolean and junk entries are dropped in order", () => {
@@ -186,7 +186,7 @@ test("quest dates keep only strict YYYY-MM-DD and conditions keep line breaks an
 
 test("normalizePortiaContent stays idempotent with quest fields present", () => {
   const content = structuredClone(defaultPortiaContent);
-  content.broadcasts = [{ id: "q", type: "quest", title: "Q", body: "", published: true, important: false, startsAt: "2026-10-20", endsAt: "2026-10-25", conditions: "a\nb" }];
+  content.broadcasts = [{ id: "q", type: "quest", title: "Q", body: "", published: true, important: false, startsAt: "2026-10-20", endsAt: "2026-10-25", conditions: "a\nb", sectionId: "" }];
   const once = normalizePortiaContent(content);
   assert.ok(once);
   assert.deepEqual(once.broadcasts[0], content.broadcasts[0]);

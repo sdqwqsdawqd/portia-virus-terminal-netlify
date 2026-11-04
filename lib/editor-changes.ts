@@ -18,9 +18,9 @@ export function sectionOfKey(key: string): EditorSection | null {
   if (key === "viruses") return "viruses";
   if (key === "infoSections") return "info";
   if (key === "guideSections") return "guide";
-  if (key === "broadcasts") return "broadcasts";
+  if (key === "broadcasts" || key === "broadcastSections") return "broadcasts";
   if (key === "recycledViruses" || key === "recycleFiles" || key === "recycleOrder") return "recycle";
-  if (key === "searchRecommendations") return "search";
+  if (key === "searchRecommendations" || key === "searchRecommendationSections") return "search";
   if (key.startsWith("assistant")) return "assistant";
   return null;
 }

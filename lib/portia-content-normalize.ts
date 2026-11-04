@@ -17,6 +17,7 @@ import {
   type Virus,
 } from "./portia-content.ts";
 import { MAX_SCIENTIST_LOGS } from "./content-limits.ts";
+import { normalizeOutlineSections, normalizeRecommendationSections } from "./editor-outline.ts";
 import { isAllowedMediaUrl } from "./media-url.ts";
 
 // Every save and every cached read passes through here: unknown input in, a complete PortiaContent out.
@@ -147,6 +148,8 @@ export function normalizeBroadcasts(value: unknown): Broadcast[] {
       startsAt: normalizeDay(item.startsAt),
       endsAt: normalizeDay(item.endsAt),
       conditions: typeof item.conditions === "string" ? item.conditions : "",
+      // D-41: the editor group of the entry; the site does not read it.
+      sectionId: typeof item.sectionId === "string" ? item.sectionId : "",
     };
   });
 }
@@ -373,15 +376,19 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     [assistantAutoMinSeconds, assistantAutoMaxSeconds] = [assistantAutoMaxSeconds, assistantAutoMinSeconds];
   }
 
+  const searchRecommendations = candidate.searchRecommendations.filter((item): item is string => typeof item === "string");
+
   return {
     viruses,
     recycledViruses,
     infoSections: normalizeInfoSections(candidate.infoSections),
     guideSections: normalizeGuideSections(candidate.guideSections),
     broadcasts: normalizeBroadcasts(candidate.broadcasts),
+    broadcastSections: normalizeOutlineSections(candidate.broadcastSections, "broadcast-section"),
     recycleFiles,
     recycleOrder,
-    searchRecommendations: candidate.searchRecommendations.filter((item): item is string => typeof item === "string"),
+    searchRecommendations,
+    searchRecommendationSections: normalizeRecommendationSections(candidate.searchRecommendationSections, searchRecommendations),
     assistantAdvice: Array.isArray(candidate.assistantAdvice)
       ? candidate.assistantAdvice.filter((item): item is string => typeof item === "string")
       : [...defaultPortiaContent.assistantAdvice],

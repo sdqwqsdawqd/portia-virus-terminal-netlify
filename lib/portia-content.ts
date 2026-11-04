@@ -462,7 +462,9 @@ export const defaultPortiaContent: PortiaContent = {
   ],
   guideSections: [],
   broadcasts: [],
+  broadcastSections: [],
   searchRecommendations: ["МОРОК", "АРАХНА", "КАЛЛИСТО", "Протей", "Воздушно-пылевой"],
+  searchRecommendationSections: [],
   assistantAdvice: [
     "Глобальный поиск видит названия, коды, классификации и сообщения станции.",
     "В каждой карточке только одна запись учёного доступна с уровнем II.",
