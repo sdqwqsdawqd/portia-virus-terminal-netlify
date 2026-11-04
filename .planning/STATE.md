@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-18-PLAN.md
-last_updated: "2026-11-04T05:08:35.350Z"
+stopped_at: Completed PORTIA-20-19-PLAN.md
+last_updated: "2026-11-04T05:26:25.514Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: a8a03950b17a1691fc442bd0ad133e99b9b99d45
+state_head: 45458aad09aea2298d1d999a2f2870039aae5f1e
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 74
+  completed_plans: 75
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 6 of 24
+Plan: 7 of 24
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-04 — Phase PORTIA-20 execution started
 
@@ -112,6 +112,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P09 | 35min | 2 tasks | 3 files |
 | Phase PORTIA-20 P17 | 30min | 2 tasks | 7 files |
 | Phase PORTIA-20 P18 | 25min | 2 tasks | 6 files |
+| Phase PORTIA-20 P19 | 60min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -182,6 +183,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-09: status/test routes unchanged (no confirmed leak); participant status body on staging stays BLOCKED(DATA) until roster nickname exists
 - [Phase PORTIA-20]: 20-17: open-tab check moved from /api/uploads route into uploadGate; 403 sheet-employee delete keeps server text
 - [Phase PORTIA-20]: 20-18: IN-05 ratings-column fallback kept as disposition (production unavailable); comment points to baseline migration with removal condition
+- [Phase PORTIA-20]: 20-19: recommendation seed via useSyncExternalStore (module-cached per page load) instead of setState in effect; global keydown uses globalSearchKeyAction (Ctrl/Cmd+K only)
 
 ### Pending Todos
 
@@ -220,8 +222,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T05:08:34.898Z
-Stopped at: Completed PORTIA-20-18-PLAN.md
+Last session: 2026-11-04T05:26:25.030Z
+Stopped at: Completed PORTIA-20-19-PLAN.md
 Resume file: None
 
 ## Operator Next Step
