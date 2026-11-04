@@ -227,3 +227,96 @@ test("question text length counts code points like Postgres length()", () => {
   assert.equal(draft("a".repeat(4001)), null);
   assert.equal(validateQuestionDraft({ type: "single", text: "Q", options: ["😀".repeat(1001), "B"], answer: 0 }), null);
 });
+
+/* ------------------------------------------------------------------ 97d7abb: saving counts and quotas without a pool check (20-26) */
+// 97d7abb (quick 261104-lkn) removed the 409 "insufficient-pool" on save-task-bank / save-qualification-bank so that a bank can be
+// configured before its pool is filled. STAB-PROM-05 (an insufficient bank blocks confirmation) must still hold through the preview,
+// the version-bound preview token and the SQL confirm. These tests describe that, they do not restore the save-time check.
+
+const baselineSql = () => readFileSync(new URL("../supabase/migrations/20261101000000_portia_baseline.sql", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+const bankRouteSource = () => readFileSync(new URL("../app/api/promotion/banks/route.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+/** One SQL function body of the baseline, from its create statement to the closing `end; $$;`. */
+function sqlFunction(sql: string, name: string) {
+  const start = sql.indexOf(`create or replace function public.${name}(`);
+  assert.notEqual(start, -1, `${name} is missing from the baseline`);
+  const end = sql.indexOf("end; $$;", start);
+  assert.notEqual(end, -1, `${name} has no closing`);
+  return sql.slice(start, end);
+}
+
+test("97d7abb: a task bank whose active pool is smaller than the saved count gives no preview, random or manual", () => {
+  const twoActive = taskItems.filter((item) => item.active).slice(0, 2);
+  assert.equal(twoActive.length, 2);
+  assert.throws(() => selectTaskPreview(twoActive, 3, { random: () => 0 }), /insufficient/i);
+  assert.throws(() => selectTaskPreview(taskItems, 4, { random: () => 0 }), /insufficient/i);
+  // A hand-picked set cannot pad the shortage: wrong length, an inactive row and a duplicate are all refused.
+  assert.throws(() => selectTaskPreview(twoActive, 3, { manualIds: ["a", "c"] }), /invalid-count/);
+  assert.throws(() => selectTaskPreview(taskItems, 2, { manualIds: ["a", "b"] }), /inactive-selection/);
+  assert.throws(() => selectTaskPreview(twoActive, 2, { manualIds: ["a", "a"] }), /duplicate/);
+});
+
+test("97d7abb: a qualification quota larger than the active pool of any one type gives no preview", () => {
+  assert.throws(() => selectQualificationPreview(questions, { single: 3, multiple: 0, freeText: 0 }, { random: () => 0 }), /insufficient/i);
+  assert.throws(() => selectQualificationPreview(questions, { single: 1, multiple: 2, freeText: 0 }, { random: () => 0 }), /insufficient/i);
+  // f2 is inactive, so a single active free-text row cannot cover a quota of two.
+  assert.throws(() => selectQualificationPreview(questions, { single: 0, multiple: 0, freeText: 2 }, { random: () => 0 }), /insufficient/i);
+  assert.throws(() => selectQualificationPreview(questions, { single: 1, multiple: 1, freeText: 1 }, { manualIds: ["s1", "s2", "m1"] }), /invalid-count|invalid-quota/);
+  assert.equal(selectQualificationPreview(questions, { single: 2, multiple: 1, freeText: 1 }, { random: () => 0 }).length, 4);
+});
+
+test("97d7abb: the bank route turns an insufficient pool into 409 at preview and confirms only a version-bound token of active items", () => {
+  const route = bankRouteSource();
+  // Saving stays unchecked on purpose (owner intent), so the limit helpers are not used by the route any more.
+  assert.ok(!route.includes("taskBankLimitError") && !route.includes("qualificationBankLimitError"));
+  // Preview: the throw from selectTaskPreview / selectQualificationPreview is a 409 with the shortage text, never a token.
+  assert.match(route, /reason\.includes\("insufficient"\) \? "Недостаточно активных элементов\." : [^\n]*\{ status: 409/);
+  const previewAt = route.indexOf('body.action === "preview"');
+  const selectAt = route.indexOf("selectTaskPreview(bank.items");
+  const tokenAt = route.indexOf("createPreviewToken(");
+  assert.ok(previewAt !== -1 && selectAt > previewAt && tokenAt > selectAt, "the token is created only after the pool-checked selection");
+  // Confirm: the token must verify against the CURRENT bank.version and every id must be an active item of that bank.
+  const confirm = route.slice(route.indexOf("const token = typeof body.preview"));
+  assert.match(confirm, /verifyPreviewToken\(token, \{ kind, bankId, version: bank\.version, now: Date\.now\(\) \}, secret\)/);
+  assert.match(confirm, /bank\.items\.find\(\(item\) => item\.id === id && item\.active\)/);
+  assert.match(confirm, /selected\.length !== ids\.length\) return Response\.json\([^\n]*code: "stale-preview" \}, \{ status: 409/);
+  assert.match(confirm, /p_bank_version: bank\.version/);
+});
+
+test("97d7abb: static SQL read, confirm compares the item count with required_count or the quota total and the bank version", () => {
+  const sql = baselineSql();
+  const assignment = sqlFunction(sql, "portia_promo_confirm_assignment");
+  assert.match(assignment, /jsonb_array_length\(p_items\) <> required_count_value then raise exception 'stale-or-mismatched-bank'/);
+  assert.match(assignment, /md5\(b\.updated_at::text \|\| coalesce\(\(select max\(i\.updated_at\)::text from public\.portia_promo_task_items i where i\.bank_id = b\.id\), ''\)\) = p_bank_version/);
+  assert.match(assignment, /source\.bank_id = p_bank_id and source\.active/);
+  assert.match(assignment, /count\(\*\) from public\.portia_promo_assignment_items ai[^;]*<> jsonb_array_length\(p_items\)/);
+  const confirmTest = sqlFunction(sql, "portia_promo_confirm_test");
+  assert.match(confirmTest, /select b\.single_count \+ b\.multiple_count \+ b\.free_text_count into quota_total/);
+  assert.match(confirmTest, /jsonb_array_length\(p_questions\) <> quota_total then raise exception 'stale-or-mismatched-bank'/);
+  assert.match(confirmTest, /md5\(b\.updated_at::text \|\| coalesce\(\(select max\(q\.updated_at\)::text from public\.portia_promo_qualification_questions q where q\.bank_id = b\.id\), ''\)\) = p_bank_version/);
+  assert.match(confirmTest, /source\.bank_id = p_bank_id and source\.active/);
+  assert.match(confirmTest, /count\(\*\) from public\.portia_promo_attempt_questions aq[^;]*<> jsonb_array_length\(p_questions\)/);
+});
+
+test("97d7abb: static SQL read, every bank save and item change moves the version that the preview token is bound to", () => {
+  const sql = baselineSql();
+  const command = sqlFunction(sql, "portia_promo_bank_command");
+  const branch = (from: string, to: string) => command.slice(command.indexOf(from), command.indexOf(to));
+  // Changing the saved count or quotas rewrites updated_at, which is part of the version, so a preview built before the change goes stale.
+  assert.match(branch("p_action = 'save-task-bank'", "p_action = 'save-task-item'"), /on conflict \(target_title_id\) do update set required_count = excluded\.required_count, updated_at = now\(\)/);
+  assert.match(branch("p_action = 'save-qualification-bank'", "p_action = 'save-question'"), /free_text_count = excluded\.free_text_count, updated_at = now\(\)/);
+  assert.match(branch("p_action = 'save-task-item'", "p_action = 'delete-task-item'"), /update public\.portia_promo_task_banks set updated_at = now\(\) where id = bank_id_value/);
+  assert.match(branch("p_action = 'delete-task-item'", "p_action = 'save-qualification-bank'"), /update public\.portia_promo_task_banks set updated_at = now\(\) where id = bank_id_value/);
+  // The version the state endpoint hands out is the same expression the confirm functions check.
+  const state = sqlFunction(sql, "portia_promo_bank_state");
+  assert.ok(state.includes("md5(b.updated_at::text || coalesce((select max(i.updated_at)::text from public.portia_promo_task_items i where i.bank_id = b.id), ''))"));
+  assert.ok(state.includes("md5(b.updated_at::text || coalesce((select max(q.updated_at)::text from public.portia_promo_qualification_questions q where q.bank_id = b.id), ''))"));
+});
+
+test("97d7abb: a preview built while the bank was sufficient stops verifying once the saved count or quota changes the version", () => {
+  const secret = "97d7abb-preview-secret-with-at-least-32-characters";
+  const token = createPreviewToken({ kind: "ordinary", bankId: "bank", version: "version-with-count-2", ids: ["a", "c"], expiresAt: 10_000 }, secret);
+  assert.deepEqual(verifyPreviewToken(token, { kind: "ordinary", bankId: "bank", version: "version-with-count-2", now: 1 }, secret), ["a", "c"]);
+  assert.equal(verifyPreviewToken(token, { kind: "ordinary", bankId: "bank", version: "version-with-count-3", now: 1 }, secret), null);
+  assert.equal(verifyPreviewToken(token, { kind: "qualification", bankId: "bank", version: "version-with-count-2", now: 1 }, secret), null);
+  assert.equal(verifyPreviewToken(token, { kind: "ordinary", bankId: "bank", version: "version-with-count-2", now: 10_001 }, secret), null);
+});
