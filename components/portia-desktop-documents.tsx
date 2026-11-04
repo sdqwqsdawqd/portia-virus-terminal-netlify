@@ -158,7 +158,7 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
         {!card.blocks.length && <p className="guide-section-empty">В карточке пока нет содержимого</p>}
         <div className="guide-blocks">{card.blocks.map((block) => <GuideBlockView key={block.id} block={block} formattedText={formattedText} cardTitle={card.title} />)}</div>
       </article>
-    </> : !sections.length ? <div className="guide-empty empty-state"><PortiaIllustration name="microscope" /><strong>{emptyCopy.guide.heading}</strong><span>{emptyCopy.guide.body}</span></div>
+    </> : !sections.length ? <div className="guide-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{emptyCopy.guide.heading}</strong><span>{emptyCopy.guide.body}</span></div>
     : sections.map((section) => {
       const folded = collapsed.includes(section.id);
       const gridId = `guide-grid-${section.id}`;

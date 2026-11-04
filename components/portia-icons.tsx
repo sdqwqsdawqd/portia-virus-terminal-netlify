@@ -150,7 +150,9 @@ export function PortiaIcon({ name, ...props }: { name: PortiaIconName } & SVGPro
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{iconPaths[name]}</svg>;
 }
 
-export type PortiaIllustrationName = "dish" | "microscope" | "flask";
+// flaskEmpty and microscopeGuide are the D-21 drawings for three chosen empty states only («Информация», «Новостей пока нет», «Справочник»).
+// flask, microscope and dish keep their old drawings for quests, trash, archive, search and every error panel.
+export type PortiaIllustrationName = "dish" | "microscope" | "flask" | "flaskEmpty" | "microscopeGuide";
 
 // Empty-state drawings on a 96px grid, in the same line language as the icons.
 const illustrations: Record<PortiaIllustrationName, React.ReactNode> = {
@@ -173,6 +175,28 @@ const illustrations: Record<PortiaIllustrationName, React.ReactNode> = {
     <path d="M40 14h16M43 14v22L24 72a6 6 0 0 0 5.3 9h37.4a6 6 0 0 0 5.3-9L53 36V14" />
     <path d="M30 62c8-4 14 4 22 0s12-3 16 0" opacity=".7" />
     <circle cx="44" cy="70" r="2.5" /><circle cx="55" cy="73" r="1.8" /><circle cx="50" cy="52" r="1.5" opacity=".6" />
+  </>,
+  flaskEmpty: <>
+    <path d="M36 12h24M41 12v22L21.6 69.2A7 7 0 0 0 27.7 80h40.6a7 7 0 0 0 6.1-10.8L55 34V12" />
+    <path d="M27.7 58c4.5-3 9 3 13.5 0s9 3 13.5 0 9 3 13.5 0L74.4 69.2a7 7 0 0 1-6.1 10.8H27.7a7 7 0 0 1-6.1-10.8Z" fill="currentColor" fillOpacity=".16" stroke="none" />
+    <path d="M27.7 58c4.5-3 9 3 13.5 0s9 3 13.5 0 9 3 13.5 0" opacity=".8" />
+    <path d="M46 20h4M46 27h6" opacity=".6" />
+    <circle cx="40" cy="70" r="3" /><circle cx="56" cy="72.5" r="2" /><circle cx="49" cy="65" r="1.5" opacity=".7" />
+    <circle cx="48" cy="45" r="2" opacity=".6" /><circle cx="51.5" cy="38.5" r="1.2" opacity=".5" />
+    <path d="M16 86h64" opacity=".45" />
+  </>,
+  microscopeGuide: <>
+    <path d="M22 86h52M28 86v-7h38v7" />
+    <path d="M52.5 28c16 0 25 12 24.5 28-.5 10-8 18-15 23" />
+    <g transform="translate(46 32) rotate(-22)">
+      <rect x="-6" y="-17" width="12" height="34" rx="2" />
+      <rect x="-4" y="-23" width="8" height="6" rx="1.5" />
+      <path d="M-3 17v6h6v-6" />
+    </g>
+    <path d="M34 63h42" />
+    <rect x="40" y="59" width="18" height="4" rx="1" opacity=".7" />
+    <circle cx="49" cy="72" r="3" opacity=".7" /><path d="M49 67v-2" opacity=".6" />
+    <circle cx="72" cy="44" r="4" opacity=".7" />
   </>,
 };
 

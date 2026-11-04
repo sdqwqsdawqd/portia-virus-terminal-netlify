@@ -1596,7 +1596,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <AppWindow app="info" state={windows.info} active={activeApp === "info"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window info-window" meta="АРХИВ ЗНАНИЙ">
             {infoView === "loading" ? <div className="app-state-body"><AppSkeleton shape="info" /></div>
               : infoView === "fatal" ? <div className="app-state-body">{contentFatal("flask")}</div>
-              : infoView === "empty" ? <div className="app-state-body"><div className="empty-state"><PortiaIllustration name="flask" /><strong>{emptyCopy.info.heading}</strong><span>{emptyCopy.info.body}</span></div></div>
+              : infoView === "empty" ? <div className="app-state-body"><div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy.info.heading}</strong><span>{emptyCopy.info.body}</span></div></div>
               : <div className="info-library">
               <aside className="info-index">{content.infoSections.map((section, index) => {
                 const open = section.id === selectedInfo?.id;
@@ -1649,7 +1649,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   const badge = state === "active" ? "АКТИВЕН" : state === "upcoming" ? `СКОРО · с ${formatQuestDay(item.startsAt).slice(0, 5)}` : "ЗАВЕРШЁН";
                   return <article key={item.id} className={`broadcast-card ${item.type}${important ? " important" : ""}${state ? ` state-${state}` : ""}${hitClass("broadcast", item.id)}`} {...hitAttrs("broadcast", item.id)}><span>{broadcastType(item.type)}{important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
                 })}
-                {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flask" /><strong>{emptyCopy[broadcastTab].heading}</strong><span>{emptyCopy[broadcastTab].body}</span></div>}
+                {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name={broadcastTab === "news" ? "flaskEmpty" : "flask"} /><strong>{emptyCopy[broadcastTab].heading}</strong><span>{emptyCopy[broadcastTab].body}</span></div>}
               </div></>}
             </div>
           </AppWindow>
