@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-09-PLAN.md
-last_updated: "2026-11-04T04:57:31.536Z"
+stopped_at: Completed 20-17-PLAN.md
+last_updated: "2026-11-04T05:03:50.072Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: be0d9302502b27c3b7627f97d141a2d6e51a8133
+state_head: 062f2566292194406f02037fb4abc644d8900610
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 72
+  completed_plans: 73
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 4 of 24
+Plan: 5 of 24
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-04 — Phase PORTIA-20 execution started
 
@@ -110,6 +110,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P01 | 40min | 2 tasks | 6 files |
 | Phase PORTIA-20 P08 | 50min | 2 tasks | 6 files |
 | Phase PORTIA-20 P09 | 35min | 2 tasks | 3 files |
+| Phase PORTIA-20 P17 | 30min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -178,6 +179,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-01: задание «создать шаблон» распознаётся по тексту (/шаблон/i); конструктор скрывает оболочку Повышения через hidden, а не размонтирует её
 - [Phase PORTIA-20]: 20-08: CSP candidate delivered only as Content-Security-Policy-Report-Only; enforced policy and img-src https: unchanged; enforcement blocked until D-05 PC/phone UAT
 - [Phase PORTIA-20]: 20-09: status/test routes unchanged (no confirmed leak); participant status body on staging stays BLOCKED(DATA) until roster nickname exists
+- [Phase PORTIA-20]: 20-17: open-tab check moved from /api/uploads route into uploadGate; 403 sheet-employee delete keeps server text
 
 ### Pending Todos
 
@@ -216,8 +218,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T04:57:31.050Z
-Stopped at: Completed PORTIA-20-09-PLAN.md
+Last session: 2026-11-04T05:03:49.618Z
+Stopped at: Completed 20-17-PLAN.md
 Resume file: None
 
 ## Operator Next Step

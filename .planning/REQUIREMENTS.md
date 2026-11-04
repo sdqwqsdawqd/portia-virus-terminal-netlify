@@ -89,15 +89,15 @@
 
 ## Accessibility и security
 
-- [ ] **STAB-A11Y-01**: PC controls имеют name/role/state, видимый focus, корректный trap/restore в dialogs и keyboard alternative для действия, доступного только drag.
+- [x] **STAB-A11Y-01**: PC controls имеют name/role/state, видимый focus, корректный trap/restore в dialogs и keyboard alternative для действия, доступного только drag.
 - [ ] **STAB-A11Y-02**: Phone actions доступны touch без hover, не перекрываются keyboard/sticky bars, имеют практичную tap area и не создают page-level horizontal overflow.
-- [ ] **STAB-A11Y-03**: Русские labels, success/error/disabled reason понятны и объявляются; нет пустых, шуточных, удвоенных или непереведённых technical labels; alt соответствует назначению изображения.
+- [x] **STAB-A11Y-03**: Русские labels, success/error/disabled reason понятны и объявляются; нет пустых, шуточных, удвоенных или непереведённых technical labels; alt соответствует назначению изображения.
 - [ ] **STAB-A11Y-04**: Итоговая motion-настройка применяется ко всем поверхностям; off/reduced прекращает looping movement, но сохраняет content и feedback.
 - [x] **STAB-SEC-01**: Anon, authenticated, editor, reviewer и owner видят и изменяют только разрешённые данные; запрещённые UI/API/table/RPC действия fail-closed, revoke действует без rebuild.
 - [x] **STAB-SEC-02**: Participant network/UI не получает answer keys, future questions, internal notes, bank payload и reviewer identity; sensitive responses используют no-store.
 - [ ] **STAB-SEC-03**: CSP, frame, nosniff, referrer, permissions, COOP и HSTS присутствуют, не ломая approved charter/sheet/video; CSP ужесточается только через report-only.
 - [x] **STAB-SEC-04**: Staging и production schema fingerprints, functions, grants и RLS соответствуют canonical migrations; ручной production step имеет записанный postflight. (Complete: staging golden == U == final; production после owner-run миграций == golden по правилу A, единственное отличие — платформенная `rls_auto_enable()`, см. `evidence/16-PRODUCTION-POSTFLIGHT.md`.)
-- [ ] **STAB-SEC-05**: Глубокий GSD code review и локальная security matrix покрывают auth/API/RLS/headers/CSP/uploads/secrets/dependencies; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, lockfile меняется отдельно.
+- [x] **STAB-SEC-05**: Глубокий GSD code review и локальная security matrix покрывают auth/API/RLS/headers/CSP/uploads/secrets/dependencies; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, lockfile меняется отдельно.
 - [ ] **STAB-SEC-06**: Release notes честно фиксируют, что device binding не hardware attestation, initial mode spoofable, и перечисляют остальные accepted risks/waivers без расширения риска.
 
 ## Release readiness
@@ -205,15 +205,15 @@
 | STAB-MEDIA-05 | Phase 19 | Complete |
 | STAB-MEDIA-06 | Phase 18 | Pending |
 | STAB-MEDIA-07 | Phase 20 | Pending |
-| STAB-A11Y-01 | Phase 20 | Pending |
+| STAB-A11Y-01 | Phase 20 | Complete |
 | STAB-A11Y-02 | Phase 20 | Pending |
-| STAB-A11Y-03 | Phase 20 | Pending |
+| STAB-A11Y-03 | Phase 20 | Complete |
 | STAB-A11Y-04 | Phase 20 | Pending |
 | STAB-SEC-01 | Phase 16 | Complete |
 | STAB-SEC-02 | Phase 20 | Complete |
 | STAB-SEC-03 | Phase 20 | Pending |
 | STAB-SEC-04 | Phase 16 | Complete |
-| STAB-SEC-05 | Phase 20 | Pending |
+| STAB-SEC-05 | Phase 20 | Complete |
 | STAB-SEC-06 | Phase 20 | Pending |
 | STAB-REL-01 | Phase 20 | Pending |
 | STAB-REL-02 | Phase 20 | Pending |
