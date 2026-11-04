@@ -7,13 +7,15 @@ import { expect, test } from "../fixtures/test";
 // PortiaImage (19-10): broken, slow and blocked pictures end in the «Изображение недоступно» placeholder of the same size,
 // and a picture of the previous record is never shown as the new one. The spec reads the real /api/employees answer and only
 // intercepts IMAGE requests to other hosts; own /api routes are never fulfilled (assertNoOwnApiFulfilled). It runs in 19-14.
+// 20-08 adds the CSP side (STAB-MEDIA-07, STAB-SEC-03): both policy headers, approved frame hosts without a CSP event, and a
+// refused host that ends in a static placeholder. The diagnostics fixture fails every unexpected console/CSP event.
 
 const PLACEHOLDER = "Изображение недоступно";
 // 1x1 PNG: a picture that loads, so record switching can be told apart by src alone.
 const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 
 type RosterEntry = { nickname: string; photoUrl?: string; robloxAvatarUrl?: string };
-type ImageMode = "pixel" | "missing" | "hold";
+type ImageMode = "pixel" | "missing" | "hold" | "rejected";
 
 const expectedSrc = (employee: RosterEntry) => {
   const source = mediaSource(employee.photoUrl || employee.robloxAvatarUrl);
@@ -31,6 +33,11 @@ async function routeForeignImages(page: Page, mode: ImageMode, gate?: Promise<vo
       await gate;
       return route.fulfill({ status: 404, contentType: "text/plain", body: "not found" });
     }
+    // "rejected": the host is refused before any answer, the way a blocking policy or an extension would.
+    if (mode === "rejected") {
+      await gate;
+      return route.abort("accessdenied");
+    }
     return new Promise<void>(() => undefined);
   });
 }
@@ -40,7 +47,7 @@ function forgiveImageFaults(diagnostics: DiagnosticLedger) {
   const kept = diagnostics.entries.filter((entry) => !(
     (entry.kind === "response" && entry.source === "image" && entry.status === 404)
     || (entry.kind === "requestfailed" && entry.source === "image")
-    || (entry.kind === "console" && /Failed to load resource/.test(entry.text) && !entry.source.startsWith("browser:/"))
+    || (entry.kind === "console" && /Failed to load resource|Cannot load image .* due to access control checks/.test(entry.text) && !entry.source.startsWith("browser:/"))
   ));
   diagnostics.entries.splice(0, diagnostics.entries.length, ...kept);
 }
@@ -142,4 +149,74 @@ test("[STAB-MEDIA-03] switching A -> B -> A always shows the current record's ow
   await showsOnly(b);
   await showsOnly(a);
   forgiveImageFaults(diagnostics);
+});
+
+const CSP_ENFORCED = "content-security-policy";
+const CSP_REPORT_ONLY = "content-security-policy-report-only";
+
+test("[STAB-SEC-03] the document carries the enforced policy and the report-only candidate; the desktop opens without a CSP event", async ({ page }) => {
+  const response = await page.goto("/");
+  const headers = response!.headers();
+  expect(headers[CSP_ENFORCED], "enforced policy").toContain("img-src 'self' data: blob: https:");
+  expect(headers[CSP_REPORT_ONLY], "report-only candidate").toContain("img-src 'self' data: blob: https:");
+  expect(headers[CSP_REPORT_ONLY]).not.toBe(headers[CSP_ENFORCED]);
+  expect(headers["x-content-type-options"]).toBe("nosniff");
+  expect(headers["x-frame-options"]).toBe("DENY");
+  expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+  expect(headers["permissions-policy"]).toContain("camera=()");
+  expect(headers["cross-origin-opener-policy"]).toBe("same-origin-allow-popups");
+  // LIMITATION (D-08/D-14): this runs over plain HTTP on a local production build. A browser ignores HSTS on HTTP, and
+  // upgrade-insecure-requests is dropped for the local E2E server on purpose, so neither is proven here (see 20-MEDIA-CSP.md).
+  expect(headers["strict-transport-security"]).toContain("max-age=");
+  await new DesktopPage(page).desktop.waitFor();
+});
+
+test("[STAB-MEDIA-07] the approved charter and sheet frame hosts load under both policies with no CSP or console event", async ({ page }) => {
+  // The approved hosts are answered locally so the check does not depend on the network; the frame still has to pass frame-src.
+  const approvedHtml = "<!doctype html><title>approved</title><p>approved</p>";
+  await page.route(/^https:\/\/(sdqwqsdawqd\.github\.io|docs\.google\.com)\//, (route) => route.fulfill({ status: 200, contentType: "text/html", body: approvedHtml }));
+  const desktop = new DesktopPage(page);
+  await desktop.goto();
+  await desktop.openApp("Устав");
+  const charter = desktop.window("Устав");
+  const frame = charter.locator(".document-app iframe");
+  await expect(frame).toHaveAttribute("src", /^https:\/\/sdqwqsdawqd\.github\.io\//);
+  await expect(charter.locator(".document-app")).toHaveAttribute("data-frame-state", "loaded");
+  await expect(charter.locator(".app-fatal-panel")).toHaveCount(0);
+  await desktop.closeApp("Устав"); // on a phone the open window covers the shortcuts
+  await desktop.openApp("Таблица");
+  const sheet = desktop.window("Таблица");
+  await expect(sheet.locator(".document-app iframe")).toHaveAttribute("src", /^https:\/\/docs\.google\.com\//);
+  await expect(sheet.locator(".document-app")).toHaveAttribute("data-frame-state", "loaded");
+  await expect(sheet.locator(".app-fatal-panel")).toHaveCount(0);
+});
+
+test("[STAB-MEDIA-07] a refused image host leaves a static placeholder with the same box, the name and the caption", async ({ page, diagnostics }) => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await routeForeignImages(page, "rejected", gate);
+  const desktop = new DesktopPage(page);
+  const { window, employees } = await openEmployees(page, desktop);
+  const employee = await selectWithImage(window, employees);
+
+  const portrait = window.locator(".personnel-portrait");
+  const frame = portrait.locator(".portia-image");
+  await expect(frame).toHaveAttribute("data-media-state", "loading");
+  const loading = await portrait.boundingBox();
+  release();
+  await expect(frame).toHaveAttribute("data-media-state", "failed");
+  await expect(frame.getByText(PLACEHOLDER)).toBeVisible();
+  await expect(frame.locator("img")).toHaveCount(0);
+  expect(await portrait.boundingBox()).toEqual(loading);
+  // Static: nothing in the placeholder runs an animation or transition (D-07).
+  const running = await frame.locator(".portia-image-placeholder").evaluate((node) => [node, ...node.querySelectorAll("*")].flatMap((element) => element.getAnimations()).length);
+  expect(running).toBe(0);
+  await expect(window.locator(".personnel-profile-identity h2")).toHaveText(employee.nickname);
+  forgiveImageFaults(diagnostics);
+});
+
+test("[STAB-MEDIA-07] hidden/lazy covers of a folded «Справочник» section (Phase 19 CR-01)", async () => {
+  // This spec does not close CR-01. 19-15 fixed the timer for the minimized charter and portrait (media-offscreen.spec.ts),
+  // but its folded-guide-cover case is still "unknown" until 19-19 seeds guide data, so the inherited gap stays open.
+  test.skip(true, "BLOCKED (inherited gap, Phase 19 CR-01): folded guide covers have no passing evidence until 19-19; media-offscreen.spec.ts owns the case.");
 });
