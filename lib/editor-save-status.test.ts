@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import * as saveStatus from "./editor-save-status.ts";
 import { draftEdits, networkSaveError, parseRefusedSections, partialSave, rebaseDecision, saveStatusText, SaveConflictError, SectionClosedError } from "./editor-save-status.ts";
 import { lf } from "./component-source.ts";
 import { historyReducer, initHistory } from "./editor-history.ts";
@@ -327,4 +328,80 @@ test("the editor sync effect asks rebaseDecision when the draft is dirty and sho
   assert.match(source, /Показаны ваши правки\. Конфликт решится при сохранении\./);
   assert.match(source, /type: "rebase"/);
   assert.match(lf(styles), /\.editor-stale-banner\s*\{/);
+});
+
+type RequestFailure = (input: { transport: boolean; status?: number; payloadError?: string; action: "load" | "save" | "add" | "remove" }) => string;
+const employeeRequestFailure: RequestFailure = (input) => (saveStatus as unknown as { employeeRequestFailure: RequestFailure }).employeeRequestFailure(input);
+
+test("employeeRequestFailure: no connection is the network text, never the raw exception (WR-05)", () => {
+  assert.equal(employeeRequestFailure({ transport: true, action: "save" }), networkSaveError);
+  assert.equal(employeeRequestFailure({ transport: true, status: 500, payloadError: "Failed to fetch", action: "load" }), networkSaveError);
+});
+
+test("employeeRequestFailure: 403 is the expired editor session (WR-05)", () => {
+  assert.equal(employeeRequestFailure({ transport: false, status: 403, action: "add" }), "Сессия редактора истекла. Войдите в редактор снова.");
+});
+
+test("employeeRequestFailure: the server's own Russian text is shown as is (WR-05)", () => {
+  assert.equal(employeeRequestFailure({ transport: false, status: 409, payloadError: "Профиль изменили.", action: "save" }), "Профиль изменили.");
+});
+
+test("employeeRequestFailure: a non-JSON answer such as 502 names the action and the code in Russian (WR-05)", () => {
+  assert.equal(employeeRequestFailure({ transport: false, status: 502, action: "save" }), "Сервер отклонил сохранение (502).");
+  assert.equal(employeeRequestFailure({ transport: false, status: 502, action: "add" }), "Сервер отклонил добавление (502).");
+  assert.equal(employeeRequestFailure({ transport: false, status: 502, action: "load" }), "Сервер отклонил загрузку (502).");
+  assert.equal(employeeRequestFailure({ transport: false, status: 502, action: "remove" }), "Сервер отклонил удаление (502).");
+});
+
+test("employeeRequestFailure: a blank payload error counts as missing (WR-05)", () => {
+  assert.equal(employeeRequestFailure({ transport: false, status: 500, payloadError: "   ", action: "save" }), "Сервер отклонил сохранение (500).");
+});
+
+test("employeeRequestFailure texts are Cyrillic, with no raw exception wording (WR-05)", () => {
+  for (const action of ["load", "save", "add", "remove"] as const) {
+    const text = employeeRequestFailure({ transport: false, status: 502, action });
+    assert.match(text, /[А-Яа-я]/);
+    assert.doesNotMatch(text, /Failed to fetch|Unexpected token|SyntaxError/);
+  }
+});
+
+const employeeRegion = () => {
+  const source = lf(editor);
+  const start = source.indexOf("function EmployeeProfilesEditor");
+  const end = source.indexOf("function EditorAccessManager");
+  assert.ok(start > -1 && end > start);
+  return source.slice(start, end);
+};
+const accessRegion = () => {
+  const source = lf(editor);
+  const start = source.indexOf("function EditorAccessManager");
+  const end = source.indexOf("function LimitNote");
+  assert.ok(start > -1 && end > start);
+  return source.slice(start, end);
+};
+
+test("EmployeeProfilesEditor shows no raw exception text and reads the answer through .json().catch (WR-05)", () => {
+  const region = employeeRegion();
+  assert.doesNotMatch(region, /\berror\.message\b/);
+  assert.ok(region.includes("employeeRequestFailure("));
+  assert.ok(region.includes("networkSaveError") || region.includes('transport: true'));
+  assert.ok(region.includes(".json().catch("));
+  assert.doesNotMatch(region, /await response\.json\(\) as/);
+});
+
+test("EmployeeProfilesEditor does not send a second PATCH or POST while one is running (WR-05)", () => {
+  const region = employeeRegion();
+  assert.match(region, /saveInflight\.current/);
+  assert.match(region, /addInflight\.current/);
+  assert.match(region, /finally\s*\{[^}]*saveInflight\.current = null/);
+});
+
+test("«ОТОЗВАТЬ» asks first through ConfirmDialog and is disabled while a request runs (IN-03)", () => {
+  const region = accessRegion();
+  assert.ok(region.includes("<ConfirmDialog"));
+  assert.ok(region.includes("Отозвать доступ?"));
+  assert.match(region, /потеряет доступ к редактору\. Вернуть его можно только новой выдачей доступа\./);
+  assert.match(region, /disabled=\{state === "saving"\}[^>]*>ОТОЗВАТЬ</);
+  assert.doesNotMatch(region, /onClick=\{\(\) => void removeEditor\(editor\.email\)\}/);
+  assert.match(region, /label: "ОТМЕНА", tone: "secondary", autoFocus: true/);
 });
