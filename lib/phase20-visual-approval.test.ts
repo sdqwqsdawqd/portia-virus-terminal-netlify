@@ -329,6 +329,64 @@ describe("20-VISUAL-APPROVAL ledger structure (fail-closed)", () => {
   });
 });
 
+describe("stale candidates (20-29, T-20-43): product code changed after candidates_commit", () => {
+  const H = ledgerFrontmatter(ledger).candidates_commit;
+
+  test("nothing changed since the candidate commit gives no problem", () => {
+    assert.deepEqual(staleCandidateProblems(H, { changedSince: () => [] }), []);
+  });
+
+  test("a changed component is a stale candidates problem naming the file and the commit", () => {
+    assert.deepEqual(staleCandidateProblems(H, { changedSince: () => ["components/portia-desktop.tsx"] }), [
+      `stale candidates: components/portia-desktop.tsx changed since ${H}`,
+    ]);
+  });
+
+  test("lib/*.test.ts and everything outside app, components, public, lib are not counted", () => {
+    const changed = ["lib/phase20-visual-approval.test.ts", "lib/other.test.ts", "tests/e2e/specs/a.ts", ".planning/STATE.md", "scripts/x.mjs", "package.json"];
+    assert.deepEqual(staleCandidateProblems(H, { changedSince: () => changed }), []);
+    const mixed = staleCandidateProblems(H, { changedSince: () => [...changed, "app/portia.css", "public/a.png", "lib/editor-notes.ts"] });
+    assert.deepEqual(mixed, [
+      `stale candidates: app/portia.css changed since ${H}`,
+      `stale candidates: public/a.png changed since ${H}`,
+      `stale candidates: lib/editor-notes.ts changed since ${H}`,
+    ]);
+  });
+
+  test("a failing comparison (git diff exits non-zero or throws) is an error, never an empty list", () => {
+    const failed = staleCandidateProblems(H, { changedSince: () => { throw new Error("git diff exited with 128"); } });
+    assert.equal(failed.length, 1);
+    assert.ok(failed[0].startsWith("stale candidates: could not compare with"));
+    const git: GitRunner = () => ({ status: 128, error: undefined, stdout: "" });
+    assert.throws(() => changedSinceCommit(H, git), /git diff .* exit 128/);
+    const spawnFailed: GitRunner = () => ({ status: null, error: "spawn git ENOENT", stdout: "" });
+    assert.throws(() => changedSinceCommit(H, spawnFailed), /could not run/);
+    const ok: GitRunner = () => ({ status: 0, stdout: "app/portia.css\nlib/a.test.ts\r\ncomponents/x.tsx\n" });
+    assert.deepEqual(changedSinceCommit(H, ok), ["app/portia.css", "lib/a.test.ts", "components/x.tsx"]);
+  });
+
+  test("the real comparison asks git for app components public lib only", () => {
+    const calls: string[][] = [];
+    changedSinceCommit(H, (args) => { calls.push(args); return { status: 0, stdout: "" }; });
+    assert.deepEqual(calls, [["diff", "--name-only", H, "HEAD", "--", "app", "components", "public", "lib"]]);
+  });
+
+  test("strict mode (requireApproval) rejects a stale fixture; the ordinary mode does not", () => {
+    const stale = { changedSince: () => ["components/portia-desktop.tsx"] };
+    const strict = validateLedger(ledger, { requireApproval: true, ...stale });
+    assert.ok(strict.some((error) => error.startsWith("stale candidates: components/portia-desktop.tsx changed since")));
+    const ordinary = validateLedger(ledger, stale);
+    assert.ok(!ordinary.some((error) => error.startsWith("stale candidates")));
+  });
+
+  test("the real ledger against the real repository: diagnostic by default, an error in the strict mode", (t) => {
+    const problems = staleCandidateProblems(H, { changedSince: (commit) => changedSinceCommit(commit, realGit) });
+    if (process.env.PORTIA_REQUIRE_APPROVAL === "1") assert.deepEqual(problems, []);
+    else if (problems.length) t.diagnostic(`stale candidates (${problems.length}): ${problems.join("; ")}`);
+    else t.diagnostic("candidates are fresh: no product code changed since candidates_commit");
+  });
+});
+
 describe("Task 2 gate: owner verdicts (PORTIA_REQUIRE_APPROVAL=1)", () => {
   test("every captured candidate has an exact positive owner verdict and every owner question an answer", { skip: process.env.PORTIA_REQUIRE_APPROVAL !== "1" ? "run with PORTIA_REQUIRE_APPROVAL=1 after the owner fills the ledger" : false }, () => {
     assert.deepEqual(validateLedger(ledger, { requireApproval: true, fileSha }), []);
