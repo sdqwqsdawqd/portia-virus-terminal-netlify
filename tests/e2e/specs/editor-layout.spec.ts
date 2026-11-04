@@ -141,6 +141,23 @@ test.describe("[STAB-EDIT-01] D-40 editor section columns", () => {
     });
   });
 
+  test("[STAB-EDIT-03] PC: a keyboard move across the column border keeps the focus on the handle and is one undo step", async ({ browser, stagingRun, baseURL }, testInfo) => {
+    test.skip(isPhone(), "PC layout");
+    await openInfo(browser, stagingRun, baseURL ?? fallbackBase, testInfo, "layout-keyboard-undo", async ({ page, run }) => {
+      const fifth = `${run}-info-5`;
+      await handle(page, fifth).focus();
+      await page.keyboard.press("ArrowDown");
+      // The moved card is the first one of the second column, at index 5, and the focus is still on its own handle.
+      await expect(card(page, fifth)).toHaveAttribute("data-sort-index", "5");
+      await expect(page.locator(".editor-section-column").nth(1).locator(":scope > .nested-editor-card").first()).toHaveAttribute("id", `card-${fifth}`);
+      await expect.poll(() => activeHandleOf(page, fifth)).toBe(true);
+      // One undo step puts it back: it is checked right after the first press, a second press is not needed.
+      await page.keyboard.press("Control+z");
+      await expect(card(page, fifth)).toHaveAttribute("data-sort-index", "4");
+      await expect(page.locator(".editor-section-column").first().locator(":scope > .nested-editor-card").nth(4)).toHaveAttribute("id", `card-${fifth}`);
+    });
+  });
+
   test("[STAB-A11Y-02] phone: one column in the source order, no horizontal overflow", async ({ browser, stagingRun, baseURL }, testInfo) => {
     test.skip(!isPhone(), "phone layout");
     await openInfo(browser, stagingRun, baseURL ?? fallbackBase, testInfo, "layout-phone", async ({ page, run }) => {
