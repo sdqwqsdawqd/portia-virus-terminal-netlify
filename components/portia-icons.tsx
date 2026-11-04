@@ -19,14 +19,16 @@ const spreadShape = <circle cx="12" cy="12" r="8.5" />;
 const escapeShape = <path d="M12 3.5 21 19.5H3Z" />;
 const dot = (x: number) => <circle key={x} cx={x} cy="12" r=".9" fill="currentColor" />;
 const chevron = (y: number) => <path key={y} d={`M10.2 ${y}l1.8-1.8 1.8 1.8`} />;
-// The additional line follows the same rule: mind is a diamond with lines of thought, appearance a pentagon
-// with mutation crosses, behaviour a rounded square with tremor waves.
-const mindShape = <path d="M12 3.2 20.8 12 12 20.8 3.2 12Z" />;
-const lookShape = <path d="M12 3.4 20.4 9.5 17.2 19.4H6.8L3.6 9.5Z" />;
-const moodShape = <rect x="4.2" y="4.2" width="15.6" height="15.6" rx="3.6" />;
-const dash = (y: number) => <path key={y} d={`M9.4 ${y}h5.2`} />;
-const cross = ([x, y]: [number, number]) => <path key={`${x} ${y}`} d={`M${x - 1.5} ${y}h3M${x} ${y - 1.5}v3`} />;
-const wave = (y: number) => <path key={y} d={`M7.6 ${y}q2.2-2 4.4 0t4.4 0`} />;
+// The additional line (D-39) is drawn as pictures, not as framed badges: mind is a brain that goes out, behaviour a line
+// that gets restless and then burns, appearance a cell that grows arms and then a torn DNA helix. The level reads from the shape.
+const brainHalf = <path d="M12 4.6C10.8 3.2 8.6 3.4 7.6 4.9 5.7 4.8 4.4 6.4 4.8 8 3.4 8.9 3.3 10.8 4.3 12 3.9 13.7 4.9 15.3 6.5 15.6 7 17.3 8.9 18.2 10.4 17.5 10.9 18 11.5 18.6 12 19.2" />;
+const brainFolds = <path d="M4.8 8.2c1.2-.2 2.1.3 2.5 1.2M8.2 11.2c1.2-.4 2.3.1 2.7 1.1M6.5 15.6c.4-1.1 1.4-1.8 2.5-1.7" />;
+const brainSpine = <path d="M12 4.6v14.6" />;
+const mirrored = (children: React.ReactNode) => <g transform="matrix(-1 0 0 1 24 0)">{children}</g>;
+const helixHalf = (y: number) => <>
+  <path d={`M8 ${y}c0 3.5 8 3.5 8 8M16 ${y}c0 3.5-8 3.5-8 8`} />
+  <path d={`M9.2 ${y + 2.2}h5.6`} />
+</>;
 // Routes of transmission are not levelled, so each is its own small picture without a frame.
 const drop = (x: number, y: number, k: number) => <path d={`M${x} ${y}c${-k} ${1.3 * k} ${-1.5 * k} ${2.1 * k} ${-1.5 * k} ${2.8 * k}a${1.5 * k} ${1.5 * k} 0 0 0 ${3 * k} 0c0 ${-0.7 * k} ${-0.5 * k} ${-1.5 * k} ${-1.5 * k} ${-2.8 * k}Z`} />;
 // Access locks (sketch #locks-a): a padlock whose shackle swings aside when open.
@@ -107,15 +109,15 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
   "class-warning": <>{escapeShape}{[16.4].map(chevron)}</>,
   "class-risk": <>{escapeShape}{[14.4, 17.2].map(chevron)}</>,
   "class-esnov": <>{escapeShape}{[12.6, 15.2, 17.8].map(chevron)}</>,
-  "class-lucidium": <>{mindShape}{[12].map(dash)}</>,
-  "class-transitium": <>{mindShape}{[10.6, 13.4].map(dash)}</>,
-  "class-oblivium": <>{mindShape}{[9.4, 12, 14.6].map(dash)}</>,
-  "class-isomorph": <>{lookShape}{([[12, 13]] as [number, number][]).map(cross)}</>,
-  "class-polymorph": <>{lookShape}{([[9.6, 13.4], [14.4, 13.4]] as [number, number][]).map(cross)}</>,
-  "class-xenomorph": <>{lookShape}{([[12, 9.8], [8.9, 14.8], [15.1, 14.8]] as [number, number][]).map(cross)}</>,
-  "class-stabilar": <>{moodShape}{[12.6].map(wave)}</>,
-  "class-impulsar": <>{moodShape}{[10.8, 14.6].map(wave)}</>,
-  "class-infernar": <>{moodShape}{[9, 12.6, 16.2].map(wave)}</>,
+  "class-lucidium": <>{brainHalf}{brainFolds}{mirrored(<>{brainHalf}{brainFolds}</>)}{brainSpine}<path d="M12 1v1.6M5.6 2.2l1 1.1M18.4 2.2l-1 1.1" /></>,
+  "class-transitium": <>{brainHalf}{brainFolds}{brainSpine}<g opacity=".45" strokeDasharray="2 2.4">{mirrored(brainHalf)}</g><g opacity=".4">{mirrored(brainFolds)}</g></>,
+  "class-oblivium": <g strokeDasharray="2.2 2.8">{brainHalf}{mirrored(brainHalf)}{brainSpine}</g>,
+  "class-isomorph": <><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /><circle cx="16.4" cy="8.4" r=".9" fill="currentColor" /></>,
+  "class-polymorph": <><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.7" /><path d="M15.5 8.5 18.6 5.4M8.5 8.5 5.4 5.4M8.5 15.5 5.4 18.6M15.5 15.5l3.1 3.1" /><circle cx="19.4" cy="4.6" r="1.3" /><circle cx="4.6" cy="4.6" r="1.3" /><circle cx="4.6" cy="19.4" r="1.3" /><circle cx="19.4" cy="19.4" r="1.3" /></>,
+  "class-xenomorph": <>{helixHalf(3)}{helixHalf(13)}</>,
+  "class-stabilar": <><path d="M5.5 12h13" /><circle cx="3" cy="12" r=".9" fill="currentColor" /><circle cx="21" cy="12" r=".9" fill="currentColor" /><path d="M8 7.5h8M8 16.5h8" opacity=".45" /></>,
+  "class-impulsar": <path d="M2.5 12h4l2.2-6.5 3.6 13 2.6-8.5 1.2 2h5.4" />,
+  "class-infernar": <><path d="M2.5 15.5h7.2" /><path d="M14 3.5c.5 3 4.6 5 4.6 9.4a4.6 4.6 0 0 1-9.2 0c0-1.6.8-2.7 1.5-3.6.2 1.3.8 2.1 1.5 2.5C12.2 9 12.5 6 14 3.5Z" /><path d="M14 14c.8.9 1.3 1.5 1.3 2.3a1.3 1.3 0 0 1-2.6 0c0-.8.5-1.4 1.3-2.3Z" /></>,
   "route-droplet": <>{drop(9, 3.5, 2.6)}{drop(16.5, 11, 1.7)}<path d="M5 20.5h14" opacity=".55" /></>,
   "route-dust": <><path d="M3.5 9.5h9.2a2.6 2.6 0 1 0-2.6-2.6M3.5 14h12.4a2.6 2.6 0 1 1-2.6 2.6" /><circle cx="18.6" cy="7.4" r=".9" fill="currentColor" /><circle cx="20.4" cy="11.6" r=".9" fill="currentColor" /><circle cx="7" cy="19.2" r=".9" fill="currentColor" /></>,
   "route-contact": <><rect x="3.6" y="5.2" width="10" height="10" rx="2.2" /><rect x="10.4" y="8.8" width="10" height="10" rx="2.2" /></>,
