@@ -8,6 +8,7 @@ import {
   notesPayloadForTabs,
   notesPutRefusal,
   pruneNotes,
+  rebaseNotes,
 } from "./editor-notes.ts";
 import { defaultPortiaContent } from "./portia-content.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
@@ -182,4 +183,20 @@ test("D-47: isMissingNotesTable is true only for 42P01 and PGRST205", () => {
   assert.equal(isMissingNotesTable({ message: "relation does not exist" }), false);
   assert.equal(isMissingNotesTable(null), false);
   assert.equal(isMissingNotesTable(undefined), false);
+});
+
+test("D-47: rebaseNotes puts the editor's own changes over the notes another editor saved", () => {
+  const before = { a: "old", b: "keep", c: "gone" };
+  const mine = { a: "mine", b: "keep", n: "new" };
+  const server = { a: "theirs", b: "theirs-b", c: "theirs-c", z: "only-theirs" };
+  // Changed (a), added (n) and removed (c) by me win; everything else follows the server.
+  assert.deepEqual(rebaseNotes(before, mine, server), { a: "mine", b: "theirs-b", n: "new", z: "only-theirs" });
+});
+
+test("D-47: rebaseNotes without own changes is the server copy, and never mutates its inputs", () => {
+  const before = { a: "1" };
+  const server = { a: "2", b: "3" };
+  assert.deepEqual(rebaseNotes(before, { a: "1" }, server), server);
+  assert.deepEqual(before, { a: "1" });
+  assert.deepEqual(server, { a: "2", b: "3" });
 });

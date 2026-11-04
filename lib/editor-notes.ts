@@ -99,3 +99,8 @@ export function isMissingNotesTable(error: unknown): boolean {
   const code = isPlainObject(error) ? error.code : undefined;
   return code === "42P01" || code === "PGRST205";
 }
+
+// RED stub (20-22): the real rebase lands in the GREEN commit.
+export function rebaseNotes(_before: NotesMap, _mine: NotesMap, _server: NotesMap): NotesMap {
+  return {};
+}
