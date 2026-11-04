@@ -242,6 +242,8 @@ export function PromotionIdentityGate({ nickname, busy, error, onNickname, onSub
       <input id="promotion-nickname" value={nickname} onChange={(event) => onNickname(event.target.value)} maxLength={64} autoComplete="off" spellCheck={false} placeholder="Введите ник Roblox из таблицы" disabled={busy} />
       {!error && <p className="promotion-binding-note">Первая заявка закрепит этот ник за устройством. Сменить его сможет проверяющий.</p>}
       {error && <p className="promotion-error" role="alert">{error}</p>}
+      {error && !busy && <p className="promotion-next-note">Введённый ник сохранён. Нажмите «Проверить ник», чтобы повторить проверку.</p>}
+      {busy && <p className="promotion-next-note" role="status">Проверяем ник. Введённый ник сохранён.</p>}
       <button className="promotion-action" type="submit" disabled={busy || !nickname.trim()}>{busy ? "ПРОВЕРЯЕМ…" : "ПРОВЕРИТЬ НИК"}</button>
     </form>
   </div>;
@@ -275,12 +277,17 @@ function eligibilityCopy(kind: RequestKind, eligibility: Eligibility) {
 /** The "create a template" task is recognised by its text; only then the optional builder entry is offered (D-23). */
 const isTemplateTask = (task: PublicTask) => /шаблон/i.test(task.text);
 
-function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback, feedbackRef, onRequest, visible, onQualificationLockChange, onQualificationFinished, onOpenTemplate }: {
+/** The one action a participant can take right now on a card: a request that is allowed and not already running. */
+const canRequestOn = (kind: RequestKind, active: ActiveState, eligibility: Eligibility) =>
+  !active && (eligibility.status === "eligible" || (kind === "ordinary" && eligibility.status === "special-task"));
+
+function PromotionStatusCard({ kind, active, eligibility, busy, stale, next, feedback, feedbackRef, onRequest, visible, onQualificationLockChange, onQualificationFinished, onOpenTemplate }: {
   kind: RequestKind;
   active: ActiveState;
   eligibility: Eligibility;
   busy: boolean;
   stale: boolean;
+  next: boolean;
   feedback: SubmitFeedback;
   feedbackRef: (node: HTMLParagraphElement | null) => void;
   onRequest: (kind: RequestKind) => void;
@@ -292,14 +299,18 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, feedback,
   const ordinary = kind === "ordinary";
   const canRequest = !active && (eligibility.status === "eligible" || (ordinary && eligibility.status === "special-task"));
   const tasks = active?.tasks?.slice().sort((a, b) => a.sortOrder - b.sortOrder) ?? [];
-  return <section className={`promotion-card ${ordinary ? "promotion-ordinary-card" : "promotion-qualification-card"}`}>
-    <header><span className="promotion-flow-icon" aria-hidden="true">{ordinary ? "▤" : "◇"}</span><div><span className="promotion-eyebrow">{ordinary ? "ОБЫЧНОЕ ПОВЫШЕНИЕ" : "КВАЛИФИКАЦИЯ"}</span><h2>{ordinary ? "Задания на повышение" : "Проверка знаний"}</h2></div></header>
+  // The state is always written out, never carried by colour alone (D-17/D-20).
+  const step = active ? { tone: "running", label: "В ПРОЦЕССЕ" } : canRequest ? { tone: "available", label: "ДОСТУПНО СЕЙЧАС" } : { tone: "waiting", label: "ПОКА НЕДОСТУПНО" };
+  return <section className={`promotion-card ${ordinary ? "promotion-ordinary-card" : "promotion-qualification-card"}`} data-next={next ? "true" : undefined}>
+    <header><span className="promotion-flow-icon" aria-hidden="true">{ordinary ? "▤" : "◇"}</span><div><span className="promotion-eyebrow">{ordinary ? "ОБЫЧНОЕ ПОВЫШЕНИЕ" : "КВАЛИФИКАЦИЯ"}</span><h2>{ordinary ? "Задания на повышение" : "Проверка знаний"}</h2></div><span className={`promotion-step-badge ${step.tone}`}>{step.label}</span></header>
+    {!active && !canRequest && <span className="promotion-reason-label">Почему сейчас нельзя</span>}
     <p className="promotion-status-copy">{active ? activeCopy(kind, active) : eligibilityCopy(kind, eligibility)}</p>
     {feedback.phase !== "idle" && <p ref={feedbackRef} tabIndex={-1} role={feedback.phase === "error" ? "alert" : "status"} className={`promotion-submit-feedback ${feedback.phase}`}>{feedback.message}</p>}
     {!ordinary && active && !active.attemptId && (active.status === "claimed" || active.status === "approved") && <div className="promotion-test-warning"><strong>15 МИНУТ ПОСЛЕ РАЗРЕШЕНИЯ</strong><p>После разрешения проверяющего начнутся 15 минут.</p><p className="promotion-mode-warning">ПК. {desktopModeWarning}</p><p className="promotion-mode-warning">Телефон. {phoneModeWarning}</p></div>}
     {!ordinary && active?.attemptId && <QualificationRunner attemptId={active.attemptId} visible={visible !== false} onLockChange={onQualificationLockChange ?? (() => undefined)} onFinished={onQualificationFinished ?? (() => undefined)} />}
     {tasks.length > 0 && <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task) => <li key={task.id}><span>{String(task.sortOrder).padStart(2, "0")}</span><div><p>{task.text}</p>{ordinary && onOpenTemplate && isTemplateTask(task) && <div className="promotion-template-entry"><button className="promotion-action" type="button" onClick={(event) => onOpenTemplate(event.currentTarget)}>Создать шаблон</button><p>Работа скачивается на ваше устройство. Отправьте файл проверяющему вне сайта.</p></div>}</div></li>)}</ol></div>}
     {canRequest && <button className="promotion-action" type="button" disabled={busy || stale} onClick={() => onRequest(kind)}>{busy ? "ОТПРАВЛЯЕМ…" : ordinary ? "ПОДАТЬ ЗАЯВКУ НА ЗАДАНИЯ" : "ЗАПРОСИТЬ КВАЛИФИКАЦИЮ"}</button>}
+    {canRequest && stale && <p className="promotion-next-note">Отправка недоступна, пока состояние не обновится. Страница проверит его сама.</p>}
   </section>;
 }
 
@@ -446,6 +457,11 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
     });
   };
 
+  const nextKind: RequestKind | null = status && status.promotionRecord !== null
+    ? (status.ordinary.eligibility.status === "qualification-required" ? (["qualification", "ordinary"] as const) : (["ordinary", "qualification"] as const))
+      .find((kind) => canRequestOn(kind, status[kind].active, status[kind].eligibility)) ?? null
+    : null;
+
   if (!status) return <div className="promotion-app"><PromotionIdentityGate nickname={nickname} busy={busy} error={error} onNickname={setNickname} onSubmit={checkNickname} /></div>;
 
   if (status.promotionRecord === null) return <div className="promotion-app"><div className="promotion-shell" aria-live="polite">
@@ -463,11 +479,12 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
       {stale && <div className="promotion-stale"><strong>Состояние временно не обновляется</strong><span>Показаны последние безопасные данные. Действия отключены до восстановления связи.</span></div>}
       {error && <p className="promotion-error" role="alert">{error}</p>}
       <div className="promotion-flow-list">
-        {status.ordinary.eligibility.status === "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
-        <PromotionStatusCard kind="ordinary" active={status.ordinary.active} eligibility={status.ordinary.eligibility} busy={submitState.ordinary.phase === "submitting"} stale={stale} feedback={submitState.ordinary} feedbackRef={(node) => { submitFeedbackRefs.current.ordinary = node; }} onRequest={requestPromotion} onOpenTemplate={openTemplate} />
-        {status.ordinary.eligibility.status !== "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
+        {status.ordinary.eligibility.status === "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} next={nextKind === "qualification"} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
+        <PromotionStatusCard kind="ordinary" active={status.ordinary.active} eligibility={status.ordinary.eligibility} busy={submitState.ordinary.phase === "submitting"} stale={stale} next={nextKind === "ordinary"} feedback={submitState.ordinary} feedbackRef={(node) => { submitFeedbackRefs.current.ordinary = node; }} onRequest={requestPromotion} onOpenTemplate={openTemplate} />
+        {status.ordinary.eligibility.status !== "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} next={nextKind === "qualification"} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
       </div>
       <p className="promotion-cleanup-hint">Подробные данные проверки удаляются после закрытия. Хранятся три последних результата.</p>
+      {status.results.length === 0 && <p className="promotion-history-empty">Результатов пока нет. Здесь появятся три последних.</p>}
       {status.results.length > 0 && <details className="promotion-history"><summary>Последние результаты <span>{Math.min(status.results.length, 3)}</span></summary><ul>{status.results.slice(0, 3).map((result, index) => <li key={`${result.createdAt}-${index}`}><span>{result.kind === "ordinary" ? "ЗАДАНИЯ" : "КВАЛИФИКАЦИЯ"}</span><strong>{outcomeLabels[result.outcome] ?? "Результат обновлён"}</strong><time dateTime={result.createdAt}>{formatDate(result.createdAt)}</time></li>)}</ul></details>}
     </div>
   </div>
