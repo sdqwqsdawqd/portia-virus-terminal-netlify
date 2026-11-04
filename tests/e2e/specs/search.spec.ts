@@ -10,7 +10,10 @@ const isPhone = () => test.info().project.name.includes("phone");
 async function firstVirusName(page: Page, desktop: DesktopPage) {
   await desktop.goto();
   await desktop.openApp("База вирусов");
-  const name = (await desktop.window("База вирусов").locator(".virus-row strong").first().textContent())?.trim() ?? "";
+  const archive = desktop.window("База вирусов");
+  await expect(archive.locator('.app-skeleton[aria-busy="true"]')).toHaveCount(0, { timeout: 20_000 });
+  test.skip(await archive.locator(".virus-row").count() === 0, "BLOCKED (DATA): this target serves no viruses to search for.");
+  const name = (await archive.locator(".virus-row strong").first().textContent())?.trim() ?? "";
   test.skip(!name, "BLOCKED (DATA): this target serves no viruses to search for.");
   await desktop.closeApp("База вирусов");
   await expect(desktop.window("База вирусов")).toHaveCount(0);
