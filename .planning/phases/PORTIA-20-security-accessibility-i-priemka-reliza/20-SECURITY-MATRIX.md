@@ -1,8 +1,8 @@
 # 20 — Security matrix (deep review, ASVS L1, local scope)
 
-Дата: 2026-11-04. Проверяемый commit: `f25b885fcf4ca61f10e1511433b7b1ac52206a74` (HEAD перед планом 20-10). Рубрика: OWASP ASVS как ориентир (config: `security_asvs_level: 1`, `security_block_on: high`). Это локальная, точечная по времени проверка репозитория: ревью выполнено исполнителем по коду и тестам, без второго независимого ревьюера и без обращения к production.
+Дата: 2026-11-04. Проверяемый commit: `b88669fb7d92dbf22d66ac6d7bb9a1b011195956` (HEAD после тестов 97d7abb плана 20-26; предыдущий охват этой матрицы — `f25b885`, HEAD перед планом 20-10). Рубрика: OWASP ASVS как ориентир (config: `security_asvs_level: 1`, `security_block_on: high`). Это локальная, точечная по времени проверка репозитория: ревью выполнено исполнителем по коду и тестам, без второго независимого ревьюера и без обращения к production.
 
-Машинная проверка структуры: `node --experimental-strip-types --test lib/security-matrix.test.ts`.
+Машинная проверка структуры, охвата маршрутов и миграций и свежести: `node --experimental-strip-types --test lib/security-matrix.test.ts`. Тест падает с «stale matrix», если файл из раздела «Охват файлов» изменился после проверяемого commit, и с «missing route row» / «missing migration row», если в дереве появился маршрут или миграция без строки. После изменения охватываемого файла матрицу нужно пересмотреть и обновить commit.
 
 ## Метод и границы
 
@@ -44,6 +44,47 @@
 | `app/api/promotion/test/route.ts` | GET, POST | токен попытки и устройства, сервер владеет состоянием попытки | да | SEC20-16, SEC20-17 | `b8ba080` |
 | `app/api/uploads/route.ts` | POST | `getEditorAccess`; 503/403/413 до `request.formData()`, сверка magic bytes | да | SEC20-05, SEC20-08, SEC20-15 | `2bb0b38` |
 
+## Миграции (охват)
+
+Каждый отслеживаемый файл `git ls-files supabase/migrations` имеет ровно одну строку (тест migration coverage). Чтение SQL статическое: живое поведение под Postgres доказывают только receipts Phase 16 и staging-прогоны, указанные в колонке «Staging». Production-применение выполняет только владелец; агент production не трогал и не трогает.
+
+| Миграция | Назначение | RLS / grants | Ревью supabase-rls-reviewer | Staging | Production |
+|---|---|---|---|---|---|
+| `supabase/migrations/20261101000000_portia_baseline.sql` | Канонический SQL: таблицы, RPC, политики, storage | Все `security definer` со `search_path=''`, `revoke ... from public`, явные grants, RLS таблиц и storage; находки SEC20-01, SEC20-03, SEC20-04, SEC20-08, SEC20-09, SEC20-10 | Phase 16 (находки MEDIUM/LOW перенесены в эту матрицу) | PASS: receipts Phase 16 (`receipt-roles.json`, `receipt-concurrency.json`) | Применена владельцем в Phase 16; postflight `16-PRODUCTION-POSTFLIGHT.md` |
+| `supabase/migrations/20261101000100_portia_explicit_grants.sql` | Явные grants для привилегированной роли, лишение последовательностей прав anon и authenticated | Сужает права (least privilege), расширяет только привилегированную роль API | Phase 16 | PASS: receipts Phase 16 | Применена владельцем в Phase 16; postflight, совпадает с golden (SEC20-11) |
+| `supabase/migrations/20261101000200_portia_drop_legacy_promo_overloads.sql` | Удаляет две устаревшие перегрузки `portia_promo_confirm_assignment(uuid, jsonb)` и `portia_promo_confirm_test(uuid, jsonb, text)`, которые обходили проверки банка и версии | Убирает пути обхода; прав не добавляет | Phase 16 | PASS: `receipt-roles-postdrop.json`, `receipt-concurrency-postdrop.json` | Применена владельцем в Phase 16; postflight `16-PRODUCTION-POSTFLIGHT.md` |
+| `supabase/migrations/20261104000000_portia_rename_virus_classes.sql` | Переименование девяти значений классов вирусов в `portia_content` (`viruses`, `recycledViruses`), `revision + 1` у изменённых строк | RLS, grants и политики не затрагивает (вердикт агента: PASS-WITH-NOTES, статический); находка SEC20-22 | supabase-rls-reviewer через оркестратора, 20-21: PASS-WITH-NOTES, без high | PASS по фикстуре на изолированном staging (`20-CLASS-MIGRATION-EVIDENCE.md`); строки `main` на staging не было, поведение на реальном контенте не доказано (LIMITATION) | ОЖИДАЕТ ВЛАДЕЛЬЦА |
+| `supabase/migrations/20261104000100_portia_editor_notes.sql` | Таблица `portia_editor_notes` для заметок редактора (D-41/D-47), недоступная anon | RLS включена; anon и authenticated лишены прав, затем authenticated получает select, insert и update по столбцам; три политики по `portia_can_edit_tab(tab)`; delete нет; находки SEC20-18..SEC20-21 | supabase-rls-reviewer через оркестратора, 20-24: PASS-WITH-NOTES, без high; LOW-1..3 и MEDIUM-4 приняты владельцем без исправлений | BLOCKED (OWNER): применение на staging не разрешено, живой RLS не проверен (`20-EDITOR-NOTES-EVIDENCE.md`) | ОЖИДАЕТ ВЛАДЕЛЬЦА |
+
+## Охват файлов
+
+Свежесть матрицы: `git diff --name-only <проверяемый commit> HEAD -- <пути ниже>` должен быть пуст. Любое изменение этих путей после проверяемого commit требует пересмотра матрицы и нового commit в шапке. Планировочные файлы (`.planning`) и тесты в охват не входят.
+
+- `app/api`
+- `supabase/migrations`
+- `proxy.ts`
+- `next.config.ts`
+- `lib/supabase`
+- `lib/editor-access.ts`
+- `lib/editor-notes.ts`
+- `lib/editor-outline.ts`
+- `lib/portia-device-binding.ts`
+- `lib/portia-promotion-api.ts`
+- `lib/portia-promotion-reviewer.ts`
+- `lib/image-upload.ts`
+- `app/owner-login/actions.ts`
+
+## Изменения вне планов после f25b885
+
+Коммиты, сделанные вне планов Phase 20 (quick-задачи и правки владельца), которые затрагивают безопасность или поверхность данных. Каждый разобран по diff.
+
+| Коммит | Файлы | Значимость для безопасности | Вывод |
+|---|---|---|---|
+| `97d7abb` | `app/api/promotion/banks/route.ts` (удалены проверки `taskBankLimitError`/`qualificationBankLimitError` при `save-task-bank` и `save-qualification-bank`), интерфейс проверяющего, CSS | Сохранение количества и квот больше не требует достаточного пула (намеренно, quick 261104-lkn); STAB-PROM-05 «недостаточный банк блокирует подтверждение» мог ослабнуть | Обхода нет: превью из недостаточного пула даёт 409, подтверждение требует токен текущей версии банка и только активные элементы, SQL сверяет число элементов; шесть тестов «97d7abb» в `lib/portia-promotion-reviewer.test.ts`; SEC20-23 |
+| `2f54ba9` | `components/portia-promotion-editor-main.tsx` | Клиент игнорирует устаревшие опросы очереди во время команд проверяющего; серверных путей, прав и данных не меняет | Значимости для безопасности нет |
+| `23c1c85` | `components/portia-desktop.tsx`, `components/portia-desktop-dossier.tsx`, редакторы Promotion, CSS | Предзагрузка GIF помощника (`new Image()`, до 32 внешних GIF при загрузке страницы, `referrerPolicy = "no-referrer"`) | Серверной поверхности нет; утечка IP посетителя сторонним хостам при загрузке — SEC20-24 |
+| `7e5e17a` | `components/portia-desktop.tsx` | Держит ссылку на предзагружаемое изображение до завершения (`assistantMediaInFlight`), чтобы загрузка не прерывалась | Поведение SEC20-24 не меняет |
+
 ## Находки
 
 Severity контекстная для приложения; где npm ставит ярлык, он сохранён без понижения. Статусы: `fixed`, `release-ledger` (medium по D-09: в релизный отчёт без отдельного waiver), `recorded` (low/info: зафиксировано, правка вне объёма), `reassessed`, `blocker` (high по D-12). Статус `open` недопустим.
@@ -67,6 +108,14 @@ Severity контекстная для приложения; где npm став
 | SEC20-15 | low | uploads | `app/api/uploads/route.ts:25` | После 20-17 отказ 503/403/413 приходит до `request.formData()` при объявленном `Content-Length`. Запрос без `Content-Length` (chunked) по-прежнему буферизуется до платформенного лимита, затем действует проверка `file.size`; отдельного rate limit нет; вызывать маршрут может только авторизованный редактор с открытой вкладкой | recorded | Остаточный риск WR-03/SEC-L1; подтверждено чистой функцией `uploadGate` и порядком в исходнике, живой сбой auth на staging не воспроизводился | Phase 20 (release notes 20-15) |
 | SEC20-16 | medium | api | `app/api/promotion/test/route.ts:56` | Начальный режим теста (desktop/phone) определяется по заголовкам запроса (`conservativeQualificationClientMode`) и поэтому подделываем; после старта режим фиксируется сервером. Подмена режима на телефоне ослабляет проверку «потеря фокуса проваливает попытку» для ПК. Подтверждение: чтение кода и SQL (`portia_promo_start_test`) | release-ledger | Принятый риск STAB-PROM-08/STAB-SEC-06; в release notes формулировать как подделываемый, без обещания защиты | Qloxz (принято в требовании) |
 | SEC20-17 | medium | auth | `lib/portia-device-binding.ts:25` | Привязка устройства — это httpOnly-cookie с токеном (хэш с серверным секретом) плюс грубые бакеты IP/UA. Это не аппаратная аттестация: очистка cookie, другой браузер или VPN дают новое устройство, а повторная привязка того же ника блокируется до сброса владельцем. Подтверждение: чтение кода | release-ledger | Принятый риск STAB-SEC-06: release notes не обещают аппаратной идентификации и устойчивости к подмене/VPN/очистке cookie | Qloxz (принято в требовании) |
+| SEC20-18 | medium | rls | `supabase/migrations/20261104000100_portia_editor_notes.sql:18` | Миграция заметок (20-24) создаёт таблицу через `create table if not exists` и политики через `drop policy if exists` только для трёх своих имён. Если `public.portia_editor_notes` уже существует другой формы (чужие столбцы, без `check`, без RLS) или на ней есть политики с другими именами, `if not exists` пропустит создание, а чужие политики останутся и могут открыть заметки (в том числе anon). Подтверждение: статическое чтение SQL и вердикт supabase-rls-reviewer (MEDIUM-4, PASS-WITH-NOTES, 20-24); на реальном Postgres не выполнялось (BLOCKED (OWNER)) | release-ledger | Принято владельцем без исправления. Закрытие: сброс политик таблицы и проверка формы перед созданием (`20-24-SUMMARY.md`, раздел «Deferred by the owner»). Перед production-применением владелец проверяет, что таблицы нет или она принадлежит этой миграции | Qloxz (применение и проверка формы таблицы) |
+| SEC20-19 | low | rls | `supabase/migrations/20261104000100_portia_editor_notes.sql:44` | Политики insert и update допускают `updated_by is null or updated_by = auth.uid()`: редактор с открытой вкладкой может записать строку без автора (LOW-1). Подтверждение: чтение SQL; маршрут `/api/content/notes` всегда пишет `updated_by: user.id` (`app/api/content/notes/route.ts:68`) | recorded | Принято владельцем; триггер для `updated_by`/`updated_at`/`revision` отложен (`20-24-SUMMARY.md`) | Phase 20 (release notes 20-15) |
+| SEC20-20 | low | api | `app/api/content/notes/route.ts:48` | Лимиты маршрута (размер, форма `notes`, `notesPutRefusal`) не действуют при прямом обращении к PostgREST со своим JWT: редактор с открытой вкладкой может записать в свою вкладку любой объект `notes` до предела `jsonb` и `revision`, минуя проверки маршрута (LOW-2). Доступ к чужим вкладкам закрыт политиками `portia_can_edit_tab(tab)`. Подтверждение: чтение SQL и маршрута | recorded | Принято владельцем; `pg_column_size` и ограничение формы в SQL отложены (`20-24-SUMMARY.md`) | Phase 20 (release notes 20-15) |
+| SEC20-21 | low | api | `app/api/content/notes/route.ts:68` | `revision: baseRevision + 1` берёт `baseRevision` из тела без верхнего предела; прямой PostgREST-вызов может поднять `revision` до предела `integer`; тогда следующее сохранение через маршрут (`baseRevision + 1`) получает ошибку переполнения, и заметки этой вкладки нельзя сохранить до ручной правки строки (LOW-3). Подтверждение: чтение кода и SQL | recorded | Принято владельцем; предел `revision` отложен (`20-24-SUMMARY.md`) | Phase 20 (release notes 20-15) |
+| SEC20-22 | low | rls | `supabase/migrations/20261104000000_portia_rename_virus_classes.sql:1` | Миграция классов переписывает только значения, равные одному из девяти старых названий точно. Варианты с U+0301 (комбинируемое ударение), NBSP или лишними пробелами не переписываются; чтение (D-36(а), `normalizePortiaContent`) нормализует их, поэтому сайт не ломается, но в `portia_content` остаются старые значения. На staging строки `main` не было, поэтому проверка на реальном контенте вакуозна. Подтверждение: `20-CLASS-MIGRATION-EVIDENCE.md`, вердикт supabase-rls-reviewer (LOW-2, PASS-WITH-NOTES) | recorded | Принято (LOW-2), не исправлялось; production — ОЖИДАЕТ ВЛАДЕЛЬЦА | Qloxz (применение на production) |
+| SEC20-23 | info | api | `app/api/promotion/banks/route.ts:101` | Коммит 97d7abb (quick 261104-lkn) убрал 409 `insufficient-pool` при сохранении количества и квот: банк можно настроить до наполнения пула (намерение владельца). Обхода STAB-PROM-05 нет: превью из недостаточного пула даёт 409 «Недостаточно активных элементов.»; подтверждение требует токен текущей версии банка (HMAC, `bank.version`) и только активные элементы; SQL `portia_promo_confirm_assignment` и `portia_promo_confirm_test` сравнивают число элементов с `required_count` или суммой квот и версию банка; каждое сохранение банка и элемента меняет `updated_at`, то есть версию; устаревшие перегрузки confirm удалены в `20261101000200`. Шесть тестов «97d7abb» (`lib/portia-promotion-reviewer.test.ts`); чтение SQL статическое | recorded | Изменение намеренное, обхода нет, код маршрута не менялся. Живое подтверждение с недостаточным банком на staging — BLOCKED (ENV). Замечание вне 97d7abb: проверяющий с вкладкой promo может вызвать RPC подтверждения напрямую без маршрута (проверки числа и версии остаются в SQL, дубли id по статическому чтению SQL явно отсекает только маршрут) | Phase 20 (release notes 20-15) |
+| SEC20-24 | low | csp | `components/portia-desktop.tsx:346` | Предзагрузка GIF помощника (23c1c85, 7e5e17a): при загрузке страницы `new Image()` запрашивает до 32 внешних GIF из фраз помощника, даже если ассистент не показан; сторонние хосты получают IP и User-Agent посетителя. `img-src https:` (D-06) это разрешает, `referrerPolicy = "no-referrer"` убирает адрес страницы из запроса. Серверной поверхности и секретов нет. Связь с STAB-MEDIA-03 «нет initial request storm»: проверка не доказана этой матрицей — прогон 20-25 гипотезу о влиянии предзагрузки на PW-07 отверг без исправления кода, живая проверка числа запросов за страницу — BLOCKED (ENV) | recorded | Принятое поведение (медиа задаёт редактор); в release notes сформулировать как загрузку внешних картинок при открытии сайта | Phase 20 (release notes 20-15) |
+| SEC20-25 | info | api | `lib/editor-changes.ts:21` | Новые ключи разделов `broadcastSections` и `searchRecommendationSections` (T-20-31): `sectionOfKey` относит их к «Сводка» (`broadcasts`) и «Рекомендации» (`search`), поэтому редактор без этой вкладки не может их изменить. Подтверждение: `lib/editor-outline.test.ts` (`D-41 the new keys belong to the Сводка and Рекомендации tabs`, `D-41 a restricted editor without «Рекомендации» cannot change searchRecommendationSections`, `D-41 a restricted editor without «Сводка» cannot change broadcastSections`) и `lib/editor-changes.test.ts` (каждый ключ контента принадлежит разделу) | recorded | PASS-local по тестам; живая проверка `PUT /api/content` с закрытой вкладкой на staging — BLOCKED (ENV) | Phase 20 (release notes 20-15) |
 
 ## Релизный реестр (D-09)
 
@@ -83,6 +132,7 @@ Medium-находки и принятые риски для `20-RELEASE-NOTES.md
 | SEC20-13 | 16 dev-находок moderate в цепочке ESLint, production audit чист. |
 | SEC20-16 | Начальный режим теста подделываем. |
 | SEC20-17 | Привязка устройства не является аппаратной аттестацией. |
+| SEC20-18 | Таблица заметок редактора: если на production уже есть таблица другой формы или чужие политики, миграция их не исправит; принято владельцем без исправления, применение миграции за владельцем. |
 
 ## Блокеры релиза (D-12)
 
@@ -96,6 +146,9 @@ Medium-находки и принятые риски для `20-RELEASE-NOTES.md
 
 - BLOCKED: выполнение RPC, политик и grants под реальным Postgres в этом плане. Используются только receipts Phase 16 и статическое чтение.
 - BLOCKED(DATA): статус-тело участника для реального ника ростера и попытка квалификации на staging (20-09).
+- BLOCKED (OWNER/ENV): живой RLS таблицы заметок (`portia_editor_notes`): миграция не применена ни на staging, ни на production; применение на production — ОЖИДАЕТ ВЛАДЕЛЬЦА (как и миграции классов `20261104000000` и заметок `20261104000100`).
+- BLOCKED (ENV): staging-подтверждение набора с недостаточным банком (97d7abb); доказано только кодом, тестами и статическим чтением SQL.
+- LIMITATION: миграция классов проверена на staging по фикстуре, строки `main` на staging не было.
 - BLOCKED: роль reviewer на staging, физические PC (включая DPR 1.25) и телефон, перевод CSP в enforcement.
 - LIMITATION: опубликованный HTTPS (HSTS, `upgrade-insecure-requests`) по D-14.
 - Нет эксплуатации, фаззинга, нагрузочных и rate-limit проверок. Сторонний код (Next, Supabase SDK) проверен только через `npm audit`.

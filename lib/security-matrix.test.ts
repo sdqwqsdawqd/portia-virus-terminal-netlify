@@ -256,6 +256,127 @@ test("route coverage fixture: a row for a route that does not exist, a duplicate
   assert.deepEqual(routeCoverageProblems("", fixtureRoutes), ["route coverage table is empty or missing"]);
 });
 
+/* ------------------------------------------------------------------ migration coverage and matrix freshness (20-26) */
+
+const migrationsHeading = "Миграции (охват)";
+
+/** Compare the "Миграции (охват)" table with the tracked supabase/migrations files; an empty list means full coverage. */
+export function migrationCoverageProblems(markdown: string, trackedMigrations: string[]): string[] {
+  const rows = tableRows(section(markdown, migrationsHeading)).map((cells) => unwrap(cells[0]));
+  if (rows.length === 0) return ["migration coverage table is empty or missing"];
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (seen.has(row)) problems.push(`duplicate migration row: ${row}`);
+    seen.add(row);
+    if (!trackedMigrations.includes(row)) problems.push(`unknown migration row: ${row}`);
+  }
+  for (const migration of trackedMigrations) if (!seen.has(migration)) problems.push(`missing migration row: ${migration}`);
+  return problems;
+}
+
+const trackedMigrations = () => gitLines(["ls-files", "supabase/migrations"]).filter((path) => path.endsWith(".sql"));
+
+const migrationFixture = [
+  "## Миграции (охват)", "| Миграция | Назначение |", "|---|---|",
+  "| `supabase/migrations/1_a.sql` | a |", "| `supabase/migrations/2_b.sql` | b |", "",
+].join("\n");
+const fixtureMigrations = ["supabase/migrations/1_a.sql", "supabase/migrations/2_b.sql"];
+
+test("migration coverage: the real matrix has exactly one row per tracked supabase migration", () => {
+  const migrations = trackedMigrations();
+  assert.ok(migrations.length >= 5, `expected at least 5 tracked migrations, git lists ${migrations.length}`);
+  assert.deepEqual(migrationCoverageProblems(matrixText(), migrations), []);
+});
+
+test("migration coverage: the two 20261104 migrations are not recorded as applied on production by the agent", () => {
+  const rows = tableRows(section(matrixText(), migrationsHeading));
+  for (const name of ["20261104000000_portia_rename_virus_classes.sql", "20261104000100_portia_editor_notes.sql"]) {
+    const cells = rows.find((cells) => cells[0].includes(name));
+    assert.ok(cells, name);
+    assert.match(cells[5], /ОЖИДАЕТ ВЛАДЕЛЬЦА/, `${name}: production column`);
+    assert.ok(!/\bPASS\b/.test(cells[5]), `${name}: production is never an agent PASS`);
+  }
+});
+
+test("migration coverage fixture: a complete table is accepted, a missing, unknown or duplicated row is rejected", () => {
+  assert.deepEqual(migrationCoverageProblems(migrationFixture, fixtureMigrations), []);
+  const rowB = "| `supabase/migrations/2_b.sql` | b |";
+  assert.deepEqual(migrationCoverageProblems(migrationFixture.replace(`${rowB}\n`, ""), fixtureMigrations), ["missing migration row: supabase/migrations/2_b.sql"]);
+  assert.deepEqual(migrationCoverageProblems(migrationFixture.replace(rowB, `${rowB}\n| \`supabase/migrations/3_c.sql\` | c |`), fixtureMigrations), ["unknown migration row: supabase/migrations/3_c.sql"]);
+  assert.deepEqual(migrationCoverageProblems(migrationFixture.replace(rowB, `${rowB}\n${rowB}`), fixtureMigrations), ["duplicate migration row: supabase/migrations/2_b.sql"]);
+  assert.deepEqual(migrationCoverageProblems("", fixtureMigrations), ["migration coverage table is empty or missing"]);
+});
+
+type FreshnessDeps = {
+  commitExists: (sha: string) => boolean;
+  isAncestor: (sha: string) => boolean;
+  changedSince: (commit: string, paths: string[]) => string[];
+};
+
+/** Paths listed as backticked bullets in "Охват файлов". */
+function coveredPaths(markdown: string) {
+  return section(markdown, "Охват файлов").split("\n").map((line) => /^-\s+`([^`]+)`/.exec(line.trim())?.[1]).filter((path): path is string => Boolean(path));
+}
+
+/** The matrix must describe HEAD: its commit exists, is an ancestor of HEAD, and no covered file changed after it. */
+export function matrixFreshnessProblems(markdown: string, deps: FreshnessDeps): string[] {
+  const header = markdown.split("\n").slice(0, 8).join("\n");
+  const commit = /Проверяемый commit:\s*`([0-9a-f]{40})`/.exec(header)?.[1];
+  if (!commit) return ["matrix header has no 40-hex «Проверяемый commit»"];
+  const paths = coveredPaths(markdown);
+  if (paths.length === 0) return ["«Охват файлов» is empty or missing"];
+  if (!deps.commitExists(commit)) return [`stale matrix: commit ${commit} does not exist`];
+  if (!deps.isAncestor(commit)) return [`stale matrix: commit ${commit} is not an ancestor of HEAD`];
+  return deps.changedSince(commit, paths).map((file) => `stale matrix: ${file} changed since ${commit}`);
+}
+
+const realFreshnessDeps: FreshnessDeps = {
+  commitExists: (sha) => spawnSync("git", ["cat-file", "-e", `${sha}^{commit}`], { cwd: root }).status === 0,
+  isAncestor: (sha) => {
+    const result = spawnSync("git", ["merge-base", "--is-ancestor", sha, "HEAD"], { cwd: root, encoding: "utf8" });
+    if (result.error || (result.status !== 0 && result.status !== 1)) throw new Error(`git merge-base failed: ${result.error?.message ?? result.stderr}`);
+    return result.status === 0;
+  },
+  changedSince: (commit, paths) => gitLines(["diff", "--name-only", commit, "HEAD", "--", ...paths]),
+};
+
+const freshCommit = "c".repeat(40);
+const freshnessFixture = [
+  "# 20 — Security matrix", "", `Дата: 2026-11-04. Проверяемый commit: \`${freshCommit}\` (HEAD).`, "",
+  "## Охват файлов", "", "- `app/api`", "- `proxy.ts`", "", "## Находки", "",
+].join("\n");
+const freshDeps = (over: Partial<FreshnessDeps> = {}): FreshnessDeps => ({ commitExists: () => true, isAncestor: () => true, changedSince: () => [], ...over });
+
+test("matrix freshness: the real matrix commit is an ancestor of HEAD and no covered file changed after it", () => {
+  assert.deepEqual(matrixFreshnessProblems(matrixText(), realFreshnessDeps), []);
+  const paths = coveredPaths(matrixText());
+  assert.ok(paths.length >= 12, `expected the covered paths, found ${paths.length}`);
+  for (const path of paths) assert.ok(existsSync(new URL(`../${path}`, import.meta.url)), `covered path does not exist: ${path}`);
+});
+
+test("matrix freshness: git failing is an error, not a fresh matrix", () => {
+  assert.throws(() => realFreshnessDeps.changedSince("not-a-commit", ["app/api"]), /failed/);
+});
+
+test("matrix freshness fixture: a current matrix is accepted", () => {
+  assert.deepEqual(matrixFreshnessProblems(freshnessFixture, freshDeps()), []);
+});
+
+test("matrix freshness fixture: a covered file changed after the verified commit is a stale matrix", () => {
+  const seen: string[][] = [];
+  const problems = matrixFreshnessProblems(freshnessFixture, freshDeps({ changedSince: (_commit, paths) => { seen.push(paths); return ["app/api/promotion/banks/route.ts"]; } }));
+  assert.deepEqual(problems, [`stale matrix: app/api/promotion/banks/route.ts changed since ${freshCommit}`]);
+  assert.deepEqual(seen, [["app/api", "proxy.ts"]]);
+});
+
+test("matrix freshness fixture: a commit that is not an ancestor, does not exist, is missing or has no coverage list is rejected", () => {
+  assert.deepEqual(matrixFreshnessProblems(freshnessFixture, freshDeps({ isAncestor: () => false })), [`stale matrix: commit ${freshCommit} is not an ancestor of HEAD`]);
+  assert.deepEqual(matrixFreshnessProblems(freshnessFixture, freshDeps({ commitExists: () => false })), [`stale matrix: commit ${freshCommit} does not exist`]);
+  assert.deepEqual(matrixFreshnessProblems(freshnessFixture.replace(freshCommit, "f25b885"), freshDeps()), ["matrix header has no 40-hex «Проверяемый commit»"]);
+  assert.deepEqual(matrixFreshnessProblems(freshnessFixture.replace(/## Охват файлов[\s\S]*## Находки/, "## Находки"), freshDeps()), ["«Охват файлов» is empty or missing"]);
+});
+
 /* ------------------------------------------------------------------ dependency audit evidence (Task 2) */
 
 const COMMIT = "a".repeat(40);
