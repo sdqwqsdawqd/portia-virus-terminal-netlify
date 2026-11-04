@@ -79,7 +79,8 @@ const fieldLabels: Record<string, string> = {
   content: "Содержимое", caption: "Подпись", label: "Метка", key: "Признак", value: "Значение", url: "Ссылка", cover: "Обложка", photo: "Фото",
   conditions: "Условия", startsAt: "Начало", endsAt: "Конец", type: "Тип", location: "Расположение", kind: "Вид", image: "Изображение", infectedImage: "Изображение заражённого",
   danger: "Опасность", spread: "Распространение", transmission: "Передача", escapeRisk: "Риск побега", mind: "Разум", appearance: "Внешний вид", behavior: "Поведение",
-  searchRecommendations: "Рекомендация", assistantAdvice: "Совет", assistantOffendedPhrase: "Фраза обиды", assistantOffendedPhrases: "Фраза обиды",
+  searchRecommendations: "Рекомендация", items: "Рекомендация", sectionId: "Раздел сводки", broadcastSections: "Раздел сводки",
+  searchRecommendationSections: "Раздел рекомендаций", subsections: "Подраздел", assistantAdvice: "Совет", assistantOffendedPhrase: "Фраза обиды", assistantOffendedPhrases: "Фраза обиды",
   assistantIdlePhrases: "Фраза бездействия", assistantActivityPhrases: "Фраза активности", assistantPatienceSeconds: "Терпение, секунд",
 };
 

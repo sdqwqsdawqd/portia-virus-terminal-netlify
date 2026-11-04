@@ -1,10 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   addBroadcastSection,
   addBroadcastSubsection,
   addRecommendationSection,
   addRecommendationSubsection,
+  broadcastGroupIds,
+  broadcastGroupPath,
   broadcastGroupsView,
   flattenRecommendationSections,
   moveBroadcastSection,
@@ -14,8 +17,10 @@ import {
   moveRecommendationSubsection,
   normalizeOutlineSections,
   normalizeRecommendationSections,
+  recommendationGroupIds,
   recommendationGroupText,
   recommendationView,
+  renameRecommendationGroup,
   removeBroadcastOutlineGroup,
   removeRecommendationGroup,
   setBroadcastSection,
@@ -387,4 +392,60 @@ test("D-41 a restricted editor without «Сводка» cannot change broadcastS
   incoming.broadcastSections = [{ id: "s1", title: "A", subsections: [] }];
   const open = editorSections.filter((section) => section !== "broadcasts");
   assert.deepEqual(contentRefusal(baseline, incoming, open), { status: 403, error: "Раздел «Сводка» для вас закрыт.", code: "section-closed", sections: ["broadcasts"] });
+});
+
+// ---- helpers of the editor UI ----
+
+test("D-41 renaming a group of the synthetic section writes real sections and keeps the formatting", () => {
+  const content = oldFormat();
+  renameRecommendationGroup(content, "search-recommendations-all", "Поиск");
+  assert.equal(content.searchRecommendationSections?.[0].title, "Поиск");
+  assert.deepEqual(content.searchRecommendations, ["r1", "r2", "r3"]);
+  assert.deepEqual(styleOfLine(content, "r2"), RED);
+});
+
+test("D-41 renaming an unknown group or to the same title changes nothing", () => {
+  const content = oldFormat();
+  renameRecommendationGroup(content, "ghost", "x");
+  renameRecommendationGroup(content, "search-recommendations-all", "Рекомендации");
+  assert.equal(content.searchRecommendationSections?.length ?? 0, 0);
+});
+
+test("D-41 recommendationGroupIds lists sections and subsections in order, the synthetic section too", () => {
+  assert.deepEqual(recommendationGroupIds(oldFormat()), ["search-recommendations-all"]);
+  assert.deepEqual(recommendationGroupIds(withGroups()), ["search-recommendations-all", "s-classes", "sub-mind"]);
+  const empty = base();
+  empty.searchRecommendations = [];
+  assert.deepEqual(recommendationGroupIds(empty), []);
+});
+
+test("D-41 broadcastGroupIds and broadcastGroupPath name the cards that hold a group", () => {
+  const content = broadcastFixture();
+  assert.deepEqual(broadcastGroupIds(content).sort(), ["s1", "s2", "sub1"]);
+  assert.deepEqual(broadcastGroupPath(content, "s2"), ["s2"]);
+  assert.deepEqual(broadcastGroupPath(content, "sub1"), ["s1", "sub1"]);
+  assert.deepEqual(broadcastGroupPath(content, ""), []);
+  assert.deepEqual(broadcastGroupPath(content, "ghost"), []);
+});
+
+// ---- source guards (the public windows stay as they were) ----
+
+const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+
+test("D-41 all three section tabs of the editor share the pinned add-section bar, and the public windows do not know the new keys", () => {
+  const editor = source("../components/portia-editor.tsx");
+  assert.ok((editor.match(/<SectionAddBar/g) ?? []).length >= 3, "Справочник, Рекомендации and Сводка each have the bar");
+  assert.match(editor, /writeRecommendationGroup\(/);
+  assert.match(editor, /trimRecommendationSections\(/);
+  assert.match(editor, /broadcastGroupsView\(/);
+  assert.match(editor, /setBroadcastSection\(/);
+  const desktop = source("../components/portia-desktop.tsx");
+  for (const name of ["broadcastSections", "searchRecommendationSections", "sectionId"]) assert.ok(!desktop.includes(name), `${name} stays out of the public desktop`);
+});
+
+test("D-47 the section types carry no note field", () => {
+  const types = source("./portia-content.ts");
+  const outline = source("./editor-outline.ts");
+  assert.doesNotMatch(types, /note\??:/);
+  assert.doesNotMatch(outline, /note\??:/);
 });

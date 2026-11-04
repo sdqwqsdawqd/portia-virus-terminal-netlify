@@ -190,6 +190,19 @@ export function writeRecommendationGroup(content: PortiaContent, groupId: string
   commitTree(content, tree);
 }
 
+/** Every group id the tab can show, synthetic section included: the notes of any other id are stale. */
+export function recommendationGroupIds(content: PortiaContent): string[] {
+  return recommendationView(content).sections.flatMap((section) => [section.id, ...section.subsections.map((sub) => sub.id)]);
+}
+
+export function renameRecommendationGroup(content: PortiaContent, groupId: string, title: string): void {
+  const tree = buildTree(content);
+  const group = findGroup(tree, groupId);
+  if (!group || group.title === title) return;
+  group.title = title;
+  commitTree(content, tree);
+}
+
 export function addRecommendationSection(content: PortiaContent, id: string, title: string): void {
   const tree = buildTree(content);
   if (tree.length >= MAX_SUBSECTIONS || findGroup(tree, id)) return;
@@ -263,6 +276,20 @@ export function broadcastGroupsView(content: PortiaContent, tab: BroadcastTab): 
     }
   }
   return groups;
+}
+
+/** Every section and subsection id of «Сводка»: the notes of any other id are stale. */
+export function broadcastGroupIds(content: PortiaContent): string[] {
+  return [...knownBroadcastGroups(content)];
+}
+
+/** The cards to open so a group is visible: [section] for a section, [section, subsection] for a subsection, [] for «Без раздела» or an unknown id. */
+export function broadcastGroupPath(content: PortiaContent, groupId: string): string[] {
+  for (const section of content.broadcastSections ?? []) {
+    if (section.id === groupId) return [section.id];
+    if (section.subsections.some((sub) => sub.id === groupId)) return [section.id, groupId];
+  }
+  return [];
 }
 
 export function addBroadcastSection(content: PortiaContent, id: string, title: string): void {

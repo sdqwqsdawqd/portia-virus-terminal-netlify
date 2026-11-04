@@ -7,6 +7,30 @@ import { draftEdits, employeeRequestFailure, partialSave, rebaseDecision, SaveCo
 import { closedMessage, closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { columnMajor } from "@/lib/editor-columns";
+import {
+  addBroadcastSection,
+  addBroadcastSubsection,
+  addRecommendationSection,
+  addRecommendationSubsection,
+  broadcastGroupIds,
+  broadcastGroupPath,
+  broadcastGroupsView,
+  moveBroadcastSection,
+  moveBroadcastSubsection,
+  moveRecommendationLine,
+  moveRecommendationSection,
+  moveRecommendationSubsection,
+  recommendationGroupIds,
+  recommendationGroupText,
+  recommendationView,
+  removeBroadcastOutlineGroup,
+  removeRecommendationGroup,
+  renameRecommendationGroup,
+  setBroadcastSection,
+  trimRecommendationSections,
+  writeRecommendationGroup,
+  type BroadcastGroup,
+} from "@/lib/editor-outline";
 import { MAX_NOTE_LENGTH, NOTES_TABS, changedNotesTabs, normalizeNotesMap, pruneNotes, rebaseNotes, type NotesByTab, type NotesMap, type NotesTab } from "@/lib/editor-notes";
 import { uploadRefusal } from "@/lib/image-upload";
 import { dropFields, mergeFragments, removeFragmentAt } from "@/lib/format-fragments";
@@ -104,6 +128,9 @@ function editKeyFor(element: Element | null): string | null {
   return `field:${id}`;
 }
 
+// Read only when an edit is dispatched. A module function, so the render-purity lint does not follow changeDraft into the render helpers that only hold it in handlers.
+const timestamp = () => Date.now();
+
 function moveArrayItem<T>(items: T[], from: number, to: number) {
   if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) return;
   const [item] = items.splice(from, 1);
@@ -140,22 +167,6 @@ function recycleKeys(content: PortiaContent) {
     ...content.recycleFiles.map((file) => `file:${file.id}`),
     ...(content.recycledViruses ?? []).map((virus) => `virus:${virus.id}`),
   ])];
-}
-
-function reorderRichTextLines(text: string, document: RichTextDocument | undefined, from: number, to: number) {
-  const sourceStyles = (document?.runs ?? []).flatMap((run) => Array.from({ length: run.text.length }, () => run.style ?? {}));
-  while (sourceStyles.length < text.length) sourceStyles.push({});
-  const lines = text.split("\n");
-  let offset = 0;
-  const parts = lines.map((line) => {
-    const part = { text: line, styles: sourceStyles.slice(offset, offset + line.length) };
-    offset += line.length + 1;
-    return part;
-  });
-  moveArrayItem(parts, from, to);
-  const nextText = parts.map((part) => part.text).join("\n");
-  const nextStyles = parts.flatMap((part, index) => index < parts.length - 1 ? [...part.styles, {}] : part.styles);
-  return { text: nextText, document: compactRuns(nextText, nextStyles) };
 }
 
 // Two table columns swap, so a header ≡ is dropped on the other header (or moved with ArrowLeft/ArrowRight) instead of sorting live.
@@ -311,7 +322,10 @@ async function fetchNotes(signal?: AbortSignal): Promise<NotesAnswer> {
 
 // The sections and cards a tab's notes may still refer to; null means the tab keeps every key it has.
 function liveNoteIds(tab: NotesTab, content: PortiaContent): string[] | null {
-  return tab === "guide" ? content.guideSections.map((section) => section.id) : null;
+  if (tab === "guide") return content.guideSections.map((section) => section.id);
+  if (tab === "broadcasts") return broadcastGroupIds(content);
+  if (tab === "search") return recommendationGroupIds(content);
+  return null;
 }
 
 // The draft as the server will store it (trimmed, empty notes dropped), so a trailing space is not an unsaved change.
@@ -331,7 +345,7 @@ function EditorNoteField({ value, status, onChange }: { value: string; status: N
 }
 
 // D-41: the add-section button stays at the top of the tab and opens a small form for the title and the editor note.
-function SectionAddBar({ status, onCreate }: { status: NotesStatus; onCreate: (title: string, note: string) => void }) {
+function SectionAddBar({ status, onCreate, children }: { status: NotesStatus; onCreate: (title: string, note: string) => void; children?: ReactNode }) {
   const formId = useId();
   const hintId = useId();
   const [open, setOpen] = useState(false);
@@ -349,7 +363,10 @@ function SectionAddBar({ status, onCreate }: { status: NotesStatus; onCreate: (t
   };
   return (
     <div className="editor-section-addbar">
-      <button ref={opener} type="button" className="secondary-control" aria-expanded={open} aria-controls={formId} onClick={() => (open ? close(true) : setOpen(true))}>+ ДОБАВИТЬ РАЗДЕЛ</button>
+      <div className="editor-section-addbar-row">
+        <button ref={opener} type="button" className="secondary-control" aria-expanded={open} aria-controls={formId} onClick={() => (open ? close(true) : setOpen(true))}>+ ДОБАВИТЬ РАЗДЕЛ</button>
+        {children}
+      </div>
       <form id={formId} className="editor-section-create" hidden={!open}
         onSubmit={(event) => { event.preventDefault(); onCreate(title.trim(), off ? "" : note.trim()); close(false); }}
         onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } }}>
@@ -516,6 +533,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">("idle");
   const [uploadMessage, setUploadMessage] = useState("");
   const [dialog, setDialog] = useState<"discard" | "recycle" | "delete" | "delete-file" | null>(null);
+  // D-41: a section of «Сводка» or «Рекомендации» waiting for the delete confirmation.
+  const [pendingSectionDelete, setPendingSectionDelete] = useState<{ tab: "broadcasts" | "search"; id: string; title: string } | null>(null);
   // A request made before this mount is not replayed; the dialog shows while a newer one is unanswered.
   const [handledCloseRequest, setHandledCloseRequest] = useState(closeRequest);
   const closeAsked = closeRequest !== handledCloseRequest;
@@ -664,7 +683,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const changeDraft = (updater: (next: PortiaContent) => void) => {
     editCount.current += 1;
     setPartialResult(null);
-    dispatch({ type: "change", updater, key: batchKey.current ?? editKeyFor(document.activeElement), now: Date.now() });
+    dispatch({ type: "change", updater, key: batchKey.current ?? editKeyFor(document.activeElement), now: timestamp() });
   };
   const runBatch = (id: string, run: () => void) => {
     batchKey.current = id;
@@ -845,6 +864,23 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   };
 
   const shownBroadcasts = draft.broadcasts.filter((item) => broadcastTabOf(item.type) === broadcastEditorTab);
+  // D-41: the groups of the open «Сводка» sub-tab («Без раздела» first) and the sections of «Рекомендации» (an old flat list shows as one section).
+  const broadcastGroups = broadcastGroupsView(draft, broadcastEditorTab);
+  const broadcastSectionGroups = broadcastGroups.filter((group) => group.kind === "section");
+  const recView = recommendationView(draft);
+  const recFormatKey = (id: string) => `${portiaTextKey.searchRecommendations}:group:${id}`;
+  // An entry inside a folded section is not on screen: opening it opens the cards that hold it.
+  const openBroadcast = (id: string) => setOpen([id, ...broadcastGroupPath(draft, draft.broadcasts.find((item) => item.id === id)?.sectionId ?? "")], true);
+  const focusNewGroup = (id: string) => {
+    setOpen([id], true);
+    requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#card-${id} > .nested-editor-body input`)?.focus());
+  };
+  const notesNoticeFor = (noticeTab: NotesTab) => notesNotice?.tab === noticeTab ? (
+    <div className="editor-note-notice" role="alert">
+      <span>{notesNotice.kind === "conflict" ? notesConflictText : notesSaveFailedText}</span>
+      {notesNotice.kind === "conflict" && <button type="button" className="secondary-control" onClick={() => void reloadNotes()}>Загрузить заметки</button>}
+    </div>
+  ) : null;
 
   // D-03: every TOC ends in this one scroll. Smooth only when the house motion switch is on; scroll-margin-top keeps the card clear of the sticky TOC.
   const jumpToCard = (id: string) => requestAnimationFrame(() => document.getElementById(`card-${id}`)?.scrollIntoView({ block: "start", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" }));
@@ -883,6 +919,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
     setOpen([id], true);
   };
   const broadcastTocItems: TocItem[] = shownBroadcasts.map((broadcast) => ({ id: broadcast.id, label: broadcast.title || "БЕЗ НАЗВАНИЯ", depth: 0 }));
+  // «Развернуть всё» also opens the sections, otherwise the entries inside stay hidden.
+  const broadcastCardIds = [...broadcastGroupIds(draft), ...broadcastTocItems.map((item) => item.id)];
   // The row button and its TOC entry share these two handlers, so the TOC never duplicates selection logic.
   const openVirus = (id: string) => { setSelectedVirusId(id); showRecord(true); };
   const openRecycleEntry = (key: string) => {
@@ -920,11 +958,126 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   // Brings the editor to one card's field from anywhere (D-18, CONT-05).
   const revealCard = (id: string, field: "title" | "type" | "endsAt", cardTab: BroadcastTab) => {
     revealBroadcast.current = { id, field };
-    setOpen([id], true);
+    openBroadcast(id);
     selectBroadcastTab(cardTab);
     if (tab !== "broadcasts") showTab("broadcasts");
     // revealTick re-runs the effect when the tab and sub-tab are already right.
     setRevealTick((value) => value + 1);
+  };
+
+  // D-41: the confirmed delete of a section or subsection. «Сводка» keeps every entry (they go to «Без раздела»); «Рекомендации» drops the lines and their formatting. The notes of the removed groups go too.
+  const deleteOutlineGroup = (outlineTab: "broadcasts" | "search", id: string) => {
+    if (outlineTab === "broadcasts") {
+      const ids = [id, ...(draft.broadcastSections?.find((section) => section.id === id)?.subsections.map((subsection) => subsection.id) ?? [])];
+      changeDraft((next) => removeBroadcastOutlineGroup(next, id));
+      ids.forEach((groupId) => dropNote("broadcasts", groupId));
+    } else {
+      const section = recView.sections.find((item) => item.id === id);
+      const ids = section ? [id, ...section.subsections.map((subsection) => subsection.id)] : [id];
+      closeFormatterFor(...ids.map(recFormatKey));
+      changeDraft((next) => removeRecommendationGroup(next, id));
+      ids.forEach((groupId) => dropNote("search", groupId));
+    }
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(".editor-section-addbar-row > button")?.focus());
+  };
+  // One entry of «Сводка». Where it stands (the «Без раздела» list or a section) is only a label: the broadcasts list keeps its order.
+  const addBroadcastEntry = (groupId: string) => {
+    const id = makeId("broadcast");
+    revealBroadcast.current = { id, field: "title" };
+    setOpen([id, ...broadcastGroupPath(draft, groupId)], true);
+    setFormatTarget(null);
+    setFormatterOpen(false);
+    changeDraft((next) => {
+      addBroadcast(next, id, broadcastEditorTab === "news" ? "news" : "quest");
+      setBroadcastSection(next, id, groupId);
+    });
+  };
+  const knownBroadcastGroup = (id: string | undefined) => (id && broadcastGroupIds(draft).includes(id) ? id : "");
+  const renderBroadcastCard = (broadcast: Broadcast) => (
+    <CollapsibleCard key={broadcast.id} id={broadcast.id} label={`${broadcast.type === "news" ? "НОВОСТЬ" : broadcast.type === "quest" ? "КВЕСТ" : "ЗАДАЧА"} ${String(shownBroadcasts.indexOf(broadcast) + 1).padStart(2, "0")}`} title={broadcast.title} open={isOpen(broadcast.id)} onToggle={() => toggleCard(broadcast.id)} cardProps={{ "data-broadcast-id": broadcast.id }}
+      actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.broadcast(broadcast.id)); changeDraft((next) => removeBroadcast(next, broadcast.id)); }}>Удалить</button></div>}>
+      <Field label="Тип"><select data-broadcast-type value={broadcast.type} onChange={(event) => {
+        const type = event.target.value as Broadcast["type"];
+        changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => {
+          item.type = type;
+          // D-19: switching back does not restore it; undo restores the whole previous card.
+          if (type !== "news") item.important = false;
+        }));
+        // A card that changes category would vanish from this list, so the view follows it.
+        if (broadcastTabOf(type) !== broadcastEditorTab) {
+          revealBroadcast.current = { id: broadcast.id, field: "type" };
+          openBroadcast(broadcast.id);
+          selectBroadcastTab(broadcastTabOf(type));
+        }
+      }}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
+      <Field label="Раздел"><select data-broadcast-section value={knownBroadcastGroup(broadcast.sectionId)} onChange={(event) => {
+        const groupId = event.target.value;
+        // The card moves to another list and remounts: open the cards that hold it and bring the focus back to this field.
+        setOpen([broadcast.id, ...broadcastGroupPath(draft, groupId)], true);
+        changeDraft((next) => setBroadcastSection(next, broadcast.id, groupId));
+        requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-broadcast-id="${CSS.escape(broadcast.id)}"] [data-broadcast-section]`)?.focus());
+      }}>
+        <option value="">Без раздела</option>
+        {(draft.broadcastSections ?? []).flatMap((section) => [
+          <option key={section.id} value={section.id}>{section.title || "Без названия"}</option>,
+          ...section.subsections.map((subsection) => <option key={subsection.id} value={subsection.id}>{`— ${subsection.title || "Без названия"}`}</option>),
+        ])}
+      </select></Field>
+      <Field label="Заголовок"><input data-broadcast-title value={broadcast.title} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.title = event.target.value; }))} /></Field>
+      <FormattedTextarea area="broadcast" label="Текст" tall value={broadcast.body} document={draft.formattedText[portiaTextKey.broadcast(broadcast.id)]} formatKey={portiaTextKey.broadcast(broadcast.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.broadcast(broadcast.id), value, document, (next, text) => updateById(next.broadcasts, broadcast.id, (item) => { item.body = text; }))} />
+      {broadcast.type === "quest" && (
+        <>
+          <Field label="Дата начала"><input type="date" value={broadcast.startsAt} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.startsAt = event.target.value; }))} /></Field>
+          <Field label="Дата окончания" error={questDateError(broadcast) ? "Окончание раньше начала" : undefined} errorId={`ends-error-${broadcast.id}`}><input type="date" data-broadcast-ends aria-invalid={questDateError(broadcast) || undefined} aria-describedby={questDateError(broadcast) ? `ends-error-${broadcast.id}` : undefined} value={broadcast.endsAt} min={broadcast.startsAt || undefined} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.endsAt = event.target.value; }))} /></Field>
+          <Field label="Условия" wide><textarea value={broadcast.conditions} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.conditions = event.target.value; }))} /></Field>
+        </>
+      )}
+      <label className="publish-toggle"><input type="checkbox" checked={broadcast.published} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.published = event.target.checked; }))} /><span>Показывать посетителям</span></label>
+      {broadcast.type === "news" && <label className="publish-toggle"><input type="checkbox" checked={broadcast.important} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.important = event.target.checked; }))} /><span>Важная новость — выделить и закрепить сверху</span></label>}
+    </CollapsibleCard>
+  );
+  // Title and editor note of a section or subsection of «Сводка»; the note goes to the private store (D-47).
+  const renderBroadcastGroupFields = (group: BroadcastGroup, subsection: boolean) => (
+    <>
+      <Field label={subsection ? "Заголовок подраздела" : "Заголовок раздела"}>
+        <input maxLength={300} value={group.title} onChange={(event) => changeDraft((next) => {
+          const target = (next.broadcastSections ?? []).flatMap((section) => [section, ...section.subsections]).find((item) => item.id === group.id);
+          if (target) target.title = event.target.value;
+        })} />
+      </Field>
+      <EditorNoteField value={noteOf("broadcasts", group.id)} status={notes.status} onChange={(text) => setNote("broadcasts", group.id, text)} />
+    </>
+  );
+  const renderBroadcastGroupEntries = (group: BroadcastGroup) => (
+    <>
+      {group.broadcasts.length === 0
+        ? <div className="editor-empty compact-empty">В разделе пока нет записей этого типа.</div>
+        : <div className="broadcast-entry-list">{group.broadcasts.map(renderBroadcastCard)}</div>}
+      <button className="secondary-control" type="button" onClick={() => addBroadcastEntry(group.id)}>{broadcastEditorTab === "news" ? "+ НОВАЯ НОВОСТЬ" : "+ НОВЫЙ КВЕСТ"}</button>
+    </>
+  );
+  // A section or subsection of «Рекомендации»: title, editor note, its lines with their formatting, and the order of those lines. The flat list the site reads is rebuilt by lib/editor-outline.
+  const renderRecommendationGroup = (group: { id: string; title: string }, subsection: boolean) => {
+    const { text, document } = recommendationGroupText(draft, group.id);
+    const lines = text === "" ? [] : text.split("\n");
+    return (
+      <>
+        <Field label={subsection ? "Заголовок подраздела" : "Заголовок раздела"}>
+          <input maxLength={300} value={group.title} onChange={(event) => changeDraft((next) => renameRecommendationGroup(next, group.id, event.target.value))} />
+        </Field>
+        <EditorNoteField value={noteOf("search", group.id)} status={notes.status} onChange={(value) => setNote("search", group.id, value)} />
+        <FormattedTextarea area="search" label={subsection ? "Рекомендации подраздела — по одной на строку" : "Рекомендации раздела — по одной на строку"} tall value={text} document={document} formatKey={recFormatKey(group.id)} onActivate={activateFormatter}
+          onChange={(value, nextDocument) => changeDraft((next) => writeRecommendationGroup(next, group.id, value, nextDocument))} />
+        <div className="recommendation-order-list" aria-label={subsection ? "Порядок рекомендаций подраздела" : "Порядок рекомендаций раздела"}>
+          {lines.map((line, index) => (
+            <div className="recommendation-order-row" data-sort-index={index} key={`${line}:${lines.slice(0, index).filter((item) => item === line).length}`}>
+              <OrderDragHandle index={index} label={line || "рекомендация"} onMove={(from, to) => changeDraft((next) => moveRecommendationLine(next, group.id, from, to))} />
+              <span title={line}><small>{String(index + 1).padStart(2, "0")}</small>{line || "ПУСТАЯ СТРОКА"}</span>
+            </div>
+          ))}
+        </div>
+      </>
+    );
   };
 
   const showTab = (id: EditorTab) => {
@@ -1003,7 +1156,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
     const editsBefore = editCount.current;
     try {
       const normalized = clone(draft);
-      normalized.searchRecommendations = normalized.searchRecommendations.map((value) => value.trim()).filter(Boolean);
+      // D-41: with sections the lines are trimmed group by group and the flat list is rebuilt from them; without, as before.
+      if (!trimRecommendationSections(normalized)) normalized.searchRecommendations = normalized.searchRecommendations.map((value) => value.trim()).filter(Boolean);
       normalized.assistantAdvice = normalized.assistantAdvice.map((value) => value.trim()).filter(Boolean);
       normalized.assistantOffendedPhrases = (normalized.assistantOffendedPhrases ?? [normalized.assistantOffendedPhrase])
         .map((value) => value.trim()).filter(Boolean);
@@ -1523,7 +1677,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
 
       {tab === "broadcasts" && (
         <div className="editor-form flat-editor-form editor-card-columns">
-          <p className="editor-guidance">Публикуйте новости, еженедельные квесты и задачи. Выключенные записи сохраняются как черновики.</p>
+          <p className="editor-guidance">Публикуйте новости, еженедельные квесты и задачи. Выключенные записи сохраняются как черновики. Разделы и подразделы только группируют записи в редакторе: на сайте порядок и состав записей остаются прежними. Заметку раздела видят только редакторы с доступом к вкладке.</p>
           <nav className="editor-tabs dossier-tabs" aria-label="Разделы сводки">
             {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([id, label]) => (
               <button key={id} type="button" className={broadcastEditorTab === id ? "active" : ""} aria-pressed={broadcastEditorTab === id} onClick={() => selectBroadcastTab(id)}>
@@ -1531,46 +1685,48 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               </button>
             ))}
           </nav>
-          <EditorToc items={broadcastTocItems} onJump={(id) => { setOpen([id], true); jumpToCard(id); }} onAll={(open) => setAllOpen(broadcastTocItems.map((item) => item.id), open)} />
-          <button className="secondary-control" type="button" onClick={() => {
-            const id = makeId("broadcast");
-            revealBroadcast.current = { id, field: "title" };
-            setOpen([id], true);
-            setFormatTarget(null);
-            setFormatterOpen(false);
-            changeDraft((next) => addBroadcast(next, id, broadcastEditorTab === "news" ? "news" : "quest"));
-          }}>{broadcastEditorTab === "news" ? "+ НОВАЯ НОВОСТЬ" : "+ НОВЫЙ КВЕСТ"}</button>
-          {shownBroadcasts.length === 0 && <div className="editor-empty">{broadcastEditorTab === "news" ? "Новостей пока нет." : "Квестов и задач пока нет."}</div>}
-          {shownBroadcasts.map((broadcast, index) => (
-            <CollapsibleCard key={broadcast.id} id={broadcast.id} label={`${broadcast.type === "news" ? "НОВОСТЬ" : broadcast.type === "quest" ? "КВЕСТ" : "ЗАДАЧА"} ${String(index + 1).padStart(2, "0")}`} title={broadcast.title} open={isOpen(broadcast.id)} onToggle={() => toggleCard(broadcast.id)} cardProps={{ "data-broadcast-id": broadcast.id }}
-              actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.broadcast(broadcast.id)); changeDraft((next) => removeBroadcast(next, broadcast.id)); }}>Удалить</button></div>}>
-              <Field label="Тип"><select data-broadcast-type value={broadcast.type} onChange={(event) => {
-                const type = event.target.value as Broadcast["type"];
-                changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => {
-                  item.type = type;
-                  // D-19: switching back does not restore it; undo restores the whole previous card.
-                  if (type !== "news") item.important = false;
-                }));
-                // A card that changes category would vanish from this list, so the view follows it.
-                if (broadcastTabOf(type) !== broadcastEditorTab) {
-                  revealBroadcast.current = { id: broadcast.id, field: "type" };
-                  setOpen([broadcast.id], true);
-                  selectBroadcastTab(broadcastTabOf(type));
-                }
-              }}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
-              <Field label="Заголовок"><input data-broadcast-title value={broadcast.title} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.title = event.target.value; }))} /></Field>
-              <FormattedTextarea area="broadcast" label="Текст" tall value={broadcast.body} document={draft.formattedText[portiaTextKey.broadcast(broadcast.id)]} formatKey={portiaTextKey.broadcast(broadcast.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.broadcast(broadcast.id), value, document, (next, text) => updateById(next.broadcasts, broadcast.id, (item) => { item.body = text; }))} />
-              {broadcast.type === "quest" && (
-                <>
-                  <Field label="Дата начала"><input type="date" value={broadcast.startsAt} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.startsAt = event.target.value; }))} /></Field>
-                  <Field label="Дата окончания" error={questDateError(broadcast) ? "Окончание раньше начала" : undefined} errorId={`ends-error-${broadcast.id}`}><input type="date" data-broadcast-ends aria-invalid={questDateError(broadcast) || undefined} aria-describedby={questDateError(broadcast) ? `ends-error-${broadcast.id}` : undefined} value={broadcast.endsAt} min={broadcast.startsAt || undefined} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.endsAt = event.target.value; }))} /></Field>
-                  <Field label="Условия" wide><textarea value={broadcast.conditions} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.conditions = event.target.value; }))} /></Field>
-                </>
-              )}
-              <label className="publish-toggle"><input type="checkbox" checked={broadcast.published} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.published = event.target.checked; }))} /><span>Показывать посетителям</span></label>
-              {broadcast.type === "news" && <label className="publish-toggle"><input type="checkbox" checked={broadcast.important} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.important = event.target.checked; }))} /><span>Важная новость — выделить и закрепить сверху</span></label>}
-            </CollapsibleCard>
-          ))}
+          <SectionAddBar status={notes.status} onCreate={(title, note) => {
+            const id = makeId("bsec");
+            changeDraft((next) => addBroadcastSection(next, id, title || "НОВЫЙ РАЗДЕЛ"));
+            if (note) setNote("broadcasts", id, note);
+            focusNewGroup(id);
+          }}>
+            <button className="secondary-control" type="button" onClick={() => addBroadcastEntry("")}>{broadcastEditorTab === "news" ? "+ НОВАЯ НОВОСТЬ" : "+ НОВЫЙ КВЕСТ"}</button>
+          </SectionAddBar>
+          {notesNoticeFor("broadcasts")}
+          <EditorToc items={broadcastTocItems} onJump={(id) => { openBroadcast(id); jumpToCard(id); }} onAll={(open) => setAllOpen(broadcastCardIds, open)} />
+          {shownBroadcasts.length === 0 && broadcastSectionGroups.length === 0 && <div className="editor-empty">{broadcastEditorTab === "news" ? "Новостей пока нет." : "Квестов и задач пока нет."}</div>}
+          {broadcastSectionGroups.length > 0 && <h3 className="broadcast-group-title">Без раздела</h3>}
+          <div className="broadcast-entry-list broadcast-entry-list--loose">{broadcastGroups[0].broadcasts.map(renderBroadcastCard)}</div>
+          {broadcastSectionGroups.length > 0 && (
+            <SectionColumns items={broadcastSectionGroups} render={(group, index) => {
+              const subsections = broadcastGroups.filter((item) => item.parentId === group.id);
+              return (
+                <CollapsibleCard key={group.id} id={group.id} sortIndex={index} label={`РАЗДЕЛ ${guideNo(index)}`} title={group.title} open={isOpen(group.id)} onToggle={() => toggleCard(group.id)}
+                  handle={<OrderDragHandle index={index} label={group.title || "раздел"} itemId={group.id} onMove={(from, to) => { const refocus = keepSectionHandleFocus(group.id); changeDraft((next) => moveBroadcastSection(next, from, to)); refocus(); }} />}
+                  actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить раздел «${group.title || "Без названия"}»`} onClick={() => setPendingSectionDelete({ tab: "broadcasts", id: group.id, title: group.title })}>Удалить</button></div>}>
+                  {renderBroadcastGroupFields(group, false)}
+                  {renderBroadcastGroupEntries(group)}
+                  <div className="info-subsection-list">
+                    {subsections.map((subsection, subIndex) => (
+                      <CollapsibleCard key={subsection.id} id={subsection.id} sortIndex={subIndex} label={`ПОДРАЗДЕЛ ${guideNo(subIndex)}`} title={subsection.title} open={isOpen(subsection.id)} onToggle={() => toggleCard(subsection.id)}
+                        handle={<OrderDragHandle index={subIndex} label={subsection.title || "подраздел"} onMove={(from, to) => changeDraft((next) => moveBroadcastSubsection(next, group.id, from, to))} />}
+                        actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить подраздел «${subsection.title || "Без названия"}»`} onClick={() => setPendingSectionDelete({ tab: "broadcasts", id: subsection.id, title: subsection.title })}>Удалить</button></div>}>
+                        {renderBroadcastGroupFields(subsection, true)}
+                        {renderBroadcastGroupEntries(subsection)}
+                      </CollapsibleCard>
+                    ))}
+                  </div>
+                  <button className="secondary-control" type="button" disabled={subsections.length >= MAX_SUBSECTIONS} onClick={() => {
+                    const id = makeId("bsub");
+                    changeDraft((next) => addBroadcastSubsection(next, group.id, id, "НОВЫЙ ПОДРАЗДЕЛ"));
+                    setOpen([group.id], true);
+                    focusNewGroup(id);
+                  }}>+ ПОДРАЗДЕЛ</button>
+                </CollapsibleCard>
+              );
+            }} />
+          )}
         </div>
       )}
 
@@ -1680,17 +1836,40 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       )}
 
       {tab === "search" && (
-        <div className="editor-form flat-editor-form compact-editor">
-          <p className="editor-guidance">Каждая строка станет ненавязчивой рекомендацией под строкой глобального поиска.</p>
-          <FormattedTextarea area="search" label="Рекомендации" tall value={draft.searchRecommendations.join("\n")} document={draft.formattedText[portiaTextKey.searchRecommendations]} formatKey={portiaTextKey.searchRecommendations} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.searchRecommendations, value, document, (next, text) => { next.searchRecommendations = text.split("\n"); })} />
-          <div className="recommendation-order-list" aria-label="Порядок рекомендаций">
-            {draft.searchRecommendations.map((recommendation, index) => <div className="recommendation-order-row" data-sort-index={index} key={`${recommendation}:${draft.searchRecommendations.slice(0, index).filter((item) => item === recommendation).length}`}><OrderDragHandle index={index} label={recommendation || "рекомендация"} onMove={(from, to) => changeDraft((next) => {
-              const currentText = next.searchRecommendations.join("\n");
-              const reordered = reorderRichTextLines(currentText, next.formattedText[portiaTextKey.searchRecommendations], from, to);
-              next.searchRecommendations = reordered.text.split("\n");
-              next.formattedText[portiaTextKey.searchRecommendations] = reordered.document;
-            })} /><span title={recommendation}><small>{String(index + 1).padStart(2, "0")}</small>{recommendation || "ПУСТАЯ СТРОКА"}</span></div>)}
-          </div>
+        <div className="editor-form flat-editor-form">
+          <p className="editor-guidance">Каждая строка станет ненавязчивой рекомендацией под строкой глобального поиска. Строки лежат в разделах и подразделах, а на сайте остаются одним списком в том же порядке. Заметку раздела видят только редакторы с доступом к вкладке.</p>
+          <SectionAddBar status={notes.status} onCreate={(title, note) => {
+            const id = makeId("rec");
+            changeDraft((next) => addRecommendationSection(next, id, title || "НОВЫЙ РАЗДЕЛ"));
+            if (note) setNote("search", id, note);
+            focusNewGroup(id);
+          }} />
+          {notesNoticeFor("search")}
+          {recView.sections.length === 0 && <div className="editor-empty">Рекомендаций пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
+          {recView.sections.length > 0 && (
+            <SectionColumns items={recView.sections} render={(section, index) => (
+              <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${guideNo(index)}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
+                handle={<OrderDragHandle index={index} label={section.title || "раздел"} itemId={section.id} onMove={(from, to) => { const refocus = keepSectionHandleFocus(section.id); changeDraft((next) => moveRecommendationSection(next, from, to)); refocus(); }} />}
+                actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить раздел «${section.title || "Без названия"}» вместе с рекомендациями`} onClick={() => setPendingSectionDelete({ tab: "search", id: section.id, title: section.title })}>Удалить</button></div>}>
+                {renderRecommendationGroup(section, false)}
+                <div className="info-subsection-list">
+                  {section.subsections.map((subsection, subIndex) => (
+                    <CollapsibleCard key={subsection.id} id={subsection.id} sortIndex={subIndex} label={`ПОДРАЗДЕЛ ${guideNo(subIndex)}`} title={subsection.title} open={isOpen(subsection.id)} onToggle={() => toggleCard(subsection.id)}
+                      handle={<OrderDragHandle index={subIndex} label={subsection.title || "подраздел"} onMove={(from, to) => changeDraft((next) => moveRecommendationSubsection(next, section.id, from, to))} />}
+                      actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить подраздел «${subsection.title || "Без названия"}» вместе с рекомендациями`} onClick={() => setPendingSectionDelete({ tab: "search", id: subsection.id, title: subsection.title })}>Удалить</button></div>}>
+                      {renderRecommendationGroup(subsection, true)}
+                    </CollapsibleCard>
+                  ))}
+                </div>
+                <button className="secondary-control" type="button" disabled={section.subsections.length >= MAX_SUBSECTIONS} onClick={() => {
+                  const id = makeId("recsub");
+                  changeDraft((next) => addRecommendationSubsection(next, section.id, id, "НОВЫЙ ПОДРАЗДЕЛ"));
+                  setOpen([section.id], true);
+                  focusNewGroup(id);
+                }}>+ ПОДРАЗДЕЛ</button>
+              </CollapsibleCard>
+            )} />
+          )}
         </div>
       )}
 
@@ -1770,6 +1949,19 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
             </div>
           )}
         </div>
+      )}
+      {pendingSectionDelete && (
+        <ConfirmDialog
+          title={pendingSectionDelete.tab === "broadcasts" ? "УДАЛИТЬ РАЗДЕЛ СВОДКИ" : "УДАЛИТЬ РАЗДЕЛ РЕКОМЕНДАЦИЙ"}
+          text={pendingSectionDelete.tab === "broadcasts"
+            ? `Удалить «${pendingSectionDelete.title || "Без названия"}»? Записи раздела останутся в «Без раздела».`
+            : `Удалить «${pendingSectionDelete.title || "Без названия"}» вместе с рекомендациями и их оформлением? Правку можно отменить (Ctrl+Z) до сохранения.`}
+          actions={[
+            { label: "УДАЛИТЬ", tone: "danger", onClick: () => { const target = pendingSectionDelete; setPendingSectionDelete(null); deleteOutlineGroup(target.tab, target.id); } },
+            { label: "Не удалять", tone: "secondary", autoFocus: true, onClick: () => setPendingSectionDelete(null) },
+          ]}
+          onCancel={() => setPendingSectionDelete(null)}
+        />
       )}
       {dialog === "discard" && (
         <ConfirmDialog
