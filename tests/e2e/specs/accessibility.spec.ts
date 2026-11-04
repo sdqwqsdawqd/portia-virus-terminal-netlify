@@ -4,6 +4,7 @@ import type { Locator, Page, TestInfo } from "@playwright/test";
 import { DesktopPage } from "../pages/desktop.page";
 import { PromotionPage } from "../pages/promotion.page";
 import type { DiagnosticLedger } from "../fixtures/diagnostics";
+import { deterministicContract } from "../fixtures/determinism";
 import { expect, test } from "../fixtures/test";
 
 // Phase 20-07 (STAB-A11Y-01..04). What this file proves and what it does not:
@@ -11,6 +12,8 @@ import { expect, test } from "../fixtures/test";
 //    «BLOCKED (DATA)»; a role lane (participant, reviewer, editor, owner) is «BLOCKED (ENV)». A skip is never a pass.
 //  - The participant/template lane stubs ONE read (GET /api/promotion/status?nickname=) exactly like template-builder.spec.ts.
 //    That is a UI-contract look at the local markup, not authenticated-role or server evidence.
+//  - The qualification-window lane (marked UI-contract stub in its name) stubs the status read and POST /api/promotion/test for that one test only. It proves
+//    the client behaviour (inert, Tab trap, focus return), not the server and not a live attempt; the live run stays «BLOCKED (ENV)».
 //  - Automated checks (axe, geometry, focus order, DOM structure) do not replace a screen reader, a hardware keyboard or a
 //    physical phone. Those belong to 20-14; no physical-device verdict is claimed here.
 
@@ -398,6 +401,101 @@ test.describe("[STAB-A11Y-01] modal qualification window", () => {
     expect(source).toMatch(/qualificationLocked[\s\S]{0,1200}\.inert\s*=\s*true/u);
     expect(source).toMatch(/\.inert\s*=\s*false/u);
     expect(source).toMatch(/restore[A-Za-z]*Focus|\.focus\(\{ preventScroll/u);
+  });
+
+  test("[STAB-A11Y-01] (UI-contract stub) qualification window: the rest of the desktop is inert, Tab stays inside, focus returns after finish", async ({ page }, testInfo) => {
+    test.skip(isPhone(), `${testInfo.project.name}: PC trap; phone is UAT QUAL-LOCK-01.`);
+    // The shapes below are copies of QualificationTest (components/portia-promotion.tsx) and safeProjection (app/api/promotion/test/route.ts).
+    const attemptId = "e2e-qualification-attempt";
+    const deadlineAt = new Date(Date.parse(deterministicContract.now) + 10 * 60_000).toISOString();
+    const activeProjection = {
+      attemptId, status: "active", clientMode: "desktop", deadlineAt,
+      question: { id: "q-1", type: "single", text: "Какой вариант верный?", options: ["Первый вариант", "Второй вариант"], index: 0, total: 1 },
+    };
+    const finishedProjection = { attemptId, status: "finished", clientMode: "desktop", deadlineAt, question: null, result: "passed", percent: 100 };
+    const posts: { action: unknown }[] = [];
+    await page.route("**/api/promotion/status**", async (route) => {
+      if (new URL(route.request().url()).searchParams.has("nickname")) {
+        const body = { ...participantStatus, qualification: { eligibility: { status: "eligible", targetTitleId: null }, active: { status: "testing", targetTitleId: null, attemptId } } };
+        await route.fulfill({ status: 200, contentType: "application/json", headers: { "cache-control": "no-store" }, body: JSON.stringify(body) });
+        return;
+      }
+      await route.fallback();
+    });
+    await page.route("**/api/promotion/test", async (route) => {
+      if (route.request().method() !== "POST") { await route.fallback(); return; }
+      const action = (route.request().postDataJSON() as { action?: unknown } | null)?.action;
+      posts.push({ action });
+      const respond = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", headers: { "cache-control": "no-store" }, body: JSON.stringify(body) });
+      if (action === "start" || action === "heartbeat") await respond(activeProjection);
+      else if (action === "answer") await respond(finishedProjection);
+      else if (action === "failure") await respond({});
+      else await route.fallback();
+    });
+
+    const desktop = new DesktopPage(page);
+    const promotion = new PromotionPage(page);
+    await desktop.goto();
+    await promotion.open();
+    await promotion.nickname.fill(nickname);
+    await promotion.checkNickname.click();
+    const runner = promotion.window.locator(".promotion-qualification-runner");
+    await expect(runner).toBeVisible();
+    await expect(runner.getByRole("heading", { name: "Какой вариант верный?" })).toBeVisible();
+    await expect(runner.getByRole("radio")).toHaveCount(2);
+    await settle(page);
+
+    // (1) shortcuts and taskbar entries are inert (themselves or through an ancestor)
+    const inertReport = () => page.evaluate(() => {
+      const report = (selector: string) => {
+        const elements = Array.from(document.querySelectorAll<HTMLElement>(selector));
+        return { total: elements.length, notInert: elements.filter((element) => !element.closest("[inert]")).map((element) => element.getAttribute("data-shortcut") ?? element.getAttribute("data-taskbar-app") ?? element.tagName) };
+      };
+      return { shortcuts: report("[data-shortcut]"), taskbar: report("[data-taskbar-app]") };
+    });
+    const locked = await inertReport();
+    expect(locked.shortcuts.total, "the desktop has shortcuts to check").toBeGreaterThan(0);
+    expect(locked.taskbar.total, "the taskbar has entries to check").toBeGreaterThan(0);
+    expect(locked.shortcuts.notInert, "every desktop shortcut is inert while the check runs").toEqual([]);
+    expect(locked.taskbar.notInert, "every taskbar entry is inert while the check runs").toEqual([]);
+    expect(await promotion.window.evaluate((element) => !element.closest("[inert]")), "the qualification window itself is not inert").toBe(true);
+
+    // (2) Tab and Shift+Tab never leave the window
+    const insideWindow = () => page.evaluate(() => {
+      const element = document.activeElement;
+      return { inside: !!element && !!element.closest(".promotion-window"), where: element ? `${element.tagName}.${String(element.className).slice(0, 40)}` : "none" };
+    });
+    await runner.locator('input[type="radio"]').first().focus();
+    for (let step = 1; step <= 15; step += 1) {
+      await page.keyboard.press("Tab");
+      const state = await insideWindow();
+      expect(state.inside, `Tab #${step} stays inside the window (focus on ${state.where})`).toBe(true);
+    }
+    for (let step = 1; step <= 15; step += 1) {
+      await page.keyboard.press("Shift+Tab");
+      const state = await insideWindow();
+      expect(state.inside, `Shift+Tab #${step} stays inside the window (focus on ${state.where})`).toBe(true);
+    }
+
+    // (4) axe on the window while the check runs
+    expect(await scan(page, testInfo, "qualification-window").then(summary)).toEqual([]);
+
+    // (5) answer: the projection becomes finished, inert is lifted and the focus is back on the opener or the «Повышение» heading
+    await runner.getByRole("radio", { name: "Первый вариант" }).check();
+    await runner.getByRole("button", { name: "ОТПРАВИТЬ И ДАЛЬШЕ" }).click();
+    await expect(promotion.window.getByRole("heading", { name: "ПРОВЕРКА ПРОЙДЕНА" })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.querySelectorAll("[inert]").length), { message: "no inert attribute is left on the page after the finish" }).toBe(0);
+    const released = await inertReport();
+    expect(released.shortcuts.notInert.length, "no shortcut stays inert").toBe(released.shortcuts.total);
+    expect(released.taskbar.notInert.length, "no taskbar entry stays inert").toBe(released.taskbar.total);
+    await expect.poll(() => page.evaluate(() => {
+      const element = document.activeElement;
+      return !!element && (element.matches(".promotion-window h1") || (!!element.closest(".promotion-window") && element.matches("button")));
+    }), { message: "the focus is back on the opening button or the «Повышение» heading, not on <body>" }).toBe(true);
+
+    // (3) the trap never made the attempt fail: no failure signal was sent in the whole run
+    expect(posts.filter((entry) => entry.action === "failure"), "no POST with action failure").toEqual([]);
+    expect(posts.some((entry) => entry.action === "start") && posts.some((entry) => entry.action === "answer"), "the stub saw start and answer").toBe(true);
   });
 
   test("BLOCKED (ENV): a live qualification run (dialog trap and focus restore) needs the participant and reviewer roles", async () => {
