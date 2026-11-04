@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-01-PLAN.md
-last_updated: "2026-11-04T04:27:55.657Z"
+stopped_at: Completed PORTIA-20-08-PLAN.md
+last_updated: "2026-11-04T04:47:21.212Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: 253fa4d25f60ab520c1bc7c25d7ac593a5aa264a
+state_head: 831696af065e808e9221db4bd0a6df306c5b1e75
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 70
+  completed_plans: 71
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 2 of 24
+Plan: 3 of 24
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-04 — Phase PORTIA-20 execution started
 
@@ -108,6 +108,7 @@ Progress: [█████░░░░░] 50%
 | Phase 19 P19 | 31min | 3 tasks | 11 files |
 | Phase PORTIA-19 P20 | 17min | 3 tasks | 10 files |
 | Phase PORTIA-20 P01 | 40min | 2 tasks | 6 files |
+| Phase PORTIA-20 P08 | 50min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -174,6 +175,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 19]: 19-19: случайный PASS живого ростера не закрывает empty и desktop stale «Сотрудников» при вердикте B; STAB-DESK-08, STAB-APP-02, STAB-APP-10 Pending.
 - [Phase PORTIA-19]: 19-20: Qloxz, 2026-11-04 — «Удалить этот run и создать новый v2 (рекомендуется)»; mw0rbyf6 teardown residual 0; новый v2 mw1loqa9_c9451c80; физическая PC/phone приёмка остаётся открытой.
 - [Phase PORTIA-20]: 20-01: задание «создать шаблон» распознаётся по тексту (/шаблон/i); конструктор скрывает оболочку Повышения через hidden, а не размонтирует её
+- [Phase PORTIA-20]: 20-08: CSP candidate delivered only as Content-Security-Policy-Report-Only; enforced policy and img-src https: unchanged; enforcement blocked until D-05 PC/phone UAT
 
 ### Pending Todos
 
@@ -212,8 +214,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T04:27:55.218Z
-Stopped at: Completed PORTIA-20-01-PLAN.md
+Last session: 2026-11-04T04:47:13.735Z
+Stopped at: Completed PORTIA-20-08-PLAN.md
 Resume file: None
 
 ## Operator Next Step
