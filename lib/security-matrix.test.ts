@@ -191,6 +191,71 @@ test("fixture: a matrix that omits an area is rejected", () => {
   assert.ok(problems.some((problem) => problem.includes('area "secrets" has no coverage row')));
 });
 
+/* ------------------------------------------------------------------ route coverage (20-26) */
+
+const root = new URL("..", import.meta.url);
+
+/** Stdout lines of a git command in the repository root. A non-zero git exit throws: a failing git must never read as an empty list. */
+function gitLines(args: string[]): string[] {
+  const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  if (result.error || result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.error?.message ?? result.stderr}`);
+  return result.stdout.split("\n").map((line) => line.trim().replace(/\\/g, "/")).filter(Boolean);
+}
+
+const routesHeading = "Маршруты API (охват)";
+const unwrap = (cell: string) => cell.replace(/`/g, "").trim();
+
+/** Compare the "Маршруты API (охват)" table with the tracked route files; an empty list means full coverage. */
+export function routeCoverageProblems(markdown: string, trackedRoutes: string[]): string[] {
+  const rows = tableRows(section(markdown, routesHeading)).map((cells) => unwrap(cells[0]));
+  if (rows.length === 0) return ["route coverage table is empty or missing"];
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (seen.has(row)) problems.push(`duplicate route row: ${row}`);
+    seen.add(row);
+    if (!trackedRoutes.includes(row)) problems.push(`unknown route row: ${row}`);
+  }
+  for (const route of trackedRoutes) if (!seen.has(route)) problems.push(`missing route row: ${route}`);
+  return problems;
+}
+
+const trackedRoutes = () => gitLines(["ls-files", "app/api"]).filter((path) => path.endsWith("/route.ts"));
+
+const routeFixture = [
+  "## Маршруты API (охват)", "| Маршрут | Методы |", "|---|---|",
+  "| `app/api/a/route.ts` | GET |", "| `app/api/content/notes/route.ts` | GET, PUT |", "",
+].join("\n");
+const fixtureRoutes = ["app/api/a/route.ts", "app/api/content/notes/route.ts"];
+
+test("route coverage: the real matrix has exactly one row per tracked app/api route", () => {
+  const routes = trackedRoutes();
+  assert.ok(routes.length >= 12, `expected at least 12 tracked routes, git lists ${routes.length}`);
+  assert.ok(routes.includes("app/api/content/notes/route.ts"));
+  assert.deepEqual(routeCoverageProblems(matrixText(), routes), []);
+});
+
+test("route coverage: git failing is an error, not an empty route list", () => {
+  assert.throws(() => gitLines(["ls-files", "--definitely-not-a-flag"]), /failed/);
+});
+
+test("route coverage fixture: a complete table is accepted", () => {
+  assert.deepEqual(routeCoverageProblems(routeFixture, fixtureRoutes), []);
+});
+
+test("route coverage fixture: a matrix without the notes route row is rejected", () => {
+  const without = routeFixture.replace("| `app/api/content/notes/route.ts` | GET, PUT |\n", "");
+  assert.notEqual(without, routeFixture);
+  assert.deepEqual(routeCoverageProblems(without, fixtureRoutes), ["missing route row: app/api/content/notes/route.ts"]);
+});
+
+test("route coverage fixture: a row for a route that does not exist, a duplicate row or a missing table is rejected", () => {
+  const aRow = "| `app/api/a/route.ts` | GET |";
+  assert.deepEqual(routeCoverageProblems(routeFixture.replace(aRow, `${aRow}\n| \`app/api/ghost/route.ts\` | GET |`), fixtureRoutes), ["unknown route row: app/api/ghost/route.ts"]);
+  assert.deepEqual(routeCoverageProblems(routeFixture.replace(aRow, `${aRow}\n${aRow}`), fixtureRoutes), ["duplicate route row: app/api/a/route.ts"]);
+  assert.deepEqual(routeCoverageProblems("", fixtureRoutes), ["route coverage table is empty or missing"]);
+});
+
 /* ------------------------------------------------------------------ dependency audit evidence (Task 2) */
 
 const COMMIT = "a".repeat(40);

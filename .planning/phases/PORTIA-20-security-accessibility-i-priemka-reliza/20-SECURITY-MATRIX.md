@@ -6,7 +6,7 @@
 
 ## Метод и границы
 
-- Прочитаны все 10 обработчиков `app/api/**/route.ts`, `app/owner-login/actions.ts`, `proxy.ts`, `lib/supabase/*`, `lib/editor-access.ts`, `lib/image-upload.ts`, `lib/portia-device-binding.ts`, `lib/portia-promotion-api.ts`, `next.config.ts` и канонический SQL `supabase/migrations/20261101000000_portia_baseline.sql` (grants, RPC, политики).
+- Прочитаны все 12 обработчиков (полный список — в «Маршруты API (охват)») `app/api/**/route.ts`, `app/owner-login/actions.ts`, `proxy.ts`, `lib/supabase/*`, `lib/editor-access.ts`, `lib/image-upload.ts`, `lib/portia-device-binding.ts`, `lib/portia-promotion-api.ts`, `next.config.ts` и канонический SQL `supabase/migrations/20261101000000_portia_baseline.sql` (grants, RPC, политики).
 - Опирается на ранее полученные доказательства, не повторяя их выполнение: Phase 15 (`15-SECURITY.md`), Phase 16 live receipts на изолированном staging (`PORTIA-16-*/evidence/receipt-roles.json`, `receipt-concurrency.json`, `fingerprint-*.json`), 20-08 (CSP), 20-09 (проекция), 20-17/20-18 (находки Phase 19).
 - Чтение SQL здесь статическое. Оно не заменяет и не выдаётся за новый Postgres PASS: поведение RPC и политик под реальной базой доказывают только receipts Phase 16.
 - По D-14 опубликованный production не опрашивался; к Supabase (production или staging) в этом плане обращений нет. `npm audit` ходил только в реестр npm. Реальные `.env*` не читались.
@@ -17,13 +17,32 @@
 | Область | Что проверено | Метод | Результат |
 |---|---|---|---|
 | auth | `getUser()` + `getEditorAccess` во всех мутирующих маршрутах; owner-only `/api/editors`; неподтверждённый email не редактирует (D-18/D-22); вход, регистрация и выход в `owner-login/actions.ts`; CDN-кэш публичных GET не несёт сессию (`createPublicSupabaseClient`) | чтение кода + существующие unit-тесты | PASS-local. Живые роли на staging доказаны Phase 16 (receipts); роль reviewer в Phase 19/20 остаётся BLOCKED(DATA) |
-| api | 10 маршрутов: проверка прав до разбора тела, `parseJsonObject`, лимит тела `/api/content`, `noStoreHeaders` для чувствительных ответов (сканер 20-09), allowlist проекции участника, owner-only сброс привязки и удаление запроса | чтение + `lib/portia-promotion-api.test.ts` (20-09) + staging-проверки тел | PASS-local с находками SEC20-02, SEC20-03, SEC20-04, SEC20-05, SEC20-06, SEC20-07. Статус-тело для реального ника ростера на staging: BLOCKED(DATA) |
+| api | 12 маршрутов: проверка прав до разбора тела, `parseJsonObject`, лимит тела `/api/content`, `noStoreHeaders` для чувствительных ответов (сканер 20-09), allowlist проекции участника, owner-only сброс привязки и удаление запроса | чтение + `lib/portia-promotion-api.test.ts` (20-09) + staging-проверки тел | PASS-local с находками SEC20-02, SEC20-03, SEC20-04, SEC20-05, SEC20-06, SEC20-07. Статус-тело для реального ника ростера на staging: BLOCKED(DATA) |
 | rls | Все `security definer` функции со `search_path=''`, `revoke ... from public`, явные grants, RLS-политики таблиц и storage; production после owner-run миграций совпадает с golden (STAB-SEC-04, правило A) | чтение baseline SQL + receipts Phase 16 | PASS-local по статике и receipts Phase 16; находки SEC20-08..SEC20-11. Новое выполнение под Postgres в этом плане не проводилось |
 | headers | frame (`X-Frame-Options: DENY`, `frame-ancestors 'none'`), `nosniff`, referrer, permissions, COOP, HSTS | `lib/security-headers.test.ts` (7 тестов, 20-08) | PASS-local по HTTP-заголовкам сборки; опубликованный HTTPS не проверялся, см. SEC20-14 |
 | csp | enforced политика не расширена, кандидат только в `Content-Security-Policy-Report-Only`, `img-src https:` сохранён (D-06) | `lib/security-headers.test.ts`, `20-MEDIA-CSP.md`, браузерные проверки 20-08 | LIMITATION: `unsafe-inline` для script/style остаётся (SEC20-12); переход кандидата в enforcement не выполнен (D-05) |
 | uploads | `/api/uploads`: 503/403/413 до разбора тела, allowlist MIME (PNG/JPEG/WebP/GIF), сверка magic bytes, 4 MiB, UUID-путь, `upsert:false`; локальные изображения шаблона (20-02) не уходят на сервер, HTML-экспорт экранирован и несёт встроенную CSP без скриптов | чтение + `lib/image-upload.test.ts` + тесты 20-02 | PASS-local; остаток SEC20-15 |
 | secrets | Нет серверных ключей в клиентском коде; в приложении, маршрутах и конфиге нет service-role; `PORTIA_PROMOTION_DEVICE_SECRET` читается только в `lib/portia-device-binding.ts` (серверные обработчики); `.env.example` содержит только имена и плейсхолдеры | `git grep` по секретным шаблонам по дереву: 0 совпадений; `git log --all -G` по истории (без `.planning` и lockfile): 0 совпадений; список отслеживаемых env-файлов: только `.env.example` | PASS-local. Реальные `.env*` не читались |
 | dependencies | Production audit и полный audit на одном commit, нормализованный отчёт и fail-closed сверка dev-находок | `scripts/phase20-audit-check.mjs --capture/--verify`, `20-DEPENDENCY-AUDIT.md/.json` | PASS-local: production 0; полный audit 16 moderate (dev-only), каждая с единственным disposition; см. SEC20-13 |
+
+## Маршруты API (охват)
+
+Каждый отслеживаемый `app/api/**/route.ts` (`git ls-files app/api`) имеет ровно одну строку. `lib/security-matrix.test.ts` (route coverage) сверяет таблицу со списком git: новый маршрут без строки или строка без файла — падение теста. Колонка «Последний коммит» — `git log -1 --format=%h -- <путь>` на момент ревью, тестом не проверяется.
+
+| Маршрут | Методы | Проверка прав | no-store | Находки | Последний коммит |
+|---|---|---|---|---|---|
+| `app/api/access/route.ts` | GET | `getUser()` + `getEditorAccess`; сбой auth или RPC даёт 503, не `canEdit:false` | да | — | `e0f89ef` |
+| `app/api/content/notes/route.ts` | GET, PUT | `getUser()` + `getEditorAccess`, `canEdit`; чтение и запись только для открытых вкладок (`openTabs`); без таблицы 503 | да (`reply`) | SEC20-18, SEC20-19, SEC20-20, SEC20-21 | `35b86a4` |
+| `app/api/content/route.ts` | GET, PUT | PUT: `getEditorAccess`, закрытые разделы через `contentRefusal`; GET публичный (CDN-кэш) | PUT да; GET публичный кэш | SEC20-02, SEC20-05, SEC20-07, SEC20-09, SEC20-25 | `f93f894` |
+| `app/api/editors/route.ts` | GET, POST, DELETE, PATCH | только владелец (`canManageEditors`) | да, кроме части 403/500 | SEC20-02, SEC20-05, SEC20-07 | `49555da` |
+| `app/api/employees/editor/route.ts` | GET | `getEditorAccess`, вкладка `employees` открыта | да | SEC20-02 | `6f6b841` |
+| `app/api/employees/route.ts` | GET, PATCH, POST, DELETE | GET публичный (CDN-кэш); изменения: `getEditorAccess` и вкладка `employees` | изменения да, кроме 403 | SEC20-02, SEC20-05, SEC20-07 | `6f6b841` |
+| `app/api/promotion/banks/route.ts` | GET, POST | проверяющий (`requirePromotionReviewer`); превью и подтверждение сверяют токен версии банка | да | SEC20-23 | `97d7abb` |
+| `app/api/promotion/requests/route.ts` | POST | без входа: ник по ростеру, токен устройства, бакеты | да | SEC20-04, SEC20-06 | `eb6026d` |
+| `app/api/promotion/reviewer/route.ts` | GET, POST | проверяющий; удаление запроса и сброс привязки только владелец | да | SEC20-03, SEC20-05 | `ad377c4` |
+| `app/api/promotion/status/route.ts` | GET | без входа: ник по ростеру, токен устройства; проекция по allowlist | да | SEC20-06 | `08f0498` |
+| `app/api/promotion/test/route.ts` | GET, POST | токен попытки и устройства, сервер владеет состоянием попытки | да | SEC20-16, SEC20-17 | `b8ba080` |
+| `app/api/uploads/route.ts` | POST | `getEditorAccess`; 503/403/413 до `request.formData()`, сверка magic bytes | да | SEC20-05, SEC20-08, SEC20-15 | `2bb0b38` |
 
 ## Находки
 
