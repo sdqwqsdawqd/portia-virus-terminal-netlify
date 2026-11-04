@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -7,6 +8,8 @@ import { describe, test } from "node:test";
 // Phase 20-11: fail-closed validation of the owner visual-approval ledger (20-VISUAL-APPROVAL.md).
 // Default mode checks structure: every required surface/state/hash row exists and no row is approved without owner, date and exact hash.
 // PORTIA_REQUIRE_APPROVAL=1 (Task 2 gate) additionally requires a positive verdict on every captured candidate and an answer to every owner question.
+// Phase 20-29: the ledger frontmatter names the commit the candidates were captured on (candidates_commit); it must be a full
+// 40-hex hash that exists in this repository and is an ancestor of HEAD, so a hash can be traced to the code it describes.
 
 const root = path.resolve(import.meta.dirname, "..");
 const ledgerPath = path.join(
@@ -84,8 +87,38 @@ export function parseLedger(text: string): { rows: LedgerRow[]; questions: Quest
   return { rows, questions };
 }
 
+// Runs git and reports the exit code; status null means git itself could not run.
+export type GitRunner = (args: string[]) => { status: number | null; error?: string };
+
+export function ledgerFrontmatter(text: string): Record<string, string> {
+  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const fields: Record<string, string> = {};
+  if (!match) return fields;
+  for (const line of match[1].split(/\r?\n/)) {
+    const pair = line.match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
+    if (pair) fields[pair[1]] = pair[2].trim();
+  }
+  return fields;
+}
+
+export function candidatesCommitProblems(commit: string | undefined, git?: GitRunner): string[] {
+  if (!commit) return ["candidates_commit: required field is missing from the ledger frontmatter"];
+  if (!/^[0-9a-f]{40}$/.test(commit)) return [`candidates_commit: "${commit}" is not a full 40-hex commit hash`];
+  if (!git) return [];
+  const exists = git(["cat-file", "-e", `${commit}^{commit}`]);
+  if (exists.status === null) return [`candidates_commit: git could not run: ${exists.error ?? "unknown error"}`];
+  if (exists.status !== 0) return [`candidates_commit: ${commit} is not a commit in this repository (git cat-file exit ${exists.status})`];
+  const ancestor = git(["merge-base", "--is-ancestor", commit, "HEAD"]);
+  if (ancestor.status === null) return [`candidates_commit: git could not run: ${ancestor.error ?? "unknown error"}`];
+  if (ancestor.status === 1) return [`candidates_commit: ${commit} is not an ancestor of HEAD`];
+  if (ancestor.status !== 0) return [`candidates_commit: git merge-base failed with exit ${ancestor.status}`];
+  return [];
+}
+
 type Options = {
   requireApproval?: boolean;
+  // Checks candidates_commit against the repository. Without it only the field shape is checked.
+  git?: GitRunner;
   // File checks run only for files that exist on this machine (the candidate directory is gitignored). Approval mode makes absence an error.
   fileSha?: (relativePath: string) => string | null;
 };
@@ -100,6 +133,8 @@ export function validateLedger(text: string, options: Options = {}): string[] {
   }
   for (const id of requiredIds) if (!byId.has(id)) errors.push(`${id}: required row is missing`);
   for (const id of requiredQuestions) if (!questions.some((q) => q.id === id)) errors.push(`${id}: required owner question is missing`);
+
+  errors.push(...candidatesCommitProblems(ledgerFrontmatter(text).candidates_commit, options.git));
 
   const fileSha = options.fileSha;
   for (const row of rows) {
@@ -149,6 +184,11 @@ const fileSha = (relativePath: string): string | null => {
   return existsSync(full) ? createHash("sha256").update(readFileSync(full)).digest("hex") : null;
 };
 
+const realGit: GitRunner = (args) => {
+  const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  return { status: result.status, error: result.error?.message };
+};
+
 const ledger = readFileSync(ledgerPath, "utf8");
 const rowLine = (text: string, id: string) => text.split(/\r?\n/).find((line) => line.startsWith(`| ${id} |`))!;
 const editRow = (text: string, id: string, edit: (cells: string[]) => void) => {
@@ -161,8 +201,33 @@ const dropRow = (text: string, id: string) => text.split(/\r?\n/).filter((line) 
 
 describe("20-VISUAL-APPROVAL ledger structure (fail-closed)", () => {
   test("the committed ledger is structurally complete", () => {
-    const errors = validateLedger(ledger, { fileSha });
+    const errors = validateLedger(ledger, { fileSha, git: realGit });
     assert.deepEqual(errors, []);
+  });
+
+  test("candidates_commit is required, a full 40-hex hash, an existing commit and an ancestor of HEAD", () => {
+    const commit = ledgerFrontmatter(ledger).candidates_commit;
+    assert.match(commit, /^[0-9a-f]{40}$/);
+    const without = ledger.replace(/^candidates_commit:.*\r?\n/m, "");
+    assert.ok(validateLedger(without).some((error) => error.startsWith("candidates_commit: required field is missing")));
+    for (const bad of [commit.slice(0, 12), commit.toUpperCase(), `${commit.slice(0, 39)}g`, ""]) {
+      const broken = ledger.replace(/^candidates_commit:.*$/m, `candidates_commit: ${bad}`);
+      assert.ok(validateLedger(broken).some((error) => error.startsWith("candidates_commit:")), `"${bad}" accepted`);
+    }
+    // A well-formed hash that is no commit of this repository: the real git must refuse it.
+    const unknown = ledger.replace(/^candidates_commit:.*$/m, `candidates_commit: ${"0".repeat(40)}`);
+    assert.ok(validateLedger(unknown, { git: realGit }).some((error) => error.includes("is not a commit in this repository")));
+  });
+
+  test("a non-zero git exit code is a check error, never a pass (cat-file, merge-base 1, merge-base 128, git not runnable)", () => {
+    const commit = ledgerFrontmatter(ledger).candidates_commit;
+    const run = (overrides: Record<string, number | null>): GitRunner => (args) => ({ status: args[0] in overrides ? overrides[args[0]] : 0, error: "spawn git ENOENT" });
+    assert.deepEqual(candidatesCommitProblems(commit, run({})), []);
+    assert.ok(candidatesCommitProblems(commit, run({ "cat-file": 128 }))[0].includes("is not a commit"));
+    assert.ok(candidatesCommitProblems(commit, run({ "merge-base": 1 }))[0].includes("not an ancestor of HEAD"));
+    assert.ok(candidatesCommitProblems(commit, run({ "merge-base": 128 }))[0].includes("merge-base failed with exit 128"));
+    assert.ok(candidatesCommitProblems(commit, run({ "cat-file": null }))[0].includes("git could not run"));
+    assert.ok(candidatesCommitProblems(commit, run({ "merge-base": null }))[0].includes("git could not run"));
   });
 
   test("every required surface has an address on PC and phone (spider, flasks, drawings, Promotion, icons, info phone)", () => {
