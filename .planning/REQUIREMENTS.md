@@ -85,7 +85,7 @@
 - [ ] **STAB-MEDIA-04**: Immutable UUID media кэшируется повторно без скачивания, новый upload получает новый URL, content revision invalidation не ломает media cache.
 - [x] **STAB-MEDIA-05**: Broken, slow или blocked external media сохраняет читаемый текст/caption и стабильный layout без app crash или infinite spinner.
 - [ ] **STAB-MEDIA-06**: До оптимизации записаны воспроизводимые owner PC/phone traces; после изменений interaction, drag, wallpaper и app-open не хуже утверждённого baseline и проходят согласованные budgets.
-- [ ] **STAB-MEDIA-07**: Внешние media hosts инвентаризированы; CSP проходит report-only до enforcement, approved images/YouTube продолжают работать, rejected host показывает fallback.
+- [x] **STAB-MEDIA-07**: Внешние media hosts инвентаризированы; CSP проходит report-only до enforcement, approved images/YouTube продолжают работать, rejected host показывает fallback.
 
 ## Accessibility и security
 
@@ -204,7 +204,7 @@
 | STAB-MEDIA-04 | Phase 19 | Pending |
 | STAB-MEDIA-05 | Phase 19 | Complete |
 | STAB-MEDIA-06 | Phase 18 | Pending |
-| STAB-MEDIA-07 | Phase 20 | Pending |
+| STAB-MEDIA-07 | Phase 20 | Complete |
 | STAB-A11Y-01 | Phase 20 | Complete |
 | STAB-A11Y-02 | Phase 20 | Pending |
 | STAB-A11Y-03 | Phase 20 | Complete |

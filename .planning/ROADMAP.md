@@ -346,7 +346,7 @@ Plans:
   12. В «Повышении» доступна кнопка «Создать шаблон», открывающая отдельный конструктор карточки досье вируса для текста и локальных изображений. Участник скачивает самодостаточные PNG или HTML для передачи проверяющему вне сайта; файлы и изображения не записываются в реальные записи архива, Supabase database/storage или `/api/uploads`.
 
 **Acceptance gate**: Неполное локальное покрытие отмечается явно; незакрытый high finding блокирует релиз согласно config. Фаза не закрывается без согласованного визуального контракта и принятия переработанного вида владельцем, физической owner PC/phone UAT, точного evidence ledger и отсутствия pending high-severity blocker.
-**Plans**: 4/24 plans executed
+**Plans**: 5/24 plans executed
 **UI hint**: yes
 
 Plans:
@@ -355,7 +355,7 @@ Plans:
 - [x] 20-08-PLAN.md — CSP report-only, media hosts и fallback
 - [x] 20-09-PLAN.md — participant projection и no-store
 - [x] 20-17-PLAN.md — D-33: WR-03 uploads 503/ранний size gate, WR-05 тексты и двойная отправка, IN-03 подтверждение «ОТОЗВАТЬ»
-- [ ] 20-18-PLAN.md — D-33: IN-01 GIF в тексте, IN-02/IN-04 скрипт приёмки, IN-05 disposition
+- [x] 20-18-PLAN.md — D-33: IN-01 GIF в тексте, IN-02/IN-04 скрипт приёмки, IN-05 disposition
 - [ ] 20-19-PLAN.md — поиск: ↑ в полях не уводит в поиск (D-44), случайные 5–10 рекомендаций (D-43), поиск без ударений (D-37)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -407,7 +407,7 @@ Plans:
 | 17. Обратимая декомпозиция рабочего стола и редактора | 8/8 | Complete    | 2026-11-01 |
 | 18. Рабочий стол, окна и живые анимации | 7/7 | In Progress | - |
 | 19. «Повышение», приложения, редактор, поиск и медиа | 20/22 | In Progress | - |
-| 20. Security, accessibility и приёмка релиза | 4/24 | In Progress | - |
+| 20. Security, accessibility и приёмка релиза | 5/24 | In Progress | - |
 
 ## Coverage
 
