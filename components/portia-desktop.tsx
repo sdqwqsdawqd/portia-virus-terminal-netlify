@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { findGuide, findInfo, portiaTextKey, type Broadcast, type PortiaContent, type RecycleFile, type RichTextDocument, type Virus } from "@/lib/portia-content";
 import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
@@ -25,6 +25,7 @@ import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-desktop-documents";
 import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { PortiaImage } from "@/components/portia-desktop-media";
+import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, rosterDegradedText, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
 
 const PortiaEditor = dynamic(
@@ -180,6 +181,12 @@ function sliceRichText(document: RichTextDocument | undefined, start: number, en
   return { runs };
 }
 
+// The seed lives for the page load: a module-level cache read on the client only, never on the server.
+let recommendationSeedOfPage: number | null = null;
+const subscribeNothing = () => () => {};
+const pageRecommendationSeed = () => (recommendationSeedOfPage ??= newRecommendationSeed());
+const serverRecommendationSeed = () => null;
+
 function richTextLine(document: RichTextDocument | undefined, lines: string[], index: number) {
   const start = lines.slice(0, index).reduce((total, line) => total + line.length + 1, 0);
   return sliceRichText(document, start, start + (lines[index]?.length ?? 0));
@@ -238,6 +245,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const searchResultsRef = useRef<HTMLDivElement>(null);
   // A phone takes over Enter alone (owner verdict 3 gives the keyboard model to the desktop); SSR and the first paint assume the desktop.
   const [searchKeyScope, setSearchKeyScope] = useState<"full" | "enter-only">("full");
+  // D-43: null on the server and for the first client render (they match), then the seed of this page load; a new seed comes only with a reload.
+  const recommendationSeed = useSyncExternalStore(subscribeNothing, pageRecommendationSeed, serverRecommendationSeed);
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [selectedInfoId, setSelectedInfoId] = useState(initialContent.infoSections[0]?.id ?? "");
   const [guideCardId, setGuideCardId] = useState("");
@@ -1259,6 +1268,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
+  // The same seed on a changed list re-picks over the new list: a removed line leaves, no new random draw happens.
+  const shownRecommendations = useMemo(() => recommendationSeed === null ? [] : pickSearchRecommendations(content.searchRecommendations, seededRandom(recommendationSeed)), [content.searchRecommendations, recommendationSeed]);
 
   // D-13: the index is rebuilt from the content on screen by one pure allowlist function, so a record the next poll removes leaves the results with it.
   // A roster that failed with no last-good copy stays out of the index; the degraded line says so.
@@ -1550,7 +1561,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <div className="global-search-app" onKeyDown={onSearchKeyDown}>
               <header className="global-search-header"><h1>Глобальный поиск</h1><p>Поиск по приложениям, сотрудникам и материалам PORTIA.</p></header>
               <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input ref={searchInputRef} value={globalQuery} onChange={(event) => { setGlobalQuery(event.target.value); setUnavailableResults([]); setSearchFocusIndex(0); }} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
-              <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{content.searchRecommendations.map((item, index) => <button key={`${item}-${index}`} type="button" onClick={() => { setGlobalQuery(item); setUnavailableResults([]); setSearchFocusIndex(0); }}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>)}</div></div>
+              {shownRecommendations.length > 0 && <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{shownRecommendations.map((index) => { const item = content.searchRecommendations[index]; return <button key={`${item}-${index}`} type="button" onClick={() => { setGlobalQuery(item); setUnavailableResults([]); setSearchFocusIndex(0); }}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>; })}</div></div>}
               <div className="global-search-summary"><span>{!contentReady ? "Ищем…" : globalQuery ? `Результаты для «${globalQuery}»` : "Доступные записи"}</span>{contentReady && <strong>{String(searchResults.length).padStart(2, "0")}</strong>}</div>
               {contentReady && rosterNote && <p className="global-search-degraded" role="status">{rosterNote}</p>}
               <div className="global-search-results" ref={searchResultsRef} aria-busy={!contentReady}>

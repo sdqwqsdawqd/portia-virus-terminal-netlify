@@ -270,7 +270,8 @@ test("search keyboard follows owner verdict 3: one window handler and one Ctrl/C
   for (const action of ["focus-input", "next", "prev", "clear", "close"]) assert.ok(handler.includes(`"${action}"`), action);
   assert.ok(handler.includes('closeApp("search")'), "Escape on an empty field closes the window");
   assert.ok(source.includes('className="global-search-app" onKeyDown={onSearchKeyDown}'));
-  assert.equal((source.match(/searchKeyAction\(searchKeyContext\(event, \{/g) ?? []).length, 2, "the window handler and the global shortcut");
+  assert.equal((source.match(/searchKeyAction\(searchKeyContext\(event, \{/g) ?? []).length, 1, "only the window handler reads the arrows");
+  assert.equal((source.match(/globalSearchKeyAction\(event\)/g) ?? []).length, 1, "the global shortcut opens the search on Ctrl/Cmd+K alone (D-44, D-46)");
   assert.ok(source.includes('if (window.matchMedia("(max-width: 900px)").matches) return;'), "a phone intercepts no Ctrl+K");
   assert.ok(source.includes("qualificationLockedRef.current) return;"), "the shortcut does not break through a qualification");
   assert.ok(source.includes("tabIndex={searchRoving ?"), "roving tabindex over the results");
@@ -295,12 +296,13 @@ test("editor scrolls as one page and its tabs use the whole window", () => {
   assert.match(styles, /\.access-editor-list\s*\{[^}]*max-width:\s*760px/);
 });
 
-test("window tiles keep their own size and every recommendation is shown", () => {
+test("window tiles keep their own size and the search shows the picked recommendations (D-43)", () => {
   assert.match(styles, /\.broadcast-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*340px\),\s*340px\)\)/);
   assert.match(styles, /\.broadcast-grid\s*\{[^}]*align-items:\s*start/);
   assert.match(styles, /\.broadcast-grid > \.broadcast-empty\s*\{[^}]*grid-column:\s*1 \/ -1/);
   assert.match(styles, /\.guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*176px\),\s*176px\)\)/);
-  assert.ok(source.includes("content.searchRecommendations.map("));
+  assert.ok(source.includes("shownRecommendations.map("), "only the picked recommendations are rendered");
+  assert.ok(!source.includes("content.searchRecommendations.map("));
 });
 
 test("editor form cards keep one fixed width set by a single variable and fill columns on desktop only (D-15)", () => {
