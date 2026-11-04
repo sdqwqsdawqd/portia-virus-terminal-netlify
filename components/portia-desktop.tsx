@@ -202,7 +202,7 @@ function qualificationTabbables(root: HTMLElement) {
 }
 
 function trapQualificationTab(event: KeyboardEvent) {
-  if (event.key !== "Tab" || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.key !== "Tab" || event.defaultPrevented) return;
   const root = document.querySelector<HTMLElement>(".promotion-window");
   if (!root) return;
   const items = qualificationTabbables(root);
