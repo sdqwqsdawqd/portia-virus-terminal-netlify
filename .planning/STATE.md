@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-03-PLAN.md
-last_updated: "2026-11-04T06:01:04.235Z"
+stopped_at: Completed PORTIA-20-10-PLAN.md
+last_updated: "2026-11-04T06:15:56.366Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: 2317d72d16e4e20454fd5bdd8e8c463b43fe0fcd
+state_head: 520e6dd59776530e548a43e0a5f3a1a22fc5e996
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 77
+  completed_plans: 78
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 9 of 24
+Plan: 10 of 24
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-04 — Phase PORTIA-20 execution started
 
@@ -115,6 +115,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P19 | 60min | 3 tasks | 8 files |
 | Phase PORTIA-20 P02 | 45min | 2 tasks | 5 files |
 | Phase PORTIA-20 P03 | 40 min | 3 tasks | 6 files |
+| Phase PORTIA-20 P10 | 35min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -189,6 +190,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-02: local image allow-list PNG/JPEG/WebP (5 MB, 4096 px side, 12 Mpx), SVG/GIF refused; PNG card 1000 px wide, max 8000 px high, longer is refused with an HTML alternative instead of cropping
 - [Phase PORTIA-20]: 20-03: spider restyled (dark opaque fills, #020706 contour, accent only in eye details); D-25 supersedes the quick 261102-d7r no-outline rule
 - [Phase PORTIA-20]: 20-03 D-45: resting-spider blur on PC is caused by will-change: transform; will-change now only via .wallpaper-spider[data-spider-walking]; spiderTransform snaps resting shift to 1/dpr and drops scale()
+- [Phase PORTIA-20]: 20-10: no high findings, 9 medium in release ledger; register_attempt has no caller, revoke recommended but not applied; IN-05 stays a D-09 disposition; STAB-SEC-05/06 not marked by 20-10 (ready-ids gate)
 
 ### Pending Todos
 
@@ -227,8 +229,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T06:01:03.785Z
-Stopped at: Completed PORTIA-20-03-PLAN.md
+Last session: 2026-11-04T06:15:55.909Z
+Stopped at: Completed PORTIA-20-10-PLAN.md
 Resume file: None
 
 ## Operator Next Step
