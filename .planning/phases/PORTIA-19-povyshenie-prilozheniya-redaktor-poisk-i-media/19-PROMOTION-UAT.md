@@ -120,6 +120,8 @@ Read-only `acceptance-residual` для run `mvz5fqgv_c40b449b` (staging, refHash
 | Манифест | `evidence/19-ACCEPTANCE-RUN.json`; снимок preexisting сохранён, окно взято по времени БД |
 | Файл временных учётных данных | `C:\Users\User\AppData\Local\Temp\portia-acceptance-mw1loqa9_c9451c80\credentials.json` (агент его не открывает; пароли в чат не вставлять) |
 
+Pre-flight: STAGING-BOUND 2026-11-04T07:59:51Z refHash 01d085e7b9f0; serverBound=true; clientBound=true; PC=https://localhost:3000; phone=https://192.168.10.3:3000; PID=30848. GET /owner-login: PC=200, LAN=200.
+
 Сервер запускает **только агент** точной командой `node --experimental-strip-types scripts/phase16-staging.mjs acceptance-serve mw1loqa9_c9451c80 --https`. Агент сообщает адрес только после строки `STAGING-BOUND` от wrapper; до неё шаг 0 не начинается. Владелец не запускает `npm run dev` сам и не держит свой сервер на порту 3000. На телефоне использовать HTTPS-адрес агента и доверенный сертификат; без HTTPS проверка cookie привязки остаётся BLOCKED (ENV). При ошибке привязки или гидратации сообщить агенту, не переключаться на другой сервер.
 
 Использовать только ники и временные аккаунты **этого run**: свой аккаунт, живые ники и живая таблица запрещены. Не менять данные вне этого run. Для reviewer берётся поле `reviewer`, для editor без `promo` — поле `editor` из `credentials.json`; вход через `/owner-login`. Пароли остаются в файле владельца, в отчёт и чат не копируются. После проверки остановить сервер через агента. Все действия PC и phone записывать раздельно; PASS одного устройства не переносится на другое.
