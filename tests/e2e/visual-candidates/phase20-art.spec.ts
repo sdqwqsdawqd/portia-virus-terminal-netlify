@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DesktopPage } from "../pages/desktop.page";
 import { expect, test } from "../fixtures/test";
@@ -237,3 +237,188 @@ test("[STAB-A11Y-04] the gait frame budget on a real device is not proven here",
     reason: "The headless run under a fake clock proves no layout reads and no per-frame React state in the loop, not the frame budget; the physical-device check is SPIDER-03 in 20-14.",
   });
 });
+
+// D-45: the spider at rest must not be blurred. The sharpness of the live element (mean absolute discrete Laplacian of the luminance, in the
+// page) is compared with a reference: the same SVG in a motionless container, no CSS transform / translate / will-change, rotated by an SVG
+// attribute so the rotation happens before rasterisation. Factors are then switched one at a time by a style override on the live element.
+const REST_FACTORS = ["as-is", "will-change-auto", "transform-snapped", "no-scale", "translate-snapped", "all"] as const;
+type SharpnessRow = { project: string; state: string; factor: string; sharpness: number; reference: number; ratio: number; dpr: number; transform: string };
+
+// Rows of both projects land in one file; a lock directory keeps two workers from overwriting each other.
+function mergeSharpnessRows(rows: SharpnessRow[]) {
+  mkdirSync(runRoot, { recursive: true });
+  const lock = path.join(runRoot, ".spider-rest-sharpness.lock");
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      mkdirSync(lock);
+      break;
+    } catch {
+      if (attempt > 200) throw new Error("[PORTIA_SPIDER_REST_LOCK_TIMEOUT]");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+  }
+  try {
+    const file = path.join(runRoot, "spider-rest-sharpness.json");
+    const existing: SharpnessRow[] = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
+    const keep = existing.filter((row) => !rows.some((next) => next.project === row.project && next.state === row.state));
+    writeFileSync(file, `${JSON.stringify([...keep, ...rows], null, 2)}\n`);
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
+}
+
+async function openStill(page: Page, patch: Settings) {
+  const settings = { ...baseSettings, ...patch };
+  await page.addInitScript((value) => window.localStorage.setItem("portia-desktop-settings-v1", JSON.stringify(value)), settings);
+  // The loop is driven by the paused clock, so the spider stands exactly where the test leaves it.
+  await page.clock.pauseAt(new Date(Date.parse("2026-10-30T09:00:00+03:00") + 5_000));
+  await page.goto("/");
+  const desktop = new DesktopPage(page);
+  await expect(async () => {
+    await page.clock.runFor(50);
+    await expect(desktop.desktop).toBeVisible({ timeout: 250 });
+  }).toPass({ timeout: 20_000 });
+  return desktop;
+}
+
+async function sharpnessOf(page: Page, png: Buffer) {
+  return page.evaluate(async (base64) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }), { colorSpaceConversion: "none" });
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const context = canvas.getContext("2d")!;
+    context.drawImage(bitmap, 0, 0);
+    const { data, width, height } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+    const luma = new Float64Array(width * height);
+    for (let index = 0; index < luma.length; index += 1) luma[index] = 0.2126 * data[index * 4] + 0.7152 * data[index * 4 + 1] + 0.0722 * data[index * 4 + 2];
+    let sum = 0;
+    for (let y = 1; y < height - 1; y += 1) {
+      for (let x = 1; x < width - 1; x += 1) {
+        const at = y * width + x;
+        sum += Math.abs(luma[at - 1] + luma[at + 1] + luma[at - width] + luma[at + width] - 4 * luma[at]);
+      }
+    }
+    return sum / ((width - 2) * (height - 2));
+  }, png.toString("base64"));
+}
+
+async function measureRest(page: Page, state: string, projectName: string): Promise<SharpnessRow[]> {
+  // Park the page for the measurement: no web, waves, dew, icons or Vivian behind the spider, and a marker at the transform origin.
+  const setup = await page.evaluate(() => {
+    const element = document.querySelector<HTMLElement>(".wallpaper-spider")!;
+    const marker = document.createElement("span");
+    marker.dataset.spiderOrigin = "1";
+    marker.style.cssText = "position:absolute;left:50%;top:46.875%;width:0;height:0;";
+    element.append(marker);
+    const park = document.createElement("style");
+    park.dataset.spiderPark = "1";
+    park.textContent = ".desktop-wallpaper, .wallpaper-web-pulses, .desktop-icon, .desktop-assistant { visibility: hidden !important; }";
+    document.head.append(park);
+    return { dpr: window.devicePixelRatio, width: parseFloat(getComputedStyle(element).width) };
+  });
+  const side = Math.ceil(setup.width * 1.8);
+  const clipAt = async () => {
+    const origin = await page.evaluate(() => {
+      const rect = document.querySelector<HTMLElement>("[data-spider-origin]")!.getBoundingClientRect();
+      return { x: rect.x, y: rect.y };
+    });
+    return { x: Math.round(origin.x) - Math.round(side / 2), y: Math.round(origin.y) - Math.round(side / 2), width: side, height: side };
+  };
+  const clip = await clipAt();
+  const settle = () => page.waitForTimeout(200);
+
+  // Reference: the same artwork, motionless and unrotated by CSS, centred on the same (integer) origin pixel.
+  const inline = await page.evaluate(() => {
+    const element = document.querySelector<HTMLElement>(".wallpaper-spider")!;
+    return { transform: element.style.transform, cssText: element.style.cssText };
+  });
+  const angle = Number.parseFloat(inline.transform.match(/rotate\(([-\d.]+)deg\)/)?.[1] ?? "0");
+  await page.evaluate(({ degrees, region }) => {
+    const element = document.querySelector<HTMLElement>(".wallpaper-spider")!;
+    const copy = document.createElement("div");
+    copy.className = "wallpaper-spider";
+    copy.dataset.spiderReference = "1";
+    const clone = element.querySelector("svg")!.cloneNode(true) as SVGSVGElement;
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.setAttribute("transform", `rotate(${degrees} 324.75 360)`);
+    group.append(...Array.from(clone.childNodes));
+    clone.append(group);
+    copy.append(clone);
+    const width = parseFloat(getComputedStyle(element).width);
+    const height = (width * 768) / 649.5;
+    const origin = { x: region.x + region.width / 2, y: region.y + region.height / 2 };
+    copy.style.cssText = `position:fixed;left:${origin.x - width / 2}px;top:${origin.y - height * 0.46875}px;width:${width}px;translate:none;transform:none;will-change:auto;animation:none;opacity:1;z-index:99999;`;
+    document.body.append(copy);
+    element.style.visibility = "hidden";
+  }, { degrees: angle, region: clip });
+  await settle();
+  const reference = await sharpnessOf(page, await page.screenshot({ clip, animations: "allow" }));
+  await page.evaluate(() => {
+    document.querySelector("[data-spider-reference]")?.remove();
+    document.querySelector<HTMLElement>(".wallpaper-spider")!.style.visibility = "";
+  });
+
+  const rows: SharpnessRow[] = [];
+  for (const factor of REST_FACTORS) {
+    await page.evaluate(({ name, dpr }) => {
+      const element = document.querySelector<HTMLElement>(".wallpaper-spider")!;
+      const snap = (value: number) => Math.round(value * dpr) / dpr;
+      if (name === "will-change-auto" || name === "all") element.style.willChange = "auto";
+      if (name === "transform-snapped" || name === "all") {
+        element.style.transform = element.style.transform.replace(/translate\(([-\d.]+)px, ([-\d.]+)px\)/, (_, x, y) => `translate(${snap(Number(x))}px, ${snap(Number(y))}px)`);
+      }
+      if (name === "no-scale" || name === "all") element.style.transform = element.style.transform.replace(/\s*scale\([^)]*\)/, "");
+      if (name === "translate-snapped" || name === "all") {
+        const style = getComputedStyle(element);
+        const width = parseFloat(style.width), height = parseFloat(style.height);
+        element.style.translate = `${snap(-0.5 * width)}px ${snap(-0.46875 * height)}px`;
+        element.style.left = `${snap(parseFloat(style.left))}px`;
+        element.style.top = `${snap(parseFloat(style.top))}px`;
+      }
+    }, { name: factor, dpr: setup.dpr });
+    await settle();
+    const live = await clipAt();
+    const transform = await page.evaluate(() => document.querySelector<HTMLElement>(".wallpaper-spider")!.style.transform);
+    const sharpness = await sharpnessOf(page, await page.screenshot({ clip: live, animations: "allow" }));
+    rows.push({ project: projectName, state, factor, sharpness, reference, ratio: reference > 0 ? sharpness / reference : 0, dpr: setup.dpr, transform });
+    await page.evaluate((css) => { document.querySelector<HTMLElement>(".wallpaper-spider")!.style.cssText = css; }, inline.cssText);
+  }
+  await page.evaluate(() => {
+    document.querySelector("[data-spider-origin]")?.remove();
+    document.querySelector("[data-spider-park]")?.remove();
+  });
+  return rows;
+}
+
+for (const rest of [{ id: "off", label: "motion off", motion: "off" }, { id: "full", label: "full motion, standing", motion: "on" }]) {
+  test(`[STAB-VIS-01] D-45 spider at rest (${rest.label}): sharpness against the unmoved reference, factor by factor`, async ({ page, browser, determinism }, testInfo) => {
+    const desktop = await openStill(page, { motion: rest.motion });
+    await page.clock.runFor(3_000);
+    await page.waitForTimeout(2_800); // the 600ms fade-in (1.8s delay) is a real-time CSS animation
+    await expect(desktop.spider).toHaveCSS("opacity", "1");
+    if (rest.motion === "on") {
+      // Standing: the inline transform has not changed for a second of loop time.
+      let unchanged = 0, previous = "";
+      for (let elapsed = 0; unchanged < 1_000 && elapsed <= 90_000; elapsed += 100) {
+        await page.clock.runFor(100);
+        const current = await desktop.spider.evaluate((element) => element.style.transform);
+        unchanged = current === previous ? unchanged + 100 : 0;
+        previous = current;
+      }
+      expect(unchanged, "the spider stands (style.transform unchanged for 1s)").toBeGreaterThanOrEqual(1_000);
+    }
+    await captureCandidate({ page, browser, determinism, testInfo }, {
+      id: `phase20-spider-rest-${rest.id}`,
+      requirement: "STAB-BASE-03",
+      surface: "Spider CURRENT",
+      actor: "visitor",
+      state: `D-45 spider at rest, ${rest.label}; transform ${await desktop.spider.evaluate((element) => element.style.transform)}`,
+      intendedSnapshot: `tests/e2e/visual/__screenshots__/phase20-spider-rest-${rest.id}--${testInfo.project.name}.png`,
+      animations: "allow",
+    });
+    const rows = await measureRest(page, rest.id, testInfo.project.name);
+    mergeSharpnessRows(rows);
+    for (const row of rows) testInfo.annotations.push({ type: "sharpness", description: `${row.state}/${row.factor}: ${row.ratio.toFixed(3)}` });
+    expect(rows.find((row) => row.factor === "as-is")!.reference, "the reference has edges to measure").toBeGreaterThan(0);
+  });
+}

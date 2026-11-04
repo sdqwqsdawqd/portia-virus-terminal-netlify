@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import * as web from "./wallpaper-web.ts";
 import { REST_NODE, SPIDER_MOTION_RATE, SPIDER_WALK_SPEED, createPulsePool, edgesAt, besideThread, emitPulse, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, planSpawn, planWalk, pointOnEdge, pulseShape, seeded, selectSpawn, stepPulses, turnGate, turnStep, visibleNodes, walkPose, webEdges, webGeometry, type Point } from "./wallpaper-web.ts";
 
 const near = (a: Point, b: Point, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
@@ -561,4 +562,49 @@ test("the spider steps its legs while it turns, the route clock is gated by the 
   assert.match(source, /\(walking \|\| Math\.abs\(turn\) > TURN_STEP_MIN \? 1 : 0\) - gait/);
   assert.match(source, /const turned = turnStep\(angle, /);
   assert.equal(source.match(/rest = 6 \+ rand\(\) \* 4/g)?.length, 2, "pauses between routes are unchanged");
+});
+
+// D-45: the spider at rest must not be blurred. A resting transform is a pure string: a shift on the device-pixel grid, the rotation, no scale().
+type SpiderTransformInput = { dx: number; dy: number; angleDeg: number; bob: number; dpr: number; resting: boolean };
+const spiderTransform = (input: SpiderTransformInput) => (web as unknown as { spiderTransform?: (input: SpiderTransformInput) => string }).spiderTransform?.(input);
+
+test("D-45 spiderTransform snaps a resting shift to the device pixel grid and drops scale()", () => {
+  assert.equal(spiderTransform({ dx: 10.37, dy: -3.21, angleDeg: 12.345, bob: 1, dpr: 2, resting: true }), "translate(10.5px, -3px) rotate(12.35deg)");
+  assert.equal(spiderTransform({ dx: -381.53, dy: 404.37, angleDeg: -154.41, bob: 1.0123, dpr: 1, resting: true }), "translate(-382px, 404px) rotate(-154.41deg)");
+  const snapped = spiderTransform({ dx: -165.05, dy: 89.17, angleDeg: -164.97, bob: 1, dpr: 2.625, resting: true })!;
+  const [, x, y] = snapped.match(/translate\(([-\d.]+)px, ([-\d.]+)px\)/)!.map(Number);
+  assert.ok(Math.abs(x * 2.625 - Math.round(x * 2.625)) < 1e-3 && Math.abs(y * 2.625 - Math.round(y * 2.625)) < 1e-3, `${snapped} is on the 1/2.625 grid`);
+  assert.doesNotMatch(snapped, /scale/);
+});
+
+test("D-45 spiderTransform keeps the walking form: two-decimal shifts and a four-decimal scale", () => {
+  assert.equal(spiderTransform({ dx: 10.37, dy: -3.21, angleDeg: 12.345, bob: 1.0123, dpr: 2, resting: false }), "translate(10.37px, -3.21px) rotate(12.35deg) scale(1.0123)");
+});
+
+test("D-45 spiderTransform counts a missing or non-positive device pixel ratio as 1 and is pure", () => {
+  for (const dpr of [Number.NaN, 0, -2, Number.POSITIVE_INFINITY]) {
+    assert.equal(spiderTransform({ dx: 10.37, dy: -3.21, angleDeg: 0, bob: 1, dpr, resting: true }), "translate(10px, -3px) rotate(0.00deg)", `dpr ${dpr}`);
+  }
+  const input = { dx: 5.55, dy: 6.66, angleDeg: 7.77, bob: 1.002, dpr: 1.25, resting: true };
+  assert.equal(spiderTransform(input), spiderTransform({ ...input }));
+});
+
+test("D-45 the spider builds every transform through spiderTransform and promotes its layer only while it walks", () => {
+  const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.ok((source.match(/spiderTransform\(/g) ?? []).length >= 3, "relocate, the walking frame and the outside-«Включены» branch");
+  assert.doesNotMatch(source, /style\.transform = `translate/, "no hand-built transform string is left");
+  assert.match(source, /resting: true/);
+  assert.match(source, /resting: false|resting: settled/);
+  assert.match(source, /devicePixelRatio/);
+  const tick = source.match(/const tick = \(now: number\) => \{([\s\S]*?)\n    \};\n\n    const motionOn/)?.[1] ?? "";
+  assert.ok(tick.length > 500, "tick body found");
+  assert.doesNotMatch(tick, /devicePixelRatio/, "the ratio is read on mount and in the resize observer, not on every frame");
+  // The base rule carries no will-change; the compositor layer exists only while the spider walks (data-spider-walking).
+  assert.doesNotMatch(styles.match(/(?:^|\n)\.wallpaper-spider \{([^}]*)\}/)?.[1] ?? "", /will-change/);
+  assert.match(styles, /\.wallpaper-spider\[data-spider-walking\]\s*\{[^}]*will-change:\s*transform/);
+  assert.match(source, /data-spider-walking|spiderWalking|dataset\.spiderWalking/);
+  // A forwards fill of the fade-in keeps the element a composited, resampled layer for good: the fade only needs to hold the start while it waits.
+  assert.doesNotMatch(styles, /html\[data-motion="full"\] \.wallpaper-spider \{ animation: fade-in 600ms ease-out 1\.8s both; \}/);
+  assert.match(styles, /html\[data-motion="full"\] \.wallpaper-spider \{ animation: fade-in 600ms ease-out 1\.8s backwards; \}/);
 });
