@@ -432,6 +432,20 @@ describe("acceptance-shift", () => {
     assert.deepEqual([theirs.deadline_at, theirs.retake_at], [future, future]);
   });
 
+  test("IN-02: an inherited object key is an unknown participant label, not a late failure", async () => {
+    const ctx = await seeded();
+    const id = ctx.manifest.runId;
+    for (const argv of [
+      ["acceptance-shift", id, "cooldown", "constructor"], ["acceptance-shift", id, "deadline", "constructor"], ["acceptance-shift", id, "retake", "constructor"],
+      ["acceptance-shift", id, "rank", "constructor", "trainee"],
+    ]) {
+      ctx.lines.err.length = 0;
+      assert.equal(await main(argv, ctx.deps), 2, argv.join(" "));
+      assert.match(ctx.lines.err.join(""), /Unknown participant label for this run/, argv.join(" "));
+    }
+    assert.equal(ctx.fake.world.log.length, 0);
+  });
+
   test("an unknown kind, a malformed run id or a bad argument give exit 2 without touching the database", async () => {
     const ctx = await seeded();
     const id = ctx.manifest.runId;
@@ -510,6 +524,21 @@ describe("acceptance-residual and acceptance-teardown", () => {
     assert.ok(errors.length > 0);
     assert.deepEqual(ctx.fake.rows("portia_promo_qualification_banks"), [], "later steps still ran");
     assert.equal(existsSync(ctx.manifest.rosterPath), true, "temp files stay while anything is left");
+  });
+
+  test("IN-04: a dirty teardown prints the work directory path and no secrets, a clean one does not", async () => {
+    const dirty = await populated();
+    dirty.fake.world.failures.add("delete:portia_promo_task_banks");
+    assert.equal(await main(["acceptance-teardown", dirty.manifest.runId], dirty.deps), 1);
+    const stderr = dirty.lines.err.join("");
+    assert.match(stderr, /\[PORTIA_STAGING:residual\] рабочий каталог не удалён: /);
+    assert.ok(stderr.includes(path.dirname(dirty.manifest.rosterPath)), stderr);
+    assert.ok(!stderr.includes(adminKey) && !stderr.includes("fake-db-password"));
+    assert.equal(existsSync(dirty.manifest.rosterPath), true);
+
+    const clean = await populated();
+    assert.equal(await main(["acceptance-teardown", clean.manifest.runId], clean.deps), 0, clean.lines.err.join(""));
+    assert.doesNotMatch(clean.lines.err.join(""), /рабочий каталог не удалён/);
   });
 
   test("preexisting bucket in the window is neither shifted nor deleted", async () => {
