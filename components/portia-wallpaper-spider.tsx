@@ -5,7 +5,7 @@
 // it reads no layout and sets no React state.
 
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
-import { REST_NODE, besideThread, createPulsePool, emitPulse, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, planSpawn, planWalk, pulseShape, seeded, stepPulses, turnGate, turnStep, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
+import { REST_NODE, besideThread, createPulsePool, emitPulse, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, planSpawn, planWalk, pulseShape, seeded, spiderTransform, stepPulses, turnGate, turnStep, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
 
 type LegId = "L1" | "L2" | "L3" | "L4" | "R1" | "R2" | "R3" | "R4";
 
@@ -77,10 +77,13 @@ export function WallpaperSpider() {
     // Size is cached here (a layout read outside the loop); the observer keeps it current.
     let scale = Math.max(layer.clientWidth / 1440, layer.clientHeight / 900);
     let visible = visibleNodes(layer.clientWidth, layer.clientHeight, 90);
+    // The device pixel ratio is read here and when the layer is resized, never inside the frame loop (D-45: a resting shift sits on whole device pixels).
+    let dpr = window.devicePixelRatio;
     const sizer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       scale = Math.max(width / 1440, height / 900);
       visible = visibleNodes(width, height, 90);
+      dpr = window.devicePixelRatio;
     });
     sizer.observe(layer);
 
@@ -104,6 +107,17 @@ export function WallpaperSpider() {
       });
     };
 
+    // Shift in screen pixels and the turn in degrees, shared by the three places that write the transform.
+    const pose = () => ({ dx: (x - restX) * scale, dy: (y - restY) * scale, angleDeg: (angle * 180) / Math.PI });
+    // The compositor layer (will-change) exists only while the spider moves; a layer left on at rest is resampled and blurs the artwork (D-45).
+    let promoted = false;
+    const promote = (on: boolean) => {
+      if (promoted === on) return;
+      promoted = on;
+      if (on) element.setAttribute("data-spider-walking", "");
+      else element.removeAttribute("data-spider-walking");
+    };
+
     const relocateVisible = () => {
       const planned = planSpawn(visible, previousVisibleSpawn, rand);
       if (planned.node === previousVisibleSpawn) return false;
@@ -114,7 +128,7 @@ export function WallpaperSpider() {
       laneStart = [x - webGeometry.nodes[planned.node][0], y - webGeometry.nodes[planned.node][1]]; settleX = x; settleY = y;
       probeRemaining = 0; probeDelay = FIRST_PROBE_MIN_DELAY + rand() * (FIRST_PROBE_MAX_DELAY - FIRST_PROBE_MIN_DELAY);
       clearPulses();
-      element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg)`;
+      element.style.transform = spiderTransform({ ...pose(), bob: 1, dpr, resting: true });
       return true;
     };
 
@@ -211,7 +225,9 @@ export function WallpaperSpider() {
       clean = settled;
       // The body swells a touch as each group lands (phase 0 and 0.5) and settles in between.
       const bob = 1 + BODY_BOB * gait * Math.max(0, Math.cos(4 * Math.PI * phase)) ** 3;
-      element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg) scale(${bob.toFixed(4)})`;
+      // The write that settles the spider is the resting one: whole device pixels, no scale(), no compositor layer.
+      element.style.transform = spiderTransform({ ...pose(), bob, dpr, resting: settled });
+      promote(!settled);
       const probeProgress = probeDuration > 0 ? 1 - probeRemaining / probeDuration : 1;
       const probeEnvelope = Math.sin(Math.PI * probeProgress) ** 2;
       const probeTap = Math.sin(probeProgress * Math.PI * 6) * probeEnvelope;
@@ -246,7 +262,7 @@ export function WallpaperSpider() {
       const turnedOff = wasSpiderOn && !enabled;
       wasSpiderOn = enabled;
       if (turnedOff || !enabled) {
-        cancelAnimationFrame(frame); frame = 0; element.style.opacity = "0"; clearPulses(); return;
+        cancelAnimationFrame(frame); frame = 0; element.style.opacity = "0"; clearPulses(); promote(false); return;
       }
       if (turnedOn) {
         relocateVisible();
@@ -257,7 +273,8 @@ export function WallpaperSpider() {
         // Outside «Включены» the spider sits where it is, without waves or trails: legs neutral, body at rest scale, position unchanged.
         clearPulses();
         legs.forEach((leg) => { leg.style.rotate = "0deg"; leg.style.scale = "1"; });
-        element.style.transform = `translate(${((x - restX) * scale).toFixed(2)}px, ${((y - restY) * scale).toFixed(2)}px) rotate(${((angle * 180) / Math.PI).toFixed(2)}deg)`;
+        element.style.transform = spiderTransform({ ...pose(), bob: 1, dpr, resting: true });
+        promote(false);
         legsNeutral = true; clean = true;
         return;
       }

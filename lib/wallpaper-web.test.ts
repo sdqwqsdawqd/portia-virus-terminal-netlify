@@ -597,7 +597,7 @@ test("D-45 the spider builds every transform through spiderTransform and promote
   assert.match(source, /resting: true/);
   assert.match(source, /resting: false|resting: settled/);
   assert.match(source, /devicePixelRatio/);
-  const tick = source.match(/const tick = \(now: number\) => \{([\s\S]*?)\n    \};\n\n    const motionOn/)?.[1] ?? "";
+  const tick = source.match(/const tick = \(now: number\) => \{([\s\S]*?)const motionOn/)?.[1] ?? "";
   assert.ok(tick.length > 500, "tick body found");
   assert.doesNotMatch(tick, /devicePixelRatio/, "the ratio is read on mount and in the resize observer, not on every frame");
   // The base rule carries no will-change; the compositor layer exists only while the spider walks (data-spider-walking).

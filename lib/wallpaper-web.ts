@@ -396,3 +396,16 @@ export function legPose(p: number): { swing: number; tuck: number } {
   const s = (p - (1 - SWING_SHARE)) / SWING_SHARE;
   return { swing: 1 - 2 * easeOutBack(s), tuck: Math.sin(Math.PI * s) };
 }
+
+export type SpiderTransformInput = { dx: number; dy: number; angleDeg: number; bob: number; dpr: number; resting: boolean };
+
+// The one place the spider's inline transform string is built (D-45). Walking keeps the smooth fractional form with the body bob.
+// At rest the shift is snapped to the device-pixel grid (multiples of 1/dpr) and scale() is left out, so the artwork is rasterised
+// on whole pixels instead of being resampled; an invalid ratio counts as 1.
+export function spiderTransform({ dx, dy, angleDeg, bob, dpr, resting }: SpiderTransformInput): string {
+  const rotate = `rotate(${angleDeg.toFixed(2)}deg)`;
+  if (!resting) return `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) ${rotate} scale(${bob.toFixed(4)})`;
+  const ratio = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
+  const snap = (value: number) => Number((Math.round(value * ratio) / ratio).toFixed(4));
+  return `translate(${snap(dx)}px, ${snap(dy)}px) ${rotate}`;
+}

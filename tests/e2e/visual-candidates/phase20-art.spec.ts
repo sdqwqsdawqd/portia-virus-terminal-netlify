@@ -167,6 +167,7 @@ test("[STAB-A11Y-04] D-01..D-04 full walks, reduced and off stop looping motion,
     const now = await state();
     return now.transform !== spawnTransform && swinging(now.rotations);
   }, "full motion: the spider walks and swings its legs");
+  await expect(desktop.spider, "D-45: the compositor layer exists while walking").toHaveAttribute("data-spider-walking", "");
   const readsBefore = await page.evaluate(() => (window as unknown as { __layoutReads: { reads: number } }).__layoutReads.reads);
   const trace: Array<{ t: number; transform: string; rotations: string[]; scales: string[]; pulses: number }> = [];
   for (let tick = 0; tick < 40; tick += 1) {
@@ -196,6 +197,8 @@ test("[STAB-A11Y-04] D-01..D-04 full walks, reduced and off stop looping motion,
   expect(afterOff.rotations.every((value) => Number.parseFloat(value) === 0), "legs neutral at once (D-02)").toBe(true);
   expect(afterOff.scales.every((value) => value === "1")).toBe(true);
   expect(afterOff.transform).not.toContain("scale(");
+  await expect(desktop.spider, "D-45: no layer once stopped").not.toHaveAttribute("data-spider-walking", /.*/);
+  expect(await desktop.spider.evaluate((element) => getComputedStyle(element).willChange), "no will-change at rest").toBe("auto");
   expect(afterOff.pulses, "waves cleared").toBe(0);
   // The settings window opens in real time, so the spider may have stepped on a little before the click; what matters is that after the stop nothing moves.
   await page.clock.runFor(4_000);
@@ -241,7 +244,8 @@ test("[STAB-A11Y-04] the gait frame budget on a real device is not proven here",
 // D-45: the spider at rest must not be blurred. The sharpness of the live element (mean absolute discrete Laplacian of the luminance, in the
 // page) is compared with a reference: the same SVG in a motionless container, no CSS transform / translate / will-change, rotated by an SVG
 // attribute so the rotation happens before rasterisation. Factors are then switched one at a time by a style override on the live element.
-const REST_FACTORS = ["as-is", "will-change-auto", "transform-snapped", "no-scale", "translate-snapped", "all"] as const;
+// The last three put the old causes back on the fixed build (will-change: transform, a forwards-filled animation) to show which one blurs.
+const REST_FACTORS = ["as-is", "will-change-auto", "transform-snapped", "no-scale", "translate-snapped", "all", "regress-will-change", "regress-fill", "regress-both"] as const;
 type SharpnessRow = { project: string; state: string; factor: string; sharpness: number; reference: number; ratio: number; dpr: number; transform: string };
 
 // Rows of both projects land in one file; a lock directory keeps two workers from overwriting each other.
@@ -364,6 +368,8 @@ async function measureRest(page: Page, state: string, projectName: string): Prom
       const element = document.querySelector<HTMLElement>(".wallpaper-spider")!;
       const snap = (value: number) => Math.round(value * dpr) / dpr;
       if (name === "will-change-auto" || name === "all") element.style.willChange = "auto";
+      if (name === "regress-will-change" || name === "regress-both") element.style.willChange = "transform";
+      if (name === "regress-fill" || name === "regress-both") element.style.animation = "fade-in 600ms ease-out 0s both";
       if (name === "transform-snapped" || name === "all") {
         element.style.transform = element.style.transform.replace(/translate\(([-\d.]+)px, ([-\d.]+)px\)/, (_, x, y) => `translate(${snap(Number(x))}px, ${snap(Number(y))}px)`);
       }
@@ -377,6 +383,7 @@ async function measureRest(page: Page, state: string, projectName: string): Prom
       }
     }, { name: factor, dpr: setup.dpr });
     await settle();
+    if (factor === "regress-fill" || factor === "regress-both") await page.waitForTimeout(700); // the 600ms fade-in is a real-time CSS animation
     const live = await clipAt();
     const transform = await page.evaluate(() => document.querySelector<HTMLElement>(".wallpaper-spider")!.style.transform);
     const sharpness = await sharpnessOf(page, await page.screenshot({ clip: live, animations: "allow" }));
