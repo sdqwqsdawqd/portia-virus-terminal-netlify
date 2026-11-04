@@ -25,7 +25,7 @@ import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-desktop-documents";
 import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { PortiaImage } from "@/components/portia-desktop-media";
-import { broadcastType, buildSearchIndex, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, rosterDegradedText, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
+import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, rosterDegradedText, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -1241,7 +1241,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || qualificationLockedRef.current) return;
       if (window.matchMedia("(max-width: 900px)").matches) return;
-      const action = searchKeyAction(searchKeyContext(event, { inInput: false, query: "", index: -1, count: 0 }));
+      const action = globalSearchKeyAction(event);
       if (action !== "focus-input") return;
       event.preventDefault();
       focusSearchRef.current();

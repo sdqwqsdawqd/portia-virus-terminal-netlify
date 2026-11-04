@@ -153,6 +153,16 @@ export function searchKeyContext(event: KeyEventLike, rest: Omit<SearchKeyContex
   return { key: event.key, code: event.code, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, ...rest };
 }
 
+// Ctrl or Cmd without Alt (AltGr reports Ctrl+Alt) plus K; the physical code keeps it working on a Russian layout, where the K key reports «л».
+function isSearchShortcut(event: { key: string; code?: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean }): boolean {
+  return Boolean((event.ctrlKey || event.metaKey) && !event.altKey && (event.key.toLowerCase() === "k" || event.code === "KeyK"));
+}
+
+// D-46: the document-level handler opens the search with Ctrl/Cmd+K alone; the arrows work only inside the search window (searchKeyAction), so typing in a field or pressing Up on an empty desktop never steals the focus (D-44).
+export function globalSearchKeyAction(event: KeyEventLike): "focus-input" | null {
+  return isSearchShortcut(event) ? "focus-input" : null;
+}
+
 // Owner verdict 19-OWNER-DECISIONS #3 (2026-11-02): Ctrl/Cmd+K, arrows between field and results, Enter opens, Escape clears then closes. Tab keeps its native order.
 export function searchKeyAction(ctx: SearchKeyContext): SearchKeyAction | null {
   const { key, inInput, query, index, count } = ctx;
@@ -161,8 +171,7 @@ export function searchKeyAction(ctx: SearchKeyContext): SearchKeyAction | null {
     return index >= 0 && index < count ? "open" : null;
   }
   if (ctx.scope === "enter-only") return null;
-  const modifier = (ctx.ctrlKey || ctx.metaKey) && !ctx.altKey;
-  if (modifier && (key.toLowerCase() === "k" || ctx.code === "KeyK")) return "focus-input";
+  if (isSearchShortcut(ctx)) return "focus-input";
   if (ctx.ctrlKey || ctx.metaKey || ctx.altKey) return null;
   if (key === "Escape") return query ? "clear" : "close";
   if (key === "ArrowDown") {

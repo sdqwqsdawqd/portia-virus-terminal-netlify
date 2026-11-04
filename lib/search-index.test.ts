@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildSearchIndex, matchSearch, normalizeSearch, rosterDegradedText, searchKeyAction, type SearchIndexInput, type SearchKeyContext } from "./search-index.ts";
-import * as searchIndexModule from "./search-index.ts";
+import { globalSearchKeyAction } from "./search-index.ts";
 
 const virus = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
   id, code: `V-${id}`, name, status: "Изучен", external: "Серый", physiology: "Без особенностей",
@@ -151,8 +151,6 @@ test("the roster line: absent while healthy, saved time with a last-good copy, p
   assert.equal(rosterDegradedText({ lastGoodAt: null, failure: "offline" }, now), "Сотрудники сейчас недоступны");
   assert.equal(rosterDegradedText({ lastGoodAt: "not a date", failure: "offline" }, now), "Сотрудники: показаны сохранённые данные");
 });
-
-const globalSearchKeyAction = (event: ReturnType<typeof keyEvent>) => (searchIndexModule as unknown as { globalSearchKeyAction: (e: unknown) => string | null }).globalSearchKeyAction(event);
 
 const keyEvent = (patch: Partial<{ key: string; code: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }>) => ({ key: "", code: "", ctrlKey: false, metaKey: false, altKey: false, ...patch });
 
