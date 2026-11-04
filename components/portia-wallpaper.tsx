@@ -206,6 +206,70 @@ const cells = cellField();
 
 const WALLPAPER_FADE_MS = 500;
 
+// «Лабораторные колбы» (D-22): four flasks of different shape and liquid level on one lab stand, grouped right of centre.
+// Drawn in the 1440 x 900 wallpaper units like the other pictures. Every flask has its own cycle length and phase (6.8 / 8.9 / 11.3 / 7.7 s,
+// UI-SPEC starting values, a design candidate) so they never glow together. Everything moves by CSS on opacity and transform only:
+// no React state and no layout read per frame, and «Уменьшены» / «Выключены» (the global rule on .desktop-wallpaper *) leave the drawn still frame.
+const FLASK_BASE_Y = 620;
+type FlaskSpec = { x: number; outline: string; lip: string; shine: string; level: number; floor: number; span: number; duration: number; delay: number; tone: number; bubbles: number };
+const flaskSpecs: FlaskSpec[] = [
+  // Conical flask.
+  { x: 970, outline: "M-13 -150L13 -150L13 -112L55 -12Q58 0 46 0L-46 0Q-58 0 -55 -12L-13 -112Z", lip: "M-17 -151H17", shine: "M-6 -140V-108L-34 -26", level: -50, floor: -7, span: 22, duration: 6.8, delay: -1.9, tone: 0.3, bubbles: 6 },
+  // Round-bottom flask.
+  { x: 1100, outline: "M-12 -150L12 -150L12 -98.5A50 50 0 1 1 -12 -98.5Z", lip: "M-16 -151H16", shine: "M-31 -72Q-33 -48 -24 -30", level: -58, floor: -10, span: 22, duration: 8.9, delay: -5.2, tone: 0.42, bubbles: 7 },
+  // Beaker.
+  { x: 1230, outline: "M-38 -120L-38 -4Q-38 0 -34 0L34 0Q38 0 38 -4L38 -120Z", lip: "M-42 -121H38", shine: "M-27 -108V-14", level: -78, floor: -8, span: 26, duration: 11.3, delay: -3.4, tone: 0.24, bubbles: 6 },
+  // Tall tube with a round bottom, held by a clamp.
+  { x: 1360, outline: "M-26 -170L-26 -26A26 26 0 0 0 26 -26L26 -170Z", lip: "M-29 -171H29", shine: "M-16 -158V-30", level: -112, floor: -10, span: 14, duration: 7.7, delay: -6.1, tone: 0.36, bubbles: 5 },
+];
+
+// A sine-like surface line, 200 wide with a 20-unit period: sliding it by one period shows the same picture again.
+const flaskWave = (level: number) => `M-100 ${level}q5 -2.5 10 0${"t10 0".repeat(19)}`;
+
+const flasks = flaskSpecs.map((spec, index) => {
+  const rand = seeded(41 + index * 7);
+  const bubbles = Array.from({ length: spec.bubbles }, () => {
+    const radius = round(1.6 + rand() * 2.2);
+    // The bubble centre travels from just above the floor to just under the surface, so a bubble never leaves the liquid.
+    const bottom = spec.floor - radius, top = spec.level + radius + 3;
+    const rest = bottom + (top - bottom) * rand();
+    return {
+      cx: round((rand() * 2 - 1) * spec.span), cy: round(rest), r: radius,
+      below: round(bottom - rest), above: round(top - rest), duration: round(2.8 + rand() * 2.4), delay: round(-rand() * 5),
+    };
+  });
+  return { ...spec, index, bubbles };
+});
+
+function WallpaperFlasks() {
+  return <g className="wallpaper-flasks">
+    <defs>
+      {flasks.map((flask) => <clipPath key={flask.index} id={`wp-flask-clip-${flask.index}`}><path d={flask.outline} /></clipPath>)}
+    </defs>
+    {/* The stand: a plate on two legs and a rod with a clamp arm for the tall tube. */}
+    <g className="wallpaper-flask-stand">
+      <path d={`M905 ${FLASK_BASE_Y}H1434M905 ${FLASK_BASE_Y + 11}H1434M925 ${FLASK_BASE_Y + 11}V${FLASK_BASE_Y + 70}M1412 ${FLASK_BASE_Y + 11}V${FLASK_BASE_Y + 70}`} />
+      <path d={`M1424 ${FLASK_BASE_Y}V${FLASK_BASE_Y - 330}M1424 ${FLASK_BASE_Y - 128}H1386`} />
+      <path d={`M1382 ${FLASK_BASE_Y - 136}h8v16h-8z`} />
+    </g>
+    {flasks.map((flask) => <g key={flask.index} className={`wallpaper-flask${flask.index === 0 ? " wallpaper-flask-far" : ""}`} data-flask={flask.index}
+      transform={`translate(${flask.x} ${FLASK_BASE_Y})`}
+      style={{ "--flask-dur": `${flask.duration}s`, "--flask-delay": `${flask.delay}s`, "--flask-tone": flask.tone } as CSSProperties}>
+      <g className="wallpaper-flask-liquid" clipPath={`url(#wp-flask-clip-${flask.index})`}>
+        <rect className="wallpaper-flask-fill" x={-80} y={flask.level} width={160} height={4 - flask.level} />
+        <path className="wallpaper-flask-surface" d={flaskWave(flask.level)} />
+      </g>
+      <g className="wallpaper-flask-bubbles" clipPath={`url(#wp-flask-clip-${flask.index})`}>
+        {flask.bubbles.map((bubble, index) => <circle key={index} className="wallpaper-flask-bubble" cx={bubble.cx} cy={bubble.cy} r={bubble.r}
+          style={{ "--bubble-below": `${bubble.below}px`, "--bubble-above": `${bubble.above}px`, "--bubble-dur": `${bubble.duration}s`, "--bubble-delay": `${bubble.delay}s` } as CSSProperties} />)}
+      </g>
+      <path className="wallpaper-flask-glass" d={flask.outline} />
+      <path className="wallpaper-flask-lip" d={flask.lip} />
+      <path className="wallpaper-flask-shine" d={flask.shine} />
+    </g>)}
+  </g>;
+}
+
 export function DesktopWallpaper({ kind }: { kind: string }) {
   const [layers, setLayers] = useState({ current: kind, leaving: null as string | null });
   // Adjusted during render, so no frame is painted without the old layer.
@@ -232,6 +296,8 @@ function WallpaperArt({ kind }: { kind: string }) {
       ? helices.map((column) => <g key={column.x} className="wallpaper-helix" style={{ opacity: column.opacity }}>
           <path d={column.a} /><path d={column.b} /><path d={column.rungs} className="wallpaper-rungs" />
         </g>)
+      : kind === "flasks"
+      ? <WallpaperFlasks />
       : kind === "gel"
       ? <g className="wallpaper-gel">
           <defs>

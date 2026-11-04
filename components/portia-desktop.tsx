@@ -51,7 +51,7 @@ const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "ra
 // Every value a setting may hold; the same ids the «Настройки» groups offer.
 const settingValues: Record<Exclude<keyof DesktopSettings, "customAccent">, readonly string[]> = {
   accent: [...accentIds, "custom"],
-  wallpaper: ["radar", "grid", "gel", "cells", "quiet"],
+  wallpaper: ["radar", "grid", "gel", "cells", "flasks", "quiet"],
   iconSize: ["compact", "standard", "large"],
   motion: motionModes,
   spider: spiderModes,
@@ -261,6 +261,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const taskbarDrag = useRef<null | { app: AppId; pointerId: number; startX: number; moved: boolean }>(null);
   const suppressTaskbarClick = useRef(false);
   const [settingsSavedVisible, setSettingsSavedVisible] = useState(false);
+  const [wallpaperSaveFailed, setWallpaperSaveFailed] = useState(false);
   const [accentPickerOpen, setAccentPickerOpen] = useState(false);
   const [accentDraft, setAccentDraft] = useState<string | null>(null);
   const accentDraftRef = useRef<string | null>(null);
@@ -795,6 +796,15 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
   const updateDesktopSetting = (key: keyof DesktopSettings, value: string) => updateDesktopSettings({ [key]: value });
 
+  // E2: the wallpaper is written to the device first. If the device refuses, the previous wallpaper stays chosen and active, and the message says so.
+  const chooseWallpaper = (value: string) => {
+    if (value === desktopSettings.wallpaper) return;
+    try { window.localStorage.setItem(desktopSettingsStorageKey, JSON.stringify({ ...desktopSettings, wallpaper: value })); }
+    catch { setWallpaperSaveFailed(true); return; }
+    setWallpaperSaveFailed(false);
+    updateDesktopSettings({ wallpaper: value });
+  };
+
   const previewAccent = (hex: string) => {
     accentDraftRef.current = hex;
     setAccentDraft(hex);
@@ -840,6 +850,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     accentDraftRef.current = null;
     setAccentDraft(null);
     setAccentPickerOpen(false);
+    setWallpaperSaveFailed(false);
     setDesktopSettings(defaultDesktopSettings);
     setShortcutPositions({});
     showSettingsSaved();
@@ -1694,7 +1705,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   <CustomColorPicker key="accent" group="accent" title="Свой цвет интерфейса" color={desktopSettings.customAccent} onChange={previewAccent} onClose={closeAccentPicker} />
                 </div>}
               </SettingGroup>
-              <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={(value) => updateDesktopSetting("wallpaper", value)} />
+              <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['flasks','Лабораторные колбы'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={chooseWallpaper}>{wallpaperSaveFailed && <p className="setting-hint" role="alert">Не удалось сохранить фон на этом устройстве. Остался прежний фон.</p>}</SettingGroup>
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
               <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)}><p className="setting-hint">Системная настройка «уменьшить движение» не учитывается: управляйте анимациями здесь.</p></SettingGroup>
               <SettingGroup title="Паук" values={[['on','Показывать'],['off','Скрыть']]} current={desktopSettings.spider} onSelect={(value) => updateDesktopSetting("spider", value)} />
