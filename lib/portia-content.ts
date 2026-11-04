@@ -187,7 +187,16 @@ export type Broadcast = {
   startsAt: string;
   endsAt: string;
   conditions: string;
+  // D-41: the editor group (a section or subsection id of broadcastSections, "" for «Без раздела»). The site does not read it.
+  sectionId?: string;
 };
+
+// D-41/D-47: sections of the «Сводка» and «Рекомендации» tabs. There is no note field on purpose: editor notes live in
+// portia_editor_notes (tabs broadcasts and search) and never in the public content.
+export type OutlineSubsection = { id: string; title: string };
+export type OutlineSection = { id: string; title: string; subsections: OutlineSubsection[] };
+export type RecommendationSubsection = OutlineSubsection & { items: string[] };
+export type RecommendationSection = { id: string; title: string; items: string[]; subsections: RecommendationSubsection[] };
 
 export type RecycleFile = {
   id: string;
@@ -208,6 +217,9 @@ export type PortiaContent = {
   recycleFiles: RecycleFile[];
   recycleOrder: string[];
   searchRecommendations: string[];
+  // D-41: the editor's view of the two lists above; the site reads only broadcasts and the flat searchRecommendations.
+  broadcastSections?: OutlineSection[];
+  searchRecommendationSections?: RecommendationSection[];
   assistantAdvice: string[];
   assistantOffendedPhrase: string;
   assistantOffendedPhrases: string[];
