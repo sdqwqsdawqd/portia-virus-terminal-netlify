@@ -85,7 +85,7 @@ test("[STAB-SEARCH-02] a click inside the opened app takes the mark off before t
   await search.locator(".global-result").filter({ hasText: name }).first().click();
   const archive = desktop.window("База вирусов");
   await expect(archive.locator('[data-search-hit="true"]')).toHaveCount(1);
-  await page.waitForTimeout(600);
+  await page.clock.runFor(450);
   await archive.locator(".browser-heading").click();
   await expect(archive.locator('[data-search-hit="true"]')).toHaveCount(0, { timeout: 1_000 });
 });
@@ -118,5 +118,7 @@ test("[STAB-SEARCH-01] «Ёж», «ёж» and «еж» are one query, and an app
     await expect(search.locator(".global-search-summary strong")).toBeVisible();
     counts.push(await search.locator(".global-result").count());
   }
+  test.skip(counts[0] === 0, "BLOCKED (DATA): this target holds no record with «ё/е» in its title, so normalization cannot be shown.");
+  expect(counts[0]).toBeGreaterThan(0);
   expect(new Set(counts).size).toBe(1);
 });

@@ -103,7 +103,7 @@ export function matrixPayload(variant, original) {
   ];
   base.broadcasts = [...(Array.isArray(base.broadcasts) ? base.broadcasts : []),
     { id: "matrix-news", type: "news", title: "Важная новость матрицы", body: "Проверка опубликованной новости.", published: true, important: true, startsAt: "", endsAt: "", conditions: "" },
-    { id: "matrix-quest", type: "quest", title: "Квест матрицы", body: "Проверка опубликованного квеста.", published: true, important: false, startsAt: "", endsAt: "", conditions: "" },
+    { id: "matrix-quest", type: "quest", title: "Квест матрицы", body: "Проверка опубликованного квеста.", published: true, important: false, startsAt: "2099-01-01", endsAt: "", conditions: "" },
     { id: "matrix-draft", type: "news", title: "Черновик матрицы", body: "Не опубликован.", published: false, important: false, startsAt: "", endsAt: "", conditions: "" },
   ];
   return base;

@@ -1,0 +1,12 @@
+{
+  "schema": "portia-matrix-run-v1",
+  "runId": "mw1k6z9m_125dc0cd",
+  "refHash": "01d085e7b9f0",
+  "variant": "populated",
+  "snapshotRevision": 0,
+  "snapshotHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+  "variantHash": "3ba05849a20a77cbb4ad24cb7db22885ae3a516c6243ca10d569f220eb0ea894",
+  "snapshotPath": "C:\\Users\\User\\AppData\\Local\\Temp\\portia-matrix-mw1k6z9m_125dc0cd\\snapshot.json",
+  "startedAt": "2026-11-04T03:30:29.004Z",
+  "restoredAt": "2026-11-04T03:33:06.244Z"
+}

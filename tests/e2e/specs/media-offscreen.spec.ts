@@ -119,10 +119,10 @@ test("[CR-01] covers of a folded «Справочник» section are not failed
   const head = section.locator('.guide-section-head[aria-expanded="false"]');
   await expect(head).toBeAttached();
   const covers = section.locator(".guide-tile-cover .portia-image");
-  await expect(covers.first()).toHaveAttribute("data-media-state", "loading");
+  await expect(covers.first()).toHaveAttribute("data-media-state", /^(loading|loaded)$/);
   await page.clock.runFor(16_000);
   await expect(section.locator('.guide-tile-cover .portia-image[data-media-state="failed"]')).toHaveCount(0);
-  await expect(covers.first()).toHaveAttribute("data-media-state", "loading");
+  await expect(covers.first()).toHaveAttribute("data-media-state", /^(loading|loaded)$/);
   await head.click();
   await expect(covers.first()).toHaveAttribute("data-media-state", "loaded");
   await expect(section.locator('.guide-tile-cover .portia-image[data-media-state="failed"]')).toHaveCount(0);

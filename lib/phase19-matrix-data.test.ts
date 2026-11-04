@@ -84,6 +84,7 @@ test("populated matrix payload has guides, media, broadcasts and an extra Ё vir
   assert.ok(payload.guideSections.some((section) => section.cards.some((card) => card.blocks.some((block) => block.type === "photo" && block.url.startsWith("/assets/")))));
   assert.ok(payload.broadcasts.some((item) => item.type === "news" && item.published && item.important));
   assert.ok(payload.broadcasts.some((item) => item.type === "quest" && item.published));
+  assert.equal(payload.broadcasts.find((item) => item.id === "matrix-quest")?.startsAt, "2099-01-01");
   assert.ok(payload.broadcasts.some((item) => !item.published));
   assert.ok(payload.guideSections.some((item) => item.id === "existing-guide"));
   assert.ok(payload.broadcasts.some((item) => item.id === "existing-broadcast"));
