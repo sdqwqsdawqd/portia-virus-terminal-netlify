@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-16-PLAN.md
-last_updated: "2026-11-04T09:10:31.326Z"
+stopped_at: Completed PORTIA-20-07-PLAN.md
+last_updated: "2026-11-04T10:00:10.023Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: b51b91406e8d636e5037a00eead73147ec323bf6
+state_head: ad3151827000837f8735bfa5a7db065e2ac1e2b8
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 87
+  completed_plans: 88
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 17 of 24
+Plan: 18 of 24
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-04 — Phase PORTIA-20 execution started
 
@@ -123,6 +123,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P06 | 105 min | 2 tasks | 4 files |
 | Phase PORTIA-20 P24 | 25m | 3 tasks | 8 files |
 | Phase PORTIA-20 P16 | 2h30m | 3 tasks | 7 files |
+| Phase PORTIA-20 P07 | 3h | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -206,6 +207,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-06: Promotion redesign appended as separate CSS blocks; E4 evidence via real-request faults only, populated/reviewer states BLOCKED (DATA/ENV)
 - [Phase PORTIA-20]: 20-24: editor notes migration 20261104000100 (hash e1866a5b) applied nowhere; owner chose option a but staging availability unconfirmed, so staging checks BLOCKED (OWNER), STAB-EDIT-04 open, production ОЖИДАЕТ ВЛАДЕЛЬЦА
 - [Phase PORTIA-20]: 20-16: phone layout of Информация via useSyncExternalStore(matchMedia 900px); back button in flow (not sticky, .app-window clips); expansion/Далее/search reveal BLOCKED (DATA) on target, STAB-A11Y-02/03 stay open
+- [Phase PORTIA-20]: 20-07: tap area measured by elementFromPoint; start button grows only its hit area, window controls drawn at 44, taskbar label hidden by clip not display:none (accessible name kept)
+- [Phase PORTIA-20]: 20-07: colour-contrast defects in Archive/Search/Trash pinned as FAIL until owner verdict D-10, not fixed (would change approved window frames); STAB-A11Y-02/04 stay open
 
 ### Pending Todos
 
@@ -244,8 +247,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T09:10:30.854Z
-Stopped at: Completed PORTIA-20-16-PLAN.md
+Last session: 2026-11-04T10:00:09.548Z
+Stopped at: Completed PORTIA-20-07-PLAN.md
 Resume file: None
 
 ## Operator Next Step
