@@ -94,7 +94,7 @@
 - [ ] **STAB-A11Y-03**: Русские labels, success/error/disabled reason понятны и объявляются; нет пустых, шуточных, удвоенных или непереведённых technical labels; alt соответствует назначению изображения.
 - [ ] **STAB-A11Y-04**: Итоговая motion-настройка применяется ко всем поверхностям; off/reduced прекращает looping movement, но сохраняет content и feedback.
 - [x] **STAB-SEC-01**: Anon, authenticated, editor, reviewer и owner видят и изменяют только разрешённые данные; запрещённые UI/API/table/RPC действия fail-closed, revoke действует без rebuild.
-- [ ] **STAB-SEC-02**: Participant network/UI не получает answer keys, future questions, internal notes, bank payload и reviewer identity; sensitive responses используют no-store.
+- [x] **STAB-SEC-02**: Participant network/UI не получает answer keys, future questions, internal notes, bank payload и reviewer identity; sensitive responses используют no-store.
 - [ ] **STAB-SEC-03**: CSP, frame, nosniff, referrer, permissions, COOP и HSTS присутствуют, не ломая approved charter/sheet/video; CSP ужесточается только через report-only.
 - [x] **STAB-SEC-04**: Staging и production schema fingerprints, functions, grants и RLS соответствуют canonical migrations; ручной production step имеет записанный postflight. (Complete: staging golden == U == final; production после owner-run миграций == golden по правилу A, единственное отличие — платформенная `rls_auto_enable()`, см. `evidence/16-PRODUCTION-POSTFLIGHT.md`.)
 - [ ] **STAB-SEC-05**: Глубокий GSD code review и локальная security matrix покрывают auth/API/RLS/headers/CSP/uploads/secrets/dependencies; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, lockfile меняется отдельно.
@@ -210,7 +210,7 @@
 | STAB-A11Y-03 | Phase 20 | Pending |
 | STAB-A11Y-04 | Phase 20 | Pending |
 | STAB-SEC-01 | Phase 16 | Complete |
-| STAB-SEC-02 | Phase 20 | Pending |
+| STAB-SEC-02 | Phase 20 | Complete |
 | STAB-SEC-03 | Phase 20 | Pending |
 | STAB-SEC-04 | Phase 16 | Complete |
 | STAB-SEC-05 | Phase 20 | Pending |
