@@ -1387,7 +1387,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .taskbar-apps::-webkit-scrollbar { display: none; }
   .taskbar-app:not(.active) { display: flex; }
   .taskbar-app { flex: 0 0 42px; justify-content: center; padding: 0 8px; }
-  .taskbar-app > span:last-child { display: none; }
+  /* Hidden by sight only: the label stays the button's accessible name (20-07, axe button-name). */
+  .taskbar-app > span:last-child { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 }
 
 @media (max-width: 520px) {
@@ -2238,4 +2239,30 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .template-shell { padding: 16px; }
   .template-grid { grid-template-columns: minmax(0, 1fr); }
   .template-actions .promotion-action, .template-back, .template-confirm-actions .promotion-action { min-height: 44px; }
+}
+
+/* 20-07 (STAB-A11Y-02): on a phone every control takes a tap of at least 44x44 CSS px. The approved frames of the phone home
+   (start button idle and open) keep their drawn size: the start button grows only its hit area, with a pseudo-element. Window
+   controls are windows-only, which no approved phone frame shows, so they are drawn at 44 with the old 30px square kept inside. */
+@media (max-width: 900px) {
+  .start-button { position: relative; }
+  .start-button::before { content: ""; position: absolute; inset: -7px 0 -4px; }
+  /* The strip takes the full bar (its 1px top border included), so a 44px entry is not cut to 43. */
+  .taskbar-apps { align-self: stretch; margin-top: -1px; }
+  .taskbar-app { flex: 0 0 44px; height: 44px; }
+  .taskbar-app.active::after { bottom: 2px; }
+  .window-titlebar { height: 48px; }
+  .window-controls { gap: 0; }
+  .window-controls button { position: relative; isolation: isolate; width: 44px; height: 44px; border-color: transparent; background: transparent; }
+  .window-controls button::before { content: ""; position: absolute; inset: 7px; z-index: -1; border: 1px solid oklch(.407 calc(.035 * var(--accent-chroma)) var(--accent-hue)); border-radius: 8px; background: oklch(.259 calc(.026 * var(--accent-chroma)) var(--accent-hue)); }
+  .window-controls button:hover, .window-controls button:last-child:hover { border-color: transparent; background: transparent; }
+  .window-controls button:hover::before { border-color: oklch(.611 calc(.037 * var(--accent-chroma)) var(--accent-hue)); background: oklch(.31 calc(.027 * var(--accent-chroma)) var(--accent-hue)); }
+  .window-controls button:last-child:hover::before { border-color: #a65750; background: #5d2d29; }
+  .search-box, .global-search-box { min-height: 44px; }
+  .search-recommendations button { min-height: 44px; padding-inline: 12px; }
+  .broadcast-tabs button { min-height: 44px; }
+  .content-control-actions button, .content-control-actions a, .factory-reset { min-height: 44px; }
+}
+@media (max-width: 430px) {
+  .taskbar-app { max-width: 44px; }
 }
