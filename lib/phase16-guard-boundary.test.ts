@@ -4,7 +4,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { check } from "../.claude/hooks/guard.mjs";
+import { existsSync } from "node:fs";
+
+// .claude/ is excluded from git (.git/info/exclude), so a clean checkout has no guard.mjs.
+// There the boundary cannot be exercised: skip as BLOCKED (ENV), never pass (owner decision 2026-11-04).
+const GUARD_URL = new URL("../.claude/hooks/guard.mjs", import.meta.url);
+const GUARD_SKIP = existsSync(GUARD_URL)
+  ? false
+  : "BLOCKED (ENV): .claude/hooks/guard.mjs is untracked and absent in this checkout";
+type GuardCheck = (input: unknown, env: NodeJS.ProcessEnv) => unknown;
+const check: GuardCheck = GUARD_SKIP
+  ? () => null
+  : ((await import(GUARD_URL.href)) as { check: GuardCheck }).check;
 
 const ISO = "aaaaaaaaaaaaaaaaaaaa";
 const PROD = "bbbbbbbbbbbbbbbbbbbb";
@@ -25,13 +36,13 @@ const allowed = (command: string, env?: Env) =>
 
 const WRAPPER = "node --experimental-strip-types scripts/phase16-staging.mjs";
 
-test("property 1: privileged-role text stays blocked, with and without keys", () => {
+test("property 1: privileged-role text stays blocked, with and without keys", { skip: GUARD_SKIP }, () => {
   const words = ["service" + "_role", "service" + "-role"];
   for (const w of words) for (const env of [keyed, {}]) blocked(`echo ${w}`, env);
   blocked("export SUPABASE_" + "SERVICE_ROLE" + "_KEY=x", {});
 });
 
-test("property 2: only exact wrapper / npm staging forms pass while keys are present", () => {
+test("property 2: only exact wrapper / npm staging forms pass while keys are present", { skip: GUARD_SKIP }, () => {
   allowed(`${WRAPPER} attest`);
   allowed(`${WRAPPER} self-test-production-block`);
   allowed(`${WRAPPER} scan-evidence .planning/phases/x/evidence`);
@@ -49,7 +60,7 @@ test("property 2: only exact wrapper / npm staging forms pass while keys are pre
   for (const c of ["git status --short", "npm test", "npm exec tsc -- --noEmit", "npm run lint", "cat package.json"]) allowed(c);
 });
 
-test("property 3: no direct CLI, env printing, secret names or raw HTTP while keys are present", () => {
+test("property 3: no direct CLI, env printing, secret names or raw HTTP while keys are present", { skip: GUARD_SKIP }, () => {
   for (const c of [
     "supabase status", "npx supabase db push", "node_modules/.bin/supabase db push",
     "env", "printenv", "echo $HOME", "node -e \"console.log(process.env)\"", "node -p \"process.env\"",
@@ -61,7 +72,7 @@ test("property 3: no direct CLI, env printing, secret names or raw HTTP while ke
   allowed("npm run test:staging-live", {});
 });
 
-test("property 4: production ref in text or as target is blocked", () => {
+test("property 4: production ref in text or as target is blocked", { skip: GUARD_SKIP }, () => {
   blocked(`git log --grep ${PROD}`);
   blocked(`git log --grep ${PROD.toUpperCase()}`);
   blocked("npm run test:staging-live", { ...keyed, PORTIA_E2E_TARGET_ID: PROD });
@@ -82,7 +93,7 @@ const hook = (command: string, env: Env) =>
     encoding: "utf8",
   });
 
-test("hook process: exit codes match check() for the four properties", () => {
+test("hook process: exit codes match check() for the four properties", { skip: GUARD_SKIP }, () => {
   assert.equal(hook(`${WRAPPER} attest`, keyed).status, 0);
   assert.equal(hook("npm run test:staging-live", keyed).status, 0);
   assert.equal(hook(`${WRAPPER} attest && ls`, keyed).status, 2);
@@ -95,7 +106,7 @@ test("hook process: exit codes match check() for the four properties", () => {
   assert.match(r.stderr, /Blocked by project guard/);
 });
 
-test("real production list (if present in env): every ref is blocked as target and in text", () => {
+test("real production list (if present in env): every ref is blocked as target and in text", { skip: GUARD_SKIP }, () => {
   const real = String(process.env.PORTIA_E2E_PRODUCTION_PROJECT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   real.forEach((ref, i) => {
     const env = { ...keyed, PORTIA_E2E_PRODUCTION_PROJECT_IDS: real.join(","), PORTIA_E2E_ISOLATED_PROJECT_IDS: ref, PORTIA_E2E_TARGET_ID: ref };
