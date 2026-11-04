@@ -255,6 +255,7 @@ test.describe("[STAB-EDIT-03] D-41 «Справочник» pinned add-section b
 
 // The private store of 20-24 is applied by the owner. Until then these steps are BLOCKED (OWNER), never a pass.
 async function skipUnlessNotesTable(stagingRun: StagingRun, testInfo: TestInfo) {
+  testInfo.skip(!stagingRun.live, "BLOCKED (ENV): safe target unavailable");
   const probe = await adminOf(stagingRun).from("portia_editor_notes").select("tab").limit(1);
   const absent = probe.error?.code === "42P01" || probe.error?.code === "PGRST205";
   testInfo.skip(absent, "BLOCKED (OWNER/ENV): notes store not applied (migration 20261104000100 awaits the owner)");
