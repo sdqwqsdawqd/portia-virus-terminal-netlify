@@ -46,7 +46,7 @@ BLOCKED: всё живое поведение RLS (нужен Postgres и при
 
 ## Staging
 
-Статус: **BLOCKED (OWNER)**. Результата staging-проверок нет; это не PASS.
+Статус: **PASS на изолированном staging, 2026-11-05** (см. «Прогон спеки на staging, 2026-11-05» ниже). Записи ниже до таблицы результатов описывают состояние до применения миграции и сохранены как история.
 
 Выполнены только команды чтения через защищённые обёртки (`scripts/phase16-staging.mjs`: `resolveStagingTarget`, `attest`, `runCli`); значения окружения и .env не читались и не печатались, записей на staging нет.
 
@@ -65,10 +65,10 @@ BLOCKED: всё живое поведение RLS (нужен Postgres и при
 
 | Сценарий | Результат |
 |----------|-----------|
-| 1. сохранение и чтение, no-store | BLOCKED (OWNER): таблицы на staging нет, push не разрешён |
-| 2. посетитель и публичный ключ | BLOCKED (OWNER) |
-| 3. закрытая вкладка | BLOCKED (OWNER) |
-| 4. устаревший revision, 409 | BLOCKED (OWNER) |
+| 1. сохранение и чтение, no-store | PASS, 5/5 проектов (2026-11-05, HEAD 74ce5c7; до этого BLOCKED (OWNER)) |
+| 2. посетитель и публичный ключ | PASS, 5/5 проектов (2026-11-05, HEAD 74ce5c7) |
+| 3. закрытая вкладка | PASS, 5/5 проектов (2026-11-05, HEAD 74ce5c7) |
+| 4. устаревший revision, 409 | PASS, 5/5 проектов (2026-11-05, HEAD 74ce5c7) |
 
 Спека сама пропускает тесты как BLOCKED (OWNER), пока таблицы нет, и как BLOCKED (ENV) без безопасных ключей; пропуск не засчитывается как pass. Прогон `npm.cmd run test:e2e:mutation -- tests/e2e/specs/editor-notes.spec.ts` не выполнялся: он требует создания пользователей и записей на staging. Скрипт `test:e2e:mutation` перечисляет только roles и staging-authz, поэтому после применения миграции спеку нужно запускать явным путём (как editor-journeys в 19-14).
 
@@ -85,8 +85,8 @@ BLOCKED: всё живое поведение RLS (нужен Postgres и при
 
 ## Что остаётся открытым
 
-- STAB-EDIT-04 (приватные заметки) остаётся **ОТКРЫТЫМ**: нет живой проверки RLS и маршрута.
-- Для закрытия нужно: владелец подтверждает свободный staging, выполняется `phase16-staging.mjs push` (применится только эта миграция по dry-run выше), затем запускается спека `editor-notes.spec.ts` и результаты вносятся в «Staging».
+- STAB-EDIT-04 (приватные заметки): живая проверка RLS и маршрута на изолированном staging получена 2026-11-05 (PASS, см. ниже). Остаётся открытым применение миграции на production (ОЖИДАЕТ ВЛАДЕЛЬЦА); итоговый статус требования решают 20-31 и 20-15.
+- Путь 503 «Заметки временно недоступны.» при отсутствии таблицы живьём не проверялся (таблица теперь есть); он доказан только offline.
 - STAB-SEC-05 (review SQL/RLS): статическое ревью получено (PASS-WITH-NOTES); живая проверка остаётся BLOCKED, отложенные находки LOW-1..LOW-3 и MEDIUM-4 открыты по решению владельца.
 
 ## Применение на staging, 2026-11-04
@@ -95,4 +95,14 @@ BLOCKED: всё живое поведение RLS (нужен Postgres и при
 - `node --experimental-strip-types scripts/phase16-staging.mjs attest`: `{"status":"ATTESTED","refHash":"01d085e7b9f0"}` (изолированный проект, production-цель отвергается охранником).
 - `node --experimental-strip-types scripts/phase16-staging.mjs push`: применена только `20261104000100_portia_editor_notes.sql`; последующий `migration list` показывает Local = Remote для всех пяти миграций (20261101000000, 20261101000100, 20261101000200, 20261104000000, 20261104000100).
 - Production не затрагивался; `.env*` не открывались.
-- Не выполнено: спека `tests/e2e/specs/editor-notes.spec.ts` (четыре сценария таблицы «Staging» выше остаются BLOCKED до её прогона). Живое поведение RLS по-прежнему не доказано: применение миграции не равно PASS сценариев.
+- Спека в этот день не запускалась; её прогон ниже.
+
+## Прогон спеки на staging, 2026-11-05
+
+- Решение владельца 2026-11-05: «Запустить».
+- Команда: `npm run test:e2e:mutation -- tests/e2e/specs/editor-notes.spec.ts` на HEAD `74ce5c7`; скрипт также прогоняет `roles.spec.ts` и `staging-authz.spec.ts`. Сервер: собственная production-сборка Playwright на 127.0.0.1:3000, остановлена по завершении. Ретраев нет в выводе: flaky 0.
+- Итог (из `playwright-report`, stats): total 105, expected 100, unexpected 0, flaky 0, skipped 5, exit 0.
+- `editor-notes.spec.ts`: все 4 сценария PASS на chromium-desktop, chromium-dpr125, firefox-desktop, webkit-phone, chromium-phone (20/20).
+- 5 пропусков: `staging-authz.spec.ts` «[STAB-SEC-02] participant status body for a roster nickname is allowlisted…» на всех 5 проектах, BLOCKED(DATA): «no promotion roster nickname provided for the isolated project». Это не PASS и не относится к заметкам.
+- Шум сервера: многократное «PORTIA cache purge failed … The Netlify site ID was not found in the execution environment» — локальный сервер без Netlify-окружения не может сбросить CDN-кэш после записи; на результаты тестов не влияет, сброс кэша этим прогоном не доказан.
+- Production не затрагивался; `.env*` не открывались.
