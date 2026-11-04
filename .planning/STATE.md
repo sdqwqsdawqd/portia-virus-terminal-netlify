@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed 19-18-PLAN.md
-last_updated: "2026-11-04T04:16:40.220Z"
-last_activity: 2026-11-03
-last_activity_desc: Phase PORTIA-19 execution started
-state_head: c04985b62e82685be802f4e305934ea90d7bf7b0
+stopped_at: Completed PORTIA-20-01-PLAN.md
+last_updated: "2026-11-04T04:27:55.657Z"
+last_activity: 2026-11-04
+last_activity_desc: Phase PORTIA-20 execution started
+state_head: 253fa4d25f60ab520c1bc7c25d7ac593a5aa264a
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 69
+  completed_plans: 70
   percent: 50
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-29)
 
 **Core value:** Сделать существующий PORTIA OS доказуемо устойчивым, безопасным и визуально последовательным, сохранив его текущую художественную основу.
-**Current focus:** Phase PORTIA-19 — «Повышение», приложения, редактор, поиск и медиа
+**Current focus:** Phase PORTIA-20 — Security, accessibility и приёмка релиза
 
 ## Current Position
 
-Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 18 of 22
-Status: Executing Phase PORTIA-19
-Last activity: 2026-11-03 — Phase PORTIA-19 execution started
+Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
+Plan: 2 of 24
+Status: Executing Phase PORTIA-20
+Last activity: 2026-11-04 — Phase PORTIA-20 execution started
 
 Progress: [█████░░░░░] 50%
 
@@ -107,6 +107,7 @@ Progress: [█████░░░░░] 50%
 | Phase 19 P18 | 17min | 2 tasks | 6 files |
 | Phase 19 P19 | 31min | 3 tasks | 11 files |
 | Phase PORTIA-19 P20 | 17min | 3 tasks | 10 files |
+| Phase PORTIA-20 P01 | 40min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -172,6 +173,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 19]: Владелец (Qloxz), 2026-11-04: B — серверный источник «Сотрудников» не менять; Task 2 плана 19-18 пропущена.
 - [Phase 19]: 19-19: случайный PASS живого ростера не закрывает empty и desktop stale «Сотрудников» при вердикте B; STAB-DESK-08, STAB-APP-02, STAB-APP-10 Pending.
 - [Phase PORTIA-19]: 19-20: Qloxz, 2026-11-04 — «Удалить этот run и создать новый v2 (рекомендуется)»; mw0rbyf6 teardown residual 0; новый v2 mw1loqa9_c9451c80; физическая PC/phone приёмка остаётся открытой.
+- [Phase PORTIA-20]: 20-01: задание «создать шаблон» распознаётся по тексту (/шаблон/i); конструктор скрывает оболочку Повышения через hidden, а не размонтирует её
 
 ### Pending Todos
 
@@ -210,8 +212,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T03:18:48.981Z
-Stopped at: Completed 19-18-PLAN.md
+Last session: 2026-11-04T04:27:55.218Z
+Stopped at: Completed PORTIA-20-01-PLAN.md
 Resume file: None
 
 ## Operator Next Step
