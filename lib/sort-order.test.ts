@@ -36,3 +36,33 @@ test("a sub-pixel top difference still counts as the same row", () => {
   assert.equal(passesTarget(own, nearly, { x: 400, y: 50 }, true), false);
   assert.equal(passesTarget(own, nearly, { x: 600, y: 50 }, true), true);
 });
+
+// D-42 (20-22): section cards sit in columns of five, column after column. Column geometry: 340 wide, 10 gap, cards 100 high.
+const columnOne = [0, 1, 2, 3, 4].map((row): Box => ({ left: 0, top: row * 110, width: 340, height: 100 }));
+const columnTwo = [0, 1].map((row): Box => ({ left: 350, top: row * 110, width: 340, height: 100 }));
+
+test("D-42 same column: the target below swaps only after its vertical middle", () => {
+  assert.equal(passesTarget(columnOne[1], columnOne[2], { x: 100, y: 260 }, true), false);
+  assert.equal(passesTarget(columnOne[1], columnOne[2], { x: 100, y: 285 }, true), true);
+});
+
+test("D-42 neighbouring column at the same height: the horizontal middle of the target decides", () => {
+  assert.equal(passesTarget(columnOne[0], columnTwo[0], { x: 400, y: 50 }, true), false);
+  assert.equal(passesTarget(columnOne[0], columnTwo[0], { x: 560, y: 50 }, true), true);
+  assert.equal(passesTarget(columnTwo[0], columnOne[0], { x: 300, y: 50 }, false), false);
+  assert.equal(passesTarget(columnTwo[0], columnOne[0], { x: 100, y: 50 }, false), true);
+});
+
+test("D-42 from the bottom of a column to the top of the next one: the target's vertical middle decides", () => {
+  const last = columnOne[4];
+  const top = columnTwo[0];
+  assert.equal(passesTarget(last, top, { x: 500, y: 20 }, true), false);
+  assert.equal(passesTarget(last, top, { x: 500, y: 70 }, true), true);
+});
+
+test("D-42 from the top of a column back to the bottom of the previous one is symmetric", () => {
+  const first = columnTwo[0];
+  const bottom = columnOne[4];
+  assert.equal(passesTarget(first, bottom, { x: 100, y: 520 }, false), false);
+  assert.equal(passesTarget(first, bottom, { x: 100, y: 460 }, false), true);
+});
