@@ -12,6 +12,24 @@ const uatPath = path.join(root, ".planning/phases/PORTIA-20-security-accessibili
 
 export const stepStatuses = ["ОЖИДАЕТ", "PASS", "FAIL", "BLOCKED (ENV)", "BLOCKED (DATA)", "BLOCKED (OWNER)", "BLOCKED (DEVICE)"];
 
+export const prerequisiteStatuses = [...stepStatuses, "ОЖИДАЕТ ВЛАДЕЛЬЦА", "ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ"];
+
+const seq = (prefix: string, count: number) => Array.from({ length: count }, (_, i) => `${prefix}${String(i + 1).padStart(2, "0")}`);
+
+// Every id the owner must see, once per place: prerequisites once; `both` on PC and phone; `pcOnly` only on PC; `phoneOnly` only on phone.
+export const requiredUatIds = {
+  prerequisites: [
+    ...Array.from({ length: 8 }, (_, i) => `P19-GAP-${15 + i}`),
+    "OWNER-MIG-D36", "OWNER-MIG-NOTES", "STAGING-FREE", "REVIEWER-ROLE", "VISUAL-APPROVED", "RELEASE-GATE",
+  ],
+  both: [
+    ...seq("SPIDER-", 3), ...seq("CLASS-", 4), "SEARCH-01", "SEARCH-03", ...seq("EDITOR-", 4), ...seq("REG-", 7), ...seq("PROMO-", 5),
+    "TMPL-01", "WIN-01", "QUAL-LOCK-01", "WALL-01", "SVG-01", "SHORTCUT-01", "VIVIAN-01", "MOTION-01", "MEDIA-01", "A11Y-SR-01",
+  ],
+  pcOnly: ["INFO-PC-01", "SEARCH-02", "A11Y-KEY-01", "A11Y-CONTRAST-D10"],
+  phoneOnly: [...seq("INFO-PHONE-", 5), "A11Y-TOUCH-01"],
+};
+
 const hexCommit = /^[0-9a-f]{7,40}$/;
 const isoDate = /^\d{4}-\d{2}-\d{2}$/;
 const empty = (value: string) => value === "" || value === "-";
@@ -150,27 +168,91 @@ export function gitCommitExists(commit: string): boolean {
   return result.status === 0;
 }
 
-const ledger = readFileSync(uatPath, "utf8");
 
-// Fixture editing: change one cell row of a section of a copy of the real ledger, so fixtures break together with the format.
-function editStep(text: string, device: "pc" | "phone", id: string, edit: (cells: string[]) => void): string {
+const ledger = readFileSync(uatPath, "utf8");
+// PORTIA_REQUIRE_UAT=1 is the 20-14 Task 2 owner gate: the real ledger must then be final, not just well-formed.
+const strict = process.env.PORTIA_REQUIRE_UAT === "1";
+
+type Table = "prereq" | "pc" | "phone";
+const isTable = (section: Section): section is Table => section === "prereq" || section === "pc" || section === "phone";
+
+// Fixture editing on a copy of the real ledger, so fixtures break together with the format. `undefined` keeps the row, `null` drops it.
+function mapRows(text: string, fn: (section: Table, cells: string[]) => string[] | null | undefined): string {
   let section: Section = "other";
-  let found = false;
-  const out = text.split(/\r?\n/).map((line) => {
+  const out: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
     if (line.startsWith("## ")) section = sectionOf(line);
-    if (section !== device || !line.startsWith(`| ${id} |`)) return line;
+    if (!isTable(section) || !line.startsWith("|")) { out.push(line); continue; }
     const cells = splitRow(line);
-    edit(cells);
-    found = true;
-    return `| ${cells.join(" | ")} |`;
-  });
-  assert.ok(found, `fixture row ${id} on ${device} not found`);
+    if (isHeaderOrSeparator(cells)) { out.push(line); continue; }
+    const next = fn(section, cells);
+    if (next === null) continue;
+    out.push(next === undefined ? line : `| ${next.join(" | ")} |`);
+  }
   return out.join("\n");
 }
 
+function editRow(text: string, table: Table, id: string, edit: (cells: string[]) => void): string {
+  let found = false;
+  const out = mapRows(text, (section, cells) => {
+    if (section !== table || cells[0] !== id) return undefined;
+    found = true;
+    edit(cells);
+    return cells;
+  });
+  assert.ok(found, `fixture row ${id} in ${table} not found`);
+  return out;
+}
+
+const dropRow = (text: string, table: Table, id: string) => mapRows(text, (section, cells) => (section === table && cells[0] === id ? null : undefined));
+const duplicateRow = (text: string, table: Table, id: string) => {
+  const out: string[] = [];
+  let section: Section = "other";
+  let done = false;
+  for (const raw of text.split(/\r?\n/)) {
+    if (raw.startsWith("## ")) section = sectionOf(raw);
+    out.push(raw);
+    if (!done && section === table && raw.startsWith(`| ${id} |`)) { out.push(raw); done = true; }
+  }
+  assert.ok(done, `fixture row ${id} in ${table} not found`);
+  return out.join("\n");
+};
+
+const stepDevice = { pc: "PC", phone: "phone" } as const;
+type Commits = { pc: string; phone: string };
+
+// A fully filled, consistent ledger (every prerequisite satisfied, every step PASS, two PASS verdicts); the baseline for negative fixtures.
+function completeLedger(text: string, commits: Commits = { pc: "abcdef1", phone: "abcdef1" }): string {
+  let out = mapRows(text, (section, cells) => {
+    if (section === "prereq") {
+      cells[3] = cells[0].startsWith("OWNER-MIG-") ? "ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ" : "PASS";
+      cells[4] = "2026-11-05";
+      if (empty(cells[5])) cells[5] = "проверено владельцем";
+      return cells;
+    }
+    cells[5] = "PASS"; cells[6] = stepDevice[section]; cells[7] = commits[section]; cells[8] = "2026-11-05"; cells[9] = "проверено владельцем";
+    return cells;
+  });
+  out = out.replace(/^release_candidate_commit:.*$/m, `release_candidate_commit: ${commits.phone}`);
+  out = out.replace(/^Вердикт PC: .*$/m, `Вердикт PC: PASS (commit ${commits.pc})`);
+  out = out.replace(/^Вердикт phone: .*$/m, `Вердикт phone: PASS (commit ${commits.phone})`);
+  if (commits.pc !== commits.phone) {
+    out = out.replace(/^- Изменение между коммитами:.*$/m, "- Изменение между коммитами: исправлен только стиль кнопки на телефоне")
+      .replace(/^- Основание сохранения PC-вердикта:.*$/m, "- Основание сохранения PC-вердикта: изменение затрагивает только phone-раскладку, PC-код не менялся")
+      .replace(/^- Полный повтор phone:.*$/m, `- Полный повтор phone: весь phone-чек-лист повторён на ${commits.phone}`);
+  }
+  return out;
+}
+
+const withVerdict = (text: string, device: "PC" | "phone", value: string) =>
+  text.replace(new RegExp(`^Вердикт ${device}: .*$`, "m"), `Вердикт ${device}: ${value}`);
+const allKnown = () => true;
+const noCommit = (_: string) => false;
+const errorsOf = (text: string, options: UatOptions = {}) => validateUat(text, { commitExists: allKnown, ...options });
+
 describe("20-UAT ledger structure (fail-closed)", () => {
-  test("the committed ledger is structurally valid", () => {
-    assert.deepEqual(validateUat(ledger, { commitExists: gitCommitExists }), []);
+  test("the committed ledger is structurally valid (and final when PORTIA_REQUIRE_UAT=1)", () => {
+    assert.deepEqual(validateUat(ledger, { commitExists: gitCommitExists, requireComplete: strict }), []);
   });
 
   test("both device tables exist, PC first, and each has a verdict line", () => {
@@ -181,21 +263,226 @@ describe("20-UAT ledger structure (fail-closed)", () => {
   });
 
   test("a PASS without a commit is rejected", () => {
-    const broken = editStep(ledger, "pc", "SPIDER-01", (cells) => { cells[5] = "PASS"; cells[6] = "PC"; cells[7] = "-"; cells[8] = "2026-11-05"; });
-    const errors = validateUat(broken, { commitExists: () => true });
+    const broken = editRow(ledger, "pc", "SPIDER-01", (cells) => { cells[5] = "PASS"; cells[6] = "PC"; cells[7] = "-"; cells[8] = "2026-11-05"; });
+    const errors = errorsOf(broken);
     assert.ok(errors.some((error) => error.startsWith("SPIDER-01 on PC: PASS needs a commit")), errors.join("\n"));
   });
 
   test("a PASS with a commit that git does not know is rejected, and a known commit passes", () => {
     const withCommit = (commit: string) =>
-      editStep(ledger, "phone", "SPIDER-01", (cells) => { cells[5] = "PASS"; cells[6] = "phone"; cells[7] = commit; cells[8] = "2026-11-05"; });
-    assert.ok(validateUat(withCommit("abcdef1"), { commitExists: () => false }).some((error) => error.includes("does not exist")));
-    assert.deepEqual(validateUat(withCommit("abcdef1"), { commitExists: () => true }), []);
+      editRow(ledger, "phone", "SPIDER-01", (cells) => { cells[5] = "PASS"; cells[6] = "phone"; cells[7] = commit; cells[8] = "2026-11-05"; });
+    assert.ok(errorsOf(withCommit("abcdef1"), { commitExists: noCommit }).some((error) => error.includes("does not exist")));
+    // SPIDER-01 depends on VISUAL-APPROVED, which is still pending in the real ledger, so a lone PASS is rejected for that reason only.
+    assert.deepEqual(errorsOf(withCommit("abcdef1")).filter((error) => !error.includes("depends on")), []);
   });
 
   test("gitCommitExists treats a missing or non-hex commit as absent", () => {
     assert.equal(gitCommitExists("0000000000000000000000000000000000000000"), false);
     assert.equal(gitCommitExists("not-a-commit"), false);
     assert.equal(gitCommitExists("HEAD"), false);
+  });
+});
+
+describe("20-UAT required ids (D-34, D-28..D-47, plan 20-14 Task 1)", () => {
+  const ids = requiredUatIds;
+  test("the id lists have the planned size and no overlaps", () => {
+    assert.equal(ids.prerequisites.length, 14);
+    assert.equal(new Set([...ids.both, ...ids.pcOnly, ...ids.phoneOnly]).size, ids.both.length + ids.pcOnly.length + ids.phoneOnly.length);
+    for (const id of ["QUAL-LOCK-01", "EDITOR-03", "A11Y-CONTRAST-D10", "OWNER-MIG-NOTES", "INFO-PHONE-05", "SEARCH-02"]) {
+      assert.ok([...ids.prerequisites, ...ids.both, ...ids.pcOnly, ...ids.phoneOnly].includes(id), `${id} is not required`);
+    }
+  });
+
+  test("dropping any required id, on each device where it belongs, is rejected", () => {
+    for (const id of ids.prerequisites) {
+      assert.ok(errorsOf(dropRow(ledger, "prereq", id)).includes(`missing ${id} on prerequisites`), `${id} not enforced`);
+    }
+    for (const id of [...ids.both, ...ids.pcOnly]) {
+      assert.ok(errorsOf(dropRow(ledger, "pc", id)).includes(`missing ${id} on PC`), `${id} not enforced on PC`);
+    }
+    for (const id of [...ids.both, ...ids.phoneOnly]) {
+      assert.ok(errorsOf(dropRow(ledger, "phone", id)).includes(`missing ${id} on phone`), `${id} not enforced on phone`);
+    }
+  });
+
+  test("every required id is present in the committed ledger exactly once per place", () => {
+    const uat = parseUat(ledger);
+    for (const id of ids.prerequisites) assert.equal(uat.prerequisites.filter((row) => row.id === id).length, 1, id);
+    for (const id of [...ids.both, ...ids.pcOnly]) assert.equal(uat.pc.filter((row) => row.id === id).length, 1, `${id} on PC`);
+    for (const id of [...ids.both, ...ids.phoneOnly]) assert.equal(uat.phone.filter((row) => row.id === id).length, 1, `${id} on phone`);
+  });
+
+  test("a duplicate id on a device or in prerequisites is rejected", () => {
+    assert.ok(errorsOf(duplicateRow(ledger, "pc", "REG-03")).some((error) => error.includes("duplicate REG-03 on PC")));
+    assert.ok(errorsOf(duplicateRow(ledger, "prereq", "STAGING-FREE")).some((error) => error.includes("duplicate STAGING-FREE")));
+  });
+
+  test("device-only steps on the wrong device are rejected", () => {
+    const phoneStep = parseUat(ledger).phone.find((row) => row.id === "INFO-PHONE-01")!;
+    const inPc = ledger.replace("## Чек-лист phone", `${`| ${Object.values(phoneStep).join(" | ")} |`}\n\n## Чек-лист phone`);
+    assert.ok(errorsOf(inPc).some((error) => error.includes("INFO-PHONE-01 must not be on PC")));
+    const pcStep = parseUat(ledger).pc.find((row) => row.id === "SEARCH-02")!;
+    const inPhone = ledger.replace("## Вердикты", `| ${Object.values(pcStep).join(" | ")} |\n\n## Вердикты`);
+    assert.ok(errorsOf(inPhone).some((error) => error.includes("SEARCH-02 must not be on phone")));
+  });
+
+  test("D-13: the phone table before the PC table is rejected", () => {
+    const pcAt = ledger.indexOf("## Чек-лист PC");
+    const phoneAt = ledger.indexOf("## Чек-лист phone");
+    const verdictsAt = ledger.indexOf("## Вердикты");
+    const swapped = ledger.slice(0, pcAt) + ledger.slice(phoneAt, verdictsAt) + ledger.slice(pcAt, phoneAt) + ledger.slice(verdictsAt);
+    assert.ok(errorsOf(swapped).includes("PC must come before phone (D-13)"));
+  });
+
+  test("the two behavior-unverified items are written out as steps on both devices", () => {
+    const uat = parseUat(ledger);
+    for (const rows of [uat.pc, uat.phone]) {
+      const qual = rows.find((row) => row.id === "QUAL-LOCK-01")!;
+      assert.match(qual.expected, /Tab/);
+      assert.match(qual.expected, /фокус возвращается/);
+      const editor = rows.find((row) => row.id === "EDITOR-03")!;
+      assert.match(editor.expected, /границ[уы]? колонки/);
+      assert.match(editor.expected, /фокус остаётся на той же ручке/);
+      assert.match(editor.expected, /одна отмена/);
+    }
+  });
+});
+
+describe("20-UAT honest statuses (T-20-41)", () => {
+  test("the baseline fully filled fixture passes strict validation", () => {
+    assert.deepEqual(errorsOf(completeLedger(ledger), { requireComplete: true }), []);
+  });
+
+  test("an unknown status is rejected in steps and prerequisites", () => {
+    assert.ok(errorsOf(editRow(ledger, "pc", "REG-01", (cells) => { cells[5] = "OK"; })).some((error) => error.includes('REG-01 on PC: unknown status "OK"')));
+    assert.ok(errorsOf(editRow(ledger, "prereq", "RELEASE-GATE", (cells) => { cells[3] = "готово"; })).some((error) => error.includes("RELEASE-GATE: unknown status")));
+  });
+
+  test("a PASS on the wrong device column or without a date is rejected", () => {
+    const base = completeLedger(ledger);
+    assert.ok(errorsOf(editRow(base, "phone", "REG-01", (cells) => { cells[6] = "PC"; })).some((error) => error.includes('REG-01 on phone: PASS needs the device "phone"')));
+    assert.ok(errorsOf(editRow(base, "pc", "REG-01", (cells) => { cells[8] = "-"; })).some((error) => error.includes("REG-01 on PC: PASS needs an ISO date")));
+  });
+
+  test("FAIL needs a note and a screenshot; BLOCKED needs a reason", () => {
+    const base = completeLedger(ledger);
+    const fail = (note: string, shot: string) => editRow(base, "pc", "REG-02", (cells) => { cells[5] = "FAIL"; cells[9] = note; cells[10] = shot; });
+    assert.ok(errorsOf(fail("-", "ui/shot.png")).some((error) => error.includes("REG-02 on PC: FAIL needs a note")));
+    assert.ok(errorsOf(fail("кнопка не нажимается", "-")).some((error) => error.includes("REG-02 on PC: FAIL needs a screenshot")));
+    const blocked = (note: string) => editRow(base, "phone", "A11Y-SR-01", (cells) => { cells[5] = "BLOCKED (DEVICE)"; cells[9] = note; });
+    assert.ok(errorsOf(blocked("-")).some((error) => error.includes("A11Y-SR-01 on phone: BLOCKED needs a reason")));
+    assert.ok(!errorsOf(blocked("на телефоне нет экранного диктора")).some((error) => error.includes("A11Y-SR-01 on phone: BLOCKED")));
+  });
+
+  test("a PASS step cannot depend on a prerequisite that is not PASS (D-34)", () => {
+    const base = completeLedger(ledger);
+    const broken = editRow(base, "prereq", "REVIEWER-ROLE", (cells) => { cells[3] = "BLOCKED (ENV)"; cells[4] = "-"; cells[5] = "нет роли на staging"; });
+    const errors = errorsOf(broken);
+    assert.ok(errors.some((error) => error.startsWith("PROMO-03 on PC: PASS depends on REVIEWER-ROLE")), errors.join("\n"));
+    assert.ok(errors.some((error) => error.startsWith("PROMO-03 on phone: PASS depends on REVIEWER-ROLE")));
+  });
+
+  test("a step that depends on a prerequisite which is not in the table is rejected", () => {
+    const broken = editRow(ledger, "pc", "REG-01", (cells) => { cells[4] = "NO-SUCH-PREREQ"; });
+    assert.ok(errorsOf(broken).some((error) => error.includes("REG-01 on PC: unknown prerequisite NO-SUCH-PREREQ")));
+  });
+
+  test("OWNER-MIG-D36 and OWNER-MIG-NOTES are never an agent PASS (D-36, D-47)", () => {
+    for (const id of ["OWNER-MIG-D36", "OWNER-MIG-NOTES"]) {
+      const broken = editRow(ledger, "prereq", id, (cells) => { cells[3] = "PASS"; cells[4] = "2026-11-05"; cells[5] = "применено"; });
+      assert.ok(errorsOf(broken).some((error) => error.startsWith(`${id}: an owner migration row cannot be PASS`)), id);
+    }
+  });
+
+  test("OWNER-MIG rows: applied needs the owner date and method; waiting and BLOCKED are allowed", () => {
+    const set = (status: string, date: string, note: string) => editRow(ledger, "prereq", "OWNER-MIG-D36", (cells) => { cells[3] = status; cells[4] = date; cells[5] = note; });
+    assert.deepEqual(errorsOf(set("ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ", "2026-11-06", "SQL Editor, владелец")), []);
+    assert.ok(errorsOf(set("ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ", "-", "SQL Editor")).some((error) => error.startsWith("OWNER-MIG-D36: applied needs")));
+    assert.ok(errorsOf(set("ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ", "2026-11-06", "-")).some((error) => error.startsWith("OWNER-MIG-D36: applied needs")));
+    assert.deepEqual(errorsOf(set("ОЖИДАЕТ ВЛАДЕЛЬЦА", "-", "ждём владельца")), []);
+    assert.deepEqual(errorsOf(set("BLOCKED (OWNER)", "-", "владелец не применил")), []);
+  });
+
+  test("a PASS prerequisite needs a date; a BLOCKED prerequisite needs a reason", () => {
+    assert.ok(errorsOf(editRow(ledger, "prereq", "P19-GAP-20", (cells) => { cells[4] = "-"; })).some((error) => error.startsWith("P19-GAP-20: PASS needs an ISO date")));
+    assert.ok(errorsOf(editRow(ledger, "prereq", "P19-GAP-16", (cells) => { cells[5] = "-"; })).some((error) => error.startsWith("P19-GAP-16: BLOCKED needs a reason")));
+  });
+
+  test("a PASS verdict needs a commit that exists and every step of that device PASS", () => {
+    const base = completeLedger(ledger);
+    assert.ok(errorsOf(withVerdict(base, "PC", "PASS")).some((error) => error.includes("PC verdict needs")));
+    assert.ok(errorsOf(withVerdict(base, "phone", "BLOCKED (commit abcdef1)")).some((error) => error.includes("phone verdict")));
+    assert.ok(errorsOf(base, { commitExists: noCommit }).some((error) => error.includes("PC verdict commit abcdef1 does not exist")));
+    const failed = editRow(base, "pc", "WIN-01", (cells) => { cells[5] = "FAIL"; cells[9] = "окно уходит за край"; cells[10] = "shots/win.png"; });
+    assert.ok(errorsOf(failed).some((error) => error.includes("PC verdict is PASS but WIN-01 is FAIL")));
+    const blocked = editRow(base, "phone", "A11Y-SR-01", (cells) => { cells[5] = "BLOCKED (DEVICE)"; cells[9] = "нет диктора"; });
+    assert.ok(errorsOf(blocked).some((error) => error.includes("phone verdict is PASS but A11Y-SR-01 is BLOCKED (DEVICE)")));
+    // A FAIL verdict with a FAIL step is consistent.
+    assert.deepEqual(errorsOf(withVerdict(failed, "PC", "FAIL (commit abcdef1)"), { requireComplete: true }), []);
+  });
+});
+
+describe("20-UAT strict mode PORTIA_REQUIRE_UAT=1 (20-14 Task 2 gate)", () => {
+  test("the unfilled ledger is rejected: pending steps, prerequisites and verdicts", () => {
+    const errors = errorsOf(ledger, { requireComplete: true });
+    assert.ok(errors.length > 0);
+    assert.ok(errors.some((error) => error.includes("REG-01 on PC: is still ОЖИДАЕТ")));
+    assert.ok(errors.some((error) => error.includes("STAGING-FREE: is still ОЖИДАЕТ")));
+    assert.ok(errors.some((error) => error.includes("PC verdict is still ОЖИДАЕТ")));
+    assert.ok(errors.some((error) => error.includes("phone verdict is still ОЖИДАЕТ")));
+    assert.ok(errors.some((error) => error.includes("release_candidate_commit")));
+  });
+
+  test("a single pending step or prerequisite breaks an otherwise final ledger", () => {
+    const base = completeLedger(ledger);
+    assert.ok(errorsOf(editRow(base, "pc", "TMPL-01", (cells) => { cells[5] = "ОЖИДАЕТ"; }), { requireComplete: true }).some((error) => error.includes("TMPL-01 on PC: is still ОЖИДАЕТ")));
+    assert.ok(errorsOf(editRow(base, "prereq", "VISUAL-APPROVED", (cells) => { cells[3] = "ОЖИДАЕТ"; }), { requireComplete: true }).some((error) => error.includes("VISUAL-APPROVED: is still ОЖИДАЕТ")));
+  });
+
+  test("OWNER-MIG waiting for the owner stays allowed in the final ledger (an honest pending production action)", () => {
+    const waiting = editRow(completeLedger(ledger), "prereq", "OWNER-MIG-NOTES", (cells) => { cells[3] = "ОЖИДАЕТ ВЛАДЕЛЬЦА"; cells[4] = "-"; });
+    assert.deepEqual(errorsOf(waiting, { requireComplete: true }), []);
+  });
+
+  test("a verdict without a hex commit, or with another status, is rejected", () => {
+    const base = completeLedger(ledger);
+    assert.ok(errorsOf(withVerdict(base, "phone", "PASS (commit xyz)"), { requireComplete: true }).some((error) => error.includes("phone verdict needs")));
+    assert.ok(errorsOf(withVerdict(base, "PC", "ГОТОВО (commit abcdef1)"), { requireComplete: true }).some((error) => error.includes("PC verdict")));
+  });
+
+  test("a step commit that differs from its device verdict commit is rejected", () => {
+    const base = completeLedger(ledger);
+    const broken = editRow(base, "phone", "REG-07", (cells) => { cells[7] = "1234567"; });
+    assert.ok(errorsOf(broken, { requireComplete: true }).some((error) => error.includes("REG-07 on phone: commit 1234567 differs from the phone verdict commit abcdef1")));
+  });
+
+  test("D-15: different PC and phone commits need a filled D-15 section", () => {
+    const commits = { pc: "abcdef1", phone: "abcdef2" };
+    const filled = completeLedger(ledger, commits);
+    assert.deepEqual(errorsOf(filled, { requireComplete: true }), []);
+    const withoutD15 = filled
+      .replace(/^- Изменение между коммитами:.*$/m, "- Изменение между коммитами: не требуется")
+      .replace(/^- Основание сохранения PC-вердикта:.*$/m, "- Основание сохранения PC-вердикта: не требуется")
+      .replace(/^- Полный повтор phone:.*$/m, "- Полный повтор phone: не требуется");
+    const errors = errorsOf(withoutD15, { requireComplete: true });
+    for (const label of ["Изменение между коммитами", "Основание сохранения PC-вердикта", "Полный повтор phone"]) {
+      assert.ok(errors.some((error) => error.includes(`D-15: "${label}" must be filled`)), label);
+    }
+    // Same commit on both devices needs no D-15 text.
+    assert.deepEqual(errorsOf(completeLedger(ledger), { requireComplete: true }), []);
+  });
+
+  test("release_candidate_commit must be a hex commit and the one the phone verdict was run on", () => {
+    const base = completeLedger(ledger);
+    const set = (value: string) => base.replace(/^release_candidate_commit:.*$/m, `release_candidate_commit: ${value}`);
+    assert.ok(errorsOf(set("ОЖИДАЕТ 20-13"), { requireComplete: true }).some((error) => error.includes("release_candidate_commit must be a 7-40 hex commit")));
+    assert.ok(errorsOf(set("1234567"), { requireComplete: true }).some((error) => error.includes("release_candidate_commit 1234567 is not the phone verdict commit abcdef1")));
+    assert.ok(errorsOf(set("abcdef1"), { requireComplete: true, commitExists: noCommit }).some((error) => error.includes("release_candidate_commit abcdef1 does not exist")));
+  });
+
+  test("RELEASE-GATE must be PASS before the owner verdicts count", () => {
+    const base = completeLedger(ledger);
+    const broken = editRow(base, "prereq", "RELEASE-GATE", (cells) => { cells[3] = "BLOCKED (ENV)"; cells[4] = "-"; cells[5] = "20-13 не выполнен"; });
+    assert.ok(errorsOf(broken, { requireComplete: true }).some((error) => error.includes("RELEASE-GATE must be PASS")));
   });
 });
