@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { changedDossierTabs, changedSections, deniedSections, editorSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
-import { draftEdits, partialSave, rebaseDecision, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
+import { draftEdits, employeeRequestFailure, partialSave, rebaseDecision, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
 import { closedMessage, closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { uploadRefusal } from "@/lib/image-upload";
@@ -1722,6 +1722,9 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
   useEffect(() => () => { if (savedTimer.current !== null) window.clearTimeout(savedTimer.current); }, []);
   // An employee clicked during a save, acted on once the answer is in (D-05).
   const queuedEmployeeIdRef = useRef<string | null>(null);
+  // WR-05: the running save and add requests; a second Ctrl+S or form submit during one joins it instead of sending again.
+  const saveInflight = useRef<Promise<boolean> | null>(null);
+  const addInflight = useRef(false);
 
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
   // Unmounting (tab left after the answer) must not leave the editor believing a draft is still dirty.
@@ -1740,17 +1743,32 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
 
   useEffect(() => {
     let active = true;
-    // The editor-only path is never CDN-cached; the public one can serve an old copy even to a no-store request (D-10).
-    void fetch("/api/employees/editor", { credentials: "same-origin", cache: "no-store" })
-      .then(async (response) => {
+    const fail = (text: string) => {
+      if (!active) return;
+      setLoadError(text);
+      setLoadState("error");
+    };
+    void (async () => {
+      try {
+        // The editor-only path is never CDN-cached; the public one can serve an old copy even to a no-store request (D-10).
+        let response: Response;
+        try {
+          response = await fetch("/api/employees/editor", { credentials: "same-origin", cache: "no-store" });
+        } catch {
+          fail(employeeRequestFailure({ transport: true, action: "load" }));
+          return;
+        }
         const payload = await response.json().catch(() => ({})) as { employees?: PortiaEmployee[]; profilesRead?: boolean; error?: string };
-        if (!response.ok) throw new Error(response.status === 403 ? "Сессия редактора истекла. Войдите в редактор снова." : payload.error || `Сервер не отдал список сотрудников (${response.status}).`);
-        return payload;
-      })
-      .then((payload) => {
+        if (!response.ok) {
+          fail(employeeRequestFailure({ transport: false, status: response.status, payloadError: payload.error, action: "load" }));
+          return;
+        }
         if (!active) return;
         // Blank profiles must not become drafts: saving one would erase the stored biography and photo (D-09).
-        if (!acceptsEditorList(payload)) throw new Error("Профили сотрудников не загрузились, сохранять сейчас нельзя. Повторите через минуту.");
+        if (!acceptsEditorList(payload)) {
+          fail("Профили сотрудников не загрузились, сохранять сейчас нельзя. Повторите через минуту.");
+          return;
+        }
         const next = payload.employees;
         const first = next[0];
         setEmployees(next);
@@ -1758,12 +1776,10 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
         setDraft(first ? profileOf(first) : null);
         setDetails(first ? detailsOf(first) : { title: "", rank: "", callsign: "" });
         setLoadState("ready");
-      })
-      .catch((error) => {
-        if (!active) return;
-        setLoadError(error instanceof Error ? error.message : "Не удалось загрузить сотрудников.");
-        setLoadState("error");
-      });
+      } catch {
+        fail("Не удалось загрузить сотрудников.");
+      }
+    })();
     return () => { active = false; };
   }, [loadAttempt]);
   // In place, without a page reload: other tabs' unsaved edits live in the parent and stay.
@@ -1780,8 +1796,22 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
     else setPendingEmployeeId(queued);
   };
 
+  // A second Ctrl+S or click while the PATCH runs gets the same answer and sends nothing (WR-05).
+  const save = (): Promise<boolean> => {
+    if (saveInflight.current) return saveInflight.current;
+    const run = (async () => {
+      try {
+        return await sendSave();
+      } finally {
+        saveInflight.current = null;
+      }
+    })();
+    saveInflight.current = run;
+    return run;
+  };
+
   // Resolves true only when the profile is saved; a failure leaves the error text on the current employee.
-  const save = async (): Promise<boolean> => {
+  const sendSave = async (): Promise<boolean> => {
     if (!selected || !draft) return false;
     // Only what the editor changed goes out; an empty body would still create a bare row for a never-saved sheet employee (D-11).
     const changes = changedFields(profileOf(selected), draft);
@@ -1797,21 +1827,29 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
     setRatingsPending(false);
     setDetailsPending(false);
     setErrorMessage("");
+    const failed = (text: string) => {
+      setErrorMessage(text);
+      setState("error");
+      resolveQueued(false);
+      return false;
+    };
+    let response: Response;
     try {
-      const response = await fetch("/api/employees", {
+      response = await fetch("/api/employees", {
         method: "PATCH",
         credentials: "same-origin",
         cache: "no-store",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: selected.id, nickname: selected.nickname, changes, ...(Object.keys(detailChanges).length ? { details: detailChanges } : {}) }),
       });
-      const payload = await response.json() as { employee?: Partial<PortiaEmployee> & { id: string }; ratingsPending?: boolean; detailsPending?: boolean; error?: string };
-      if (!response.ok || !payload.employee) {
-        const message = response.status === 403
-          ? "Сессия редактора истекла. Войдите в редактор снова."
-          : payload.error || `Сервер отклонил сохранение (${response.status}).`;
-        throw new Error(message);
-      }
+    } catch {
+      return failed(employeeRequestFailure({ transport: true, action: "save" }));
+    }
+    const payload = await response.json().catch(() => ({})) as { employee?: Partial<PortiaEmployee> & { id: string }; ratingsPending?: boolean; detailsPending?: boolean; error?: string };
+    if (!response.ok || !payload.employee) {
+      return failed(employeeRequestFailure({ transport: false, status: response.status, payloadError: payload.error, action: "save" }));
+    }
+    try {
       // The answer is the stored profile only; the card keeps its avatar, nickname, source and sheet title (D-07).
       const merged: PortiaEmployee = { ...selected, ...payload.employee };
       setEmployees((current) => current.map((employee) => employee.id === merged.id ? merged : employee));
@@ -1831,32 +1869,36 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
       const typedMeanwhile = stillOpen && (Object.keys(changedFields(sentProfile, draftRef.current ?? sentProfile)).length > 0 || Object.keys(changedDetails(sentDetails, detailsRef.current)).length > 0);
       resolveQueued(!typedMeanwhile);
       return !typedMeanwhile;
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Не удалось сохранить профиль.");
-      setState("error");
-      resolveQueued(false);
-      return false;
+    } catch {
+      return failed("Не удалось сохранить профиль.");
     }
   };
 
   // A person outside the sheet, by Roblox nickname; an open selection and its draft stay as they are.
   const addEmployee = async () => {
+    // A second submit during the POST sends nothing (WR-05).
+    if (addInflight.current) return;
+    addInflight.current = true;
     setAddState("adding");
     setAddError("");
     try {
-      const response = await fetch("/api/employees", {
-        method: "POST",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(addDraft),
-      });
-      const payload = await response.json() as { employee?: PortiaEmployee; error?: string };
+      let response: Response;
+      try {
+        response = await fetch("/api/employees", {
+          method: "POST",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(addDraft),
+        });
+      } catch {
+        setAddError(employeeRequestFailure({ transport: true, action: "add" }));
+        return;
+      }
+      const payload = await response.json().catch(() => ({})) as { employee?: PortiaEmployee; error?: string };
       if (!response.ok || !payload.employee) {
-        const message = response.status === 403
-          ? "Сессия редактора истекла. Войдите в редактор снова."
-          : payload.error || `Сервер отклонил добавление (${response.status}).`;
-        throw new Error(message);
+        setAddError(employeeRequestFailure({ transport: false, status: response.status, payloadError: payload.error, action: "add" }));
+        return;
       }
       setEmployees((current) => [...current, payload.employee!]);
       onSaved(payload.employee);
@@ -1864,10 +1906,12 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
       setAddOpen(false);
       // The list was empty (or the last person was removed): nothing is open yet, so open the new person.
       if (!draft) openEmployee(payload.employee);
-    } catch (error) {
-      setAddError(error instanceof Error ? error.message : "Не удалось добавить сотрудника.");
+    } catch {
+      setAddError("Не удалось добавить сотрудника.");
+    } finally {
+      addInflight.current = false;
+      setAddState("idle");
     }
-    setAddState("idle");
   };
 
   if (loadState === "loading") return <div className="editor-empty">Загрузка сотрудников…</div>;
@@ -1917,21 +1961,33 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
     if (!selected) return;
     setDeleting(true);
     setErrorMessage("");
+    const failed = (text: string) => {
+      setErrorMessage(text);
+      setState("error");
+      setDeleteAsked(false);
+      setDeleting(false);
+    };
+    let response: Response;
     try {
-      const response = await fetch("/api/employees", {
+      response = await fetch("/api/employees", {
         method: "DELETE",
         credentials: "same-origin",
         cache: "no-store",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: selected.id }),
       });
-      const payload = await response.json() as { id?: string; error?: string; code?: string };
-      if (!response.ok) {
-        const message = response.status === 403 && payload.code !== "sheet-employee"
-          ? "Сессия редактора истекла. Войдите в редактор снова."
-          : payload.error || `Сервер отклонил удаление (${response.status}).`;
-        throw new Error(message);
-      }
+    } catch {
+      failed(employeeRequestFailure({ transport: true, action: "remove" }));
+      return;
+    }
+    const payload = await response.json().catch(() => ({})) as { id?: string; error?: string; code?: string };
+    if (!response.ok) {
+      // A sheet employee is refused with 403 and its own text; that is not an expired session.
+      const sheetRefusal = response.status === 403 && payload.code === "sheet-employee";
+      failed(employeeRequestFailure({ transport: false, status: sheetRefusal ? undefined : response.status, payloadError: payload.error, action: "remove" }));
+      return;
+    }
+    try {
       const index = employees.findIndex((employee) => employee.id === selected.id);
       const next = employees[index + 1] ?? employees[index - 1];
       setEmployees(employees.filter((employee) => employee.id !== selected.id));
@@ -1939,10 +1995,9 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
       setDeleteAsked(false);
       if (next) openEmployee(next);
       else { setDraft(null); setRecordOpen(false); }
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Не удалось удалить сотрудника.");
-      setState("error");
-      setDeleteAsked(false);
+    } catch {
+      failed("Не удалось удалить сотрудника.");
+      return;
     }
     setDeleting(false);
   };
@@ -2030,6 +2085,8 @@ type RowNote = { error: boolean; text: string };
 
 function EditorAccessManager() {
   const [editors, setEditors] = useState<EditorAccount[]>([]);
+  // IN-03: the editor whose access is about to be revoked; the revoke runs only after the dialog is confirmed.
+  const [revokeAsked, setRevokeAsked] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"loading" | "idle" | "saving" | "error">("loading");
   const [message, setMessage] = useState("");
@@ -2186,10 +2243,21 @@ function EditorAccessManager() {
             {tabRegistry.map((tab) => <button key={tab.id} type="button" className="access-tab-chip" aria-pressed={open.includes(tab.id)} disabled={!tabsEnforced} onClick={() => toggleTab(editor, tab)}>{open.includes(tab.id) ? `✓ ${tab.label}` : tab.label}</button>)}
           </div>
           {note && <span className={`access-tab-note${note.error ? " is-error" : ""}`} role="status">{note.text}</span>}
-        </div><button type="button" onClick={() => void removeEditor(editor.email)}>ОТОЗВАТЬ</button></div>;
+        </div><button type="button" disabled={state === "saving"} onClick={() => setRevokeAsked(editor.email)}>ОТОЗВАТЬ</button></div>;
       })}
       {!tabsEnforced && editors.length > 0 && <p className="editor-guidance">Вкладки по редакторам заработают после применения SQL</p>}
     </div>
+    {revokeAsked !== null && (
+      <ConfirmDialog
+        title="Отозвать доступ?"
+        text={`${revokeAsked} потеряет доступ к редактору. Вернуть его можно только новой выдачей доступа.`}
+        actions={[
+          { label: "ОТОЗВАТЬ", tone: "danger", disabled: state === "saving", onClick: () => { const target = revokeAsked; setRevokeAsked(null); void removeEditor(target); } },
+          { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setRevokeAsked(null) },
+        ]}
+        onCancel={() => setRevokeAsked(null)}
+      />
+    )}
   </div>;
 }
 

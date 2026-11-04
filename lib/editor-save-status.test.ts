@@ -401,7 +401,7 @@ test("«ОТОЗВАТЬ» asks first through ConfirmDialog and is disabled whil
   assert.ok(region.includes("<ConfirmDialog"));
   assert.ok(region.includes("Отозвать доступ?"));
   assert.match(region, /потеряет доступ к редактору\. Вернуть его можно только новой выдачей доступа\./);
-  assert.match(region, /disabled=\{state === "saving"\}[^>]*>ОТОЗВАТЬ</);
+  assert.match(region, /disabled=\{state === "saving"\} onClick=\{[^\n]*\}>ОТОЗВАТЬ</);
   assert.doesNotMatch(region, /onClick=\{\(\) => void removeEditor\(editor\.email\)\}/);
   assert.match(region, /label: "ОТМЕНА", tone: "secondary", autoFocus: true/);
 });

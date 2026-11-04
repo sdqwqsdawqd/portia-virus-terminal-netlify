@@ -29,6 +29,20 @@ export function partialSave(changed: readonly EditorSection[], refused: readonly
 // UI E3: the request got no answer (offline, timeout); the draft stays in the fields.
 export const networkSaveError = "Нет связи с сервером. Попробуйте ещё раз.";
 
+export type EmployeeRequestAction = "load" | "save" | "add" | "remove";
+
+const employeeActionNoun: Record<EmployeeRequestAction, string> = { load: "загрузку", save: "сохранение", add: "добавление", remove: "удаление" };
+
+// WR-05: the one Russian text for a failed employee-editor request. Never an exception's own message («Failed to fetch», «Unexpected token»).
+// transport: the request got no answer. Otherwise: 403 is an expired session, the server's own text wins, else the action and the code.
+export function employeeRequestFailure(input: { transport: boolean; status?: number; payloadError?: string; action: EmployeeRequestAction }): string {
+  if (input.transport) return networkSaveError;
+  if (input.status === 403) return "Сессия редактора истекла. Войдите в редактор снова.";
+  const fromServer = input.payloadError?.trim();
+  if (fromServer) return fromServer;
+  return `Сервер отклонил ${employeeActionNoun[input.action]} (${input.status ?? "—"}).`;
+}
+
 // The server answered 409: somebody saved a newer revision first (D-09). Thrown by the desktop save, caught by the editor.
 export class SaveConflictError extends Error {
   constructor() {

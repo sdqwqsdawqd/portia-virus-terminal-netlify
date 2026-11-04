@@ -171,7 +171,9 @@ test("employee writes check the Сотрудники tab after canEdit; the publ
 
 test("the editor employee roster and uploads respect the tab list", () => {
   assert.ok(bodyOf(routeText("employees/editor"), "GET").includes('openTabs.includes("employees")'));
-  assert.ok(routeText("uploads").includes("access.openTabs.length"));
+  // The decision lives in uploadGate (20-17 WR-03); the route passes the access answer to it.
+  assert.ok(routeText("uploads").includes("uploadGate(") && routeText("uploads").includes("getEditorAccess("));
+  assert.ok(readFileSync(new URL("./image-upload.ts", import.meta.url), "utf8").includes("access.openTabs.length"));
 });
 
 test("/api/editors has an owner-only PATCH with full lists and a pending-database answer; POST still inserts only email and granted_by", () => {
@@ -202,7 +204,7 @@ test("an editor with no grants and no closures gets every regular tab and no П�
   assert.deepEqual(none, []);
   // No tab at all: the content save is refused as a whole and the upload route answers by the same empty list.
   assert.equal(contentRefusal(defaultPortiaContent, defaultPortiaContent, none)?.status, 403);
-  assert.match(readFileSync(new URL("../app/api/uploads/route.ts", import.meta.url), "utf8"), /access\.openTabs\.length === 0/);
+  assert.match(readFileSync(new URL("./image-upload.ts", import.meta.url), "utf8"), /access\.openTabs\.length === 0/);
 });
 
 test("a tab revoked while editing: the next access answer drops it and the same save is refused for that section only (STAB-APP-09 concurrency)", () => {
