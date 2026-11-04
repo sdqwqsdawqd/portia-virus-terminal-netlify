@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed 20-04-PLAN.md
-last_updated: "2026-11-04T07:00:51.687Z"
+stopped_at: Completed 20-21-PLAN.md
+last_updated: "2026-11-04T07:13:09.555Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: ff47b281e2bef61185efb09a4f7e92ffba26d08b
+state_head: 08dfc4231e820ddac45af2c698198b5229f8109a
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 95
-  completed_plans: 80
+  completed_plans: 81
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 12 of 24
+Plan: 13 of 24
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-04 — Phase PORTIA-20 execution started
 
@@ -118,6 +118,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P10 | 35min | 3 tasks | 6 files |
 | Phase PORTIA-20 P20 | 70min | 3 tasks | 8 files |
 | Phase PORTIA-20 P04 | 80 min | 2 tasks | 4 files |
+| Phase PORTIA-20 P21 | 35m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -196,6 +197,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-20: legacy class names are mapped only inside normalizePortiaContent (D-36a); classificationIconFor resolves via canonicalClassificationName; nine class icons are candidates until 20-11 approval
 - [Phase PORTIA-20]: 20-04: flask wallpaper accent blended 70/30 toward --desktop-base via color-mix (relative colours are forbidden); text contrast asserted over the brightest 8 px square
 - [Phase PORTIA-20]: 20-04: wallpaper save failure keeps the previous wallpaper and shows a message (wallpaper only; other settings unchanged)
+- [Phase PORTIA-20]: 20-21: owner chose option a; D-36b migration applied to isolated staging only (fixture verified, residual 0); production left to owner (ОЖИДАЕТ ВЛАДЕЛЬЦА)
 
 ### Pending Todos
 
@@ -234,8 +236,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T07:00:51.234Z
-Stopped at: Completed 20-04-PLAN.md
+Last session: 2026-11-04T07:13:09.105Z
+Stopped at: Completed 20-21-PLAN.md
 Resume file: None
 
 ## Operator Next Step
