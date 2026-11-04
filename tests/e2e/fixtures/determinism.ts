@@ -53,3 +53,13 @@ export async function installDeterminism(page: Page) {
     window.sessionStorage.setItem("portia-e2e-random-probe", JSON.stringify(randomProbe));
   }, deterministicContract);
 }
+
+// install() leaves the fake clock running at real speed, so a limit counted in fake seconds (the 15 s image and frame limits) keeps ticking while
+// the test waits for a window or a response. A test that needs the limit to move ONLY through runFor parks the clock first. Parking does not make
+// runFor cheap: runFor spends real time (about 1:1 on WebKit, about 3:1 on Chromium), so a test with 15 s steps also needs test.slow().
+// Park AFTER the desktop mounted and after every step that needs a timer (a window minimize or restore finishes from a timer). The fake time now
+// is the install time plus performance.now(); the 1 s margin keeps pauseAt from asking for a moment that already passed.
+export async function parkClock(page: Page) {
+  const elapsed = await page.evaluate(() => performance.now());
+  await page.clock.pauseAt(new Date(Date.parse(deterministicContract.now) + elapsed + 1_000));
+}

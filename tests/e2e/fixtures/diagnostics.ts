@@ -74,7 +74,42 @@ export const diagnosticAllowlist: readonly DiagnosticAllowlistRow[] = [...promot
   ],
 ), webkitReportOnlyNotice];
 
-const hydrationPattern = /hydration|server rendered html|did not match|react error #418/i;
+// 20-25 (T-20-37): a fault THIS test causes on purpose (an aborted own API, a held frame, a cancelled image). Rules belong to one test,
+// match by kind + resource type (or console source) + error text, and are applied when the test ends, so an event that arrives after
+// the test body finished is judged by the same rule. The global allowlist above is not touched. csp, pageerror and hydration events
+// can never be expected: they are product defects, not a fault the test injects.
+export type ExpectedFaultRule = Readonly<{
+  kind: Exclude<DiagnosticKind, "csp" | "pageerror" | "hydration">;
+  /** Resource type for requestfailed/response entries, console source for console entries. Omit to match any. */
+  source?: string | RegExp;
+  /** Matched against the redacted text: URLs are already `[url-redacted]`, so a host name is not available in requestfailed/console text. */
+  text: RegExp;
+  reason: string;
+}>;
+
+const neverExpected: readonly DiagnosticKind[] = ["csp", "pageerror", "hydration"];
+
+function ruleMatches(rule: ExpectedFaultRule, entry: DiagnosticEntry) {
+  if (rule.kind !== entry.kind) return false;
+  if (rule.source !== undefined) {
+    const sourceMatches = typeof rule.source === "string" ? rule.source === entry.source : rule.source.test(entry.source);
+    if (!sourceMatches) return false;
+  }
+  return rule.text.test(entry.text);
+}
+
+export function applyExpectedFaults(entries: readonly DiagnosticEntry[], rules: readonly ExpectedFaultRule[]) {
+  const remaining: DiagnosticEntry[] = [];
+  const forgiven: { rule: ExpectedFaultRule; entry: DiagnosticEntry }[] = [];
+  for (const entry of entries) {
+    const rule = rules.find((candidate) => ruleMatches(candidate, entry));
+    if (rule) forgiven.push({ rule, entry });
+    else remaining.push(entry);
+  }
+  return { remaining, forgiven };
+}
+
+const hydrationPattern =/hydration|server rendered html|did not match|react error #418/i;
 const secretPattern =
   /(?:bearer\s+|token[=:]\s*|key[=:]\s*|cookie[=:]\s*)[^\s,;]+|eyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/gi;
 
@@ -115,6 +150,18 @@ function normalizedEntry(entry: DiagnosticEntry): DiagnosticEntry {
 
 export class DiagnosticLedger {
   readonly entries: DiagnosticEntry[] = [];
+  readonly expectedFaults: ExpectedFaultRule[] = [];
+
+  /** Register a fault this test causes. Call it BEFORE the action that causes it. */
+  expectFault(rule: ExpectedFaultRule) {
+    if (neverExpected.includes(rule.kind)) {
+      throw new Error(`[PORTIA_E2E_EXPECT_FAULT] kind "${rule.kind}" can never be an expected fault`);
+    }
+    if (!rule.reason.trim()) {
+      throw new Error("[PORTIA_E2E_EXPECT_FAULT] an expected fault needs a reason");
+    }
+    this.expectedFaults.push(rule);
+  }
 
   record(entry: DiagnosticEntry) {
     this.entries.push(normalizedEntry(entry));
@@ -125,14 +172,29 @@ export async function assertDiagnosticsClean(
   entries: readonly DiagnosticEntry[],
   testInfo: Pick<TestInfo, "attach" | "project">,
   attachmentName = "portia-diagnostics",
+  expectedFaults: readonly ExpectedFaultRule[] = [],
 ) {
   const normalized = entries.map(normalizedEntry);
   await testInfo.attach(attachmentName, {
     body: Buffer.from(`${JSON.stringify(normalized, null, 2)}\n`, "utf8"),
     contentType: "application/json",
   });
+  const { remaining, forgiven } = applyExpectedFaults(normalized, expectedFaults);
+  if (expectedFaults.length) {
+    const applied = expectedFaults.map((rule) => ({
+      kind: rule.kind,
+      source: rule.source === undefined ? null : String(rule.source),
+      text: String(rule.text),
+      reason: rule.reason,
+      matched: forgiven.filter((item) => item.rule === rule).length,
+    }));
+    await testInfo.attach(`${attachmentName}-expected-faults`, {
+      body: Buffer.from(`${JSON.stringify(applied, null, 2)}\n`, "utf8"),
+      contentType: "application/json",
+    });
+  }
   const unexpected = unexpectedDiagnostics(
-    normalized,
+    remaining,
     testInfo.project.name,
     new Date(),
   );

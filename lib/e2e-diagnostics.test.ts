@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  applyExpectedFaults,
+  DiagnosticLedger,
   diagnosticAllowlist,
   unexpectedDiagnostics,
   type DiagnosticEntry,
@@ -50,5 +52,33 @@ describe("Phase 15 diagnostic expiry", () => {
       unexpectedDiagnostics([exactEntry], `${row.project}-other`, beforeExpiry),
       [exactEntry],
     );
+  });
+});
+
+describe("20-25 expected faults (T-20-37)", () => {
+  const aborted: DiagnosticEntry = { kind: "requestfailed", source: "fetch", text: "GET [url-redacted] net::ERR_FAILED" };
+  const rule = { kind: "requestfailed" as const, source: "fetch", text: /ERR_FAILED/, reason: "the test aborts its own API" };
+
+  test("keeps the global allowlist at 11 rows", () => {
+    assert.equal(diagnosticAllowlist.length, 11);
+  });
+
+  test("forgives only an entry that matches kind, source and text", () => {
+    const wrongSource: DiagnosticEntry = { ...aborted, source: "image" };
+    const wrongText: DiagnosticEntry = { ...aborted, text: "GET [url-redacted] net::ERR_CONNECTION_RESET" };
+    const wrongKind: DiagnosticEntry = { kind: "console", source: "fetch", text: aborted.text };
+    const result = applyExpectedFaults([aborted, wrongSource, wrongText, wrongKind], [rule]);
+    assert.deepEqual(result.forgiven.map((item) => item.entry), [aborted]);
+    assert.deepEqual(result.remaining, [wrongSource, wrongText, wrongKind]);
+  });
+
+  test("never forgives csp, pageerror or hydration, and needs a reason", () => {
+    const ledger = new DiagnosticLedger();
+    for (const kind of ["csp", "pageerror", "hydration"] as const) {
+      assert.throws(() => ledger.expectFault({ kind: kind as never, text: /./, reason: "x" }), /can never be an expected fault/);
+    }
+    assert.throws(() => ledger.expectFault({ ...rule, reason: " " }), /needs a reason/);
+    ledger.expectFault(rule);
+    assert.equal(ledger.expectedFaults.length, 1);
   });
 });

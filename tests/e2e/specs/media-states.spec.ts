@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { mediaSource } from "../../../lib/media-display.ts";
-import { deterministicContract } from "../fixtures/determinism";
+import { parkClock } from "../fixtures/determinism";
 import { DesktopPage } from "../pages/desktop.page";
 import type { DiagnosticLedger } from "../fixtures/diagnostics";
 import { expect, test } from "../fixtures/test";
@@ -55,13 +55,8 @@ function forgiveImageFaults(diagnostics: DiagnosticLedger) {
   diagnostics.entries.splice(0, diagnostics.entries.length, ...kept);
 }
 
-// install() leaves the clock running at real speed, so a limit counted on it keeps ticking while the test waits for the window and
-// the roster; the budget of the two steps (14 s, then 1.5 s) against the 15 s limit is only 1 s of slack. Parking the clock once the desktop
-// has mounted (it needs its 0 ms timers first) makes the 15 s limit move only through runFor, whatever the load or the previous test.
-async function parkClock(page: Page) {
-  await page.clock.pauseAt(new Date(Date.parse(deterministicContract.now) + 5_000));
-}
-
+// A limit counted in fake seconds (the 15 s portrait limit) must not tick while the test waits for the window and the roster: openEmployees
+// parks the clock once the desktop has mounted (see parkClock), so the 15 s limit moves only through runFor, whatever the load or the previous test.
 async function openEmployees(page: Page, desktop: DesktopPage, options: { parkClock?: boolean } = {}) {
   const roster = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/employees", { timeout: 20_000 }).catch(() => undefined);
   await desktop.goto();

@@ -253,7 +253,7 @@ export const test = base.extend<PortiaFixtures, PortiaWorkerFixtures>({
       const ledger = new DiagnosticLedger();
       await installDiagnostics(page, ledger);
       await use(ledger);
-      await assertDiagnosticsClean(ledger.entries, testInfo);
+      await assertDiagnosticsClean(ledger.entries, testInfo, "portia-diagnostics", ledger.expectedFaults);
     },
     { auto: true },
   ],
