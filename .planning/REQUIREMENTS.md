@@ -85,20 +85,20 @@
 - [ ] **STAB-MEDIA-04**: Immutable UUID media кэшируется повторно без скачивания, новый upload получает новый URL, content revision invalidation не ломает media cache.
 - [x] **STAB-MEDIA-05**: Broken, slow или blocked external media сохраняет читаемый текст/caption и стабильный layout без app crash или infinite spinner.
 - [ ] **STAB-MEDIA-06**: До оптимизации записаны воспроизводимые owner PC/phone traces; после изменений interaction, drag, wallpaper и app-open не хуже утверждённого baseline и проходят согласованные budgets.
-- [x] **STAB-MEDIA-07**: Внешние media hosts инвентаризированы; CSP проходит report-only до enforcement, approved images/YouTube продолжают работать, rejected host показывает fallback.
+- [ ] **STAB-MEDIA-07**: Внешние media hosts инвентаризированы; CSP проходит report-only до enforcement, approved images/YouTube продолжают работать, rejected host показывает fallback. (Pending — gap closure 20-31: нулевой report-only отчёт для YouTube-блоков, GIF-хостов и аватаров Roblox — BLOCKED (DATA); CR-01 Phase 19 открыт; физическая проверка D-05 на PC и phone (20-14) не проведена.)
 
 ## Accessibility и security
 
-- [x] **STAB-A11Y-01**: PC controls имеют name/role/state, видимый focus, корректный trap/restore в dialogs и keyboard alternative для действия, доступного только drag.
+- [ ] **STAB-A11Y-01**: PC controls имеют name/role/state, видимый focus, корректный trap/restore в dialogs и keyboard alternative для действия, доступного только drag. (Pending — gap closure 20-31: живой trap/restore квалификации — BLOCKED (ENV), пройден только контракт UI на заглушке (20-28); ролевые поверхности и ручки редактора — BLOCKED (ENV); физический PC (20-14) не проведён.)
 - [ ] **STAB-A11Y-02**: Phone actions доступны touch без hover, не перекрываются keyboard/sticky bars, имеют практичную tap area и не создают page-level horizontal overflow.
-- [x] **STAB-A11Y-03**: Русские labels, success/error/disabled reason понятны и объявляются; нет пустых, шуточных, удвоенных или непереведённых technical labels; alt соответствует назначению изображения.
+- [ ] **STAB-A11Y-03**: Русские labels, success/error/disabled reason понятны и объявляются; нет пустых, шуточных, удвоенных или непереведённых technical labels; alt соответствует назначению изображения. (Pending — gap closure 20-31: экранный диктор не проверен (A11Y-SR-01; без устройства — BLOCKED (DEVICE)); medium-контраст в «Архиве», «Глобальном поиске» и «Корзине» — FAIL до вердикта владельца D-10.)
 - [ ] **STAB-A11Y-04**: Итоговая motion-настройка применяется ко всем поверхностям; off/reduced прекращает looping movement, но сохраняет content и feedback.
 - [x] **STAB-SEC-01**: Anon, authenticated, editor, reviewer и owner видят и изменяют только разрешённые данные; запрещённые UI/API/table/RPC действия fail-closed, revoke действует без rebuild.
 - [x] **STAB-SEC-02**: Participant network/UI не получает answer keys, future questions, internal notes, bank payload и reviewer identity; sensitive responses используют no-store.
 - [ ] **STAB-SEC-03**: CSP, frame, nosniff, referrer, permissions, COOP и HSTS присутствуют, не ломая approved charter/sheet/video; CSP ужесточается только через report-only.
 - [x] **STAB-SEC-04**: Staging и production schema fingerprints, functions, grants и RLS соответствуют canonical migrations; ручной production step имеет записанный postflight. (Complete: staging golden == U == final; production после owner-run миграций == golden по правилу A, единственное отличие — платформенная `rls_auto_enable()`, см. `evidence/16-PRODUCTION-POSTFLIGHT.md`.)
-- [x] **STAB-SEC-05**: Глубокий GSD code review и локальная security matrix покрывают auth/API/RLS/headers/CSP/uploads/secrets/dependencies; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, lockfile меняется отдельно.
-- [ ] **STAB-SEC-06**: Release notes честно фиксируют, что device binding не hardware attestation, initial mode spoofable, и перечисляют остальные accepted risks/waivers без расширения риска.
+- [x] **STAB-SEC-05**: Глубокий GSD code review и локальная security matrix покрывают auth/API/RLS/headers/CSP/uploads/secrets/dependencies; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, lockfile меняется отдельно. (матрица обновлена в 20-26 на b88669f; выполнение RPC и RLS под Postgres в матрице не повторялось — статическое чтение и receipts Phase 16.)
+- [ ] **STAB-SEC-06**: Release notes честно фиксируют, что device binding не hardware attestation, initial mode spoofable, и перечисляют остальные accepted risks/waivers без расширения риска. (черновик 20-RELEASE-NOTES.md — 20-31; финал — 20-15)
 
 ## Release readiness
 
@@ -204,10 +204,10 @@
 | STAB-MEDIA-04 | Phase 19 | Pending |
 | STAB-MEDIA-05 | Phase 19 | Complete |
 | STAB-MEDIA-06 | Phase 18 | Pending |
-| STAB-MEDIA-07 | Phase 20 | Complete |
-| STAB-A11Y-01 | Phase 20 | Complete |
+| STAB-MEDIA-07 | Phase 20 | Pending |
+| STAB-A11Y-01 | Phase 20 | Pending |
 | STAB-A11Y-02 | Phase 20 | Pending |
-| STAB-A11Y-03 | Phase 20 | Complete |
+| STAB-A11Y-03 | Phase 20 | Pending |
 | STAB-A11Y-04 | Phase 20 | Pending |
 | STAB-SEC-01 | Phase 16 | Complete |
 | STAB-SEC-02 | Phase 20 | Complete |
@@ -241,4 +241,4 @@
 | STAB-EDIT-04 | Phase 20 | Pending |
 
 ---
-*Last updated: 2026-11-04 after owner decisions D-46..D-49 added Phase 20 requirements (92/92 uniquely mapped)*
+*Last updated: 2026-11-04 — gap closure 20-31: A11Y-01/03, MEDIA-07 → Pending (prior: after owner decisions D-46..D-49 added Phase 20 requirements, 92/92 uniquely mapped)*
