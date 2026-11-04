@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed 20-30-PLAN.md
-last_updated: "2026-11-04T18:38:18.716Z"
+stopped_at: Completed PORTIA-20-29-PLAN.md
+last_updated: "2026-11-04T19:02:19.546Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 20 execution started
-state_head: 27e3d1897f2fb8f9ee3f0a675f87c8e9cd6bf625
+state_head: e0ee8b8e175e5324f743e6d831879d544b8d5cd3
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 102
-  completed_plans: 95
+  completed_plans: 96
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 16 of 31
+Plan: 17 of 31
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 20 execution started
 
@@ -131,6 +131,7 @@ Progress: [█████░░░░░] 50%
 | Phase 20 P27 | 35 min | 3 tasks | 2 files |
 | Phase PORTIA-20 P28 | ~5h | 3 tasks | 4 files |
 | Phase 20 P30 | 75 min | 3 tasks | 3 files |
+| Phase PORTIA-20 P29 | ~120 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -229,6 +230,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 20]: 20-27: UAT ledger prepared (20-UAT.md + lib/phase20-uat.test.ts); P19-GAP PASS only with residual-0 SUMMARY evidence (20, 22), others BLOCKED; OWNER-MIG rows never agent PASS; strict PORTIA_REQUIRE_UAT=1 fails until owner fills
 - [Phase PORTIA-20]: 20-28: the stub lane found that Tab left the qualification window (blur failed the PC attempt on Chromium); fixed with a Tab wrap in portia-desktop.tsx. Live run and the editor keyboard-move scenario stay BLOCKED (ENV); PW-10 is a waiver awaiting the owner.
 - [Phase 20]: 20-30: release gate runner is fail-closed (flaky/retry/skip/BLOCKED never PASS; waiver without owner verdict is FAIL, PW-10 pending, PW-07 accepted); first clean-checkout smoke: lint PASS, unit and typecheck FAIL because tracked lib/phase16-guard-boundary.test.ts imports untracked .claude/hooks/guard.mjs (deferred, blocks 20-13 unit/typecheck PASS)
+- [Phase PORTIA-20]: 20-29: all 73 candidates recaptured on HEAD 0929a084c13d (set phase20-refresh-0929a084c13d); strict mode rejects product changes after candidates_commit — Owner must not approve stale hashes; old baselines failing for data or unisolated causes (B1-B5) stay blockers, only explained changes get rebaseline-* rows
 
 ### Pending Todos
 
@@ -271,8 +273,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T18:38:18.170Z
-Stopped at: Completed 20-30-PLAN.md
+Last session: 2026-11-04T19:02:19.007Z
+Stopped at: Completed PORTIA-20-29-PLAN.md
 Resume file: None
 
 ## Operator Next Step
