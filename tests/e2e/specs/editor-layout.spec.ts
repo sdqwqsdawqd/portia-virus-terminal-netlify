@@ -323,3 +323,296 @@ test.describe("[STAB-EDIT-04] D-47 editor note of a «Справочник» sec
     });
   });
 });
+
+// ---- D-41 / D-42 «Рекомендации» and «Сводка» sections (Phase 20-23) ------------------------------------------------------------------
+// Same rules as above: staging only, content "main" is put back, nothing is mocked, no safe target means BLOCKED (ENV).
+
+type StoredDocument = { runs: { text: string; style?: Record<string, unknown> }[] };
+type StoredRecommendationSection = { id: string; title: string; items: string[]; subsections: { id: string; title: string; items: string[] }[] };
+type StoredContent = {
+  searchRecommendations: string[];
+  searchRecommendationSections?: StoredRecommendationSection[];
+  formattedText: Record<string, StoredDocument>;
+  broadcasts: { id: string; type: string; title: string; sectionId?: string }[];
+  broadcastSections?: { id: string; title: string; subsections: { id: string; title: string }[] }[];
+};
+
+async function storedContent(stagingRun: StagingRun): Promise<StoredContent> {
+  const row = await adminOf(stagingRun).from("portia_content").select("payload").eq("id", "main").maybeSingle<{ payload: StoredContent }>();
+  expect(row.error, "read portia_content").toBeNull();
+  expect(row.data, "portia_content main exists").not.toBeNull();
+  return row.data!.payload;
+}
+
+// The style of the first character of line `line` of the flat recommendations list.
+function styleOfStoredLine(document: StoredDocument | undefined, flat: string[], line: number) {
+  const offset = flat.slice(0, line).reduce((total, item) => total + item.length + 1, 0);
+  let at = 0;
+  for (const run of document?.runs ?? []) {
+    if (offset < at + run.text.length) return run.style ?? {};
+    at += run.text.length;
+  }
+  return {};
+}
+
+async function saveEditor(page: Page) {
+  await page.locator(".editor-save-chip > button").click();
+  await page.getByRole("button", { name: "СОХРАНИТЬ", exact: true }).click();
+  await expect(page.locator("p.sr-only[role='status']")).toContainText("Сохранено");
+}
+
+async function openTabWith(browser: Browser, stagingRun: StagingRun, baseURL: string, testInfo: TestInfo, label: string, tabName: RegExp, seedPayload: (payload: Record<string, unknown>, run: string) => void, work: (ctx: { context: BrowserContext; page: Page; editor: EditorPage; run: string }) => Promise<void>) {
+  const session = await sessionOrSkip(stagingRun, baseURL, testInfo, label);
+  const context = await contextFor(browser, baseURL, session);
+  try {
+    await withContentRestored(stagingRun, async (seed) => {
+      const run = stagingRun.run!.runId;
+      await seed((payload) => seedPayload(payload, run));
+      const { page, editor } = await openEditor(context);
+      await tab(editor, tabName).click();
+      await work({ context, page, editor, run });
+    });
+  } finally {
+    await context.close();
+  }
+}
+
+const sectionCard = (page: Page, title: string) => page.locator(".editor-section-column > .nested-editor-card").filter({ has: page.getByRole("button", { name: new RegExp(title) }) });
+const toggleOf = (target: ReturnType<typeof card>) => target.locator(":scope > .nested-editor-head .nested-editor-toggle");
+// The bar is still inside the visible part of the editor after scrolling to the bottom (PC: the editor pane; phone: the page).
+async function expectBarInView(page: Page) {
+  const bar = page.locator(".editor-section-addbar");
+  if (isPhone()) await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  else await page.locator(".content-editor").evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect.poll(async () => {
+    const found = await bar.boundingBox();
+    const view = isPhone() ? { top: 0, bottom: page.viewportSize()!.height } : await page.locator(".content-editor").boundingBox().then((editorBox) => ({ top: editorBox!.y, bottom: editorBox!.y + editorBox!.height }));
+    return found !== null && found.y >= view.top - 1 && found.y + found.height <= view.bottom + 1;
+  }, "the add-section bar is still in the visible part of the editor").toBe(true);
+}
+
+test.describe("[STAB-EDIT-03] D-41 «Рекомендации» sections", () => {
+  test("[STAB-EDIT-03] an old flat list shows as one section; a section with a subsection and a line keeps the flat list and its colour; the search window reads only the flat list; ArrowDown reorders sections and lines", async ({ browser, stagingRun, baseURL }, testInfo) => {
+    test.skip(isPhone(), "PC lane: the keyboard order and the search window are checked once");
+    const base = baseURL ?? fallbackBase;
+    await openTabWith(browser, stagingRun, base, testInfo, "layout-recommendations", /^Рекомендации/, (payload, run) => {
+      payload.searchRecommendations = [`${run} r1`, `${run} r2`, `${run} r3`];
+      delete payload.searchRecommendationSections;
+      const document: StoredDocument = { runs: [{ text: `${run} r1\n` }, { text: `${run} r2`, style: { color: "#b43632" } }, { text: `\n${run} r3` }] };
+      payload.formattedText = { ...(payload.formattedText as Record<string, unknown>), "search:recommendations": document };
+    }, async ({ page, run }) => {
+      // Old format: one section «Рекомендации» with the three lines.
+      await expect(page.locator(".editor-section-column > .nested-editor-card")).toHaveCount(1);
+      const synthetic = card(page, "search-recommendations-all");
+      await toggleOf(synthetic).click();
+      await expect(synthetic.locator(":scope > .nested-editor-body .recommendation-order-row")).toHaveCount(3);
+
+      const title = `${run} Классы`;
+      const mind = `${run} Разум`;
+      const line = `${run} Люцидиум`;
+      await addButton(page).click();
+      await page.locator(".editor-section-create").getByLabel("Заголовок раздела").fill(title);
+      await page.locator(".editor-section-create").getByRole("button", { name: "Создать раздел" }).click();
+      const created = sectionCard(page, title);
+      await expect(created.getByLabel("Заголовок раздела").first()).toBeFocused();
+      await created.getByRole("button", { name: "+ ПОДРАЗДЕЛ", exact: true }).click();
+      const sub = created.locator(".info-subsection-list > .nested-editor-card").first();
+      await expect(sub.getByLabel("Заголовок подраздела")).toBeFocused();
+      await sub.getByLabel("Заголовок подраздела").fill(mind);
+      await sub.locator("[data-format-key]").click();
+      await page.keyboard.type(line);
+      await expect(sub.locator(".recommendation-order-row")).toHaveCount(1);
+
+      await saveEditor(page);
+      const stored = await storedContent(stagingRun);
+      const sections = stored.searchRecommendationSections ?? [];
+      expect(sections.map((section) => section.title)).toEqual(["Рекомендации", title]);
+      expect(stored.searchRecommendations, "the flat list equals the expansion of the sections").toEqual([`${run} r1`, `${run} r2`, `${run} r3`, line]);
+      expect(sections.flatMap((section) => [...section.items, ...section.subsections.flatMap((item) => item.items)])).toEqual(stored.searchRecommendations);
+      expect(styleOfStoredLine(stored.formattedText["search:recommendations"], stored.searchRecommendations, 1), "the second line keeps its colour").toEqual({ color: "#b43632" });
+
+      // D-43: the search window reads only the flat list; section titles are not recommendations.
+      const visitor = await browser.newContext({ baseURL: base, locale: "ru-RU" });
+      try {
+        await visitor.addInitScript(() => window.sessionStorage.setItem("portia-boot-seen-v1", "1"));
+        const visitorPage = await visitor.newPage();
+        const desktop = new DesktopPage(visitorPage);
+        await desktop.goto();
+        await desktop.openApp("Глобальный поиск");
+        const search = desktop.window("Глобальный поиск");
+        const shown = await search.locator(".search-recommendations button").allTextContents();
+        for (const text of shown) expect(stored.searchRecommendations, `«${text}» is a line of the flat list`).toContain(text.trim());
+        await expect(search).not.toContainText(title);
+        await expect(search).not.toContainText(mind);
+      } finally {
+        await visitor.close();
+      }
+
+      // D-42: ArrowDown on the handle of the first section moves it below the second; the lines follow.
+      await handle(page, "search-recommendations-all").focus();
+      await page.keyboard.press("ArrowDown");
+      await expect(card(page, "search-recommendations-all")).toHaveAttribute("data-sort-index", "1");
+      await expect.poll(() => activeHandleOf(page, "search-recommendations-all")).toBe(true);
+      await saveEditor(page);
+      const reordered = await storedContent(stagingRun);
+      expect(reordered.searchRecommendations[0], "the line of the subsection comes first now").toBe(line);
+      expect(reordered.searchRecommendations.slice(1)).toEqual([`${run} r1`, `${run} r2`, `${run} r3`]);
+      expect(styleOfStoredLine(reordered.formattedText["search:recommendations"], reordered.searchRecommendations, 2), "the colour moved with its line").toEqual({ color: "#b43632" });
+    });
+  });
+
+  test("[STAB-A11Y-02] the pinned bar stays in view after scrolling; on a phone the sections share one left edge without horizontal overflow", async ({ browser, stagingRun, baseURL }, testInfo) => {
+    await openTabWith(browser, stagingRun, baseURL ?? fallbackBase, testInfo, "layout-recommendations-bar", /^Рекомендации/, (payload, run) => {
+      const lines = Array.from({ length: 12 }, (_, index) => `${run} строка ${index + 1}`);
+      payload.searchRecommendations = lines;
+      payload.searchRecommendationSections = Array.from({ length: 7 }, (_, index) => ({ id: `${run}-rec-${index + 1}`, title: `${run} Раздел ${index + 1}`, items: index === 0 ? lines : [], subsections: [] }));
+      const formatted = { ...(payload.formattedText as Record<string, unknown>) };
+      delete formatted["search:recommendations"];
+      payload.formattedText = formatted;
+    }, async ({ page, run }) => {
+      await expect(page.locator(".editor-section-column > .nested-editor-card")).toHaveCount(7);
+      await expectBarInView(page);
+      if (isPhone()) {
+        const lefts = new Set<number>();
+        for (let index = 1; index <= 7; index += 1) lefts.add(Math.round((await box(card(page, `${run}-rec-${index}`))).x));
+        expect(lefts.size, "all sections share one left edge").toBe(1);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+    });
+  });
+});
+
+// ---- «Сводка» --------------------------------------------------------------------------------------------------------------------
+
+const newsSeed = (run: string, count: number) => Array.from({ length: count }, (_, index) => ({
+  id: `${run}-bc-${index + 1}`, type: "news", title: `${run} Новость ${index + 1}`, body: "", published: true, important: false, startsAt: "", endsAt: "", conditions: "",
+}));
+
+test.describe("[STAB-EDIT-03] D-41 «Сводка» sections", () => {
+  test("[STAB-EDIT-03] entries without sectionId stand in «Без раздела»; a subsection takes an entry through «Раздел»; broadcasts keep their order and members; the public window shows the same news; deleting the section keeps the entry", async ({ browser, stagingRun, baseURL }, testInfo) => {
+    test.skip(isPhone(), "PC lane: the same data path runs on every device");
+    const base = baseURL ?? fallbackBase;
+    await openTabWith(browser, stagingRun, base, testInfo, "layout-broadcasts", /^Сводка/, (payload, run) => {
+      payload.broadcasts = newsSeed(run, 2);
+      delete payload.broadcastSections;
+    }, async ({ page, run }) => {
+      const ids = [`${run}-bc-1`, `${run}-bc-2`];
+      await expect(page.locator(".broadcast-entry-list--loose [data-broadcast-id]")).toHaveCount(2);
+
+      const title = `${run} Еженедельное`;
+      const sub = `${run} Итоги`;
+      await addButton(page).click();
+      await page.locator(".editor-section-create").getByLabel("Заголовок раздела").fill(title);
+      await page.locator(".editor-section-create").getByRole("button", { name: "Создать раздел" }).click();
+      const created = sectionCard(page, title);
+      await expect(created.getByLabel("Заголовок раздела").first()).toBeFocused();
+      await created.getByRole("button", { name: "+ ПОДРАЗДЕЛ", exact: true }).click();
+      const subCard = created.locator(".info-subsection-list > .nested-editor-card").first();
+      await subCard.getByLabel("Заголовок подраздела").fill(sub);
+
+      const entry = page.locator(`.broadcast-entry-list--loose [data-broadcast-id="${ids[0]}"]`);
+      await toggleOf(card(page, ids[0])).click();
+      await entry.locator("[data-broadcast-section]").selectOption({ label: `— ${sub}` });
+      await expect(subCard.locator(`[data-broadcast-id="${ids[0]}"]`)).toHaveCount(1);
+      await expect(page.locator(`.broadcast-entry-list--loose [data-broadcast-id="${ids[0]}"]`)).toHaveCount(0);
+
+      await saveEditor(page);
+      const stored = await storedContent(stagingRun);
+      const subId = stored.broadcastSections?.[0]?.subsections[0]?.id ?? "";
+      expect(subId).not.toBe("");
+      expect(stored.broadcasts.find((item) => item.id === ids[0])?.sectionId).toBe(subId);
+      expect(stored.broadcasts.map((item) => item.id), "the broadcasts keep their order and members").toEqual(ids);
+
+      // The public window shows the same news; the section title is not part of it.
+      const visitor = await browser.newContext({ baseURL: base, locale: "ru-RU" });
+      try {
+        await visitor.addInitScript(() => window.sessionStorage.setItem("portia-boot-seen-v1", "1"));
+        await expect.poll(async () => (await (await visitor.request.get("/api/content")).text()).includes(title), { timeout: 20_000 }).toBe(true);
+        const visitorPage = await visitor.newPage();
+        const desktop = new DesktopPage(visitorPage);
+        await desktop.goto();
+        await desktop.openApp("Сводка");
+        const broadcastWindow = desktop.window("Сводка");
+        await expect(broadcastWindow).toContainText(`${run} Новость 1`);
+        await expect(broadcastWindow).toContainText(`${run} Новость 2`);
+        await expect(broadcastWindow).not.toContainText(title);
+        await expect(broadcastWindow).not.toContainText(sub);
+      } finally {
+        await visitor.close();
+      }
+
+      // Deleting the section keeps the entry, in «Без раздела».
+      await created.getByRole("button", { name: `Удалить раздел «${title}»`, exact: true }).click();
+      await page.getByRole("alertdialog").getByRole("button", { name: "УДАЛИТЬ", exact: true }).click();
+      await expect(page.locator(`.broadcast-entry-list--loose [data-broadcast-id="${ids[0]}"]`)).toHaveCount(1);
+      await saveEditor(page);
+      const after = await storedContent(stagingRun);
+      expect(after.broadcasts.map((item) => item.id), "no entry was removed with the section").toEqual(ids);
+      expect(after.broadcasts.find((item) => item.id === ids[0])?.sectionId).toBe("");
+      expect(after.broadcastSections ?? []).toEqual([]);
+    });
+  });
+
+  test("[STAB-A11Y-02] the pinned bar stays in view after scrolling; on a phone the sections use one column without horizontal overflow", async ({ browser, stagingRun, baseURL }, testInfo) => {
+    await openTabWith(browser, stagingRun, baseURL ?? fallbackBase, testInfo, "layout-broadcasts-bar", /^Сводка/, (payload, run) => {
+      payload.broadcasts = newsSeed(run, 12);
+      payload.broadcastSections = Array.from({ length: 7 }, (_, index) => ({ id: `${run}-bs-${index + 1}`, title: `${run} Раздел ${index + 1}`, subsections: [] }));
+    }, async ({ page, run }) => {
+      await expect(page.locator(".editor-section-column > .nested-editor-card")).toHaveCount(7);
+      await expectBarInView(page);
+      if (isPhone()) {
+        const lefts = new Set<number>();
+        for (let index = 1; index <= 7; index += 1) lefts.add(Math.round((await box(card(page, `${run}-bs-${index}`))).x));
+        expect(lefts.size, "all sections share one left edge").toBe(1);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+    });
+  });
+
+  test("[STAB-EDIT-04] D-47 the note of a «Сводка» section is stored only in /api/content/notes", async ({ browser, stagingRun, baseURL }, testInfo) => {
+    test.skip(isPhone(), "Same data path on every device; the PC lane runs it once");
+    const base = baseURL ?? fallbackBase;
+    await skipUnlessNotesTable(stagingRun, testInfo);
+    await openTabWith(browser, stagingRun, base, testInfo, "layout-broadcasts-notes", /^Сводка/, (payload, run) => {
+      payload.broadcasts = newsSeed(run, 1);
+      delete payload.broadcastSections;
+    }, async ({ context, page, run }) => {
+      const admin = adminOf(stagingRun);
+      const rowsBefore = await admin.from("portia_editor_notes").select("*");
+      expect(rowsBefore.error, "snapshot portia_editor_notes").toBeNull();
+      try {
+        const title = `${run} Раздел с заметкой`;
+        const note = `${run} только для редактора`;
+        await addButton(page).click();
+        const form = page.locator(".editor-section-create");
+        await form.getByLabel("Заголовок раздела").fill(title);
+        const noteField = form.getByLabel("Заметка для редактора");
+        await expect(noteField, "the store answers, so the field is enabled").toBeEnabled();
+        await noteField.fill(note);
+        await form.getByRole("button", { name: "Создать раздел" }).click();
+        await expect(sectionCard(page, title).getByLabel("Заметка для редактора").first()).toHaveValue(note);
+        await saveEditor(page);
+
+        const stored = await context.request.get("/api/content/notes");
+        expect(stored.status()).toBe(200);
+        const answer = (await stored.json()) as { notes: { broadcasts?: Record<string, string> } };
+        expect(Object.values(answer.notes.broadcasts ?? {})).toContain(note);
+
+        const visitor = await browser.newContext({ baseURL: base, locale: "ru-RU" });
+        try {
+          await expect.poll(async () => (await (await visitor.request.get("/api/content")).text()).includes(title), { timeout: 20_000 }).toBe(true);
+          expect(await (await visitor.request.get("/api/content")).text(), "no note text in the public payload").not.toContain(note);
+        } finally {
+          await visitor.close();
+        }
+      } finally {
+        const wipe = await admin.from("portia_editor_notes").delete().in("tab", ["guide", "broadcasts", "search"]);
+        expect(wipe.error, "clear portia_editor_notes").toBeNull();
+        if (rowsBefore.data?.length) {
+          const back = await admin.from("portia_editor_notes").insert(rowsBefore.data);
+          expect(back.error, "restore portia_editor_notes").toBeNull();
+        }
+      }
+    });
+  });
+});
