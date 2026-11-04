@@ -2155,6 +2155,10 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .template-preview dd { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .template-empty { color: var(--ink-soft); font-style: italic; }
 .template-preview footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--paper-2); }
+.template-field-title { color: oklch(.78 calc(.024 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.template-image-field { gap: 8px; }
+.template-figure { margin: 16px 0 0; }
+.template-figure img { display: block; max-width: 100%; max-height: 520px; width: auto; height: auto; object-fit: contain; border: 1px solid var(--paper-2); }
 @media (max-width: 900px) {
   .template-shell { padding: 16px; }
   .template-grid { grid-template-columns: minmax(0, 1fr); }
