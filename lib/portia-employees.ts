@@ -504,7 +504,9 @@ export async function saveEmployeeProfile(supabase: SupabaseClient, target: { id
   const table = supabase.from("portia_employee_profiles");
   const first = await table.upsert({ ...base, ...ratings }).select("*").single<ProfileRow>();
   if (!first.error) return { profile: profileFromRow(first.data), ratingsSaved: true };
-  // Tolerates the rating columns being absent until 03.2-06 applies the SQL.
+  // Rating columns are added by supabase/migrations/20261101000000_portia_baseline.sql (add column if not exists).
+  // Remove this retry, ratingsSaved and the ratingsPending state once the owner confirms production applied that baseline;
+  // production is not checked in phase 20 (D-33/IN-05).
   if (!isMissingColumnError(first.error) || !Object.keys(ratings).length) throw first.error;
   const retry = await table.upsert(base).select("*").single<ProfileRow>();
   if (retry.error) throw retry.error;

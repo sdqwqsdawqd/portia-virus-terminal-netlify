@@ -190,6 +190,7 @@ export async function acceptanceServe(target, runId, options = {}, deps = {}) {
     if (!/^[a-f0-9]{64,}$/u.test(deviceSecret)) throw new AcceptanceError("device-secret-invalid", ["device-secret"]);
   } else {
     deviceSecret = randomBytes(32).toString("hex");
+    // mode 0o600 has no effect on NTFS (Windows): the file sits in the temp work directory until a clean acceptance-teardown removes it.
     fs.writeFileSync(secretFile, deviceSecret, { mode: 0o600, flag: "wx" });
   }
 
@@ -366,6 +367,7 @@ export async function acceptanceSeed(target, deps = {}) {
       ])],
     }));
     // Passwords live only here, outside the repository.
+    // mode 0o600 has no effect on NTFS (Windows): the file is not access-protected there and stays in the temp work directory until a clean acceptance-teardown removes it.
     fs.writeFileSync(credentialsFile, JSON.stringify({ reviewer: run.credentials("reviewer"), editor: run.credentials("editor") }), { mode: 0o600 });
 
     writeManifest({
@@ -416,7 +418,7 @@ export async function acceptanceShift(target, runId, kind, args = [], deps = {})
     return 2;
   }
   const manifest = readManifest(runId, deps);
-  if (label && !(label in manifest.nicknames)) {
+  if (label && !Object.hasOwn(manifest.nicknames, label)) {
     errOf(deps)("[PORTIA_STAGING:usage] Unknown participant label for this run.\n");
     return 2;
   }
@@ -565,5 +567,6 @@ export async function acceptanceTeardown(target, runId, deps = {}) {
   const clean = residual !== null && Object.values(residual).every((count) => count === 0) && errors.length === 0;
   outOf(deps)(`${JSON.stringify({ residual, deleted, errors, legacyWindow: manifest.legacy })}\n`);
   if (clean) fsOf(deps).rmSync(workDirOf(runId, deps), { recursive: true, force: true });
+  else errOf(deps)(`[PORTIA_STAGING:residual] рабочий каталог не удалён: ${workDirOf(runId, deps)}\n`);
   return clean ? 0 : 1;
 }
