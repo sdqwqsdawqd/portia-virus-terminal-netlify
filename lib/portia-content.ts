@@ -55,21 +55,36 @@ export const classificationOptions = {
     { value: "Эснов", level: 3 },
   ],
   mind: [
-    { value: "Рубедо", level: 1 },
-    { value: "Альбедо", level: 2 },
-    { value: "Нигредо", level: 3 },
+    { value: "Люцидиум", level: 1 },
+    { value: "Транзитиум", level: 2 },
+    { value: "Обливиум", level: 3 },
   ],
   appearance: [
-    { value: "Нюктея", level: 1 },
-    { value: "Морфея", level: 2 },
-    { value: "Дедалея", level: 3 },
+    { value: "Изоморф", level: 1 },
+    { value: "Полиморф", level: 2 },
+    { value: "Ксеноморф", level: 3 },
   ],
   behavior: [
-    { value: "Фобус", level: 1 },
-    { value: "Ареус", level: 2 },
-    { value: "Селенус", level: 3 },
+    { value: "Стабилар", level: 1 },
+    { value: "Импульсар", level: 2 },
+    { value: "Инфернар", level: 3 },
   ],
 } satisfies Record<keyof Virus["classification"], readonly { value: string; level?: number }[]>;
+
+// D-35 / D-36(а): the old names of the three renamed axes, mapped to the new ones with the same level.
+// Saved records may still carry an old name until the SQL rewrite (20-21) runs; reading maps it, saving writes the new name.
+export const legacyClassificationNames: Readonly<Record<string, string>> = Object.freeze({
+  "Рубедо": "Люцидиум", "Альбедо": "Транзитиум", "Нигредо": "Обливиум",
+  "Фобус": "Стабилар", "Ареус": "Импульсар", "Селенус": "Инфернар",
+  "Нюктея": "Изоморф", "Морфея": "Полиморф", "Дедалея": "Ксеноморф",
+});
+
+// The accent mark U+0301 belongs only to the text of the «Классификация» section (D-37); a class value never keeps it.
+// Own keys only (Object.hasOwn), so "__proto__" or "constructor" never resolve to a prototype member; unknown values stay as they are.
+export function canonicalClassificationName(value: string): string {
+  const plain = value.replace(/́/g, "");
+  return Object.hasOwn(legacyClassificationNames, plain) ? legacyClassificationNames[plain] : plain;
+}
 
 export function scientistLogPlainText(log: ScientistLog) {
   if (log.richContent?.runs?.length) return log.richContent.runs.map((run) => run.text).join("");
@@ -294,9 +309,9 @@ export const defaultPortiaContent: PortiaContent = {
         spread: "Тезей",
         transmission: "Воздушно-пылевой",
         escapeRisk: "Риск",
-        mind: "Альбедо",
-        appearance: "Морфея",
-        behavior: "Фобус",
+        mind: "Транзитиум",
+        appearance: "Полиморф",
+        behavior: "Стабилар",
       },
       scientistLogs: placeholderLogs("morok"),
     },
@@ -327,9 +342,9 @@ export const defaultPortiaContent: PortiaContent = {
         spread: "Номос",
         transmission: "Контактно-бытовой",
         escapeRisk: "Предупреждение",
-        mind: "Нигредо",
-        appearance: "Дедалея",
-        behavior: "Селенус",
+        mind: "Обливиум",
+        appearance: "Ксеноморф",
+        behavior: "Инфернар",
       },
       scientistLogs: placeholderLogs("arahna"),
     },
@@ -365,9 +380,9 @@ export const defaultPortiaContent: PortiaContent = {
         spread: "Абраксас",
         transmission: "Воздушно-капельный",
         escapeRisk: "Эснов",
-        mind: "Рубедо",
-        appearance: "Нюктея",
-        behavior: "Ареус",
+        mind: "Люцидиум",
+        appearance: "Изоморф",
+        behavior: "Импульсар",
       },
       scientistLogs: placeholderLogs("kallisto"),
     },

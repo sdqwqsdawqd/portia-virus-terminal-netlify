@@ -1,4 +1,5 @@
 import type { SVGProps } from "react";
+import { canonicalClassificationName } from "@/lib/portia-content";
 
 export type PortiaIconName =
   | "search" | "virus" | "employees" | "broadcasts" | "info" | "guide"
@@ -6,9 +7,9 @@ export type PortiaIconName =
   | "class-hephaestus" | "class-proteus" | "class-apeiron"
   | "class-nomos" | "class-theseus" | "class-abraxas"
   | "class-warning" | "class-risk" | "class-esnov"
-  | "class-rubedo" | "class-albedo" | "class-nigredo"
-  | "class-nyktea" | "class-morfea" | "class-dedalea"
-  | "class-fobus" | "class-areus" | "class-selenus"
+  | "class-lucidium" | "class-transitium" | "class-oblivium"
+  | "class-stabilar" | "class-impulsar" | "class-infernar"
+  | "class-isomorph" | "class-polymorph" | "class-xenomorph"
   | "route-droplet" | "route-dust" | "route-contact" | "route-oral" | "route-sexual" | "route-unknown"
   | "lock-open" | "lock-closed";
 
@@ -106,15 +107,15 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
   "class-warning": <>{escapeShape}{[16.4].map(chevron)}</>,
   "class-risk": <>{escapeShape}{[14.4, 17.2].map(chevron)}</>,
   "class-esnov": <>{escapeShape}{[12.6, 15.2, 17.8].map(chevron)}</>,
-  "class-rubedo": <>{mindShape}{[12].map(dash)}</>,
-  "class-albedo": <>{mindShape}{[10.6, 13.4].map(dash)}</>,
-  "class-nigredo": <>{mindShape}{[9.4, 12, 14.6].map(dash)}</>,
-  "class-nyktea": <>{lookShape}{([[12, 13]] as [number, number][]).map(cross)}</>,
-  "class-morfea": <>{lookShape}{([[9.6, 13.4], [14.4, 13.4]] as [number, number][]).map(cross)}</>,
-  "class-dedalea": <>{lookShape}{([[12, 9.8], [8.9, 14.8], [15.1, 14.8]] as [number, number][]).map(cross)}</>,
-  "class-fobus": <>{moodShape}{[12.6].map(wave)}</>,
-  "class-areus": <>{moodShape}{[10.8, 14.6].map(wave)}</>,
-  "class-selenus": <>{moodShape}{[9, 12.6, 16.2].map(wave)}</>,
+  "class-lucidium": <>{mindShape}{[12].map(dash)}</>,
+  "class-transitium": <>{mindShape}{[10.6, 13.4].map(dash)}</>,
+  "class-oblivium": <>{mindShape}{[9.4, 12, 14.6].map(dash)}</>,
+  "class-isomorph": <>{lookShape}{([[12, 13]] as [number, number][]).map(cross)}</>,
+  "class-polymorph": <>{lookShape}{([[9.6, 13.4], [14.4, 13.4]] as [number, number][]).map(cross)}</>,
+  "class-xenomorph": <>{lookShape}{([[12, 9.8], [8.9, 14.8], [15.1, 14.8]] as [number, number][]).map(cross)}</>,
+  "class-stabilar": <>{moodShape}{[12.6].map(wave)}</>,
+  "class-impulsar": <>{moodShape}{[10.8, 14.6].map(wave)}</>,
+  "class-infernar": <>{moodShape}{[9, 12.6, 16.2].map(wave)}</>,
   "route-droplet": <>{drop(9, 3.5, 2.6)}{drop(16.5, 11, 1.7)}<path d="M5 20.5h14" opacity=".55" /></>,
   "route-dust": <><path d="M3.5 9.5h9.2a2.6 2.6 0 1 0-2.6-2.6M3.5 14h12.4a2.6 2.6 0 1 1-2.6 2.6" /><circle cx="18.6" cy="7.4" r=".9" fill="currentColor" /><circle cx="20.4" cy="11.6" r=".9" fill="currentColor" /><circle cx="7" cy="19.2" r=".9" fill="currentColor" /></>,
   "route-contact": <><rect x="3.6" y="5.2" width="10" height="10" rx="2.2" /><rect x="10.4" y="8.8" width="10" height="10" rx="2.2" /></>,
@@ -130,16 +131,17 @@ export const classificationIcon: Record<string, PortiaIconName> = {
   "Гефест": "class-hephaestus", "Протей": "class-proteus", "Апейрон": "class-apeiron",
   "Номос": "class-nomos", "Тезей": "class-theseus", "Абраксас": "class-abraxas",
   "Предупреждение": "class-warning", "Риск": "class-risk", "Эснов": "class-esnov",
-  "Рубедо": "class-rubedo", "Альбедо": "class-albedo", "Нигредо": "class-nigredo",
-  "Нюктея": "class-nyktea", "Морфея": "class-morfea", "Дедалея": "class-dedalea",
-  "Фобус": "class-fobus", "Ареус": "class-areus", "Селенус": "class-selenus",
+  "Люцидиум": "class-lucidium", "Транзитиум": "class-transitium", "Обливиум": "class-oblivium",
+  "Изоморф": "class-isomorph", "Полиморф": "class-polymorph", "Ксеноморф": "class-xenomorph",
+  "Стабилар": "class-stabilar", "Импульсар": "class-impulsar", "Инфернар": "class-infernar",
   "Воздушно-капельный": "route-droplet", "Воздушно-пылевой": "route-dust", "Контактно-бытовой": "route-contact",
   "Фекально-оральный": "route-oral", "Половой": "route-sexual", "Неизвестно": "route-unknown",
 };
 
 // Content values are editor input: own keys only, so "constructor" or "__proto__" never resolve to a prototype member.
 export function classificationIconFor(value: string): PortiaIconName | undefined {
-  return Object.hasOwn(classificationIcon, value) ? classificationIcon[value] : undefined;
+  const name = canonicalClassificationName(value);
+  return Object.hasOwn(classificationIcon, name) ? classificationIcon[name] : undefined;
 }
 
 export function PortiaIcon({ name, ...props }: { name: PortiaIconName } & SVGProps<SVGSVGElement>) {

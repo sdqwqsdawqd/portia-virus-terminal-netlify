@@ -331,9 +331,9 @@ const blankVirus = (): Virus => ({
     spread: "Номос",
     transmission: "Контактно-бытовой",
     escapeRisk: "Предупреждение",
-    mind: "Альбедо",
-    appearance: "Нюктея",
-    behavior: "Фобус",
+    mind: "Транзитиум",
+    appearance: "Изоморф",
+    behavior: "Стабилар",
   },
   scientistLogs: [
     { id: makeId("log"), title: "ЗАПИСЬ 01", scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] },

@@ -1,5 +1,6 @@
 import {
   type Broadcast,
+  canonicalClassificationName,
   classificationOptions,
   type InfoBlock,
   type InfoSection,
@@ -280,7 +281,7 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
       physiology: textOf(virus.physiology),
       ppu: { health: textOf(ppu.health), speed: textOf(ppu.speed), abilities: textOf(ppu.abilities) },
       classification: Object.fromEntries(
-        Object.keys(classificationOptions).map((key) => [key, textOf(classification[key])]),
+        Object.keys(classificationOptions).map((key) => [key, canonicalClassificationName(textOf(classification[key]))]),
       ) as Virus["classification"],
       infectedImage: normalizeMediaUrl(virus.infectedImage),
       mutations: Array.isArray(virus.mutations)
