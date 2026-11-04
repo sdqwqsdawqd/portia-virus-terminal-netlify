@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { canonicalize, extractFingerprint, inventory } from "./phase16-fingerprint-compare.mjs";
 import { acceptanceResidual, acceptanceSeed, acceptanceServe, acceptanceShift, acceptanceTeardown } from "./phase19-acceptance.mjs";
+import { matrixResidual, matrixRestore, matrixRun } from "./phase19-matrix-data.mjs";
 import { createRun } from "../tests/e2e/fixtures/staging-harness.ts";
 import { assertAppBoundToTarget } from "../tests/e2e/fixtures/target-attestation.ts";
 import { requireSafeMutationTargetFromEnvironment } from "../tests/e2e/fixtures/target-guard.ts";
@@ -414,6 +415,16 @@ export async function main(argv, deps = {}) {
       const target = resolveStagingTarget(env, deps);
       return await acceptance[0](target, { ...deps, out: (text) => out(redact(text, secrets)), err: (text) => err(redact(text, secrets)) });
     }
+    const matrix = {
+      "matrix-run": [(t, d) => matrixRun(t, rest[0], { stagingEmployees: rest[1] === "--staging-employees" }, d),
+        (rest.length === 1 || (rest.length === 2 && rest[1] === "--staging-employees")) && ["empty", "populated"].includes(rest[0])],
+      "matrix-restore": [(t, d) => matrixRestore(t, d), rest.length === 0],
+      "matrix-residual": [(t, d) => matrixResidual(t, d), rest.length === 0],
+    }[command];
+    if (matrix?.[1]) {
+      const target = resolveStagingTarget(env, deps);
+      return await matrix[0](target, { ...deps, out: (text) => out(redact(text, secrets)), err: (text) => err(redact(text, secrets)) });
+    }
     if (command === "attest") {
       out(`${JSON.stringify(await attest(env, deps))}\n`);
       return 0;
@@ -434,7 +445,7 @@ export async function main(argv, deps = {}) {
     err(`${redact(error instanceof Error ? error.message : "[PORTIA_STAGING:internal]", secrets)}\n`);
     return 1;
   }
-  err("[PORTIA_STAGING:usage] Subcommands: attest | self-test-production-block | scan-evidence <dir> | cli-help <words...> | push | fingerprint <label> | teardown | upgrade-ladder | acceptance-seed | acceptance-shift <runId> <kind> [label] [value] | acceptance-residual <runId> | acceptance-teardown <runId> | acceptance-serve <runId> [--https]\n");
+  err("[PORTIA_STAGING:usage] Subcommands: attest | self-test-production-block | scan-evidence <dir> | cli-help <words...> | push | fingerprint <label> | teardown | upgrade-ladder | acceptance-seed | acceptance-shift <runId> <kind> [label] [value] | acceptance-residual <runId> | acceptance-teardown <runId> | acceptance-serve <runId> [--https] | matrix-run <empty|populated> [--staging-employees] | matrix-restore | matrix-residual\n");
   return 2;
 }
 

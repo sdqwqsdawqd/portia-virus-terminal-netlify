@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { defaultPortiaContent } from "./portia-content.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
 import { matrixPayload, matrixRun, matrixRestore, matrixResidual } from "../scripts/phase19-matrix-data.mjs";
+import { main } from "../scripts/phase16-staging.mjs";
 
 const target = { projectId: "aaaaaaaaaaaaaaaaaaaa", url: "https://aaaaaaaaaaaaaaaaaaaa.supabase.co", adminKey: "fake-key" };
 const clone = <T>(value: T): T => structuredClone(value);
@@ -23,6 +24,10 @@ function fakeClient(initial: Record<string, unknown> | null = { id: "main", payl
         eq(key: string, value: unknown) { filters.push([key, value]); return query; },
         async maybeSingle() { return { data: row && filters.every(([key, value]) => row?.[key] === value) ? clone(row) : null, error: null }; },
         async upsert(value: Record<string, unknown>) { writes++; row = clone(value); return { error: null }; },
+        insert(value: Record<string, unknown>) { return { async select() {
+          if (row) return { data: [], error: { code: "23505" } };
+          writes++; row = { ...clone(value), updated_at: "2026-01-02T00:00:00Z" }; return { data: [{ id: "main" }], error: null };
+        } }; },
         update(value: Record<string, unknown>) {
           return { eq(key: string, expected: unknown) { filters.push([key, expected]); return this; }, async select() {
             if (!row || !filters.every(([key, expected]) => row?.[key] === expected)) return { data: [], error: null };
@@ -47,6 +52,7 @@ function fixture(initial?: Record<string, unknown> | null) {
   const output: string[] = [];
   const calls: { file: string; args: string[]; options: Record<string, unknown> }[] = [];
   const deps = { admin: db.admin, manifestFile, tmpdir: dir, out: (s: string) => output.push(s),
+    stats: () => ({ passed: 2, failed: 0, skipped: 1 }),
     spawn: (file: string, args: string[], options: Record<string, unknown>) => {
       calls.push({ file, args, options });
       return { status: 0 };
@@ -63,7 +69,11 @@ test("empty matrix payload keeps unrelated fields and normalizes to empty record
 });
 
 test("populated matrix payload has guides, media, broadcasts and an extra Ё virus", () => {
-  const payload = normalizePortiaContent(matrixPayload("populated", original));
+  const withExisting = { ...original,
+    guideSections: [{ id: "existing-guide", title: "Исходный раздел", photo: "", cards: [] }],
+    broadcasts: [{ id: "existing-broadcast", type: "news" as const, title: "Исходная новость", body: "", published: true, important: false, startsAt: "", endsAt: "", conditions: "" }],
+  };
+  const payload = normalizePortiaContent(matrixPayload("populated", withExisting));
   assert.ok(payload);
   assert.ok(payload.guideSections.length >= 2);
   for (const section of payload.guideSections) {
@@ -75,6 +85,8 @@ test("populated matrix payload has guides, media, broadcasts and an extra Ё vir
   assert.ok(payload.broadcasts.some((item) => item.type === "news" && item.published && item.important));
   assert.ok(payload.broadcasts.some((item) => item.type === "quest" && item.published));
   assert.ok(payload.broadcasts.some((item) => !item.published));
+  assert.ok(payload.guideSections.some((item) => item.id === "existing-guide"));
+  assert.ok(payload.broadcasts.some((item) => item.id === "existing-broadcast"));
   assert.equal(payload.viruses.length, original.viruses.length + 1);
   assert.ok(payload.viruses.some((item) => item.name.includes("Ё")));
   for (const virus of original.viruses) assert.ok(payload.viruses.some((item) => item.id === virus.id));
@@ -128,5 +140,70 @@ test("matrix-residual reads only and matrix-restore closed run is idempotent", a
     assert.equal(JSON.parse(fx.output.at(-1) ?? "{}").open, false);
     assert.equal(await matrixRestore(target, fx.deps), 0);
     assert.equal(fx.db.writes, writes);
+  } finally { fx.cleanup(); }
+});
+
+test("owner verdict B refuses staging employees without a DB write", async () => {
+  const fx = fixture();
+  try {
+    await assert.rejects(() => matrixRun(target, "empty", { stagingEmployees: true }, fx.deps), /matrix-employees-unavailable/);
+    assert.equal(fx.db.writes, 0);
+  } finally { fx.cleanup(); }
+});
+
+test("wrapper validates matrix arguments and reports owner B without exposing target values", async () => {
+  const errors: string[] = [];
+  const ref = "aaaaaaaaaaaaaaaaaaaa";
+  const env = {
+    PORTIA_E2E_MUTATION_CONFIRM: "ISOLATED_TEST_PROJECT",
+    PORTIA_E2E_TARGET_ENVIRONMENT: "isolated-test",
+    PORTIA_E2E_TARGET_ID: ref,
+    PORTIA_E2E_SUPABASE_URL: `https://${ref}.supabase.co`,
+    PORTIA_E2E_PRODUCTION_PROJECT_IDS: "bbbbbbbbbbbbbbbbbbbb",
+    PORTIA_E2E_ISOLATED_PROJECT_IDS: ref,
+    NEXT_PUBLIC_SUPABASE_URL: `https://${ref}.supabase.co`,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "fake-publishable",
+    PORTIA_PROMO_LIVE_URL: `https://${ref}.supabase.co`,
+    PORTIA_PROMO_LIVE_CONFIRM: "ISOLATED_TEST_PROJECT",
+    PORTIA_STAGING_DB_URL: `postgresql://postgres.${ref}:fake@aws-0-eu-central-1.pooler.supabase.com:5432/postgres`,
+    PORTIA_PROMO_LIVE_SERVICE_ROLE_KEY: "fake-admin-key",
+  };
+  const deps = { env, root: "/fake-repo", fs: { existsSync: () => false }, err: (s: string) => errors.push(s), out: () => {} };
+  assert.equal(await main(["matrix-run", "unknown"], deps), 2);
+  assert.equal(await main(["matrix-run", "empty", "--staging-employees"], deps), 1);
+  assert.match(errors.at(-1) ?? "", /matrix-employees-unavailable/);
+  assert.ok(!errors.join(" ").includes(ref));
+  assert.ok(!errors.join(" ").includes("fake-admin-key"));
+});
+
+test("a failed Playwright run still restores and returns its exit code", async () => {
+  const fx = fixture();
+  try {
+    const before = clone(fx.db.row);
+    fx.deps.spawn = () => ({ status: 7 });
+    assert.equal(await matrixRun(target, "empty", { stagingEmployees: false }, fx.deps), 7);
+    assert.deepEqual(fx.db.row, before);
+  } finally { fx.cleanup(); }
+});
+
+test("a missing original row is removed after the matrix run", async () => {
+  const fx = fixture(null);
+  try {
+    assert.equal(await matrixRun(target, "empty", { stagingEmployees: false }, fx.deps), 0);
+    assert.equal(fx.db.row, null);
+  } finally { fx.cleanup(); }
+});
+
+test("matrix-restore can close an interrupted open run when the variant is unchanged", async () => {
+  const fx = fixture();
+  try {
+    const before = clone(fx.db.row);
+    await matrixRun(target, "empty", { stagingEmployees: false }, fx.deps);
+    const manifest = JSON.parse(readFileSync(fx.manifestFile, "utf8"));
+    fx.db.row = { ...before, payload: matrixPayload("empty", original), revision: 8, updated_at: "2026-01-02T00:00:00Z", updated_by: null };
+    writeFileSync(fx.manifestFile, JSON.stringify({ ...manifest, restoredAt: null }));
+    assert.equal(await matrixRestore(target, fx.deps), 0);
+    assert.deepEqual(fx.db.row, before);
+    assert.ok(JSON.parse(readFileSync(fx.manifestFile, "utf8")).restoredAt);
   } finally { fx.cleanup(); }
 });
