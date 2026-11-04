@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { mediaSource } from "../../../lib/media-display.ts";
+import { deterministicContract } from "../fixtures/determinism";
 import { DesktopPage } from "../pages/desktop.page";
 import type { DiagnosticLedger } from "../fixtures/diagnostics";
 import { expect, test } from "../fixtures/test";
@@ -23,7 +24,8 @@ const expectedSrc = (employee: RosterEntry) => {
 };
 
 // Image requests to other hosts only. "hold" never answers: the picture stays on its skeleton until the 15s limit.
-async function routeForeignImages(page: Page, mode: ImageMode, gate?: Promise<void>) {
+// onHold reports each held request from inside the route handler, so a test can prove the picture was intercepted and is waiting.
+async function routeForeignImages(page: Page, mode: ImageMode, gate?: Promise<void>, onHold?: () => void) {
   await page.route("**/*", async (route) => {
     const request = route.request();
     const foreign = request.resourceType() === "image" && new URL(request.url()).origin !== new URL(page.url()).origin;
@@ -38,6 +40,7 @@ async function routeForeignImages(page: Page, mode: ImageMode, gate?: Promise<vo
       await gate;
       return route.abort("accessdenied");
     }
+    onHold?.();
     return new Promise<void>(() => undefined);
   });
 }
@@ -52,9 +55,17 @@ function forgiveImageFaults(diagnostics: DiagnosticLedger) {
   diagnostics.entries.splice(0, diagnostics.entries.length, ...kept);
 }
 
-async function openEmployees(page: Page, desktop: DesktopPage) {
+// install() leaves the clock running at real speed, so a limit counted on it keeps ticking while the test waits for the window and
+// the roster; the budget of the two steps (14 s, then 1.5 s) against the 15 s limit is only 1 s of slack. Parking the clock once the desktop
+// has mounted (it needs its 0 ms timers first) makes the 15 s limit move only through runFor, whatever the load or the previous test.
+async function parkClock(page: Page) {
+  await page.clock.pauseAt(new Date(Date.parse(deterministicContract.now) + 5_000));
+}
+
+async function openEmployees(page: Page, desktop: DesktopPage, options: { parkClock?: boolean } = {}) {
   const roster = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/employees", { timeout: 20_000 }).catch(() => undefined);
   await desktop.goto();
+  if (options.parkClock) await parkClock(page);
   await desktop.openApp("Сотрудники");
   const answer = await roster;
   const payload = answer ? await answer.json().catch(() => undefined) as { employees?: RosterEntry[] } | undefined : undefined;
@@ -88,13 +99,18 @@ test("[STAB-MEDIA-02] a portrait that answers 404 becomes the placeholder; the w
 });
 
 test("[STAB-MEDIA-03] a portrait that never answers gives up after 15s: placeholder, no endless skeleton", async ({ page, diagnostics }) => {
-  await routeForeignImages(page, "hold");
+  let holdSeen!: () => void;
+  const held = new Promise<void>((resolve) => { holdSeen = resolve; });
+  await routeForeignImages(page, "hold", undefined, holdSeen);
   const desktop = new DesktopPage(page);
-  const { window, employees } = await openEmployees(page, desktop);
+  const { window, employees } = await openEmployees(page, desktop, { parkClock: true });
   await selectWithImage(window, employees);
 
   const portrait = window.locator(".personnel-portrait .portia-image");
   await expect(portrait).toHaveAttribute("data-media-state", "loading");
+  // The picture is intercepted and unanswered, and its 15 s timer is running (armed) on the parked clock.
+  await held;
+  await expect(portrait).toHaveAttribute("data-media-armed", "true");
   await page.clock.runFor(14_000);
   await expect(portrait).toHaveAttribute("data-media-state", "loading");
   await page.clock.runFor(1_500);
