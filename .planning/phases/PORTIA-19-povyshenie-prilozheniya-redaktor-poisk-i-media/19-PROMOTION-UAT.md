@@ -103,3 +103,5 @@ Read-only `acceptance-residual` для run `mvz5fqgv_c40b449b` (staging, refHash
 ## Teardown — решение владельца
 
 Решение teardown: удалить (владелец, 2026-11-03; ответ дословно: «удалить»). Прежнее решение «19-07 held» отменено владельцем этим ответом.
+
+Решение по run mw0rbyf6_72424cdc: удалить и создать новый v2 (владелец Qloxz, 2026-11-04; ответ дословно: «Удалить этот run и создать новый v2 (рекомендуется)»). Перед удалением повторно подтверждены `ATTESTED`, refHash `01d085e7b9f0` и свободный порт 3000. Read-only `acceptance-residual mw0rbyf6_72424cdc`: `{"promo":0,"editors":2,"storage":0,"content":0,"authUsers":2,"banks":4,"buckets":0,"attempts":0,"answers":0}`, `legacyWindow: true`. Удаление касается только этого run; прежний `mvz5fqgv_c40b449b` уже удалён и не является целью.
