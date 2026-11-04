@@ -291,6 +291,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const accentDraftRef = useRef<string | null>(null);
   const customAccentButton = useRef<HTMLButtonElement>(null);
   const preloadedAssistantMedia = useRef(new Set<string>());
+  const assistantMediaInFlight = useRef(new Map<string, HTMLImageElement>());
   const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
   const [employeesReady, setEmployeesReady] = useState(false);
@@ -347,6 +348,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         preloadedAssistantMedia.current.add(segment.url);
         const image = new Image();
         image.referrerPolicy = "no-referrer";
+        assistantMediaInFlight.current.set(segment.url, image);
+        image.onload = image.onerror = () => { assistantMediaInFlight.current.delete(segment.url); };
         image.src = segment.url;
       }
     }
