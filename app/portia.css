@@ -857,6 +857,14 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 /* D-41: the add-section bar stays at the top of the «Справочник» tab (above the .editor-toc, z-index 3). */
 .editor-section-addbar { position: sticky; top: 0; z-index: 4; display: grid; gap: 8px; padding: 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .editor-section-addbar > button { justify-self: start; }
+/* The editor pane has 28px of padding and sticky measures from inside it: -28px makes the bar sit flush with the top edge of the pane. */
+@media (min-width: 901px) { .editor-section-addbar { top: -28px; } }
+@media (max-width: 900px) {
+  /* The page scrolls on a phone and .app-window clips with overflow: hidden, which makes it the scroll container sticky looks at (the reason .editor-save-chip is fixed). overflow: clip keeps the clipping but is no scroll container, so the bar holds against the page, under the 48px system bar. */
+  .app-window:has(.editor-section-addbar), .content-editor:has(.editor-section-addbar) { overflow: clip; }
+  .editor-section-addbar { top: 48px; padding-inline: 0; }
+  .editor-section-addbar > button { min-height: 44px; }
+}
 .editor-section-create { display: grid; gap: 8px; }
 .editor-section-create[hidden] { display: none; }
 .editor-note-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--warning); color: var(--warning); font: 13px/1.45 var(--sans); }
