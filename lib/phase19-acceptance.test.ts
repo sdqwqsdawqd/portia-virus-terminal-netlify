@@ -104,6 +104,32 @@ describe("acceptance-serve staging binding", () => {
       assert.equal(ctx.calls.out.length, 0);
     }
   });
+  test("client binding may be proved by desktop scripts when owner login is server rendered", async () => {
+    const base = serveCase();
+    const fetchLocal = async (url: string) => {
+      if (url.endsWith("/owner-login")) return { status: 200, text: async () => `<script src="/_next/static/owner.js"></script>` };
+      if (url.endsWith("/")) return { status: 200, text: async () => `<script src="/_next/static/desktop.js"></script>` };
+      if (url.endsWith("/_next/static/owner.js")) return { status: 200, text: async () => "server-rendered login" };
+      if (url.endsWith("/_next/static/desktop.js")) return { status: 200, text: async () => `${ref}.supabase.co` };
+      return base.deps.fetchLocal(url);
+    };
+    const ctx = serveCase({ fetchLocal });
+    assert.equal(await main(["acceptance-serve", runId], ctx.deps), 0);
+    assert.match(ctx.calls.out.join(""), /STAGING-BOUND/u);
+  });
+  test("a production ref in desktop scripts blocks the bound server", async () => {
+    const base = serveCase();
+    const fetchLocal = async (url: string) => {
+      if (url.endsWith("/")) return { status: 200, text: async () => `<script src="/_next/static/desktop.js"></script>` };
+      if (url.endsWith("/_next/static/desktop.js")) return { status: 200, text: async () => `${prod}.supabase.co` };
+      return base.deps.fetchLocal(url);
+    };
+    const ctx = serveCase({ fetchLocal });
+    assert.equal(await main(["acceptance-serve", runId], ctx.deps), 1);
+    assert.match(ctx.calls.err.join(""), /production-ref-in-bundle/u);
+    assert.equal(ctx.calls.out.length, 0);
+    assert.equal(ctx.calls.killed, 1);
+  });
   test("bound server receives staging env and prints one safe STAGING-BOUND line", async () => {
     const ctx = serveCase();
     assert.equal(await main(["acceptance-serve", runId, "--https"], ctx.deps), 0);

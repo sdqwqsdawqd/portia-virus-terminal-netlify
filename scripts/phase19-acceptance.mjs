@@ -243,15 +243,19 @@ export async function acceptanceServe(target, runId, options = {}, deps = {}) {
     const ownerPage = await get("/owner-login");
     if (ownerPage.status !== 200) throw new AcceptanceError("client-binding-unproven", ["owner-login"]);
     const html = await ownerPage.text();
-    const scriptUrls = [...html.matchAll(/<script\b[^>]*\bsrc=["'](\/_next\/[^"']+)["']/giu)].map((match) => match[1]);
+    const desktopPage = await get("/");
+    if (desktopPage.status !== 200) throw new AcceptanceError("client-binding-unproven", ["desktop"]);
+    const desktopHtml = await desktopPage.text();
+    const scriptUrls = [...new Set([html, desktopHtml].flatMap((pageHtml) =>
+      [...pageHtml.matchAll(/<script\b[^>]*\bsrc=["'](\/_next\/[^"']+)["']/giu)].map((match) => match[1])))];
     const scripts = await Promise.all(scriptUrls.map(async (url) => {
       const response = await get(url);
       if (response.status !== 200) throw new AcceptanceError("client-binding-unproven", ["owner-login scripts"]);
       return response.text();
     }));
-    const content = [html, ...scripts].join("\n").toLowerCase();
+    const content = [html, desktopHtml, ...scripts].join("\n").toLowerCase();
     if (productionRefs.some((item) => content.includes(item))) throw new AcceptanceError("production-ref-in-bundle", ["owner-login scripts"]);
-    if (!content.includes(`${target.projectId}.supabase.co`)) throw new AcceptanceError("client-binding-unproven", ["owner-login scripts"]);
+    if (!scripts.join("\n").toLowerCase().includes(`${target.projectId}.supabase.co`)) throw new AcceptanceError("client-binding-unproven", ["desktop scripts"]);
     const interfaces = (deps.networkInterfaces ?? os.networkInterfaces)();
     const lan = Object.values(interfaces).flat().filter((entry) => entry && entry.family === "IPv4" && !entry.internal).map((entry) => entry.address);
     const protocol = options.https ? "https" : "http";
