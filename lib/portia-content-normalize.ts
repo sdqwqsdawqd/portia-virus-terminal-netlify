@@ -96,6 +96,14 @@ const textOf = (value: unknown) => (typeof value === "string" ? value : typeof v
 const asText = (value: unknown) => (typeof value === "string" ? value : "");
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object";
 
+// D-47: editor notes live in portia_editor_notes and never in the public payload, so a stored "note" key is not carried
+// over by the spreads below that keep the unknown fields of a record.
+const withoutNote = (record: Record<string, unknown>): Record<string, unknown> => {
+  const rest = { ...record };
+  delete rest.note;
+  return rest;
+};
+
 const realId = (value: unknown) => {
   const id = textOf(value);
   return id.trim() ? id : "";
@@ -128,7 +136,7 @@ export function normalizeBroadcasts(value: unknown): Broadcast[] {
   return items.map((item, index) => {
     const type = item.type === "quest" || item.type === "task" ? item.type : "news";
     return {
-      ...item,
+      ...withoutNote(item),
       id: ids[index],
       type,
       title: textOf(item.title),
@@ -272,7 +280,7 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     const ppu = isRecord(virus.ppu) ? virus.ppu : {};
     const classification = isRecord(virus.classification) ? virus.classification : {};
     return {
-      ...virus,
+      ...withoutNote(virus),
       id,
       code: textOf(virus.code),
       name: textOf(virus.name),
@@ -287,14 +295,14 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
       mutations: Array.isArray(virus.mutations)
         ? virus.mutations.map((item) => {
             const mutation = isRecord(item) ? item : {};
-            return { ...mutation, name: textOf(mutation.name), description: textOf(mutation.description), image: normalizeMediaUrl(mutation.image) };
+            return { ...withoutNote(mutation), name: textOf(mutation.name), description: textOf(mutation.description), image: normalizeMediaUrl(mutation.image) };
           })
         : [],
       scientistLogs: Array.isArray(virus.scientistLogs)
         ? virus.scientistLogs.slice(0, MAX_SCIENTIST_LOGS).map((item) => {
             const log = isRecord(item) ? item : {};
             return {
-              ...log,
+              ...withoutNote(log),
               id: textOf(log.id),
               title: textOf(log.title),
               scientist: textOf(log.scientist),

@@ -23,6 +23,7 @@ const migrationHashes: Record<string, string> = {
   "20261101000100_portia_explicit_grants.sql": "d6588aeafe9d2aa407734a115b9b6916f815ffe54cab65f9686f3f01d2cac954",
   "20261101000200_portia_drop_legacy_promo_overloads.sql": "b19caa7841b843c923ac4eb240da88a5627efa1a1375190bca93eef85eaac403",
   "20261104000000_portia_rename_virus_classes.sql": "0037b9303c9524920af5dc810e1d0efacdbc038dcfe535b50535b032c816a98c",
+  "20261104000100_portia_editor_notes.sql": "e1866a5bf9e1095955384c8643e6d16d23864349822724a404e9d8433b3aa5fd",
 };
 
 const baselineName = "20261101000000_portia_baseline.sql";
