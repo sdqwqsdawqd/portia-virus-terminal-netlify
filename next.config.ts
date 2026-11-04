@@ -22,6 +22,27 @@ const contentSecurityPolicy = [
   ...(upgradeInsecureRequests ? ["upgrade-insecure-requests"] : []),
 ].join("; ");
 
+// 20-08 (D-05): stricter candidate, delivered ONLY as Content-Security-Policy-Report-Only next to the enforced policy above.
+// It narrows what no approved scenario needs (browser-side https:/wss: connections, data: fonts, data:/blob: media) and keeps
+// img-src https: (D-06) and the approved frame hosts. upgrade-insecure-requests is not allowed in a report-only policy, so it
+// stays in the enforced one. Tightening the enforced policy needs the PC/phone acceptance of D-05; see 20-MEDIA-CSP.md.
+const contentSecurityPolicyCandidate = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  `script-src 'self' 'unsafe-inline'${development ? " 'unsafe-eval'" : ""}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self'",
+  `connect-src 'self'${development ? " ws:" : ""}`,
+  "media-src 'self' https:",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  "frame-src https://docs.google.com https://sdqwqsdawqd.github.io https://www.youtube.com https://www.youtube-nocookie.com",
+].join("; ");
+
 const nextConfig: NextConfig = {
   agentRules: false,
   // A package lock exists above the repository on this workstation; pinning the root keeps
@@ -32,6 +53,7 @@ const nextConfig: NextConfig = {
       source: "/(.*)",
       headers: [
         { key: "Content-Security-Policy", value: contentSecurityPolicy },
+        { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicyCandidate },
         { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "X-Frame-Options", value: "DENY" },

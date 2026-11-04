@@ -34,7 +34,22 @@ const promotionUnboundProjects = [
   "chromium-phone",
 ] as const;
 
-export const diagnosticAllowlist: readonly DiagnosticAllowlistRow[] = promotionUnboundProjects.flatMap(
+// 20-08 (D-05): WebKit logs this console error for ANY policy delivered as Content-Security-Policy-Report-Only without a
+// report-to/report-uri, and says the policy then has no effect there. The candidate has no collector on purpose (violations are
+// read from securitypolicyviolation events), so WebKit observes nothing and Chromium/Firefox are the observation lanes.
+// The text is exact: changing the candidate in next.config.ts fails this row loudly, which forces a fresh review.
+const webkitReportOnlyNotice: DiagnosticAllowlistRow = {
+  kind: "console",
+  source: "browser",
+  text: "The Content Security Policy 'default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self'; media-src 'self' https:; worker-src 'self' blob:; manifest-src 'self'; frame-src [url-redacted] [url-redacted] [url-redacted] [url-redacted] was delivered in report-only mode, but does not specify a 'report-to'; the policy will have no effect. Please either add a 'report-to' directive, or deliver the policy via the 'Content-Security-Policy' header.",
+  project: "webkit-phone",
+  requirement: "STAB-SEC-03",
+  reason: "WebKit ignores a report-only policy that has no report-to; the candidate is observed in Chromium and Firefox.",
+  owner: "phase-20-csp-candidate",
+  expires: "2027-01-31T00:00:00.000Z",
+};
+
+export const diagnosticAllowlist: readonly DiagnosticAllowlistRow[] = [...promotionUnboundProjects.flatMap(
   (project) => [
     {
       kind: "response" as const,
@@ -57,7 +72,7 @@ export const diagnosticAllowlist: readonly DiagnosticAllowlistRow[] = promotionU
       expires: "2027-01-31T00:00:00.000Z",
     },
   ],
-);
+), webkitReportOnlyNotice];
 
 const hydrationPattern = /hydration|server rendered html|did not match|react error #418/i;
 const secretPattern =
