@@ -1,6 +1,6 @@
 # 20 — Dependency audit и реестр переносимых рисков
 
-Commit: aa39a4fab24d7bff5b7199e56a2e24614cb523b0
+Commit: 59f90d2c1b088b1a835400c7491173e4129bf224
 
 Данные: `20-DEPENDENCY-AUDIT.json` (нормализованный результат обеих команд на этом commit). Проверка: `node scripts/phase20-audit-check.mjs --verify`. Отчёт признаётся устаревшим, если commit не предок HEAD или изменились `package.json` / `package-lock.json` (сверка по sha256), если команды не те, если у dev-находки нет единственного disposition или в production есть находка.
 

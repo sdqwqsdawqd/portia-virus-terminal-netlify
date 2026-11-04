@@ -1,7 +1,7 @@
 {
   "schema": "phase20-dependency-audit/1",
-  "commit": "aa39a4fab24d7bff5b7199e56a2e24614cb523b0",
-  "capturedAt": "2026-11-04T06:09:46.046Z",
+  "commit": "59f90d2c1b088b1a835400c7491173e4129bf224",
+  "capturedAt": "2026-11-04T06:12:02.966Z",
   "node": "v22.13.1",
   "lockfileSha256": "5cf3fc221de31767f322aa197c3b701772f0909bc65912ff003b7ce02525f6fd",
   "packageJsonSha256": "c1bd0492cab433d149fb634534e1ff1eea0dedf124f2cbf8ef70a5fc7885884d",
@@ -106,7 +106,7 @@
           ],
           "path": "eslint-config-next > @next/eslint-plugin-next",
           "range": ">=16.3.0-canary.0",
-          "fix": "eslint-config-next@0.2.4 (semver-major)",
+          "fix": "eslint-config-next@12.0.4 (semver-major)",
           "advisory": null
         },
         {
@@ -120,15 +120,13 @@
             "@typescript-eslint/utils",
             "eslint"
           ],
-          "effects": [
-            "typescript-eslint"
-          ],
+          "effects": [],
           "nodes": [
             "node_modules/@typescript-eslint/eslint-plugin"
           ],
-          "path": "eslint-config-next > typescript-eslint > @typescript-eslint/eslint-plugin",
+          "path": "@typescript-eslint/eslint-plugin",
           "range": "*",
-          "fix": "eslint-config-next@0.2.4 (semver-major)",
+          "fix": "true",
           "advisory": null
         },
         {
@@ -141,14 +139,15 @@
             "eslint"
           ],
           "effects": [
-            "@typescript-eslint/eslint-plugin"
+            "@typescript-eslint/eslint-plugin",
+            "typescript-eslint"
           ],
           "nodes": [
             "node_modules/@typescript-eslint/parser"
           ],
-          "path": "eslint-config-next > typescript-eslint > @typescript-eslint/eslint-plugin > @typescript-eslint/parser",
+          "path": "eslint-config-next > typescript-eslint > @typescript-eslint/parser",
           "range": "*",
-          "fix": "eslint-config-next@0.2.4 (semver-major)",
+          "fix": "eslint-config-next@12.0.4 (semver-major)",
           "advisory": null
         },
         {
@@ -167,9 +166,9 @@
           "nodes": [
             "node_modules/@typescript-eslint/type-utils"
           ],
-          "path": "eslint-config-next > typescript-eslint > @typescript-eslint/eslint-plugin > @typescript-eslint/type-utils",
-          "range": ">=5.9.2-alpha.0",
-          "fix": "eslint-config-next@0.2.4 (semver-major)",
+          "path": "@typescript-eslint/type-utils",
+          "range": ">=5.62.1-alpha.0",
+          "fix": "true",
           "advisory": null
         },
         {
@@ -191,7 +190,7 @@
           ],
           "path": "eslint-config-next > typescript-eslint > @typescript-eslint/typescript-estree",
           "range": ">=6.16.0",
-          "fix": "eslint-config-next@0.2.4 (semver-major)",
+          "fix": "eslint-config-next@12.0.4 (semver-major)",
           "advisory": null
         },
         {
@@ -205,8 +204,6 @@
             "eslint"
           ],
           "effects": [
-            "@typescript-eslint/eslint-plugin",
-            "@typescript-eslint/type-utils",
             "typescript-eslint"
           ],
           "nodes": [
@@ -214,7 +211,7 @@
           ],
           "path": "eslint-config-next > typescript-eslint > @typescript-eslint/utils",
           "range": "*",
-          "fix": "eslint-config-next@0.2.4 (semver-major)",
+          "fix": "eslint-config-next@12.0.4 (semver-major)",
           "advisory": null
         },
         {
@@ -264,7 +261,7 @@
           ],
           "path": "eslint-config-next",
           "range": ">=10.2.1-canary.2",
-          "fix": "eslint-config-next@0.2.4 (semver-major)",
+          "fix": "eslint-config-next@12.0.4 (semver-major)",
           "advisory": null
         },
         {
@@ -300,7 +297,7 @@
           ],
           "path": "eslint-config-next > eslint-plugin-jsx-a11y",
           "range": ">=6.5.0",
-          "fix": "eslint-config-next@0.2.4 (semver-major)",
+          "fix": "eslint-config-next@12.0.4 (semver-major)",
           "advisory": null
         },
         {
@@ -374,7 +371,7 @@
           ],
           "path": "eslint-config-next > typescript-eslint",
           "range": "*",
-          "fix": "eslint-config-next@0.2.4 (semver-major)",
+          "fix": "eslint-config-next@12.0.4 (semver-major)",
           "advisory": null
         }
       ]

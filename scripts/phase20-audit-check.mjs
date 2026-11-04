@@ -196,7 +196,11 @@ function defaultDeps() {
   return { fs: nodeFs, git, npm, root: ROOT, out: (text) => process.stdout.write(text), err: (text) => process.stderr.write(text), now: () => new Date().toISOString() };
 }
 
-const fileHash = (deps, relative) => sha256(deps.fs.readFileSync(path.join(deps.root, relative)));
+// Line endings are normalized so a checkout with another autocrlf setting still matches the recorded hash.
+const fileHash = (deps, relative) => {
+  const text = deps.fs.readFileSync(path.join(deps.root, relative)).toString("latin1").replace(/\r\n/g, "\n");
+  return sha256(Buffer.from(text, "latin1"));
+};
 
 export function capture(deps) {
   const dirty = deps.git("status", "--porcelain", "--", "package.json", "package-lock.json").stdout;
