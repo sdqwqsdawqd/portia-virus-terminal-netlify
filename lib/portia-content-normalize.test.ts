@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { MAX_BLOCK_TEXT, MAX_CONDITIONS, MAX_SCIENTIST_LOGS } from "./content-limits.ts";
 import { classificationOptions, defaultPortiaContent, findInfo, type InfoSection } from "./portia-content.ts";
 import { contentRefusal } from "./editor-tabs.ts";
+import { buildSearchIndex, matchSearch } from "./search-index.ts";
 import { normalizeBroadcasts, normalizeGuideSections, normalizeInfoSections, normalizePortiaContent, parseYoutubeId } from "./portia-content-normalize.ts";
 
 test("a save from before Phase 13 reads as an empty guide (D-00f)", () => {
@@ -480,4 +481,32 @@ test("D-36 the three renamed axes keep levels 1, 2, 3 and carry no accent mark (
   assert.deepEqual(classificationOptions.mind.map((option) => option.value), ["Люцидиум", "Транзитиум", "Обливиум"]);
   assert.deepEqual(classificationOptions.behavior.map((option) => option.value), ["Стабилар", "Импульсар", "Инфернар"]);
   assert.deepEqual(classificationOptions.appearance.map((option) => option.value), ["Изоморф", "Полиморф", "Ксеноморф"]);
+});
+
+// D-47 guard (20-22): the editor note of a «Справочник» section lives in the private store (20-24), never in PortiaContent.
+const NOTE_TEXT = "заметка-только-для-редакторов-47";
+const sectionWithNote = { id: "g1", title: "Раздел", photo: "", note: NOTE_TEXT, editorNote: NOTE_TEXT, cards: [{ id: "c1", title: "Карточка", cover: "", note: NOTE_TEXT, blocks: [] }] };
+
+test("D-47 normalizeGuideSections returns a section with exactly id, title, photo and cards", () => {
+  const [section] = normalizeGuideSections([sectionWithNote]);
+  assert.deepEqual(Object.keys(section).sort(), ["cards", "id", "photo", "title"]);
+  assert.equal("note" in section, false);
+  assert.equal("note" in section.cards[0], false);
+});
+
+test("D-47 a note stored inside a guide section does not reach the normalized public content", () => {
+  const payload: Record<string, unknown> = structuredClone(defaultPortiaContent);
+  payload.guideSections = [sectionWithNote];
+  const content = normalizePortiaContent(payload);
+  assert.ok(content);
+  assert.equal(JSON.stringify(content).includes(NOTE_TEXT), false);
+});
+
+test("D-47 the search index cannot find a section by its note text", () => {
+  const content = normalizePortiaContent({ ...structuredClone(defaultPortiaContent), guideSections: [sectionWithNote] });
+  assert.ok(content);
+  const index = buildSearchIndex({ apps: [], viruses: [], employees: [], infoSections: [], guideSections: content.guideSections, broadcasts: [], recycleFiles: [], recycledViruses: [] });
+  assert.equal(index.length > 0, true, "the section's own card is indexed");
+  assert.deepEqual(matchSearch(index, NOTE_TEXT), []);
+  assert.equal(JSON.stringify(index).includes(NOTE_TEXT), false);
 });
