@@ -1270,13 +1270,18 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .global-result-status { grid-column: 2; max-width: none; text-align: left; }
   .info-app, .settings-app, .trash-app, .broadcasts-app, .content-editor { min-height: calc(100svh - 140px); padding: 24px 15px 42px; }
   .info-library { min-height: calc(100svh - 140px); height: auto; display: block; }
-  .info-index { display: flex; gap: 7px; padding: 13px; overflow-x: auto; border-right: 0; border-bottom: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); }
+  /* D-28: on a phone the sections are a list from top to bottom, one screen at a time (list or article); the PC rules above stay as they are. */
+  .info-index { display: block; padding: 13px; overflow: visible; border-right: 0; border-bottom: 0; }
   .info-index > .eyebrow { display: none; }
-  .info-index button { flex: 0 0 190px; }
-  /* A fixed basis like the section tabs: WebKit sized the group of tabs from the untrimmed titles, so the next section tab was drawn over the last subsection. */
-  .info-index .info-subsections button { flex: 0 0 190px; }
-  .info-index > div, .info-subsections { display: flex; gap: 7px; margin: 0; padding: 0; border: 0; }
-  .info-index > div, .info-subsections { flex: 0 0 auto; }
+  .info-index button { min-height: 44px; align-items: center; scroll-margin: 56px 0; }
+  .info-index button span { overflow-wrap: anywhere; }
+  .info-index .info-subsections button { min-height: 44px; padding: 8px 9px; align-items: center; }
+  /* A subsection title wraps on a phone instead of being cut by an ellipsis. */
+  .info-index .info-subsections button span { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+  .info-library[data-info-screen="list"] .info-document { display: none; }
+  .info-library[data-info-screen="article"] .info-index { display: none; }
+  /* D-30: the only control above the text. It stays in the flow: .app-window clips on a phone, so a sticky button could not hold while the page scrolls. */
+  .info-phone-back { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: 0 0 18px; padding: 0; border: 1px solid var(--teal-dim); border-radius: 4px; background: var(--panel); color: var(--teal); font: 700 20px var(--sans); cursor: pointer; }
   .info-document { padding: 27px 17px 45px; }
   .info-document h1 { font-size: 29px; }
   .info-document-copy, .info-document-copy p, .formatted-rich-input[data-area="info"] { font-size: 15px; }
