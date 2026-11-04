@@ -627,3 +627,212 @@ test("main --run rejects an unknown gate id and a missing --commit", () => {
   assert.notEqual(gate.main(["--run", "--commit", "HEAD", "--only", "no-such-gate"], deps), 0);
   assert.match(err, /unknown-gate/);
 });
+
+// --- Task 3: --verify-evidence ---------------------------------------------------------------------------------------------
+
+const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+const CLEAN_MATRIX = "## Блокеры релиза (D-12)\n\nТекст.\n\n| ID | Severity | Блокирует релиз |\n|---|---|---|\n| нет | нет | нет |\n\n## Не доказано\n";
+const BLOCKER_MATRIX = "## Блокеры релиза (D-12)\n\n| ID | Severity | Блокирует релиз |\n|---|---|---|\n| SEC20-99 | high | да |\n\n## Не доказано\n";
+
+type Row = { id: string; status: string; evidence?: string };
+
+const D33_FIXTURE: Row[] = ["WR-03", "WR-05", "IN-01", "IN-02", "IN-03", "IN-04", "IN-05"].map((id) => ({ id, status: id === "IN-05" ? "disposition" : "fixed" }));
+const DECISION_FIXTURE: Row[] = [
+  { id: "D-36(б) staging", status: "BLOCKED (OWNER)" },
+  { id: "D-36(б) production", status: "ОЖИДАЕТ ВЛАДЕЛЬЦА" },
+  { id: "D-47 staging", status: "BLOCKED (OWNER)" },
+  { id: "D-47 production", status: "ОЖИДАЕТ ВЛАДЕЛЬЦА" },
+  { id: "T-20-31", status: "PASS" },
+  { id: "D-43/D-44/D-37", status: "PASS" },
+  { id: "D-40..D-42", status: "BLOCKED (ENV)" },
+  { id: "D-39/D-45", status: "BLOCKED (OWNER)" },
+];
+
+function fullRun(overrides: Record<string, unknown> = {}, gateStatus: (id: string) => Record<string, unknown> = () => ({})) {
+  const results = gate.GATES.map((entry: { id: string; command: string; counts?: string }) => ({
+    id: entry.id,
+    command: entry.command,
+    exitCode: 0,
+    status: "PASS",
+    counts: entry.counts ? { passed: 10, failed: 0, skipped: 0, flaky: 0, blocked: 0 } : null,
+    artifacts: [`${entry.id}-1.log`],
+    ...gateStatus(entry.id),
+  }));
+  return {
+    commit: COMMIT,
+    node: "v22.13.1",
+    startedAt: "2026-11-04T00:00:00.000Z",
+    artifactsDir: "test-results/release-gate/x",
+    partial: false,
+    only: [],
+    results,
+    env: gate.envPresence(["NEXT_PUBLIC_SUPABASE_URL"], {}),
+    d33: D33_FIXTURE,
+    decisions: DECISION_FIXTURE,
+    verdict: "PASS",
+    reasons: [],
+    ...overrides,
+  };
+}
+
+const depsOk = { commitExists: () => true, matrix: CLEAN_MATRIX };
+const verify = (markdown: string, deps: Record<string, unknown> = depsOk): string[] => gate.verifyEvidence(markdown, deps);
+const goodEvidence = () => gate.renderEvidence(fullRun());
+const removeLine = (markdown: string, needle: string) => markdown.split("\n").filter((line) => !line.includes(needle)).join("\n");
+const mentions = (errors: string[], pattern: RegExp) => assert.ok(errors.some((error) => pattern.test(error)), `no error matching ${pattern}:\n${errors.join("\n")}`);
+
+test("verifyEvidence: a complete, honest protocol has no errors", () => {
+  assert.deepEqual(verify(goodEvidence()), []);
+});
+
+test("verifyEvidence: a protocol without the «Решения D-35..D-45» table is rejected", () => {
+  const without = gate.renderEvidence(fullRun({ decisions: undefined }));
+  mentions(verify(without), /«Решения D-35\.\.D-45» is missing/);
+});
+
+test("verifyEvidence: every required decision row is required (compared by the first column, spaces ignored)", () => {
+  for (const id of gate.DECISION_ROWS) {
+    const errors = verify(removeLine(goodEvidence(), `| ${id} |`));
+    mentions(errors, new RegExp(`${id.replace(/[()./]/g, "\\$&")}: decision row is missing`));
+  }
+  const spaced = goodEvidence().replace("| D-47 staging |", "|   D-47staging   |");
+  assert.deepEqual(verify(spaced), [], "spacing in the first column does not matter");
+});
+
+test("verifyEvidence: PASS in D-36(б) production or D-47 production is rejected as an owner action", () => {
+  for (const id of ["D-36(б) production", "D-47 production"]) {
+    const rows = DECISION_FIXTURE.map((row) => (row.id === id ? { ...row, status: "PASS" } : row));
+    const errors = verify(gate.renderEvidence(fullRun({ decisions: rows })));
+    mentions(errors, new RegExp(`${id.replace(/[()]/g, "\\$&")}: production row is an owner action`));
+  }
+  const applied = DECISION_FIXTURE.map((row) => (row.id === "D-47 production" ? { ...row, status: "ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ 2026-11-05" } : row));
+  assert.deepEqual(verify(gate.renderEvidence(fullRun({ decisions: applied }))), []);
+  const badDate = DECISION_FIXTURE.map((row) => (row.id === "D-47 production" ? { ...row, status: "ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ вчера" } : row));
+  mentions(verify(gate.renderEvidence(fullRun({ decisions: badDate }))), /D-47 production: production row is an owner action/);
+  const sneaky = DECISION_FIXTURE.map((row) => (row.id === "D-36(б) production" ? { ...row, status: "ОЖИДАЕТ ВЛАДЕЛЬЦА", evidence: "PASS агента" } : row));
+  mentions(verify(gate.renderEvidence(fullRun({ decisions: sneaky }))), /must not contain PASS/);
+});
+
+test("verifyEvidence: an empty or open decision status is rejected", () => {
+  const rows = DECISION_FIXTURE.map((row) => (row.id === "T-20-31" ? { ...row, status: "open" } : row));
+  mentions(verify(gate.renderEvidence(fullRun({ decisions: rows }))), /T-20-31: decision status is empty or open/);
+});
+
+test("verifyEvidence: the D-33 table needs WR-03, WR-05 and IN-01..IN-05 with fixed or disposition", () => {
+  mentions(verify(gate.renderEvidence(fullRun({ d33: undefined }))), /D-33\)» is missing/);
+  for (const id of gate.D33_ROWS) mentions(verify(removeLine(goodEvidence(), `| ${id} |`)), new RegExp(`${id}: D-33 row is missing`));
+  const open = D33_FIXTURE.map((row) => (row.id === "IN-03" ? { ...row, status: "open" } : row));
+  mentions(verify(gate.renderEvidence(fullRun({ d33: open }))), /IN-03: D-33 status "open"/);
+  const empty = D33_FIXTURE.map((row) => (row.id === "WR-03" ? { ...row, status: "" } : row));
+  mentions(verify(gate.renderEvidence(fullRun({ d33: empty }))), /WR-03: D-33 status "\(empty\)"/);
+});
+
+test("verifyEvidence: a retry-pass or a skip counted as PASS in a Playwright row is rejected", () => {
+  const retry = gate.renderEvidence(fullRun({}, (id: string) => (id === "e2e-full" ? { counts: { passed: 10, failed: 0, skipped: 0, flaky: 1, blocked: 0 } } : {})));
+  mentions(verify(retry), /e2e-full: PASS row has 1 flaky\/retried/);
+  const skipped = gate.renderEvidence(fullRun({}, (id: string) => (id === "e2e-full" ? { counts: { passed: 10, failed: 0, skipped: 3, flaky: 0, blocked: 0 } } : {})));
+  mentions(verify(skipped), /e2e-full: PASS row has 3 skipped/);
+  const live = gate.renderEvidence(fullRun({}, (id: string) => (id === "staging-live" ? { counts: { passed: 4, failed: 0, skipped: 2, flaky: 0, blocked: 0 } } : {})));
+  mentions(verify(live), /staging-live: PASS row has 2 skipped/);
+  const none = gate.renderEvidence(fullRun({}, (id: string) => (id === "e2e-full" ? { counts: { passed: 0, failed: 0, skipped: 0, flaky: 0, blocked: 0 } } : {})));
+  mentions(verify(none), /e2e-full: PASS row has 0 passed/);
+  const failed = gate.renderEvidence(fullRun({}, (id: string) => (id === "unit" ? { exitCode: 1 } : {})));
+  mentions(verify(failed), /unit: PASS row has exit "1"/);
+});
+
+test("verifyEvidence: SKIPPED or BLOCKED gates cannot sit under a PASS verdict", () => {
+  const skipped = gate.renderEvidence(fullRun({}, (id: string) => (id === "lint" ? { status: "SKIPPED", exitCode: null } : {})));
+  mentions(verify(skipped), /verdict PASS with a SKIPPED mandatory gate/);
+  mentions(verify(skipped), /verdict PASS is stronger than the gate table allows \(FAIL\)/);
+  const blocked = gate.renderEvidence(fullRun({}, (id: string) => (id === "e2e-mutation" ? { status: "BLOCKED", blockedKind: "ENV", exitCode: null, counts: null } : {})));
+  mentions(verify(blocked), /stronger than the gate table allows \(BLOCKED\)/);
+  const honest = gate.renderEvidence(fullRun({ verdict: "BLOCKED" }, (id: string) => (id === "e2e-mutation" ? { status: "BLOCKED", blockedKind: "ENV", exitCode: null, counts: null } : {})));
+  assert.deepEqual(verify(honest), []);
+  const failing = gate.renderEvidence(fullRun({ verdict: "BLOCKED" }, (id: string) => (id === "unit" ? { status: "FAIL", exitCode: 1 } : {})));
+  mentions(verify(failing), /verdict BLOCKED is stronger than the gate table allows \(FAIL\)/);
+});
+
+test("verifyEvidence: a waived FAIL allows only PASS-WITH-OWNER-WAIVERS", () => {
+  const waived = (id: string) => (id === "e2e-full" ? { status: "FAIL", waived: true, waivedBy: ["PW-07"], exitCode: 1 } : {});
+  assert.deepEqual(verify(gate.renderEvidence(fullRun({ verdict: "PASS-WITH-OWNER-WAIVERS" }, waived))), []);
+  mentions(verify(gate.renderEvidence(fullRun({ verdict: "PASS" }, waived))), /verdict PASS is stronger than the gate table allows \(PASS-WITH-OWNER-WAIVERS\)/);
+  const unwaived = (id: string) => (id === "e2e-full" ? { status: "FAIL", waived: false, exitCode: 1 } : {});
+  mentions(verify(gate.renderEvidence(fullRun({ verdict: "PASS-WITH-OWNER-WAIVERS" }, unwaived))), /stronger than the gate table allows \(FAIL\)/);
+});
+
+test("verifyEvidence: verdict PASS is refused while the matrix lists a high blocker", () => {
+  const errors = verify(goodEvidence(), { commitExists: () => true, matrix: BLOCKER_MATRIX });
+  mentions(errors, /unresolved high blocker\(s\) in the security matrix \(SEC20-99\)/);
+  const waivers = gate.renderEvidence(fullRun({ verdict: "PASS-WITH-OWNER-WAIVERS" }, (id: string) => (id === "e2e-full" ? { status: "FAIL", waived: true, exitCode: 1 } : {})));
+  mentions(verify(waivers, { commitExists: () => true, matrix: BLOCKER_MATRIX }), /unresolved high blocker/);
+  const failVerdict = gate.renderEvidence(fullRun({ verdict: "FAIL" }, (id: string) => (id === "unit" ? { status: "FAIL", exitCode: 1 } : {})));
+  assert.deepEqual(verify(failVerdict, { commitExists: () => true, matrix: BLOCKER_MATRIX }), [], "a FAIL verdict is consistent with a blocker");
+  mentions(verify(goodEvidence(), { commitExists: () => true, matrix: null }), /«Блокеры релиза \(D-12\)» is unreadable/);
+  assert.deepEqual(gate.matrixBlockers(CLEAN_MATRIX), []);
+  assert.deepEqual(gate.matrixBlockers(BLOCKER_MATRIX), ["SEC20-99"]);
+  assert.equal(gate.matrixBlockers("# no section"), null);
+});
+
+test("verifyEvidence: the commit must be a full 40-hex sha that exists", () => {
+  mentions(verify(goodEvidence().replace(COMMIT, "0123456")), /commit is missing or not a full 40-hex sha/);
+  mentions(verify(goodEvidence().replace(/^Commit:.*$/m, "")), /commit is missing/);
+  mentions(verify(goodEvidence(), { commitExists: () => false, matrix: CLEAN_MATRIX }), /does not exist in this repository/);
+});
+
+test("verifyEvidence: a partial run, a missing gate row, a wrong Node and a missing verdict are rejected", () => {
+  mentions(verify(gate.renderEvidence(fullRun({ partial: true, only: ["unit"] }))), /run mode is "partial"/);
+  mentions(verify(removeLine(goodEvidence(), "| lint |")), /lint: gate row is missing/);
+  mentions(verify(goodEvidence().replace("Node: v22.13.1", "Node: v24.1.0")), /Node line is missing or is not 22\.13\.x/);
+  mentions(verify(goodEvidence().replace(/^Итог: .*$/m, "")), /verdict line «Итог:» is missing/);
+  mentions(verify(goodEvidence().replace(/^Итог: .*$/m, "Итог: DONE")), /unknown \("DONE"\)/);
+  assert.deepEqual(verify(""), ["evidence is empty"]);
+});
+
+test("main --verify-evidence: a missing protocol exits non-zero with «20-RELEASE-EVIDENCE.md not found»", () => {
+  const base = mkdtempSync(path.join(os.tmpdir(), "phase20-evidence-test-"));
+  let err = "";
+  const code = gate.main(["--verify-evidence"], { root: base, err: (text: string) => { err += text; }, out: () => {} });
+  assert.notEqual(code, 0);
+  assert.match(err, /20-RELEASE-EVIDENCE\.md not found/);
+  rmSync(base, { recursive: true, force: true });
+});
+
+test("main --verify-evidence: reads the protocol and the matrix, exits 0 for a verified protocol and 1 for a broken one", () => {
+  const base = mkdtempSync(path.join(os.tmpdir(), "phase20-evidence-test-"));
+  mkdirSync(path.join(base, gate.PHASE_DIR), { recursive: true });
+  writeFileSync(path.join(base, gate.MATRIX_MD), CLEAN_MATRIX);
+  writeFileSync(path.join(base, gate.EVIDENCE_MD), goodEvidence());
+  let out = "";
+  let err = "";
+  const deps = { root: base, git: () => ({ status: 0, stdout: "", stderr: "" }), out: (text: string) => { out += text; }, err: (text: string) => { err += text; } };
+  assert.equal(gate.main(["--verify-evidence"], deps), 0, err);
+  assert.match(out, /release evidence verified/);
+  writeFileSync(path.join(base, gate.MATRIX_MD), BLOCKER_MATRIX);
+  assert.equal(gate.main(["--verify-evidence"], deps), 1);
+  assert.match(err, /unresolved high blocker/);
+  const explicit = path.join(base, "other.md");
+  writeFileSync(explicit, removeLine(goodEvidence(), "| D-47 production |"));
+  writeFileSync(path.join(base, gate.MATRIX_MD), CLEAN_MATRIX);
+  err = "";
+  assert.equal(gate.main(["--verify-evidence", "--evidence", explicit], deps), 1);
+  assert.match(err, /D-47 production: decision row is missing/);
+  rmSync(base, { recursive: true, force: true });
+});
+
+test("main --verify-evidence: extra verifiers (20-15 lineage, docs, reconciliation) attach without touching the base checks", () => {
+  const base = mkdtempSync(path.join(os.tmpdir(), "phase20-evidence-test-"));
+  mkdirSync(path.join(base, gate.PHASE_DIR), { recursive: true });
+  writeFileSync(path.join(base, gate.MATRIX_MD), CLEAN_MATRIX);
+  writeFileSync(path.join(base, gate.EVIDENCE_MD), goodEvidence());
+  let err = "";
+  const code = gate.main(["--verify-evidence"], {
+    root: base,
+    git: () => ({ status: 0, stdout: "", stderr: "" }),
+    out: () => {},
+    err: (text: string) => { err += text; },
+    extraEvidenceVerifiers: [() => ["lineage: example problem"]],
+  });
+  assert.equal(code, 1);
+  assert.match(err, /lineage: example problem/);
+  rmSync(base, { recursive: true, force: true });
+});
