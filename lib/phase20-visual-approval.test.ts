@@ -115,6 +115,48 @@ export function candidatesCommitProblems(commit: string | undefined, git?: GitRu
   return [];
 }
 
+const rejectedIds = ["spider-accent-custom-dark:pc", "spider-accent-custom-dark:phone", "class-icon-transitium:pc", "class-icon-transitium:phone"];
+
+export function candidatesSetProblems(commit: string | undefined, set: string | undefined): string[] {
+  if (!commit || !/^[0-9a-f]{40}$/.test(commit)) return [];
+  return set === `phase20-refresh-${commit.slice(0, 12)}` ? [] : ["candidates_set does not match candidates_commit"];
+}
+
+export function rejectedFixProblems(text: string, rows: LedgerRow[], captureCommit: string | undefined, git?: GitRunner): string[] {
+  const section = text.split(/^## 11\. [^\r\n]+\r?\n/m)[1]?.split(/^## /m)[0];
+  if (!section) return ["section 11: rejected frames and fix commits are missing"];
+  const errors: string[] = [];
+  const fixes = new Map<string, { sha: string; commit: string }>();
+  for (const line of section.split(/\r?\n/)) {
+    if (!line.startsWith("|")) continue;
+    const cells = line.slice(1, line.endsWith("|") ? -1 : undefined).split("|").map((cell) => cell.trim().replace(/^`|`$/g, ""));
+    if (cells.length !== 4 || !rejectedIds.includes(cells[0])) continue;
+    if (fixes.has(cells[0])) errors.push(`${cells[0]}: duplicate rejected frame`);
+    fixes.set(cells[0], { sha: cells[1], commit: cells[3] });
+  }
+  for (const id of rejectedIds) {
+    const fix = fixes.get(id);
+    if (!fix) { errors.push(`${id}: rejected frame is missing from section 11`); continue; }
+    const row = rows.find((candidate) => candidate.id === id);
+    if (!/^[0-9a-f]{64}$/.test(fix.sha)) errors.push(`${id}: rejected sha256 is malformed`);
+    if (row?.candidateSha === fix.sha) errors.push(`${id}: re-presents the rejected frame`);
+    if (!/^[0-9a-f]{40}$/.test(fix.commit)) { errors.push(`${id}: fix commit is not a full 40-hex hash`); continue; }
+    if (!git || !captureCommit || !/^[0-9a-f]{40}$/.test(captureCommit)) continue;
+    const exists = git(["cat-file", "-e", `${fix.commit}^{commit}`]);
+    if (exists.status !== 0) { errors.push(`${id}: fix commit could not be verified (${exists.status ?? exists.error ?? "git unavailable"})`); continue; }
+    const ancestor = git(["merge-base", "--is-ancestor", fix.commit, captureCommit]);
+    if (ancestor.status !== 0) errors.push(`${id}: captured before the fix (${ancestor.status ?? ancestor.error ?? "git unavailable"})`);
+  }
+  return errors;
+}
+
+export function candidateMembershipProblems(rows: LedgerRow[], set: string | undefined): string[] {
+  if (!set) return ["candidates_set is missing"];
+  const prefix = `tests/e2e/visual-candidates/.runs/${set}/`;
+  return rows.filter((row) => row.status === "CANDIDATE" && !row.candidate.startsWith(prefix))
+    .map((row) => `${row.id}: captured outside candidates_set`);
+}
+
 // Files changed between the candidate commit and HEAD, limited to the product directories. A non-zero git exit is an error, not an empty list.
 export function changedSinceCommit(commit: string, git: GitRunner): string[] {
   const result = git(["diff", "--name-only", commit, "HEAD", "--", "app", "components", "public", "lib"]);
@@ -142,6 +184,7 @@ export function staleCandidateProblems(commit: string, deps: { changedSince: (co
 
 type Options = {
   requireApproval?: boolean;
+  requireSetMembership?: boolean;
   // Checks candidates_commit against the repository. Without it only the field shape is checked.
   git?: GitRunner;
   // Product files changed since candidates_commit; in the strict mode (requireApproval) any such file makes the candidates stale.
@@ -161,8 +204,12 @@ export function validateLedger(text: string, options: Options = {}): string[] {
   for (const id of requiredIds) if (!byId.has(id)) errors.push(`${id}: required row is missing`);
   for (const id of requiredQuestions) if (!questions.some((q) => q.id === id)) errors.push(`${id}: required owner question is missing`);
 
-  const candidatesCommit = ledgerFrontmatter(text).candidates_commit;
+  const frontmatter = ledgerFrontmatter(text);
+  const candidatesCommit = frontmatter.candidates_commit;
   errors.push(...candidatesCommitProblems(candidatesCommit, options.git));
+  errors.push(...candidatesSetProblems(candidatesCommit, frontmatter.candidates_set));
+  errors.push(...rejectedFixProblems(text, rows, candidatesCommit, options.git));
+  if (options.requireSetMembership) errors.push(...candidateMembershipProblems(rows, frontmatter.candidates_set));
   if (options.requireApproval && options.changedSince && /^[0-9a-f]{40}$/.test(candidatesCommit ?? "")) {
     errors.push(...staleCandidateProblems(candidatesCommit, { changedSince: options.changedSince }));
   }
@@ -229,6 +276,37 @@ const editRow = (text: string, id: string, edit: (cells: string[]) => void) => {
   return text.replace(line, `| ${cells.join(" | ")} |`);
 };
 const dropRow = (text: string, id: string) => text.split(/\r?\n/).filter((line) => !line.startsWith(`| ${id} |`)).join("\n");
+
+describe("20-33 recapture guard", () => {
+  const fixes = `\n## 11. Исправления по вердикту владельца 2026-11-05 (20-32, 20-33)\n\n| Строка | Отклонённый hash | Просьба владельца | Коммит исправления |\n| --- | --- | --- | --- |\n${rejectedIds.map((id) => {
+    const row = parseLedger(ledger).rows.find((candidate) => candidate.id === id)!;
+    return `| ${id} | ${row.candidateSha} | исправить | ${id.startsWith("spider-") ? "4fa4dd6b01495081da7730c93b0b2868aab8daf2" : "19d5bc28425127ea784dbaf7ac01098f85df5006"} |`;
+  }).join("\n")}\n`;
+
+  test("the real ledger needs a section 11 listing four rejected frames", () => {
+    assert.ok(rejectedFixProblems(ledger, parseLedger(ledger).rows, ledgerFrontmatter(ledger).candidates_commit).some((error) => error.includes("section 11")));
+    assert.ok(rejectedFixProblems(`${ledger}${fixes}`, parseLedger(ledger).rows, ledgerFrontmatter(ledger).candidates_commit).every((error) => error.includes("re-presents the rejected frame")));
+  });
+
+  test("the rejected bytes cannot be presented again; git errors and pre-fix capture fail closed", () => {
+    let fixture = `${ledger}${fixes}`;
+    for (const id of rejectedIds) fixture = editRow(fixture, id, (cells) => { cells[6] = "f".repeat(64); });
+    const rows = parseLedger(fixture).rows;
+    const capture = "346316129101a934c26f9305e6aeb03f75b5f458";
+    assert.deepEqual(rejectedFixProblems(fixture, rows, capture, () => ({ status: 0 })), []);
+    assert.ok(rejectedFixProblems(fixture, rows, capture, () => ({ status: 1 })).some((error) => error.includes("could not be verified")));
+    assert.ok(rejectedFixProblems(fixture, rows, capture, (args) => ({ status: args[0] === "merge-base" ? 1 : 0 })).some((error) => error.includes("captured before the fix")));
+  });
+
+  test("set name follows the capture commit and membership is strict only when requested", () => {
+    const commit = "346316129101a934c26f9305e6aeb03f75b5f458";
+    assert.deepEqual(candidatesSetProblems(commit, "phase20-refresh-346316129101"), []);
+    assert.ok(candidatesSetProblems(commit, "phase20-refresh-old").length);
+    const rows = parseLedger(ledger).rows;
+    assert.ok(candidateMembershipProblems(rows, "phase20-refresh-346316129101").some((error) => error.includes("captured outside candidates_set")));
+    assert.ok(!validateLedger(`${ledger}${fixes}`, { requireSetMembership: false }).some((error) => error.includes("captured outside candidates_set")));
+  });
+});
 
 describe("20-VISUAL-APPROVAL ledger structure (fail-closed)", () => {
   test("the committed ledger is structurally complete", () => {
