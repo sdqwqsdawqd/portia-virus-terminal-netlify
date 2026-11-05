@@ -567,11 +567,23 @@ test("the spider has an independent saved switch and stays visible and still whe
 
 // Supersedes the quick 261102-d7r rule «no outline» (and the accent-tinted fills): D-25 asks for a dense body with a dark contour,
 // D-26 for dark-palette fills with the accent only in small details. The full check lives in lib/wallpaper-web.test.ts.
-test("the spider has a dark contour and no accent-tinted fills (D-25/D-26 supersede quick 261102-d7r)", () => {
-  assert.match(css, /\.wallpaper-spider :is\(path, circle\)\s*\{\s*stroke:\s*#020706;/);
+test("the spider rim follows its dedicated token while body and legs keep dark fills", () => {
+  assert.match(css, /--spider-rim:\s*#020706;/);
+  assert.match(css, /\.wallpaper-spider :is\(path, circle\)\s*\{\s*stroke:\s*var\(--spider-rim\);/);
   assert.doesNotMatch(css, /\.wallpaper-spider-(dark|limb|pale)\s*\{[^}]*(var\(--teal\)|currentColor)/, "body and legs do not follow the accent");
   assert.doesNotMatch(css, /wallpaper-spider-teal/);
   assert.match(css, /\.wallpaper-spider \.wallpaper-spider-accent\s*\{[^}]*fill:\s*var\(--teal\)/);
+});
+
+test("G1: very dark custom accents give the spider a readable rim", () => {
+  for (const pick of ["#1a1a1a", "#0d0d0d", "#101820"]) {
+    const tokens = deriveAccentTokens(pick)!;
+    assert.equal(tokens["--spider-rim"], tokens["--teal"], pick);
+    assert.ok(contrast(hex(tokens["--spider-rim"]), hex(tokens["--desktop-base"])) >= 3, pick);
+  }
+  for (const pick of ["#f2f2f2", "#a0a0a0", "#ffffff"]) {
+    assert.equal(deriveAccentTokens(pick)!["--spider-rim"], "#020706", pick);
+  }
 });
 
 test("a window appears smoothly under «Включены» and «Уменьшены» and at once under «Выключены» (quick 261102-d7r)", () => {

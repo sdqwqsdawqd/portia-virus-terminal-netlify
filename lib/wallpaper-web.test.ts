@@ -85,7 +85,8 @@ test("D-25/D-26: the spider body and legs are dense dark outlined parts and the 
     assert.doesNotMatch(text, /color-mix/, `${selector} has no translucent mix`);
   }
   const stroke = rule(".wallpaper-spider :is(path, circle)");
-  assert.match(stroke, /stroke:\s*#020706/, "body and legs carry a contour darker than the background");
+  assert.match(stroke, /stroke:\s*var\(--spider-rim\)/, "body and legs use the dedicated contour token");
+  assert.match(rule(":root"), /--spider-rim:\s*#020706/, "preset accents keep the accepted dark contour");
   assert.doesNotMatch(stroke, /stroke:\s*none|opacity/);
   assert.doesNotMatch(rule(".wallpaper-spider"), /color:\s*var\(--teal\)|opacity:\s*0?\.\d/, "the spider wrapper does not tint its parts with the accent");
   const accent = rule(".wallpaper-spider .wallpaper-spider-accent");
