@@ -586,6 +586,54 @@ test("G1: very dark custom accents give the spider a readable rim", () => {
   }
 });
 
+test("G3 / D-10 small window labels keep at least 4.5:1 across accents", () => {
+  const bodyOf = (selector: string) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const body = css.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`))?.[1];
+    assert.ok(body, `missing CSS rule ${selector}`);
+    return body;
+  };
+  const property = (selector: string, name: string) => {
+    const value = bodyOf(selector).match(new RegExp(`(?:^|;)\\s*${name}:\\s*([^;]+)`))?.[1]?.trim();
+    assert.ok(value, `${selector} missing ${name}`);
+    return value;
+  };
+  const selectors = [".browser-labels", ".row-index", ".row-main small", ".browser-footer", ".global-result-mark", ".trash-list-head"];
+  const accents = [
+    ["default", root], ["ice", themes.ice], ["amber", themes.amber], ["red", themes.red],
+    ["custom-dark", new Map(Object.entries(deriveAccentTokens("#1a1a1a")!))],
+    ["custom-light", new Map(Object.entries(deriveAccentTokens("#f2f2f2")!))],
+  ] as const;
+  const findings: string[] = [];
+  const report: string[] = [];
+  for (const [accent, overrides] of accents) {
+    const token = (name: string): string => overrides.get(name) ?? root.get(name) ?? "";
+    const rgb = (value: string): Rgb => {
+      const resolved = value.startsWith("var(") ? token(value.slice(4, -1)) : value;
+      if (resolved.startsWith("#")) return hex(resolved);
+      const match = /^oklch\(([\d.]+) calc\(([\d.]+) \* var\(--accent-chroma\)\) var\(--accent-hue\)\)$/.exec(resolved);
+      assert.ok(match, `unsupported CSS colour ${resolved}`);
+      return oklchToRgb(Number(match[1]), Number(match[2]) * Number(token("--accent-chroma")), Number(token("--accent-hue"))).map((v) => Math.min(255, Math.max(0, v))) as Rgb;
+    };
+    const archive = rgb(property(".archive-browser", "background"));
+    const trash = rgb(property(".trash-layout", "background"));
+    const overlay = token("--teal-soft").match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/);
+    assert.ok(overlay, `invalid --teal-soft on ${accent}`);
+    const active = archive.map((channel, index) => channel * (1 - Number(overlay[4])) + Number(overlay[index + 1]) * Number(overlay[4])) as Rgb;
+    for (const selector of selectors) {
+      const foreground = rgb(property(selector, "color"));
+      const backgrounds = selector === ".global-result-mark" ? [rgb(property(selector, "background"))]
+        : selector === ".trash-list-head" ? [trash]
+          : selector === ".row-index" || selector === ".row-main small" ? [archive, active] : [archive];
+      const ratio = Math.min(...backgrounds.map((background) => contrast(foreground, background)));
+      report.push(`${selector} ${accent} ${ratio.toFixed(2)}`);
+      if (ratio < 4.55) findings.push(`${selector} ${accent} ${ratio.toFixed(2)}`);
+    }
+  }
+  if (process.env.PORTIA_CONTRAST_REPORT === "1") console.log(report.join("\n"));
+  assert.deepEqual(findings, [], `labels below 4.55:1: ${findings.join(", ")}`);
+});
+
 test("a window appears smoothly under «Включены» and «Уменьшены» and at once under «Выключены» (quick 261102-d7r)", () => {
   const msOf = (token: string) => Number(new RegExp(`${token}:\\s*(\\d+)ms`).exec(css)?.[1]);
   const closeMs = Number(/WINDOW_CLOSE_MS = (\d+)/.exec(desktopSource)?.[1]), fadeOutMs = Number(/WINDOW_FADE_OUT_MS = (\d+)/.exec(desktopSource)?.[1]);
