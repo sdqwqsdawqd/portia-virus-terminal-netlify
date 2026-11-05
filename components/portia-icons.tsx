@@ -110,7 +110,7 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
   "class-risk": <>{escapeShape}{[14.4, 17.2].map(chevron)}</>,
   "class-esnov": <>{escapeShape}{[12.6, 15.2, 17.8].map(chevron)}</>,
   "class-lucidium": <>{brainHalf}{brainFolds}{mirrored(<>{brainHalf}{brainFolds}</>)}{brainSpine}<path d="M12 1v1.6M5.6 2.2l1 1.1M18.4 2.2l-1 1.1" /></>,
-  "class-transitium": <>{brainHalf}{brainFolds}{brainSpine}<g opacity=".45" strokeDasharray="2 2.4">{mirrored(brainHalf)}</g><g opacity=".4">{mirrored(brainFolds)}</g></>,
+  "class-transitium": <>{brainHalf}{brainFolds}{brainSpine}<g strokeDasharray="2 2.4">{mirrored(brainHalf)}</g><g>{mirrored(brainFolds)}</g></>,
   "class-oblivium": <g strokeDasharray="2.2 2.8">{brainHalf}{mirrored(brainHalf)}{brainSpine}</g>,
   "class-isomorph": <><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /><circle cx="16.4" cy="8.4" r=".9" fill="currentColor" /></>,
   "class-polymorph": <><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.7" /><path d="M15.5 8.5 18.6 5.4M8.5 8.5 5.4 5.4M8.5 15.5 5.4 18.6M15.5 15.5l3.1 3.1" /><circle cx="19.4" cy="4.6" r="1.3" /><circle cx="4.6" cy="4.6" r="1.3" /><circle cx="4.6" cy="19.4" r="1.3" /><circle cx="19.4" cy="19.4" r="1.3" /></>,
