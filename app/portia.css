@@ -23,6 +23,7 @@ html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-
   --danger: #d55449;
   --desktop-base: #07100f;
   --desktop-deep: #0c1715;
+  --spider-rim: #020706;
   --desktop-glow: 0, 188, 166;
   --desktop-grid: 96, 171, 157;
   --accent-hue: 180.4;
@@ -1534,9 +1535,8 @@ html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-
    straight on the page, so it is not resampled: the blur at rest came from a layer kept by will-change and by a forwards-filled fade. */
 .wallpaper-spider[data-spider-walking] { will-change: transform; }
 .wallpaper-spider svg { display: block; width: 100%; height: auto; }
-/* D-25/D-26: body and legs are dense and opaque, filled from the dark PORTIA OS palette and drawn with a contour darker than the
-   background, so nothing shows through them and they do not follow the accent. The accent is only in .wallpaper-spider-accent (eyes). */
-.wallpaper-spider :is(path, circle) { stroke: #020706; stroke-width: 5; stroke-linejoin: round; }
+/* D-25/D-26: body and legs stay opaque and dark. Only an exceptionally dark custom accent switches their rim to the derived readable accent. */
+.wallpaper-spider :is(path, circle) { stroke: var(--spider-rim); stroke-width: 5; stroke-linejoin: round; }
 .wallpaper-spider-dark { fill: var(--panel); }
 .wallpaper-spider-limb { fill: var(--panel-2); }
 .wallpaper-spider-pale { fill: var(--panel-2); }

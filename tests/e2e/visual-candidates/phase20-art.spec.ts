@@ -68,8 +68,10 @@ for (const accent of accents) {
       const details = [...document.querySelectorAll<SVGElement>(".wallpaper-spider .wallpaper-spider-accent")];
       const tint = document.createElement("i");
       tint.style.color = "var(--teal)";
+      tint.style.backgroundColor = "var(--desktop-base)";
       document.body.append(tint);
       const teal = getComputedStyle(tint).color;
+      const desktopBase = getComputedStyle(tint).backgroundColor;
       tint.remove();
       const style = (element: Element) => getComputedStyle(element);
       return {
@@ -80,6 +82,7 @@ for (const accent of accents) {
         details: details.length,
         detailsOnAccent: details.filter((detail) => style(detail).fill === teal).length,
         teal,
+        desktopBase,
         bodyFill: style(bodyParts[0]).fill,
         stroke: style(bodyParts[0]).stroke,
       };
@@ -90,6 +93,17 @@ for (const accent of accents) {
     expect(probe.accentFilled, "body/leg parts filled with the accent (D-26)").toBe(0);
     expect(probe.details, "accent details exist").toBeGreaterThan(0);
     expect(probe.detailsOnAccent, "every accent detail is filled with the accent").toBe(probe.details);
+    if (accent.id === "custom-dark") {
+      expect(probe.stroke, "the very dark custom accent gets a readable rim").toBe(probe.teal);
+      expect(probe.stroke).not.toBe("rgb(2, 7, 6)");
+      const channels = (value: string) => (value.match(/\d+/g) ?? []).slice(0, 3).map(Number);
+      const linear = (channel: number) => { const v = channel / 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
+      const luminance = (value: string) => channels(value).reduce((sum, channel, index) => sum + linear(channel) * [.2126, .7152, .0722][index], 0);
+      const light = luminance(probe.stroke), dark = luminance(probe.desktopBase);
+      expect((Math.max(light, dark) + .05) / (Math.min(light, dark) + .05), "rim contrast against the desktop").toBeGreaterThanOrEqual(3);
+    } else {
+      expect(probe.stroke, "the accepted spider outline remains unchanged").toBe("rgb(2, 7, 6)");
+    }
     const context = { page, browser, determinism, testInfo };
     await captureCandidate(context, {
       id: `phase20-spider-accent-${accent.id}`,
