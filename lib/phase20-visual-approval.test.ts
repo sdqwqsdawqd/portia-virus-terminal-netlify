@@ -283,13 +283,16 @@ describe("20-33 recapture guard", () => {
     return `| ${id} | ${row.candidateSha} | исправить | ${id.startsWith("spider-") ? "4fa4dd6b01495081da7730c93b0b2868aab8daf2" : "19d5bc28425127ea784dbaf7ac01098f85df5006"} |`;
   }).join("\n")}\n`;
 
-  test("the real ledger needs a section 11 listing four rejected frames", () => {
-    assert.ok(rejectedFixProblems(ledger, parseLedger(ledger).rows, ledgerFrontmatter(ledger).candidates_commit).some((error) => error.includes("section 11")));
-    assert.ok(rejectedFixProblems(`${ledger}${fixes}`, parseLedger(ledger).rows, ledgerFrontmatter(ledger).candidates_commit).every((error) => error.includes("re-presents the rejected frame")));
+  test("the real ledger lists four rejected frames in section 11", () => {
+    const withoutSection = ledger.split(/^## 11\./m)[0];
+    assert.ok(rejectedFixProblems(withoutSection, parseLedger(ledger).rows, ledgerFrontmatter(ledger).candidates_commit).some((error) => error.includes("section 11")));
+    assert.deepEqual(rejectedFixProblems(ledger, parseLedger(ledger).rows, ledgerFrontmatter(ledger).candidates_commit), []);
+    const oldRows = parseLedger(ledger).rows.map((row) => row.id === rejectedIds[0] ? { ...row, candidateSha: "c1abfadbaa755e38db6091897d0a2b08371753785ff65036318a3beb82bb8051" } : row);
+    assert.ok(rejectedFixProblems(ledger, oldRows, ledgerFrontmatter(ledger).candidates_commit).some((error) => error.includes("re-presents the rejected frame")));
   });
 
   test("the rejected bytes cannot be presented again; git errors and pre-fix capture fail closed", () => {
-    let fixture = `${ledger}${fixes}`;
+    let fixture = `${ledger.split(/^## 11\./m)[0]}${fixes}`;
     for (const id of rejectedIds) fixture = editRow(fixture, id, (cells) => { cells[6] = "f".repeat(64); });
     const rows = parseLedger(fixture).rows;
     const capture = "346316129101a934c26f9305e6aeb03f75b5f458";
@@ -304,7 +307,7 @@ describe("20-33 recapture guard", () => {
     assert.ok(candidatesSetProblems(commit, "phase20-refresh-old").length);
     const rows = parseLedger(ledger).rows;
     assert.ok(candidateMembershipProblems(rows, "phase20-refresh-346316129101").some((error) => error.includes("captured outside candidates_set")));
-    assert.ok(!validateLedger(`${ledger}${fixes}`, { requireSetMembership: false }).some((error) => error.includes("captured outside candidates_set")));
+    assert.ok(!validateLedger(`${ledger.split(/^## 11\./m)[0]}${fixes}`, { requireSetMembership: false }).some((error) => error.includes("captured outside candidates_set")));
   });
 });
 
@@ -498,6 +501,6 @@ describe("stale candidates (20-29, T-20-43): product code changed after candidat
 
 describe("Task 2 gate: owner verdicts (PORTIA_REQUIRE_APPROVAL=1)", () => {
   test("every captured candidate has an exact positive owner verdict and every owner question an answer", { skip: process.env.PORTIA_REQUIRE_APPROVAL !== "1" ? "run with PORTIA_REQUIRE_APPROVAL=1 after the owner fills the ledger" : false }, () => {
-    assert.deepEqual(validateLedger(ledger, { requireApproval: true, fileSha, git: realGit, changedSince: (commit) => changedSinceCommit(commit, realGit) }), []);
+    assert.deepEqual(validateLedger(ledger, { requireApproval: true, requireSetMembership: true, fileSha, git: realGit, changedSince: (commit) => changedSinceCommit(commit, realGit) }), []);
   });
 });
