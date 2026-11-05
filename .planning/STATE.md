@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-31-PLAN.md
-last_updated: "2026-11-04T19:23:06.840Z"
+stopped_at: "Completed PORTIA-20-11-PLAN.md (open follow-ups: spider #1a1a1a, Transitium, D-10 contrast gap, flask durations to 20-14, Promotion BLOCKED)"
+last_updated: "2026-11-05T03:22:51.046Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 20 execution started
-state_head: c2c1ea00db22c4bdeacc34ca0be535e3865aa11e
+state_head: 9bbf1b41c45b5f6f81707e7c10977acccad711d1
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 102
-  completed_plans: 97
+  completed_plans: 98
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 18 of 31
+Plan: 19 of 31
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 20 execution started
 
@@ -133,6 +133,7 @@ Progress: [█████░░░░░] 50%
 | Phase 20 P30 | 75 min | 3 tasks | 3 files |
 | Phase PORTIA-20 P29 | ~120 min | 3 tasks | 4 files |
 | Phase PORTIA-20 P31 | 10 min | 3 tasks | 5 files |
+| Phase PORTIA-20 P20-11 | owner-gated | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -233,6 +234,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 20]: 20-30: release gate runner is fail-closed (flaky/retry/skip/BLOCKED never PASS; waiver without owner verdict is FAIL, PW-10 pending, PW-07 accepted); first clean-checkout smoke: lint PASS, unit and typecheck FAIL because tracked lib/phase16-guard-boundary.test.ts imports untracked .claude/hooks/guard.mjs (deferred, blocks 20-13 unit/typecheck PASS)
 - [Phase PORTIA-20]: 20-29: all 73 candidates recaptured on HEAD 0929a084c13d (set phase20-refresh-0929a084c13d); strict mode rejects product changes after candidates_commit — Owner must not approve stale hashes; old baselines failing for data or unisolated causes (B1-B5) stay blockers, only explained changes get rebaseline-* rows
 - [Phase PORTIA-20]: 20-31: 20-15 finalizes the 20-RELEASE-NOTES.md draft (matrix_commit b88669f) instead of creating notes; STAB-A11Y-01, STAB-A11Y-03, STAB-MEDIA-07 reopened to Pending (BLOCKED sub-items listed); STAB-SEC-05 stays Complete on the 20-26 matrix; lib/phase20-requirements-ledger.test.ts blocks Complete without UAT/matrix/reconciliation proof
+- [Phase PORTIA-20]: 20-11: owner accepted 79 visual rows, 4 sent back for fixes (spider on #1a1a1a, Transitium); strict gate fails on those by design; D-10 contrast fix-now needs a gap in 20-12/20-13
 
 ### Pending Todos
 
@@ -275,8 +277,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-04T19:23:06.356Z
-Stopped at: Completed PORTIA-20-31-PLAN.md
+Last session: 2026-11-05T03:22:50.562Z
+Stopped at: Completed PORTIA-20-11-PLAN.md (open follow-ups: spider #1a1a1a, Transitium, D-10 contrast gap, flask durations to 20-14, Promotion BLOCKED)
 Resume file: None
 
 ## Operator Next Step
