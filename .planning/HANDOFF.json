@@ -1,0 +1,54 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-11-05T08:09:12.711Z",
+  "phase": "PORTIA-20",
+  "phase_name": "Security, accessibility и приёмка релиза",
+  "phase_dir": ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza",
+  "plan": "20-32",
+  "task": 0,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": "20-11", "name": "Owner visual verdict recorded (79 accepted, 4 fix)", "status": "done", "commit": "0a2e1fe"},
+    {"id": "20-11", "name": "20-11 SUMMARY + state/roadmap", "status": "done", "commit": "a5b9f3e"},
+    {"id": "plan", "name": "Gap-closure plans 20-32, 20-33; 20-12..15 rewired (waves 11..14)", "status": "done", "commit": "f827737"}
+  ],
+  "remaining_tasks": [
+    {"id": "20-32", "name": "Fixes G1 spider rim, G2 Transitium opacity, G3 D-10 label contrast (wave 9, autonomous)", "status": "not_started"},
+    {"id": "20-33", "name": "Re-shoot all candidates on fix commit + owner re-approval checkpoint (wave 10, non-autonomous)", "status": "not_started"},
+    {"id": "20-12", "name": "Baseline promotion (wave 11)", "status": "not_started"},
+    {"id": "20-13", "name": "Release gate rehearsal (wave 12)", "status": "not_started"},
+    {"id": "20-14", "name": "Physical owner UAT PC + phone (wave 13, non-autonomous)", "status": "not_started"},
+    {"id": "20-15", "name": "Final release reconciliation (wave 14)", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "20-33 Task 3 needs the owner to re-approve every row reset to ОЖИДАЕТ in 20-VISUAL-APPROVAL.md", "type": "human_action", "workaround": "none — blocking-human gate"},
+    {"description": "20-14 is a physical owner UAT on PC and phone", "type": "human_action", "workaround": "none"}
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Re-approve re-shot visual candidates after 20-32 (20-33 checkpoint)", "context": "Spider custom-dark, Transitium, plus rows sharing frame vir-d17 (stabilar:pc, polymorph:pc/phone) and any row whose bytes change from G1/G3", "blocking": true},
+    {"action": "Decide flask cycle durations during UAT 20-14", "context": "Owner answered 'idk' on q-flasks-durations; deferred", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "79 visual rows accepted; spider-accent-custom-dark and class-icon-transitium (pc/phone) sent back for fixes", "rationale": "Owner verdict 2026-11-05", "phase": "PORTIA-20"},
+    {"decision": "D-10 contrast fixed now (20-32), not deferred to UAT", "rationale": "Owner answer to q-contrast-d10", "phase": "PORTIA-20"},
+    {"decision": "Promotion participant cards and reviewer view stay BLOCKED; Behaviour icons accepted PC-only; spider shape kept as is", "rationale": "Owner answers q-promotion-*, q-class-phone-crop, q-spider-shape", "phase": "PORTIA-20"},
+    {"decision": "Fix work added as gap plans inside phase 20 (not a decimal phase)", "rationale": "A decimal phase 20.1 would run after 20-12..15, too late", "phase": "PORTIA-20"},
+    {"decision": "Spider rim threshold: custom accent OKLCH lightness < 0.62", "rationale": "Planner choice recorded in 20-32 assumptions", "phase": "PORTIA-20"}
+  ],
+  "uncommitted_files": [
+    " M .planning/milestone.lock",
+    " M .planning/state.json",
+    "?? .mcp.json",
+    "?? .planning/forensics/",
+    "?? .planning/milestones/v1.2-incomplete-research/",
+    "?? .planning/quick/261028-c9g-portia-promotion-1-8/",
+    "?? .planning/research/.cache/",
+    "?? .planning/ui-reviews/",
+    "?? AGENTS.md",
+    "?? CLAUDE.md"
+  ],
+  "next_action": "Run /gsd-execute-phase 20 --gaps-only to dispatch 20-32 (sequential executor, use_worktrees=false), then 20-33 up to its owner checkpoint",
+  "context_notes": "The uncommitted files above were already dirty before this session and are not part of phase 20 work; executors must stage files by explicit path. Branch design/stage-1-desktop, HEAD f827737."
+}
