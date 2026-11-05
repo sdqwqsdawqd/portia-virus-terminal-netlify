@@ -512,36 +512,29 @@ test.describe("[STAB-A11Y-01] role lanes", () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// Known defects outside the scoped surfaces (D-10: medium defects are FAIL until the owner's verdict after physical UAT).
-// They are pinned so that a NEW one fails this test; the fingerprints below are NOT an owner disposition.
+// Owner verdict 2026-11-05 (20-32): the D-10 contrast issue is fixed here; every serious or critical violation fails.
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-test.describe("[STAB-A11Y-03] windows outside 20-07's scope: critical never, serious only the recorded defects", () => {
+test.describe("[STAB-A11Y-03] windows outside 20-07's scope: no serious or critical violations", () => {
   const windows = ["База вирусов", "Сотрудники", "Глобальный поиск", "Корзина"];
-  const recordedContrastDefects = new Set(["color-contrast:serious"]);
 
-  test("no critical violation; serious ones are only the recorded colour-contrast defect (FAIL until D-10)", async ({ page }, testInfo) => {
+  test("no serious or critical violation in the four windows", async ({ page }, testInfo) => {
     const desktop = new DesktopPage(page);
     await desktop.goto();
     const critical: string[] = [];
-    const unrecorded: string[] = [];
-    const recorded: string[] = [];
+    const serious: string[] = [];
     for (const app of windows) {
       await desktop.openApp(app);
       await settle(page);
       for (const violation of await scan(page, testInfo, `other-${app}`, { withoutIframes: true })) {
         const line = `${app}: ${summary([violation])[0]}`;
         if (violation.impact === "critical") critical.push(line);
-        else if (recordedContrastDefects.has(fingerprint(violation))) recorded.push(line);
-        else unrecorded.push(line);
+        else serious.push(line);
       }
       await desktop.closeApp(app);
     }
-    if (recorded.length) {
-      testInfo.annotations.push({ type: "DEFECT (medium, FAIL until owner verdict D-10)", description: `${recorded.length} colour-contrast groups: ${recorded.join(" || ")}` });
-    }
     expect(critical, "critical violations").toEqual([]);
-    expect(unrecorded, "serious violations other than the recorded colour-contrast defect").toEqual([]);
+    expect(serious, "serious violations").toEqual([]);
   });
 });
 
