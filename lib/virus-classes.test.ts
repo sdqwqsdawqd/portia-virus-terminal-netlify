@@ -106,6 +106,14 @@ test("D-39 the nine drawings are pairwise different and use no colour beyond cur
   }
 });
 
+test("G2 Transitium right brain has the left brain's opacity and keeps its dashed contour", () => {
+  const transitium = drawing("class-transitium");
+  assert.doesNotMatch(transitium, /opacity\s*=/, "both right-hand groups are fully opaque");
+  assert.match(transitium, /strokeDasharray="2 2\.4"/, "the right contour remains dashed");
+  assert.doesNotMatch(drawing("class-lucidium"), /strokeDasharray/, "Lucidium remains solid");
+  assert.match(drawing("class-oblivium"), /strokeDasharray/, "Oblivium remains dashed throughout");
+});
+
 test("D-39 every new class name from classificationOptions maps to one of the new icons", () => {
   for (const axis of ["mind", "behavior", "appearance"] as const) {
     for (const option of classificationOptions[axis]) {
