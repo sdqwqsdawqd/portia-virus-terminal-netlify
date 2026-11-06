@@ -179,17 +179,72 @@ HEAD пересъёмки: `0929a084c13dc8cd420152c949c3332e82ed7e67`. Набо�
 
 Для B2/B3 новые actual-файлы лежат в `tests/e2e/visual-candidates/.runs/phase20-refresh-666836d77963/_work/blocker-actuals/`; для B5 — в том же наборе `window-search-*.png`. Их SHA256 записаны в примечаниях BLOCKED-строк. Снимки с данными цели не предлагаются к одобрению. Различия остальных строк, особенно с движением паука и WebKit, требуют вердикта владельца по конкретным байтам, а не автоматического наследования прежней оценки.
 
-## Пересъёмка после перерисовки паука и колб (20-37): блокеры, план остановлен до показа владельцу
+## Пересъёмка после перерисовки паука и колб (20-37)
 
-Коммит съёмки H3 `39bd4d371efa6caa284d50cb3c2140beaa243f6a`, набор `phase20-refresh-39bd4d371efa` (в .gitignore), сборка production на 127.0.0.1:3100 (visitor, только чтение). Эталоны `tests/e2e/visual/__screenshots__` не менялись. Ledger 20-VISUAL-APPROVAL.md на этом шаге не менялся: строки владельцу не показаны, вердиктов нет.
+Коммиты исправлений 20-35 и 20-36: паук `d7d917e466e77e43ea0fa7ae126c86810acd7b19`, колбы `abddc8cc6efcf6aeb695fcfdc5800b51c1cffe4f`. Коммит съёмки H3 `cf8fcfcc249f745fd3836b11726445660c02ef8f`, набор S3 `phase20-refresh-cf8fcfcc249f` (в .gitignore). Сборка production на 127.0.0.1:3100 (visitor, только чтение, `PORTIA_E2E_ALLOW_HTTP=1`, Node 22.13.1), код app/components/public/lib равен H3. Эталоны `tests/e2e/visual/__screenshots__` не менялись. Предыдущая попытка на `39bd4d371efa` остановилась на блокерах B6-B9 (ниже, исправлены); её кадры в ledger не входят.
 
-Что прошло: `phase20-art.spec.ts` на chromium-desktop и chromium-phone, 44 passed (`--retries=0`). Остальные кандидатные спеки (apps, desktop, editor, motion, info-phone, class-icons, empty-art, promotion, template-builder): 164 passed, 165 skipped, 1 failed (B6 ниже).
+### Исправленные блокеры предыдущей попытки
 
-| ID | Что упало | Причина | Что нужно |
+| ID | Что было | Исправление | Коммит |
 |---|---|---|---|
-| B6 | `editor.spec.ts:5` «capture signed-out editor access states», firefox-desktop, 3 из 3 повторов | `[PORTIA_E2E_DIAGNOSTICS]`: два `requestfailed` `GET /api/content` и `GET /api/employees` с `NS_BINDING_ABORTED`: тест уходит на /owner-login, пока читаются данные цели; ответы целевого источника идут около 1.2 и 1.5 с (`curl`). Продуктовый код не затронут, кадры firefox записаны. | перепрогон при быстром источнике данных либо решение по ожиданию в спеке (как PW-04) |
-| B7 | `tests/e2e/specs/template-builder.spec.ts:569` «participant builds a text template…», chromium-desktop и chromium-phone | спек ждёт текст «Работа скачивается на ваше устройство. Отправьте файл проверяющему вне сайта.», а `components/portia-promotion.tsx:481` пишет «…устройство; отправьте файл…» (в `components/portia-template-builder.tsx:340` текст с точкой) | выровнять текст продукта и спека; правка компонента меняет продуктовый код и делает съёмку H3 устаревшей |
-| B8 | `tests/e2e/specs/accessibility.spec.ts:223` «template builder (UI-contract stub)…», chromium-phone, вкладка «Основное» | axe `label-content-name-mismatch` (serious) на `.global-format-launch > button`: у кнопки панели оформления доступное имя не содержит видимого текста | исправить имя кнопки в общем компоненте панели оформления (продуктовый код) |
-| B9 | кадр `phase20-spider-mid-step-off--chromium-phone` (строка `spider-motion-off:phone`) | на телефоне кадр показывает окно «Настройки» без паука: байты (`a53419f8…`) побитово равны отклонённым 2026-11-06, тест раздела 12 это отвергает («re-presents the rejected frame»); перерисовка паука в кадре не видна | переснять кадр так, чтобы паук был виден (правка `phase20-art.spec.ts`), либо решение владельца/оркестратора вывести строку из раздела 12 как `spider-off` |
+| B6 | `editor.spec.ts:5` на firefox-desktop: `NS_BINDING_ABORTED` на `/api/content` и `/api/employees`, 3 из 3 | Перепрогон на новой сборке снова красный (3 из 3), поэтому спек перед переходом на страницу входа ждёт `networkidle`: чтения цели занимают 1-1.5 с. После правки 3 из 3 зелёные, в полном прогоне 165 passed | 8b683c0 |
+| B7 | текст «Повышения» «…устройство; отправьте файл…» против «…устройство. Отправьте файл…» в конструкторе, спеке и UI-SPEC | `components/portia-promotion.tsx` приведён к форме с точкой; других проверок с точкой с запятой нет | 7242911 |
+| B8 | axe `label-content-name-mismatch` (serious) на `.global-format-launch > button`, chromium-phone, «Основное» | Общая кнопка `FormatLaunchButton` в `components/portia-editor-rich-text.tsx` (имена в `lib/format-launch.ts`), конструктор использует её. axe сравнивает целые слова, поэтому первая правка («Выберите текстовое поле для оформления»: слово «текстовое» не равно «текст») не помогла; имя пустого состояния теперь «Выберите текст: сначала выберите текстовое поле», имя с полем «Оформление <поле>: панель оформления текста» (содержит видимое «ОФОРМЛЕНИЕ <поле>»). Телефон в свёрнутом виде рисует тот же DOM (CSS обрезает текст), имя одно для всех состояний и ширин. Кнопка редактора в `components/portia-editor.tsx` намеренно не тронута по указанию, поэтому у редактора остаётся прежняя разметка (замечание для владельца) | f00d528, cf8fcfc |
+| B9 | кадр `phase20-spider-mid-step-off--chromium-phone` показывал окно «Настройки» без паука, байты равнялись отклонённым 2026-11-06 | `phase20-art.spec.ts`: после выбора «Выключены» окно «Настройки» закрывается, тест проверяет, что ни одно окно не лежит на пауке и поза не сдвинулась, затем окно открывается для шага «Уменьшены». Паук виден на PC и на телефоне. `spider-off` (кадр «Паук: Скрыть») по замыслу без паука, строки и раздел 12 не менялись | 7e36b35 |
 
-Строки `template-builder-*` и остальной пакет к вердикту не выносятся. Исправления B7 и B8 меняют продуктовый код, поэтому после них нужна полная пересъёмка на новом H3 (Task 1 и Task 2 заново); защита раздела 12 в `lib/phase20-visual-approval.test.ts` уже добавлена коммитами a02eda7 (RED) и 39bd4d3 (GREEN), тесты реального ledger красные, пока раздел 12 не записан.
+Проверка B8: `template-builder.spec.ts` и полоса «template builder» в `accessibility.spec.ts` на chromium-desktop и chromium-phone: 24 passed, 0 failed (`--retries=0`, сборка H3). На сборке перед второй правкой тот же прогон: 23 passed, 1 failed (то самое `label-content-name-mismatch`).
+
+### Прогоны на H3
+
+- `phase20-art.spec.ts`, chromium-desktop и chromium-phone, `--retries=0`: 44 passed.
+- Остальные кандидатные спеки (apps, desktop, editor, motion, info-phone, class-icons, empty-art, promotion, template-builder) на пяти проектах: 165 passed, 165 skipped, 0 failed (`--retries=0`).
+- UI-контракт конструктора (второй verify): 24 passed, ноль запросов записи (трекер в спеке роняет тест при любой записи).
+
+### Сводка по разделам ledger
+
+| Раздел ledger | Строк CANDIDATE | Тот же SHA256 / прежнее одобрение | Новый SHA256 / ОЖИДАЕТ | Что изменилось |
+| --- | ---: | ---: | ---: | --- |
+| 1. Паук | 16 | 0 | 16 | Новый паук D-50 (20-35); `spider-off` изменил байты без паука в кадре |
+| 2. Колбы | 12 | 0 | 12 | Фон D-51 (20-36) |
+| 3. Пустые состояния | 16 | 7 | 9 | Область паука в углу у PC; на телефоне один кадр изменился ниже порога канала 16 |
+| 4. Promotion (участник) | 10 | 4 | 6 | Область паука у PC; кадр `gate-refused:phone` изменился ниже порога |
+| 5. Иконки классов | 5 | 5 | 0 | Панели без паука, байты те же |
+| 6. «Информация» на телефоне | 6 | 5 | 1 | `info-phone-next:phone` изменился ниже порога канала 16 |
+| 10. Прежние эталоны (rebaseline-*) | 23 | 0 | 23 | 14 существующих и 9 новых строк |
+| Конструктор шаблона (D-52, раздел 4) | 8 | 0 | 8 | Новые строки, прежнего кадра нет |
+
+Итого 131 строка: 21 принято (те же байты), 75 ОЖИДАЕТ, 35 BLOCKED. Ни один изменившийся SHA256 не оставлен с вердиктом «принято».
+
+### Прежние эталоны на H3 (`--retries=0`)
+
+Гейт на chromium-desktop и chromium-dpr125 запускался дважды (`npm run test:e2e:visual -- --retries=0`: 11 failed, 5 passed, 14 skipped; повтор со списком: 10 failed, 6 passed). Расхождение между прогонами в одном снимке: «Корзина» (данные цели). Остальные проекты: `npm run test:e2e -- --retries=0 --project=chromium-phone --project=webkit-phone --project=firefox-desktop tests/e2e/visual`: 5 failed, 40 skipped, 0 passed. Числа пикселей отличаются от прежних таблиц (паук стал крупнее). Снимки, до которых гейт не дошёл (тест останавливается на первом упавшем снимке), оценены компаратором гейта по кадру кандидата того же сценария и помечены «оценка».
+
+| Снимок / проект | Итог, пиксели | Класс / строка ledger |
+| --- | --- | --- |
+| `application-broadcasts--chromium-desktop` | FAIL 5057 | паук и пустой рисунок; строка rebaseline ОЖИДАЕТ |
+| `application-guide--chromium-desktop` | FAIL 5764 | паук и пустой рисунок; строка ОЖИДАЕТ |
+| `application-settings--chromium-desktop` | FAIL 4049 | паук D-50; строка ОЖИДАЕТ |
+| `application-search--chromium-desktop` | FAIL 4571 | паук D-50; строка ОЖИДАЕТ |
+| `application-information--chromium-desktop` | FAIL 25449 | паук и содержимое окна (данные цели, B1); строка ОЖИДАЕТ, как в 20-33 |
+| `editor-visitor-denied--chromium-desktop` | FAIL 3044 | паук D-50; строка ОЖИДАЕТ |
+| `desktop-clean--chromium-desktop` | FAIL 2020 (2015 в первом прогоне) | паук; строка ОЖИДАЕТ |
+| `desktop-clean--chromium-dpr125`, `desktop-dpr125--chromium-dpr125` | FAIL 2789, 2777 | две строки ОЖИДАЕТ |
+| `desktop-clean--firefox-desktop` | FAIL 2053 | строка ОЖИДАЕТ |
+| `desktop-clean--chromium-phone`, `phone-chromium--chromium-phone` | FAIL 8794, 8703 | две строки ОЖИДАЕТ |
+| `desktop-start-open--webkit-phone` | FAIL 411 | строка ОЖИДАЕТ |
+| `desktop-start-open--chromium-phone` | оценка 787 | строка ОЖИДАЕТ |
+| `motion-web-rest--chromium-desktop` | FAIL 2985 (3031 в первом прогоне); на 7aafc61edef8 проходил | НОВАЯ строка ОЖИДАЕТ |
+| `motion-vivian-idle`, `-activity`, `-offended`, `-recovery` | оценка 2991, 5170, 3885, 3764 (допуск 2300); idle, activity, recovery на 7aafc61edef8 проходили | четыре НОВЫЕ строки ОЖИДАЕТ; различие фразы Вивьян в пузыре было и раньше, в пределах допуска |
+| `desktop-start-open` на chromium-desktop, chromium-dpr125, firefox-desktop | оценка 1831, 2543, 1868 | три НОВЫЕ строки: на 7aafc61edef8 оценка тоже превышала допуск, строки не было (гейт не доходил); теперь классифицировано |
+| `window-search-minimized--firefox-desktop` | оценка 2139 | НОВАЯ строка (тот же пробел 20-33) |
+| `application-employees`, `application-charter`, `application-table`, `promotion-participant-lookup` | PASS | строк нет |
+| `application-trash--chromium-desktop` | FAIL 12402 в первом прогоне, PASS во втором | B2, данные цели нестабильны; строка остаётся BLOCKED (DATA), новый кадр не предлагается |
+| `application-virus-archive--chromium-desktop` | PASS в обоих прогонах (на 666836d77963 было FAIL 4511) | B3, данные цели изменились; строка остаётся BLOCKED (DATA), PASS на сегодняшних данных не считается доказательством |
+| `phone-webkit--webkit-phone` | FAIL 60777 (было 54235) | B4, причина полосы прокрутки не изолирована, BLOCKED; строки в ledger нет |
+| `window-search-restored/maximized--firefox-desktop` | оценка 2786 / 2121 | B5, данные «Рекомендаций»; строки остаются BLOCKED (DATA) |
+
+Новые строки rebaseline-* (9): `motion-web-rest`, `motion-vivian-idle`, `-activity`, `-offended`, `-recovery`, `desktop-start-open` на chromium-desktop, chromium-dpr125 и firefox-desktop, `window-search-minimized` на firefox-desktop. Кадры лежат в `tests/e2e/visual-candidates/.runs/phase20-refresh-cf8fcfcc249f/rebaseline/`; для шести кадров гейта это его actual, для остальных кадр кандидата того же сценария.
+
+### Блокеры
+
+Незакрытых блокеров нет: B6-B9 исправлены, B1-B5 остаются данными цели (BLOCKED), B4 не изолирован. Физический бюджет кадров на телефоне остаётся BLOCKED до 20-14 (на телефоне getAnimations насчитывает 96).
