@@ -7,7 +7,7 @@ import {
   ActiveFormatContext,
   FloatingTextFormatPanel,
   FormattedTextarea,
-  findFormatField,
+  FormatLaunchButton,
   joinFormatTarget,
   type EditorPreviewSurface,
   type FormatTarget,
@@ -351,26 +351,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
       <ActiveFormatContext.Provider value={{ key: formatTarget?.key ?? null, surface: previewSurface, phonePanelOpen: formatterOpen && window.matchMedia("(max-width: 900px)").matches }}>
       <div className="template-grid" inert={confirmClose || undefined}>
         <div className="template-form" aria-label="Поля шаблона" role="group">
-          <div className="global-format-launch">
-            <button
-              type="button"
-              disabled={!formatTarget}
-              aria-label={formatTarget ? `Оформление текста: ${formatTarget.title}` : "Сначала выберите текстовое поле"}
-              aria-expanded={formatterOpen}
-              title={formatTarget ? `Оформление: ${formatTarget.title}` : "Сначала выберите текстовое поле"}
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => {
-                // Phone: the field loses focus once per opening so the keyboard leaves.
-                if (!formatterOpen && formatTarget && window.matchMedia("(max-width: 900px)").matches) findFormatField(formatTarget.key)?.blur();
-                setFormatterOpen((current) => !current);
-              }}
-            >
-              <span aria-hidden="true">✎</span>
-              <strong>{formatTarget ? "ОФОРМЛЕНИЕ" : "ВЫБЕРИТЕ ТЕКСТ"}</strong>
-              {formatTarget && <em>{formatTarget.title}</em>}
-            </button>
-            <small>{formatTarget ? "Выделите текст в активном поле или поставьте курсор в слово, чтобы оформить его." : "Одна кнопка форматирования работает со всеми большими текстовыми полями."}</small>
-          </div>
+          <FormatLaunchButton target={formatTarget} open={formatterOpen} onToggle={() => setFormatterOpen((current) => !current)} />
 
           <div className="editor-form virus-editor-form">
             <DossierTabs active={dossierTab} changed={[]} onSelect={selectDossierTab} tabs={["main", "text", "mutations"]} />

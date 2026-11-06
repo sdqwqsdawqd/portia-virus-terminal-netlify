@@ -137,7 +137,7 @@ async function styleFirstWord(page: Page, builder: Locator, field: Locator, word
   await field.fill(`${word} и далее`);
   await field.press("Home");
   for (let step = 0; step < word.length; step += 1) await page.keyboard.press("Shift+ArrowRight");
-  const launch = builder.getByRole("button", { name: /^Оформление текста:/ });
+  const launch = builder.getByRole("button", { name: /^Оформление .+: панель оформления текста$/ });
   await expect(launch).toBeEnabled();
   await launch.click();
   const panel = page.getByRole("region", { name: /^Форматирование:/ });
@@ -202,7 +202,7 @@ test("[STAB-TMPL-01] the form is the editor's virus card: three tabs, the same g
   // Before any text field is chosen the one format button says so and is off.
   const launch = builder.locator(".global-format-launch > button");
   await expect(launch).toBeDisabled();
-  await expect(launch).toHaveAccessibleName("Сначала выберите текстовое поле");
+  await expect(launch).toHaveAccessibleName("Выберите текстовое поле для оформления");
   await expect(launch).toContainText("ВЫБЕРИТЕ ТЕКСТ");
 
   await expect(builder.getByRole("heading", { name: "Основные данные" })).toBeVisible();

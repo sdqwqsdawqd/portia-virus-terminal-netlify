@@ -155,7 +155,7 @@ async function styleFirstWord(page: Page, builder: Locator, field: Locator, word
   await field.fill(`${word} и далее`);
   await field.press("Home");
   for (let step = 0; step < word.length; step += 1) await page.keyboard.press("Shift+ArrowRight");
-  const launch = builder.getByRole("button", { name: /^Оформление текста:/ });
+  const launch = builder.getByRole("button", { name: /^Оформление .+: панель оформления текста$/ });
   await expect(launch).toBeEnabled();
   await launch.click();
   const panel = page.getByRole("region", { name: /^Форматирование:/ });

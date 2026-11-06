@@ -6,6 +6,7 @@ import { CustomColorPicker } from "@/components/custom-color-picker";
 import { mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
 import { TYPING_PAUSE_MS } from "@/lib/editor-history";
 import { makeId } from "@/lib/editor-items";
+import { formatLaunchLabels } from "@/lib/format-launch";
 import type { RichTextDocument, RichTextStyle } from "@/lib/portia-content";
 import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
 import { clampPanelOffset, initialPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
@@ -355,6 +356,33 @@ export function joinFormatTarget(prev: FormatTarget | null, target: FormatTarget
   const kept: Record<string, FormatTarget> = {};
   for (const fragment of fragments) if (fragment.key !== target.key && peers[fragment.key]) kept[fragment.key] = peers[fragment.key];
   return { ...target, fragments, peers: kept };
+}
+
+/** The one launch button of the format panel. Its accessible name holds the visible text (WCAG 2.5.3, lib/format-launch.ts). */
+export function FormatLaunchButton({ target, open, onToggle }: { target: FormatTarget | null; open: boolean; onToggle: () => void }) {
+  const labels = formatLaunchLabels(target ? target.title : null);
+  return (
+    <div className="global-format-launch">
+      <button
+        type="button"
+        disabled={!target}
+        aria-label={labels.accessibleName}
+        aria-expanded={open}
+        title={labels.tooltip}
+        onPointerDown={(event) => event.preventDefault()}
+        onClick={() => {
+          // Phone: the field loses focus once per opening so the keyboard leaves.
+          if (!open && target && window.matchMedia("(max-width: 900px)").matches) findFormatField(target.key)?.blur();
+          onToggle();
+        }}
+      >
+        <span aria-hidden="true">✎</span>
+        <strong>{labels.visibleLabel}</strong>
+        {target && <em>{labels.visibleTitle}</em>}
+      </button>
+      <small>{labels.hint}</small>
+    </div>
+  );
 }
 
 export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onUpdate, onBatch, onClose, positionStorageKey }: {
