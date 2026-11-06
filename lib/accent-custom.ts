@@ -108,7 +108,7 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
     "--desktop-grid": grid.join(", "),
     "--desktop-base": hex(base),
     "--desktop-deep": hex(deep),
-    "--spider-rim": lch[0] < 0.62 ? hex(teal) : "#020706",
+    "--spider-rim": "#d0d0d0", // D-50 S1-А: one light neutral rim for every accent (matches :root in app/portia.css)
     "--accent-hue": String(accentHue),
     "--accent-chroma": String(k),
     "--mark-filter": filterFor(["#00b396"]),
