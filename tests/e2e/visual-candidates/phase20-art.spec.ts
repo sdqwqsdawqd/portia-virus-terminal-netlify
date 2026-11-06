@@ -41,6 +41,9 @@ async function openWeb(page: Page, patch: Settings) {
   await setDesktopSetting(page, { ...baseSettings, ...patch });
   await page.reload();
   await desktop.desktop.waitFor();
+  // The tests below run the fake clock ahead by seconds; a /api/content answer still in flight would then hit the app's own load timeout
+  // and abort (ERR_ABORTED is an unexpected runtime event). The first load finishes in real time before the clock moves.
+  await page.waitForLoadState("networkidle");
   return desktop;
 }
 
@@ -146,8 +149,11 @@ test("[STAB-VIS-01] D-27 «Паук: Скрыть» keeps the web and hides the 
   await expect(desktop.web).toBeVisible();
 });
 
-test("[STAB-A11Y-04] D-01..D-04 full walks, reduced and off stop looping motion, mid-step off keeps the finished action; the OS setting does not switch the mode", async ({ page, browser, determinism }, testInfo) => {
+test("[STAB-A11Y-04] D-01..D-04 full walks, reduced and off stop looping motion, mid-step off keeps the finished action; the OS setting does not switch the mode", async ({ page, browser, determinism, diagnostics }, testInfo) => {
   const context = { page, browser, determinism, testInfo };
+  // The walk below runs the fake clock tens of seconds ahead. The site polls /api/content every 10 s; a poll whose real answer is still in flight
+  // then reaches the app's own fetch timeout on the fake clock and is aborted. The page itself is correct; the abort comes from the test's clock.
+  diagnostics.expectFault({ kind: "requestfailed", source: "fetch", text: /^GET \[url-redacted\] net::ERR_ABORTED$/, reason: "a content poll in flight hits the app's fetch timeout while the test runs the fake clock ahead" });
   // D-01: the system preference alone never changes the site mode.
   await page.emulateMedia({ reducedMotion: "reduce" });
   const desktop = await openWeb(page, { motion: "on" });

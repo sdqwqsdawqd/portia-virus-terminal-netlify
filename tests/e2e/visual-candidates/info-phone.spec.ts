@@ -48,12 +48,13 @@ test("[STAB-A11Y-02] info-phone-article: the article of the first section withou
   const sections = await infoSections(page);
   const plain = sections.find((section) => section.title.trim() && section.subsections.length === 0);
   const spec = { ...base, id: "info-phone-article", state: "article", intendedSnapshot };
+  // The site is opened first: the BLOCKED record reads the page's settings, which about:blank does not allow.
+  const window = await openInfo(page);
   if (!plain) {
     await recordBlockedCandidate(context, spec, { reasonCode: "PUBLIC_STATE_FIXTURE_REQUIRED", recoveryPhase: 20, reason: "BLOCKED (DATA): the target serves no «Информация» section without subsections." });
     test.skip(true, "BLOCKED (DATA): no section without subsections on this target.");
     return;
   }
-  const window = await openInfo(page);
   await window.locator(".info-index > div > button").filter({ has: page.getByText(plain.title, { exact: true }) }).first().click();
   await expect(window.locator(".info-document h1")).toHaveText(plain.title);
   await captureCandidate(context, spec);
