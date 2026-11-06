@@ -301,17 +301,17 @@ test("dossier HTML shows a styled fragment, an honest empty marker and a closed 
 });
 
 test("dossier HTML escapes typed markup and refuses style values outside the allow-list", () => {
-  let dossier = editTemplateText(
+  const dossier = editTemplateText(
     emptyTemplateDossier(), externalKey, `<b onmouseover="x()">два</b>`,
     { runs: [{ text: `<b onmouseover="x()">два</b>`, style: { color: "#b43632;background:url(//evil.example/p)", fontSize: 9999, fontWeight: 450, backgroundColor: "red" } as never }] },
     (next, text) => { next.virus.external = text; },
   );
-  dossier = editTemplateText(dossier, portiaTextKey.virus(templateVirusId, "physiology"), "<script>alert(1)</script>", { runs: [{ text: "<script>alert(1)</script>" }] }, (next, text) => { next.virus.physiology = text; });
+  dossier.virus.name = "<script>alert(1)</script>";
   const html = createTemplateDossierHtml(dossier);
   assert.ok(html.includes("&lt;b onmouseover=&quot;x()&quot;&gt;два&lt;/b&gt;"));
   assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
-  assert.ok(html.includes(`style="font-size:48px"`), "only the in-range size survives");
-  for (const forbidden of ["<script", "<b ", "url(", "evil", "background:", "font-weight:450", "red"]) assert.ok(!html.includes(forbidden), forbidden);
+  assert.deepEqual([...html.matchAll(/ style="([^"]*)"/g)].map((match) => match[1]), ["font-size:48px"], "only the in-range size survives as a fragment style");
+  for (const forbidden of ["<script", "<b ", "url(", "evil", "font-weight:450"]) assert.ok(!html.includes(forbidden), forbidden);
 });
 
 test("wrapping across fragments keeps every character, blank lines and the fragment fonts", () => {

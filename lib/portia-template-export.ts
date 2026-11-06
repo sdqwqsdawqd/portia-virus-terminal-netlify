@@ -8,7 +8,16 @@
  * same bounded model and never reference an external URL.
  */
 
-import type { TemplateDossier, TemplateRun } from "./portia-template-dossier.ts";
+import {
+  isLocalTemplateImage,
+  safeTemplateRunStyle,
+  templateFieldRuns,
+  templateRunBackground,
+  templateVirusId,
+  type TemplateDossier,
+  type TemplateRun,
+} from "./portia-template-dossier.ts";
+import { portiaTextKey, type RichTextStyle } from "./portia-content.ts";
 
 export type TemplateFieldKey =
   | "name"
@@ -303,7 +312,8 @@ type Measure = (text: string, font: string) => number;
 export type PngOp =
   | Readonly<{ kind: "rect"; x: number; y: number; width: number; height: number; fill?: string; stroke?: string }>
   | Readonly<{ kind: "text"; x: number; y: number; text: string; font: string; fill: string }>
-  | Readonly<{ kind: "image"; x: number; y: number; width: number; height: number }>;
+  /** `slot` names the model slot a picture comes from (dossier layout only). */
+  | Readonly<{ kind: "image"; x: number; y: number; width: number; height: number; slot?: string }>;
 
 export type PngLayout = Readonly<{ width: number; height: number; ops: readonly PngOp[] }>;
 
@@ -506,22 +516,284 @@ export async function createTemplatePng(
 
 /* ---------------------------------------------------------------- dossier model export (20-38, D-52) */
 
-// RED-phase skeleton: deliberately wrong, replaced by the implementation in the next commit.
 export type TemplateStyledPiece = Readonly<{ text: string; font: string; fill: string; background?: string; width: number }>;
 export type TemplateWrappedLine = Readonly<{ pieces: readonly TemplateStyledPiece[]; height: number }>;
 
-export function wrapTemplateRuns(_runs: readonly TemplateRun[], _maxWidth: number, _measure: (text: string, font: string) => number): TemplateWrappedLine[] {
-  return [];
+const bodyFontSize = 16;
+const minLineHeight = 25;
+
+function pieceStyle(style: RichTextStyle | undefined) {
+  const safe = safeTemplateRunStyle(style);
+  const size = safe.fontSize ?? bodyFontSize;
+  return {
+    size,
+    font: sansFont(size, safe.fontWeight ?? 400),
+    fill: safe.color ?? pngPalette.ink,
+    background: templateRunBackground(safe),
+  };
 }
 
-export function createTemplateDossierHtml(_dossier: TemplateDossier) {
-  return "";
+type StyledChar = { ch: string; run: number };
+
+/**
+ * Greedy word wrap over styled fragments. A word may span fragments; every piece is measured with its own font, a blank line stays a
+ * blank line, a word wider than the line is cut by characters and no visible character is dropped. A line is as high as its
+ * largest fragment (never below 25).
+ */
+export function wrapTemplateRuns(runs: readonly TemplateRun[], maxWidth: number, measure: Measure): TemplateWrappedLine[] {
+  const styles = runs.map((run) => pieceStyle(run.style));
+  const paragraphs: StyledChar[][] = [[]];
+  runs.forEach((run, runIndex) => {
+    for (const ch of Array.from(run.text)) {
+      if (ch === "\r") continue;
+      if (ch === "\n") paragraphs.push([]);
+      else paragraphs[paragraphs.length - 1].push({ ch, run: runIndex });
+    }
+  });
+
+  const isSpace = (value: StyledChar) => /\s/.test(value.ch);
+  const trimEnd = (chars: StyledChar[]) => {
+    let end = chars.length;
+    while (end > 0 && isSpace(chars[end - 1])) end -= 1;
+    return chars.slice(0, end);
+  };
+  const toPieces = (chars: readonly StyledChar[]) => {
+    const pieces: { text: string; run: number }[] = [];
+    for (const value of chars) {
+      const last = pieces[pieces.length - 1];
+      if (last && last.run === value.run) last.text += value.ch;
+      else pieces.push({ text: value.ch, run: value.run });
+    }
+    return pieces;
+  };
+  const fits = (chars: StyledChar[]) => toPieces(trimEnd(chars)).reduce((total, piece) => total + measure(piece.text, styles[piece.run].font), 0) <= maxWidth;
+
+  const rawLines: StyledChar[][] = [];
+  for (const paragraph of paragraphs) {
+    if (paragraph.length === 0) {
+      rawLines.push([]);
+      continue;
+    }
+    // Same tokens as `\S+\s*|\s+`: a word with the spaces after it, or a run of spaces.
+    const tokens: StyledChar[][] = [];
+    for (let index = 0; index < paragraph.length;) {
+      const start = index;
+      if (isSpace(paragraph[index])) {
+        while (index < paragraph.length && isSpace(paragraph[index])) index += 1;
+      } else {
+        while (index < paragraph.length && !isSpace(paragraph[index])) index += 1;
+        while (index < paragraph.length && isSpace(paragraph[index])) index += 1;
+      }
+      tokens.push(paragraph.slice(start, index));
+    }
+    let current: StyledChar[] = [];
+    for (const token of tokens) {
+      if (current.length > 0 && !fits(current.concat(token))) {
+        rawLines.push(trimEnd(current));
+        current = [];
+      }
+      current = current.concat(token);
+      if (fits(current)) continue;
+      // A single word wider than the line: split it by characters.
+      let piece: StyledChar[] = [];
+      for (const value of current) {
+        if (piece.length > 0 && !fits(piece.concat(value))) {
+          rawLines.push(trimEnd(piece));
+          piece = [value];
+        } else {
+          piece.push(value);
+        }
+      }
+      current = piece;
+    }
+    rawLines.push(trimEnd(current));
+  }
+
+  return rawLines.map((chars) => {
+    const pieces = toPieces(chars).map((piece): TemplateStyledPiece => {
+      const style = styles[piece.run];
+      return {
+        text: piece.text,
+        font: style.font,
+        fill: style.fill,
+        ...(style.background ? { background: style.background } : {}),
+        width: measure(piece.text, style.font),
+      };
+    });
+    const size = chars.reduce((largest, value) => Math.max(largest, styles[value.run].size), bodyFontSize);
+    return { pieces, height: Math.max(minLineHeight, Math.ceil(size * 1.55)) };
+  });
 }
 
-export function layoutTemplateDossierCard(_dossier: TemplateDossier, _measure: (text: string, font: string) => number): PngLayout {
-  return { width: 0, height: 0, ops: [] };
+/* ---- HTML */
+
+const dossierCss = `${standaloneCss}
+.rich{white-space:pre-wrap;overflow-wrap:anywhere}`;
+
+function runCss(style: RichTextStyle | undefined) {
+  const safe = safeTemplateRunStyle(style);
+  const parts: string[] = [];
+  if (safe.color) parts.push(`color:${safe.color}`);
+  if (safe.fontSize) parts.push(`font-size:${safe.fontSize}px`);
+  if (safe.fontWeight) parts.push(`font-weight:${safe.fontWeight}`);
+  const background = templateRunBackground(safe);
+  if (background) parts.push(`background-color:${background}`);
+  return parts.join(";");
 }
 
-export async function createTemplateDossierPng(_dossier: TemplateDossier, _environment?: PngEnvironment): Promise<Blob> {
-  return new Blob([]);
+/** A formatted field: escaped fragments, each with a style attribute built only from the allow-listed values. */
+function richHtml(dossier: TemplateDossier, key: string, text: string) {
+  if (text.trim() === "") return `<span class="empty">${emptyTemplateText}</span>`;
+  return templateFieldRuns(dossier, key, text).map((run) => {
+    const css = runCss(run.style);
+    const escaped = escapeTemplateHtml(run.text);
+    return css === "" ? escaped : `<span style="${css}">${escaped}</span>`;
+  }).join("");
+}
+
+/**
+ * A self-contained HTML document of the template dossier. Fragments carry only allow-listed styles, all text is escaped, the CSS is
+ * inline, there is no script, no link and no external address; the embedded content policy allows `data:` images only.
+ */
+export function createTemplateDossierHtml(dossier: TemplateDossier) {
+  const { virus } = dossier;
+  const title = virus.name.trim() === "" ? templateDefaultTitle : escapeTemplateHtml(virus.name.trim());
+  const sections = [
+    `<section><h2>02 ВНЕШНИЕ ХАРАКТЕРИСТИКИ</h2><div class="rich">${richHtml(dossier, portiaTextKey.virus(templateVirusId, "external"), virus.external)}</div></section>`,
+  ].join("");
+  return [
+    "<!doctype html>",
+    `<html lang="ru"><head><meta charset="utf-8">`,
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`,
+    `<meta name="viewport" content="width=device-width, initial-scale=1">`,
+    `<title>${title}</title><style>${dossierCss}</style></head><body>`,
+    `<main class="card"><header><div><span class="code">${valueHtml(virus.code)}</span><h1>${virus.name.trim() === "" ? `<span class="empty">${emptyTemplateText}</span>` : title}</h1></div>`,
+    `<div class="status">${valueHtml(virus.status)}</div></header>`,
+    sections,
+    `<footer>${escapeTemplateHtml(templateDefaultTitle)} / PORTIA / локальный черновик участника, не запись архива</footer></main>`,
+    "</body></html>",
+  ].join("");
+}
+
+/* ---- PNG */
+
+/** The local images of the model by slot name. A slot that is not a valid local image is left out, so nothing else can be drawn. */
+function usableTemplateImages(dossier: TemplateDossier) {
+  const slots = new Map<string, TemplateImage>();
+  const { infected, mutations } = dossier.images;
+  if (isLocalTemplateImage(infected) && imageSizeWithinBounds(infected.width, infected.height)) slots.set("infected", infected);
+  mutations.slice(0, dossier.virus.mutations.length).forEach((image, index) => {
+    if (isLocalTemplateImage(image) && imageSizeWithinBounds(image.width, image.height)) slots.set(`mutation:${index}`, image);
+  });
+  return slots;
+}
+
+/** Lays the dossier out on the fixed-width page; throws TemplatePngTooLargeError instead of cropping a card that is too long. */
+export function layoutTemplateDossierCard(dossier: TemplateDossier, measure: Measure): PngLayout {
+  const { virus } = dossier;
+  const contentWidth = pngWidth - pngPadding * 2;
+  const ops: PngOp[] = [];
+  let y = pngPadding;
+  const overflowed = () => y > pngMaxHeight * 4;
+  const empty = (lineHeight: number) => {
+    ops.push({ kind: "text", x: pngPadding, y, text: emptyTemplateText, font: sansFont(16, 400, "italic"), fill: pngPalette.empty });
+    y += lineHeight;
+  };
+  const plain = (value: string, font: string, fill: string, lineHeight: number) => {
+    if (value.trim() === "") return empty(lineHeight);
+    for (const line of wrapTemplateText(value, contentWidth, font, measure)) {
+      if (line !== "") ops.push({ kind: "text", x: pngPadding, y, text: line, font, fill });
+      y += lineHeight;
+      if (overflowed()) break;
+    }
+  };
+  const rich = (key: string, value: string) => {
+    if (value.trim() === "") return empty(minLineHeight);
+    for (const line of wrapTemplateRuns(templateFieldRuns(dossier, key, value), contentWidth, measure)) {
+      let x = pngPadding;
+      for (const piece of line.pieces) {
+        if (piece.background) ops.push({ kind: "rect", x, y, width: piece.width, height: line.height, fill: piece.background });
+        if (piece.text.trim() !== "") ops.push({ kind: "text", x, y, text: piece.text, font: piece.font, fill: piece.fill });
+        x += piece.width;
+      }
+      y += line.height;
+      if (overflowed()) break;
+    }
+  };
+  const sectionHead = (index: string, title: string) => {
+    y += 24;
+    ops.push({ kind: "text", x: pngPadding, y, text: `${index} ${title}`, font: monoFont(12), fill: pngPalette.accent });
+    y += 26;
+  };
+
+  plain(virus.code, monoFont(12), pngPalette.soft, 18);
+  y += 4;
+  plain(virus.name, sansFont(28, 700), pngPalette.ink, 34);
+  y += 6;
+  plain(virus.status, monoFont(12), pngPalette.ink, 18);
+  y += 12;
+  ops.push({ kind: "rect", x: pngPadding, y, width: contentWidth, height: 2, fill: pngPalette.ink });
+  y += 2;
+
+  sectionHead("02", "ВНЕШНИЕ ХАРАКТЕРИСТИКИ");
+  rich(portiaTextKey.virus(templateVirusId, "external"), virus.external);
+
+  y += 32;
+  ops.push({ kind: "rect", x: pngPadding, y, width: contentWidth, height: 1, fill: pngPalette.border });
+  y += 12;
+  ops.push({ kind: "text", x: pngPadding, y, text: `${templateDefaultTitle} / PORTIA / локальный черновик участника, не запись архива`, font: monoFont(11), fill: pngPalette.soft });
+  y += 16 + pngPadding;
+
+  if (y > pngMaxHeight) throw namedError("TemplatePngTooLargeError", `card height ${y} exceeds ${pngMaxHeight}`);
+  return { width: pngWidth, height: y, ops };
+}
+
+/** Draws the dossier and encodes it as PNG. Only the data URLs held in the model slots are ever loaded. */
+export async function createTemplateDossierPng(dossier: TemplateDossier, environment: PngEnvironment = browserPngEnvironment()): Promise<Blob> {
+  const probe = environment.createCanvas(1, 1).getContext("2d");
+  if (probe === null) throw new Error("2d canvas is not available");
+  const layout = layoutTemplateDossierCard(dossier, (value, font) => {
+    probe.font = font;
+    return probe.measureText(value).width;
+  });
+  const slots = usableTemplateImages(dossier);
+  const loaded = new Map<string, ImageSource>();
+  for (const op of layout.ops) {
+    if (op.kind !== "image" || op.slot === undefined || loaded.has(op.slot)) continue;
+    const image = slots.get(op.slot);
+    if (image !== undefined) loaded.set(op.slot, await environment.loadImage(image.dataUrl));
+  }
+  const canvas = environment.createCanvas(layout.width, layout.height);
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error("2d canvas is not available");
+  context.fillStyle = pngPalette.paper;
+  context.fillRect(0, 0, layout.width, layout.height);
+  context.textBaseline = "top";
+  for (const op of layout.ops) {
+    if (op.kind === "rect") {
+      if (op.fill !== undefined) {
+        context.fillStyle = op.fill;
+        context.fillRect(op.x, op.y, op.width, op.height);
+      }
+      if (op.stroke !== undefined) {
+        context.strokeStyle = op.stroke;
+        context.lineWidth = 1;
+        context.strokeRect(op.x + 0.5, op.y + 0.5, op.width - 1, op.height - 1);
+      }
+    } else if (op.kind === "text") {
+      context.font = op.font;
+      context.fillStyle = op.fill;
+      context.fillText(op.text, op.x, op.y);
+    } else {
+      const picture = op.slot === undefined ? undefined : loaded.get(op.slot);
+      if (picture !== undefined) context.drawImage(picture as never, op.x, op.y, op.width, op.height);
+    }
+  }
+  return new Promise<Blob>((resolve, reject) => {
+    try {
+      canvas.toBlob((value) => (value !== null && value.size > 0 ? resolve(value) : reject(new Error("PNG encoding failed"))), "image/png");
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
