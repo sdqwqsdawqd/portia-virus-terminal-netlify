@@ -16,6 +16,9 @@ test("[STAB-BASE-03] capture signed-out editor access states", async ({ page, br
     intendedSnapshot: `tests/e2e/visual/__screenshots__/editor-visitor-denied--${testInfo.project.name}.png`,
   });
 
+  // The desktop reads /api/content and /api/employees; the real data source answers in 1-1.5 s. Leaving for the login page while they are in flight
+  // makes Firefox abort them (NS_BINDING_ABORTED), so the test waits for the reads to finish first.
+  await page.waitForLoadState("networkidle");
   await editor.gotoLogin();
   await captureCandidate(context, {
     id: "editor-signed-out-login",
