@@ -62,13 +62,14 @@ const accents: Array<{ id: string; label: string; settings: Settings }> = [
 ];
 
 for (const accent of accents) {
-  test(`[STAB-VIS-01] D-25/D-26 spider at rest on the ${accent.label}: dense dark outlined body, accent only in details`, async ({ page, browser, determinism }, testInfo) => {
+  // D-50 (20-34) replaces the D-25/D-26 probe (stroke rgb(2, 7, 6), accent only in details): the spider is the owner's logo spider.
+  test(`[STAB-VIS-01] D-50 spider at rest on the ${accent.label}: white body, black parts, accent strand, light rim`, async ({ page, browser, determinism }, testInfo) => {
     const desktop = await openWeb(page, { ...accent.settings, motion: "off" });
     await expect(desktop.spider).toBeVisible();
     await expect(desktop.spider).toHaveCSS("opacity", "1");
     const probe = await page.evaluate(() => {
-      const bodyParts = [...document.querySelectorAll<SVGElement>(".wallpaper-spider .wallpaper-spider-dark, .wallpaper-spider .wallpaper-spider-limb, .wallpaper-spider .wallpaper-spider-pale")];
-      const details = [...document.querySelectorAll<SVGElement>(".wallpaper-spider .wallpaper-spider-accent")];
+      const all = (selector: string) => [...document.querySelectorAll<SVGElement>(selector)];
+      const bodyParts = all(".wallpaper-spider .wallpaper-spider-dark, .wallpaper-spider .wallpaper-spider-limb, .wallpaper-spider .wallpaper-spider-pale");
       const tint = document.createElement("i");
       tint.style.color = "var(--teal)";
       tint.style.backgroundColor = "var(--desktop-base)";
@@ -78,42 +79,53 @@ for (const accent of accents) {
       tint.remove();
       const style = (element: Element) => getComputedStyle(element);
       return {
+        legs: all(".wallpaper-spider [data-leg]").length,
         parts: bodyParts.length,
         translucent: bodyParts.filter((part) => style(part).opacity !== "1" || style(part).fillOpacity !== "1").length,
-        unoutlined: bodyParts.filter((part) => style(part).stroke === "none").length,
-        accentFilled: bodyParts.filter((part) => style(part).fill === teal).length,
-        details: details.length,
-        detailsOnAccent: details.filter((detail) => style(detail).fill === teal).length,
+        staticStroke: bodyParts.filter((part) => style(part).stroke !== "none").length,
         teal,
         desktopBase,
-        bodyFill: style(bodyParts[0]).fill,
-        stroke: style(bodyParts[0]).stroke,
+        paleFills: all(".wallpaper-spider-pale").map((part) => style(part).fill),
+        darkFills: all(".wallpaper-spider-dark").map((part) => style(part).fill),
+        limbFills: all(".wallpaper-spider-limb").map((part) => style(part).fill),
+        eyes: all(".wallpaper-spider-body circle").map((eye) => style(eye).fill),
+        accentPupils: all(".wallpaper-spider-accent").length,
+        rimGroups: all(".wallpaper-spider-leg > .wallpaper-spider-kant, .wallpaper-spider-body > .wallpaper-spider-kant").length,
+        rimStrokes: all(".wallpaper-spider-kant").map((rim) => style(rim).stroke),
+        rimWidths: all(".wallpaper-spider-kant").map((rim) => style(rim).strokeWidth),
+        rimPathsFiltered: all(".wallpaper-spider-kant path").filter((rim) => style(rim).filter !== "none").length,
       };
     });
+    const channels = (value: string) => (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const linear = (channel: number) => { const v = channel / 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
+    const luminance = (value: string) => channels(value).reduce((sum, channel, index) => sum + linear(channel) * [.2126, .7152, .0722][index], 0);
+    const contrast = (a: string, b: string) => { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
+    expect(probe.legs, "eight [data-leg] groups L1-L4, R1-R4").toBe(8);
     expect(probe.parts, "body and leg parts found").toBeGreaterThan(20);
     expect(probe.translucent, "parts with opacity or fill-opacity below 1 (D-25)").toBe(0);
-    expect(probe.unoutlined, "parts with stroke none (D-25)").toBe(0);
-    expect(probe.accentFilled, "body/leg parts filled with the accent (D-26)").toBe(0);
-    expect(probe.details, "accent details exist").toBeGreaterThan(0);
-    expect(probe.detailsOnAccent, "every accent detail is filled with the accent").toBe(probe.details);
-    if (accent.id === "custom-dark") {
-      expect(probe.stroke, "the very dark custom accent gets a readable rim").toBe(probe.teal);
-      expect(probe.stroke).not.toBe("rgb(2, 7, 6)");
-      const channels = (value: string) => (value.match(/\d+/g) ?? []).slice(0, 3).map(Number);
-      const linear = (channel: number) => { const v = channel / 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
-      const luminance = (value: string) => channels(value).reduce((sum, channel, index) => sum + linear(channel) * [.2126, .7152, .0722][index], 0);
-      const light = luminance(probe.stroke), dark = luminance(probe.desktopBase);
-      expect((Math.max(light, dark) + .05) / (Math.min(light, dark) + .05), "rim contrast against the desktop").toBeGreaterThanOrEqual(3);
-    } else {
-      expect(probe.stroke, "the accepted spider outline remains unchanged").toBe("rgb(2, 7, 6)");
-    }
+    expect(probe.staticStroke, "the parts themselves carry no stroke (D-50: the rim is its own layer)").toBe(0);
+    expect(probe.accentPupils, "no accent pupils over the eyes (D-50)").toBe(0);
+    expect(probe.paleFills.length, "pale parts: head, eye plate, two fangs").toBeGreaterThan(0);
+    for (const fill of probe.paleFills) expect(luminance(fill), `body fill ${fill} is white`).toBeGreaterThan(0.9);
+    expect(probe.darkFills.length, "black parts found").toBeGreaterThan(8);
+    for (const fill of probe.darkFills) expect(luminance(fill), `black part ${fill} is near-black`).toBeLessThan(0.01);
+    expect(probe.limbFills.length, "second strands found").toBeGreaterThan(8);
+    for (const fill of probe.limbFills) expect(fill, "the second strand is the accent (D-50 S2-А)").toBe(probe.teal);
+    expect(probe.eyes.length, "four black eyes").toBe(4);
+    for (const fill of probe.eyes) expect(luminance(fill), `eye ${fill} is black`).toBeLessThan(0.01);
+    expect(probe.rimGroups, "the rim layer sits in 8 legs and the body").toBe(9);
+    expect(probe.rimStrokes.length, "nine rim layers").toBe(9);
+    for (const stroke of probe.rimStrokes) expect(contrast(stroke, probe.desktopBase), `rim ${stroke} on ${probe.desktopBase}`).toBeGreaterThanOrEqual(3);
+    for (const width of probe.rimWidths) expect(Number.parseFloat(width), "rim width in drawing units").toBeGreaterThan(0);
+    expect(probe.rimPathsFiltered, "no filter on the rim (D-45)").toBe(0);
+    const rim = probe.rimStrokes[0];
     const context = { page, browser, determinism, testInfo };
     await captureCandidate(context, {
       id: `phase20-spider-accent-${accent.id}`,
       requirement: "STAB-BASE-03",
       surface: "Spider CURRENT",
       actor: "visitor",
-      state: `D-26 spider at rest on «Паутина», ${accent.label}, motion off; body fill ${probe.bodyFill}, stroke ${probe.stroke}, accent ${probe.teal}`,
+      state: `D-50 spider at rest on «Паутина», ${accent.label}, motion off; body fill ${probe.paleFills[0]}, rim ${rim}, strand ${probe.teal}`,
       intendedSnapshot: `tests/e2e/visual/__screenshots__/phase20-spider-accent-${accent.id}--${testInfo.project.name}.png`,
       animations: "allow",
     });
