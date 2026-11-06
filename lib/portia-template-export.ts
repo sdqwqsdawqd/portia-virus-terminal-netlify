@@ -1,8 +1,8 @@
 /**
- * Local-only export of the participant's "Шаблон досье" draft (Phase 20, D-23/D-24).
+ * Local-only export of the participant's "Шаблон досье" (Phase 20, D-23, D-24, D-52).
  *
- * The draft is a small text model of its own: it deliberately has no classification, scientist log or
- * archive identity, so an archive `Virus` record can never flow into it. Nothing here touches the network.
+ * The draft is a TemplateDossier (lib/portia-template-dossier.ts): the shape of a site editor virus card without scientist logs,
+ * so an archive record can never flow into it. Nothing here touches the network.
  *
  * Local images (D-24) live only in memory as a validated data URL. Both exports (standalone HTML and PNG) are built from the
  * same bounded model and never reference an external URL.
@@ -18,54 +18,6 @@ import {
   type TemplateRun,
 } from "./portia-template-dossier.ts";
 import { classificationOptions, portiaTextKey, type RichTextStyle, type Virus } from "./portia-content.ts";
-
-export type TemplateFieldKey =
-  | "name"
-  | "code"
-  | "status"
-  | "external"
-  | "health"
-  | "speed"
-  | "abilities"
-  | "physiology"
-  | "mutationName"
-  | "mutationDescription";
-
-export type TemplateDraft = Readonly<Record<TemplateFieldKey, string>>;
-
-export type TemplateField = Readonly<{
-  key: TemplateFieldKey;
-  label: string;
-  multiline: boolean;
-  maxLength: number;
-}>;
-
-export type TemplateSection = Readonly<{
-  index: string;
-  title: string;
-  /** Section 01 is the card header (code, name, status); the others follow the dossier sections. */
-  keys: readonly TemplateFieldKey[];
-}>;
-
-export const templateFields: readonly TemplateField[] = [
-  { key: "name", label: "Название вируса", multiline: false, maxLength: 120 },
-  { key: "code", label: "Код записи", multiline: false, maxLength: 40 },
-  { key: "status", label: "Статус", multiline: false, maxLength: 80 },
-  { key: "external", label: "Внешние характеристики", multiline: true, maxLength: 4000 },
-  { key: "health", label: "Здоровье", multiline: false, maxLength: 200 },
-  { key: "speed", label: "Скорость", multiline: false, maxLength: 200 },
-  { key: "abilities", label: "Способности", multiline: true, maxLength: 1000 },
-  { key: "physiology", label: "Физиология", multiline: true, maxLength: 4000 },
-  { key: "mutationName", label: "Название мутации", multiline: false, maxLength: 120 },
-  { key: "mutationDescription", label: "Описание мутации", multiline: true, maxLength: 2000 },
-];
-
-export const templateSections: readonly TemplateSection[] = [
-  { index: "02", title: "ВНЕШНИЕ ХАРАКТЕРИСТИКИ", keys: ["external"] },
-  { index: "03", title: "ХАРАКТЕРИСТИКИ С PPU", keys: ["health", "speed", "abilities"] },
-  { index: "04", title: "ФИЗИОЛОГИЯ", keys: ["physiology"] },
-  { index: "05", title: "МУТАЦИИ ВИРУСА", keys: ["mutationName", "mutationDescription"] },
-];
 
 export const emptyTemplateText = "Не заполнено";
 export const templateFileName = "shablon-dosye.html";
@@ -190,28 +142,6 @@ export function fitTemplateImage(image: Pick<TemplateImage, "width" | "height">,
   return { width: Math.max(1, Math.round(image.width * scale)), height: Math.max(1, Math.round(image.height * scale)) };
 }
 
-/* ---------------------------------------------------------------- draft helpers */
-
-export function emptyTemplateDraft(): TemplateDraft {
-  return Object.freeze(Object.fromEntries(templateFields.map((field) => [field.key, ""])) as Record<TemplateFieldKey, string>);
-}
-
-/** True when the participant typed at least one visible character; an empty draft is never exported as a success. */
-export function hasTemplateText(draft: TemplateDraft) {
-  return templateFields.some((field) => draft[field.key].trim() !== "");
-}
-
-/** Something the participant actually provided: text or an image. An export of neither is never reported as a success. */
-export function hasTemplateContent(draft: TemplateDraft, image: TemplateImage | null) {
-  return image !== null || hasTemplateText(draft);
-}
-
-/** A stable value used to tell whether the current text and image already left the device as a file. */
-export function templateSnapshotKey(draft: TemplateDraft, image: TemplateImage | null = null) {
-  const imageKey = image === null ? null : [image.name, image.bytes, image.width, image.height, image.dataUrl.length, image.dataUrl.slice(-48)];
-  return JSON.stringify([templateFields.map((field) => draft[field.key]), imageKey]);
-}
-
 export function escapeTemplateHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -220,8 +150,6 @@ export function escapeTemplateHtml(value: string) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
-
-const fieldLabel = (key: TemplateFieldKey) => templateFields.find((field) => field.key === key)?.label ?? key;
 
 function valueHtml(value: string) {
   return value.trim() === ""
@@ -247,34 +175,6 @@ dd{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .photo img{display:block;max-width:100%;max-height:520px;width:auto;height:auto;object-fit:contain;border:1px solid #bdb8a6}
 footer{margin-top:32px;padding-top:12px;border-top:1px solid #bdb8a6;font:11px/1.4 ui-monospace,Consolas,monospace;color:#4a5a56}
 `.trim();
-
-/**
- * Builds a self-contained HTML document. Every typed value is escaped, the CSS is inline, there is no script and the
- * embedded CSP forbids any request except `data:` images, so the file opens offline and cannot load anything from a server.
- * A chosen image is embedded as its validated data URL (the MIME comes from the signature allow-list, never from user text).
- */
-export function createStandaloneHtml(draft: TemplateDraft, image: TemplateImage | null = null) {
-  const title = draft.name.trim() === "" ? templateDefaultTitle : escapeTemplateHtml(draft.name.trim());
-  const sections = templateSections.map((section) => {
-    const rows = section.keys
-      .map((key) => `<div><dt>${escapeTemplateHtml(fieldLabel(key))}</dt><dd>${valueHtml(draft[key])}</dd></div>`)
-      .join("");
-    return `<section><h2>${section.index} ${escapeTemplateHtml(section.title)}</h2><dl>${rows}</dl></section>`;
-  }).join("");
-  return [
-    "<!doctype html>",
-    `<html lang="ru"><head><meta charset="utf-8">`,
-    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`,
-    `<meta name="viewport" content="width=device-width, initial-scale=1">`,
-    `<title>${title}</title><style>${standaloneCss}</style></head><body>`,
-    `<main class="card"><header><div><span class="code">${valueHtml(draft.code)}</span><h1>${draft.name.trim() === "" ? `<span class="empty">${emptyTemplateText}</span>` : title}</h1></div>`,
-    `<div class="status">${valueHtml(draft.status)}</div></header>`,
-    image === null ? "" : `<figure class="photo"><img src="${image.dataUrl}" alt="Изображение, выбранное участником"></figure>`,
-    sections,
-    `<footer>${escapeTemplateHtml(templateDefaultTitle)} / PORTIA / локальный черновик участника, не запись архива</footer></main>`,
-    "</body></html>",
-  ].join("");
-}
 
 /** Starts a browser download of `content` (HTML text or a Blob) and releases the object URL afterwards. */
 export function downloadTemplateBlob(
@@ -355,80 +255,6 @@ export function wrapTemplateText(text: string, maxWidth: number, font: string, m
   return lines;
 }
 
-/**
- * Lays out the whole card on a fixed-width page and measures the real height before anything is encoded. If the card does not
- * fit the bounded canvas it throws instead of silently cropping.
- */
-export function layoutTemplateCard(
-  draft: TemplateDraft,
-  image: Pick<TemplateImage, "width" | "height"> | null,
-  measure: Measure,
-): PngLayout {
-  const contentWidth = pngWidth - pngPadding * 2;
-  const ops: PngOp[] = [];
-  let y = pngPadding;
-  const text = (value: string, font: string, fill: string, lineHeight: number) => {
-    if (value.trim() === "") {
-      ops.push({ kind: "text", x: pngPadding, y, text: emptyTemplateText, font: sansFont(16, 400, "italic"), fill: pngPalette.empty });
-      y += lineHeight;
-      return;
-    }
-    for (const line of wrapTemplateText(value, contentWidth, font, measure)) {
-      if (line !== "") ops.push({ kind: "text", x: pngPadding, y, text: line, font, fill });
-      y += lineHeight;
-      // Stop measuring once the card can no longer fit; the check below reports the overflow.
-      if (y > pngMaxHeight * 4) break;
-    }
-  };
-
-  text(draft.code, monoFont(12), pngPalette.soft, 18);
-  y += 4;
-  text(draft.name, sansFont(28, 700), pngPalette.ink, 34);
-  y += 6;
-  text(draft.status, monoFont(12), pngPalette.ink, 18);
-  y += 12;
-  ops.push({ kind: "rect", x: pngPadding, y, width: contentWidth, height: 2, fill: pngPalette.ink });
-  y += 2;
-
-  if (image !== null) {
-    y += 16;
-    const box = fitTemplateImage(image, contentWidth);
-    ops.push({ kind: "image", x: pngPadding, y, width: box.width, height: box.height });
-    // The 1px frame sits just outside the image so it never covers the picture's edge pixels.
-    ops.push({ kind: "rect", x: pngPadding - 1, y: y - 1, width: box.width + 2, height: box.height + 2, stroke: pngPalette.border });
-    y += box.height;
-  }
-
-  for (const section of templateSections) {
-    y += 24;
-    ops.push({ kind: "text", x: pngPadding, y, text: `${section.index} ${section.title}`, font: monoFont(12), fill: pngPalette.accent });
-    y += 26;
-    for (const key of section.keys) {
-      ops.push({ kind: "text", x: pngPadding, y, text: fieldLabel(key), font: monoFont(11), fill: pngPalette.soft });
-      y += 18;
-      text(draft[key], sansFont(16), pngPalette.ink, 25);
-      y += 12;
-    }
-    y -= 12;
-  }
-
-  y += 32;
-  ops.push({ kind: "rect", x: pngPadding, y, width: contentWidth, height: 1, fill: pngPalette.border });
-  y += 12;
-  ops.push({
-    kind: "text",
-    x: pngPadding,
-    y,
-    text: `${templateDefaultTitle} / PORTIA / локальный черновик участника, не запись архива`,
-    font: monoFont(11),
-    fill: pngPalette.soft,
-  });
-  y += 16 + pngPadding;
-
-  if (y > pngMaxHeight) throw namedError("TemplatePngTooLargeError", `card height ${y} exceeds ${pngMaxHeight}`);
-  return { width: pngWidth, height: y, ops };
-}
-
 type Ctx2D = {
   font: string;
   fillStyle: string;
@@ -463,56 +289,6 @@ const browserPngEnvironment = (): PngEnvironment => ({
   },
   loadImage: loadBrowserImage,
 });
-
-/**
- * Draws the card from the snapshot and encodes it as PNG. Rejects when the card is too long (TemplatePngTooLargeError), when
- * the canvas or encoder is unavailable, and when `toBlob` yields null or an empty blob, so an empty file is never handed out.
- */
-export async function createTemplatePng(
-  draft: TemplateDraft,
-  image: TemplateImage | null,
-  environment: PngEnvironment = browserPngEnvironment(),
-): Promise<Blob> {
-  const probe = environment.createCanvas(1, 1).getContext("2d");
-  if (probe === null) throw new Error("2d canvas is not available");
-  const layout = layoutTemplateCard(draft, image, (value, font) => {
-    probe.font = font;
-    return probe.measureText(value).width;
-  });
-  const loaded = image === null ? null : await environment.loadImage(image.dataUrl);
-  const canvas = environment.createCanvas(layout.width, layout.height);
-  const context = canvas.getContext("2d");
-  if (context === null) throw new Error("2d canvas is not available");
-  context.fillStyle = pngPalette.paper;
-  context.fillRect(0, 0, layout.width, layout.height);
-  context.textBaseline = "top";
-  for (const op of layout.ops) {
-    if (op.kind === "rect") {
-      if (op.fill !== undefined) {
-        context.fillStyle = op.fill;
-        context.fillRect(op.x, op.y, op.width, op.height);
-      }
-      if (op.stroke !== undefined) {
-        context.strokeStyle = op.stroke;
-        context.lineWidth = 1;
-        context.strokeRect(op.x + 0.5, op.y + 0.5, op.width - 1, op.height - 1);
-      }
-    } else if (op.kind === "text") {
-      context.font = op.font;
-      context.fillStyle = op.fill;
-      context.fillText(op.text, op.x, op.y);
-    } else if (loaded !== null) {
-      context.drawImage(loaded as never, op.x, op.y, op.width, op.height);
-    }
-  }
-  return new Promise<Blob>((resolve, reject) => {
-    try {
-      canvas.toBlob((value) => (value !== null && value.size > 0 ? resolve(value) : reject(new Error("PNG encoding failed"))), "image/png");
-    } catch (error) {
-      reject(error);
-    }
-  });
-}
 
 /* ---------------------------------------------------------------- dossier model export (20-38, D-52) */
 
@@ -625,9 +401,9 @@ export function wrapTemplateRuns(runs: readonly TemplateRun[], maxWidth: number,
   });
 }
 
-/* ---- sections shared by HTML and PNG (same labels as VirusRecord in components/portia-desktop-dossier.tsx) */
+/* ---- sections shared by the preview, HTML and PNG (same labels as VirusRecord in components/portia-desktop-dossier.tsx) */
 
-const classificationAxes = [
+export const classificationAxes = [
   ["danger", "Общий уровень опасности"],
   ["spread", "Распространение"],
   ["escapeRisk", "Угроза и риск побега"],
@@ -637,13 +413,13 @@ const classificationAxes = [
   ["behavior", "Поведение"],
 ] as const satisfies readonly (readonly [keyof Virus["classification"], string])[];
 
-const ppuFields = [
+export const ppuFields = [
   ["ppu-health", "ЗДОРОВЬЕ", (virus: Virus) => virus.ppu.health],
   ["ppu-speed", "СКОРОСТЬ", (virus: Virus) => virus.ppu.speed],
   ["ppu-abilities", "СПОСОБНОСТИ", (virus: Virus) => virus.ppu.abilities],
 ] as const;
 
-const sectionTitles = {
+export const sectionTitles = {
   classification: ["01", "КЛАССИФИКАЦИЯ"],
   external: ["02", "ВНЕШНИЕ ХАРАКТЕРИСТИКИ"],
   ppu: ["03", "ХАРАКТЕРИСТИКИ С PPU"],
@@ -651,11 +427,11 @@ const sectionTitles = {
   mutations: ["05", "МУТАЦИИ ВИРУСА"],
 } as const;
 
-const photoCaption = "Фото после заражения";
-const mutationCaption = "Скриншот мутации";
-const mutationLabel = (index: number) => `M-${String(index + 1).padStart(2, "0")}`;
+export const photoCaption = "Фото после заражения";
+export const mutationCaption = "Скриншот мутации";
+export const mutationLabel = (index: number) => `M-${String(index + 1).padStart(2, "0")}`;
 
-function classificationLevel(axis: keyof Virus["classification"], value: string) {
+export function classificationLevel(axis: keyof Virus["classification"], value: string) {
   return (classificationOptions[axis] as readonly { value: string; level?: number }[]).find((option) => option.value === value)?.level;
 }
 

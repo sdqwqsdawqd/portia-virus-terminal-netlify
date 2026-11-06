@@ -5,37 +5,27 @@ import test from "node:test";
 import { portiaTextKey, type RichTextDocument } from "./portia-content.ts";
 import { addTemplateMutation, editTemplateText, editTemplateVirus, emptyTemplateDossier, setTemplateImage, templateVirusId, type TemplateDossier } from "./portia-template-dossier.ts";
 import {
-  createStandaloneHtml,
   createTemplateDossierHtml,
   createTemplateDossierPng,
-  createTemplatePng,
   decodeLocalTemplateImage,
   downloadTemplateBlob,
-  emptyTemplateDraft,
   emptyTemplateText,
   escapeTemplateHtml,
-  hasTemplateContent,
-  hasTemplateText,
   imageSizeWithinBounds,
   isTemplateImageError,
   isTemplatePngTooLargeError,
-  layoutTemplateCard,
   layoutTemplateDossierCard,
   pngMaxHeight,
   pngPadding,
   pngWidth,
   sniffImageMime,
   templateImageMaxBytes,
-  templateSnapshotKey,
   wrapTemplateRuns,
   wrapTemplateText,
   type LocalImageFile,
   type PngEnvironment,
-  type TemplateDraft,
   type TemplateImage,
 } from "./portia-template-export.ts";
-
-const withText = (patch: Partial<Record<keyof TemplateDraft, string>>): TemplateDraft => ({ ...emptyTemplateDraft(), ...patch });
 
 const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const jpegSignature = [0xff, 0xd8, 0xff, 0xe0];
@@ -48,54 +38,11 @@ function fileOf(bytes: readonly number[], type: string, name = "photo.png", size
 
 const okImage = (width = 40, height = 20) => async () => ({ width, height });
 
-const sampleImage: TemplateImage = Object.freeze({
-  name: "photo.png", mime: "image/png", dataUrl: "data:image/png;base64,iVBORw0KGgo=", width: 800, height: 400, bytes: 8,
-});
-
 // 10 px per character keeps the fake measurement deterministic.
 const measure = (text: string) => Array.from(text).length * 10;
 
 test("escapeTemplateHtml neutralises markup and quotes", () => {
   assert.equal(escapeTemplateHtml(`<img src=x onerror="a()"> & 'b'`), "&lt;img src=x onerror=&quot;a()&quot;&gt; &amp; &#39;b&#39;");
-});
-
-test("standalone HTML escapes typed text and carries no script, link or external request", () => {
-  const html = createStandaloneHtml(withText({
-    name: `<script>alert(1)</script>`,
-    external: `Line 1\n<b onmouseover="x()">два</b>`,
-    mutationName: `"><img src=//evil.example/p.png>`,
-  }));
-  assert.ok(!/<script/i.test(html));
-  assert.ok(!/<img/i.test(html));
-  assert.ok(!/<b /i.test(html));
-  assert.ok(!/<link/i.test(html));
-  assert.ok(!/<[^>]*[ "'](?:src|href)=/i.test(html));
-  assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
-  assert.ok(html.includes("Content-Security-Policy"));
-  assert.ok(html.includes("default-src 'none'"));
-});
-
-test("a partial draft shows empty fields honestly instead of inventing values", () => {
-  const html = createStandaloneHtml(withText({ name: "Вирус А" }));
-  assert.ok(html.includes("Вирус А"));
-  assert.ok(html.includes(emptyTemplateText));
-  assert.ok(!html.includes("undefined"));
-});
-
-test("an empty draft has no text and is not exportable", () => {
-  assert.equal(hasTemplateText(emptyTemplateDraft()), false);
-  assert.equal(hasTemplateText(withText({ physiology: "   " })), false);
-  assert.equal(hasTemplateText(withText({ physiology: "x" })), true);
-  assert.equal(hasTemplateContent(emptyTemplateDraft(), null), false);
-  assert.equal(hasTemplateContent(emptyTemplateDraft(), sampleImage), true);
-});
-
-test("the snapshot key changes with any edit or image so a stale download is not counted as saved", () => {
-  const a = withText({ name: "A" });
-  assert.equal(templateSnapshotKey(a), templateSnapshotKey({ ...a }));
-  assert.notEqual(templateSnapshotKey(a), templateSnapshotKey({ ...a, name: "AB" }));
-  assert.notEqual(templateSnapshotKey(a), templateSnapshotKey(a, sampleImage));
-  assert.notEqual(templateSnapshotKey(a, sampleImage), templateSnapshotKey(a, { ...sampleImage, dataUrl: "data:image/png;base64,AAAAAAAAAAAA", bytes: 9 }));
 });
 
 test("signature sniffing accepts png, jpeg and webp and rejects text, svg and truncated headers", () => {
@@ -144,17 +91,6 @@ test("an unsupported, mislabelled, empty, oversized or undecodable image is refu
   await refused(fileOf([...pngSignature], "image/png"), { loadImage: okImage(4096, 4096) });
 });
 
-test("standalone HTML embeds a local image as a data URL and names no external resource", () => {
-  const html = createStandaloneHtml(withText({ name: "С картинкой" }), sampleImage);
-  assert.ok(html.includes(`<img src="${sampleImage.dataUrl}"`));
-  assert.equal((html.match(/<img/g) ?? []).length, 1);
-  assert.ok(!/(?:src|href)=["']?(?:https?:)?\/\//i.test(html));
-  assert.ok(!/url\(/i.test(html));
-  assert.ok(!/<script|<link/i.test(html));
-  assert.ok(html.includes("img-src data:"));
-  assert.ok(html.includes("С картинкой"));
-});
-
 test("wrapping keeps every word, preserves blank lines and splits an over-wide word by characters", () => {
   const text = "один два три\n\nчетыре";
   const lines = wrapTemplateText(text, 90, "16px x", measure);
@@ -163,26 +99,6 @@ test("wrapping keeps every word, preserves blank lines and splits an over-wide w
   const split = wrapTemplateText(long, 100, "16px x", measure);
   assert.equal(split.join(""), long);
   assert.ok(split.every((line) => measure(line) <= 100));
-});
-
-test("the layout draws all long text, scales the image into the page and stays inside the bounded height", () => {
-  const paragraph = Array.from({ length: 60 }, (_, index) => `слово${index}`).join(" ");
-  const draft = withText({ name: "Длинный", external: paragraph, physiology: paragraph });
-  const layout = layoutTemplateCard(draft, { width: 3000, height: 3000 }, measure);
-  assert.equal(layout.width, pngWidth);
-  assert.ok(layout.height > 400 && layout.height <= pngMaxHeight);
-  const drawn = layout.ops.flatMap((op) => (op.kind === "text" ? [op.text] : [])).join(" ");
-  for (let index = 0; index < 60; index += 1) assert.ok(drawn.includes(`слово${index}`), `слово${index} is drawn`);
-  const image = layout.ops.find((op) => op.kind === "image");
-  assert.ok(image && image.kind === "image");
-  assert.ok(image.width <= pngWidth - pngPadding * 2 && image.height <= 520);
-  assert.equal(image.x, pngPadding);
-  for (const op of layout.ops) assert.ok(op.y >= 0 && op.y <= layout.height, "every operation sits inside the canvas");
-});
-
-test("a card taller than the canvas limit is refused instead of cropped", () => {
-  const draft = withText({ external: "a\n".repeat(1999), physiology: "a\n".repeat(1999) });
-  assert.throws(() => layoutTemplateCard(draft, null, measure), (error) => isTemplatePngTooLargeError(error));
 });
 
 type Call = { name: string; args: unknown[] };
@@ -217,49 +133,6 @@ function fakePngEnvironment(options: { toBlob?: "ok" | "null" | "throw" | "empty
   };
   return { environment, calls, sizes, loadedSources };
 }
-
-test("PNG export draws the image from its data URL and every text line, then returns a non-empty png blob", async () => {
-  const fake = fakePngEnvironment();
-  const draft = withText({ name: "Вирус", physiology: "alpha beta\ngamma" });
-  const blob = await createTemplatePng(draft, sampleImage, fake.environment);
-  assert.equal(blob.type, "image/png");
-  assert.ok(blob.size > 0);
-  assert.deepEqual(fake.loadedSources, [sampleImage.dataUrl]);
-  assert.equal(fake.calls.filter((call) => call.name === "drawImage").length, 1);
-  const lines = fake.calls.filter((call) => call.name === "fillText").map((call) => String(call.args[0]));
-  for (const expected of ["Вирус", "alpha beta", "gamma", emptyTemplateText]) assert.ok(lines.includes(expected), `${expected} is drawn`);
-  const [, finalSize] = fake.sizes;
-  assert.equal(finalSize[0], pngWidth);
-  assert.ok(finalSize[1] <= pngMaxHeight);
-});
-
-test("PNG export fails loudly when the encoder or canvas misbehaves", async () => {
-  const draft = withText({ name: "Вирус" });
-  await assert.rejects(createTemplatePng(draft, null, fakePngEnvironment({ toBlob: "null" }).environment), /PNG encoding failed/);
-  await assert.rejects(createTemplatePng(draft, null, fakePngEnvironment({ toBlob: "empty" }).environment), /PNG encoding failed/);
-  await assert.rejects(createTemplatePng(draft, null, fakePngEnvironment({ toBlob: "throw" }).environment), /SecurityError/);
-  await assert.rejects(createTemplatePng(draft, null, fakePngEnvironment({ contextNull: true }).environment), /canvas/);
-  const tooLong = fakePngEnvironment();
-  await assert.rejects(
-    createTemplatePng(withText({ external: "a\n".repeat(1999), physiology: "a\n".repeat(1999) }), null, tooLong.environment),
-    (error) => isTemplatePngTooLargeError(error),
-  );
-  assert.equal(tooLong.calls.length, 0, "an over-long card draws nothing and encodes nothing");
-});
-
-test("PNG export never touches the network", async () => {
-  const original = globalThis.fetch;
-  let requests = 0;
-  globalThis.fetch = (async () => { requests += 1; throw new Error("network is off"); }) as typeof fetch;
-  try {
-    await createTemplatePng(withText({ name: "A" }), sampleImage, fakePngEnvironment().environment);
-    await decodeLocalTemplateImage(fileOf(pngSignature, "image/png"), { loadImage: okImage() });
-    createStandaloneHtml(withText({ name: "A" }), sampleImage);
-  } finally {
-    globalThis.fetch = original;
-  }
-  assert.equal(requests, 0);
-});
 
 test("a download of a Blob or HTML text releases its object URL, also when the click fails", () => {
   const revoked: string[] = [];
@@ -566,4 +439,33 @@ test("the dossier layout keeps every operation inside the page and scales images
     assert.ok(op.x >= 0 && op.y >= 0 && op.y <= layout.height);
     if (op.kind !== "text") assert.ok(op.x + op.width <= layout.width && op.y + op.height <= layout.height);
   }
+});
+
+/* ---------------------------------------------------------------- failure and network behaviour of the dossier PNG (20-39) */
+
+test("dossier PNG fails loudly when the encoder or canvas misbehaves", async () => {
+  const dossier = dangerDossier();
+  await assert.rejects(createTemplateDossierPng(dossier, fakePngEnvironment({ toBlob: "null" }).environment), /PNG encoding failed/);
+  await assert.rejects(createTemplateDossierPng(dossier, fakePngEnvironment({ toBlob: "empty" }).environment), /PNG encoding failed/);
+  await assert.rejects(createTemplateDossierPng(dossier, fakePngEnvironment({ toBlob: "throw" }).environment), /SecurityError/);
+  await assert.rejects(createTemplateDossierPng(dossier, fakePngEnvironment({ contextNull: true }).environment), /canvas/);
+  const long = "a\n".repeat(1999);
+  const tooLongDossier = editTemplateText(dossier, portiaTextKey.virus(templateVirusId, "physiology"), long, { runs: [{ text: long }] }, (next, text) => { next.virus.physiology = text; });
+  const tooLong = fakePngEnvironment();
+  await assert.rejects(createTemplateDossierPng(tooLongDossier, tooLong.environment), (error) => isTemplatePngTooLargeError(error));
+  assert.equal(tooLong.calls.length, 0, "an over-long card draws nothing and encodes nothing");
+});
+
+test("the dossier exports and the image check never touch the network", async () => {
+  const original = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = (async () => { requests += 1; throw new Error("network is off"); }) as typeof fetch;
+  try {
+    await createTemplateDossierPng(dangerDossier(), fakePngEnvironment().environment);
+    await decodeLocalTemplateImage(fileOf(pngSignature, "image/png"), { loadImage: okImage() });
+    createTemplateDossierHtml(dangerDossier());
+  } finally {
+    globalThis.fetch = original;
+  }
+  assert.equal(requests, 0);
 });

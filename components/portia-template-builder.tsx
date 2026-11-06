@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ClassificationField, DossierTabs, EditorGroup, Field } from "@/components/portia-editor-dossier";
 import {
@@ -13,27 +13,44 @@ import {
   type FormatTarget,
 } from "@/components/portia-editor-rich-text";
 import type { DossierTab } from "@/lib/editor-changes";
-import { portiaTextKey, type RichTextDocument, type Virus } from "@/lib/portia-content";
+import { portiaTextKey, type RichTextDocument, type RichTextStyle, type Virus } from "@/lib/portia-content";
 import {
   addTemplateMutation,
   editTemplateText,
   editTemplateVirus,
   emptyTemplateDossier,
   hasTemplateDossierContent,
+  isLocalTemplateImage,
   removeTemplateMutation,
+  safeTemplateRunStyle,
+  setTemplateImage,
   templateDossierSnapshotKey,
+  templateFieldRuns,
+  templateRunBackground,
   templateVirusId,
   type TemplateDossier,
 } from "@/lib/portia-template-dossier";
 import {
+  classificationAxes,
+  classificationLevel,
   createTemplateDossierHtml,
   createTemplateDossierPng,
+  decodeLocalTemplateImage,
   downloadTemplateBlob,
+  emptyTemplateText,
   isTemplatePngTooLargeError,
+  mutationCaption,
+  mutationLabel,
+  photoCaption,
+  ppuFields,
+  sectionTitles,
   templateExportError,
   templateFileName,
+  templateImageAccept,
+  templateImageOpenError,
   templatePngFileName,
   templatePngTooLargeError,
+  type TemplateImage,
 } from "@/lib/portia-template-export";
 
 type ExportPhase = "idle" | "preparing" | "error" | "too-large" | "done";
@@ -44,6 +61,130 @@ const preparingMinimumMs = 400;
 
 // The editor says "Текст и GIF можно использовать вместе"; a template is self-contained, so pictures are added as files only (D-24).
 const textHint = "Картинки по ссылке в тексте шаблона не загружаются: добавьте изображение файлом.";
+
+type ImageSlot = "infected" | number;
+const slotKey = (slot: ImageSlot) => (slot === "infected" ? "infected" : `mutation:${slot}`);
+
+const sizeLabel = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} МБ` : `${Math.max(1, Math.round(bytes / 1024))} КБ`);
+
+/**
+ * A picture slot in the place and with the markup of the editor's ImageEditorField, but local only: there is no address field,
+ * no upload and no GIF (D-24). A refused file shows an error and changes neither the text nor the previous picture.
+ */
+function TemplateImageField({ label, placement, image, error, busy, onFile, onRemove }: {
+  label: string;
+  placement: "dossier" | "mutation";
+  image: TemplateImage | null;
+  error: boolean;
+  busy: boolean;
+  onFile: (file: File | undefined) => void;
+  onRemove: () => void;
+}) {
+  const titleId = useId();
+  const actionId = useId();
+  const hint = image
+    ? `Выбрано: ${image.name}, ${image.width}×${image.height}, ${sizeLabel(image.bytes)}. Файл не покидает это устройство.`
+    : "PNG, JPEG или WebP до 5 МБ. Файл остаётся на этом устройстве.";
+  return <div className={`editor-field wide image-editor-field image-placement-${placement}`}>
+    <span id={titleId}>{label}</span>
+    <label className="editor-dropzone" aria-disabled={busy || undefined} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event) => { event.preventDefault(); onFile(event.dataTransfer.files?.[0]); }}>
+      <input className="sr-only" type="file" accept={templateImageAccept} disabled={busy} aria-labelledby={`${titleId} ${actionId}`} data-testid="template-image-input" onChange={(event) => { onFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+      <strong id={actionId}>ВЫБРАТЬ ФАЙЛ С КОМПЬЮТЕРА</strong>
+      <small>или перетащите изображение сюда · PNG, JPEG, WebP · до 5 МБ</small>
+    </label>
+    <small className="editor-media-hint">{hint}</small>
+    {error && <span className="editor-media-error" role="alert">{templateImageOpenError}</span>}
+    {image && <figure className={`editor-image-preview ${placement}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL; next/image cannot optimise it */}
+      <img src={image.dataUrl} alt={`Предпросмотр: ${label}`} />
+    </figure>}
+    {image && <button type="button" className="secondary-control" disabled={busy} onClick={onRemove}>Убрать изображение</button>}
+  </div>;
+}
+
+/* ---------------------------------------------------------------- preview of the card, sections 01-05 */
+
+function runStyle(style: RichTextStyle | undefined): CSSProperties | undefined {
+  const safe = safeTemplateRunStyle(style);
+  const css: CSSProperties = {};
+  if (safe.color) css.color = safe.color;
+  if (safe.fontSize) css.fontSize = `${safe.fontSize}px`;
+  if (safe.fontWeight) css.fontWeight = safe.fontWeight;
+  const background = templateRunBackground(safe);
+  if (background) css.backgroundColor = background;
+  return Object.keys(css).length > 0 ? css : undefined;
+}
+
+function PreviewPlain({ value }: { value: string }) {
+  return value.trim() === "" ? <span className="template-empty">{emptyTemplateText}</span> : <>{value}</>;
+}
+
+/** The fragments of a field with their formatting. Links stay plain text; nothing is turned into an element. */
+function PreviewRich({ dossier, fieldKey, text }: { dossier: TemplateDossier; fieldKey: string; text: string }) {
+  if (text.trim() === "") return <span className="template-empty">{emptyTemplateText}</span>;
+  return <>{templateFieldRuns(dossier, fieldKey, text).map((run, index) => <span key={index} style={runStyle(run.style)}>{run.text}</span>)}</>;
+}
+
+function PreviewFigure({ image, alt, caption }: { image: TemplateImage | null; alt: string; caption: string | null }) {
+  if (!isLocalTemplateImage(image)) return null;
+  return <figure className="template-figure">
+    {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL; next/image cannot optimise it */}
+    <img src={image.dataUrl} alt={alt} width={image.width} height={image.height} />
+    {caption !== null && <figcaption>{caption}</figcaption>}
+  </figure>;
+}
+
+function PreviewKicker({ kind }: { kind: keyof typeof sectionTitles }) {
+  return <div className="template-kicker"><span>{sectionTitles[kind][0]}</span>{sectionTitles[kind][1]}</div>;
+}
+
+function TemplatePreview({ dossier }: { dossier: TemplateDossier }) {
+  const { virus, images } = dossier;
+  const fieldKey = (field: Parameters<typeof portiaTextKey.virus>[1]) => portiaTextKey.virus(templateVirusId, field);
+  return <article className="template-preview" aria-label="Предпросмотр шаблона">
+    <header>
+      <div><span className="template-code"><PreviewPlain value={virus.code} /></span><h2><PreviewPlain value={virus.name} /></h2></div>
+      <div className="template-status-badge"><PreviewPlain value={virus.status} /></div>
+    </header>
+    <PreviewFigure image={images.infected} alt={photoCaption} caption={photoCaption} />
+    <section className="template-section">
+      <PreviewKicker kind="classification" />
+      <div className="template-class-grid">
+        {classificationAxes.map(([axis, label]) => {
+          const value = virus.classification[axis];
+          const level = classificationLevel(axis, value);
+          return <div className="template-class-cell" key={axis}><span>{label}</span><strong><PreviewPlain value={value} /></strong>{level !== undefined && <small>УРОВЕНЬ {level}</small>}</div>;
+        })}
+      </div>
+    </section>
+    <section className="template-section">
+      <PreviewKicker kind="external" />
+      <div className="template-rich"><PreviewRich dossier={dossier} fieldKey={fieldKey("external")} text={virus.external} /></div>
+    </section>
+    <section className="template-section">
+      <PreviewKicker kind="ppu" />
+      <dl>
+        {ppuFields.map(([field, label, read]) => <div key={field}><dt>{label}</dt><dd className="template-rich"><PreviewRich dossier={dossier} fieldKey={fieldKey(field)} text={read(virus)} /></dd></div>)}
+      </dl>
+    </section>
+    <section className="template-section">
+      <PreviewKicker kind="physiology" />
+      <div className="template-rich"><PreviewRich dossier={dossier} fieldKey={fieldKey("physiology")} text={virus.physiology} /></div>
+    </section>
+    <section className="template-section">
+      <PreviewKicker kind="mutations" />
+      {virus.mutations.length === 0
+        ? <p className="template-empty">{emptyTemplateText}</p>
+        : virus.mutations.map((mutation, index) => <div className="template-mutation" key={index}>
+          <div className="template-mutation-index">{mutationLabel(index)}</div>
+          <PreviewFigure image={images.mutations[index] ?? null} alt={mutation.name.trim() === "" ? mutationCaption : mutation.name} caption={null} />
+          <h3><PreviewPlain value={mutation.name} /></h3>
+          <div className="template-rich"><PreviewRich dossier={dossier} fieldKey={portiaTextKey.mutation(templateVirusId, index)} text={mutation.description} /></div>
+        </div>)}
+    </section>
+    <footer>Шаблон досье / PORTIA / локальный черновик, не запись архива</footer>
+  </article>;
+}
 
 /**
  * Participant-only "Создать шаблон" builder (D-52, D-23, D-24). The form is the site editor's virus card made of the editor's own
@@ -66,6 +207,9 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
   const backRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLElement>(null);
   const exportingRef = useRef(false);
+  const readingRef = useRef(false);
+  const [reading, setReading] = useState(false);
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const idPrefix = useId();
 
   useEffect(() => { headingRef.current?.focus(); }, []);
@@ -74,7 +218,8 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
   const virus = dossier.virus;
   const hasContent = hasTemplateDossierContent(dossier);
   const dirty = hasContent && templateDossierSnapshotKey(dossier) !== exportedKey;
-  const busy = phase === "preparing";
+  // Nothing may be downloaded, replaced, removed or left while a file is being read or built.
+  const busy = phase === "preparing" || reading;
 
   // A new edit makes a previous "done" or "error" status stale, but never clears the typed text.
   const change = (updater: (current: TemplateDossier) => TemplateDossier) => {
@@ -94,13 +239,39 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
     closeFormatter();
   };
   const removeMutation = (index: number) => {
-    // A delete shifts the later mutations' index keys, so it closes the format panel.
+    if (busy) return;
+    // A delete shifts the later mutations' index keys, so it closes the format panel; the slot errors are tied to those indexes and go with it.
     closeFormatter();
+    setImageErrors({});
     change((current) => removeTemplateMutation(current, index));
   };
 
+  const chooseImage = async (slot: ImageSlot, file: File | undefined) => {
+    if (!file || exportingRef.current || readingRef.current) return;
+    const key = slotKey(slot);
+    readingRef.current = true;
+    setReading(true);
+    setImageErrors((current) => ({ ...current, [key]: false }));
+    try {
+      const decoded = await decodeLocalTemplateImage(file);
+      change((current) => setTemplateImage(current, slot, decoded));
+    } catch {
+      // The text and a previously accepted picture stay exactly as they were.
+      setImageErrors((current) => ({ ...current, [key]: true }));
+    } finally {
+      readingRef.current = false;
+      setReading(false);
+    }
+  };
+
+  const removeImage = (slot: ImageSlot) => {
+    if (busy) return;
+    setImageErrors((current) => ({ ...current, [slotKey(slot)]: false }));
+    change((current) => setTemplateImage(current, slot, null));
+  };
+
   const runExport = async (format: ExportFormat) => {
-    if (exportingRef.current || !hasContent) return;
+    if (exportingRef.current || readingRef.current || !hasContent) return;
     exportingRef.current = true;
     // The file is built from this snapshot, so edits made while it is being prepared never mix versions.
     const snapshot = dossier;
@@ -207,6 +378,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
               <Field label="Название"><input value={virus.name} maxLength={120} autoComplete="off" onChange={(event) => updateVirus((next) => { next.name = event.target.value; })} /></Field>
               <Field label="Код"><input value={virus.code} maxLength={40} autoComplete="off" onChange={(event) => updateVirus((next) => { next.code = event.target.value; })} /></Field>
               <Field label="Статус"><input value={virus.status} maxLength={80} autoComplete="off" onChange={(event) => updateVirus((next) => { next.status = event.target.value; })} /></Field>
+              <TemplateImageField label="Фото после заражения" placement="dossier" image={dossier.images.infected} error={imageErrors.infected === true} busy={busy} onFile={(file) => { void chooseImage("infected", file); }} onRemove={() => removeImage("infected")} />
             </EditorGroup>}
 
             {dossierTab === "text" && <EditorGroup title="Описание">
@@ -235,6 +407,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
                   <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={busy} onClick={() => removeMutation(index)}>Удалить</button></div>
                   <Field label="Название"><input value={mutation.name} maxLength={120} autoComplete="off" onChange={(event) => updateVirus((next) => { const item = next.mutations[index]; if (item) item.name = event.target.value; })} /></Field>
                   <FormattedTextarea area="mutation" label="Описание" value={mutation.description} document={dossier.formattedText[portiaTextKey.mutation(templateVirusId, index)]} formatKey={portiaTextKey.mutation(templateVirusId, index)} hint={textHint} onActivate={activateFormatter} onChange={(value, document) => changeText(portiaTextKey.mutation(templateVirusId, index), value, document, (next, text) => { const item = next.virus.mutations[index]; if (item) item.description = text; })} />
+                  <TemplateImageField label="Изображение мутации" placement="mutation" image={dossier.images.mutations[index] ?? null} error={imageErrors[slotKey(index)] === true} busy={busy} onFile={(file) => { void chooseImage(index, file); }} onRemove={() => removeImage(index)} />
                 </div>
               ))}
               <button className="secondary-control" type="button" onClick={() => change(addTemplateMutation)}>+ ДОБАВИТЬ МУТАЦИЮ</button>
@@ -253,6 +426,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
           {phase === "error" && <p className="promotion-error" role="alert">{templateExportError}</p>}
           {phase === "too-large" && <p className="promotion-error" role="alert">{templatePngTooLargeError}</p>}
         </div>
+        <TemplatePreview dossier={dossier} />
       </div>
       </ActiveFormatContext.Provider>
       {formatterOpen && formatTarget && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={(_id, run) => run()} onClose={() => setFormatterOpen(false)} positionStorageKey={null} />, document.getElementById("desktop") ?? document.body)}
