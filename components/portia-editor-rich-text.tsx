@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
-import { mergeFragments, pickCurrentRange, type FormatFragment } from "@/lib/format-fragments";
+import { mergeFragments, pickCurrentRange, removeFragmentAt, type FormatFragment } from "@/lib/format-fragments";
 import { TYPING_PAUSE_MS } from "@/lib/editor-history";
 import { makeId } from "@/lib/editor-items";
 import type { RichTextDocument, RichTextStyle } from "@/lib/portia-content";
@@ -208,7 +208,7 @@ export function findFormatField(key: string) {
   return window.document.querySelector<HTMLElement>(`[data-format-key="${CSS.escape(key)}"]`);
 }
 
-export function FormattedTextarea({ label, area, value, document, formatKey, onChange, onActivate, tall = false }: {
+export function FormattedTextarea({ label, area, value, document, formatKey, onChange, onActivate, tall = false, hint }: {
   label: string;
   area: DisplayArea;
   value: string;
@@ -217,7 +217,10 @@ export function FormattedTextarea({ label, area, value, document, formatKey, onC
   onChange: (value: string, document: RichTextDocument) => void;
   onActivate: (target: FormatTarget) => void;
   tall?: boolean;
+  // Optional line under the field; without it the editor's own hint is shown.
+  hint?: string;
 }) {
+  const labelId = useId();
   const activeFormat = useContext(ActiveFormatContext);
   const editorRef = useRef<HTMLDivElement>(null);
   // Selection policy of this field: own input opens on pointer / key down and closes after release or blur (CR-01, D-05).
@@ -269,7 +272,7 @@ export function FormattedTextarea({ label, area, value, document, formatKey, onC
   }, [currentDocument, documentSignature]);
 
   return <div className="editor-field wide formatted-text-field">
-    <div className="formatted-text-field-head"><span>{label}</span></div>
+    <div className="formatted-text-field-head"><span id={labelId}>{label}</span></div>
     <div
       ref={editorRef}
       data-area={area}
@@ -279,6 +282,7 @@ export function FormattedTextarea({ label, area, value, document, formatKey, onC
       inputMode={activeFormat.phonePanelOpen ? "none" : undefined}
       suppressContentEditableWarning
       role="textbox"
+      aria-labelledby={labelId}
       aria-multiline="true"
       spellCheck
       onPointerDown={(event) => {
@@ -327,18 +331,43 @@ export function FormattedTextarea({ label, area, value, document, formatKey, onC
         commitEditorValue(event.currentTarget, nextValue, selection);
       }}
     />
-    <small className="formatted-text-field-hint">Текст и GIF можно использовать вместе. Не добавляйте лишних элементов.</small>
+    <small className="formatted-text-field-hint">{hint ?? "Текст и GIF можно использовать вместе. Не добавляйте лишних элементов."}</small>
   </div>;
 }
 
-export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onUpdate, onBatch, onClose }: {
+// EDIT-06: what a field activation makes of the target before it. A plain gesture starts over (D-14); an additive one keeps the fragments and,
+// on its first activation, turns the previous non-empty selection into one (D-13). A collapsed caret in an additive gesture drops the fragment it lands in.
+export function joinFormatTarget(prev: FormatTarget | null, target: FormatTarget): FormatTarget {
+  if (!target.gesture.additive || !prev) return target;
+  let fragments = prev.fragments;
+  let peers = prev.peers;
+  if (prev.gesture.id !== target.gesture.id) {
+    const length = prev.document.runs.reduce((sum, run) => sum + run.text.length, 0);
+    const clamp = (value: number) => Math.max(0, Math.min(length, value));
+    const selection = prev.selection;
+    const picked = selection && selection.start !== selection.end ? [{ key: prev.key, from: clamp(selection.start), to: clamp(selection.end) }] : [];
+    fragments = [...prev.fragments, ...picked];
+    peers = { ...prev.peers, [prev.key]: { ...prev, fragments: [], peers: {} } };
+  }
+  fragments = mergeFragments(fragments);
+  const caret = target.selection;
+  if (caret && caret.start === caret.end) fragments = removeFragmentAt(fragments, target.key, caret.start);
+  const kept: Record<string, FormatTarget> = {};
+  for (const fragment of fragments) if (fragment.key !== target.key && peers[fragment.key]) kept[fragment.key] = peers[fragment.key];
+  return { ...target, fragments, peers: kept };
+}
+
+export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onUpdate, onBatch, onClose, positionStorageKey }: {
   target: FormatTarget;
   previewSurface: EditorPreviewSurface | null;
   onPreviewSurface: (surface: EditorPreviewSurface) => void;
   onUpdate: (target: FormatTarget) => void;
   onBatch: (id: string, run: () => void) => void;
   onClose: () => void;
+  // Where the PC panel remembers its place. Undefined keeps the editor's own key; null remembers nothing and never touches browser storage.
+  positionStorageKey?: string | null;
 }) {
+  const storageKey = positionStorageKey === undefined ? formatPanelStorageKey : positionStorageKey;
   // Seeds the custom colour picker for text without a colour: baseInk at the default accent.
   const surface = previewSurface ?? nativeSurface[target.area];
   const defaultTextColor = surface === "dark" ? "#aebfba" : "#17211f";
@@ -501,8 +530,7 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
         panel.style.bottom = "";
         return;
       }
-      let saved: PanelOffset | null = null;
-      try { saved = parsePanelOffset(localStorage.getItem(formatPanelStorageKey)); } catch { saved = null; }
+      const saved = readPanelOffset(storageKey);
       // Nothing remembered (or storage unreadable): beside the editor window when it fits, else the default corner (D-07).
       const editor = document.querySelector(".editor-window")?.getBoundingClientRect() ?? null;
       paintPanelOffset(panel, saved ?? initialPanelOffset(editor, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight }));
@@ -510,7 +538,7 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
     place();
     window.addEventListener("resize", place);
     return () => window.removeEventListener("resize", place);
-  }, []);
+  }, [storageKey]);
 
   // PC: the panel is a layer of the desktop and moves by its header anywhere on the screen (D-06, EDIT-04). The phone panel is docked.
   const beginDrag = (event: React.PointerEvent<HTMLElement>) => {
@@ -537,7 +565,7 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
     if (drag?.pointerId !== event.pointerId) return;
     dragRef.current = null;
     // A blocked storage only means the place is not remembered.
-    if (drag.last) try { localStorage.setItem(formatPanelStorageKey, JSON.stringify(drag.last)); } catch { /* ignore */ }
+    if (drag.last) writePanelOffset(storageKey, drag.last);
   };
 
   // Arrow keys move the panel from its header: 8px, Shift 32px (EDIT-04). Only when the header itself has focus, so buttons keep their keys.
@@ -550,7 +578,7 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
     event.preventDefault();
     const rect = panel.getBoundingClientRect();
     const next = paintPanelOffset(panel, { right: document.documentElement.clientWidth - rect.right + delta[0], bottom: document.documentElement.clientHeight - rect.bottom + delta[1] });
-    try { localStorage.setItem(formatPanelStorageKey, JSON.stringify(next)); } catch { /* ignore */ }
+    writePanelOffset(storageKey, next);
   };
 
   // Esc leaves the panel for the text: the field with its selection back, else the ✎ button. The panel stays open.
@@ -616,6 +644,18 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
 
 // Where the PC format panel was left, px from the viewport's right and bottom edges; read back on mount (D-07).
 const formatPanelStorageKey = "portia-format-panel-v1";
+
+// The only two places that touch browser storage. A null key means the caller wants nothing remembered (the template builder), so both return first.
+function readPanelOffset(storageKey: string | null): PanelOffset | null {
+  if (storageKey === null) return null;
+  try { return parsePanelOffset(localStorage.getItem(storageKey)); } catch { return null; }
+}
+
+function writePanelOffset(storageKey: string | null, offset: PanelOffset) {
+  if (storageKey === null) return;
+  // A blocked storage only means the place is not remembered.
+  try { localStorage.setItem(storageKey, JSON.stringify(offset)); } catch { /* ignore */ }
+}
 
 // Writes the clamped right/bottom straight on the panel (no React render per move) and returns what was painted.
 function paintPanelOffset(panel: HTMLElement, offset: { right: number; bottom: number }) {

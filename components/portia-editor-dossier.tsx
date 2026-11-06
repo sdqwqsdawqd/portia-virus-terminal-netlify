@@ -262,9 +262,10 @@ export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUploa
   </div>;
 }
 
-export function DossierTabs({ active, changed, onSelect }: { active: DossierTab; changed: DossierTab[]; onSelect: (id: DossierTab) => void }) {
+// `tabs` is optional: without it every dossier tab is shown, as the site editor does. The template builder passes the tabs without the scientist records.
+export function DossierTabs({ active, changed, onSelect, tabs }: { active: DossierTab; changed: DossierTab[]; onSelect: (id: DossierTab) => void; tabs?: readonly DossierTab[] }) {
   return <nav className="editor-tabs dossier-tabs" aria-label="Разделы досье">
-    {dossierTabs.map(([id, label]) => {
+    {dossierTabs.filter(([id]) => !tabs || tabs.includes(id)).map(([id, label]) => {
       const unsaved = changed.includes(id);
       return <button key={id} type="button" className={active === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => onSelect(id)}>
         {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}

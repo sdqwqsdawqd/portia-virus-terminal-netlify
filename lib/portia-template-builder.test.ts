@@ -10,12 +10,13 @@ import test from "node:test";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, "..");
-const read = (relative: string) => readFileSync(path.join(root, relative), "utf8");
+const lf = (text: string) => text.replace(/\r\n/g, "\n");
+const read = (relative: string) => lf(readFileSync(path.join(root, relative), "utf8"));
 
 const builderPath = "components/portia-template-builder.tsx";
 const subjectOverride = process.env.GSD_PROHIB_SUBJECT;
 const subjectFile = subjectOverride ? path.resolve(process.cwd(), subjectOverride) : path.join(root, builderPath);
-const subjectSource = () => readFileSync(subjectFile, "utf8");
+const subjectSource = () => lf(readFileSync(subjectFile, "utf8"));
 
 /* ---------------------------------------------------------------- source helpers */
 
@@ -102,7 +103,7 @@ function importGraph(entry: string): Graph {
   const graph: Graph = { files: new Map(), forbidden: [], packages: [], missing: [] };
   const visit = (file: string) => {
     if (graph.files.has(file)) return;
-    const code = stripComments(readFileSync(file, "utf8"));
+    const code = stripComments(lf(readFileSync(file, "utf8")));
     graph.files.set(file, code);
     for (const specifier of importsOf(code)) {
       const resolved = resolveModule(file, specifier);
@@ -187,7 +188,9 @@ test("the format panel reads and writes its position only for a non-null positio
 
 test("the builder passes positionStorageKey null and owns no browser storage", () => {
   const code = stripComments(subjectSource());
-  expectMatch(code, /<FloatingTextFormatPanel[^>]*\bpositionStorageKey=\{null\}/, "the panel does not use the editor's position key");
+  const panel = /<FloatingTextFormatPanel\b[\s\S]*?\/>/.exec(code)?.[0] ?? "";
+  assert.ok(panel.length > 0, "the builder renders the format panel");
+  expectMatch(panel, /\bpositionStorageKey=\{null\}/, "the panel does not use the editor's position key");
   for (const token of storageTokens) expectNoMatch(code, new RegExp(`\\b${token}\\b`), token);
 });
 
@@ -248,7 +251,7 @@ function formFeatures(slice: string) {
 test("the builder's form has the live editor card's groups, labels, text areas, classification and PPU captions in the same order", () => {
   const live = formFeatures(formSlice(read("components/portia-editor.tsx")));
   const mine = formFeatures(builderSlice(stripComments(subjectSource())));
-  assert.ok(live.groups.length === 5 && live.labels.length >= 8 && live.areas.length === 4 && live.classification.length === 7 && live.ppu.length === 1, "the live slice is read as expected");
+  assert.ok(live.groups.length === 5 && live.labels.length === 7 && live.areas.length === 4 && live.classification.length === 7 && live.ppu.length === 1, "the live slice is read as expected");
   assert.deepEqual(mine.groups, live.groups);
   assert.deepEqual(mine.labels, live.labels);
   assert.deepEqual(mine.areas, live.areas);
