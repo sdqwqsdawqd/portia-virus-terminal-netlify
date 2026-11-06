@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-38-PLAN.md (template dossier model and export; 20-39 builds the UI on it)
-last_updated: "2026-11-06T16:18:17.737Z"
+stopped_at: Completed 20-35-PLAN.md
+last_updated: "2026-11-06T16:28:58.625Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 20 execution started
-state_head: 077580754962b4828dc17a47e9d74adfeb90dd91
+state_head: 919424c36ee26a3cc2dd190170bcc56ec3c2908f
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 110
-  completed_plans: 102
+  completed_plans: 103
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 14 of 37
+Plan: 15 of 37
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 20 execution started
 
@@ -136,6 +136,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P20-11 | owner-gated | 2 tasks | 2 files |
 | Phase PORTIA-20 P20-34 | session | 3 tasks | 2 files |
 | Phase PORTIA-20 P20-38 | 14min | 2 tasks | 6 files |
+| Phase PORTIA-20 P20-35 | 1 session | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -240,6 +241,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: D-52: template builder in Promotion becomes a near copy of the site editor's mutation description editing (no scientist records); creating a template must not affect the main site; fix plan required before 20-37
 - [Phase PORTIA-20]: 20-38: an edit that changes the template's mutation count is refused (same draft returned); id, scientist logs, image addresses and image slots are restored after every edit
 - [Phase PORTIA-20]: 20-38: template export reads images only from validated local data URL slots and re-checks them; virus.infectedImage and mutation.image are never read
+- [Phase PORTIA-20]: 20-35: spider redrawn per D-50 (S1-A light neutral rim #d0d0d0 in each group, S2-A strand = accent, S3-A size 72px unchanged); spider_fix_commit d7d917e
 
 ### Pending Todos
 
@@ -282,8 +284,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-06T16:18:17.171Z
-Stopped at: Completed PORTIA-20-38-PLAN.md (template dossier model and export; 20-39 builds the UI on it)
+Last session: 2026-11-06T16:28:58.053Z
+Stopped at: Completed 20-35-PLAN.md
 Resume file: None
 
 ## Operator Next Step
