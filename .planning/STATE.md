@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-20-39-PLAN.md
-last_updated: "2026-11-06T20:09:42.676Z"
+stopped_at: Completed PORTIA-20-37-PLAN.md with outcome stopped-for-fixes (owner verdict 2026-11-07, D-53..D-57); phase 20 needs a new gap cycle, 20-12 must not run
+last_updated: "2026-11-06T21:15:34.356Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 20 execution started
-state_head: 42706e673221cf82e79c0942f11015b0db412fdf
+state_head: 270309cc8dcef65660d10034721f48d3c7067736
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 110
-  completed_plans: 105
+  completed_plans: 106
   percent: 50
 ---
 
@@ -245,6 +245,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-38: template export reads images only from validated local data URL slots and re-checks them; virus.infectedImage and mutation.image are never read
 - [Phase PORTIA-20]: 20-35: spider redrawn per D-50 (S1-A light neutral rim #d0d0d0 in each group, S2-A strand = accent, S3-A size 72px unchanged); spider_fix_commit d7d917e
 - [Phase PORTIA-20]: 20-36: flasks wallpaper is a 12-vessel lab scene (D-51); name and settings key unchanged; 96 endless animations (budget 100)
+- [Phase 20]: 20-37 outcome stopped-for-fixes: owner verdict 2026-11-07 asks to fix 36 rows (16 spider, 12 flasks, 8 template builder), decisions D-53..D-57 in 20-CONTEXT.md; 39 rebaseline/other rows have no verdict; access-request gate is a deferred idea; phase 20 needs a new gap cycle before 20-12
 
 ### Pending Todos
 
@@ -262,6 +263,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 20] register_attempt RPC is granted to anon but has no caller - decide revoke or confirm purpose in the security review.
 - 20-23: live proof of Сводка/Рекомендации sections is BLOCKED (ENV) (no safe staging target) and the notes steps BLOCKED (OWNER) (portia_editor_notes not applied); STAB-EDIT-02/03/04, STAB-A11Y-01/02, STAB-REL-06 stay open
 - [Phase 20] Clean checkout: lib/phase16-guard-boundary.test.ts imports untracked .claude/hooks/guard.mjs, so unit (1 fail) and tsc (TS2307) fail outside the owner's tree; decision needed before 20-13 Task 2
+- Phase 20: new gap cycle for D-53..D-57 (spider gait and rim, flasks animation, template builder as real card, short hints, editor format button) must run and be recaptured before 20-12; 20-12 must not run
 
 ### Quick Tasks Completed
 
@@ -287,10 +289,10 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-06T20:09:42.029Z
-Stopped at: Completed PORTIA-20-20-39-PLAN.md
+Last session: 2026-11-06T21:15:31.954Z
+Stopped at: Completed PORTIA-20-37-PLAN.md with outcome stopped-for-fixes (owner verdict 2026-11-07, D-53..D-57); phase 20 needs a new gap cycle, 20-12 must not run
 Resume file: None
 
 ## Operator Next Step
 
-Plan 15-15 is complete. Run the Phase 15 verification gates; phase stays `gaps_found` until Phase 16/18/19/22 close the owned gaps.
+Phase 20: plan 20-37 executed with outcome `stopped-for-fixes` (owner verdict 2026-11-07, decisions D-53..D-57 in 20-CONTEXT.md). Plan a new gap-closure cycle (`/gsd-plan-phase 20 --gaps`): spider without rim and with all 8 legs stepping and the web synced (D-53), flasks animation and density (D-54), template builder output as the real virus-database card (D-55), short hints (D-56), editor format launch button name (D-57). Then recapture the 36 fix rows and the 39 rows without a verdict. Do not run 20-12 until the ledger is approved.
