@@ -3,11 +3,18 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import test from "node:test";
-import { classificationOptions, portiaTextKey, type RichTextDocument } from "./portia-content.ts";
+import { classificationOptions, portiaTextKey, type PortiaContent, type RichTextDocument } from "./portia-content.ts";
+import { removeMutation } from "./editor-items.ts";
 import {
+  addTemplateMutation,
   editTemplateText,
+  editTemplateVirus,
   emptyTemplateDossier,
+  hasTemplateDossierContent,
+  removeTemplateMutation,
   safeTemplateRunStyle,
+  setTemplateImage,
+  templateDossierSnapshotKey,
   templateFieldRuns,
   templateRunBackground,
   templateVirusId,
@@ -18,6 +25,7 @@ import {
   createTemplateDossierPng,
   downloadTemplateBlob,
   type PngEnvironment,
+  type TemplateImage,
 } from "./portia-template-export.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -289,4 +297,168 @@ test("the static guard recognises a violating source (guard self-check)", () => 
   const found = ioViolations(bad);
   assert.ok(found.includes("token fetch") && found.includes("token sessionStorage") && found.includes("import @/lib/upload-image") && found.includes("route /api/"));
   assert.deepEqual(ioViolations(`// fetch localStorage\n/* sendBeacon */ import type { Virus } from "./portia-content.ts";\nconst note = "plain";`), []);
+});
+
+/* ---------------------------------------------------------------- edits like the editor (Task 2) */
+
+const tinyPng: TemplateImage = Object.freeze({ name: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,iVBORw0KGgo=", width: 40, height: 20, bytes: 8 });
+const tinyJpeg: TemplateImage = Object.freeze({ name: "b.jpg", mime: "image/jpeg", dataUrl: "data:image/jpeg;base64,/9j/4AAQ", width: 30, height: 30, bytes: 6 });
+
+function describeMutation(dossier: TemplateDossier, index: number, name: string, description: string, color: string) {
+  const named = editTemplateVirus(dossier, (virus) => { virus.mutations[index].name = name; });
+  return editTemplateText(named, portiaTextKey.mutation(templateVirusId, index), description, { runs: [{ text: description, style: { color } }] }, (next, text) => { next.virus.mutations[index].description = text; });
+}
+
+function threeMutations(): TemplateDossier {
+  let dossier = emptyTemplateDossier();
+  for (let index = 0; index < 3; index += 1) dossier = addTemplateMutation(dossier);
+  for (let index = 0; index < 3; index += 1) dossier = describeMutation(dossier, index, `M${index}`, `описание ${index}`, `#10203${index}`);
+  dossier = editExternal(dossier);
+  dossier = setTemplateImage(dossier, 0, tinyPng);
+  dossier = setTemplateImage(dossier, 2, tinyJpeg);
+  return dossier;
+}
+
+test("a new mutation equals the editor's new mutation and gets an empty image slot", () => {
+  const match = /virus\.mutations\.push\((\{[^}]*НОВАЯ МУТАЦИЯ[^}]*\})\)/.exec(editorSource());
+  assert.ok(match, "the add-mutation literal is found in the editor source");
+  const fromEditor = Object.fromEntries([...match[1].matchAll(/(\w+):\s*"([^"]*)"/g)].map((pair) => [pair[1], pair[2]]));
+  assert.deepEqual(fromEditor, { name: "НОВАЯ МУТАЦИЯ", description: "", image: "" });
+  const before = emptyTemplateDossier();
+  const snapshot = structuredClone(before);
+  const after = addTemplateMutation(before);
+  assert.deepEqual(before, snapshot);
+  assert.notEqual(after, before);
+  assert.deepEqual(after.virus.mutations, [fromEditor]);
+  assert.deepEqual(after.images.mutations, [null]);
+  assert.deepEqual(addTemplateMutation(after).images.mutations, [null, null]);
+});
+
+test("deleting a mutation shifts the descriptions' formatting exactly like the editor's removeMutation", () => {
+  for (const index of [0, 1, 2]) {
+    const before = threeMutations();
+    const snapshot = structuredClone(before);
+    const after = removeTemplateMutation(before, index);
+    const content = { formattedText: structuredClone(before.formattedText) } as unknown as PortiaContent;
+    const virus = structuredClone(before.virus);
+    removeMutation(content, virus, index);
+    assert.deepEqual(before, snapshot, `input is untouched (index ${index})`);
+    assert.equal(after.virus.mutations.length, 2);
+    assert.deepEqual(after.virus.mutations, virus.mutations, `mutations (index ${index})`);
+    assert.deepEqual(after.formattedText, content.formattedText, `formattedText (index ${index})`);
+    assert.deepEqual(after.images.mutations, before.images.mutations.filter((_, position) => position !== index), `image slots (index ${index})`);
+    assert.ok(externalKey in after.formattedText, "other fields keep their formatting");
+  }
+  const middle = removeTemplateMutation(threeMutations(), 1);
+  assert.equal(middle.virus.mutations[1].name, "M2");
+  assert.deepEqual(middle.formattedText[portiaTextKey.mutation(templateVirusId, 1)], { runs: [{ text: "описание 2", style: { color: "#102032" } }] });
+  assert.equal(portiaTextKey.mutation(templateVirusId, 2) in middle.formattedText, false);
+});
+
+test("deleting an unknown mutation changes nothing", () => {
+  const dossier = threeMutations();
+  for (const index of [-1, 3, 1.5, Number.NaN]) assert.equal(removeTemplateMutation(dossier, index), dossier, String(index));
+});
+
+test("a virus edit cannot change the id, add a scientist log, write an image address or change the mutation count", () => {
+  const dossier = threeMutations();
+  const edited = editTemplateVirus(dossier, (virus) => {
+    virus.code = "VIR-7";
+    virus.classification.mind = "Обливиум";
+    virus.mutations[0].name = "Первая";
+    virus.id = "virus-real-1";
+    virus.infectedImage = "https://evil.example/a.png";
+    virus.mutations[1].image = "https://evil.example/m.png";
+    virus.scientistLogs.push({ id: "log-1", title: "ЗАПИСЬ 01", scientist: "X", lockedLevel: 3, content: [""] });
+  });
+  assert.notEqual(edited, dossier);
+  assert.equal(edited.virus.code, "VIR-7");
+  assert.equal(edited.virus.classification.mind, "Обливиум");
+  assert.equal(edited.virus.mutations[0].name, "Первая");
+  assert.equal(edited.virus.id, "template");
+  assert.equal(edited.virus.infectedImage, "");
+  assert.deepEqual(edited.virus.mutations.map((mutation) => mutation.image), ["", "", ""]);
+  assert.deepEqual(edited.virus.scientistLogs, []);
+  // The chosen behaviour for a count change: the whole edit is refused and the same draft comes back.
+  assert.equal(editTemplateVirus(dossier, (virus) => { virus.mutations.push({ name: "x", description: "", image: "" }); }), dossier);
+  assert.equal(editTemplateVirus(dossier, (virus) => { virus.mutations.length = 1; }), dossier);
+  assert.equal(editTemplateText(dossier, externalKey, "x", dangerDoc, (next) => { next.virus.mutations.pop(); }), dossier);
+  assert.equal(editTemplateText(dossier, externalKey, "x", dangerDoc, (next) => { next.formattedText["virus:real:external"] = dangerDoc; }).formattedText["virus:real:external"], undefined);
+});
+
+test("an image goes only into its own slot and only as a local data URL", () => {
+  const dossier = threeMutations();
+  const infected = setTemplateImage(dossier, "infected", tinyPng);
+  assert.equal(infected.images.infected, tinyPng);
+  assert.deepEqual(infected.images.mutations, dossier.images.mutations);
+  const second = setTemplateImage(dossier, 1, tinyJpeg);
+  assert.deepEqual(second.images.mutations, [tinyPng, tinyJpeg, tinyJpeg]);
+  assert.equal(second.images.infected, null);
+  assert.deepEqual(setTemplateImage(second, 1, null).images.mutations, [tinyPng, null, tinyJpeg]);
+  assert.equal(dossier.images.mutations[1], null, "the input draft is untouched");
+  const external = { ...tinyPng, dataUrl: "https://evil.example/a.png" };
+  const svg = { ...tinyPng, mime: "image/svg+xml", dataUrl: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=" } as unknown as TemplateImage;
+  const mismatched = { ...tinyPng, dataUrl: "data:image/jpeg;base64,/9j/4AAQ" };
+  const withQuote = { ...tinyPng, dataUrl: "data:image/png;base64,AAAA\" onerror=\"x" };
+  for (const bad of [external, svg, mismatched, withQuote]) assert.equal(setTemplateImage(dossier, "infected", bad), dossier);
+  for (const slot of [-1, 3, 0.5]) assert.equal(setTemplateImage(dossier, slot, tinyPng), dossier, String(slot));
+});
+
+test("content is detected for any typed character, class change, image or mutation, and not for an empty draft", () => {
+  const empty = emptyTemplateDossier();
+  assert.equal(hasTemplateDossierContent(empty), false);
+  assert.equal(hasTemplateDossierContent(editTemplateVirus(empty, (virus) => { virus.physiology = "   "; })), false);
+  const typed = (patch: (virus: TemplateDossier["virus"]) => void) => hasTemplateDossierContent(editTemplateVirus(empty, patch));
+  assert.equal(typed((virus) => { virus.code = "V"; }), true);
+  assert.equal(typed((virus) => { virus.ppu.speed = "1"; }), true);
+  assert.equal(typed((virus) => { virus.classification.behavior = "Инфернар"; }), true);
+  assert.equal(hasTemplateDossierContent(addTemplateMutation(empty)), true);
+  assert.equal(hasTemplateDossierContent(setTemplateImage(empty, "infected", tinyPng)), true);
+});
+
+test("the snapshot key follows text, formatting, classification, mutations and images and equals itself for equal content", () => {
+  const base = threeMutations();
+  const key = templateDossierSnapshotKey(base);
+  assert.equal(templateDossierSnapshotKey(structuredClone(base)), key);
+  assert.equal(templateDossierSnapshotKey(emptyTemplateDossier()), templateDossierSnapshotKey(emptyTemplateDossier()));
+  const changes: TemplateDossier[] = [
+    editTemplateVirus(base, (virus) => { virus.name = "A"; }),
+    editTemplateVirus(base, (virus) => { virus.classification.danger = "Апейрон"; }),
+    editTemplateVirus(base, (virus) => { virus.mutations[1].name = "другая"; }),
+    editTemplateText(base, externalKey, dangerText, { runs: [{ text: "Опасно", style: { color: "#B43633", fontWeight: 600 } }, { text: " для всех" }] }, (next, text) => { next.virus.external = text; }),
+    editTemplateText(base, portiaTextKey.virus(templateVirusId, "physiology"), "ф", { runs: [{ text: "ф" }] }, (next, text) => { next.virus.physiology = text; }),
+    addTemplateMutation(base),
+    removeTemplateMutation(base, 0),
+    setTemplateImage(base, 1, tinyPng),
+    setTemplateImage(base, "infected", tinyJpeg),
+    setTemplateImage(base, 0, null),
+  ];
+  const keys = new Set(changes.map(templateDossierSnapshotKey));
+  assert.ok(!keys.has(key), "no change leaves the key as it was");
+  assert.equal(keys.size, changes.length, "different changes give different keys");
+});
+
+test("a whole editing session with every edit function and both exports makes no request and uses no storage", async () => {
+  const anchor = { href: "", download: "", rel: "", style: { display: "" }, click: () => {}, remove: () => {} };
+  const downloadEnvironment = {
+    document: { createElement: () => anchor, body: { append: () => {} } } as unknown as Document,
+    URL: { createObjectURL: () => "blob:test", revokeObjectURL: () => {} } as unknown as typeof URL,
+    setTimeout: (() => 0) as unknown as typeof setTimeout,
+  };
+  const fake = fakeCanvasEnvironment();
+  const { result, hits } = await withIoTraps(async () => {
+    let dossier = threeMutations();
+    dossier = removeTemplateMutation(addTemplateMutation(dossier), 1);
+    dossier = setTemplateImage(dossier, "infected", tinyPng);
+    dossier = editTemplateVirus(dossier, (virus) => { virus.status = "НАБЛЮДЕНИЕ"; });
+    const html = createTemplateDossierHtml(dossier);
+    const png = await createTemplateDossierPng(dossier, fake.environment);
+    downloadTemplateBlob(html, "a.html", downloadEnvironment);
+    downloadTemplateBlob(png, "a.png", downloadEnvironment);
+    return { key: templateDossierSnapshotKey(dossier), content: hasTemplateDossierContent(dossier) };
+  });
+  assert.deepEqual(hits, []);
+  assert.equal(result.content, true);
+  assert.ok(result.key.length > 0);
+  assert.ok(fake.loaded.length > 0 && fake.loaded.every((source) => source.startsWith("data:image/")), "only slot data URLs were loaded");
 });

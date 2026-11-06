@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import { portiaTextKey, type RichTextDocument } from "./portia-content.ts";
-import { editTemplateText, emptyTemplateDossier, templateVirusId, type TemplateDossier } from "./portia-template-dossier.ts";
+import { addTemplateMutation, editTemplateText, editTemplateVirus, emptyTemplateDossier, setTemplateImage, templateVirusId, type TemplateDossier } from "./portia-template-dossier.ts";
 import {
   createStandaloneHtml,
   createTemplateDossierHtml,
@@ -381,4 +383,187 @@ test("dossier PNG draws the styled fragment with its own fill and returns a png 
   const danger = drawn.find((item) => item.text === "Опасно");
   assert.ok(danger && danger.fill === "#b43632" && danger.font.includes(" 600 "));
   assert.ok(drawn.some((item) => item.text.includes("для всех") && item.fill === "#1b2523"));
+});
+
+/* ---------------------------------------------------------------- all card sections (Task 2) */
+
+const pngImage: TemplateImage = Object.freeze({ name: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,iVBORw0KGgo=", width: 3000, height: 3000, bytes: 8 });
+const jpegImage: TemplateImage = Object.freeze({ name: "b.jpg", mime: "image/jpeg", dataUrl: "data:image/jpeg;base64,/9j/4AAQ", width: 400, height: 200, bytes: 6 });
+
+function fullDossier(): TemplateDossier {
+  let dossier = emptyTemplateDossier();
+  dossier = editTemplateVirus(dossier, (virus) => {
+    virus.code = "VIR-77";
+    virus.name = "Тестовый вирус";
+    virus.status = "НАБЛЮДЕНИЕ";
+    virus.classification.danger = "Протей";
+    virus.classification.transmission = "Половой";
+  });
+  const set = (key: string, text: string, style: object | undefined, apply: (next: TemplateDossier, value: string) => void) => {
+    dossier = editTemplateText(dossier, key, text, { runs: [{ text, ...(style ? { style } : {}) }] }, apply);
+  };
+  set(portiaTextKey.virus(templateVirusId, "external"), "Внешний вид", { color: "#b43632", fontWeight: 700 }, (next, text) => { next.virus.external = text; });
+  set(portiaTextKey.virus(templateVirusId, "ppu-health"), "Здоровье 100", { backgroundColor: "#102030", backgroundOpacity: 0.5 }, (next, text) => { next.virus.ppu.health = text; });
+  set(portiaTextKey.virus(templateVirusId, "ppu-speed"), "Скорость 3", undefined, (next, text) => { next.virus.ppu.speed = text; });
+  set(portiaTextKey.virus(templateVirusId, "ppu-abilities"), "Способности ", { fontSize: 20 }, (next, text) => { next.virus.ppu.abilities = text; });
+  set(portiaTextKey.virus(templateVirusId, "physiology"), "Физиология", { color: "#2e6f64" }, (next, text) => { next.virus.physiology = text; });
+  dossier = addTemplateMutation(addTemplateMutation(dossier));
+  dossier = editTemplateVirus(dossier, (virus) => { virus.mutations[0].name = "Первая мутация"; });
+  set(portiaTextKey.mutation(templateVirusId, 0), "Описание первой", { color: "#112233" }, (next, text) => { next.virus.mutations[0].description = text; });
+  dossier = setTemplateImage(dossier, "infected", pngImage);
+  dossier = setTemplateImage(dossier, 0, jpegImage);
+  return dossier;
+}
+
+test("dossier HTML has sections 01-05 in order with the site's labels and no scientist records", () => {
+  const html = createTemplateDossierHtml(fullDossier());
+  const positions = ["01 КЛАССИФИКАЦИЯ", "02 ВНЕШНИЕ ХАРАКТЕРИСТИКИ", "03 ХАРАКТЕРИСТИКИ С PPU", "04 ФИЗИОЛОГИЯ", "05 МУТАЦИИ ВИРУСА"].map((title) => html.indexOf(title));
+  assert.ok(positions.every((position) => position >= 0), "every section is present");
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions, "sections keep the site's order");
+  for (const label of ["Общий уровень опасности", "Распространение", "Угроза и риск побега", "Способ распространения", "Разум", "Вид / внешность", "Поведение", "ЗДОРОВЬЕ", "СКОРОСТЬ", "СПОСОБНОСТИ", "M-01", "M-02", "Первая мутация", "Протей", "Половой"]) {
+    assert.ok(html.includes(escapeTemplateHtml(label)), label);
+  }
+  assert.ok(html.includes("УРОВЕНЬ 2"), "Протей is level 2");
+  assert.ok(!html.includes("ЗАПИСИ УЧЁНЫХ"));
+  assert.ok(!/LOG-\d/.test(html));
+  assert.ok(html.includes(`<span style="color:#112233">Описание первой</span>`));
+  assert.ok(html.includes(`style="background-color:rgba(16,32,48,0.5)"`));
+  assert.ok(html.includes(`style="font-size:20px"`));
+  assert.ok(html.includes(emptyTemplateText), "the second mutation has no name or description");
+});
+
+test("dossier HTML embeds exactly the filled image slots and never reads an address from the record", () => {
+  const dossier = fullDossier();
+  dossier.virus.infectedImage = "https://evil.example/a.png";
+  dossier.virus.mutations[1].image = "https://evil.example/m.png";
+  const html = createTemplateDossierHtml(dossier);
+  assert.equal((html.match(/<img/g) ?? []).length, 2);
+  assert.ok(html.includes(`src="${pngImage.dataUrl}"`) && html.includes(`src="${jpegImage.dataUrl}"`));
+  assert.ok(!html.includes("evil.example"));
+  assert.equal((createTemplateDossierHtml(emptyTemplateDossier()).match(/<img/g) ?? []).length, 0);
+});
+
+/** One check over a finished export document: the closed content policy of D-23/D-24. */
+function exportViolations(html: string) {
+  const found: string[] = [];
+  if (/https?:/i.test(html)) found.push("external address");
+  if (/<script/i.test(html)) found.push("script");
+  if (/<link/i.test(html)) found.push("link");
+  if (/url\(/i.test(html)) found.push("css url");
+  if (/<[^>]*\son[a-z]+\s*=/i.test(html)) found.push("event handler");
+  if (html.includes("ЗАПИСИ УЧЁНЫХ")) found.push("scientist records section");
+  for (const image of html.match(/<img[^>]*>/gi) ?? []) {
+    if (!/^<img src="data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}"/.test(image)) found.push(`image outside data:image/png|jpeg|webp: ${image.slice(0, 40)}`);
+  }
+  return found;
+}
+
+function hostileDossier(): TemplateDossier {
+  const dossier = emptyTemplateDossier();
+  dossier.virus.name = `<img src=x onerror="a()">`;
+  dossier.virus.code = `"><script>alert(1)</script>`;
+  dossier.virus.external = `<link rel=stylesheet href=//evil.example/x.css>`;
+  dossier.virus.classification.danger = `<script>x</script>`;
+  dossier.virus.infectedImage = "https://evil.example/a.png";
+  dossier.virus.mutations.push({ name: `<b onmouseover="x()">`, description: `<script>y</script>`, image: "https://evil.example/m.png" });
+  dossier.virus.scientistLogs.push({ id: "log-1", title: "ЗАПИСИ УЧЁНЫХ", scientist: "X", lockedLevel: 1, content: ["секрет"] });
+  dossier.images.infected = { ...pngImage, dataUrl: "https://evil.example/x.png" };
+  dossier.images.mutations = [{ ...jpegImage, dataUrl: `data:image/jpeg;base64,AAAA" onerror="x` }];
+  dossier.formattedText[portiaTextKey.virus(templateVirusId, "external")] = {
+    runs: [{ text: dossier.virus.external, style: { color: "#b43632;background:url(//evil.example/p)", fontSize: 9999 } as never }],
+  };
+  return dossier;
+}
+
+test("the export stays inside the closed policy: no address, script, link, url(), handler, foreign image or scientist section", () => {
+  const subject = process.env.GSD_PROHIB_SUBJECT;
+  const html = subject ? readFileSync(path.resolve(process.cwd(), subject), "utf8") : createTemplateDossierHtml(hostileDossier());
+  assert.deepEqual(exportViolations(html), []);
+  if (!subject) {
+    assert.deepEqual(exportViolations(createTemplateDossierHtml(fullDossier())), []);
+    assert.deepEqual(exportViolations(createTemplateDossierHtml(emptyTemplateDossier())), []);
+    assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), "typed markup is escaped, not dropped");
+  }
+});
+
+test("the closed-policy check recognises a violating document (check self-check)", () => {
+  const found = exportViolations(`<body onload="a()"><img src="https://x.example/a.png"><section>ЗАПИСИ УЧЁНЫХ</section><script>1</script><link href=a><i style="background:url(a)"></i></body>`);
+  for (const expected of ["external address", "script", "link", "css url", "event handler", "scientist records section"]) assert.ok(found.includes(expected), expected);
+  assert.ok(found.some((entry) => entry.startsWith("image outside")));
+});
+
+type DrawnText = { text: string; fill: string; font: string };
+
+function recordingPngEnvironment(options: { measureOf?: (text: string) => number } = {}) {
+  const texts: DrawnText[] = [];
+  const rects: Array<{ x: number; y: number; width: number; height: number; fill: string }> = [];
+  const images: Array<{ x: number; y: number; width: number; height: number }> = [];
+  const loaded: string[] = [];
+  const environment: PngEnvironment = {
+    createCanvas: (width, height) => {
+      const context = {
+        font: "", fillStyle: "", strokeStyle: "", lineWidth: 1, textBaseline: "",
+        fillRect(x: number, y: number, rectWidth: number, rectHeight: number) { rects.push({ x, y, width: rectWidth, height: rectHeight, fill: this.fillStyle }); },
+        strokeRect: () => {},
+        fillText(text: string) { texts.push({ text, fill: this.fillStyle, font: this.font }); },
+        drawImage: (_image: never, x: number, y: number, imageWidth: number, imageHeight: number) => { images.push({ x, y, width: imageWidth, height: imageHeight }); },
+        measureText: (text: string) => ({ width: (options.measureOf ?? ((value: string) => Array.from(value).length * 8))(text) }),
+      };
+      return { width, height, getContext: () => context, toBlob: (callback: (blob: Blob | null) => void) => callback(new Blob(["png-bytes"], { type: "image/png" })) };
+    },
+    loadImage: async (src) => { loaded.push(src); return { width: 100, height: 100 }; },
+  };
+  return { environment, texts, rects, images, loaded };
+}
+
+test("dossier PNG draws every visible character, the fragment background, bounded images and only slot data URLs", async () => {
+  const dossier = fullDossier();
+  const fake = recordingPngEnvironment();
+  const blob = await createTemplateDossierPng(dossier, fake.environment);
+  assert.ok(blob.size > 0);
+  const drawn = fake.texts.map((item) => item.text).join("");
+  const visible = (value: string) => Array.from(value.replace(/\s/g, ""));
+  for (const field of ["VIR-77", "Тестовый вирус", "НАБЛЮДЕНИЕ", "Внешний вид", "Здоровье 100", "Скорость 3", "Способности", "Физиология", "Первая мутация", "Описание первой", "Протей", "Половой", "УРОВЕНЬ 2", "M-01", "M-02", "КЛАССИФИКАЦИЯ", "МУТАЦИИ ВИРУСА"]) {
+    for (const character of visible(field)) assert.ok(drawn.includes(character), `${character} of ${field}`);
+    assert.ok(drawn.replace(/\s/g, "").includes(field.replace(/\s/g, "")), field);
+  }
+  assert.ok(!drawn.includes("ЗАПИСИ УЧЁНЫХ"));
+  assert.ok(fake.rects.some((rect) => rect.fill === "rgba(16,32,48,0.5)"), "the fragment with a background gets a rectangle");
+  assert.equal(fake.images.length, 2);
+  for (const image of fake.images) assert.ok(image.width <= pngWidth && image.height <= 520 && image.width >= 1);
+  assert.deepEqual([...fake.loaded].sort(), [jpegImage.dataUrl, pngImage.dataUrl].sort());
+  assert.ok(fake.texts.some((item) => item.text === "Внешний вид" && item.fill === "#b43632" && item.font.includes(" 700 ")));
+});
+
+test("dossier PNG never loads an address that was written around the edit functions", async () => {
+  const fake = recordingPngEnvironment();
+  await createTemplateDossierPng(hostileDossier(), fake.environment);
+  assert.deepEqual(fake.loaded, []);
+  assert.deepEqual(fake.images, []);
+});
+
+test("a dossier card taller than the canvas limit is refused instead of cropped", async () => {
+  const tall = emptyTemplateDossier();
+  tall.virus.external = "a\n".repeat(1999);
+  tall.virus.physiology = "a\n".repeat(1999);
+  assert.throws(() => layoutTemplateDossierCard(tall, measure), (error) => isTemplatePngTooLargeError(error));
+  const fake = recordingPngEnvironment();
+  await assert.rejects(createTemplateDossierPng(tall, fake.environment), (error) => isTemplatePngTooLargeError(error));
+  assert.deepEqual(fake.texts, []);
+});
+
+test("the dossier layout keeps every operation inside the page and scales images into the page width", () => {
+  const layout = layoutTemplateDossierCard(fullDossier(), sizeMeasure);
+  assert.equal(layout.width, pngWidth);
+  assert.ok(layout.height <= pngMaxHeight);
+  const images = layout.ops.filter((op) => op.kind === "image");
+  assert.equal(images.length, 2);
+  for (const image of images) {
+    assert.ok(image.kind === "image" && image.width <= pngWidth - pngPadding * 2 && image.height <= 520 && image.slot !== undefined);
+    assert.equal(image.x, pngPadding);
+  }
+  for (const op of layout.ops) {
+    assert.ok(op.x >= 0 && op.y >= 0 && op.y <= layout.height);
+    if (op.kind !== "text") assert.ok(op.x + op.width <= layout.width && op.y + op.height <= layout.height);
+  }
 });

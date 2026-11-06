@@ -175,3 +175,29 @@ export function templateFieldRuns(dossier: TemplateDossier, key: string, text: s
   }
   return [{ text }];
 }
+
+/* ---------------------------------------------------------------- RED skeleton (20-38 Task 2), replaced by the implementation */
+
+export function editTemplateVirus(dossier: TemplateDossier, _update: (virus: Virus) => void): TemplateDossier {
+  return dossier;
+}
+
+export function addTemplateMutation(dossier: TemplateDossier): TemplateDossier {
+  return dossier;
+}
+
+export function removeTemplateMutation(dossier: TemplateDossier, _index: number): TemplateDossier {
+  return dossier;
+}
+
+export function setTemplateImage(dossier: TemplateDossier, _slot: "infected" | number, _image: TemplateImage | null): TemplateDossier {
+  return dossier;
+}
+
+export function hasTemplateDossierContent(_dossier: TemplateDossier): boolean {
+  return false;
+}
+
+export function templateDossierSnapshotKey(_dossier: TemplateDossier): string {
+  return "";
+}
