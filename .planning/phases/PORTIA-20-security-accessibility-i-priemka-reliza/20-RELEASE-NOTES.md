@@ -2,7 +2,7 @@
 phase: PORTIA-20-security-accessibility-i-priemka-reliza
 status: draft
 release_commit: ОЖИДАЕТ 20-15
-matrix_commit: b88669fb7d92dbf22d66ac6d7bb9a1b011195956
+matrix_commit: ddbf427ca9ddf24d1cdcea2271c645dbe06a641d
 ---
 
 # 20 — Release notes (черновик плана 20-31, финал в плане 20-15)
