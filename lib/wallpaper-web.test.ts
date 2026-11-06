@@ -70,26 +70,70 @@ test("the wallpaper spider starts randomly beside threads and relocates after an
   assert.ok(source.includes('const motionOn = () => root.dataset.motion !== "reduced" && root.dataset.motion !== "off";'));
 });
 
-test("the spider keeps a white body, black and turquoise legs, and its walking outline", () => {
+// D-50 (20-34) заменяет D-26 в части цвета тела и деталей: паук как на логотипе владельца
+// (белое тело, чёрные части, вторая нить цвета акцента, тонкий светлый кант).
+test("D-50 the spider is drawn as the owner's logo spider: white body, black parts, accent strand, light rim", () => {
   const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
   const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
   const rule = (selector: string) => {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return styles.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
   };
-  assert.match(rule(".wallpaper-spider-dark"), /fill:\s*color-mix\(.*#020706/);
-  assert.match(rule(".wallpaper-spider-limb"), /fill:\s*color-mix\(.*var\(--teal\)/);
-  assert.match(rule(".wallpaper-spider-pale"), /fill:\s*#f1f6f4/);
-  const stroke = rule(".wallpaper-spider :is(path, circle)");
-  assert.match(stroke, /stroke:\s*var\(--spider-rim\)/, "body and legs use the dedicated contour token");
-  assert.match(rule(":root"), /--spider-rim:\s*#020706/, "preset accents keep the accepted dark contour");
-  assert.doesNotMatch(stroke, /stroke:\s*none|opacity/);
+  assert.match(rule(".wallpaper-spider-pale"), /fill:\s*#fdfdfd/, "the body is the sample's white");
+  const dark = rule(".wallpaper-spider-dark");
+  assert.match(dark, /fill:\s*#070707/, "the black parts are the sample's neutral near-black");
+  assert.doesNotMatch(dark, /var\(--teal\)|color-mix/, "no accent tint in the black parts");
+  assert.match(rule(".wallpaper-spider-limb"), /fill:\s*var\(--teal\)/, "S2-А: the second strand of the legs is the accent");
+  // D-50 S1-А: a thin light neutral rim round the outer edge, drawn as a rim layer under the parts; the parts themselves carry no stroke.
+  const kant = rule(".wallpaper-spider-kant");
+  assert.match(kant, /stroke:\s*var\(--spider-rim\)/);
+  assert.match(kant, /fill:\s*var\(--spider-rim\)/);
+  assert.match(kant, /stroke-linejoin:\s*round/);
+  assert.equal(rule(".wallpaper-spider :is(path, circle)").trim(), "", "the parts no longer carry the old dark stroke");
+  const width = Number(kant.match(/stroke-width:\s*([\d.]+)/)?.[1]);
+  assert.ok(width >= 14 && width <= 22, `about 1 CSS px of rim outside the silhouette at 72 px (stroke-width ${width} units, half of it shows)`);
+  const rim = styles.match(/(?:^|\n)\s*--spider-rim:\s*(#[0-9a-f]{6});/i)?.[1] ?? "";
+  const channels = [1, 3, 5].map((at) => parseInt(rim.slice(at, at + 2), 16));
+  assert.ok(Math.max(...channels) - Math.min(...channels) < 6 && Math.min(...channels) >= 0xb0, `:root --spider-rim ${rim} is a light neutral`);
   assert.doesNotMatch(rule(".wallpaper-spider"), /color:\s*var\(--teal\)|opacity:\s*0?\.\d/, "the spider wrapper does not tint its parts with the accent");
-  const accent = rule(".wallpaper-spider .wallpaper-spider-accent");
-  assert.match(accent, /fill:\s*var\(--teal\)/);
-  assert.match(source, /className="wallpaper-spider-accent"/);
-  assert.doesNotMatch(source, /wallpaper-spider-teal/, "the old solid accent segment class is gone");
+  // D-45: no SVG filter, blur or shadow anywhere in the spider rules.
+  for (const [, selector, body] of styles.matchAll(/([^{}]*\.wallpaper-spider[^{}]*)\{([^{}]*)\}/g)) {
+    assert.doesNotMatch(body, /filter|blur|drop-shadow/, `${selector.trim()} has no filter`);
+  }
+  assert.doesNotMatch(source, /<filter|filter=|feGaussianBlur|drop-shadow/);
+  // The old accent pupils over the eyes are gone.
+  assert.doesNotMatch(source, /wallpaper-spider-accent/);
+  assert.doesNotMatch(styles, /wallpaper-spider-accent/);
+  assert.doesNotMatch(source, /wallpaper-spider-teal/);
   assert.doesNotMatch(styles, /wallpaper-spider-teal/);
+});
+
+// D-50 без вируса: the artwork is exactly the body (silhouette, head, fangs, four eyes) and eight leg groups; any extra group or shape fails here.
+test("D-50 без вируса: the artwork is the body, four eyes and eight [data-leg] groups with the same pivots", () => {
+  const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
+  const ids = ["L1", "L2", "L3", "L4", "R1", "R2", "R3", "R4"];
+  const legBlock = source.match(/const LEG_PARTS: [^=]*= \{([\s\S]*?)\n\};/)?.[1] ?? "";
+  assert.deepEqual([...legBlock.matchAll(/^  (\w+): \[/gm)].map((m) => m[1]).sort(), ids, "eight legs in the path data");
+  const pivots = source.match(/const LEG_PIVOTS[^=]*= \{([\s\S]*?)\n\};/)?.[1] ?? "";
+  assert.deepEqual([...pivots.matchAll(/(\w+): \[([\d.]+), ([\d.]+)\]/g)].map((m) => `${m[1]} ${m[2]} ${m[3]}`), [
+    "L1 225.84 320.44", "L2 219.46 341.72", "L3 213.04 401.78", "L4 237.32 430.45",
+    "R1 423.72 320.25", "R2 429.68 341.43", "R3 435.84 401.19", "R4 411.79 428.91",
+  ], "LEG_PIVOTS are unchanged");
+  assert.match(source, /const LEG_DRAW_ORDER[^=]*= \["R4", "R3", "R2", "R1", "L4", "L3", "L2", "L1"\]/, "the drawing order is kept");
+  assert.match(source, /type PartKind = "dark" \| "limb" \| "pale";/, "only the three artwork colours exist");
+  assert.equal([...source.matchAll(/\["(dark|limb|pale)", "M/g)].length, 39, "the 39 paths of Spider.svg are kept");
+  assert.equal(source.match(/\["(?!dark"|limb"|pale")\w+", "M/g), null, "no other part kind");
+  assert.equal(source.match(/<g[ >]/g)?.length, 3, "markup groups: leg, rim layer, body");
+  assert.match(source, /<g className="wallpaper-spider-leg" data-leg=\{leg\} style=\{legOrigin\(leg\)\} key=\{leg\}>/);
+  assert.match(source, /<g className="wallpaper-spider-body">/);
+  assert.equal(source.match(/<circle[ >]/g)?.length, 1, "one circle in the markup, drawn for each of the four eyes");
+  const eyes = source.match(/const EYES[^=]*= \[([\s\S]*?)\];/)?.[1] ?? "";
+  assert.equal([...eyes.matchAll(/\[[\d.]+, [\d.]+, [\d.]+\]/g)].length, 4, "four black eyes, no accent pupils");
+  // The rim layer sits in every leg group and in the body group, before the parts, and repeats only the black and strand parts.
+  assert.match(source, /<g className="wallpaper-spider-kant">\{parts\.filter\(\(\[kind\]\) => kind !== "pale"\)/);
+  assert.ok(source.indexOf('className="wallpaper-spider-kant"') < source.indexOf("parts.map(([kind, d]"), "the rim layer comes first");
+  assert.match(source, /<SpiderParts parts=\{LEG_PARTS\[leg\]\} \/>/);
+  assert.match(source, /<SpiderParts parts=\{BODY_PARTS\} \/>/);
 });
 
 test("the web stands still in every mode, with the spider shown or hidden (owner recall of the D-09 sway, quick 261102-d7r)", () => {
