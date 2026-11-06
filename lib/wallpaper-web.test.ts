@@ -70,20 +70,16 @@ test("the wallpaper spider starts randomly beside threads and relocates after an
   assert.ok(source.includes('const motionOn = () => root.dataset.motion !== "reduced" && root.dataset.motion !== "off";'));
 });
 
-test("D-25/D-26: the spider body and legs are dense dark outlined parts and the accent lives only in small details", () => {
+test("the spider keeps a white body, black and turquoise legs, and its walking outline", () => {
   const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
   const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
   const rule = (selector: string) => {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return styles.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
   };
-  const bodyRules = [".wallpaper-spider-dark", ".wallpaper-spider-limb", ".wallpaper-spider-pale"].map((selector) => [selector, rule(selector)] as const);
-  for (const [selector, text] of bodyRules) {
-    assert.match(text, /fill:\s*var\(--panel/, `${selector} is filled from the dark palette`);
-    assert.doesNotMatch(text, /var\(--teal\)|currentColor/, `${selector} does not follow the accent`);
-    assert.doesNotMatch(text, /opacity/, `${selector} is opaque`);
-    assert.doesNotMatch(text, /color-mix/, `${selector} has no translucent mix`);
-  }
+  assert.match(rule(".wallpaper-spider-dark"), /fill:\s*color-mix\(.*#020706/);
+  assert.match(rule(".wallpaper-spider-limb"), /fill:\s*color-mix\(.*var\(--teal\)/);
+  assert.match(rule(".wallpaper-spider-pale"), /fill:\s*#f1f6f4/);
   const stroke = rule(".wallpaper-spider :is(path, circle)");
   assert.match(stroke, /stroke:\s*var\(--spider-rim\)/, "body and legs use the dedicated contour token");
   assert.match(rule(":root"), /--spider-rim:\s*#020706/, "preset accents keep the accepted dark contour");

@@ -97,8 +97,8 @@ const textOf = (value: unknown) => (typeof value === "string" ? value : typeof v
 const asText = (value: unknown) => (typeof value === "string" ? value : "");
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object";
 
-// D-47: editor notes live in portia_editor_notes and never in the public payload, so a stored "note" key is not carried
-// over by the spreads below that keep the unknown fields of a record.
+// D-47: editor notes never belong in the public payload (the owner removed them in 20-33), so a stored "note" key is not
+// carried over by the spreads below that keep the unknown fields of a record.
 const withoutNote = (record: Record<string, unknown>): Record<string, unknown> => {
   const rest = { ...record };
   delete rest.note;
@@ -233,7 +233,13 @@ function normalizeGuideBlock(value: unknown, cardId: string, index: number): Gui
     case "table":
       return [{ id, type: "table", rows: normalizeTableRows(value.rows, id) }];
     case "photo":
-      return [{ id, type: "photo", url: normalizeMediaUrl(value.url), caption: asText(value.caption) }];
+      return [{ id, type: "photo", url: normalizeMediaUrl(value.url), caption: asText(value.caption),
+        ...(typeof value.width === "number" && Number.isFinite(value.width) ? { width: Math.min(100, Math.max(40, Math.round(value.width))) } : {}),
+        ...(typeof value.height === "number" && Number.isFinite(value.height) ? { height: Math.min(600, Math.max(0, Math.round(value.height))) } : {}),
+        ...(value.align === "left" || value.align === "center" || value.align === "right" ? { align: value.align } : {}),
+        ...(typeof value.focusX === "number" && Number.isFinite(value.focusX) ? { focusX: Math.min(100, Math.max(0, Math.round(value.focusX))) } : {}),
+        ...(typeof value.focusY === "number" && Number.isFinite(value.focusY) ? { focusY: Math.min(100, Math.max(0, Math.round(value.focusY))) } : {}),
+      }];
     case "video":
       return [{ id, type: "video", videoId: typeof value.videoId === "string" && youtubeIdPattern.test(value.videoId) ? value.videoId : "" }];
     case "callout":

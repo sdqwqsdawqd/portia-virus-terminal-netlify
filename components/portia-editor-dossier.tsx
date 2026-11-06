@@ -347,13 +347,14 @@ export function Field({ label, children, wide = false, error, errorId }: { label
   return <label className={`editor-field${wide ? " wide" : ""}${error ? " is-invalid" : ""}`}><span>{label}</span>{children}{error && <small id={errorId} className="editor-field-error" aria-hidden="true">{error}</small>}</label>;
 }
 
-export function ImageEditorField({ label, value, placement, maxHint, removeLabel, uploadState = "idle", uploadMessage = "", onChange, onUpload }: {
+export function ImageEditorField({ label, value, placement, maxHint, removeLabel, showPreview = true, uploadState = "idle", uploadMessage = "", onChange, onUpload }: {
   label: string;
   value: string;
   placement: ImagePlacement;
   maxHint: string;
   // When set and the field holds an image, a button with this text clears it.
   removeLabel?: string;
+    showPreview?: boolean;
   uploadState?: "idle" | "uploading" | "error";
   // Server or network refusal text, shown under the field; the value itself is never touched on refusal.
   uploadMessage?: string;
@@ -384,7 +385,7 @@ export function ImageEditorField({ label, value, placement, maxHint, removeLabel
       <small>или перетащите изображение сюда · PNG, JPG, WEBP, GIF · до 4 МБ</small>
     </label>}
     {refusal && <span className="editor-media-error" role="alert">{refusal}</span>}
-    {value && !previewFailed && <figure className={`editor-image-preview ${placement}`}><img src={value} alt={`Предпросмотр: ${label}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedPreviewUrl(value)} /></figure>}
+      {value && showPreview && !previewFailed && <figure className={`editor-image-preview ${placement}`}><img src={value} alt={`Предпросмотр: ${label}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedPreviewUrl(value)} /></figure>}
     {value && removeLabel && <button type="button" className="secondary-control" onClick={() => onChange("")}>{removeLabel}</button>}
     {value && previewFailed && <span className="editor-media-error">Не удалось открыть ссылку. Нужна прямая HTTPS-ссылка на файл изображения или GIF.</span>}
   </div>;

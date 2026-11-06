@@ -143,7 +143,7 @@ test("STAB-DESK-07: app ids, storage keys and API endpoints stay as pinned", () 
   assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-content-last-success-v1", "portia-desktop-shortcuts-v3", "portia-employees-last-success-v1", "portia-guide-collapsed-v2", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
   assert.deepEqual(keys(editorSource), ["portia-format-panel-v1"]);
   assert.deepEqual(endpoints(source), { "/api/content": 2, "/api/access": 1, "/api/employees": 1 });
-  assert.deepEqual(endpoints(editorSource), { "/api/uploads": 1, "/api/employees/editor": 1, "/api/employees": 3, "/api/editors": 4, "/api/content/notes": 2 });
+  assert.deepEqual(endpoints(editorSource), { "/api/uploads": 1, "/api/employees/editor": 1, "/api/employees": 3, "/api/editors": 4 });
 });
 
 test("every desktop shortcut owns a default position and saved positions override only itself", () => {
@@ -976,7 +976,7 @@ test("sticky and floating editor layers never cover the content: notices are in 
   const rules = styles.split("\n").filter((line) => /^\.[^{]*\{/.test(line));
   const stickyEditor = rules.filter((line) => /position:\s*sticky/.test(line) && /editor/.test(line.slice(0, line.indexOf("{")))).map((line) => line.slice(0, line.indexOf("{")).trim());
   // 20-22 (D-41): the «Справочник» add-section bar is the one other sticky editor layer. It sits in the flow at the top of the tab, above the TOC, on an opaque panel.
-  assert.deepEqual(stickyEditor, [".editor-save-chip", ".editor-section-addbar"]);
+  assert.deepEqual(stickyEditor, [".editor-save-chip", ".editor-section-tabs", ".editor-section-addbar"]);
   const addbar = rules.find((line) => line.startsWith(".editor-section-addbar {")) ?? "";
   assert.match(addbar, /top:\s*0/);
   assert.match(addbar, /background:\s*var\(--panel\)/);

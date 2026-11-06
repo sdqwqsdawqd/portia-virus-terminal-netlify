@@ -65,7 +65,7 @@ export function EmbeddedDocument({ src, external, title }: { src: string; extern
       <iframe key={frameKey} src={src} title={title} loading="lazy" sandbox={embedSandbox} referrerPolicy="no-referrer" onLoad={() => setFrameState("loaded")} style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})` }} />
       {frameState === "loading" && <AppSkeleton shape="document" />}
       {/* Retry remounts the frame (new key) and goes back to the skeleton; the external link stays as the way out. */}
-      {frameState === "failed" && <AppFatalPanel failure="iframe" illustration="microscope" extra={<a className="app-state-action" href={external} target="_blank" rel="noreferrer">Открыть отдельно</a>} retrying={false} onRetry={() => { setFrameKey((key) => key + 1); setFrameState("loading"); }} />}
+      {frameState === "failed" && <AppFatalPanel failure="iframe" illustration="microscopeGuide" extra={<a className="app-state-action" href={external} target="_blank" rel="noreferrer">Открыть отдельно</a>} retrying={false} onRetry={() => { setFrameKey((key) => key + 1); setFrameState("loading"); }} />}
       {/* A lost keyup (Ctrl+key shortcut that moved focus, a context menu) clears on the first move or press instead of leaving the document blocked (01-WR-03). */}
       {ctrlHeld && <div className="document-app-zoom-layer" aria-hidden="true" onPointerMove={(event) => { if (!zoomModifier(event)) setCtrlHeld(false); }} onPointerDown={(event) => { if (!zoomModifier(event)) setCtrlHeld(false); }} />}
     </div>
@@ -184,7 +184,7 @@ function GuideBlockView({ block, formattedText, cardTitle }: { block: GuideBlock
   if (block.type === "heading") return block.text.trim() ? <h2 className="guide-heading">{block.text}</h2> : null;
   if (block.type === "text") return <FormattedText className="info-document-copy" text={block.text} document={formattedText[portiaTextKey.guideBlock(block.id)]} />;
   if (block.type === "table") return <div className="guide-table"><dl className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row) => <div key={row.id}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl></div>;
-  if (block.type === "photo") return block.url ? <GuidePhoto url={block.url} caption={block.caption} recordId={block.id} /> : null;
+  if (block.type === "photo") return block.url ? <GuidePhoto block={block} /> : null;
   if (block.type === "video") return block.videoId ? <YoutubeFigure videoId={block.videoId} title={cardTitle || "Без названия"} /> : null;
   return <aside className="guide-callout">
     {block.label.trim() && <span className="guide-callout-label">{block.label}</span>}
@@ -193,10 +193,11 @@ function GuideBlockView({ block, formattedText, cardTitle }: { block: GuideBlock
 }
 
 // A page photo is full width, not a link and has no zoom; a failed image is said so in words by the placeholder, never a broken icon (A11Y-03).
-function GuidePhoto({ url, caption, recordId }: { url: string; caption: string; recordId: string }) {
-  return <figure className="info-block-photo guide-photo">
-    <PortiaImage src={url} alt={caption} recordId={recordId} priority="lazy" icon="guide" />
-    {caption.trim() && <figcaption>{caption}</figcaption>}
+function GuidePhoto({ block }: { block: Extract<GuideBlock, { type: "photo" }> }) {
+  const alignment = block.align ?? "center";
+  return <figure className={`info-block-photo guide-photo guide-photo-${alignment}`} style={{ width: `${block.width ?? 100}%` }}>
+    <PortiaImage src={block.url} alt={block.caption} recordId={block.id} priority="lazy" icon="guide" style={{ height: block.height ? `${block.height}px` : undefined, objectFit: block.height ? "cover" : "contain", objectPosition: `${block.focusX ?? 50}% ${block.focusY ?? 50}%` }} />
+    {block.caption.trim() && <figcaption>{block.caption}</figcaption>}
   </figure>;
 }
 

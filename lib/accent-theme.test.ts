@@ -567,10 +567,12 @@ test("the spider has an independent saved switch and stays visible and still whe
 
 // Supersedes the quick 261102-d7r rule «no outline» (and the accent-tinted fills): D-25 asks for a dense body with a dark contour,
 // D-26 for dark-palette fills with the accent only in small details. The full check lives in lib/wallpaper-web.test.ts.
-test("the spider rim follows its dedicated token while body and legs keep dark fills", () => {
+test("the spider rim follows its token while its white body and turquoise legs remain readable", () => {
   assert.match(css, /--spider-rim:\s*#020706;/);
   assert.match(css, /\.wallpaper-spider :is\(path, circle\)\s*\{\s*stroke:\s*var\(--spider-rim\);/);
-  assert.doesNotMatch(css, /\.wallpaper-spider-(dark|limb|pale)\s*\{[^}]*(var\(--teal\)|currentColor)/, "body and legs do not follow the accent");
+  assert.match(css, /\.wallpaper-spider-dark\s*\{[^}]*#020706/);
+  assert.match(css, /\.wallpaper-spider-limb\s*\{[^}]*var\(--teal\)/);
+  assert.match(css, /\.wallpaper-spider-pale\s*\{[^}]*#f1f6f4/);
   assert.doesNotMatch(css, /wallpaper-spider-teal/);
   assert.match(css, /\.wallpaper-spider \.wallpaper-spider-accent\s*\{[^}]*fill:\s*var\(--teal\)/);
 });

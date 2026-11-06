@@ -142,14 +142,13 @@ test("scope enter-only (a refusal of the keyboard verdict, and the phone) takes 
   assert.equal(searchKeyAction(ctx({ key: "k", ctrlKey: true, scope: "enter-only" })), null);
 });
 
-test("the roster line: absent while healthy, saved time with a last-good copy, plain unavailable without one", () => {
-  const now = new Date(2026, 10, 3, 18, 0);
+test("the roster line: absent while healthy, saved-data notice without a timestamp, unavailable without a copy", () => {
   const today = new Date(2026, 10, 3, 14, 5).toISOString();
-  assert.equal(rosterDegradedText({ lastGoodAt: today, failure: null }, now), null);
-  assert.equal(rosterDegradedText({ lastGoodAt: null, failure: null }, now), null);
-  assert.equal(rosterDegradedText({ lastGoodAt: today, failure: "offline" }, now), "Сотрудники: показаны сохранённые данные на 14:05");
-  assert.equal(rosterDegradedText({ lastGoodAt: null, failure: "offline" }, now), "Сотрудники сейчас недоступны");
-  assert.equal(rosterDegradedText({ lastGoodAt: "not a date", failure: "offline" }, now), "Сотрудники: показаны сохранённые данные");
+  assert.equal(rosterDegradedText({ lastGoodAt: today, failure: null }), null);
+  assert.equal(rosterDegradedText({ lastGoodAt: null, failure: null }), null);
+  assert.equal(rosterDegradedText({ lastGoodAt: today, failure: "offline" }), "Сотрудники: показаны сохранённые данные");
+  assert.equal(rosterDegradedText({ lastGoodAt: null, failure: "offline" }), "Сотрудники сейчас недоступны");
+  assert.equal(rosterDegradedText({ lastGoodAt: "not a date", failure: "offline" }), "Сотрудники: показаны сохранённые данные");
 });
 
 const keyEvent = (patch: Partial<{ key: string; code: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }>) => ({ key: "", code: "", ctrlKey: false, metaKey: false, altKey: false, ...patch });

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExtern
 import dynamic from "next/dynamic";
 import { findGuide, findInfo, portiaTextKey, type Broadcast, type PortiaContent, type RecycleFile, type RichTextDocument, type Virus } from "@/lib/portia-content";
 import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
-import { classificationIconFor, PortiaIcon, PortiaIllustration } from "@/components/portia-icons";
+import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIllustrationName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes, spiderModes } from "@/lib/accent-boot";
 import { accentTokenNames, deriveAccentTokens } from "@/lib/accent-custom";
@@ -1242,7 +1242,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const trashView = appViewState({ ...contentBase, count: content.recycleFiles.length + (content.recycledViruses?.length ?? 0) });
   const employeesView = appViewState({ denied: false, ready: employeesReady, hasData: employeesSync.lastGoodAt !== null, count: employees.length, failure: employeesSync.failure });
   const contentStaleBanner = contentSync.lastGoodAt !== null ? <AppStaleBanner lastGoodAt={contentSync.lastGoodAt} retrying={contentSync.retrying} onRetry={() => void retryContent()} /> : null;
-  const contentFatal = (illustration: "dish" | "microscope" | "flask") => contentSync.failure ? <AppFatalPanel failure={contentSync.failure} retrying={contentSync.retrying} onRetry={() => void retryContent()} illustration={illustration} /> : null;
+  const contentFatal = (illustration: PortiaIllustrationName) => contentSync.failure ? <AppFatalPanel failure={contentSync.failure} retrying={contentSync.retrying} onRetry={() => void retryContent()} illustration={illustration} /> : null;
   const selectedInfoEntry = findInfo(content.infoSections, selectedInfoId)
     ?? (content.infoSections[0] ? { section: content.infoSections[0], subsection: null } : null);
   const selectedInfo = selectedInfoEntry?.section;
@@ -1565,7 +1565,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     return () => window.clearTimeout(timer);
   }, [unavailableResults]);
 
-  const rosterNote = rosterDegradedText(employeesSync, new Date());
+  const rosterNote = rosterDegradedText(employeesSync);
   const searchRoving = searchKeyScope === "full";
   const searchActiveIndex = Math.min(searchFocusIndex, Math.max(searchRows.length - 1, 0));
   const focusSearchResult = (index: number) => {
@@ -1682,7 +1682,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               </aside>
               <article className="record-view" aria-live="polite">
                 {archiveView === "stale" && contentStaleBanner}
-                {archiveView === "loading" ? <AppSkeleton shape="document" /> : archiveView === "fatal" ? contentFatal("microscope") : archiveView === "empty" || !activeVirus ? <div className="record-empty empty-state"><PortiaIllustration name="microscope" /><strong>{emptyCopy.archive.heading}</strong><span>{emptyCopy.archive.body}</span></div> : openLog ? <ScientistDocument key={openLog} virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} />}
+                {archiveView === "loading" ? <AppSkeleton shape="document" /> : archiveView === "fatal" ? contentFatal("microscopeGuide") : archiveView === "empty" || !activeVirus ? <div className="record-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{emptyCopy.archive.heading}</strong><span>{emptyCopy.archive.body}</span></div> : openLog ? <ScientistDocument key={openLog} virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} />}
               </article>
             </div>
           </AppWindow>
@@ -1702,7 +1702,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               </aside>
               <article className="personnel-profile">
                 {employeesView === "stale" && employeesSync.lastGoodAt !== null && <AppStaleBanner lastGoodAt={employeesSync.lastGoodAt} retrying={employeesSync.retrying} onRetry={() => void retryEmployees()} />}
-                {employeesView === "loading" ? <AppSkeleton shape="document" /> : employeesView === "fatal" && employeesSync.failure ? <AppFatalPanel failure={employeesSync.failure} retrying={employeesSync.retrying} onRetry={() => void retryEmployees()} illustration="dish" /> : employeesView === "empty" || !selectedEmployee ? <div className="editor-empty empty-state"><PortiaIllustration name="dish" /><strong>{emptyCopy.employees.heading}</strong><span>{emptyCopy.employees.body}</span></div> : <div className="personnel-profile-body content-fade" key={selectedEmployee.id}>
+                {employeesView === "loading" ? <AppSkeleton shape="document" /> : employeesView === "fatal" && employeesSync.failure ? <AppFatalPanel failure={employeesSync.failure} retrying={employeesSync.retrying} onRetry={() => void retryEmployees()} illustration="flaskEmpty" /> : employeesView === "empty" || !selectedEmployee ? <div className="editor-empty empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy.employees.heading}</strong><span>{emptyCopy.employees.body}</span></div> : <div className="personnel-profile-body content-fade" key={selectedEmployee.id}>
                   <header className="personnel-profile-head">
                     <div className="personnel-avatar-stage">
                       <figure className="personnel-full-avatar">{selectedEmployee.robloxFullAvatarUrl ? <PortiaImage src={selectedEmployee.robloxFullAvatarUrl} alt={`Roblox-аватар ${selectedEmployee.nickname} в полный рост`} recordId={`${selectedEmployee.id}:avatar`} priority="hero" icon="employees" className="is-fill" /> : <div className="personnel-full-avatar-empty"><span>ROBLOX</span><small>ПОЛНЫЙ АВАТАР ПОЯВИТСЯ ПОСЛЕ СИНХРОНИЗАЦИИ</small></div>}</figure>
@@ -1737,7 +1737,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                     {unavailable && <span className="global-result-status" role="status">Запись недоступна</span>}
                   </button>
                 ))}
-                {!searchRows.length && <div className="global-search-empty empty-state"><PortiaIllustration name="microscope" /><strong>Совпадений нет</strong><span>Измените запрос или выберите рекомендацию.</span></div>}
+                {!searchRows.length && <div className="global-search-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>Совпадений нет</strong><span>Измените запрос или выберите рекомендацию.</span></div>}
                 </>}
               </div>
             </div>
@@ -1745,7 +1745,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
           <AppWindow app="info" state={windows.info} active={activeApp === "info"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window info-window" meta="АРХИВ ЗНАНИЙ">
             {infoView === "loading" ? <div className="app-state-body"><AppSkeleton shape="info" /></div>
-              : infoView === "fatal" ? <div className="app-state-body">{contentFatal("flask")}</div>
+              : infoView === "fatal" ? <div className="app-state-body">{contentFatal("flaskEmpty")}</div>
               : infoView === "empty" ? <div className="app-state-body"><div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy.info.heading}</strong><span>{emptyCopy.info.body}</span></div></div>
               : <div className="info-library" data-info-screen={infoPhone ? infoScreen : undefined}>
               {infoPhone && infoScreen === "list" && infoView === "stale" && contentStaleBanner}
@@ -1779,7 +1779,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
 
           <AppWindow app="guide" state={windows.guide} active={activeApp === "guide"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window guide-window" meta="СПРАВОЧНИК">
             {guideView === "loading" ? <div className="app-state-body"><AppSkeleton shape="guide" /></div>
-              : guideView === "fatal" ? <div className="app-state-body">{contentFatal("microscope")}</div>
+              : guideView === "fatal" ? <div className="app-state-body">{contentFatal("microscopeGuide")}</div>
               : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={setGuideCardId} hitId={searchHit?.type === "guide" ? searchHit.id : ""} banner={guideView === "stale" ? contentStaleBanner : null} />}
           </AppWindow>
 
@@ -1791,7 +1791,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <div className="broadcasts-app">
               <header><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>
               {broadcastsView === "stale" && contentStaleBanner}
-              {broadcastsView === "loading" ? <AppSkeleton shape="broadcasts" /> : broadcastsView === "fatal" ? contentFatal("flask") : <>
+              {broadcastsView === "loading" ? <AppSkeleton shape="broadcasts" /> : broadcastsView === "fatal" ? contentFatal("flaskEmpty") : <>
               <div className="editor-tabs broadcast-tabs">
                 {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([tab, label]) => <button key={tab} type="button" className={broadcastTab === tab ? "active" : ""} aria-pressed={broadcastTab === tab} onClick={() => setBroadcastTab(tab)}>{label} {broadcastFeed(content.broadcasts, tab, today).length}</button>)}
               </div>
@@ -1803,7 +1803,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   const badge = state === "active" ? "АКТИВЕН" : state === "upcoming" ? `СКОРО · с ${formatQuestDay(item.startsAt).slice(0, 5)}` : "ЗАВЕРШЁН";
                   return <article key={item.id} className={`broadcast-card ${item.type}${important ? " important" : ""}${state ? ` state-${state}` : ""}${hitClass("broadcast", item.id)}`} {...hitAttrs("broadcast", item.id)}><span>{broadcastType(item.type)}{important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
                 })}
-                {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name={broadcastTab === "news" ? "flaskEmpty" : "flask"} /><strong>{emptyCopy[broadcastTab].heading}</strong><span>{emptyCopy[broadcastTab].body}</span></div>}
+                {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy[broadcastTab].heading}</strong><span>{emptyCopy[broadcastTab].body}</span></div>}
               </div></>}
             </div>
           </AppWindow>
@@ -1815,7 +1815,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
             <div className={`trash-app${activeTrashFile || activeTrashVirus ? " is-viewing" : ""}`}>
               <header><h1>Корзина</h1><p>Бесполезный хлам — кому вообще придет в голову его перебирать?</p></header>
               {trashView === "stale" && contentStaleBanner}
-              {trashView === "loading" ? <AppSkeleton shape="trash" /> : trashView === "fatal" ? contentFatal("dish") : <div className="trash-layout">
+              {trashView === "loading" ? <AppSkeleton shape="trash" /> : trashView === "fatal" ? contentFatal("flaskEmpty") : <div className="trash-layout">
                 <div className="trash-files">
                   <div className="trash-list-head" aria-hidden="true"><span>ИМЯ</span><span>ИСХОДНОЕ РАСПОЛОЖЕНИЕ</span><span>ТИП</span></div>
                   {trashOrder.map((key) => {
@@ -1826,7 +1826,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                     const file = trashFiles.find((item) => item.id === key.slice(5));
                     return file ? <button key={key} className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}${hitClass("file", file.id)}`} {...hitAttrs("file", file.id)} type="button" onClick={() => openTrashFile(file)}><span className="trash-file-name"><i className={`trash-file-icon ${file.kind}`}>{file.kind === "virus" ? "V" : file.kind === "image" ? "IMG" : "TXT"}</i><strong>{file.name}</strong></span><span>{file.location}</span><span>{recycleFileType(file.kind)}</span></button> : null;
                   })}
-                  {trashView === "empty" && <div className="editor-empty empty-state"><PortiaIllustration name="dish" /><strong>{emptyCopy.trash.heading}</strong><span>{emptyCopy.trash.body}</span></div>}
+                  {trashView === "empty" && <div className="editor-empty empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy.trash.heading}</strong><span>{emptyCopy.trash.body}</span></div>}
                 </div>
                 {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} onOpenLog={() => undefined} /></div></div>}
                 {activeTrashFile && <div className={`trash-viewer ${activeTrashFile.kind} doc-open`} key={activeTrashFile.id}>

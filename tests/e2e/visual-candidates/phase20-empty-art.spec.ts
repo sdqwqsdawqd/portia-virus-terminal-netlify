@@ -9,8 +9,8 @@ import type { DiagnosticLedger } from "../fixtures/diagnostics";
 import { expect, test } from "../fixtures/test";
 import { captureCandidate, recordBlockedCandidate } from "./support";
 
-// Phase 20-05 (D-21): the new 96x96 flask («Информация», «Новостей пока нет») and the new 96x96 microscope («Справочник», empty) next to the
-// surfaces that keep their old drawing (quests, archive, global search, the iframe error and every error panel).
+// Phase 20-05 (D-21), widened by the owner in 20-33: the new 96x96 flask and the new 96x96 microscope are the only drawings left. Every app shows
+// one of them wherever information is missing (empty lists, global search with no match, the iframe error and every error panel).
 // Candidates only: every frame goes under visual-candidates/.runs; nothing here touches tests/e2e/visual/__screenshots__.
 // The requirement id of a frame is STAB-BASE-03 because that is the only family support.ts accepts; the evidence belongs to STAB-VIS-03.
 // The spec reads the real /api answers of the target and only injects faults into them (abort or hold, never fulfil): own /api routes are never
@@ -27,7 +27,7 @@ const runRoot = path.resolve("tests/e2e/visual-candidates/.runs", setId);
 
 type Context = Parameters<typeof captureCandidate>[0];
 type Settings = Record<string, string>;
-type Drawing = "flask" | "flaskEmpty" | "microscope" | "microscopeGuide";
+type Drawing = "flaskEmpty" | "microscopeGuide";
 
 async function setDesktopSetting(page: Page, patch: Settings) {
   await page.evaluate((next) => {
@@ -100,9 +100,9 @@ type Surface = {
 };
 
 const surfaces: Surface[] = [
-  { key: "info", app: "Информация", name: "«Информация», пусто", drawing: "flaskEmpty", fatalDrawing: "flask", copy: emptyCopy.info, records: (w) => w.locator(".info-index button"), box: (w) => w.locator(".app-state-body .empty-state") },
-  { key: "news", app: "Сводка", name: "«Сводка» → «Новости», пусто", drawing: "flaskEmpty", fatalDrawing: "flask", copy: emptyCopy.news, records: (w) => w.locator(".broadcast-card"), box: (w) => w.locator(".broadcast-empty"), prepare: async (w) => { await w.getByRole("button", { name: /^Новости/ }).click(); } },
-  { key: "guide", app: "Справочник", name: "«Справочник», пусто", drawing: "microscopeGuide", fatalDrawing: "microscope", copy: emptyCopy.guide, records: (w) => w.locator(".guide-tile"), box: (w) => w.locator(".guide-empty") },
+  { key: "info", app: "Информация", name: "«Информация», пусто", drawing: "flaskEmpty", fatalDrawing: "flaskEmpty", copy: emptyCopy.info, records: (w) => w.locator(".info-index button"), box: (w) => w.locator(".app-state-body .empty-state") },
+  { key: "news", app: "Сводка", name: "«Сводка» → «Новости», пусто", drawing: "flaskEmpty", fatalDrawing: "flaskEmpty", copy: emptyCopy.news, records: (w) => w.locator(".broadcast-card"), box: (w) => w.locator(".broadcast-empty"), prepare: async (w) => { await w.getByRole("button", { name: /^Новости/ }).click(); } },
+  { key: "guide", app: "Справочник", name: "«Справочник», пусто", drawing: "microscopeGuide", fatalDrawing: "microscopeGuide", copy: emptyCopy.guide, records: (w) => w.locator(".guide-tile"), box: (w) => w.locator(".guide-empty") },
 ];
 
 const skeleton = (window: Locator) => window.locator('.app-skeleton[aria-busy="true"]').first();
@@ -183,13 +183,6 @@ async function assertEmptyDrawing(page: Page, window: Locator, s: Surface) {
 
 // ---- the drawings themselves (source level, same for every lane) ---------------------------------------------------------------------
 
-// sha256 of the three pre-plan drawings, taken from components/portia-icons.tsx at 8c05499 (before this plan): they must stay byte for byte.
-const oldDrawings = {
-  dish: "6a19e541ecf41b5b8f9d345ee213fce172606d3a78aa44e9fa9797473fe09cdb",
-  microscope: "1177e355fdae3fe64684b2f10429114f2c65af494151d5711c5691121d03de36",
-  flask: "aca34412817a33b5adb4cf8eebfb4a2f901b97977615fd6643eb726b4e4bf56d",
-} as const;
-
 function drawingSource(name: string) {
   const source = readFileSync(path.resolve("components/portia-icons.tsx"), "utf8").replaceAll("\r\n", "\n");
   const match = source.match(new RegExp(`  ${name}: <>\\n([\\s\\S]*?)\\n  </>,`));
@@ -197,22 +190,20 @@ function drawingSource(name: string) {
   return match![1];
 }
 
-test("[STAB-VIS-03] D-21 the old flask, microscope and dish are byte-identical; the two new drawings exist, differ, and use only currentColor", async ({}, testInfo) => {
-  for (const [name, hash] of Object.entries(oldDrawings)) {
-    expect(createHash("sha256").update(drawingSource(name)).digest("hex"), `${name} is unchanged`).toBe(hash);
-  }
+const callSiteFiles = ["components/portia-desktop.tsx", "components/portia-desktop-documents.tsx", "components/portia-desktop-media.tsx", "components/portia-desktop-states.tsx"];
+
+test("[STAB-VIS-03] D-21 only the new flask and microscope exist; the old dish, flask and microscope are gone from every call site", async ({}, testInfo) => {
+  const icons = readFileSync(path.resolve("components/portia-icons.tsx"), "utf8");
+  for (const old of ["dish", "flask", "microscope"]) expect(icons, `old drawing ${old} removed`).not.toMatch(new RegExp(`^  ${old}: <>`, "m"));
   const fresh = { flaskEmpty: drawingSource("flaskEmpty"), microscopeGuide: drawingSource("microscopeGuide") };
-  expect(fresh.flaskEmpty).not.toBe(drawingSource("flask"));
-  expect(fresh.microscopeGuide).not.toBe(drawingSource("microscope"));
+  expect(fresh.flaskEmpty).not.toBe(fresh.microscopeGuide);
   for (const source of Object.values(fresh)) expect(source).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(|oklch\(|var\(/i);
-  // Only the three chosen call sites name a new variant.
-  const users = ["components/portia-desktop.tsx", "components/portia-desktop-documents.tsx"].flatMap((file) =>
-    readFileSync(path.resolve(file), "utf8").split(/\r?\n/).map((line, index) => ({ file, line: index + 1, text: line })).filter((row) => /flaskEmpty|microscopeGuide/.test(row.text)));
-  expect(users.map((row) => `${row.file}:${/flaskEmpty/.test(row.text) ? (/broadcastTab/.test(row.text) ? "news" : "info") : "guide"}`).sort()).toEqual([
-    "components/portia-desktop-documents.tsx:guide", "components/portia-desktop.tsx:info", "components/portia-desktop.tsx:news",
-  ]);
+  const rows = callSiteFiles.flatMap((file) =>
+    readFileSync(path.resolve(file), "utf8").split(/\r?\n/).map((line, index) => ({ file, line: index + 1, text: line })));
+  const oldUse = rows.filter((row) => /(?:name|illustration|icon)\s*=\s*\{?\s*"(?:dish|flask|microscope)"|contentFatal\("(?:dish|flask|microscope)"\)/.test(row.text));
+  expect(oldUse.map((row) => `${row.file}:${row.line}`), "no call site names an old drawing").toEqual([]);
   mkdirSync(runRoot, { recursive: true });
-  writeFileSync(path.join(runRoot, `phase20-empty-art-drawings--${testInfo.project.name}.json`), `${JSON.stringify({ oldDrawingSha256: oldDrawings, newDrawingSha256: Object.fromEntries(Object.entries(fresh).map(([k, v]) => [k, createHash("sha256").update(v).digest("hex")])), callSites: users }, null, 2)}\n`);
+  writeFileSync(path.join(runRoot, `phase20-empty-art-drawings--${testInfo.project.name}.json`), `${JSON.stringify({ drawingSha256: Object.fromEntries(Object.entries(fresh).map(([k, v]) => [k, createHash("sha256").update(v).digest("hex")])), callSites: rows.filter((row) => /flaskEmpty|microscopeGuide/.test(row.text)).map(({ file, line }) => ({ file, line })) }, null, 2)}\n`);
 });
 
 // ---- E3/E6: loading, error, populated for the three surfaces ----------------------------------------------------------------------------
@@ -233,7 +224,7 @@ for (const s of surfaces) {
     await expect(skeleton(window)).toHaveCount(0, { timeout: 20_000 });
   });
 
-  test(`[STAB-VIS-03] ${s.name}: error shows the reason and the retry with the old drawing, not the empty state`, async ({ page, browser, determinism, diagnostics }, testInfo) => {
+  test(`[STAB-VIS-03] ${s.name}: error shows the reason and the retry with the new drawing, not the empty state`, async ({ page, browser, determinism, diagnostics }, testInfo) => {
     const context = { page, browser, determinism, testInfo };
     const restore = await abortApi(page, "**/api/content");
     const window = await openSurface(page, s);
@@ -246,7 +237,7 @@ for (const s of surfaces) {
     await expect(window.getByText(s.copy.heading)).toHaveCount(0);
     await captureCandidate(context, {
       id: `empty-art-${s.key}-error`, requirement: "STAB-BASE-03", surface: `E3/E6 ${s.app}`, actor: "visitor",
-      state: `${s.app}: first load failed, reason and retry shown on the unchanged ${s.fatalDrawing} drawing`, intendedSnapshot: "phase20-empty-art (после одобрения 20-11)",
+      state: `${s.app}: first load failed, reason and retry shown on the new ${s.fatalDrawing} drawing`, intendedSnapshot: "phase20-empty-art (после одобрения 20-11)",
     });
     await restore();
     forgiveFaults(diagnostics);
@@ -329,9 +320,9 @@ for (const s of surfaces) {
   });
 }
 
-// ---- unchanged surfaces, next to the new ones -------------------------------------------------------------------------------------------
+// ---- the other surfaces draw the same new pictures -------------------------------------------------------------------------------------------
 
-test("[STAB-VIS-03] D-21 quests keep the old flask beside the new one in the news tab (same window, same state)", async ({ page, browser, determinism }, testInfo) => {
+test("[STAB-VIS-03] D-21 quests draw the same new flask as the news tab (same window, same state)", async ({ page, browser, determinism }, testInfo) => {
   const context = { page, browser, determinism, testInfo };
   const window = await openSurface(page, surfaces[1]);
   await expect(skeleton(window)).toHaveCount(0, { timeout: 20_000 });
@@ -339,7 +330,7 @@ test("[STAB-VIS-03] D-21 quests keep the old flask beside the new one in the new
   await tabs.news.click();
   if (!(await window.locator(".broadcast-empty").isVisible()) || (await tabs.quests.click(), !(await window.locator(".broadcast-empty").isVisible()))) {
     const reason = "BLOCKED (DATA): this target serves announcements, so the empty news and quests tabs cannot be compared without invented data.";
-    await blocked(context, "empty-art-quests-vs-news", "E3 Сводка", "«Новости» (новая колба) рядом с «Квесты» (прежняя колба)", reason);
+    await blocked(context, "empty-art-quests-vs-news", "E3 Сводка", "«Новости» и «Квесты»: одна и та же новая колба", reason);
     test.skip(true, reason);
   }
   await tabs.news.click();
@@ -349,17 +340,17 @@ test("[STAB-VIS-03] D-21 quests keep the old flask beside the new one in the new
   await crop(window.locator(".broadcast-empty"), "empty-art-news-new-flask", testInfo);
   await tabs.quests.click();
   const quests = window.locator(".broadcast-empty svg");
-  await expect(quests).toHaveAttribute("data-illustration", "flask");
+  await expect(quests).toHaveAttribute("data-illustration", "flaskEmpty");
   await expect(window.locator(".broadcast-empty strong")).toHaveText(emptyCopy.quests.heading);
-  expect(await quests.innerHTML(), "the quests drawing is not the new one").not.toBe(newMarkup);
-  await crop(window.locator(".broadcast-empty"), "empty-art-quests-old-flask", testInfo);
+  expect(await quests.innerHTML(), "the quests drawing is the new one").toBe(newMarkup);
+  await crop(window.locator(".broadcast-empty"), "empty-art-quests-new-flask", testInfo);
   await captureCandidate(context, {
-    id: "empty-art-quests-old-flask", requirement: "STAB-BASE-03", surface: "E3 Сводка", actor: "visitor",
-    state: "D-21 «Квесты» empty keeps the old flask; the new flask is in the «Новости» frame of the same window", intendedSnapshot: "phase20-empty-art (после одобрения 20-11)",
+    id: "empty-art-quests-new-flask", requirement: "STAB-BASE-03", surface: "E3 Сводка", actor: "visitor",
+    state: "D-21 «Квесты» empty draws the new flask, the same as «Новости» in the same window", intendedSnapshot: "phase20-empty-art (после одобрения 20-11)",
   });
 });
 
-test("[STAB-VIS-03] D-21 global search «Совпадений нет» keeps the old microscope, different from the guide microscope", async ({ page, browser, determinism }, testInfo) => {
+test("[STAB-VIS-03] D-21 global search «Совпадений нет» draws the new microscope, the same as the empty guide", async ({ page, browser, determinism }, testInfo) => {
   const context = { page, browser, determinism, testInfo };
   const desktop = await openDesktop(page);
   await desktop.openApp("Глобальный поиск");
@@ -367,17 +358,17 @@ test("[STAB-VIS-03] D-21 global search «Совпадений нет» keeps the
   await search.getByRole("searchbox").fill("яяяяяяяяяяяяяя");
   const empty = search.locator(".global-search-empty");
   await expect(empty).toBeVisible();
-  const old = empty.locator("svg");
-  await expect(old).toHaveAttribute("data-illustration", "microscope");
-  await expect(old).toHaveAttribute("aria-hidden", "true");
+  const drawing = empty.locator("svg");
+  await expect(drawing).toHaveAttribute("data-illustration", "microscopeGuide");
+  await expect(drawing).toHaveAttribute("aria-hidden", "true");
   await expect(empty.locator("strong")).toHaveText("Совпадений нет");
-  const oldMarkup = await old.innerHTML();
-  await crop(empty, "empty-art-search-old-microscope", testInfo);
+  const searchMarkup = await drawing.innerHTML();
+  await crop(empty, "empty-art-search-new-microscope", testInfo);
   await captureCandidate(context, {
-    id: "empty-art-search-old-microscope", requirement: "STAB-BASE-03", surface: "E6 Глобальный поиск", actor: "visitor",
-    state: "D-21 global search with no match keeps the old microscope", intendedSnapshot: "phase20-empty-art (после одобрения 20-11)",
+    id: "empty-art-search-new-microscope", requirement: "STAB-BASE-03", surface: "E6 Глобальный поиск", actor: "visitor",
+    state: "D-21 global search with no match draws the new microscope", intendedSnapshot: "phase20-empty-art (после одобрения 20-11)",
   });
-  // The guide window in the same page: when it is empty it must draw something else.
+  // The guide window in the same page: when it is empty it draws the very same microscope.
   await desktop.closeApp("Глобальный поиск");
   await expect(search).toHaveCount(0);
   await desktop.openApp("Справочник");
@@ -386,11 +377,11 @@ test("[STAB-VIS-03] D-21 global search «Совпадений нет» keeps the
   if (await guide.locator(".guide-empty").isVisible()) {
     const fresh = guide.locator(".guide-empty svg");
     await expect(fresh).toHaveAttribute("data-illustration", "microscopeGuide");
-    expect(await fresh.innerHTML(), "the guide drawing is a new one").not.toBe(oldMarkup);
+    expect(await fresh.innerHTML(), "the guide draws the same microscope").toBe(searchMarkup);
   }
 });
 
-test("[STAB-VIS-03] D-21 archive keeps the old microscope in its error panel; its empty state is BLOCKED (DATA) while the target serves viruses", async ({ page, browser, determinism, diagnostics }, testInfo) => {
+test("[STAB-VIS-03] D-21 archive draws the new microscope in its error panel; its empty state is BLOCKED (DATA) while the target serves viruses", async ({ page, browser, determinism, diagnostics }, testInfo) => {
   const context = { page, browser, determinism, testInfo };
   // Fault first: a successful load would leave a device cache and the failure would then read as a stale strip, not as the error panel.
   const restore = await abortApi(page, "**/api/content");
@@ -398,10 +389,10 @@ test("[STAB-VIS-03] D-21 archive keeps the old microscope in its error panel; it
   await desktop.openApp("База вирусов");
   const panel = fatalPanel(desktop.window("База вирусов"));
   await expect(panel).toBeVisible();
-  await expect(panel.locator("svg")).toHaveAttribute("data-illustration", "microscope");
+  await expect(panel.locator("svg")).toHaveAttribute("data-illustration", "microscopeGuide");
   await captureCandidate(context, {
-    id: "empty-art-archive-error-old-microscope", requirement: "STAB-BASE-03", surface: "E6 База вирусов", actor: "visitor",
-    state: "D-21 archive error panel keeps the old microscope", intendedSnapshot: "phase20-empty-art (после одобрения 20-11)",
+    id: "empty-art-archive-error-new-microscope", requirement: "STAB-BASE-03", surface: "E6 База вирусов", actor: "visitor",
+    state: "D-21 archive error panel draws the new microscope", intendedSnapshot: "phase20-empty-art (после одобрения 20-11)",
   });
   await restore();
   forgiveFaults(diagnostics);
@@ -411,14 +402,14 @@ test("[STAB-VIS-03] D-21 archive keeps the old microscope in its error panel; it
   const archive = desktop.window("База вирусов");
   await expect(skeleton(archive)).toHaveCount(0, { timeout: 20_000 });
   if (await archive.locator(".virus-row").count() > 0) {
-    await blocked(context, "empty-art-archive-empty-old-microscope", "E6 База вирусов", "«База вирусов», пусто (старый микроскоп)",
-      "BLOCKED (DATA): this target serves viruses, so the archive empty state cannot be shown without invented data. The archive keeps microscope by the source check and by its error panel above.");
+    await blocked(context, "empty-art-archive-empty-new-microscope", "E6 База вирусов", "«База вирусов», пусто (новый микроскоп)",
+      "BLOCKED (DATA): this target serves viruses, so the archive empty state cannot be shown without invented data. The archive draws the new microscope by the source check and by its error panel above.");
   } else {
-    await expect(archive.locator(".record-empty svg")).toHaveAttribute("data-illustration", "microscope");
+    await expect(archive.locator(".record-empty svg")).toHaveAttribute("data-illustration", "microscopeGuide");
   }
 });
 
-test("[STAB-VIS-03] D-21 the iframe error of «Таблица» keeps the old microscope", async ({ page, browser, determinism, diagnostics }, testInfo) => {
+test("[STAB-VIS-03] D-21 the iframe error of «Таблица» draws the new microscope", async ({ page, browser, determinism, diagnostics }, testInfo) => {
   const context = { page, browser, determinism, testInfo };
   const release = await holdRoute(page, "https://docs.google.com/**");
   const desktop = await openDesktop(page);
@@ -429,11 +420,11 @@ test("[STAB-VIS-03] D-21 the iframe error of «Таблица» keeps the old mi
   const panel = fatalPanel(window);
   await expect(panel).toBeVisible();
   await expect(panel.getByRole("alert")).toContainText(iframeFailureCopy.heading);
-  await expect(panel.locator("svg")).toHaveAttribute("data-illustration", "microscope");
+  await expect(panel.locator("svg")).toHaveAttribute("data-illustration", "microscopeGuide");
   await expect(panel.locator("svg")).toHaveAttribute("aria-hidden", "true");
   await captureCandidate(context, {
-    id: "empty-art-iframe-error-old-microscope", requirement: "STAB-BASE-03", surface: "E6 Таблица", actor: "visitor",
-    state: "D-21 iframe error keeps the old microscope", intendedSnapshot: "phase20-empty-art (после одобрения 20-11)",
+    id: "empty-art-iframe-error-new-microscope", requirement: "STAB-BASE-03", surface: "E6 Таблица", actor: "visitor",
+    state: "D-21 iframe error draws the new microscope", intendedSnapshot: "phase20-empty-art (после одобрения 20-11)",
     mask: [window.locator("iframe")],
   });
   release();

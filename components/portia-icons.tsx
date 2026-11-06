@@ -13,12 +13,11 @@ export type PortiaIconName =
   | "route-droplet" | "route-dust" | "route-contact" | "route-oral" | "route-sexual" | "route-unknown"
   | "lock-open" | "lock-closed";
 
-// Classification badges (sketch #badges-b): one shape per class line, 1-3 inner marks for the level.
-const dangerShape = <path d="m12 3.2 7.6 4.4v8.8L12 20.8l-7.6-4.4V7.6Z" />;
-const spreadShape = <circle cx="12" cy="12" r="8.5" />;
-const escapeShape = <path d="M12 3.5 21 19.5H3Z" />;
-const dot = (x: number) => <circle key={x} cx={x} cy="12" r=".9" fill="currentColor" />;
-const chevron = (y: number) => <path key={y} d={`M10.2 ${y}l1.8-1.8 1.8 1.8`} />;
+// Classification badges: the first three lines are small illustrations of a breached containment cell,
+// a spreading cluster, and a broken containment gate. Each level changes the silhouette.
+const dangerCore = <><circle cx="12" cy="12" r="3.2" /><path d="M12 8.8V6.8M15 13.2l1.8 1M9 13.2l-1.8 1" /></>;
+const spreadCore = <><circle cx="12" cy="12" r="3.2" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /></>;
+const escapeGate = <><path d="M5 20V7.5a7 7 0 0 1 14 0V20M3.5 20h17" /><path d="M8 20V8a4 4 0 0 1 8 0v12" /></>;
 // The additional line (D-39) is drawn as pictures, not as framed badges: mind is a brain that goes out, behaviour a line
 // that gets restless and then burns, appearance a cell that grows arms and then a torn DNA helix. The level reads from the shape.
 const brainHalf = <path d="M12 4.6C10.8 3.2 8.6 3.4 7.6 4.9 5.7 4.8 4.4 6.4 4.8 8 3.4 8.9 3.3 10.8 4.3 12 3.9 13.7 4.9 15.3 6.5 15.6 7 17.3 8.9 18.2 10.4 17.5 10.9 18 11.5 18.6 12 19.2" />;
@@ -100,15 +99,15 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
     <path d="M5 4v16M5 7h3M5 12h5M5 17h3" />
     <path d="m19.5 6.5-7.8 7.8-.9 3.1 3.1-.9 7.8-7.8a1.6 1.6 0 0 0-2.2-2.2Z" />
   </>,
-  "class-hephaestus": <>{dangerShape}<path d="M12 9v6" /></>,
-  "class-proteus": <>{dangerShape}<path d="M10 9v6M14 9v6" /></>,
-  "class-apeiron": <>{dangerShape}<path d="M8.6 9v6M12 9v6M15.4 9v6" /></>,
-  "class-nomos": <>{spreadShape}{[12].map(dot)}</>,
-  "class-theseus": <>{spreadShape}{[10, 14].map(dot)}</>,
-  "class-abraxas": <>{spreadShape}{[8.5, 12, 15.5].map(dot)}</>,
-  "class-warning": <>{escapeShape}{[16.4].map(chevron)}</>,
-  "class-risk": <>{escapeShape}{[14.4, 17.2].map(chevron)}</>,
-  "class-esnov": <>{escapeShape}{[12.6, 15.2, 17.8].map(chevron)}</>,
+  "class-hephaestus": <>{dangerCore}<path d="M12 3.4 18.8 7v8.5L12 20l-6.8-4.5V7Z" /><path d="M7.4 8.3 9.2 7" /></>,
+  "class-proteus": <>{dangerCore}<path d="M12 3.4 18.8 7v5.1l-2.4 1.4 1.2 3.3L12 20l-6.8-4.5V7Z" /><path d="m16.4 13.5-2.2 1.1M5.2 11.2l-2.1 1.2" /></>,
+  "class-apeiron": <>{dangerCore}<path d="M12 2.4 16 6l3.6.1-.6 4.3 2.1 2.8-3.7 2.2-.6 4.4L12 22l-3.1-3.5-4.6.5.7-4.4-2.5-2.5 3.1-2.8.1-4.2 4.1.8Z" /><path d="m4.9 14.6-2.1 2.1m15.4-6.3 2.9-1.5M10 18l-1.2 3" /></>,
+  "class-nomos": <>{spreadCore}<path d="M12 8.8V5.5M15.2 12h3.3M8.8 12H5.5M12 15.2v3.3" /><circle cx="12" cy="4.3" r="1.2" /><circle cx="19.7" cy="12" r="1.2" /><circle cx="4.3" cy="12" r="1.2" /><circle cx="12" cy="19.7" r="1.2" /></>,
+  "class-theseus": <>{spreadCore}<path d="M9.6 9.6 6.5 6.5M14.4 9.6l3.1-3.1M9.6 14.4l-3.1 3.1M14.4 14.4l3.1 3.1" /><circle cx="5.5" cy="5.5" r="1.4" /><circle cx="18.5" cy="5.5" r="1.4" /><circle cx="5.5" cy="18.5" r="1.4" /><circle cx="18.5" cy="18.5" r="1.4" /><path d="M5.5 5.5 3 7m15.5-1.5L21 7" /></>,
+  "class-abraxas": <>{spreadCore}<path d="M9.4 9.4 5.5 5.5M14.6 9.4l3.9-3.9M9.4 14.6l-3.9 3.9M14.6 14.6l3.9 3.9M12 8.8V3M15.2 12H21M12 15.2v5.8M8.8 12H3" /><circle cx="4.5" cy="4.5" r="1.2" /><circle cx="19.5" cy="4.5" r="1.2" /><circle cx="4.5" cy="19.5" r="1.2" /><circle cx="19.5" cy="19.5" r="1.2" /><circle cx="12" cy="2" r="1" /><circle cx="22" cy="12" r="1" /><circle cx="12" cy="22" r="1" /><circle cx="2" cy="12" r="1" /></>,
+  "class-warning": <>{escapeGate}<path d="M10 20v-8h4v8M9 8.5h6" /></>,
+  "class-risk": <>{escapeGate}<path d="M10 20v-8h4v8m-4-4 4-3M16 10l2.7-2.2M18 8l2.3.6" /></>,
+  "class-esnov": <>{escapeGate}<path d="M10 20v-8h4v8m-4-3 4-4M16 10l3.5-3M16 15l4 1.5M7 10 3.5 7M7 15l-4 1.5" /><path d="m18.8 3.2 1.5-1.5M4.2 3.2 2.7 1.7" /></>,
   "class-lucidium": <>{brainHalf}{brainFolds}{mirrored(<>{brainHalf}{brainFolds}</>)}{brainSpine}<path d="M12 1v1.6M5.6 2.2l1 1.1M18.4 2.2l-1 1.1" /></>,
   "class-transitium": <>{brainHalf}{brainFolds}{brainSpine}<g strokeDasharray="2 2.4">{mirrored(brainHalf)}</g><g>{mirrored(brainFolds)}</g></>,
   "class-oblivium": <g strokeDasharray="2.2 2.8">{brainHalf}{mirrored(brainHalf)}{brainSpine}</g>,
@@ -150,32 +149,12 @@ export function PortiaIcon({ name, ...props }: { name: PortiaIconName } & SVGPro
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{iconPaths[name]}</svg>;
 }
 
-// flaskEmpty and microscopeGuide are the D-21 drawings for three chosen empty states only («Информация», «Новостей пока нет», «Справочник»).
-// flask, microscope and dish keep their old drawings for quests, trash, archive, search and every error panel.
-export type PortiaIllustrationName = "dish" | "microscope" | "flask" | "flaskEmpty" | "microscopeGuide";
+// flaskEmpty and microscopeGuide are the only empty-state drawings: every app shows them wherever information is missing
+// (empty lists, no search matches, error panels, a missing picture). The old dish, flask and microscope drawings are gone.
+export type PortiaIllustrationName = "flaskEmpty" | "microscopeGuide";
 
 // Empty-state drawings on a 96px grid, in the same line language as the icons.
 const illustrations: Record<PortiaIllustrationName, React.ReactNode> = {
-  dish: <>
-    <ellipse cx="48" cy="56" rx="36" ry="13" />
-    <path d="M12 56v6c0 7.2 16.1 13 36 13s36-5.8 36-13v-6" />
-    <ellipse cx="48" cy="50" rx="30" ry="9" strokeDasharray="3 5" opacity=".6" />
-    <circle cx="36" cy="54" r="2.5" /><circle cx="56" cy="51" r="3.5" /><circle cx="62" cy="57" r="1.8" /><circle cx="44" cy="58" r="1.5" />
-    <path d="M48 22v10M44 26h8" opacity=".7" />
-  </>,
-  microscope: <>
-    <path d="M24 82h48M34 82v-8h28v8" />
-    <path d="M40 74c-8-4-11-12-9-21" />
-    <path d="m46 14 10 5-12 24-10-5Z" />
-    <path d="M40 43l-3 7 6 3 3-7M51 16l3-6" />
-    <path d="M50 56h18M58 56v18" />
-    <circle cx="66" cy="42" r="5" opacity=".7" />
-  </>,
-  flask: <>
-    <path d="M40 14h16M43 14v22L24 72a6 6 0 0 0 5.3 9h37.4a6 6 0 0 0 5.3-9L53 36V14" />
-    <path d="M30 62c8-4 14 4 22 0s12-3 16 0" opacity=".7" />
-    <circle cx="44" cy="70" r="2.5" /><circle cx="55" cy="73" r="1.8" /><circle cx="50" cy="52" r="1.5" opacity=".6" />
-  </>,
   flaskEmpty: <>
     <path d="M36 12h24M41 12v22L21.6 69.2A7 7 0 0 0 27.7 80h40.6a7 7 0 0 0 6.1-10.8L55 34V12" />
     <path d="M27.7 58c4.5-3 9 3 13.5 0s9 3 13.5 0 9 3 13.5 0L74.4 69.2a7 7 0 0 1-6.1 10.8H27.7a7 7 0 0 1-6.1-10.8Z" fill="currentColor" fillOpacity=".16" stroke="none" />

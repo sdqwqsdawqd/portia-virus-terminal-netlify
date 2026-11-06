@@ -432,13 +432,14 @@ test("D-41 broadcastGroupIds and broadcastGroupPath name the cards that hold a g
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-test("D-41 all three section tabs of the editor share the pinned add-section bar, and the public windows do not know the new keys", () => {
+test("D-41 section editing stays in Справочник; Сводка and Рекомендации are plain lists (owner, 20-33)", () => {
   const editor = source("../components/portia-editor.tsx");
-  assert.ok((editor.match(/<SectionAddBar/g) ?? []).length >= 3, "Справочник, Рекомендации and Сводка each have the bar");
-  assert.match(editor, /writeRecommendationGroup\(/);
+  assert.equal((editor.match(/<SectionAddBar/g) ?? []).length, 1);
+  assert.match(editor, /next\.searchRecommendationSections = \[\]/);
+  assert.match(editor, /draft\.searchRecommendations\.join\("\\n"\)/);
   assert.match(editor, /trimRecommendationSections\(/);
-  assert.match(editor, /broadcastGroupsView\(/);
-  assert.match(editor, /setBroadcastSection\(/);
+  for (const gone of ["broadcastGroupsView(", "setBroadcastSection(", "addBroadcastSection(", "data-broadcast-section", "Разделы и подразделы только группируют"]) assert.ok(!editor.includes(gone), `${gone} is gone from the editor`);
+  assert.match(editor, /shownBroadcasts\.map\(renderBroadcastCard\)/);
   const desktop = source("../components/portia-desktop.tsx");
   for (const name of ["broadcastSections", "searchRecommendationSections", "sectionId"]) assert.ok(!desktop.includes(name), `${name} stays out of the public desktop`);
 });

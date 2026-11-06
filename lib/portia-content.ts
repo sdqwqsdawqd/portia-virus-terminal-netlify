@@ -148,7 +148,7 @@ export type GuideBlock =
   | { id: string; type: "heading"; text: string }
   | { id: string; type: "text"; text: string }
   | { id: string; type: "table"; rows: { id: string; key: string; value: string }[] }
-  | { id: string; type: "photo"; url: string; caption: string }
+  | { id: string; type: "photo"; url: string; caption: string; width?: number; height?: number; align?: "left" | "center" | "right"; focusX?: number; focusY?: number }
   | { id: string; type: "video"; videoId: string }
   | { id: string; type: "callout"; label: string; text: string };
 
@@ -191,8 +191,8 @@ export type Broadcast = {
   sectionId?: string;
 };
 
-// D-41/D-47: sections of the «Сводка» and «Рекомендации» tabs. There is no note field on purpose: editor notes live in
-// portia_editor_notes (tabs broadcasts and search) and never in the public content.
+// D-41/D-47: stored sections of the «Сводка» and «Рекомендации» tabs. The editor no longer shows them (20-33); they are kept
+// only so old data stays readable. There is no note field: the owner removed editor notes.
 export type OutlineSubsection = { id: string; title: string };
 export type OutlineSection = { id: string; title: string; subsections: OutlineSubsection[] };
 export type RecommendationSubsection = OutlineSubsection & { items: string[] };

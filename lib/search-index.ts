@@ -1,7 +1,6 @@
 // Global search index (D-13): one pure function that builds every searchable item from an explicit allowlist of fields per source.
 // A field that is not named here can never be found, whatever the source object carries (drafts, editor notes, reviewer fields, answer keys).
 import type { Broadcast, InfoBlock, GuideBlock, RecycleFile } from "./portia-content.ts";
-import { syncTimeText } from "./app-state.ts";
 
 export type SearchItemType = "virus" | "employee" | "info" | "guide" | "broadcast" | "file" | "app";
 
@@ -122,11 +121,10 @@ export function matchSearch(items: readonly SearchItem[], query: string, limit =
 }
 
 // Partial: the roster failed. With a last-good copy the results still list employees (from that copy); without one they list none, and the line says so.
-export function rosterDegradedText(sync: { lastGoodAt: string | null; failure: unknown }, now: Date): string | null {
+export function rosterDegradedText(sync: { lastGoodAt: string | null; failure: unknown }): string | null {
   if (!sync.failure) return null;
-  const when = sync.lastGoodAt ? syncTimeText(sync.lastGoodAt, now) : null;
   if (!sync.lastGoodAt) return "Сотрудники сейчас недоступны";
-  return when ? `Сотрудники: показаны сохранённые данные на ${when}` : "Сотрудники: показаны сохранённые данные";
+  return "Сотрудники: показаны сохранённые данные";
 }
 
 export type SearchKeyAction = "focus-input" | "next" | "prev" | "open" | "clear" | "close";

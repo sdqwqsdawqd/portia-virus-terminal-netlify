@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { preconnect, preload } from "react-dom";
 import { MEDIA_SLOW_MS, mediaLoadingAttrs, mediaSource, visibleTimerRunning } from "@/lib/media-display";
 import { PortiaIcon, PortiaIllustration, type PortiaIconName, type PortiaIllustrationName } from "@/components/portia-icons";
 
 export type PortiaImageIcon = PortiaIconName | PortiaIllustrationName;
 
-const isIllustration = (name: PortiaImageIcon): name is PortiaIllustrationName => name === "dish" || name === "microscope" || name === "flask";
+const isIllustration = (name: PortiaImageIcon): name is PortiaIllustrationName => name === "flaskEmpty" || name === "microscopeGuide";
 
 // The active hero opens its connection and starts its fetch before the image element mounts. Called from PortiaImage only.
 function prioritizeImage(src: string) {
@@ -60,6 +60,7 @@ type PortiaImageProps = {
   icon?: PortiaImageIcon;
   className?: string;
   caption?: string;
+  style?: CSSProperties;
 };
 
 // Every record picture goes through here: link check before any request, a quiet skeleton, the PORTIA placeholder on error, block or 15 seconds.
@@ -69,7 +70,7 @@ export function PortiaImage({ src, recordId, ...rest }: PortiaImageProps) {
   return <PortiaImageFrame key={`${recordId}|${link}`} link={link} {...rest} />;
 }
 
-function PortiaImageFrame({ link, alt, priority, icon = "microscope", className, caption }: Omit<PortiaImageProps, "src" | "recordId"> & { link: string }) {
+function PortiaImageFrame({ link, alt, priority, icon = "microscopeGuide", className, caption, style }: Omit<PortiaImageProps, "src" | "recordId"> & { link: string }) {
   const [state, setState] = useState<ImageState>(link ? "loading" : "failed");
   const image = useRef<HTMLImageElement>(null);
   const frameRef = useRef<HTMLSpanElement>(null);
@@ -94,6 +95,7 @@ function PortiaImageFrame({ link, alt, priority, icon = "microscope", className,
           ref={image}
           src={link}
           alt={alt}
+          style={style}
           {...mediaLoadingAttrs(priority)}
           referrerPolicy="no-referrer"
           onLoad={() => setState("loaded")}

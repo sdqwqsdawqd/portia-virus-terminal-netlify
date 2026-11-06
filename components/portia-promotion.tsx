@@ -276,14 +276,11 @@ function eligibilityCopy(kind: RequestKind, eligibility: Eligibility) {
   return "Повышение сейчас недоступно.";
 }
 
-/** The "create a template" task is recognised by its text; only then the optional builder entry is offered (D-23). */
-const isTemplateTask = (task: PublicTask) => /шаблон/i.test(task.text);
-
 /** The one action a participant can take right now on a card: a request that is allowed and not already running. */
 const canRequestOn = (kind: RequestKind, active: ActiveState, eligibility: Eligibility) =>
   !active && (eligibility.status === "eligible" || (kind === "ordinary" && eligibility.status === "special-task"));
 
-function PromotionStatusCard({ kind, active, eligibility, busy, stale, next, feedback, feedbackRef, onRequest, visible, onQualificationLockChange, onQualificationFinished, onOpenTemplate }: {
+function PromotionStatusCard({ kind, active, eligibility, busy, stale, next, feedback, feedbackRef, onRequest, visible, onQualificationLockChange, onQualificationFinished }: {
   kind: RequestKind;
   active: ActiveState;
   eligibility: Eligibility;
@@ -296,7 +293,6 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, next, fee
   visible?: boolean;
   onQualificationLockChange?: (locked: boolean) => void;
   onQualificationFinished?: () => void;
-  onOpenTemplate?: (trigger: HTMLButtonElement) => void;
 }) {
   const ordinary = kind === "ordinary";
   const canRequest = !active && (eligibility.status === "eligible" || (ordinary && eligibility.status === "special-task"));
@@ -310,7 +306,7 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, next, fee
     {feedback.phase !== "idle" && <p ref={feedbackRef} tabIndex={-1} role={feedback.phase === "error" ? "alert" : "status"} className={`promotion-submit-feedback ${feedback.phase}`}>{feedback.message}</p>}
     {!ordinary && active && !active.attemptId && (active.status === "claimed" || active.status === "approved") && <div className="promotion-test-warning"><strong>15 МИНУТ ПОСЛЕ РАЗРЕШЕНИЯ</strong><p>После разрешения проверяющего начнутся 15 минут.</p><p className="promotion-mode-warning">ПК. {desktopModeWarning}</p><p className="promotion-mode-warning">Телефон. {phoneModeWarning}</p></div>}
     {!ordinary && active?.attemptId && <QualificationRunner attemptId={active.attemptId} visible={visible !== false} onLockChange={onQualificationLockChange ?? (() => undefined)} onFinished={onQualificationFinished ?? (() => undefined)} />}
-    {tasks.length > 0 && <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task) => <li key={task.id}><span>{String(task.sortOrder).padStart(2, "0")}</span><div><p>{task.text}</p>{ordinary && onOpenTemplate && isTemplateTask(task) && <div className="promotion-template-entry"><button className="promotion-action" type="button" onClick={(event) => onOpenTemplate(event.currentTarget)}>Создать шаблон</button><p>Работа скачивается на ваше устройство. Отправьте файл проверяющему вне сайта.</p></div>}</div></li>)}</ol></div>}
+    {tasks.length > 0 && <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task) => <li key={task.id}><span>{String(task.sortOrder).padStart(2, "0")}</span><div><p>{task.text}</p></div></li>)}</ol></div>}
     {canRequest && <button className="promotion-action" type="button" disabled={busy || stale} onClick={() => onRequest(kind)}>{busy ? "ОТПРАВЛЯЕМ…" : ordinary ? "ПОДАТЬ ЗАЯВКУ НА ЗАДАНИЯ" : "ЗАПРОСИТЬ КВАЛИФИКАЦИЮ"}</button>}
     {canRequest && stale && <p className="promotion-next-note">Отправка недоступна, пока состояние не обновится. Страница проверит его сама.</p>}
   </section>;
@@ -480,9 +476,13 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
       </header>
       {stale && <div className="promotion-stale"><strong>Состояние временно не обновляется</strong><span>Показаны последние безопасные данные. Действия отключены до восстановления связи.</span></div>}
       {error && <p className="promotion-error" role="alert">{error}</p>}
+      <section className="promotion-template-entry" aria-label="Конструктор шаблона">
+        <button className="promotion-action" type="button" onClick={(event) => openTemplate(event.currentTarget)}>Создать шаблон</button>
+        <p>Отдельный инструмент для оформления досье. Работа скачивается на ваше устройство; отправьте файл проверяющему вне сайта. Создание шаблона само по себе не засчитывает задание.</p>
+      </section>
       <div className="promotion-flow-list">
         {status.ordinary.eligibility.status === "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} next={nextKind === "qualification"} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
-        <PromotionStatusCard kind="ordinary" active={status.ordinary.active} eligibility={status.ordinary.eligibility} busy={submitState.ordinary.phase === "submitting"} stale={stale} next={nextKind === "ordinary"} feedback={submitState.ordinary} feedbackRef={(node) => { submitFeedbackRefs.current.ordinary = node; }} onRequest={requestPromotion} onOpenTemplate={openTemplate} />
+        <PromotionStatusCard kind="ordinary" active={status.ordinary.active} eligibility={status.ordinary.eligibility} busy={submitState.ordinary.phase === "submitting"} stale={stale} next={nextKind === "ordinary"} feedback={submitState.ordinary} feedbackRef={(node) => { submitFeedbackRefs.current.ordinary = node; }} onRequest={requestPromotion} />
         {status.ordinary.eligibility.status !== "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} next={nextKind === "qualification"} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
       </div>
       <p className="promotion-cleanup-hint">Подробные данные проверки удаляются после закрытия. Хранятся три последних результата.</p>
