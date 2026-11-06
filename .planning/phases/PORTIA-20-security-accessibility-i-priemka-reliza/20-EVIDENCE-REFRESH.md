@@ -178,3 +178,18 @@ HEAD пересъёмки: `0929a084c13dc8cd420152c949c3332e82ed7e67`. Набо�
 | `application-employees`, `application-search` на chromium-desktop | PASS | новых строк rebaseline по G3 нет: гейт принимает их при прежнем допуске |
 
 Для B2/B3 новые actual-файлы лежат в `tests/e2e/visual-candidates/.runs/phase20-refresh-666836d77963/_work/blocker-actuals/`; для B5 — в том же наборе `window-search-*.png`. Их SHA256 записаны в примечаниях BLOCKED-строк. Снимки с данными цели не предлагаются к одобрению. Различия остальных строк, особенно с движением паука и WebKit, требуют вердикта владельца по конкретным байтам, а не автоматического наследования прежней оценки.
+
+## Пересъёмка после перерисовки паука и колб (20-37): блокеры, план остановлен до показа владельцу
+
+Коммит съёмки H3 `39bd4d371efa6caa284d50cb3c2140beaa243f6a`, набор `phase20-refresh-39bd4d371efa` (в .gitignore), сборка production на 127.0.0.1:3100 (visitor, только чтение). Эталоны `tests/e2e/visual/__screenshots__` не менялись. Ledger 20-VISUAL-APPROVAL.md на этом шаге не менялся: строки владельцу не показаны, вердиктов нет.
+
+Что прошло: `phase20-art.spec.ts` на chromium-desktop и chromium-phone, 44 passed (`--retries=0`). Остальные кандидатные спеки (apps, desktop, editor, motion, info-phone, class-icons, empty-art, promotion, template-builder): 164 passed, 165 skipped, 1 failed (B6 ниже).
+
+| ID | Что упало | Причина | Что нужно |
+|---|---|---|---|
+| B6 | `editor.spec.ts:5` «capture signed-out editor access states», firefox-desktop, 3 из 3 повторов | `[PORTIA_E2E_DIAGNOSTICS]`: два `requestfailed` `GET /api/content` и `GET /api/employees` с `NS_BINDING_ABORTED`: тест уходит на /owner-login, пока читаются данные цели; ответы целевого источника идут около 1.2 и 1.5 с (`curl`). Продуктовый код не затронут, кадры firefox записаны. | перепрогон при быстром источнике данных либо решение по ожиданию в спеке (как PW-04) |
+| B7 | `tests/e2e/specs/template-builder.spec.ts:569` «participant builds a text template…», chromium-desktop и chromium-phone | спек ждёт текст «Работа скачивается на ваше устройство. Отправьте файл проверяющему вне сайта.», а `components/portia-promotion.tsx:481` пишет «…устройство; отправьте файл…» (в `components/portia-template-builder.tsx:340` текст с точкой) | выровнять текст продукта и спека; правка компонента меняет продуктовый код и делает съёмку H3 устаревшей |
+| B8 | `tests/e2e/specs/accessibility.spec.ts:223` «template builder (UI-contract stub)…», chromium-phone, вкладка «Основное» | axe `label-content-name-mismatch` (serious) на `.global-format-launch > button`: у кнопки панели оформления доступное имя не содержит видимого текста | исправить имя кнопки в общем компоненте панели оформления (продуктовый код) |
+| B9 | кадр `phase20-spider-mid-step-off--chromium-phone` (строка `spider-motion-off:phone`) | на телефоне кадр показывает окно «Настройки» без паука: байты (`a53419f8…`) побитово равны отклонённым 2026-11-06, тест раздела 12 это отвергает («re-presents the rejected frame»); перерисовка паука в кадре не видна | переснять кадр так, чтобы паук был виден (правка `phase20-art.spec.ts`), либо решение владельца/оркестратора вывести строку из раздела 12 как `spider-off` |
+
+Строки `template-builder-*` и остальной пакет к вердикту не выносятся. Исправления B7 и B8 меняют продуктовый код, поэтому после них нужна полная пересъёмка на новом H3 (Task 1 и Task 2 заново); защита раздела 12 в `lib/phase20-visual-approval.test.ts` уже добавлена коммитами a02eda7 (RED) и 39bd4d3 (GREEN), тесты реального ledger красные, пока раздел 12 не записан.
