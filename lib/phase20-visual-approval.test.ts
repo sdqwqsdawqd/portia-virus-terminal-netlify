@@ -38,6 +38,11 @@ const requiredBoth = [
   "promotion-participant-gate-empty",
   "promotion-participant-cards",
   "promotion-reviewer-queue",
+  // D-52 (20-38, 20-39): the template builder frames of 20-37.
+  "template-builder-main",
+  "template-builder-text",
+  "template-builder-mutations",
+  "template-builder-preview",
   ...classKeys.map((key) => `class-icon-${key}`),
 ];
 // Info phone runs on two phone projects.
