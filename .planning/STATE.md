@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-34-PLAN.md (D-50, D-51, D-52 recorded; fix plan for template builder needed before 20-37)
-last_updated: "2026-11-06T15:57:49.523Z"
+stopped_at: Completed PORTIA-20-38-PLAN.md (template dossier model and export; 20-39 builds the UI on it)
+last_updated: "2026-11-06T16:18:17.737Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 20 execution started
-state_head: 4dc34288661b31dbb1a7bb06788247bde45dc7d4
+state_head: 077580754962b4828dc17a47e9d74adfeb90dd91
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 110
-  completed_plans: 101
+  completed_plans: 102
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: 20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 13 of 37
+Plan: 14 of 37
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 20 execution started
 
@@ -135,6 +135,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P31 | 10 min | 3 tasks | 5 files |
 | Phase PORTIA-20 P20-11 | owner-gated | 2 tasks | 2 files |
 | Phase PORTIA-20 P20-34 | session | 3 tasks | 2 files |
+| Phase PORTIA-20 P20-38 | 14min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -237,6 +238,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-31: 20-15 finalizes the 20-RELEASE-NOTES.md draft (matrix_commit b88669f) instead of creating notes; STAB-A11Y-01, STAB-A11Y-03, STAB-MEDIA-07 reopened to Pending (BLOCKED sub-items listed); STAB-SEC-05 stays Complete on the 20-26 matrix; lib/phase20-requirements-ledger.test.ts blocks Complete without UAT/matrix/reconciliation proof
 - [Phase PORTIA-20]: 20-11: owner accepted 79 visual rows, 4 sent back for fixes (spider on #1a1a1a, Transitium); strict gate fails on those by design; D-10 contrast fix-now needs a gap in 20-12/20-13
 - [Phase PORTIA-20]: D-52: template builder in Promotion becomes a near copy of the site editor's mutation description editing (no scientist records); creating a template must not affect the main site; fix plan required before 20-37
+- [Phase PORTIA-20]: 20-38: an edit that changes the template's mutation count is refused (same draft returned); id, scientist logs, image addresses and image slots are restored after every edit
+- [Phase PORTIA-20]: 20-38: template export reads images only from validated local data URL slots and re-checks them; virus.infectedImage and mutation.image are never read
 
 ### Pending Todos
 
@@ -279,8 +282,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-06T15:16:00.808Z
-Stopped at: Completed PORTIA-20-34-PLAN.md (D-50, D-51, D-52 recorded; fix plan for template builder needed before 20-37)
+Last session: 2026-11-06T16:18:17.171Z
+Stopped at: Completed PORTIA-20-38-PLAN.md (template dossier model and export; 20-39 builds the UI on it)
 Resume file: None
 
 ## Operator Next Step
