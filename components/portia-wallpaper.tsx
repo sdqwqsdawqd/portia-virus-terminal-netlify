@@ -206,25 +206,37 @@ const cells = cellField();
 
 const WALLPAPER_FADE_MS = 500;
 
-// A wide laboratory bench: four distinct vessels, coloured liquids and independent cycles.
-// The whole drawing stays in SVG; reduced/off motion leaves the same readable still frame.
-const FLASK_BASE_Y = 706;
-type FlaskSpec = { x: number; outline: string; lip: string; shine: string; level: number; floor: number; span: number; duration: number; delay: number; bubbles: number; hue: string };
+// «Лабораторные колбы» (D-22, redrawn in 20-33): a small distillation set on one bench, right of centre — a graduated cylinder,
+// a conical flask, a round-bottom flask held by a clamp over a ring and a beaker that takes the bent tube from it. Thin muted
+// lines and deep liquids, so a shortcut label stays readable over any part of the drawing. The cylinder is the far vessel a
+// phone hides. The cycle lengths and phases are the authored D-22 values; reduced/off motion keeps the same still frame.
+const FLASK_BASE_Y = 650;
+type FlaskSpec = { x: number; outline: string; lip: string; shine: string; marks: string; level: number; floor: number; span: number; duration: number; delay: number; bubbles: number; hue: string };
 const flaskSpecs: FlaskSpec[] = [
-  { x: 805, outline: "M-18-266h36v64l73 167q12 29-17 29H-74q-29 0-17-29l73-167Z", lip: "M-24-267h48M-24-260h48", shine: "M-8-250v51L-70-47", level: -116, floor: -16, span: 51, duration: 7.2, delay: -2.1, bubbles: 13, hue: "cyan" },
-  { x: 994, outline: "M-16-286h32v89a88 88 0 1 1-32 0Z", lip: "M-22-287h44M-22-280h44", shine: "M-7-269v65M-59-117q-24 45-3 80", level: -102, floor: -18, span: 53, duration: 9.4, delay: -5.7, bubbles: 15, hue: "violet" },
-  { x: 1178, outline: "M-72-218h144L63-18q-1 12-14 12h-98q-13 0-14-12Z", lip: "M-80-220h160M-72-213h144", shine: "M-58-204l5 160M47-190l-4 114", level: -125, floor: -17, span: 47, duration: 11.1, delay: -3.5, bubbles: 12, hue: "amber" },
-  { x: 1360, outline: "M-43-298h86v239a43 43 0 0 1-86 0Z", lip: "M-49-299h98M-43-292h86", shine: "M-30-279v210M29-258v136", level: -185, floor: -52, span: 27, duration: 8.1, delay: -6.2, bubbles: 11, hue: "rose" },
+  // Graduated cylinder on a foot, with a pouring spout.
+  { x: 958, outline: "M-19-205h38v197q0 8-8 8h-22q-8 0-8-8Z", lip: "M-24-206h48M-19-206l-6-7", shine: "M-10-192v176",
+    marks: "M7-180h12M11-160h8M7-140h12M11-120h8M7-100h12M11-80h8M7-60h12M11-40h8M-34 0h68", level: -118, floor: -6, span: 11, duration: 6.8, delay: -1.9, bubbles: 5, hue: "teal" },
+  // Conical (Erlenmeyer) flask.
+  { x: 1092, outline: "M-10-172h20v58l45 103q5 11-7 11h-96q-12 0-7-11l45-103Z", lip: "M-14-173h28M-12-166h24", shine: "M-4-160v46L-28-46",
+    marks: "M-20-60h10M-25-40h12M-29-20h10", level: -64, floor: -7, span: 28, duration: 8.9, delay: -5.2, bubbles: 8, hue: "violet" },
+  // Round-bottom flask in a clamp, sitting on a ring.
+  { x: 1226, outline: "M-9-190h18v85a46 46 0 1 1-18 0Z", lip: "M-13-191h26M-11-184h22", shine: "M-29-80q-9 22 1 42",
+    marks: "M-9-150h18", level: -70, floor: -19, span: 27, duration: 11.3, delay: -3.4, bubbles: 7, hue: "amber" },
+  // Beaker with a spout and a scale.
+  { x: 1370, outline: "M-33-128h66v120q0 8-8 8h-50q-8 0-8-8Z", lip: "M-38-129h74M-33-129l-6-6", shine: "M-23-116v102",
+    marks: "M19-104h10M23-88h6M19-72h10M23-56h6M19-40h10", level: -52, floor: -7, span: 22, duration: 7.7, delay: -6.1, bubbles: 6, hue: "rose" },
 ];
-const flaskWave = (level: number) => `M-105 ${level}q10 -7 20 0${"t20 0".repeat(10)}`;
+// A sine-like surface, 200 wide with a 20-unit period: sliding it by one period shows the same picture again.
+const flaskWave = (level: number) => `M-100 ${level}q5 -2.5 10 0${"t10 0".repeat(19)}`;
 const flasks = flaskSpecs.map((spec, index) => {
-  const rand = seeded(41 + index * 7);
+  const rand = seeded(53 + index * 11);
   const bubbles = Array.from({ length: spec.bubbles }, () => {
-    const radius = round(2.2 + rand() * 4.8);
-    const bottom = spec.floor - radius, top = spec.level + radius + 6;
+    const radius = round(1.6 + rand() * 2.4);
+    // The centre travels from just above the floor to just under the surface, so a bubble never leaves the liquid.
+    const bottom = spec.floor - radius, top = spec.level + radius + 3;
     const rest = bottom + (top - bottom) * rand();
     return { cx: round((rand() * 2 - 1) * spec.span), cy: round(rest), r: radius,
-      below: round(bottom - rest), above: round(top - rest), duration: round(2.7 + rand() * 3), delay: round(-rand() * 6) };
+      below: round(bottom - rest), above: round(top - rest), duration: round(2.8 + rand() * 2.6), delay: round(-rand() * 5) };
   });
   return { ...spec, index, bubbles };
 });
@@ -233,23 +245,26 @@ function WallpaperFlasks() {
   return <g className="wallpaper-flasks">
     <defs>
       {flasks.map((flask) => <clipPath key={flask.index} id={`wp-flask-clip-${flask.index}`}><path d={flask.outline} /></clipPath>)}
-      <linearGradient id="wp-liquid-cyan" x1="0" y1="0" x2="1" y2="1"><stop stopColor="var(--teal)" /><stop offset=".48" stopColor="#7dabff" /><stop offset="1" stopColor="#5e7df1" /></linearGradient>
-      <linearGradient id="wp-liquid-violet" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#284985" /><stop offset=".55" stopColor="#8e6eed" /><stop offset="1" stopColor="#eb68c7" /></linearGradient>
-      <linearGradient id="wp-liquid-amber" x1="0" y1="0" x2="1" y2="1"><stop stopColor="var(--teal)" /><stop offset=".52" stopColor="#67c793" /><stop offset="1" stopColor="#e0bd65" /></linearGradient>
-      <linearGradient id="wp-liquid-rose" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#70497b" /><stop offset=".52" stopColor="#d568a0" /><stop offset="1" stopColor="#f0a979" /></linearGradient>
+      <linearGradient id="wp-liquid-teal" x1="0" y1="0" x2="0" y2="1"><stop stopColor="currentColor" stopOpacity=".7" /><stop offset="1" stopColor="currentColor" stopOpacity=".35" /></linearGradient>
+      <linearGradient id="wp-liquid-violet" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#7462b8" /><stop offset="1" stopColor="#3b3170" /></linearGradient>
+      <linearGradient id="wp-liquid-amber" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#a8843e" /><stop offset="1" stopColor="#5c4420" /></linearGradient>
+      <linearGradient id="wp-liquid-rose" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#a65a80" /><stop offset="1" stopColor="#5a2c48" /></linearGradient>
     </defs>
     <g className="wallpaper-flask-stand">
-      <path d="M700 723H1438M700 738H1438M730 738v52m678-52v52M705 754h728" />
-      <path d="M732 723V322m0 0h85m-85 80h266m-266 81h454m-454 80h633M1411 723V292m0 0h-52m52 135h-52" />
-      <path d="M807 317v94m190-14v58m181 23v22m182-76v40" />
-      <circle cx="732" cy="322" r="7" /><circle cx="1411" cy="292" r="7" />
+      {/* The bench: a top with an edge, two legs and a shelf. */}
+      <path d="M915 650H1440M915 657H1440M935 657v60M1420 657v60M935 700H1420" />
+      {/* A rod with a clamp arm round the neck of the round-bottom flask, and a ring on three short legs under it. */}
+      <path d="M1296 650V470M1296 488H1236M1232 482v12M1196 636h60M1202 636l-7 14M1250 636l7 14M1226 636v14" />
+      {/* The bent tube from the round-bottom flask to the beaker. */}
+      <path d="M1226 460V444q0-8 8-8h128q8 0 8 8v100" />
+      <circle cx="1296" cy="470" r="4" />
     </g>
-    {flasks.map((flask) => <g key={flask.index} className="wallpaper-flask" data-flask={flask.index}
+    {flasks.map((flask) => <g key={flask.index} className={`wallpaper-flask${flask.index === 0 ? " wallpaper-flask-far" : ""}`} data-flask={flask.index}
       transform={`translate(${flask.x} ${FLASK_BASE_Y})`}
       style={{ "--flask-dur": `${flask.duration}s`, "--flask-delay": `${flask.delay}s` } as CSSProperties}>
       <path className="wallpaper-flask-glass-depth" d={flask.outline} />
       <g className="wallpaper-flask-liquid" clipPath={`url(#wp-flask-clip-${flask.index})`}>
-        <rect className="wallpaper-flask-fill" x={-105} y={flask.level} width={210} height={-flask.level + 5} fill={`url(#wp-liquid-${flask.hue})`} />
+        <rect className="wallpaper-flask-fill" x={-100} y={flask.level} width={200} height={4 - flask.level} fill={`url(#wp-liquid-${flask.hue})`} />
         <path className="wallpaper-flask-surface" d={flaskWave(flask.level)} />
       </g>
       <g className="wallpaper-flask-bubbles" clipPath={`url(#wp-flask-clip-${flask.index})`}>
@@ -257,9 +272,9 @@ function WallpaperFlasks() {
           style={{ "--bubble-below": `${bubble.below}px`, "--bubble-above": `${bubble.above}px`, "--bubble-dur": `${bubble.duration}s`, "--bubble-delay": `${bubble.delay}s` } as CSSProperties} />)}
       </g>
       <path className="wallpaper-flask-glass" d={flask.outline} />
+      <path className="wallpaper-flask-marks" d={flask.marks} />
       <path className="wallpaper-flask-lip" d={flask.lip} />
       <path className="wallpaper-flask-shine" d={flask.shine} />
-      <ellipse className="wallpaper-flask-reflection" cx="0" cy="-10" rx="27" ry="3" />
     </g>)}
   </g>;
 }

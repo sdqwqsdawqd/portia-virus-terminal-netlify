@@ -1606,30 +1606,34 @@ html[data-motion="full"] .wallpaper-particle { animation: particle-tumble 20s li
 @keyframes nucleus-wander { from { translate: -2px 1px; } to { translate: 2px -1px; } }
 @keyframes particle-drift { from { translate: calc(var(--particle-dx) * -1) calc(var(--particle-dy) * -1); } to { translate: var(--particle-dx) var(--particle-dy); } }
 @keyframes particle-tumble { to { rotate: 360deg; } }
-/* «Лабораторные колбы» (D-22): four flasks on a lab stand, right of centre. Glass and stand are thin muted lines; the liquid is the accent at a different
-   tone per flask. With motion on each flask glows on its own cycle (--flask-dur / --flask-delay, set per flask), its surface slides and its bubbles rise
-   inside the liquid only (the group is clipped by the glass outline, and every bubble's travel is computed inside the liquid). Only opacity and transform
-   animate. Reduced and off fall under the global `.desktop-wallpaper *` rule: no animation, the drawn frame stays. */
-/* The accent is blended toward the desktop base here (70/30): a near-white custom accent would otherwise make a bright patch under the shortcut labels (checked in phase20-art.spec.ts: label contrast over the brightest 8 px square stays at least 4.5:1). No relative colour syntax (accent-theme test). */
-.wallpaper-flasks { color: color-mix(in oklab, var(--teal) 58%, #b5c9d2); }
-.wallpaper-flask-stand path { fill: none; stroke: color-mix(in oklab, currentColor 46%, #283b47); stroke-width: 3; stroke-linejoin: round; opacity: .62; }
-.wallpaper-flask-stand circle { fill: #647785; stroke: #a6bdc6; stroke-width: 1.5; opacity: .76; }
-.wallpaper-flask-glass-depth { fill: color-mix(in oklab, var(--teal) 30%, white); fill-opacity: .045; stroke: none; }
-.wallpaper-flask-glass { fill: none; stroke: color-mix(in oklab, var(--teal) 30%, white); stroke-width: 3; stroke-linejoin: round; opacity: .64; }
-.wallpaper-flask-lip { fill: none; stroke: #fff; stroke-width: 3.5; opacity: .8; }
-.wallpaper-flask-shine { fill: none; stroke: #fff; stroke-width: 4; stroke-linecap: round; opacity: .53; }
-.wallpaper-flask-liquid { opacity: .9; }
-.wallpaper-flask-fill { fill-opacity: .72; stroke: none; }
-.wallpaper-flask-surface { fill: none; stroke: #f4f8f5; stroke-width: 2.5; opacity: .85; }
-.wallpaper-flask-bubble { fill: #fff; fill-opacity: .16; stroke: #fff; stroke-width: 1.5; opacity: .9; }
-.wallpaper-flask-reflection { fill: #fff; opacity: .14; }
+/* «Лабораторные колбы» (D-22, redrawn in 20-33): a distillation set of four vessels on one bench, right of centre. Glass, scale marks, bench and
+   stand are thin muted lines; the liquids are deep, one hue per vessel (the cylinder takes the accent). With motion on each vessel glows on its
+   own cycle (--flask-dur / --flask-delay), its surface slides and its bubbles rise inside the liquid only (clipped by the glass outline, and every
+   bubble's travel is computed inside the liquid). Only opacity and transform animate. Reduced and off fall under the global `.desktop-wallpaper *`
+   rule: no animation, the drawn frame stays.
+   Readability (owner, 20-33): no line or liquid is bright enough to sit under a shortcut label — phase20-art.spec.ts asserts label contrast over
+   the brightest 8 px square of the drawing at least 4.5:1, on the standard, very dark and very light accents. The accent is blended toward the
+   desktop base so a near-white custom accent cannot make a bright patch. No relative colour syntax (accent-theme test). */
+.wallpaper-flasks { color: color-mix(in oklab, var(--teal) 55%, var(--desktop-base)); }
+.wallpaper-flask-stand path { fill: none; stroke: color-mix(in oklab, currentColor 55%, #46545c); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; opacity: .42; }
+.wallpaper-flask-stand circle { fill: none; stroke: color-mix(in oklab, currentColor 55%, #46545c); stroke-width: 1.5; opacity: .5; }
+.wallpaper-flask-glass-depth { fill: currentColor; fill-opacity: .035; stroke: none; }
+.wallpaper-flask-glass { fill: none; stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke-width: 1.6; stroke-linejoin: round; opacity: .5; }
+.wallpaper-flask-marks { fill: none; stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke-width: 1.2; stroke-linecap: round; opacity: .35; }
+.wallpaper-flask-lip { fill: none; stroke: color-mix(in oklab, currentColor 50%, #a3b3ba); stroke-width: 2; stroke-linecap: round; opacity: .5; }
+.wallpaper-flask-shine { fill: none; stroke: #d0d0d0; stroke-width: 2; stroke-linecap: round; opacity: .12; }
+.wallpaper-flask-liquid { opacity: .85; }
+.wallpaper-flask-fill { fill-opacity: .62; stroke: none; }
+.wallpaper-flask-surface { fill: none; stroke: color-mix(in oklab, currentColor 50%, #a3b3ba); stroke-width: 1.5; opacity: .6; }
+.wallpaper-flask-bubble { fill: currentColor; fill-opacity: .1; stroke: color-mix(in oklab, currentColor 50%, #a3b3ba); stroke-width: 1; opacity: .55; }
 html[data-motion="full"] .wallpaper-flask-liquid { animation: flask-glow var(--flask-dur) ease-in-out var(--flask-delay) infinite; }
 html[data-motion="full"] .wallpaper-flask-surface { animation: flask-wave calc(var(--flask-dur) * .45) linear var(--flask-delay) infinite; }
 html[data-motion="full"] .wallpaper-flask-bubble { animation: flask-bubble var(--bubble-dur) linear var(--bubble-delay) infinite; }
 @keyframes flask-glow { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 @keyframes flask-wave { to { transform: translateX(20px); } }
 @keyframes flask-bubble { 0% { transform: translateY(var(--bubble-below)); opacity: 0; } 12%, 85% { opacity: .75; } 100% { transform: translateY(var(--bubble-above)); opacity: 0; } }
-/* The xMax wallpaper crop naturally keeps the three right vessels on narrow screens. */
+/* A tall narrow screen shows only the right ~420 wallpaper units: the graduated cylinder would be cut, so a phone keeps three vessels. */
+@container (max-aspect-ratio: 3/5) { .wallpaper-flask-far { display: none; } }
 
 /* The spider lowers itself on a silk thread while the terminal boots: one animation for thread and spider, so the spider can never lead its web (D-06). */
 .boot-thread { position: absolute; left: 50%; bottom: calc(100% - 46px); width: 1px; height: 50vh; margin-left: -.5px; background: linear-gradient(transparent, var(--teal)); animation: spider-descend 900ms cubic-bezier(.16, 1, .3, 1) both; animation-play-state: paused; }
