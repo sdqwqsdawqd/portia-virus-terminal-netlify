@@ -206,74 +206,181 @@ const cells = cellField();
 
 const WALLPAPER_FADE_MS = 500;
 
-// «Лабораторные колбы» (D-22, redrawn in 20-33): a small distillation set on one bench, right of centre — a graduated cylinder,
-// a conical flask, a round-bottom flask held by a clamp over a ring and a beaker that takes the bent tube from it. Thin muted
-// lines and deep liquids, so a shortcut label stays readable over any part of the drawing. The cylinder is the far vessel a
-// phone hides. The cycle lengths and phases are the authored D-22 values; reduced/off motion keeps the same still frame.
-const FLASK_BASE_Y = 650;
-type FlaskSpec = { x: number; outline: string; lip: string; shine: string; marks: string; level: number; floor: number; span: number; duration: number; delay: number; bubbles: number; hue: string };
-const flaskSpecs: FlaskSpec[] = [
+// «Лабораторные колбы» (D-22, redrawn in 20-33 and again in 20-36 by D-51): the whole lower half of the screen is a busy lab —
+// a long bench with a cabinet, a wall shelf of reagent bottles and jars, a poster, a tripod with a burner, a condenser coil, a test-tube
+// rack and twelve vessels that bubble each on its own cycle. Thin line art (glass wall, scale, label, cork, shine); the liquids are deep
+// hues that never reach the brightness of a shortcut label (phase20-art.spec.ts: label contrast over the brightest 8 px square of the
+// whole drawing at least 4.5:1 on three accents). The scene is original: no character or artwork is copied from the owner's mood reference.
+// Units are the 1440×900 wallpaper frame; the right ~405 units stay in view on a phone, so the four vessels there carry no `far` flag
+// and everything left of them is hidden by a container query. The cycle lengths and phases are authored: the first four are the D-22
+// pairs, the others differ (6–12 s) and their first glow peaks are at least 0.7 s apart (the spec table repeats these numbers).
+const FLASK_BENCH_Y = 660;
+type FlaskShape = { outline: string; lip: string; shine: string; marks: string; label: string; cork: string; level: number; floor: number; span: number; height: number; half: number; radius: [number, number] };
+const flaskShapes = {
   // Graduated cylinder on a foot, with a pouring spout.
-  { x: 958, outline: "M-19-205h38v197q0 8-8 8h-22q-8 0-8-8Z", lip: "M-24-206h48M-19-206l-6-7", shine: "M-10-192v176",
-    marks: "M7-180h12M11-160h8M7-140h12M11-120h8M7-100h12M11-80h8M7-60h12M11-40h8M-34 0h68", level: -118, floor: -6, span: 11, duration: 6.8, delay: -1.9, bubbles: 5, hue: "teal" },
-  // Conical (Erlenmeyer) flask.
-  { x: 1092, outline: "M-10-172h20v58l45 103q5 11-7 11h-96q-12 0-7-11l45-103Z", lip: "M-14-173h28M-12-166h24", shine: "M-4-160v46L-28-46",
-    marks: "M-20-60h10M-25-40h12M-29-20h10", level: -64, floor: -7, span: 28, duration: 8.9, delay: -5.2, bubbles: 8, hue: "violet" },
-  // Round-bottom flask in a clamp, sitting on a ring.
-  { x: 1226, outline: "M-9-190h18v85a46 46 0 1 1-18 0Z", lip: "M-13-191h26M-11-184h22", shine: "M-29-80q-9 22 1 42",
-    marks: "M-9-150h18", level: -70, floor: -19, span: 27, duration: 11.3, delay: -3.4, bubbles: 7, hue: "amber" },
-  // Beaker with a spout and a scale.
-  { x: 1370, outline: "M-33-128h66v120q0 8-8 8h-50q-8 0-8-8Z", lip: "M-38-129h74M-33-129l-6-6", shine: "M-23-116v102",
-    marks: "M19-104h10M23-88h6M19-72h10M23-56h6M19-40h10", level: -52, floor: -7, span: 22, duration: 7.7, delay: -6.1, bubbles: 6, hue: "rose" },
+  cylinder: { outline: "M-19-205h38v197q0 8-8 8h-22q-8 0-8-8Z", lip: "M-24-206h48M-19-206l-6-7", shine: "M-10-192v176", cork: "",
+    marks: "M7-180h12M11-160h8M7-140h12M11-120h8M7-100h12M11-80h8M7-60h12M11-40h8M-34 0h68", label: "", level: -118, floor: -6, span: 11, height: 205, half: 34, radius: [1.6, 2.4] },
+  // Conical (Erlenmeyer) flask with a stopper and a label.
+  conical: { outline: "M-10-172h20v58l45 103q5 11-7 11h-96q-12 0-7-11l45-103Z", lip: "M-14-173h28M-12-166h24", shine: "M-4-160v46L-28-46", cork: "M-11-174h22l-3-12h-16Z",
+    marks: "M-17-96h7M-22-80h10M-27-64h7", label: "M-26-38h52v20h-52ZM-18-31h36M-18-25h22", level: -64, floor: -7, span: 28, height: 173, half: 55, radius: [1.6, 2.4] },
+  // Round-bottom flask (it hangs on a clamp over a tripod).
+  round: { outline: "M-9-190h18v85a46 46 0 1 1-18 0Z", lip: "M-13-191h26M-11-184h22", shine: "M-29-80q-9 22 1 42", cork: "",
+    marks: "M-9-150h18", label: "", level: -70, floor: -19, span: 27, height: 190, half: 46, radius: [1.6, 2.4] },
+  // Beaker with a spout, a scale and a label.
+  beaker: { outline: "M-33-128h66v120q0 8-8 8h-50q-8 0-8-8Z", lip: "M-38-129h74M-33-129l-6-6", shine: "M-23-116v102", cork: "",
+    marks: "M19-104h10M23-88h6M19-72h10M23-56h6M19-40h10", label: "M-26-34h30v16h-30Z", level: -52, floor: -7, span: 22, height: 128, half: 33, radius: [1.6, 2.4] },
+  // Flat-bottom (Florence) flask with a long neck, a stopper and a label.
+  florence: { outline: "M-8-190h16v90.6a50 50 0 1 1-16 0Z", lip: "M-12-191h24M-10-184h20", shine: "M-40-70q-4 22 4 40", cork: "M-9-192h18l-3-12h-12Z",
+    marks: "M-8-150h16M-8-130h10", label: "M-22-44h44v16h-44ZM-14-39h28", level: -58, floor: -6, span: 22, height: 190, half: 50, radius: [1.6, 2.4] },
+  // Test tube.
+  tube: { outline: "M-9-95h18v82a9 9 0 0 1-18 0Z", lip: "M-12-96h24", shine: "M-5-86v58", cork: "",
+    marks: "M3-80h5M3-64h5M3-48h5", label: "", level: -62, floor: -6, span: 3, height: 95, half: 11, radius: [1.1, 1.2] },
+  // Wide-mouth jar with a lid (shelf only).
+  jar: { outline: "M-26-72h52v8l4 6v50q0 8-8 8h-44q-8 0-8-8v-50l4-6Z", lip: "M-28-72h56v-10h-56Z", shine: "M-22-52v36", cork: "",
+    marks: "", label: "M-20-40h40v22h-40ZM-12-33h24M-12-27h16", level: -40, floor: -6, span: 18, height: 82, half: 30, radius: [1.6, 2.4] },
+  // Reagent bottle with a stopper (shelf only).
+  bottle: { outline: "M-7-112h14v18l22 18v68q0 8-8 8h-42q-8 0-8-8v-68l22-18Z", lip: "M-10-113h20", shine: "M-22-72v56", cork: "M-6-114h12l-1-9h-10Z",
+    marks: "", label: "M-24-62h48v30h-48ZM-16-52h32M-16-44h20", level: -50, floor: -6, span: 20, height: 112, half: 29, radius: [1.6, 2.4] },
+} satisfies Record<string, FlaskShape>;
+type ShapeKey = keyof typeof flaskShapes;
+
+// The animated vessels: `hue` is the resting liquid, `alt` the one it slowly turns into (a second fill that fades in and out on its own, longer cycle).
+// Index 0-3 keep the D-22 durations and phases. `far` vessels stand left of the phone's view and are hidden there.
+type FlaskSpec = { shape: ShapeKey; x: number; y: number; scale: number; hue: string; alt: string; duration: number; delay: number; bubbles: number; far?: boolean };
+const flaskSpecs: FlaskSpec[] = [
+  { shape: "cylinder", x: 118, y: FLASK_BENCH_Y, scale: 1, hue: "teal", alt: "violet", duration: 6.8, delay: -1.9, bubbles: 5, far: true },
+  { shape: "conical", x: 222, y: FLASK_BENCH_Y, scale: 1, hue: "violet", alt: "rose", duration: 8.9, delay: -5.2, bubbles: 7, far: true },
+  { shape: "round", x: 395, y: 585, scale: 1, hue: "amber", alt: "green", duration: 11.3, delay: -3.4, bubbles: 7, far: true },
+  { shape: "beaker", x: 568, y: FLASK_BENCH_Y, scale: 1, hue: "rose", alt: "amber", duration: 7.7, delay: -6.1, bubbles: 6, far: true },
+  { shape: "florence", x: 668, y: FLASK_BENCH_Y, scale: 1, hue: "green", alt: "teal", duration: 9.7, delay: -1.0, bubbles: 5, far: true },
+  { shape: "tube", x: 766, y: 652, scale: 1, hue: "amber", alt: "rose", duration: 6.3, delay: -3.0, bubbles: 3, far: true },
+  { shape: "tube", x: 794, y: 652, scale: 1, hue: "violet", alt: "teal", duration: 10.4, delay: -5.3, bubbles: 3, far: true },
+  { shape: "tube", x: 822, y: 652, scale: 1, hue: "rose", alt: "green", duration: 7.2, delay: -4.0, bubbles: 3, far: true },
+  { shape: "conical", x: 1105, y: FLASK_BENCH_Y, scale: 1.1, hue: "green", alt: "violet", duration: 8.3, delay: -7.8, bubbles: 7 },
+  { shape: "beaker", x: 1210, y: FLASK_BENCH_Y, scale: 1.15, hue: "teal", alt: "rose", duration: 11.8, delay: -6.0, bubbles: 5 },
+  { shape: "florence", x: 1307, y: FLASK_BENCH_Y, scale: 1.1, hue: "amber", alt: "rose", duration: 6.6, delay: -2.5, bubbles: 5 },
+  { shape: "cylinder", x: 1400, y: FLASK_BENCH_Y, scale: 1.05, hue: "violet", alt: "teal", duration: 9.1, delay: -4.6, bubbles: 4 },
 ];
 // A sine-like surface, 200 wide with a 20-unit period: sliding it by one period shows the same picture again.
 const flaskWave = (level: number) => `M-100 ${level}q5 -2.5 10 0${"t10 0".repeat(19)}`;
 const flasks = flaskSpecs.map((spec, index) => {
+  const shape = flaskShapes[spec.shape];
   const rand = seeded(53 + index * 11);
   const bubbles = Array.from({ length: spec.bubbles }, () => {
-    const radius = round(1.6 + rand() * 2.4);
+    const radius = round(shape.radius[0] + rand() * shape.radius[1]);
     // The centre travels from just above the floor to just under the surface, so a bubble never leaves the liquid.
-    const bottom = spec.floor - radius, top = spec.level + radius + 3;
+    const bottom = shape.floor - radius, top = shape.level + radius + 3;
     const rest = bottom + (top - bottom) * rand();
-    return { cx: round((rand() * 2 - 1) * spec.span), cy: round(rest), r: radius,
+    return { cx: round((rand() * 2 - 1) * shape.span), cy: round(rest), r: radius,
       below: round(bottom - rest), above: round(top - rest), duration: round(2.8 + rand() * 2.6), delay: round(-rand() * 5) };
   });
-  return { ...spec, index, bubbles };
+  return { ...spec, ...shape, index, key: spec.shape, bubbles };
 });
+
+// Still vessels on the wall shelf: the same glass, a flat liquid (or none), no animation.
+const shelfY = 372;
+const shelfItems: Array<{ shape: ShapeKey; x: number; scale: number; hue: string | null }> = [
+  { shape: "bottle", x: 420, scale: 0.62, hue: "amber" }, { shape: "jar", x: 490, scale: 0.7, hue: "violet" }, { shape: "conical", x: 562, scale: 0.5, hue: "rose" },
+  { shape: "bottle", x: 628, scale: 0.58, hue: "green" }, { shape: "beaker", x: 694, scale: 0.55, hue: "teal" }, { shape: "florence", x: 768, scale: 0.5, hue: "violet" },
+  { shape: "jar", x: 842, scale: 0.7, hue: "amber" }, { shape: "bottle", x: 908, scale: 0.65, hue: "rose" }, { shape: "cylinder", x: 962, scale: 0.45, hue: "teal" },
+  { shape: "conical", x: 1034, scale: 0.5, hue: "green" }, { shape: "jar", x: 1102, scale: 0.7, hue: null }, { shape: "bottle", x: 1170, scale: 0.6, hue: "violet" },
+  { shape: "beaker", x: 1236, scale: 0.55, hue: "amber" }, { shape: "florence", x: 1306, scale: 0.5, hue: "rose" }, { shape: "bottle", x: 1376, scale: 0.62, hue: "green" },
+];
+
+// Bench: the top and its edge, a cabinet of four doors, a skirting line, then the tripod and burner under the round-bottom flask, the clamp rod,
+// the test-tube rack, an alcohol lamp and a mortar. Shelf and poster are the wall behind it.
+const cabinetDoors = [64, 444, 824, 1204].map((left) => `M${left} 684h360v78h-360ZM${left + 166} 702h28`).join("");
+const coilPoints = Array.from({ length: 11 }, (_, step) => `${step ? "L" : "M"}${step % 2 ? 882 : 898} ${492 + step * 14}`).join("");
+const benchPaths = {
+  top: `M40 ${FLASK_BENCH_Y}H1440M40 ${FLASK_BENCH_Y + 12}H1440`,
+  cabinet: `M60 ${FLASK_BENCH_Y + 12}V772M40 772H1440${cabinetDoors}`,
+  tripod: "M343 571L325 660M447 571L465 660M350 571h90",
+  burner: "M388 660v-36h14v36M372 660q0-8 23-8t23 8",
+  rod: "M480 660V425M445 660h72M480 432H404M404 424v16",
+  rack: "M744 622h100v8H744ZM750 630v30M838 630v30M744 650h100",
+  lamp: "M926 660q-6-24 6-38h32q12 14 6 38ZM942 622v-10h12v10M948 612v-8",
+  mortar: "M988 625h48q-2 28-24 33q-22-5-24-33ZM1022 625l20-32",
+  coil: `M872 470h36v190h-36ZM872 500h-14M908 630h14M866 560h48${coilPoints}`,
+};
+const posterPaths = {
+  frame: "M92 290h206v146H92ZM108 306h110M236 312h50M236 324h36",
+  ring: "M150 330L176 345V375L150 390L124 375V345ZM150 338L169 349M169 371L150 382M131 371V349",
+  chain: "M176 345L200 331L224 345L248 331M176 375L200 389L224 375L248 389",
+};
+
+function FlaskShelfItem({ item }: { item: typeof shelfItems[number] }) {
+  const shape = flaskShapes[item.shape];
+  return <g className="wallpaper-flask-scene-vessel" transform={`translate(${item.x} ${shelfY}) scale(${item.scale})`}>
+    <path className="wallpaper-flask-scene-depth" d={shape.outline} />
+    {item.hue && <rect className="wallpaper-flask-scene-liquid" x={-60} y={shape.level} width={120} height={-shape.level} fill={`url(#wp-liquid-${item.hue})`} clipPath={`url(#wp-flask-clip-${item.shape})`} />}
+    <path className="wallpaper-flask-scene-glass" d={shape.outline} />
+    {shape.marks && <path className="wallpaper-flask-scene-line" d={shape.marks} />}
+    {shape.label && <path className="wallpaper-flask-scene-line" d={shape.label} />}
+    <path className="wallpaper-flask-scene-line" d={shape.lip} />
+    {shape.cork && <path className="wallpaper-flask-scene-cork" d={shape.cork} />}
+    <path className="wallpaper-flask-scene-shine" d={shape.shine} />
+  </g>;
+}
 
 function WallpaperFlasks() {
   return <g className="wallpaper-flasks">
     <defs>
-      {flasks.map((flask) => <clipPath key={flask.index} id={`wp-flask-clip-${flask.index}`}><path d={flask.outline} /></clipPath>)}
+      {(Object.keys(flaskShapes) as ShapeKey[]).map((key) => <clipPath key={key} id={`wp-flask-clip-${key}`}><path d={flaskShapes[key].outline} /></clipPath>)}
       <linearGradient id="wp-liquid-teal" x1="0" y1="0" x2="0" y2="1"><stop stopColor="currentColor" stopOpacity=".7" /><stop offset="1" stopColor="currentColor" stopOpacity=".35" /></linearGradient>
       <linearGradient id="wp-liquid-violet" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#7462b8" /><stop offset="1" stopColor="#3b3170" /></linearGradient>
-      <linearGradient id="wp-liquid-amber" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#a8843e" /><stop offset="1" stopColor="#5c4420" /></linearGradient>
+      <linearGradient id="wp-liquid-amber" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#8e7036" /><stop offset="1" stopColor="#54401e" /></linearGradient>
       <linearGradient id="wp-liquid-rose" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#a65a80" /><stop offset="1" stopColor="#5a2c48" /></linearGradient>
+      <linearGradient id="wp-liquid-green" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#4a8434" /><stop offset="1" stopColor="#2a5020" /></linearGradient>
     </defs>
-    <g className="wallpaper-flask-stand">
-      {/* The bench: a top with an edge, two legs and a shelf. */}
-      <path d="M915 650H1440M915 657H1440M935 657v60M1420 657v60M935 700H1420" />
-      {/* A rod with a clamp arm round the neck of the round-bottom flask, and a ring on three short legs under it. */}
-      <path d="M1296 650V470M1296 488H1236M1232 482v12M1196 636h60M1202 636l-7 14M1250 636l7 14M1226 636v14" />
-      {/* The bent tube from the round-bottom flask to the beaker. */}
-      <path d="M1226 460V444q0-8 8-8h128q8 0 8 8v100" />
-      <circle cx="1296" cy="470" r="4" />
+    <g className="wallpaper-flask-scene">
+      <g className="wallpaper-flask-scene-wall">
+        {/* The shelf: a board with an edge and three brackets, then the poster of a ring molecule on the left wall. */}
+        <path className="wallpaper-flask-scene-board" d={`M360 ${shelfY}H1440v9H360Z`} />
+        <path d={`M450 ${shelfY + 9}v30l36-30M820 ${shelfY + 9}v30l36-30M1190 ${shelfY + 9}v30l36-30`} />
+        <path d={posterPaths.frame} />
+        <path d={posterPaths.ring} />
+        <path d={posterPaths.chain} />
+        <circle cx={200} cy={331} r={4} /><circle cx={248} cy={331} r={4} /><circle cx={200} cy={389} r={4} /><circle cx={248} cy={389} r={4} />
+        {/* A wall clock between the poster and the shelf. */}
+        <circle cx={330} cy={328} r={22} /><path d="M330 328V312M330 328l11 6M330 308v3M330 345v3M310 328h3M347 328h3" />
+      </g>
+      {shelfItems.map((item) => <FlaskShelfItem key={item.x} item={item} />)}
     </g>
-    {flasks.map((flask) => <g key={flask.index} className={`wallpaper-flask${flask.index === 0 ? " wallpaper-flask-far" : ""}`} data-flask={flask.index}
-      transform={`translate(${flask.x} ${FLASK_BASE_Y})`}
+    <g className="wallpaper-flask-stand">
+      {/* The bench first (its top edge is the widest line), then what stands on it. */}
+      <path d={benchPaths.top} />
+      <path d={benchPaths.cabinet} />
+      <path d={benchPaths.tripod} />
+      <path d={benchPaths.burner} />
+      <path className="wallpaper-flask-flame" d="M395 622q-9-14 0-30q9 16 0 30Z" />
+      <path d={benchPaths.rod} />
+      <circle cx="480" cy="432" r="5" />
+      <path d={benchPaths.rack} />
+      <path d={benchPaths.lamp} />
+      <path className="wallpaper-flask-flame" d="M948 604q-8-10 0-22q8 12 0 22Z" />
+      <path d={benchPaths.mortar} />
+      <path className="wallpaper-flask-coil" d={benchPaths.coil} />
+    </g>
+    {flasks.map((flask) => <g key={flask.index} className={`wallpaper-flask${flask.far ? " wallpaper-flask-far" : ""}`} data-flask={flask.index}
+      transform={`translate(${flask.x} ${flask.y})${flask.scale === 1 ? "" : ` scale(${flask.scale})`}`}
       style={{ "--flask-dur": `${flask.duration}s`, "--flask-delay": `${flask.delay}s` } as CSSProperties}>
+      <path className="wallpaper-flask-shadow" d={`M${-flask.half} 1q${flask.half} 9 ${flask.half * 2} 0`} />
       <path className="wallpaper-flask-glass-depth" d={flask.outline} />
-      <g className="wallpaper-flask-liquid" clipPath={`url(#wp-flask-clip-${flask.index})`}>
+      <g className="wallpaper-flask-liquid" clipPath={`url(#wp-flask-clip-${flask.key})`}>
         <rect className="wallpaper-flask-fill" x={-100} y={flask.level} width={200} height={4 - flask.level} fill={`url(#wp-liquid-${flask.hue})`} />
+        <rect className="wallpaper-flask-fill-alt" x={-100} y={flask.level} width={200} height={4 - flask.level} fill={`url(#wp-liquid-${flask.alt})`} />
         <path className="wallpaper-flask-surface" d={flaskWave(flask.level)} />
       </g>
-      <g className="wallpaper-flask-bubbles" clipPath={`url(#wp-flask-clip-${flask.index})`}>
+      <g className="wallpaper-flask-bubbles" clipPath={`url(#wp-flask-clip-${flask.key})`}>
         {flask.bubbles.map((bubble, index) => <circle key={index} className="wallpaper-flask-bubble" cx={bubble.cx} cy={bubble.cy} r={bubble.r}
           style={{ "--bubble-below": `${bubble.below}px`, "--bubble-above": `${bubble.above}px`, "--bubble-dur": `${bubble.duration}s`, "--bubble-delay": `${bubble.delay}s` } as CSSProperties} />)}
       </g>
       <path className="wallpaper-flask-glass" d={flask.outline} />
-      <path className="wallpaper-flask-marks" d={flask.marks} />
+      <path className="wallpaper-flask-wall" d={flask.outline} transform={`translate(0 ${round(-(1 - 0.92) * flask.height / 2)}) scale(.92)`} />
+      {flask.marks && <path className="wallpaper-flask-marks" d={flask.marks} />}
+      {flask.label && <path className="wallpaper-flask-label" d={flask.label} />}
       <path className="wallpaper-flask-lip" d={flask.lip} />
+      {flask.cork && <path className="wallpaper-flask-cork" d={flask.cork} />}
       <path className="wallpaper-flask-shine" d={flask.shine} />
     </g>)}
   </g>;

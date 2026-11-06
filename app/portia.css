@@ -1606,33 +1606,50 @@ html[data-motion="full"] .wallpaper-particle { animation: particle-tumble 20s li
 @keyframes nucleus-wander { from { translate: -2px 1px; } to { translate: 2px -1px; } }
 @keyframes particle-drift { from { translate: calc(var(--particle-dx) * -1) calc(var(--particle-dy) * -1); } to { translate: var(--particle-dx) var(--particle-dy); } }
 @keyframes particle-tumble { to { rotate: 360deg; } }
-/* «Лабораторные колбы» (D-22, redrawn in 20-33): a distillation set of four vessels on one bench, right of centre. Glass, scale marks, bench and
-   stand are thin muted lines; the liquids are deep, one hue per vessel (the cylinder takes the accent). With motion on each vessel glows on its
-   own cycle (--flask-dur / --flask-delay), its surface slides and its bubbles rise inside the liquid only (clipped by the glass outline, and every
-   bubble's travel is computed inside the liquid). Only opacity and transform animate. Reduced and off fall under the global `.desktop-wallpaper *`
-   rule: no animation, the drawn frame stays.
-   Readability (owner, 20-33): no line or liquid is bright enough to sit under a shortcut label — phase20-art.spec.ts asserts label contrast over
-   the brightest 8 px square of the drawing at least 4.5:1, on the standard, very dark and very light accents. The accent is blended toward the
-   desktop base so a near-white custom accent cannot make a bright patch. No relative colour syntax (accent-theme test). */
+/* «Лабораторные колбы» (D-22, redrawn in 20-33 and again in 20-36 by D-51): a busy lab across the lower half of the screen — a bench with a cabinet,
+   a shelf of bottles and jars, a poster, a tripod and burner, a condenser coil, a test-tube rack and twelve vessels (four of them in a phone's view).
+   Glass, scale marks, labels, bench and wall are thin muted lines; the liquids are deep, one hue per vessel and a second hue it slowly turns into
+   (--flask-dur / --flask-delay give every vessel its own cycle; the turn takes 1.37 times longer and starts 1.9 times further in). Each vessel's
+   surface slides and its bubbles rise inside the liquid only (clipped by the glass outline, and every bubble's travel is computed inside the liquid).
+   Only opacity and transform animate. Reduced and off fall under the global `.desktop-wallpaper *` rule: no animation, the drawn frame stays.
+   Readability (owner, 20-33, kept by D-51): no line or liquid is bright enough to sit under a shortcut label — phase20-art.spec.ts asserts label
+   contrast over the brightest 8 px square of the whole drawing at least 4.5:1, on the standard, very dark and very light accents. The accent is
+   blended toward the desktop base so a near-white custom accent cannot make a bright patch. No relative colour syntax (accent-theme test). */
 .wallpaper-flasks { color: color-mix(in oklab, var(--teal) 55%, var(--desktop-base)); }
-.wallpaper-flask-stand path { fill: none; stroke: color-mix(in oklab, currentColor 55%, #46545c); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; opacity: .42; }
-.wallpaper-flask-stand circle { fill: none; stroke: color-mix(in oklab, currentColor 55%, #46545c); stroke-width: 1.5; opacity: .5; }
+.wallpaper-flask-stand path, .wallpaper-flask-stand circle { fill: none; stroke: color-mix(in oklab, currentColor 55%, #46545c); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; opacity: .42; }
+.wallpaper-flask-stand .wallpaper-flask-coil { stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); opacity: .4; }
+.wallpaper-flask-stand .wallpaper-flask-flame { fill: #b9803a; fill-opacity: .2; stroke: #b9803a; stroke-width: 1; opacity: .4; }
+.wallpaper-flask-scene-wall path, .wallpaper-flask-scene-wall circle { fill: none; stroke: color-mix(in oklab, currentColor 55%, #46545c); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: .32; }
+.wallpaper-flask-scene-wall .wallpaper-flask-scene-board { fill: color-mix(in oklab, currentColor 20%, var(--desktop-base)); fill-opacity: .6; opacity: .5; }
+.wallpaper-flask-scene-depth { fill: currentColor; fill-opacity: .03; stroke: none; }
+.wallpaper-flask-scene-glass { fill: none; stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke-width: 1.5; stroke-linejoin: round; opacity: .38; }
+.wallpaper-flask-scene-line { fill: none; stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; opacity: .28; }
+.wallpaper-flask-scene-cork { fill: #8a6a3a; fill-opacity: .3; stroke: none; }
+.wallpaper-flask-scene-shine { fill: none; stroke: #d0d0d0; stroke-width: 1.6; stroke-linecap: round; opacity: .1; }
+.wallpaper-flask-scene-liquid { stroke: none; fill-opacity: .45; opacity: .75; }
+.wallpaper-flask-shadow { fill: currentColor; fill-opacity: .1; stroke: none; }
 .wallpaper-flask-glass-depth { fill: currentColor; fill-opacity: .035; stroke: none; }
 .wallpaper-flask-glass { fill: none; stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke-width: 1.6; stroke-linejoin: round; opacity: .5; }
+.wallpaper-flask-wall { fill: none; stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke-width: 1; stroke-linejoin: round; opacity: .2; }
 .wallpaper-flask-marks { fill: none; stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke-width: 1.2; stroke-linecap: round; opacity: .35; }
+.wallpaper-flask-label { fill: none; stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; opacity: .36; }
 .wallpaper-flask-lip { fill: none; stroke: color-mix(in oklab, currentColor 50%, #a3b3ba); stroke-width: 2; stroke-linecap: round; opacity: .5; }
+.wallpaper-flask-cork { fill: #8a6a3a; fill-opacity: .4; stroke: color-mix(in oklab, currentColor 50%, #a3b3ba); stroke-width: 1; opacity: .5; }
 .wallpaper-flask-shine { fill: none; stroke: #d0d0d0; stroke-width: 2; stroke-linecap: round; opacity: .12; }
 .wallpaper-flask-liquid { opacity: .85; }
-.wallpaper-flask-fill { fill-opacity: .62; stroke: none; }
+.wallpaper-flask-fill { fill-opacity: .55; stroke: none; }
+.wallpaper-flask-fill-alt { fill-opacity: .55; stroke: none; opacity: .4; }
 .wallpaper-flask-surface { fill: none; stroke: color-mix(in oklab, currentColor 50%, #a3b3ba); stroke-width: 1.5; opacity: .6; }
 .wallpaper-flask-bubble { fill: currentColor; fill-opacity: .1; stroke: color-mix(in oklab, currentColor 50%, #a3b3ba); stroke-width: 1; opacity: .55; }
 html[data-motion="full"] .wallpaper-flask-liquid { animation: flask-glow var(--flask-dur) ease-in-out var(--flask-delay) infinite; }
+html[data-motion="full"] .wallpaper-flask-fill-alt { animation: flask-shift calc(var(--flask-dur) * 1.37) ease-in-out calc(var(--flask-delay) * 1.9) infinite; }
 html[data-motion="full"] .wallpaper-flask-surface { animation: flask-wave calc(var(--flask-dur) * .45) linear var(--flask-delay) infinite; }
 html[data-motion="full"] .wallpaper-flask-bubble { animation: flask-bubble var(--bubble-dur) linear var(--bubble-delay) infinite; }
 @keyframes flask-glow { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes flask-shift { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 @keyframes flask-wave { to { transform: translateX(20px); } }
 @keyframes flask-bubble { 0% { transform: translateY(var(--bubble-below)); opacity: 0; } 12%, 85% { opacity: .75; } 100% { transform: translateY(var(--bubble-above)); opacity: 0; } }
-/* A tall narrow screen shows only the right ~420 wallpaper units: the graduated cylinder would be cut, so a phone keeps three vessels. */
+/* A tall narrow screen shows only the right ~405 wallpaper units (D-51 F6-А): the eight vessels left of them are hidden, the four at the right stay. */
 @container (max-aspect-ratio: 3/5) { .wallpaper-flask-far { display: none; } }
 
 /* The spider lowers itself on a silk thread while the terminal boots: one animation for thread and spider, so the spider can never lead its web (D-06). */

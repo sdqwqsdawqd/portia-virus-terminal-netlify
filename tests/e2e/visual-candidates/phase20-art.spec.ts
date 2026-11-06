@@ -608,20 +608,34 @@ test("[STAB-VIS-02] D-22 a stored wallpaper outside the allowlist falls back to 
   expect(await wallpaperOf(page)).toBe("flasks");
 });
 
-test("[STAB-VIS-02] D-22 four flasks on PC, three on a phone, each with its own cycle; bubbles stay in the liquid; the glow is smooth", async ({ page, browser, determinism }, testInfo) => {
+// D-51 (20-34): the old rules "four flasks", "right of centre" and "two or three on a phone" are replaced by the owner's answers F1-А / F2 / F6-А:
+// a lab of many vessels across the lower half of the screen; a phone shows the richest right strip with 2-4 whole vessels.
+const FLASK_COUNT = 12, PHONE_FLASKS = 4, MAX_INFINITE_ANIMATIONS = 100;
+// D-51 (20-34): the table of expected cycles covers all twelve vessels. The first four are the D-22 pairs; the rest are new, authored values.
+// It must change together with flaskSpecs in components/portia-wallpaper.tsx.
+const wantedCycles = [
+  { duration: 6800, delay: -1900 }, { duration: 8900, delay: -5200 }, { duration: 11300, delay: -3400 }, { duration: 7700, delay: -6100 },
+  { duration: 9700, delay: -1000 }, { duration: 6300, delay: -3000 }, { duration: 10400, delay: -5300 }, { duration: 7200, delay: -4000 },
+  { duration: 8300, delay: -7800 }, { duration: 11800, delay: -6000 }, { duration: 6600, delay: -2500 }, { duration: 9100, delay: -4600 },
+];
+
+test("[STAB-VIS-02] D-51 twelve vessels on PC, four on a phone, each with its own cycle; bubbles stay in the liquid; the glow is smooth", async ({ page, browser, determinism }, testInfo) => {
   const phone = isPhone(testInfo.project.name);
   await openFlasks(page, { motion: "on" });
   await expect(page.locator(".wallpaper-flasks")).toBeAttached();
   const viewport = page.viewportSize()!;
 
   const boxes = await flaskBoxes(page);
-  expect(boxes, "all four flasks are drawn").toHaveLength(4);
+  // D-51 (20-34): twelve animated vessels are drawn (was four).
+  expect(boxes, "all twelve vessels are drawn").toHaveLength(FLASK_COUNT);
   const shown = boxes.filter((box) => box.display !== "none");
+  // D-51 (20-34): a phone shows 2-4 whole vessels of the richest part (was 2-3); a PC shows all twelve (was four).
   if (phone) {
-    expect(shown.length, "a phone shows two or three flasks").toBeGreaterThanOrEqual(2);
-    expect(shown.length).toBeLessThanOrEqual(3);
+    expect(shown.length, "a phone shows two to four vessels").toBeGreaterThanOrEqual(2);
+    expect(shown.length).toBeLessThanOrEqual(4);
+    expect(shown.length).toBe(PHONE_FLASKS);
   } else {
-    expect(shown.length, "a PC shows four").toBe(4);
+    expect(shown.length, "a PC shows all twelve").toBe(FLASK_COUNT);
   }
   for (const box of shown) {
     expect(box.left, `flask ${box.index} is not cut at the left`).toBeGreaterThanOrEqual(0);
@@ -629,7 +643,8 @@ test("[STAB-VIS-02] D-22 four flasks on PC, three on a phone, each with its own 
     expect(box.top).toBeGreaterThanOrEqual(0);
     expect(box.bottom).toBeLessThanOrEqual(viewport.height);
   }
-  if (!phone) expect(Math.min(...shown.map((box) => box.left)), "the group stands right of centre").toBeGreaterThan(viewport.width / 2);
+  // D-51 (20-34): "right of centre" is dropped; the scene runs the whole width, so the vessels reach into the left half on a PC.
+  if (!phone) expect(Math.min(...shown.map((box) => box.left)), "the vessels spread over the whole width").toBeLessThan(viewport.width / 2);
 
   // Independent cycles: durations and delays are the authored candidates, all different.
   const timings = await page.evaluate(() => document.getAnimations().flatMap((animation) => {
@@ -639,7 +654,7 @@ test("[STAB-VIS-02] D-22 four flasks on PC, three on a phone, each with its own 
     if (getComputedStyle(target.closest(".wallpaper-flask")!).display === "none") return [];
     return [{ index: Number(target.closest<SVGGElement>(".wallpaper-flask")!.dataset.flask), duration: Number(timing.duration), delay: Number(timing.delay), name: (animation as CSSAnimation).animationName }];
   }).sort((a, b) => a.index - b.index));
-  const wanted = [{ duration: 6800, delay: -1900 }, { duration: 8900, delay: -5200 }, { duration: 11300, delay: -3400 }, { duration: 7700, delay: -6100 }];
+  const wanted = wantedCycles;
   expect(timings.length, "every shown flask glows").toBe(shown.length);
   for (const timing of timings) {
     expect(timing.name).toBe("flask-glow");
@@ -699,9 +714,15 @@ test("[STAB-VIS-02] D-22 four flasks on PC, three on a phone, each with its own 
     }
     return { out, checked, bubbles: bubbles.length };
   });
-  expect(escapes.bubbles, "bubbles exist").toBeGreaterThanOrEqual(shown.length * 5);
+  expect(escapes.bubbles, "bubbles exist").toBeGreaterThanOrEqual(shown.length * 3);
   expect(escapes.out, `${escapes.checked} bubble positions checked`).toEqual([]);
-  expect(await page.locator(".wallpaper-flask-bubbles[clip-path]").count(), "every bubble group is also clipped by the glass").toBe(4);
+  // D-51 (20-34): one clipped bubble group per animated vessel, twelve (was four).
+  expect(await page.locator(".wallpaper-flask-bubbles[clip-path]").count(), "every bubble group is also clipped by the glass").toBe(FLASK_COUNT);
+  // D-51 (20-34): a budget on the endless animations inside the drawing (cost on a phone); the actual number is recorded.
+  const infinite = await page.evaluate(() => document.getAnimations().filter((animation) => ((animation.effect as KeyframeEffect | null)?.target as Element | null)?.closest(".wallpaper-flasks") && animation.effect!.getTiming().iterations === Infinity).length);
+  writeRun(`flasks-animation-count--${testInfo.project.name}.json`, { project: testInfo.project.name, infiniteAnimationsInDrawing: infinite, shownVessels: shown.length, budget: MAX_INFINITE_ANIMATIONS });
+  expect(infinite, "endless animations inside the drawing").toBeLessThanOrEqual(MAX_INFINITE_ANIMATIONS);
+  expect(infinite).toBeGreaterThan(shown.length * 5);
 
   // A frame of the full-motion wallpaper at a fixed animation time (the candidate; not an approved baseline).
   await seekFlasks(page, 4_000);
@@ -710,7 +731,7 @@ test("[STAB-VIS-02] D-22 four flasks on PC, three on a phone, each with its own 
     requirement: "STAB-BASE-03",
     surface: "Flask wallpaper CANDIDATE",
     actor: "visitor",
-    state: `D-22 «Лабораторные колбы», full motion, animations paused at 4.0 s; ${shown.length} flasks shown`,
+    state: `D-51 «Лабораторные колбы», full motion, animations paused at 4.0 s; ${shown.length} vessels shown`,
     intendedSnapshot: `tests/e2e/visual/__screenshots__/phase20-flasks-full--${testInfo.project.name}.png`,
     animations: "allow",
   });
@@ -739,7 +760,8 @@ for (const mode of ["reduced", "off"] as const) {
     expect(probe.bubbleTransforms.every((value) => value === "none"), "bubbles sit at their drawn place").toBe(true);
     expect(probe.drawn.every(Boolean), "glass, liquid, lip and surface are drawn").toBe(true);
     expect(probe.stand, "the stand is drawn").toBeGreaterThan(100);
-    expect(probe.count).toBe(isPhone(testInfo.project.name) ? 3 : 4);
+    // D-51 (20-34): four vessels on a phone (was three), twelve on a PC (was four).
+    expect(probe.count).toBe(isPhone(testInfo.project.name) ? PHONE_FLASKS : FLASK_COUNT);
     const first = await boxesOf(page, ".wallpaper-flask-bubble");
     await page.waitForTimeout(700);
     expect(await boxesOf(page, ".wallpaper-flask-bubble"), "nothing moves").toEqual(first);
@@ -798,12 +820,14 @@ test("[STAB-VIS-02] UI E1 the base and the vector frame appear at once; a failed
   const first = await page.evaluate(() => ({
     art: document.querySelector(".desktop-wallpaper-flasks") !== null,
     glass: document.querySelectorAll(".wallpaper-flask-glass").length,
+    scene: document.querySelectorAll(".wallpaper-flask-scene-vessel").length,
     stand: document.querySelectorAll(".wallpaper-flask-stand path").length,
     icon: document.querySelector(".desktop-icon")!.getBoundingClientRect().height,
     liquid: Number(getComputedStyle(document.querySelector(".wallpaper-flask-liquid")!).opacity),
     artOpacity: Number(getComputedStyle(document.querySelector(".desktop-wallpaper-flasks")!).opacity),
   }));
-  expect(first.art && first.glass === 4 && first.stand >= 2, "the vector frame is in the DOM").toBe(true);
+  // D-51 (20-34): twelve animated vessels, a shelf of still ones and the bench are in the frame from the first paint (was four vessels).
+  expect(first.art && first.glass === FLASK_COUNT && first.scene > 5 && first.stand >= 2, "the vector frame is in the DOM").toBe(true);
   expect(first.icon, "shortcuts are shown with it").toBeGreaterThan(0);
   expect(first.liquid, "the liquid is visible from the first frame").toBeGreaterThanOrEqual(0.5);
   expect(first.artOpacity).toBeGreaterThan(0.5);
@@ -938,7 +962,7 @@ test("[STAB-VIS-02] UI E2 a long option label wraps inside its button, keeps the
 });
 
 for (const accent of accents) {
-  test(`[STAB-VIS-02] the flasks on the ${accent.label}: behind windows, shortcuts and Vivian; label contrast over the brightest flask pixel`, async ({ page, browser, determinism }, testInfo) => {
+  test(`[STAB-VIS-02] D-51 the flasks on the ${accent.label}: behind windows, shortcuts and Vivian; label contrast over the brightest part of the whole drawing`, async ({ page, browser, determinism }, testInfo) => {
     const desktop = await openFlasks(page, { ...accent.settings, motion: "off" });
     await desktop.openApp("Настройки");
     // Behind everything: the frame is the lowest layer and takes no pointer events.
@@ -959,11 +983,16 @@ for (const accent of accents) {
     await expect(desktop.window("Настройки")).toBeHidden();
 
     // The brightest pixel of the flask region without shortcuts or Vivian on top, against the shortcut label colour.
-    await page.addStyleTag({ content: ".desktop-icon, .desktop-assistant { visibility: hidden !important; }" });
-    const boxes = (await flaskBoxes(page)).filter((box) => box.display !== "none");
-    const viewport = page.viewportSize()!;
-    const x = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.left)) - 20)), y = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.top)) - 20));
-    const clip = { x, y, width: Math.min(viewport.width - x, Math.ceil(Math.max(...boxes.map((box) => box.right)) + 20 - x)), height: Math.min(viewport.height - y, Math.ceil(Math.max(...boxes.map((box) => box.bottom)) + 90 - y)) };
+    // D-51 (20-34): the measured area is the whole drawing (the rectangle of .wallpaper-flasks), not just the vessels, cut to the work area between the top bar and the taskbar.
+    await page.addStyleTag({ content: ".desktop-icon, .desktop-assistant, .system-bar, .taskbar { visibility: hidden !important; }" });
+    const clip = await page.evaluate(() => {
+      const art = document.querySelector(".wallpaper-flasks")!.getBoundingClientRect();
+      const top = document.querySelector(".system-bar")!.getBoundingClientRect().bottom, bottom = document.querySelector(".taskbar")!.getBoundingClientRect().top;
+      const x = Math.max(0, Math.floor(art.left)), y = Math.max(Math.ceil(top), Math.floor(art.top));
+      return { x, y, width: Math.min(window.innerWidth, Math.ceil(art.right)) - x, height: Math.min(Math.floor(bottom), Math.ceil(art.bottom)) - y };
+    });
+    expect(clip.width, "the measured area has width").toBeGreaterThan(200);
+    expect(clip.height, "the measured area has height").toBeGreaterThan(200);
     const region = await lumaStats(page, await page.screenshot({ clip, animations: "allow" }), await page.evaluate(() => window.devicePixelRatio));
     const label = await page.evaluate(() => {
       const probe = document.createElement("canvas").getContext("2d")!;
