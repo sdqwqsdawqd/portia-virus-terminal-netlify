@@ -238,17 +238,34 @@ test("[STAB-A11Y-04] D-01..D-04 full walks, reduced and off stop looping motion,
   expect(later.transform, "no looping motion after off").toBe(afterOff.transform);
   expect(translateOf(later.transform)).toBe(translateOf(afterOff.transform));
   expect(translateOf(beforeOff.transform), "a position was reached before the stop").not.toBe("");
+  // The frame shows the spider in its terminal pose. On a phone the Settings window is maximised and covers the whole desktop, so it is closed
+  // before the capture (the mode stays off) and opened again for the next step. Nothing may cover the spider in the frame.
+  await desktop.closeApp("Настройки");
+  await expect(async () => {
+    await page.clock.runFor(100);
+    await expect(desktop.window("Настройки")).toBeHidden({ timeout: 250 });
+  }).toPass({ timeout: 10_000 });
+  await expect(desktop.spider).toBeVisible();
+  const coveredBy = await desktop.spider.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const x = box.left + box.width / 2;
+    const y = box.top + box.height / 2;
+    return document.elementsFromPoint(x, y).filter((candidate) => candidate.closest(".app-window")).map((candidate) => candidate.className.toString());
+  });
+  expect(coveredBy, "no window covers the spider in the frame").toEqual([]);
+  expect((await state()).transform, "closing Settings does not move the spider").toBe(afterOff.transform);
   await captureCandidate(context, {
     id: "phase20-spider-mid-step-off",
     requirement: "STAB-BASE-03",
     surface: "Spider CURRENT",
     actor: "visitor",
-    state: "D-02/D-04 «Анимации: Выключены» chosen in the middle of a step: terminal pose, position kept, no waves",
+    state: "D-02/D-04 «Анимации: Выключены» chosen in the middle of a step: terminal pose, position kept, no waves; the Settings window is closed so the spider is in view",
     intendedSnapshot: `tests/e2e/visual/__screenshots__/phase20-spider-mid-step-off--${testInfo.project.name}.png`,
     animations: "allow",
   });
 
   // «Уменьшены»: the spider stays visible and still too.
+  await desktop.openApp("Настройки");
   await desktop.chooseSetting("Анимации", "Уменьшены");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.motion)).toBe("reduced");
   const reduced = await state();
