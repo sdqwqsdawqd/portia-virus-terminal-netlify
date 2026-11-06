@@ -372,7 +372,7 @@ describe("20-37 recapture guard", () => {
     assert.ok(rejectedRoundProblems(fixture, rows, capture, 12, (args) => ({ status: args[0] === "merge-base" ? 1 : 0 })).some((error) => error.includes("captured before the fix")));
     assert.ok(rejectedRoundProblems(fixture, rows, capture, 12, (args) => ({ status: args[0] === "merge-base" ? null : 0, error: "spawn git ENOENT" })).some((error) => error.includes("captured before the fix")));
     assert.ok(rejectedRoundProblems(fixture, rows, capture, 12, () => ({ status: null, error: "spawn git ENOENT" })).some((error) => error.includes("could not be verified")));
-    assert.ok(rejectedRoundProblems(fixture.replace(spiderFix, "abc123"), rows, capture, 12).some((error) => error.includes("fix commit is not a full 40-hex hash")));
+    assert.ok(rejectedRoundProblems(fixture.replaceAll(spiderFix, "abc123"), rows, capture, 12).some((error) => error.includes("fix commit is not a full 40-hex hash")));
   });
 
   test("validateLedger runs both rounds: section 11 is unchanged, section 12 is added", () => {
