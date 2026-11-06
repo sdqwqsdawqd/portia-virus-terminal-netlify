@@ -230,8 +230,8 @@ const fixtureRoutes = ["app/api/a/route.ts", "app/api/content/notes/route.ts"];
 
 test("route coverage: the real matrix has exactly one row per tracked app/api route", () => {
   const routes = trackedRoutes();
-  assert.ok(routes.length >= 12, `expected at least 12 tracked routes, git lists ${routes.length}`);
-  assert.ok(routes.includes("app/api/content/notes/route.ts"));
+  assert.ok(routes.length >= 11, `expected at least 11 tracked routes, git lists ${routes.length}`);
+  assert.ok(!routes.includes("app/api/content/notes/route.ts"), "the notes route was removed in 20-33");
   assert.deepEqual(routeCoverageProblems(matrixText(), routes), []);
 });
 
@@ -289,9 +289,9 @@ test("migration coverage: the real matrix has exactly one row per tracked supaba
   assert.deepEqual(migrationCoverageProblems(matrixText(), migrations), []);
 });
 
-test("migration coverage: the two 20261104 migrations are not recorded as applied on production by the agent", () => {
+test("migration coverage: the migrations after 20261101 are not recorded as applied on production by the agent", () => {
   const rows = tableRows(section(matrixText(), migrationsHeading));
-  for (const name of ["20261104000000_portia_rename_virus_classes.sql", "20261104000100_portia_editor_notes.sql"]) {
+  for (const name of ["20261104000000_portia_rename_virus_classes.sql", "20261104000100_portia_editor_notes.sql", "20261106000000_portia_drop_editor_notes.sql"]) {
     const cells = rows.find((cells) => cells[0].includes(name));
     assert.ok(cells, name);
     assert.match(cells[5], /ОЖИДАЕТ ВЛАДЕЛЬЦА/, `${name}: production column`);

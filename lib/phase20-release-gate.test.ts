@@ -213,7 +213,7 @@ test("GATES: commands follow 20-13 (npm.cmd ci, no bare --verify of the visual m
   }
   assert.match(byId("e2e-full").command, /--grep-invert @phase20/);
   assert.match(byId("visual-phase20").command, /tests\/e2e\/visual\/phase20\.spec\.ts/);
-  assert.match(byId("e2e-mutation").command, /editor-layout\.spec\.ts tests\/e2e\/specs\/editor-notes\.spec\.ts/);
+  assert.match(byId("e2e-mutation").command, /editor-layout\.spec\.ts/);
   assert.equal(byId("staging-live").command, "npm.cmd run test:staging-live");
 });
 

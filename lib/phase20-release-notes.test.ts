@@ -75,6 +75,8 @@ const requiredSections = [
 
 /** Migrations whose production application the owner still owes; the notes must name them and never call them proven. */
 const pendingMigrations = ["20261104000000", "20261104000100"];
+/** The real list: 20-33 added the migration that drops the editor notes table. */
+const realPendingMigrations = [...pendingMigrations, "20261106000000"];
 const pendingMark = "ОЖИДАЕТ ВЛАДЕЛЬЦА";
 
 const matrixCommitOf = (matrix: string) => /Проверяемый commit:\s*`([0-9a-f]{40})`/.exec(matrix.split("\n").slice(0, 8).join("\n"))?.[1];
@@ -394,6 +396,6 @@ test("the real release notes draft is consistent with the real security matrix a
   assert.ok(findingsOf(matrix).length >= 25, "the matrix has at least the 25 findings SEC20-01..SEC20-25");
   assert.ok(waiverRows(waivers).length >= 10, "the waiver registry has at least PW-01..PW-10");
   assert.deepEqual(d33Rows(matrix).map((row) => row.id), ["WR-03", "WR-05", "IN-01", "IN-02", "IN-03", "IN-04", "IN-05"]);
-  assert.deepEqual(pendingMigrationsOf(matrix), pendingMigrations);
+  assert.deepEqual(pendingMigrationsOf(matrix), realPendingMigrations);
   assert.deepEqual(notesProblems(notes, { matrix, waivers }), []);
 });

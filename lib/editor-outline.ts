@@ -13,7 +13,7 @@ import { compactRuns, expandStyles } from "./rich-text-style.ts";
 
 // Sections and subsections of the «Сводка» and «Рекомендации» editor tabs (Phase 20, D-41, D-42).
 // Everything is pure: no DOM, no Supabase. Operations mutate the draft they are given, like lib/editor-items.ts.
-// D-47: nothing here knows about editor notes; they live in portia_editor_notes under the section or subsection id.
+// There are no editor notes: the owner removed them in 20-33 (supabase/migrations/20261106000000_portia_drop_editor_notes.sql).
 
 /** The id of the section that shows the old flat recommendation list until the first edit writes real sections. */
 export const SYNTHETIC_RECOMMENDATION_ID = "search-recommendations-all";

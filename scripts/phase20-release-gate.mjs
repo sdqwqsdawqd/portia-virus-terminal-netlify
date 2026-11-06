@@ -156,7 +156,7 @@ export const GATES = Object.freeze([
     kind: "playwright",
     steps: [
       playwrightStep("test:e2e:mutation", [], "e2e-mutation"),
-      playwrightStep("test:e2e:mutation", ["tests/e2e/specs/editor-layout.spec.ts", "tests/e2e/specs/editor-notes.spec.ts"]),
+      playwrightStep("test:e2e:mutation", ["tests/e2e/specs/editor-layout.spec.ts"]),
     ],
     counts: "playwright",
     strictSkips: true,
