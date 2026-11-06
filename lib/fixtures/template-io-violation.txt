@@ -1,0 +1,11 @@
+// Fail-first data for lib/portia-template-dossier.test.ts (20-38). This is text, not project code:
+// the static guard must reject it when GSD_PROHIB_SUBJECT points here.
+import { uploadImage } from "@/lib/upload-image";
+import { dossierToContent } from "./portia-template-dossier.ts";
+
+export async function saveTemplate(dossier: unknown, file: File) {
+  const url = await uploadImage(file);
+  await fetch("/api/content", { method: "PUT", body: JSON.stringify({ dossier, url }) });
+  sessionStorage.setItem("template", JSON.stringify(dossier));
+  return dossierToContent(dossier);
+}

@@ -8,6 +8,8 @@
  * same bounded model and never reference an external URL.
  */
 
+import type { TemplateDossier, TemplateRun } from "./portia-template-dossier.ts";
+
 export type TemplateFieldKey =
   | "name"
   | "code"
@@ -500,4 +502,26 @@ export async function createTemplatePng(
       reject(error);
     }
   });
+}
+
+/* ---------------------------------------------------------------- dossier model export (20-38, D-52) */
+
+// RED-phase skeleton: deliberately wrong, replaced by the implementation in the next commit.
+export type TemplateStyledPiece = Readonly<{ text: string; font: string; fill: string; background?: string; width: number }>;
+export type TemplateWrappedLine = Readonly<{ pieces: readonly TemplateStyledPiece[]; height: number }>;
+
+export function wrapTemplateRuns(_runs: readonly TemplateRun[], _maxWidth: number, _measure: (text: string, font: string) => number): TemplateWrappedLine[] {
+  return [];
+}
+
+export function createTemplateDossierHtml(_dossier: TemplateDossier) {
+  return "";
+}
+
+export function layoutTemplateDossierCard(_dossier: TemplateDossier, _measure: (text: string, font: string) => number): PngLayout {
+  return { width: 0, height: 0, ops: [] };
+}
+
+export async function createTemplateDossierPng(_dossier: TemplateDossier, _environment?: PngEnvironment): Promise<Blob> {
+  return new Blob([]);
 }

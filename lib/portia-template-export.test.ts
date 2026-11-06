@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { portiaTextKey, type RichTextDocument } from "./portia-content.ts";
+import { editTemplateText, emptyTemplateDossier, templateVirusId, type TemplateDossier } from "./portia-template-dossier.ts";
 import {
   createStandaloneHtml,
+  createTemplateDossierHtml,
+  createTemplateDossierPng,
   createTemplatePng,
   decodeLocalTemplateImage,
   downloadTemplateBlob,
@@ -14,12 +18,14 @@ import {
   isTemplateImageError,
   isTemplatePngTooLargeError,
   layoutTemplateCard,
+  layoutTemplateDossierCard,
   pngMaxHeight,
   pngPadding,
   pngWidth,
   sniffImageMime,
   templateImageMaxBytes,
   templateSnapshotKey,
+  wrapTemplateRuns,
   wrapTemplateText,
   type LocalImageFile,
   type PngEnvironment,
@@ -271,4 +277,108 @@ test("a download of a Blob or HTML text releases its object URL, also when the c
   anchor.click = () => { throw new Error("blocked"); };
   assert.throws(() => downloadTemplateBlob("<p>x</p>", "a.html", environment), /blocked/);
   assert.deepEqual(revoked, ["blob:test", "blob:test"]);
+});
+
+/* ---------------------------------------------------------------- dossier model export (20-38, D-52) */
+
+const externalKey = portiaTextKey.virus(templateVirusId, "external");
+const dangerDoc: RichTextDocument = { runs: [{ text: "Опасно", style: { color: "#B43632", fontWeight: 600 } }, { text: " для всех" }] };
+const dangerText = "Опасно для всех";
+const dangerDossier = (): TemplateDossier => editTemplateText(emptyTemplateDossier(), externalKey, dangerText, dangerDoc, (next, text) => { next.virus.external = text; });
+
+// Width follows the font size, so a larger fragment is measurably wider.
+const sizeMeasure = (text: string, font: string) => Array.from(text).length * Number(/(\d+)px/.exec(font)?.[1] ?? 16) * 0.5;
+const pieceText = (line: { pieces: readonly { text: string }[] }) => line.pieces.map((piece) => piece.text).join("");
+
+test("dossier HTML shows a styled fragment, an honest empty marker and a closed content policy", () => {
+  const html = createTemplateDossierHtml(dangerDossier());
+  assert.ok(html.includes(`<span style="color:#b43632;font-weight:600">Опасно</span>`));
+  assert.ok(html.includes(" для всех"));
+  assert.ok(html.includes(emptyTemplateText));
+  assert.ok(html.includes("ВНЕШНИЕ ХАРАКТЕРИСТИКИ"));
+  assert.ok(html.includes("default-src 'none'; style-src 'unsafe-inline'; img-src data:"));
+  for (const forbidden of ["<script", "<link", "url(", "http:", "https:", "undefined"]) assert.ok(!html.includes(forbidden), forbidden);
+});
+
+test("dossier HTML escapes typed markup and refuses style values outside the allow-list", () => {
+  let dossier = editTemplateText(
+    emptyTemplateDossier(), externalKey, `<b onmouseover="x()">два</b>`,
+    { runs: [{ text: `<b onmouseover="x()">два</b>`, style: { color: "#b43632;background:url(//evil.example/p)", fontSize: 9999, fontWeight: 450, backgroundColor: "red" } as never }] },
+    (next, text) => { next.virus.external = text; },
+  );
+  dossier = editTemplateText(dossier, portiaTextKey.virus(templateVirusId, "physiology"), "<script>alert(1)</script>", { runs: [{ text: "<script>alert(1)</script>" }] }, (next, text) => { next.virus.physiology = text; });
+  const html = createTemplateDossierHtml(dossier);
+  assert.ok(html.includes("&lt;b onmouseover=&quot;x()&quot;&gt;два&lt;/b&gt;"));
+  assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
+  assert.ok(html.includes(`style="font-size:48px"`), "only the in-range size survives");
+  for (const forbidden of ["<script", "<b ", "url(", "evil", "background:", "font-weight:450", "red"]) assert.ok(!html.includes(forbidden), forbidden);
+});
+
+test("wrapping across fragments keeps every character, blank lines and the fragment fonts", () => {
+  const measureTen = (text: string) => Array.from(text).length * 10;
+  const lines = wrapTemplateRuns([{ text: "один два", style: { fontWeight: 700 } }, { text: " три\n\nчетыре" }], 90, measureTen);
+  assert.deepEqual(lines.map(pieceText), ["один два", "три", "", "четыре"]);
+  assert.ok(lines[0].pieces[0].font.includes(" 700 "));
+  assert.ok(!lines[1].pieces[0].font.includes(" 700 "));
+  assert.deepEqual(lines[2].pieces, []);
+  assert.ok(lines.every((line) => line.height >= 25));
+});
+
+test("wrapping breaks an over-wide word by characters and never drops a visible character", () => {
+  const long = "x".repeat(25);
+  const lines = wrapTemplateRuns([{ text: long.slice(0, 10), style: { color: "#112233" } }, { text: long.slice(10) }], 100, (text) => Array.from(text).length * 10);
+  assert.equal(lines.map(pieceText).join(""), long);
+  for (const line of lines) assert.ok(line.pieces.reduce((total, piece) => total + piece.width, 0) <= 100);
+  assert.ok(lines.length >= 3);
+});
+
+test("a larger fragment raises the line height and the width is measured with the fragment font", () => {
+  const lines = wrapTemplateRuns([{ text: "мелко " }, { text: "крупно", style: { fontSize: 40 } }], 1000, sizeMeasure);
+  assert.equal(lines.length, 1);
+  assert.ok(lines[0].height >= 40, `line height ${lines[0].height} grows with the biggest font`);
+  const [small, big] = lines[0].pieces;
+  assert.equal(small.width, sizeMeasure("мелко ", small.font));
+  assert.equal(big.width, sizeMeasure("крупно", big.font));
+  assert.ok(big.font.includes("40px"));
+  const plain = wrapTemplateRuns([{ text: "мелко" }], 1000, sizeMeasure);
+  assert.equal(plain[0].height, 25);
+});
+
+test("the dossier card layout draws a styled fragment in its colour and weight inside a 1000 px page", () => {
+  const layout = layoutTemplateDossierCard(dangerDossier(), sizeMeasure);
+  assert.equal(layout.width, pngWidth);
+  assert.ok(layout.height <= pngMaxHeight);
+  const texts = layout.ops.filter((op) => op.kind === "text");
+  const danger = texts.find((op) => op.text === "Опасно");
+  assert.ok(danger && danger.fill === "#b43632" && danger.font.includes(" 600 "), "styled fragment keeps colour and weight");
+  const rest = texts.find((op) => op.text.includes("для всех"));
+  assert.ok(rest && rest.fill === "#1b2523" && !rest.font.includes(" 600 "), "the rest keeps the body text style");
+  assert.ok(danger.x < rest.x, "the second fragment follows the first on the same line");
+  assert.equal(danger.y, rest.y);
+  for (const op of layout.ops) {
+    assert.ok(op.x >= 0 && op.y >= 0 && op.y <= layout.height, "every operation starts inside the canvas");
+    if (op.kind !== "text") assert.ok(op.x + op.width <= layout.width && op.y + op.height <= layout.height);
+  }
+});
+
+test("dossier PNG draws the styled fragment with its own fill and returns a png blob", async () => {
+  const drawn: Array<{ text: string; fill: string; font: string }> = [];
+  const environment: PngEnvironment = {
+    createCanvas: (width, height) => {
+      const context = {
+        font: "", fillStyle: "", strokeStyle: "", lineWidth: 1, textBaseline: "",
+        fillRect: () => {}, strokeRect: () => {}, drawImage: () => {},
+        fillText(text: string) { drawn.push({ text, fill: this.fillStyle, font: this.font }); },
+        measureText: (text: string) => ({ width: sizeMeasure(text, "16px x") }),
+      };
+      return { width, height, getContext: () => context, toBlob: (callback: (blob: Blob | null) => void) => callback(new Blob(["png-bytes"], { type: "image/png" })) };
+    },
+    loadImage: async () => ({ width: 1, height: 1 }),
+  };
+  const blob = await createTemplateDossierPng(dangerDossier(), environment);
+  assert.equal(blob.type, "image/png");
+  assert.ok(blob.size > 0);
+  const danger = drawn.find((item) => item.text === "Опасно");
+  assert.ok(danger && danger.fill === "#b43632" && danger.font.includes(" 600 "));
+  assert.ok(drawn.some((item) => item.text.includes("для всех") && item.fill === "#1b2523"));
 });
