@@ -89,7 +89,8 @@ const item = (type: SearchItemType, id: string, title: string, meta: string, bod
 export function buildSearchIndex(input: SearchIndexInput): SearchItem[] {
   const virusBody = (virus: SearchVirus) => `${virus.status} ${virus.external} ${virus.physiology} ${Object.values(virus.classification).join(" ")} ${virus.mutations.map((mutation) => `${mutation.name} ${mutation.description}`).join(" ")}`;
   const items: SearchItem[] = [
-    ...input.apps.map((app) => item("app", app.id, app.label, "ПРИЛОЖЕНИЕ", `${app.path} ${app.id}`)),
+    // An app is found by its Russian name only; the technical path and id are not shown or searched (owner, 20-33).
+    ...input.apps.map((app) => item("app", app.id, app.label, "ПРИЛОЖЕНИЕ", "")),
     ...input.viruses.map((virus) => item("virus", virus.id, virus.name, virus.code, virusBody(virus))),
     ...input.employees.map((employee) => item("employee", employee.id, employee.nickname, "СОТРУДНИКИ", `${employee.callsign} ${employee.title} ${employee.rank} ${employee.biography}`)),
     ...input.infoSections.flatMap((section) => [
@@ -120,11 +121,11 @@ export function matchSearch(items: readonly SearchItem[], query: string, limit =
   });
 }
 
-// Partial: the roster failed. With a last-good copy the results still list employees (from that copy); without one they list none, and the line says so.
+// Partial: the roster failed. With a last-good copy the results still list employees from that copy and say nothing (owner, 20-33:
+// no "показаны сохранённые данные" line in search); without one they list none, and the line says so.
 export function rosterDegradedText(sync: { lastGoodAt: string | null; failure: unknown }): string | null {
-  if (!sync.failure) return null;
-  if (!sync.lastGoodAt) return "Сотрудники сейчас недоступны";
-  return "Сотрудники: показаны сохранённые данные";
+  if (!sync.failure || sync.lastGoodAt) return null;
+  return "Сотрудники сейчас недоступны";
 }
 
 export type SearchKeyAction = "focus-input" | "next" | "prev" | "open" | "clear" | "close";

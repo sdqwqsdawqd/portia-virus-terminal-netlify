@@ -96,6 +96,10 @@ test("the apps are listed exactly as given: the caller filters by access, «Ус
   const items = buildSearchIndex({ ...empty, apps: [{ id: "charter", label: "Устав", path: "PORTIA://CHARTER" }] });
   assert.deepEqual(matchSearch(items, "устав").map((entry) => entry.key), ["app:charter"]);
   assert.deepEqual(matchSearch(buildSearchIndex(empty), "устав"), []);
+  // Owner, 20-33: no technical path or id beside an app in the results, and neither is searchable.
+  assert.equal(items[0].body, "");
+  assert.deepEqual(matchSearch(items, "charter"), []);
+  assert.deepEqual(matchSearch(items, "portia://"), []);
 });
 
 const ctx = (patch: Partial<SearchKeyContext>): SearchKeyContext => ({ key: "", inInput: true, query: "", index: -1, count: 3, ...patch });
@@ -146,9 +150,9 @@ test("the roster line: absent while healthy, saved-data notice without a timesta
   const today = new Date(2026, 10, 3, 14, 5).toISOString();
   assert.equal(rosterDegradedText({ lastGoodAt: today, failure: null }), null);
   assert.equal(rosterDegradedText({ lastGoodAt: null, failure: null }), null);
-  assert.equal(rosterDegradedText({ lastGoodAt: today, failure: "offline" }), "Сотрудники: показаны сохранённые данные");
+  assert.equal(rosterDegradedText({ lastGoodAt: today, failure: "offline" }), null);
   assert.equal(rosterDegradedText({ lastGoodAt: null, failure: "offline" }), "Сотрудники сейчас недоступны");
-  assert.equal(rosterDegradedText({ lastGoodAt: "not a date", failure: "offline" }), "Сотрудники: показаны сохранённые данные");
+  assert.equal(rosterDegradedText({ lastGoodAt: "not a date", failure: "offline" }), null);
 });
 
 const keyEvent = (patch: Partial<{ key: string; code: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }>) => ({ key: "", code: "", ctrlKey: false, metaKey: false, altKey: false, ...patch });
