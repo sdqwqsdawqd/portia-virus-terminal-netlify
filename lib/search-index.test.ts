@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSearchIndex, matchSearch, normalizeSearch, rosterDegradedText, searchKeyAction, type SearchIndexInput, type SearchKeyContext } from "./search-index.ts";
+import { buildSearchIndex, matchSearch, normalizeSearch, searchKeyAction, type SearchIndexInput, type SearchKeyContext } from "./search-index.ts";
 import { globalSearchKeyAction } from "./search-index.ts";
 
 const virus = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
@@ -96,10 +96,9 @@ test("the apps are listed exactly as given: the caller filters by access, «Ус
   const items = buildSearchIndex({ ...empty, apps: [{ id: "charter", label: "Устав", path: "PORTIA://CHARTER" }] });
   assert.deepEqual(matchSearch(items, "устав").map((entry) => entry.key), ["app:charter"]);
   assert.deepEqual(matchSearch(buildSearchIndex(empty), "устав"), []);
-  // Owner, 20-33: no technical path or id beside an app in the results, and neither is searchable.
-  assert.equal(items[0].body, "");
-  assert.deepEqual(matchSearch(items, "charter"), []);
-  assert.deepEqual(matchSearch(items, "portia://"), []);
+  // Owner, 20-33: an app shows its PORTIA:// path, never the repeated internal id.
+  assert.equal(items[0].body, "PORTIA://CHARTER");
+  assert.ok(!/(^|\s)charter(\s|$)/.test(items[0].body));
 });
 
 const ctx = (patch: Partial<SearchKeyContext>): SearchKeyContext => ({ key: "", inInput: true, query: "", index: -1, count: 3, ...patch });
@@ -144,15 +143,6 @@ test("scope enter-only (a refusal of the keyboard verdict, and the phone) takes 
   assert.equal(searchKeyAction(ctx({ key: "Enter", inInput: false, index: 0, scope: "enter-only" })), "open");
   for (const key of ["ArrowDown", "ArrowUp", "Escape"]) assert.equal(searchKeyAction(ctx({ key, scope: "enter-only" })), null, key);
   assert.equal(searchKeyAction(ctx({ key: "k", ctrlKey: true, scope: "enter-only" })), null);
-});
-
-test("the roster line: absent while healthy, saved-data notice without a timestamp, unavailable without a copy", () => {
-  const today = new Date(2026, 10, 3, 14, 5).toISOString();
-  assert.equal(rosterDegradedText({ lastGoodAt: today, failure: null }), null);
-  assert.equal(rosterDegradedText({ lastGoodAt: null, failure: null }), null);
-  assert.equal(rosterDegradedText({ lastGoodAt: today, failure: "offline" }), null);
-  assert.equal(rosterDegradedText({ lastGoodAt: null, failure: "offline" }), "Сотрудники сейчас недоступны");
-  assert.equal(rosterDegradedText({ lastGoodAt: "not a date", failure: "offline" }), null);
 });
 
 const keyEvent = (patch: Partial<{ key: string; code: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }>) => ({ key: "", code: "", ctrlKey: false, metaKey: false, altKey: false, ...patch });

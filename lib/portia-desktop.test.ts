@@ -250,14 +250,14 @@ test("search-hit attributes never precede key, so list rows keep the jsx runtime
   }
 });
 
-test("search states: loading rows with aria-busy, distinct empty text, roster line, long meta wraps (UI E4)", () => {
+test("search states: loading rows with aria-busy, distinct empty text, no roster status line (owner, 20-33), long meta wraps (UI E4)", () => {
   const window = source.slice(source.indexOf('<AppWindow app="search"'), source.indexOf('<AppWindow app="info"'));
   assert.ok(window.includes("Ищем…") && window.includes("aria-busy={!contentReady}"));
   assert.ok(window.includes("[0, 1, 2].map") && window.includes("global-result global-result-skeleton skeleton-block"));
   assert.ok(window.includes("Совпадений нет") && window.includes("Измените запрос или выберите рекомендацию."));
-  assert.ok(window.includes('className="global-search-degraded"') && window.includes("rosterNote"));
+  assert.ok(!window.includes("global-search-degraded") && !window.includes("rosterNote"), "no message about the employee list in search");
   assert.ok(source.includes("rosterOutOfSearch ? [] : employees"), "no last-good roster: no employees in the index");
-  assert.ok(/\.global-search-degraded\s*\{[^}]*var\(--warning\)[^}]*font: 11px/.test(styles));
+  assert.ok(!styles.includes(".global-search-degraded"));
   assert.ok(/\.global-result-heading small\s*\{[^}]*overflow-wrap: anywhere/.test(styles));
   assert.ok(/\.global-result-skeleton\s*\{[^}]*min-height: 78px/.test(styles));
 });

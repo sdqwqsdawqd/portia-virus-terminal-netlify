@@ -28,7 +28,7 @@ import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/c
 import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { infoNextTarget, infoOverviewVisible, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
-import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, rosterDegradedText, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
+import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -1565,7 +1565,6 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     return () => window.clearTimeout(timer);
   }, [unavailableResults]);
 
-  const rosterNote = rosterDegradedText(employeesSync);
   const searchRoving = searchKeyScope === "full";
   const searchActiveIndex = Math.min(searchFocusIndex, Math.max(searchRows.length - 1, 0));
   const focusSearchResult = (index: number) => {
@@ -1724,7 +1723,6 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
               <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input ref={searchInputRef} value={globalQuery} onChange={(event) => { setGlobalQuery(event.target.value); setUnavailableResults([]); setSearchFocusIndex(0); }} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
               {shownRecommendations.length > 0 && <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{shownRecommendations.map((index) => { const item = content.searchRecommendations[index]; return <button key={`${item}-${index}`} type="button" onClick={() => { setGlobalQuery(item); setUnavailableResults([]); setSearchFocusIndex(0); }}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>; })}</div></div>}
               <div className="global-search-summary"><span>{!contentReady ? "Ищем…" : globalQuery ? `Результаты для «${globalQuery}»` : "Доступные записи"}</span>{contentReady && <strong>{String(searchResults.length).padStart(2, "0")}</strong>}</div>
-              {contentReady && rosterNote && <p className="global-search-degraded" role="status">{rosterNote}</p>}
               <div className="global-search-results" ref={searchResultsRef} aria-busy={!contentReady}>
                 {!contentReady ? <>
                 <span className="sr-only" role="status">Ищем…</span>
