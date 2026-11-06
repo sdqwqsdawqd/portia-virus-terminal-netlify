@@ -278,7 +278,7 @@ Full decision history: `.planning/PROJECT.md`.
 ## Session Continuity
 
 Last session: 2026-11-06T19:00:00.000Z
-Stopped at: 20-33 Task 3: recapture on 7aafc61 done (201 pass), ledger 79 ОЖИДАЕТ / 35 BLOCKED; awaiting owner verdict via review.html
+Stopped at: Gap plans 20-34..20-37 planned and checked; next /gsd-execute-phase 20 --gaps-only
 Resume file: None
 
 ## Operator Next Step
