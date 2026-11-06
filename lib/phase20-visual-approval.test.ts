@@ -278,10 +278,10 @@ const editRow = (text: string, id: string, edit: (cells: string[]) => void) => {
 const dropRow = (text: string, id: string) => text.split(/\r?\n/).filter((line) => !line.startsWith(`| ${id} |`)).join("\n");
 
 describe("20-33 recapture guard", () => {
-  const fixes = `\n## 11. Исправления по вердикту владельца 2026-11-05 (20-32, 20-33)\n\n| Строка | Отклонённый hash | Просьба владельца | Коммит исправления |\n| --- | --- | --- | --- |\n${rejectedIds.map((id) => {
-    const row = parseLedger(ledger).rows.find((candidate) => candidate.id === id)!;
-    return `| ${id} | ${row.candidateSha} | исправить | ${id.startsWith("spider-") ? "4fa4dd6b01495081da7730c93b0b2868aab8daf2" : "19d5bc28425127ea784dbaf7ac01098f85df5006"} |`;
-  }).join("\n")}\n`;
+  const fixes = `\n## 11. Исправления по вердикту владельца 2026-11-05 (20-32, 20-33)\n\n| Строка | Отклонённый hash | Просьба владельца | Коммит исправления |\n| --- | --- | --- | --- |\n${rejectedIds.map((id) =>
+    // A synthetic rejected hash: the real row may be BLOCKED (DATA) with no hash of its own on a target without the data.
+    `| ${id} | ${"e".repeat(64)} | исправить | ${id.startsWith("spider-") ? "4fa4dd6b01495081da7730c93b0b2868aab8daf2" : "19d5bc28425127ea784dbaf7ac01098f85df5006"} |`,
+  ).join("\n")}\n`;
 
   test("the real ledger lists four rejected frames in section 11", () => {
     const withoutSection = ledger.split(/^## 11\./m)[0];

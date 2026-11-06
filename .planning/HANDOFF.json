@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-11-05T15:18:23.633Z",
+  "timestamp": "2026-11-06T19:00:00.000Z",
   "phase": "PORTIA-20",
   "phase_name": "Security, accessibility и приёмка релиза",
   "phase_dir": ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza",
@@ -9,45 +9,184 @@
   "total_tasks": 3,
   "status": "paused",
   "completed_tasks": [
-    {"id": "20-32", "name": "Исправления G1/G2/G3 и SUMMARY", "status": "done", "commit": "346316129101a934c26f9305e6aeb03f75b5f458"},
-    {"id": "20-33-1-2", "name": "Пересъёмка кандидатов и обновление visual ledger", "status": "done", "commit": "e66a5ec7fa6eb0f7c6fdb3ec9610de42cf28787f"},
-    {"id": "20-33-3", "name": "Исправления по новому вердикту владельца", "status": "in_progress", "progress": "Незакоммиченные изменения реализуют новые заголовки окон, компактные рекомендации, вкладки разделов редактора, preview фото справочника, новый фон колб, прежнюю палитру паука, 9 новых class icons и постоянную кнопку шаблона в Повышении. TSC и lint прошли; профильные тесты 159/159 и wallpaper-web 39/39 прошли. Полный npm test после последней корректировки ещё не повторён; браузерная визуальная проверка не завершена."}
+    {
+      "id": "20-32",
+      "name": "Исправления G1/G2/G3 и SUMMARY",
+      "status": "done",
+      "commit": "346316129101a934c26f9305e6aeb03f75b5f458"
+    },
+    {
+      "id": "20-33-1-2",
+      "name": "Пересъёмка кандидатов и обновление visual ledger",
+      "status": "done",
+      "commit": "e66a5ec7fa6eb0f7c6fdb3ec9610de42cf28787f"
+    },
+    {
+      "id": "20-33-3",
+      "name": "Исправления по новому вердикту владельца",
+      "status": "in_progress",
+      "progress": "Незакоммиченные изменения реализуют новые заголовки окон, компактные рекомендации, вкладки разделов редактора, preview фото справочника, новый фон колб, прежнюю палитру паука, 9 новых class icons и постоянную кнопку шаблона в Повышении. TSC и lint прошли; профильные тесты 159/159 и wallpaper-web 39/39 прошли. Полный npm test после последней корректировки ещё не повторён; браузерная визуальная проверка не завершена. | 2026-11-06: Сводка возвращена к простому списку; новые рисунки во всех пустых состояниях; npm test 1485/0, tsc, lint (0 errors) зелёные; production build/start в безопасном worktree прошёл, браузерная проверка пустых/ошибочных состояний 7 приложений PC+phone — только новые рисунки. Редактор (нужен вход) в браузере не проверен — BLOCKED (ENV)."
+    }
   ],
   "remaining_tasks": [
-    {"id": "20-33-3a", "name": "Повторить полный npm test и исправить возможные остаточные тесты", "status": "not_started"},
-    {"id": "20-33-3b", "name": "Провести безопасную браузерную проверку PC/phone из worktree без .env.local", "status": "not_started"},
-    {"id": "20-33-3c", "name": "Переснять visual candidates, обновить ledger и получить новый вердикт владельца", "status": "not_started"},
-    {"id": "20-12", "name": "Baseline promotion", "status": "not_started"},
-    {"id": "20-13", "name": "Release gate rehearsal", "status": "not_started"},
-    {"id": "20-14", "name": "Physical owner UAT PC + phone", "status": "not_started"},
-    {"id": "20-15", "name": "Final release reconciliation", "status": "not_started"}
+    {
+      "id": "20-33-3a",
+      "name": "Повторить полный npm test и исправить возможные остаточные тесты",
+      "status": "done"
+    },
+    {
+      "id": "20-33-3b",
+      "name": "Провести безопасную браузерную проверку PC/phone из worktree без .env.local",
+      "status": "done"
+    },
+    {
+      "id": "20-33-3c",
+      "name": "Переснять visual candidates, обновить ledger и получить новый вердикт владельца",
+      "status": "awaiting_owner"
+    },
+    {
+      "id": "20-12",
+      "name": "Baseline promotion",
+      "status": "not_started"
+    },
+    {
+      "id": "20-13",
+      "name": "Release gate rehearsal",
+      "status": "not_started"
+    },
+    {
+      "id": "20-14",
+      "name": "Physical owner UAT PC + phone",
+      "status": "not_started"
+    },
+    {
+      "id": "20-15",
+      "name": "Final release reconciliation",
+      "status": "not_started"
+    }
   ],
   "blockers": [
-    {"description": "Браузерная проверка во временном junction-worktree не запустилась: Turbopack не разрешил Next вне корня, а webpack dev упал на client import node:fs/promises.", "type": "technical", "workaround": "Использовать C:/Users/User/AppData/Local/Temp/portia-20-32-verify-3a90dda с собственной папкой node_modules, без .env.local; выполнить production build и start, не webpack dev."},
-    {"description": "После новых визуальных изменений прежние candidate hashes устарели; Task 3 требует новой пересъёмки и решения владельца.", "type": "human_action", "workaround": "Сначала завершить проверки и пересъёмку, затем показать новую gallery владельцу."},
-    {"description": "20-14 требует физической проверки владельцем на PC и телефоне.", "type": "human_action", "workaround": "none"}
+    {
+      "description": "Браузерная проверка во временном junction-worktree не запустилась: Turbopack не разрешил Next вне корня, а webpack dev упал на client import node:fs/promises.",
+      "type": "technical",
+      "workaround": "Использовать C:/Users/User/AppData/Local/Temp/portia-20-32-verify-3a90dda с собственной папкой node_modules, без .env.local; выполнить production build и start, не webpack dev."
+    },
+    {
+      "description": "После новых визуальных изменений прежние candidate hashes устарели; Task 3 требует новой пересъёмки и решения владельца.",
+      "type": "human_action",
+      "workaround": "Сначала завершить проверки и пересъёмку, затем показать новую gallery владельцу."
+    },
+    {
+      "description": "20-14 требует физической проверки владельцем на PC и телефоне.",
+      "type": "human_action",
+      "workaround": "none"
+    }
   ],
   "async_jobs": [],
   "human_actions_pending": [
-    {"action": "Дать новый визуальный вердикт после пересъёмки", "context": "Текущие изменения затрагивают паука, колбы, 9 class icons, окна, редакторы, рекомендации и Повышение; старые одобрения нельзя наследовать.", "blocking": true},
-    {"action": "Пройти физический UAT на PC и телефоне", "context": "План 20-14 после baseline/release gate.", "blocking": true}
+    {
+      "action": "Дать новый визуальный вердикт после пересъёмки",
+      "context": "79 строк в 20-VISUAL-APPROVAL.md, галерея tests/e2e/visual-candidates/.runs/phase20-refresh-7aafc61edef8/review.html.",
+      "blocking": true
+    },
+    {
+      "action": "Пройти физический UAT на PC и телефоне",
+      "context": "План 20-14 после baseline/release gate.",
+      "blocking": true
+    }
   ],
   "decisions": [
-    {"decision": "В заголовке окна показывается только русское название приложения; PORTIA:// и дополнительная подпись убираются.", "rationale": "Владелец просил убрать повтор классификации/архива.", "phase": "PORTIA-20"},
-    {"decision": "Рекомендации сохраняют случайную выборку 5-10 на новый заход; мобильный список компактный; редактор использует одно поле и колонки по пять.", "rationale": "Уточнение владельца.", "phase": "PORTIA-20"},
-    {"decision": "Сводка, Информация и Справочник используют закреплённые верхние вкладки разделов; подразделы остаются внутри выбранного раздела.", "rationale": "Уточнение владельца для экономии рабочего пространства.", "phase": "PORTIA-20"},
-    {"decision": "Текст раздела Сводки остаётся приватной заметкой редактора.", "rationale": "Прямой ответ владельца.", "phase": "PORTIA-20"},
-    {"decision": "Фотоблок Справочника хранит ширину, высоту, выравнивание и focus X/Y и показывает preview.", "rationale": "Владелец дал пример crop/preview интерфейса.", "phase": "PORTIA-20"},
-    {"decision": "Фон лабораторных колб полностью перерисовывается с нуля; паук снова белый с чёрно-бирюзовыми лапами во всех темах; переделываются все 9 значков danger/spread/escape.", "rationale": "Новый визуальный вердикт владельца.", "phase": "PORTIA-20"},
-    {"decision": "Кнопка Создать шаблон всегда показывается участнику как отдельный инструмент Повышения.", "rationale": "Прямой выбор владельца; конструктор уже локальный и не сохраняет данные на сервер.", "phase": "PORTIA-20"}
+    {
+      "decision": "В заголовке окна показывается только русское название приложения; PORTIA:// и дополнительная подпись убираются.",
+      "rationale": "Владелец просил убрать повтор классификации/архива.",
+      "phase": "PORTIA-20"
+    },
+    {
+      "decision": "Рекомендации сохраняют случайную выборку 5-10 на новый заход; мобильный список компактный; редактор использует одно поле и колонки по пять.",
+      "rationale": "Уточнение владельца.",
+      "phase": "PORTIA-20"
+    },
+    {
+      "decision": "Сводка, Информация и Справочник используют закреплённые верхние вкладки разделов; подразделы остаются внутри выбранного раздела.",
+      "rationale": "Уточнение владельца для экономии рабочего пространства.",
+      "phase": "PORTIA-20"
+    },
+    {
+      "decision": "Фотоблок Справочника хранит ширину, высоту, выравнивание и focus X/Y и показывает preview.",
+      "rationale": "Владелец дал пример crop/preview интерфейса.",
+      "phase": "PORTIA-20"
+    },
+    {
+      "decision": "Фон лабораторных колб полностью перерисовывается с нуля; паук снова белый с чёрно-бирюзовыми лапами во всех темах; переделываются все 9 значков danger/spread/escape.",
+      "rationale": "Новый визуальный вердикт владельца.",
+      "phase": "PORTIA-20"
+    },
+    {
+      "decision": "Кнопка Создать шаблон всегда показывается участнику как отдельный инструмент Повышения.",
+      "rationale": "Прямой выбор владельца; конструктор уже локальный и не сохраняет данные на сервер.",
+      "phase": "PORTIA-20"
+    },
+    {
+      "decision": "Все пункты владельческого вердикта 20-33 переделываются полностью, текущие незакоммиченные правки не считаются принятыми.",
+      "rationale": "Ответ владельца 2026-11-06.",
+      "phase": "PORTIA-20"
+    },
+    {
+      "decision": "«Сводка» без разделов: как раньше — вкладки Новости/Квесты, простой список записей, у каждой «Показывать посетителям». Разделы, подразделы и заметки разделов Сводки убраны из редактора; сохранённые broadcastSections/sectionId не удаляются, а игнорируются.",
+      "rationale": "Ответ владельца 2026-11-06.",
+      "phase": "PORTIA-20"
+    },
+    {
+      "decision": "Везде, где нет информации (пустые списки, «Совпадений нет», панели ошибок, iframe, заглушка картинки), показываются только новые рисунки: новая колба (flaskEmpty) и новый микроскоп (microscopeGuide). Старые dish/flask/microscope удалены; чашка Петри заменена новой колбой.",
+      "rationale": "Баг, найденный владельцем 2026-11-06.",
+      "phase": "PORTIA-20"
+    },
+    {
+      "decision": "Приватных заметок редактора нет. Удалены поле заметки, клиентский код, маршрут /api/content/notes, lib/editor-notes и e2e editor-notes.spec. Таблицу удаляет новая forward-only миграция 20261106000000_portia_drop_editor_notes.sql: 20261104000100 остаётся в истории, потому что применена на staging. supabase-rls-reviewer: PASS-WITH-NOTES, без high и medium. На production обе миграции применяются только вместе. На staging 20261106000000 ещё не применена. SEC20-18..21 закрыты (fixed).",
+      "rationale": "Ответы владельца 2026-11-06: «убрать», затем «Удалить».",
+      "phase": "PORTIA-20"
+    },
+    {
+      "decision": "Фон колб нарисован заново (вариант А): дистилляционная установка из четырёх сосудов с приглушёнными линиями; контраст подписи над самым ярким квадратом 8 px около 7:1; на телефоне три сосуда.",
+      "rationale": "Ответ владельца 2026-11-06: «A, но переделать рисунок с нуля».",
+      "phase": "PORTIA-20"
+    },
+    {
+      "decision": "Для пересъёмки разрешено чтение реальных данных цели (production-сборка в основной папке с .env.local, только чтение).",
+      "rationale": "Ответ владельца 2026-11-06.",
+      "phase": "PORTIA-20"
+    }
   ],
   "uncommitted_files": [
-    " M .planning/milestone.lock", " M .planning/state.json", " M app/portia.css",
-    " M components/portia-desktop-documents.tsx", " M components/portia-desktop-media.tsx", " M components/portia-desktop-window.tsx", " M components/portia-desktop.tsx",
-    " M components/portia-editor-dossier.tsx", " M components/portia-editor.tsx", " M components/portia-icons.tsx", " M components/portia-promotion.tsx", " M components/portia-wallpaper.tsx",
-    " M lib/accent-theme.test.ts", " M lib/editor-outline.test.ts", " M lib/portia-content-normalize.ts", " M lib/portia-content.ts", " M lib/portia-desktop.test.ts", " M lib/search-index.test.ts", " M lib/search-index.ts", " M lib/wallpaper-web.test.ts",
-    "?? .mcp.json", "?? .planning/forensics/", "?? .planning/milestones/v1.2-incomplete-research/", "?? .planning/quick/261028-c9g-portia-promotion-1-8/", "?? .planning/research/.cache/", "?? .planning/ui-reviews/", "?? AGENTS.md", "?? CLAUDE.md"
+    " M .planning/milestone.lock",
+    " M .planning/state.json",
+    " M app/portia.css",
+    " M components/portia-desktop-documents.tsx",
+    " M components/portia-desktop-media.tsx",
+    " M components/portia-desktop-window.tsx",
+    " M components/portia-desktop.tsx",
+    " M components/portia-editor-dossier.tsx",
+    " M components/portia-editor.tsx",
+    " M components/portia-icons.tsx",
+    " M components/portia-promotion.tsx",
+    " M components/portia-wallpaper.tsx",
+    " M lib/accent-theme.test.ts",
+    " M lib/editor-outline.test.ts",
+    " M lib/portia-content-normalize.ts",
+    " M lib/portia-content.ts",
+    " M lib/portia-desktop.test.ts",
+    " M lib/search-index.test.ts",
+    " M lib/search-index.ts",
+    " M lib/wallpaper-web.test.ts",
+    "?? .mcp.json",
+    "?? .planning/forensics/",
+    "?? .planning/milestones/v1.2-incomplete-research/",
+    "?? .planning/quick/261028-c9g-portia-promotion-1-8/",
+    "?? .planning/research/.cache/",
+    "?? .planning/ui-reviews/",
+    "?? AGENTS.md",
+    "?? CLAUDE.md"
   ],
-  "next_action": "Сначала прочитать phase .continue-here.md, затем повторить полный npm test. После зелёного прогона выполнить production build/start в C:/Users/User/AppData/Local/Temp/portia-20-32-verify-3a90dda (там нет .env.local), проверить PC/phone визуально и только затем переснимать кандидатов.",
-  "context_notes": "HEAD b1235a6. Все продуктовые изменения этого сеанса остаются незакоммиченными в основном worktree. Не трогать owner paths из AGENTS.md. Два временных worktree существуют; порт 3101 не слушается, серверы не работают. Первичная browser попытка через junction node_modules/webpack dev невалидна. Полный npm test до последнего исправления имел 1 остаточный failure wallpaper-web; профильный тест после исправления прошёл 39/39. TSC и lint прошли до последней test-only правки. SUMMARY matches placeholder/TBD в 20-07, 20-08 и 20-31 являются описательным текстом, а не ложными заглушками."
+  "next_action": "Владелец смотрит review.html и даёт вердикт по 79 строкам («принято» или «исправить: …»); затем PORTIA_REQUIRE_APPROVAL=1 тест журнала и 20-12.",
+  "context_notes": "HEAD after ledger commit. Candidates set phase20-refresh-7aafc61edef8 (commit 7aafc61): 201 passed, 0 failed; dpr125/firefox desktop candidates added. 20-VISUAL-APPROVAL.md: 79 rows ОЖИДАЕТ, 35 BLOCKED, 0 carried approvals (every hash changed). Gallery: tests/e2e/visual-candidates/.runs/phase20-refresh-7aafc61edef8/review.html. Old baselines rerun: test:e2e:visual 11 failed/5 passed, phone/webkit/firefox 5 failed; 10 existing + 4 new rebaseline rows (settings, search, information, editor-visitor-denied) in section 10; motion.spec baseline failure has no actual and is not classified yet. Servers stopped. Next: owner verdict per row, then 20-12."
 }

@@ -277,8 +277,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-05T03:22:50.562Z
-Stopped at: Completed PORTIA-20-11-PLAN.md (open follow-ups: spider #1a1a1a, Transitium, D-10 contrast gap, flask durations to 20-14, Promotion BLOCKED)
+Last session: 2026-11-06T19:00:00.000Z
+Stopped at: 20-33 Task 3: recapture on 7aafc61 done (201 pass), ledger 79 ОЖИДАЕТ / 35 BLOCKED; awaiting owner verdict via review.html
 Resume file: None
 
 ## Operator Next Step
