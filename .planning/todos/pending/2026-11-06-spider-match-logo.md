@@ -4,7 +4,7 @@ title: Паук на фоне «Паутина» должен выглядеть
 area: wallpaper-spider
 phase: 20
 severity: medium
-status: deferred
+status: implemented
 files:
   - components/portia-wallpaper-spider.tsx
   - app/portia.css
@@ -23,3 +23,5 @@ files:
 - вирус перед пауком **не брать** (прямое указание владельца).
 
 При переделке сохранить правила D-25/D-26/D-27/D-45 (ходьба, «Уменьшены»/«Выключены», резкость в покое, читаемость на тёмном «Своём» акценте) и проверки `tests/e2e/visual-candidates/phase20-art.spec.ts`. Строки `spider-*` в `20-VISUAL-APPROVAL.md` получают вердикт «исправить».
+
+Перерисовано в 20-35 (коммит d7d917e466e77e43ea0fa7ae126c86810acd7b19); вердикт владельца — 20-37.
