@@ -478,7 +478,7 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
       {error && <p className="promotion-error" role="alert">{error}</p>}
       <section className="promotion-template-entry" aria-label="Конструктор шаблона">
         <button className="promotion-action" type="button" onClick={(event) => openTemplate(event.currentTarget)}>Создать шаблон</button>
-        <p>Отдельный инструмент для оформления досье. Работа скачивается на ваше устройство; отправьте файл проверяющему вне сайта. Создание шаблона само по себе не засчитывает задание.</p>
+        <p>Отдельный инструмент для оформления досье. Работа скачивается на ваше устройство. Отправьте файл проверяющему вне сайта. Создание шаблона само по себе не засчитывает задание.</p>
       </section>
       <div className="promotion-flow-list">
         {status.ordinary.eligibility.status === "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} next={nextKind === "qualification"} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
