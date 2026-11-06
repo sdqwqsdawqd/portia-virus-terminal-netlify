@@ -1,0 +1,23 @@
+// Fail-first data for lib/portia-template-builder.test.ts (20-39). This is text, not project code:
+// the guards must reject it when GSD_PROHIB_SUBJECT points here.
+import { useState } from "react";
+import { PortiaEditor } from "@/components/portia-editor";
+import { uploadImage } from "@/lib/image-upload";
+import { DossierTabs, EditorGroup } from "@/components/portia-editor-dossier";
+import { FloatingTextFormatPanel } from "@/components/portia-editor-rich-text";
+
+export function BadTemplateBuilder({ target }: { target: unknown }) {
+  const [dossier, setDossier] = useState<unknown>(null);
+  const save = async (file: File) => {
+    const url = await uploadImage(file);
+    await fetch("/api/content", { method: "PUT", body: JSON.stringify({ dossier, url }) });
+    sessionStorage.setItem("template", JSON.stringify(dossier));
+    setDossier(null);
+  };
+  return <div>
+    <DossierTabs active="logs" changed={[]} onSelect={() => undefined} />
+    <EditorGroup title="Записи учёных">scientistLogs</EditorGroup>
+    <FloatingTextFormatPanel target={target} />
+    <PortiaEditor onSave={save} />
+  </div>;
+}
