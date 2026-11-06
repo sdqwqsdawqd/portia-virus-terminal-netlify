@@ -122,21 +122,40 @@ export function candidatesSetProblems(commit: string | undefined, set: string | 
   return set === `phase20-refresh-${commit.slice(0, 12)}` ? [] : ["candidates_set does not match candidates_commit"];
 }
 
+// 20-37: rows rejected by the owner on 2026-11-06 (spider and flasks). spider-off is not here: its frame has no spider, so a redraw may leave its bytes unchanged.
+export const rejectedIdsRound12 = [
+  "spider-accent-default", "spider-accent-custom-dark", "spider-accent-custom-light", "spider-full-walk", "spider-motion-off", "spider-rest-sharp", "spider-rest-sharp-off",
+  "flasks-full", "flasks-off", "flasks-reduced", "flasks-accent-default", "flasks-accent-custom-dark", "flasks-accent-custom-light",
+].flatMap((base) => devices.map((device) => `${base}:${device}`));
+
+const rejectedRounds = {
+  11: { heading: /^## 11\. [^\r\n]+\r?\n/m, ids: rejectedIds },
+  12: { heading: /^## 12\. [^\r\n]+\r?\n/m, ids: rejectedIdsRound12 },
+} as const;
+
+// Section 11 (20-33, 2026-11-05); the signature is kept for the existing tests.
 export function rejectedFixProblems(text: string, rows: LedgerRow[], captureCommit: string | undefined, git?: GitRunner): string[] {
-  const section = text.split(/^## 11\. [^\r\n]+\r?\n/m)[1]?.split(/^## /m)[0];
-  if (!section) return ["section 11: rejected frames and fix commits are missing"];
+  return rejectedRoundProblems(text, rows, captureCommit, 11, git);
+}
+
+// One round of owner rejections: a ledger section "## <round>." with a table of rejected sha256, the owner's request and the fix commit.
+// The candidate must not re-present the rejected bytes and must be captured after the fix commit.
+export function rejectedRoundProblems(text: string, rows: LedgerRow[], captureCommit: string | undefined, round: keyof typeof rejectedRounds, git?: GitRunner): string[] {
+  const { heading, ids } = rejectedRounds[round];
+  const section = text.split(heading)[1]?.split(/^## /m)[0];
+  if (!section) return [`section ${round}: rejected frames and fix commits are missing`];
   const errors: string[] = [];
   const fixes = new Map<string, { sha: string; commit: string }>();
   for (const line of section.split(/\r?\n/)) {
     if (!line.startsWith("|")) continue;
     const cells = line.slice(1, line.endsWith("|") ? -1 : undefined).split("|").map((cell) => cell.trim().replace(/^`|`$/g, ""));
-    if (cells.length !== 4 || !rejectedIds.includes(cells[0])) continue;
+    if (cells.length !== 4 || !ids.includes(cells[0])) continue;
     if (fixes.has(cells[0])) errors.push(`${cells[0]}: duplicate rejected frame`);
     fixes.set(cells[0], { sha: cells[1], commit: cells[3] });
   }
-  for (const id of rejectedIds) {
+  for (const id of ids) {
     const fix = fixes.get(id);
-    if (!fix) { errors.push(`${id}: rejected frame is missing from section 11`); continue; }
+    if (!fix) { errors.push(`${id}: rejected frame is missing from section ${round}`); continue; }
     const row = rows.find((candidate) => candidate.id === id);
     if (!/^[0-9a-f]{64}$/.test(fix.sha)) errors.push(`${id}: rejected sha256 is malformed`);
     if (row?.candidateSha === fix.sha) errors.push(`${id}: re-presents the rejected frame`);
@@ -209,6 +228,7 @@ export function validateLedger(text: string, options: Options = {}): string[] {
   errors.push(...candidatesCommitProblems(candidatesCommit, options.git));
   errors.push(...candidatesSetProblems(candidatesCommit, frontmatter.candidates_set));
   errors.push(...rejectedFixProblems(text, rows, candidatesCommit, options.git));
+  errors.push(...rejectedRoundProblems(text, rows, candidatesCommit, 12, options.git));
   if (options.requireSetMembership) errors.push(...candidateMembershipProblems(rows, frontmatter.candidates_set));
   if (options.requireApproval && options.changedSince && /^[0-9a-f]{40}$/.test(candidatesCommit ?? "")) {
     errors.push(...staleCandidateProblems(candidatesCommit, { changedSince: options.changedSince }));
@@ -312,10 +332,7 @@ describe("20-33 recapture guard", () => {
 });
 
 describe("20-37 recapture guard", () => {
-  const rejected = [
-    "spider-accent-default", "spider-accent-custom-dark", "spider-accent-custom-light", "spider-full-walk", "spider-motion-off", "spider-rest-sharp", "spider-rest-sharp-off",
-    "flasks-full", "flasks-off", "flasks-reduced", "flasks-accent-default", "flasks-accent-custom-dark", "flasks-accent-custom-light",
-  ].flatMap((base) => devices.map((device) => `${base}:${device}`));
+  const rejected = rejectedIdsRound12;
   const spiderFix = "d7d917e466e77e43ea0fa7ae126c86810acd7b19";
   const flaskFix = "abddc8cc6efcf6aeb695fcfdc5800b51c1cffe4f";
   const header = "\n## 12. Исправления по вердикту владельца 2026-11-06 (20-35, 20-36, 20-37)\n\n| Строка | Отклонённый hash | Просьба владельца | Коммит исправления |\n| --- | --- | --- | --- |\n";
