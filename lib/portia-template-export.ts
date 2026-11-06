@@ -17,7 +17,7 @@ import {
   type TemplateDossier,
   type TemplateRun,
 } from "./portia-template-dossier.ts";
-import { portiaTextKey, type RichTextStyle } from "./portia-content.ts";
+import { classificationOptions, portiaTextKey, type RichTextStyle, type Virus } from "./portia-content.ts";
 
 export type TemplateFieldKey =
   | "name"
@@ -625,10 +625,51 @@ export function wrapTemplateRuns(runs: readonly TemplateRun[], maxWidth: number,
   });
 }
 
+/* ---- sections shared by HTML and PNG (same labels as VirusRecord in components/portia-desktop-dossier.tsx) */
+
+const classificationAxes = [
+  ["danger", "Общий уровень опасности"],
+  ["spread", "Распространение"],
+  ["escapeRisk", "Угроза и риск побега"],
+  ["transmission", "Способ распространения"],
+  ["mind", "Разум"],
+  ["appearance", "Вид / внешность"],
+  ["behavior", "Поведение"],
+] as const satisfies readonly (readonly [keyof Virus["classification"], string])[];
+
+const ppuFields = [
+  ["ppu-health", "ЗДОРОВЬЕ", (virus: Virus) => virus.ppu.health],
+  ["ppu-speed", "СКОРОСТЬ", (virus: Virus) => virus.ppu.speed],
+  ["ppu-abilities", "СПОСОБНОСТИ", (virus: Virus) => virus.ppu.abilities],
+] as const;
+
+const sectionTitles = {
+  classification: ["01", "КЛАССИФИКАЦИЯ"],
+  external: ["02", "ВНЕШНИЕ ХАРАКТЕРИСТИКИ"],
+  ppu: ["03", "ХАРАКТЕРИСТИКИ С PPU"],
+  physiology: ["04", "ФИЗИОЛОГИЯ"],
+  mutations: ["05", "МУТАЦИИ ВИРУСА"],
+} as const;
+
+const photoCaption = "Фото после заражения";
+const mutationCaption = "Скриншот мутации";
+const mutationLabel = (index: number) => `M-${String(index + 1).padStart(2, "0")}`;
+
+function classificationLevel(axis: keyof Virus["classification"], value: string) {
+  return (classificationOptions[axis] as readonly { value: string; level?: number }[]).find((option) => option.value === value)?.level;
+}
+
 /* ---- HTML */
 
 const dossierCss = `${standaloneCss}
-.rich{white-space:pre-wrap;overflow-wrap:anywhere}`;
+.rich{white-space:pre-wrap;overflow-wrap:anywhere}
+.class-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.class-cell span,.class-cell small{display:block;font:700 11px/1.3 ui-monospace,Consolas,monospace;letter-spacing:.06em;color:#4a5a56}
+.class-cell strong{display:block;margin:2px 0}
+.mutation{margin-top:16px;padding-top:12px;border-top:1px solid #bdb8a6}
+.mutation-index{font:700 12px/1.3 ui-monospace,Consolas,monospace;letter-spacing:.08em;color:#2e6f64}
+h3{margin:4px 0 6px;font-size:16px;line-height:1.3;overflow-wrap:anywhere}
+figcaption{margin-top:4px;font:11px/1.4 ui-monospace,Consolas,monospace;color:#4a5a56}`;
 
 function runCss(style: RichTextStyle | undefined) {
   const safe = safeTemplateRunStyle(style);
@@ -651,15 +692,47 @@ function richHtml(dossier: TemplateDossier, key: string, text: string) {
   }).join("");
 }
 
+/** The picture of a slot. Only a validated local data URL from the model slots is written, never an address from the virus record. */
+function figureHtml(slots: ReadonlyMap<string, TemplateImage>, slot: string, alt: string, caption: string | null) {
+  const image = slots.get(slot);
+  if (image === undefined) return "";
+  return `<figure class="photo"><img src="${image.dataUrl}" alt="${escapeTemplateHtml(alt)}">${caption === null ? "" : `<figcaption>${escapeTemplateHtml(caption)}</figcaption>`}</figure>`;
+}
+
+const sectionHtml = (kind: keyof typeof sectionTitles, body: string) => `<section><h2>${sectionTitles[kind][0]} ${sectionTitles[kind][1]}</h2>${body}</section>`;
+
 /**
- * A self-contained HTML document of the template dossier. Fragments carry only allow-listed styles, all text is escaped, the CSS is
- * inline, there is no script, no link and no external address; the embedded content policy allows `data:` images only.
+ * A self-contained HTML document of the template dossier: sections 01-05 of the site's virus card, without scientist records.
+ * Fragments carry only allow-listed styles, all text is escaped, the CSS is inline, there is no script, no link and no external
+ * address; the embedded content policy allows `data:` images only.
  */
 export function createTemplateDossierHtml(dossier: TemplateDossier) {
   const { virus } = dossier;
+  const slots = usableTemplateImages(dossier);
+  const key = (field: Parameters<typeof portiaTextKey.virus>[1]) => portiaTextKey.virus(templateVirusId, field);
   const title = virus.name.trim() === "" ? templateDefaultTitle : escapeTemplateHtml(virus.name.trim());
+  const classification = classificationAxes.map(([axis, label]) => {
+    const value = virus.classification[axis];
+    const level = classificationLevel(axis, value);
+    return `<div class="class-cell"><span>${escapeTemplateHtml(label)}</span><strong>${valueHtml(value)}</strong>${level === undefined ? "" : `<small>УРОВЕНЬ ${level}</small>`}</div>`;
+  }).join("");
+  const ppu = ppuFields
+    .map(([field, label, read]) => `<div><dt>${label}</dt><dd class="rich">${richHtml(dossier, key(field), read(virus))}</dd></div>`)
+    .join("");
+  const mutations = virus.mutations.length === 0
+    ? `<p class="empty">${emptyTemplateText}</p>`
+    : virus.mutations.map((mutation, index) => [
+      `<div class="mutation"><div class="mutation-index">${mutationLabel(index)}</div>`,
+      figureHtml(slots, `mutation:${index}`, mutation.name.trim() === "" ? mutationCaption : mutation.name, null),
+      `<h3>${valueHtml(mutation.name)}</h3>`,
+      `<div class="rich">${richHtml(dossier, portiaTextKey.mutation(templateVirusId, index), mutation.description)}</div></div>`,
+    ].join("")).join("");
   const sections = [
-    `<section><h2>02 ВНЕШНИЕ ХАРАКТЕРИСТИКИ</h2><div class="rich">${richHtml(dossier, portiaTextKey.virus(templateVirusId, "external"), virus.external)}</div></section>`,
+    sectionHtml("classification", `<div class="class-grid">${classification}</div>`),
+    sectionHtml("external", `<div class="rich">${richHtml(dossier, key("external"), virus.external)}</div>`),
+    sectionHtml("ppu", `<dl>${ppu}</dl>`),
+    sectionHtml("physiology", `<div class="rich">${richHtml(dossier, key("physiology"), virus.physiology)}</div>`),
+    sectionHtml("mutations", mutations),
   ].join("");
   return [
     "<!doctype html>",
@@ -669,6 +742,7 @@ export function createTemplateDossierHtml(dossier: TemplateDossier) {
     `<title>${title}</title><style>${dossierCss}</style></head><body>`,
     `<main class="card"><header><div><span class="code">${valueHtml(virus.code)}</span><h1>${virus.name.trim() === "" ? `<span class="empty">${emptyTemplateText}</span>` : title}</h1></div>`,
     `<div class="status">${valueHtml(virus.status)}</div></header>`,
+    figureHtml(slots, "infected", photoCaption, photoCaption),
     sections,
     `<footer>${escapeTemplateHtml(templateDefaultTitle)} / PORTIA / локальный черновик участника, не запись архива</footer></main>`,
     "</body></html>",
@@ -691,18 +765,21 @@ function usableTemplateImages(dossier: TemplateDossier) {
 /** Lays the dossier out on the fixed-width page; throws TemplatePngTooLargeError instead of cropping a card that is too long. */
 export function layoutTemplateDossierCard(dossier: TemplateDossier, measure: Measure): PngLayout {
   const { virus } = dossier;
+  const slots = usableTemplateImages(dossier);
   const contentWidth = pngWidth - pngPadding * 2;
+  const columnGap = 24;
+  const columnWidth = (contentWidth - columnGap) / 2;
   const ops: PngOp[] = [];
   let y = pngPadding;
   const overflowed = () => y > pngMaxHeight * 4;
-  const empty = (lineHeight: number) => {
-    ops.push({ kind: "text", x: pngPadding, y, text: emptyTemplateText, font: sansFont(16, 400, "italic"), fill: pngPalette.empty });
+  const empty = (lineHeight: number, x = pngPadding) => {
+    ops.push({ kind: "text", x, y, text: emptyTemplateText, font: sansFont(16, 400, "italic"), fill: pngPalette.empty });
     y += lineHeight;
   };
-  const plain = (value: string, font: string, fill: string, lineHeight: number) => {
-    if (value.trim() === "") return empty(lineHeight);
-    for (const line of wrapTemplateText(value, contentWidth, font, measure)) {
-      if (line !== "") ops.push({ kind: "text", x: pngPadding, y, text: line, font, fill });
+  const plain = (value: string, font: string, fill: string, lineHeight: number, x = pngPadding, width = contentWidth) => {
+    if (value.trim() === "") return empty(lineHeight, x);
+    for (const line of wrapTemplateText(value, width, font, measure)) {
+      if (line !== "") ops.push({ kind: "text", x, y, text: line, font, fill });
       y += lineHeight;
       if (overflowed()) break;
     }
@@ -720,11 +797,23 @@ export function layoutTemplateDossierCard(dossier: TemplateDossier, measure: Mea
       if (overflowed()) break;
     }
   };
-  const sectionHead = (index: string, title: string) => {
+  const sectionHead = (kind: keyof typeof sectionTitles) => {
     y += 24;
-    ops.push({ kind: "text", x: pngPadding, y, text: `${index} ${title}`, font: monoFont(12), fill: pngPalette.accent });
+    ops.push({ kind: "text", x: pngPadding, y, text: `${sectionTitles[kind][0]} ${sectionTitles[kind][1]}`, font: monoFont(12), fill: pngPalette.accent });
     y += 26;
   };
+  /** A picture scaled into the page width and the 520 px display height, with a 1 px frame just outside it. */
+  const picture = (slot: string) => {
+    const image = slots.get(slot);
+    if (image === undefined) return false;
+    y += 16;
+    const box = fitTemplateImage(image, contentWidth);
+    ops.push({ kind: "image", x: pngPadding, y, width: box.width, height: box.height, slot });
+    ops.push({ kind: "rect", x: pngPadding - 1, y: y - 1, width: box.width + 2, height: box.height + 2, stroke: pngPalette.border });
+    y += box.height;
+    return true;
+  };
+  const key = (field: Parameters<typeof portiaTextKey.virus>[1]) => portiaTextKey.virus(templateVirusId, field);
 
   plain(virus.code, monoFont(12), pngPalette.soft, 18);
   y += 4;
@@ -734,9 +823,55 @@ export function layoutTemplateDossierCard(dossier: TemplateDossier, measure: Mea
   y += 12;
   ops.push({ kind: "rect", x: pngPadding, y, width: contentWidth, height: 2, fill: pngPalette.ink });
   y += 2;
+  picture("infected");
 
-  sectionHead("02", "ВНЕШНИЕ ХАРАКТЕРИСТИКИ");
-  rich(portiaTextKey.virus(templateVirusId, "external"), virus.external);
+  sectionHead("classification");
+  for (let row = 0; row < classificationAxes.length; row += 2) {
+    const rowTop = y;
+    let rowBottom = y;
+    classificationAxes.slice(row, row + 2).forEach(([axis, label], column) => {
+      const x = pngPadding + column * (columnWidth + columnGap);
+      const value = virus.classification[axis];
+      const level = classificationLevel(axis, value);
+      y = rowTop;
+      ops.push({ kind: "text", x, y, text: label, font: monoFont(11), fill: pngPalette.soft });
+      y += 18;
+      plain(value, sansFont(16, 700), pngPalette.ink, 25, x, columnWidth);
+      if (level !== undefined) {
+        ops.push({ kind: "text", x, y, text: `УРОВЕНЬ ${level}`, font: monoFont(11), fill: pngPalette.soft });
+        y += 16;
+      }
+      rowBottom = Math.max(rowBottom, y);
+    });
+    y = rowBottom + 12;
+  }
+
+  sectionHead("external");
+  rich(key("external"), virus.external);
+
+  sectionHead("ppu");
+  for (const [field, label, read] of ppuFields) {
+    ops.push({ kind: "text", x: pngPadding, y, text: label, font: monoFont(11), fill: pngPalette.soft });
+    y += 18;
+    rich(key(field), read(virus));
+    y += 12;
+  }
+  y -= 12;
+
+  sectionHead("physiology");
+  rich(key("physiology"), virus.physiology);
+
+  sectionHead("mutations");
+  if (virus.mutations.length === 0) empty(minLineHeight);
+  virus.mutations.forEach((mutation, index) => {
+    if (index > 0) y += 16;
+    ops.push({ kind: "text", x: pngPadding, y, text: mutationLabel(index), font: monoFont(12), fill: pngPalette.accent });
+    y += 20;
+    if (picture(`mutation:${index}`)) y += 12;
+    plain(mutation.name, sansFont(16, 700), pngPalette.ink, 25);
+    y += 4;
+    rich(portiaTextKey.mutation(templateVirusId, index), mutation.description);
+  });
 
   y += 32;
   ops.push({ kind: "rect", x: pngPadding, y, width: contentWidth, height: 1, fill: pngPalette.border });

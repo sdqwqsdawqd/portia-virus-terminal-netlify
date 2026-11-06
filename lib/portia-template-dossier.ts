@@ -176,28 +176,88 @@ export function templateFieldRuns(dossier: TemplateDossier, key: string, text: s
   return [{ text }];
 }
 
-/* ---------------------------------------------------------------- RED skeleton (20-38 Task 2), replaced by the implementation */
+/* ---------------------------------------------------------------- edits like the editor */
 
-export function editTemplateVirus(dossier: TemplateDossier, _update: (virus: Virus) => void): TemplateDossier {
-  return dossier;
+/**
+ * A change to the plain virus fields (code, name, status, classification, mutation names, ...). The id, the scientist logs and all
+ * picture addresses are put back after `update`; an edit that changes the number of mutations is refused and the same draft is
+ * returned, because mutations are added and removed only through the two functions below.
+ */
+export function editTemplateVirus(dossier: TemplateDossier, update: (virus: Virus) => void): TemplateDossier {
+  const next = cloneDossier(dossier);
+  update(next.virus);
+  return enforceInvariants(next, dossier.virus.mutations.length) ?? dossier;
 }
 
+/** The same new mutation as the editor's «+ ДОБАВИТЬ МУТАЦИЮ» (components/portia-editor.tsx), with an empty picture slot. */
 export function addTemplateMutation(dossier: TemplateDossier): TemplateDossier {
-  return dossier;
+  const next = cloneDossier(dossier);
+  next.virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" });
+  next.images.mutations.push(null);
+  return next;
 }
 
-export function removeTemplateMutation(dossier: TemplateDossier, _index: number): TemplateDossier {
-  return dossier;
+/**
+ * Deleting a mutation moves each later description key down one place and drops the last, exactly like `removeMutation` in
+ * lib/editor-items.ts; the picture slots move the same way. An index outside the list returns the draft unchanged.
+ */
+export function removeTemplateMutation(dossier: TemplateDossier, index: number): TemplateDossier {
+  const count = dossier.virus.mutations.length;
+  if (!Number.isInteger(index) || index < 0 || index >= count) return dossier;
+  const next = cloneDossier(dossier);
+  next.virus.mutations.splice(index, 1);
+  next.images.mutations.splice(index, 1);
+  for (let position = index; position < count; position += 1) {
+    const following = next.formattedText[portiaTextKey.mutation(templateVirusId, position + 1)];
+    if (following) next.formattedText[portiaTextKey.mutation(templateVirusId, position)] = following;
+    else delete next.formattedText[portiaTextKey.mutation(templateVirusId, position)];
+  }
+  return next;
 }
 
-export function setTemplateImage(dossier: TemplateDossier, _slot: "infected" | number, _image: TemplateImage | null): TemplateDossier {
-  return dossier;
+/** Puts a validated local image into one slot (or clears it). Anything that is not a local raster data URL changes nothing. */
+export function setTemplateImage(dossier: TemplateDossier, slot: "infected" | number, image: TemplateImage | null): TemplateDossier {
+  if (image !== null && !isLocalTemplateImage(image)) return dossier;
+  if (slot !== "infected" && (!Number.isInteger(slot) || slot < 0 || slot >= dossier.virus.mutations.length)) return dossier;
+  const next = cloneDossier(dossier);
+  if (slot === "infected") next.images.infected = image;
+  else next.images.mutations[slot] = image;
+  return next;
 }
 
-export function hasTemplateDossierContent(_dossier: TemplateDossier): boolean {
-  return false;
+/* ---------------------------------------------------------------- content and snapshot */
+
+const plainFields = (virus: Virus) => [
+  virus.code, virus.name, virus.status, virus.external, virus.ppu.health, virus.ppu.speed, virus.ppu.abilities, virus.physiology,
+];
+
+const classificationValues = (virus: Virus) => [
+  virus.classification.danger, virus.classification.spread, virus.classification.transmission, virus.classification.escapeRisk,
+  virus.classification.mind, virus.classification.appearance, virus.classification.behavior,
+];
+
+/** True once the participant provided something: a visible character, a changed class, a mutation or a picture. */
+export function hasTemplateDossierContent(dossier: TemplateDossier) {
+  const { virus, images } = dossier;
+  const defaults = classificationValues(emptyTemplateDossier().virus);
+  return plainFields(virus).some((value) => value.trim() !== "")
+    || virus.mutations.length > 0
+    || classificationValues(virus).some((value, index) => value !== defaults[index])
+    || images.infected !== null
+    || images.mutations.some((image) => image !== null);
 }
 
-export function templateDossierSnapshotKey(_dossier: TemplateDossier): string {
-  return "";
+const imageKey = (image: TemplateImage | null) => (image === null ? null : [image.name, image.bytes, image.width, image.height, image.dataUrl.length, image.dataUrl.slice(-48)]);
+
+/** A stable value that changes with every text, formatting, class, mutation or picture change; used to tell a downloaded draft from a changed one. */
+export function templateDossierSnapshotKey(dossier: TemplateDossier) {
+  const { virus, formattedText, images } = dossier;
+  return JSON.stringify([
+    plainFields(virus),
+    classificationValues(virus),
+    virus.mutations.map((mutation) => [mutation.name, mutation.description]),
+    Object.keys(formattedText).sort().map((key) => [key, formattedText[key]]),
+    imageKey(images.infected),
+    images.mutations.map(imageKey),
+  ]);
 }
