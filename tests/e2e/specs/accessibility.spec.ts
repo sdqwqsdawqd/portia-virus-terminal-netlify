@@ -220,22 +220,37 @@ test.describe("[STAB-A11Y-01] PC controls: axe, names, focus", () => {
     }
   });
 
-  test("template builder (UI-contract stub): axe, labels, dialog trap and focus restore", async ({ page }, testInfo) => {
+  test("template builder (UI-contract stub): axe and accessible names on every tab, dialog trap and focus restore", async ({ page }, testInfo) => {
     const { promotion, builder, trigger } = await openBuilder(page);
-    expect(await scan(page, testInfo, "template").then(summary)).toEqual([]);
+    const tabs = builder.getByRole("navigation", { name: "Разделы досье" });
 
-    // every input has a visible label; the file input is named through the hidden one's labelledby
-    const fields = builder.locator("input:not([hidden]), textarea");
-    const count = await fields.count();
-    expect(count).toBeGreaterThan(3);
-    for (let index = 0; index < count; index += 1) {
-      const field = fields.nth(index);
-      const id = await field.getAttribute("id");
-      await expect(builder.locator(`label[for="${id}"]`), `field #${index} has a visible label`).toHaveText(/\S/);
-    }
+    // The builder is the editor's virus card: every input, select, textarea and formatted text field has an accessible name
+    // (a label, aria-labelledby for the formatted text and the file input), and axe finds nothing critical or serious, on each tab.
+    const expectNamedFields = async (tab: string) => {
+      const fields = builder.locator("input:not([hidden]), select, textarea, [role=textbox]");
+      const count = await fields.count();
+      expect(count, `${tab}: the tab has fields`).toBeGreaterThan(2);
+      for (let index = 0; index < count; index += 1) {
+        await expect(fields.nth(index), `${tab}: field #${index} has an accessible name`).toHaveAccessibleName(/\S/);
+      }
+    };
+    await expectNamedFields("Основное");
+    expect(await scan(page, testInfo, "template-main").then(summary)).toEqual([]);
+
+    await tabs.getByRole("button", { name: "Описание", exact: true }).click();
+    await expectNamedFields("Описание");
+    expect(await scan(page, testInfo, "template-text").then(summary)).toEqual([]);
+
+    // one mutation, so its fields (name, formatted description, image slot, delete) are on the tab too
+    await tabs.getByRole("button", { name: "Мутации", exact: true }).click();
+    await builder.getByRole("button", { name: "+ ДОБАВИТЬ МУТАЦИЮ" }).click();
+    await expect(builder.getByText("МУТАЦИЯ 01")).toBeVisible();
+    await expectNamedFields("Мутации");
+    expect(await scan(page, testInfo, "template-mutations").then(summary)).toEqual([]);
 
     // empty, Cyrillic and long values keep the preview named and the page unwidened
-    const first = fields.first();
+    await tabs.getByRole("button", { name: "Основное", exact: true }).click();
+    const first = builder.getByLabel("Название", { exact: true });
     const value = "Вирус «Ёж-Щ» ".repeat(30).slice(0, 80);
     await first.fill(value);
     await expect(first).toHaveValue(value);
