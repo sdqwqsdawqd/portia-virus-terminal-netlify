@@ -18,8 +18,8 @@ export function formatLaunchLabels(title: string | null): FormatLaunchLabels {
     return {
       visibleLabel: "ВЫБЕРИТЕ ТЕКСТ",
       visibleTitle: "",
-      // «выберите текстовое поле» holds the visible «выберите текст».
-      accessibleName: "Выберите текстовое поле для оформления",
+      // Whole words count (axe label-content-name-mismatch): «выберите текстовое» would not hold the word «текст».
+      accessibleName: "Выберите текст: сначала выберите текстовое поле",
       tooltip: "Сначала выберите текстовое поле",
       hint: "Одна кнопка форматирования работает со всеми большими текстовыми полями.",
     };
@@ -33,11 +33,20 @@ export function formatLaunchLabels(title: string | null): FormatLaunchLabels {
   };
 }
 
-const normalize = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
+const words = (text: string) => text.toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, " ").split(" ").filter(Boolean);
 
-/** The Label in Name check axe runs: the visible text, case and spacing aside, is part of the accessible name. */
+/**
+ * The Label in Name check axe runs (label-content-name-mismatch): the words of the visible text are a contiguous run of words in the
+ * accessible name, case and punctuation aside. A word that merely starts another word does not count.
+ */
 export function nameContainsVisibleText(accessibleName: string, visibleText: string) {
-  return normalize(accessibleName).includes(normalize(visibleText));
+  const name = words(accessibleName);
+  const label = words(visibleText);
+  if (label.length === 0) return true;
+  for (let start = 0; start + label.length <= name.length; start += 1) {
+    if (label.every((word, index) => name[start + index] === word)) return true;
+  }
+  return false;
 }
 
 export function visibleLaunchText(labels: FormatLaunchLabels) {

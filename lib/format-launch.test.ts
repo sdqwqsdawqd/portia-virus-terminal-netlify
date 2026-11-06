@@ -5,7 +5,7 @@ import { formatLaunchLabels, nameContainsVisibleText, visibleLaunchText } from "
 
 const titles = ["Внешние характеристики", "Мутация 1: ПОВЕДЕНИЕ", "Очень длинное название текстового поля, которое на телефоне обрезается многоточием"];
 
-test("the empty state: the name starts the visible text «выберите текст» (WCAG 2.5.3)", () => {
+test("the empty state: the name starts with the visible text «выберите текст» (WCAG 2.5.3)", () => {
   const labels = formatLaunchLabels(null);
   assert.equal(visibleLaunchText(labels), "ВЫБЕРИТЕ ТЕКСТ");
   assert.ok(nameContainsVisibleText(labels.accessibleName, visibleLaunchText(labels)), labels.accessibleName);
@@ -20,6 +20,12 @@ test("every field state: the name contains the whole visible text and starts wit
     assert.ok(nameContainsVisibleText(labels.accessibleName, visible), `${labels.accessibleName} must contain ${visible}`);
     assert.ok(labels.accessibleName.toLowerCase().startsWith(labels.visibleLabel.toLowerCase()));
   }
+});
+
+test("whole words count: a longer word does not hold the visible one, and the old names are caught", () => {
+  assert.equal(nameContainsVisibleText("Сначала выберите текстовое поле", "ВЫБЕРИТЕ ТЕКСТ"), false, "«текстовое» is not «текст» (axe compares words); this was the B8 mismatch");
+  assert.equal(nameContainsVisibleText("Выберите текст: сначала выберите текстовое поле", "ВЫБЕРИТЕ ТЕКСТ"), true);
+  assert.equal(nameContainsVisibleText("Оформление поля: Внешние", "ОФОРМЛЕНИЕ Внешние"), false, "the words must be contiguous");
 });
 
 test("the old field name, which dropped the visible title, is caught by the check", () => {

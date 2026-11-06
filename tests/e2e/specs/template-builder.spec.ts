@@ -202,7 +202,7 @@ test("[STAB-TMPL-01] the form is the editor's virus card: three tabs, the same g
   // Before any text field is chosen the one format button says so and is off.
   const launch = builder.locator(".global-format-launch > button");
   await expect(launch).toBeDisabled();
-  await expect(launch).toHaveAccessibleName("Выберите текстовое поле для оформления");
+  await expect(launch).toHaveAccessibleName("Выберите текст: сначала выберите текстовое поле");
   await expect(launch).toContainText("ВЫБЕРИТЕ ТЕКСТ");
 
   await expect(builder.getByRole("heading", { name: "Основные данные" })).toBeVisible();
