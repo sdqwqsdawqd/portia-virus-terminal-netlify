@@ -76,7 +76,7 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
 
     const button = addSectionButton(page);
     await expect(button, "one add-section button in the tab, and it is the top one").toHaveCount(1);
-    await expect(button.locator("xpath=ancestor::div[contains(@class, 'editor-section-addbar')]"), "the button lives in the pinned bar of «Справочник»").toHaveCount(1);
+    await expect(page.locator(".editor-section-addbar").getByRole("button", { name: "+ ДОБАВИТЬ РАЗДЕЛ", exact: true }), "the button lives in the pinned bar of «Справочник»").toHaveCount(1);
     const nav = infoTabsNav(page);
     const buttonBox = await box(button);
     const navBox = await box(nav);

@@ -1299,6 +1299,13 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       {tab === "info" && (
         <div className="editor-form flat-editor-form editor-card-columns">
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация». Раздел может содержать подразделы, собранные из блоков в любом порядке.</p>
+          <SectionAddBar onCreate={(title) => {
+            const id = makeId("info");
+            changeDraft((next) => { next.infoSections.push({ id, title: title || "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] }); });
+            setSelectedInfoSection(id);
+            setOpen([id], true);
+            requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#card-${id} > .nested-editor-body input`)?.focus());
+          }} />
           <SectionTabs label="Разделы информации" sections={draft.infoSections} activeId={activeInfoSection} onSelect={setSelectedInfoSection} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} />
           <EditorToc items={infoTocItems} onJump={jumpInfo} onAll={(open) => setAllOpen(infoCardIds, open)} />
           {draft.infoSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
@@ -1344,7 +1351,6 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               </div>
             </CollapsibleCard>
           )} />
-          <button className="secondary-control" type="button" onClick={() => { const id = makeId("info"); changeDraft((next) => next.infoSections.push({ id, title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] })); setSelectedInfoSection(id); setOpen([id], true); }}>+ ДОБАВИТЬ РАЗДЕЛ</button>
         </div>
       )}
 
