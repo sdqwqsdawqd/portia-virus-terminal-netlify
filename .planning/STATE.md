@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-44-PLAN.md
-last_updated: "2026-11-07T11:33:09.296Z"
+stopped_at: Completed PORTIA-20-46-PLAN.md
+last_updated: "2026-11-07T12:03:16.835Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: 9867d3062c49a2bc0f74ca5c004d931c12aad64d
+state_head: df05717beb758c103bd3f3d0f0c0cc578bfaab46
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 118
-  completed_plans: 112
+  completed_plans: 113
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 18 of 47
+Plan: 19 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-07 — Phase PORTIA-20 execution started
 
@@ -145,6 +145,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P42 | 25 min | 2 tasks | 5 files |
 | Phase PORTIA-20 P43 | 23 min | 3 tasks | 11 files |
 | Phase PORTIA-20 P44 | 120 min | 3 tasks | 7 files |
+| Phase PORTIA-20 P46 | 28 min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -262,6 +263,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: D-55 (20-43): карточка шаблона двухколоночна как у архива только в развёрнутом окне (окно Повышение 760 px < порога 840 px); особый порог отвергнут, решение за владельцем по кадрам 20-47
 - [Phase PORTIA-20]: D-55 (20-44): downloaded HTML and PNG are the archive card itself (VirusCardBody markup + the card's own CSS from the site's sheets, closed policy over HTML and SVG before download); PNG is the SVG foreignObject raster at 1060 CSS px, scale 2 up to 4000 px, refusal above 8000 px
 - [Phase PORTIA-20]: 20-44: typed http(s):/url( in card text is neutralised with a character reference so a typed address never blocks an export; real addresses in attributes still fail the policy
+- [Phase PORTIA-20]: 20-46: D-56 в объёме D-58 выполнен; подсказки сайта сокращены или убраны, components/portia-editor.tsx не менялся; предупреждение теста на ПК (утверждено в 19) оставлено дословно
 
 ### Pending Todos
 
@@ -305,8 +307,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-07T11:33:08.768Z
-Stopped at: Completed PORTIA-20-44-PLAN.md
+Last session: 2026-11-07T12:03:16.275Z
+Stopped at: Completed PORTIA-20-46-PLAN.md
 Resume file: None
 
 ## Operator Next Step
