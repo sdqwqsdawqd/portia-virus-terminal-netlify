@@ -1590,7 +1590,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
           <div className="recommendation-preview" aria-label="Список вариантов рекомендаций">
             <h3>Все варианты</h3>
             <SectionColumns items={draft.searchRecommendations.map((text, index) => ({ text, index })).filter(({ text }) => text.trim())} render={({ text, index }) => (
-              <div className="recommendation-preview-item"><small>{String(index + 1).padStart(2, "0")}</small><span>{text}</span></div>
+              <div className="recommendation-preview-item" key={index}><small>{String(index + 1).padStart(2, "0")}</small><span>{text}</span></div>
             )} />
             {draft.searchRecommendations.every((text) => !text.trim()) && <p className="editor-empty compact-empty">Пока нет вариантов. Добавьте первую строку в поле выше.</p>}
           </div>
