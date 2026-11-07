@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-53-PLAN.md
-last_updated: "2026-11-07T18:52:42.095Z"
+stopped_at: Completed 20-54-PLAN.md (stopped-for-fixes)
+last_updated: "2026-11-07T21:50:07.268Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: ce09135339c57f2c86712a514e5f64d2c5e3bc84
+state_head: cd3f0640dc4b5ec9d7843a9696b3502f4cc3bc8c
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 125
-  completed_plans: 120
+  completed_plans: 121
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 26 of 47
+Plan: 27 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-07 — Phase PORTIA-20 execution resumed (wave continue)
 
@@ -153,6 +153,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P51 | 28 min | 3 tasks | 10 files |
 | Phase PORTIA-20 P52 | 5min | 1 tasks | 1 files |
 | Phase PORTIA-20 P53 | 100min | 3 tasks | 13 files |
+| Phase PORTIA-20 P54 | n/a | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -281,6 +282,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-51: кадр картинки D-63 = три целых числа (x,y 0–100, zoom 100–300), читаются только собственные конечные числа, кадр без картинки и кадр по умолчанию отбрасываются; поля вируса и мутации вынимаются из разворота withoutNote и ставятся заново из нормализованных чисел; PortiaImage нормализует кадр вторым разом, стиль только числами
 - [Phase PORTIA-20]: 20-52: владелец выбрал вариант b — фото сотрудников без выбора кадра; миграции и кода нет, 20-53 не подключает кадр к полю «Фото сотрудника»
 - [Phase PORTIA-20]: 20-53: блок «Видимая часть» во всех полях картинок редактора кроме фото сотрудника (b) и фото-блока страницы карточки; предпросмотр рисует рамку сайта сам (без импорта PortiaImage: граница конструктора шаблона); сброс кадра при смене адреса в обработчике и по метке загрузки; охрана D-64 вырезает атрибуты кадра только из строк <ImageEditorField
+- [Phase PORTIA-20]: 20-54: владелец 2026-11-08 принял 70 строк (колбы, паук, rebaseline, прочие, кнопка раздела в «Информации»), 16 строк на исправление: карточка шаблона (классификация как раньше, всегда две колонки) и выбор видимой части (предпросмотр с рамкой как баннер в Discord вместо ползунков); outcome stopped-for-fixes, 20-12 не запускается
 
 ### Pending Todos
 
@@ -324,8 +326,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-07T18:52:41.454Z
-Stopped at: Completed PORTIA-20-53-PLAN.md
+Last session: 2026-11-07T21:50:06.724Z
+Stopped at: Completed 20-54-PLAN.md (stopped-for-fixes)
 Resume file: None
 
 ## Operator Next Step
