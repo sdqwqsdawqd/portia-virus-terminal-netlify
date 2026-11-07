@@ -248,3 +248,67 @@ HEAD пересъёмки: `0929a084c13dc8cd420152c949c3332e82ed7e67`. Набо�
 ### Блокеры
 
 Незакрытых блокеров нет: B6-B9 исправлены, B1-B5 остаются данными цели (BLOCKED), B4 не изолирован. Физический бюджет кадров на телефоне остаётся BLOCKED до 20-14 (на телефоне getAnimations насчитывает 96).
+
+## Пересъёмка после исправлений D-53..D-57 (20-47)
+
+Коммиты исправлений: паук 20-40 `f7a1faf172a9adbe029f066027e3890a0b18a598` и 20-41 `db151677cf01d45f852b32e14d73725dd515dc70`, колбы 20-42 `859a493fb295cd6a7a879b0f0ae12b25efeac45f`, конструктор шаблона 20-44 `be9af79925cb12dd1d6dcb933d7b48a3de3c956e` (раскладка карточки 20-43), кнопка «ОФОРМЛЕНИЕ» 20-45 `769601524e4d76773bede7be2c1f063365b17211`, подсказки 20-46. Коммит съёмки H4 `ecf5173a5d51616ac3a1f1cc044e2b536a61a2fb`, набор S4 `phase20-refresh-ecf5173a5d51` (в .gitignore). Сборка production на 127.0.0.1:3100 (visitor, только чтение, `PORTIA_E2E_ALLOW_HTTP=1`, Node 22.13.1, прямые команды: `npm run` падает на node-gyp), код app/components/public/lib равен H4. Эталоны `tests/e2e/visual/__screenshots__` не менялись (`git status --porcelain` пуст, флаг обновления не использовался).
+
+### Прогоны на H4 (`--retries=0`)
+
+- Обязательные проверки до показа: UI-контракт конструктора (`template-builder.spec.ts` и полоса «template builder» в `accessibility.spec.ts`, chromium-desktop и chromium-phone): 32 passed, ноль запросов записи. `phase20-art.spec.ts` в S4: 60 passed. `visual-candidates/template-builder.spec.ts` в S4: 8 passed.
+- Остальные кандидатные спеки (apps, desktop, editor, motion, info-phone, class-icons, empty-art, promotion) на всех проектах: 157 passed, 153 skipped (чужие проекты), 0 failed.
+- Спек сопровождения галереи `phase20-review-extras.spec.ts` (новый): 8 passed, ноль запросов записи; ролики ходьбы паука (два акцента × два проекта), ролики колб (два проекта), скачанные HTML и PNG, снимки открытого HTML без сети в `S4/extras/`.
+- Прежние эталоны: chromium-desktop и chromium-dpr125: 11 failed, 5 passed, 14 skipped; chromium-phone, webkit-phone, firefox-desktop: 5 failed, 40 skipped, 0 passed.
+
+### Сводка по разделам ledger
+
+| Раздел ledger | Строк CANDIDATE | Тот же SHA256 / прежнее одобрение | Новый SHA256 / ОЖИДАЕТ | Что изменилось |
+| --- | ---: | ---: | ---: | --- |
+| 1. Паук | 16 | 0 | 16 | Паук D-53 (20-40, 20-41); `spider-off` изменил байты без паука в кадре |
+| 2. Колбы | 12 | 0 | 12 | Фон D-54 (20-42) |
+| 3. Пустые состояния | 16 | 8 | 8 | Область паука у PC (8 строк PC); телефон не изменился |
+| 4. Promotion (участник) | 10 | 0 | 10 | Подсказки D-56 (20-46); у четырёх ранее принятых строк телефона прежнее одобрение не перенесено |
+| 5. Иконки классов | 5 | 5 | 0 | Панели без паука, байты те же |
+| 6. «Информация» на телефоне | 6 | 5 | 1 | `info-phone-next:phone-webkit` изменился ниже порога канала 16 (ранее «принято», сброшен) |
+| 10. Прежние эталоны (rebaseline-*) | 24 | 0 | 24 | 22 существующих и 2 новых строки; `application-information` переведена в BLOCKED (DATA) |
+| Конструктор шаблона (D-55, раздел 4) | 8 | 0 | 8 | Карточка базы вирусов (20-43, 20-44) |
+
+Итого 133 строки: 16 принято (те же байты), 81 ОЖИДАЕТ, 36 BLOCKED, «исправить» 0. Ни один изменившийся SHA256 не оставлен с вердиктом «принято»; 36 строк раунда 13 (с `spider-off`) показаны заново.
+
+### Прежние эталоны на H4
+
+Тест останавливается на первом упавшем снимке; снимки, до которых гейт не дошёл, оценены компаратором гейта (`getComparator`, допуск и порог политики снимка) по кадру кандидата того же сценария и помечены «оценка».
+
+| Снимок / проект | Итог, пиксели (допуск) | Класс / строка ledger |
+| --- | --- | --- |
+| `application-broadcasts--chromium-desktop` | FAIL 4868 (2300) | паук D-53 и рисунок пустого состояния; существующая строка ОЖИДАЕТ |
+| `application-guide--chromium-desktop` | FAIL 5685 (2300) | то же; существующая строка |
+| `application-settings--chromium-desktop` | FAIL 23187 (2300) | подпись окна убрана по D-56 (h-13), паук D-53; существующая строка |
+| `application-search--chromium-desktop` | FAIL 21876 (2300) | подпись убрана по D-56 (h-11), паук D-53, данные «Рекомендаций»; существующая строка |
+| `application-information--chromium-desktop` | PASS | на H3 падал на 25449 px из-за данных цели (B1); строка переведена в BLOCKED (DATA), PASS на сегодняшних данных не доказательство |
+| `application-virus-archive--chromium-desktop` | PASS | B3, данные цели, строка BLOCKED (DATA) без изменений |
+| `application-trash--chromium-desktop` | FAIL 12158 (2300) | B2, данные цели, строка BLOCKED (DATA); actual в `S4/_work/blocker-actuals/` |
+| `application-employees`, `application-table`, `application-charter` | PASS | строк нет |
+| `editor-visitor-denied--chromium-desktop` | FAIL 22790 (2300) | кадр показывает окно «Настройки»: D-56 (h-13), паук D-53; существующая строка |
+| `editor-signed-out-login--chromium-desktop` | оценка 10301 (2300) | подпись входа сокращена по D-56 (h-01); НОВАЯ строка |
+| `promotion-participant-lookup--chromium-desktop` | FAIL 21225 (2300); на H3 проходил | подсказки «Повышения» по D-56 (h-109, h-110, h-112), паук; НОВАЯ строка |
+| `desktop-clean` на chromium-desktop, chromium-dpr125, firefox-desktop, chromium-phone | FAIL 1091, 1659, 1066, 4975 (256) | паук D-53; существующие строки |
+| `desktop-dpr125--chromium-dpr125`, `phone-chromium--chromium-phone` | FAIL 1659, 4884 (256) | паук D-53; существующие строки |
+| `desktop-start-open` на webkit-phone | FAIL 411 (256) | существующая строка |
+| `desktop-start-open` на chromium-desktop, chromium-dpr125, firefox-desktop, chromium-phone | оценка 924, 1442, 912, 669 (256) | существующие строки |
+| `motion-web-rest`, `motion-vivian-idle`, `motion-vivian-activity` | PASS в допуске (оценка по кадру кандидата 1818, 1748, 3925 при 2300: фраза Вивьян) | существующие строки; кадры показываются для сравнения |
+| `motion-vivian-offended--chromium-desktop` | FAIL 2321 (2300) | существующая строка |
+| `motion-vivian-recovery--chromium-desktop` | оценка 2438 (2300) | существующая строка |
+| `window-search-minimized--firefox-desktop` | оценка 1183 (256) | существующая строка |
+| `window-search-restored`, `window-search-maximized` на firefox-desktop | оценка 17540, 26758 (256) | B5, данные «Рекомендаций», строки BLOCKED (DATA) |
+| `phone-webkit--webkit-phone` | FAIL 57837 (256) | B4, причина полосы прокрутки не изолирована, BLOCKED; строки в ledger нет |
+
+### Допущения исполнителя
+
+- `application-information` переведена из CANDIDATE в BLOCKED (DATA): гейт проходит на сегодняшних данных цели, нового actual нет; тот же подход, что у `application-virus-archive`. Если владелец предпочтёт оставить строку кадром кандидата, это решение плана 20-12.
+- Откройте-файл-офлайн снимок конструктора на проекте chromium-phone масштабирован (DPR контекста), содержимое то же.
+- В HTML и PNG шаблона слово «Предупреждение» в ячейке «Угроза и риск побега» переносится посреди слова («Предупреждени-е») при ширине 1280; шрифты в файл не встраиваются (D-24), запасные шрифты шире. Это на показ владельцу (допущение 20-44), не блокер.
+
+### Блокеры
+
+Незакрытых блокеров нет. B1-B5 остаются данными цели (BLOCKED), B4 не изолирован. Физический бюджет кадров на телефоне остаётся BLOCKED до 20-14 (на телефоне показано 55 из 118 анимаций колб при пределе 80, замер в `flasks-animation-count--chromium-phone.json`).
