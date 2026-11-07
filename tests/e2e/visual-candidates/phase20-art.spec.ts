@@ -696,7 +696,7 @@ test("[STAB-VIS-02] D-22 a stored wallpaper outside the allowlist falls back to 
 
 // D-51 (20-34): the old rules "four flasks", "right of centre" and "two or three on a phone" are replaced by the owner's answers F1-А / F2 / F6-А:
 // a lab of many vessels across the lower half of the screen; a phone shows the richest right strip with 2-4 whole vessels.
-const FLASK_COUNT = 12, PHONE_FLASKS = 4, MAX_INFINITE_ANIMATIONS = 100;
+const FLASK_COUNT = 12, PHONE_FLASKS = 4;
 // D-51 (20-34): the table of expected cycles covers all twelve vessels. The first four are the D-22 pairs; the rest are new, authored values.
 // It must change together with flaskSpecs in components/portia-wallpaper.tsx.
 const wantedCycles = [
@@ -804,9 +804,9 @@ test("[STAB-VIS-02] D-51 twelve vessels on PC, four on a phone, each with its ow
   expect(escapes.out, `${escapes.checked} bubble positions checked`).toEqual([]);
   // D-51 (20-34): one clipped bubble group per animated vessel, twelve (was four).
   expect(await page.locator(".wallpaper-flask-bubbles[clip-path]").count(), "every bubble group is also clipped by the glass").toBe(FLASK_COUNT);
-  // D-51 (20-34): a budget on the endless animations inside the drawing (cost on a phone); the actual number is recorded.
+  // D-51 (20-34): a budget on the endless animations inside the drawing (cost on a phone). D-54 (20-37): the limit is now 140 (was 100) and is declared with its
+  // reasons below; the actual numbers are recorded by the D-54 budget test (flasks-animation-count--<project>.json).
   const infinite = await page.evaluate(() => document.getAnimations().filter((animation) => ((animation.effect as KeyframeEffect | null)?.target as Element | null)?.closest(".wallpaper-flasks") && animation.effect!.getTiming().iterations === Infinity).length);
-  writeRun(`flasks-animation-count--${testInfo.project.name}.json`, { project: testInfo.project.name, infiniteAnimationsInDrawing: infinite, shownVessels: shown.length, budget: MAX_INFINITE_ANIMATIONS });
   expect(infinite, "endless animations inside the drawing").toBeLessThanOrEqual(MAX_INFINITE_ANIMATIONS);
   expect(infinite).toBeGreaterThan(shown.length * 5);
 
@@ -1103,6 +1103,303 @@ for (const accent of accents) {
       intendedSnapshot: `tests/e2e/visual/__screenshots__/phase20-flasks-accent-${accent.id}--${testInfo.project.name}.png`,
       animations: "allow",
     });
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// D-54 (20-37, plan 20-42): the owner asked for more motion in «Лабораторные колбы» — a flickering flame, moving vessels on the back shelf, a ticking
+// clock — and for less empty space. The contract below is new; every number that was changed is marked «D-54 (20-37)».
+// ---------------------------------------------------------------------------------------------------------------------
+
+// D-54 (20-37): the shelf cycles. One entry per still-until-now shelf vessel that holds liquid, in the order of `shelfItems` (lamp skipped) in
+// components/portia-wallpaper.tsx. Durations 5.4–10.6 s, all different, all phases different, the first glow peaks 380 ms apart or more.
+// This table and `shelfCycles` in the component change only together.
+const SHELF_CYCLES = [
+  { duration: 7300, delay: -3250 }, { duration: 5600, delay: -2020 }, { duration: 9400, delay: -3540 }, { duration: 6200, delay: -1560 },
+  { duration: 10600, delay: -3380 }, { duration: 8100, delay: -1750 }, { duration: 5900, delay: -270 }, { duration: 9000, delay: -1440 },
+  { duration: 6800, delay: -6760 }, { duration: 10100, delay: -1230 }, { duration: 7700, delay: -7350 }, { duration: 5400, delay: -3520 },
+  { duration: 8600, delay: -7940 }, { duration: 6500, delay: -4410 },
+];
+
+type CycleProbe = { name: string; duration: number; delay: number; iterations: number; properties: string[]; easing: string; frames: number; firstPeakMs: number | null; visible: boolean };
+
+// Every running animation whose target matches the selector: its timing, the properties its keyframes touch, and the first time (ms) its opacity is at the maximum.
+const cyclesOf = (page: Page, selector: string): Promise<Array<CycleProbe & { index: number }>> => page.evaluate((query) => {
+  const targets = [...document.querySelectorAll(query)];
+  return document.getAnimations().flatMap((animation) => {
+    const effect = animation.effect as KeyframeEffect | null;
+    const target = effect?.target as Element | null;
+    if (!effect || !target || !targets.includes(target)) return [];
+    const timing = effect.getTiming();
+    const frames = effect.getKeyframes();
+    const properties = [...new Set(frames.flatMap((frame) => Object.keys(frame).filter((key) => !["offset", "computedOffset", "easing", "composite"].includes(key))))].sort();
+    const original = animation.currentTime;
+    animation.pause();
+    const duration = Number(timing.duration), delay = Number(timing.delay);
+    let best = -1, peak: number | null = null;
+    if (properties.includes("opacity")) {
+      for (let at = 0; at < duration; at += 20) {
+        animation.currentTime = delay + at;
+        const value = Number(getComputedStyle(target).opacity);
+        if (value > best + 1e-6) { best = value; peak = at; }
+      }
+    }
+    animation.currentTime = original;
+    animation.play();
+    let hidden = false;
+    for (let node: Element | null = target; node; node = node.parentElement) if (getComputedStyle(node).display === "none") hidden = true;
+    return [{ index: targets.indexOf(target), name: (animation as CSSAnimation).animationName, duration, delay, iterations: Number(timing.iterations), properties, easing: String(timing.easing), frames: frames.length, firstPeakMs: peak === null ? null : ((peak + delay) % duration + duration) % duration, visible: !hidden }];
+  }).sort((a, b) => a.index - b.index);
+}, selector);
+
+const insideViewport = (box: { left: number; right: number; top: number; bottom: number }, page: Page) => {
+  const view = page.viewportSize()!;
+  return box.left >= -0.5 && box.top >= -0.5 && box.right <= view.width + 0.5 && box.bottom <= view.height + 0.5;
+};
+const rectsOf = (page: Page, selector: string) => page.evaluate((query) => [...document.querySelectorAll(query)].map((element) => {
+  const box = element.getBoundingClientRect();
+  let hidden = false;
+  for (let node: Element | null = element; node; node = node.parentElement) if (getComputedStyle(node).display === "none") hidden = true;
+  return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, hidden };
+}), selector);
+
+// A frame measured the way the contrast test measures it: shortcuts, Vivian, the top bar and the taskbar hidden, the clip is the rectangle of the drawing
+// cut to the work area.
+async function measureClip(page: Page) {
+  await page.addStyleTag({ content: ".desktop-icon, .desktop-icons, .desktop-assistant, .system-bar, .taskbar { visibility: hidden !important; }" });
+  return page.evaluate(() => {
+    const art = document.querySelector(".wallpaper-flasks")!.getBoundingClientRect();
+    const top = document.querySelector(".system-bar")!.getBoundingClientRect().bottom, bottom = document.querySelector(".taskbar")!.getBoundingClientRect().top;
+    const x = Math.max(0, Math.floor(art.left)), y = Math.max(Math.ceil(top), Math.floor(art.top));
+    return { x, y, width: Math.min(window.innerWidth, Math.ceil(art.right)) - x, height: Math.min(Math.floor(bottom), Math.ceil(art.bottom)) - y, artHeight: art.height, artTop: art.top, artBottom: art.bottom, viewportHeight: window.innerHeight };
+  });
+}
+
+// Cells of 48 CSS px over the clip: a cell is empty when its brightest pixel is less than 0.01 of relative luminance above the median of the darkest 10% of the frame.
+async function emptyCellsOf(page: Page, png: Buffer, dpr: number) {
+  return page.evaluate(async ([base64, ratio]) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }), { colorSpaceConversion: "none" });
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const context = canvas.getContext("2d")!;
+    context.drawImage(bitmap, 0, 0);
+    const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+    const linear = (value: number) => { const unit = value / 255; return unit <= 0.04045 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4; };
+    const width = bitmap.width, height = bitmap.height;
+    const lum = new Float32Array(width * height);
+    for (let at = 0; at < lum.length; at += 1) lum[at] = 0.2126 * linear(data[at * 4]) + 0.7152 * linear(data[at * 4 + 1]) + 0.0722 * linear(data[at * 4 + 2]);
+    const sorted = Float32Array.from(lum).sort();
+    const darkest = sorted[Math.floor(sorted.length * 0.05)];
+    const cell = Math.max(2, Math.round(48 * ratio));
+    let total = 0, empty = 0;
+    for (let top = 0; top < height; top += cell) {
+      for (let left = 0; left < width; left += cell) {
+        let brightest = 0;
+        for (let y = top; y < Math.min(height, top + cell); y += 1) for (let x = left; x < Math.min(width, left + cell); x += 1) brightest = Math.max(brightest, lum[y * width + x]);
+        total += 1;
+        if (brightest - darkest < 0.01) empty += 1;
+      }
+    }
+    return { total, empty, darkest };
+  }, [png.toString("base64"), dpr] as const);
+}
+
+// D-54 (20-37): the empty cells of the drawing at HEAD 33552db (замер 20-42 на 33552db, «Выключены», the same clip and the same threshold).
+const HEAD_EMPTY_CELLS: Record<string, number | null> = { "chromium-desktop": 78, "chromium-phone": 25 };
+const MAX_DRAWING_HEIGHT_SHARE = 0.62; // D-51 F2: «половина экрана или чуть больше»
+const MAX_EMPTY_SHARE_OF_HEAD = 0.6; // D-54: at least 40% fewer empty cells than HEAD
+
+test("[STAB-VIS-02] D-54 coverage: less empty space inside the drawing (cells of 48 px), and the drawing stays within 62% of the screen height", async ({ page }, testInfo) => {
+  const project = testInfo.project.name;
+  await openFlasks(page, { motion: "off" });
+  const clip = await measureClip(page);
+  const dpr = await page.evaluate(() => window.devicePixelRatio);
+  const cells = await emptyCellsOf(page, await page.screenshot({ clip, animations: "allow" }), dpr);
+  const head = HEAD_EMPTY_CELLS[project];
+  const heightShare = clip.artHeight / clip.viewportHeight;
+  writeRun(`flasks-coverage-${project}.json`, { project, emptyCells: cells.empty, totalCells: cells.total, emptyShare: cells.empty / cells.total, headEmptyCells: head, ratioToHead: head ? cells.empty / head : null, darkestLuminance: cells.darkest, cell: 48, heightShare, drawingTop: clip.artTop, drawingBottom: clip.artBottom, clip });
+  console.log(`[D-54 coverage] ${project}: empty ${cells.empty} of ${cells.total}, height share ${heightShare.toFixed(3)}, head ${head}`);
+  expect(heightShare, "the drawing is not taller than 62% of the screen (D-51 F2)").toBeLessThanOrEqual(MAX_DRAWING_HEIGHT_SHARE);
+  expect(head, "the HEAD number is recorded (замер 20-42 на 33552db)").not.toBeNull();
+  // D-54: the PC frame must lose at least 40% of the empty cells; the phone number is recorded and its frame is checked by its own test.
+  if (!isPhone(project)) expect(cells.empty, `empty cells against HEAD ${head}`).toBeLessThanOrEqual(Math.floor(head! * MAX_EMPTY_SHARE_OF_HEAD));
+});
+
+test("[STAB-VIS-02] D-54 the flame flickers: the burner and the lamps each flicker on their own irregular cycle, outer layer and core, opacity and transform only", async ({ page }, testInfo) => {
+  await openFlasks(page, { motion: "on" });
+  const flames = await cyclesOf(page, ".wallpaper-flask-flame");
+  const cores = await cyclesOf(page, ".wallpaper-flask-flame-core");
+  const count = await page.locator(".wallpaper-flask-flame").count();
+  expect(count, "the burner, the alcohol lamp and one more flame on the shelf (a phone sees that one)").toBeGreaterThanOrEqual(3);
+  expect(await page.locator(".wallpaper-flask-flame-core").count(), "every flame has a core").toBe(count);
+  for (const cycle of [...flames, ...cores]) {
+    expect(cycle.iterations, "a flame flickers for ever").toBe(Infinity);
+    expect(cycle.properties, "only opacity and transform").toEqual(["opacity", "transform"]);
+    expect(cycle.frames, "an irregular cycle has more than three keyframes").toBeGreaterThanOrEqual(5);
+  }
+  expect(flames.length, "every outer layer is animated, once").toBe(count);
+  expect(cores.length, "every core is animated, once").toBe(count);
+  const lengths = [...flames, ...cores].map((cycle) => cycle.duration);
+  expect(new Set(lengths).size, "every flame layer has its own cycle length").toBe(lengths.length);
+  for (const cycle of [...flames, ...cores]) expect(cycle.duration, "a flicker is quick, 0.8–3 s").toBeGreaterThanOrEqual(800);
+  for (const cycle of [...flames, ...cores]) expect(cycle.duration).toBeLessThanOrEqual(3_000);
+  if (isPhone(testInfo.project.name)) {
+    const shown = (await rectsOf(page, ".wallpaper-flask-flame")).filter((box) => !box.hidden && insideViewport(box, page));
+    expect(shown.length, "a phone shows at least one flickering flame whole").toBeGreaterThanOrEqual(1);
+  }
+});
+
+test("[STAB-VIS-02] D-54 the clock ticks: the second hand steps once a second (60 s, 60 steps), the minute hand turns in 3600 s, both around the dial centre; still hands in the stopped modes", async ({ page }, testInfo) => {
+  await openFlasks(page, { motion: "on" });
+  const second = await cyclesOf(page, ".wallpaper-flask-clock-second");
+  const minute = await cyclesOf(page, ".wallpaper-flask-clock-minute");
+  expect(second, "one animation on the second hand").toHaveLength(1);
+  expect(minute, "one animation on the minute hand").toHaveLength(1);
+  expect(second[0].duration).toBe(60_000);
+  expect(second[0].iterations).toBe(Infinity);
+  expect(second[0].properties).toEqual(["transform"]);
+  expect(minute[0].duration).toBe(3_600_000);
+  expect(minute[0].iterations).toBe(Infinity);
+  expect(minute[0].properties).toEqual(["transform"]);
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector(".wallpaper-flask-clock-second")!).animationTimingFunction), "the second hand steps").toMatch(/^steps\(60/);
+  // The angle of the second hand against the time: it does not move inside a second and jumps 6 degrees on the beat.
+  const angleAt = (time: number) => page.evaluate((ms) => {
+    const hand = document.querySelector(".wallpaper-flask-clock-second")!;
+    const animation = document.getAnimations().find((candidate) => (candidate.effect as KeyframeEffect).target === hand)!;
+    animation.pause();
+    animation.currentTime = ms;
+    const [a, b] = getComputedStyle(hand).transform.replace(/matrix\(|\)/g, "").split(",").map(Number);
+    return (Math.atan2(b, a) * 180) / Math.PI;
+  }, time);
+  const wrap = (value: number) => ((value + 540) % 360) - 180;
+  const start = await angleAt(0);
+  expect(Math.abs(wrap((await angleAt(990)) - start)), "no creeping between beats").toBeLessThan(0.01);
+  expect(Math.abs(wrap((await angleAt(1010)) - start) - 6), "a 6 degree step on the beat").toBeLessThan(0.05);
+  expect(Math.abs(wrap((await angleAt(30_500)) - start) - 180), "half a turn in 30 s").toBeLessThan(0.05);
+  // Both hands turn around the dial centre: the middle of a hand's box walks round the middle of the dial.
+  const handsAround = async (selector: string, times: number[]) => page.evaluate(([query, stops]) => {
+    const hand = document.querySelector(query as string)!;
+    const dial = document.querySelector(".wallpaper-flask-clock-face")!.getBoundingClientRect();
+    const animation = document.getAnimations().find((candidate) => (candidate.effect as KeyframeEffect).target === hand)!;
+    animation.pause();
+    const centres = (stops as number[]).map((ms) => {
+      animation.currentTime = ms;
+      const box = hand.getBoundingClientRect();
+      return { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
+    });
+    return { centres, middle: { x: (dial.left + dial.right) / 2, y: (dial.top + dial.bottom) / 2 }, radius: dial.width / 2 };
+  }, [selector, times] as const);
+  const secondRound = await handsAround(".wallpaper-flask-clock-second", [0, 15_000, 30_000, 45_000]);
+  const meanX = secondRound.centres.reduce((sum, point) => sum + point.x, 0) / 4, meanY = secondRound.centres.reduce((sum, point) => sum + point.y, 0) / 4;
+  expect(Math.abs(meanX - secondRound.middle.x), "second hand pivots on the dial centre (x)").toBeLessThan(secondRound.radius * 0.12);
+  expect(Math.abs(meanY - secondRound.middle.y), "second hand pivots on the dial centre (y)").toBeLessThan(secondRound.radius * 0.12);
+  const spread = Math.max(...secondRound.centres.map((point) => point.x)) - Math.min(...secondRound.centres.map((point) => point.x));
+  expect(spread, "the second hand sweeps round the dial").toBeGreaterThan(secondRound.radius * 0.6);
+  const minuteRound = await handsAround(".wallpaper-flask-clock-minute", [0, 900_000, 1_800_000, 2_700_000]);
+  const minuteSpread = Math.max(...minuteRound.centres.map((point) => point.y)) - Math.min(...minuteRound.centres.map((point) => point.y));
+  expect(minuteSpread, "the minute hand sweeps round the dial too").toBeGreaterThan(minuteRound.radius * 0.5);
+  if (isPhone(testInfo.project.name)) {
+    const [dial] = await rectsOf(page, ".wallpaper-flask-clock-face");
+    expect(dial.hidden, "a phone shows the clock").toBe(false);
+    expect(insideViewport(dial, page), "the dial is whole in a phone's frame").toBe(true);
+  }
+});
+
+test("[STAB-VIS-02] D-54 the shelf vessels move: every vessel with liquid on the back shelf has one overflow cycle of its own (duration and phase), opacity and transform only", async ({ page }, testInfo) => {
+  await openFlasks(page, { motion: "on" });
+  const liquids = await page.locator(".wallpaper-flask-scene-liquid").count();
+  expect(liquids, "fourteen shelf vessels hold liquid").toBe(SHELF_CYCLES.length);
+  const cycles = await cyclesOf(page, ".wallpaper-flask-scene-liquid");
+  expect(cycles, "exactly one animation on each shelf liquid").toHaveLength(SHELF_CYCLES.length);
+  for (const cycle of cycles) {
+    expect(cycle.iterations).toBe(Infinity);
+    expect(cycle.properties, "only opacity and transform").toEqual(["opacity", "transform"]);
+    expect(cycle.duration, "5–11 s").toBeGreaterThanOrEqual(5_000);
+    expect(cycle.duration).toBeLessThanOrEqual(11_000);
+    expect({ duration: cycle.duration, delay: cycle.delay }, `shelf vessel ${cycle.index} follows the table`).toEqual(SHELF_CYCLES[cycle.index]);
+  }
+  const pairs = cycles.map((cycle) => `${cycle.duration}/${cycle.delay}`);
+  expect(new Set(pairs).size, "duration and phase differ pair by pair").toBe(pairs.length);
+  expect(new Set(cycles.map((cycle) => cycle.duration)).size, "every vessel has its own length").toBe(cycles.length);
+  expect(new Set(cycles.map((cycle) => cycle.delay)).size, "every vessel has its own phase").toBe(cycles.length);
+  // First opacity peaks: the time of the first maximum counted from now.
+  const peaks = cycles.map((cycle) => cycle.firstPeakMs!);
+  expect(peaks.every((peak) => peak !== null), "every cycle has an opacity peak").toBe(true);
+  const sorted = [...peaks].sort((a, b) => a - b);
+  for (let at = 1; at < sorted.length; at += 1) expect(sorted[at] - sorted[at - 1], "the first peaks of two shelf vessels are more than 300 ms apart").toBeGreaterThan(300);
+  if (isPhone(testInfo.project.name)) {
+    const shown = (await rectsOf(page, ".wallpaper-flask-scene-liquid")).filter((box) => !box.hidden && insideViewport(box, page));
+    expect(shown.length, "a phone sees moving shelf vessels").toBeGreaterThanOrEqual(3);
+  }
+});
+
+// D-54 (20-37): the endless-animation limit inside the drawing goes from 100 to 140 and a limit of 80 is added for the animations a phone actually shows.
+// The old number was a technical guide set by plan 20-36, not by the owner; D-54 asks for more motion; the extra motion is only opacity and transform
+// (compositor properties) and no page code reads layout per frame. Merging the shelf cycles into shared groups was rejected: the owner has already complained
+// about uniformity (D-51). The budget on real hardware stays BLOCKED until 20-14.
+const MAX_INFINITE_ANIMATIONS = 140, MAX_PHONE_ANIMATIONS = 80;
+
+test("[STAB-A11Y-04] D-54 budget: at most 140 endless animations in the drawing on a PC and 80 shown on a phone, only opacity and transform inside it", async ({ page }, testInfo) => {
+  const project = testInfo.project.name;
+  await openFlasks(page, { motion: "on" });
+  const probe = await page.evaluate(() => {
+    const inside = document.getAnimations().filter((animation) => ((animation.effect as KeyframeEffect | null)?.target as Element | null)?.closest(".wallpaper-flasks"));
+    const shown = inside.filter((animation) => {
+      for (let node: Element | null = (animation.effect as KeyframeEffect).target as Element; node; node = node.parentElement) if (getComputedStyle(node).display === "none") return false;
+      return true;
+    });
+    const properties = [...new Set(inside.flatMap((animation) => (animation.effect as KeyframeEffect).getKeyframes().flatMap((frame) => Object.keys(frame).filter((key) => !["offset", "computedOffset", "easing", "composite"].includes(key)))))].sort();
+    const finite = inside.filter((animation) => animation.effect!.getTiming().iterations !== Infinity).length;
+    const infinite = inside.filter((animation) => animation.effect!.getTiming().iterations === Infinity).length;
+    const shownInfinite = shown.filter((animation) => animation.effect!.getTiming().iterations === Infinity).length;
+    const shelfLiquids = [...document.querySelectorAll(".wallpaper-flask-scene-liquid")].filter((element) => { for (let node: Element | null = element; node; node = node.parentElement) if (getComputedStyle(node).display === "none") return false; return true; }).length;
+    return { total: inside.length, finite, infinite, shownInfinite, properties, shelfLiquids, vessels: [...document.querySelectorAll<SVGGElement>(".wallpaper-flask")].filter((flask) => getComputedStyle(flask).display !== "none").length };
+  });
+  writeRun(`flasks-animation-count--${project}.json`, { project, infiniteAnimationsInDrawing: probe.infinite, shownInfiniteAnimations: probe.shownInfinite, finiteAnimations: probe.finite, shownVessels: probe.vessels, shownShelfVessels: probe.shelfLiquids, budgetPc: MAX_INFINITE_ANIMATIONS, budgetPhoneShown: MAX_PHONE_ANIMATIONS, properties: probe.properties });
+  expect(probe.properties, "every keyframe inside the drawing animates only opacity and transform (D-54)").toEqual(["opacity", "transform"]);
+  expect(probe.finite, "nothing inside the drawing is a one-shot").toBe(0);
+  expect(probe.infinite, "endless animations inside the drawing (D-54: 140, was 100)").toBeLessThanOrEqual(MAX_INFINITE_ANIMATIONS);
+  expect(probe.infinite, "and the drawing is really busy").toBeGreaterThan(probe.vessels * 5);
+  if (isPhone(project)) expect(probe.shownInfinite, "animations with a displayed target on a phone (D-54: new limit 80)").toBeLessThanOrEqual(MAX_PHONE_ANIMATIONS);
+});
+
+// D-54 (20-37): the label contrast is measured not only in the stopped frame but at the brightest moment — every animation of the drawing paused at the
+// moment its own opacity is the highest (an animation without opacity at its start).
+for (const accent of accents) {
+  test(`[STAB-VIS-02] D-54 (20-37) peak: the shortcut label stays readable over the brightest part of the drawing when every animation is at its brightest, on the ${accent.label}`, async ({ page }, testInfo) => {
+    await openFlasks(page, { ...accent.settings, motion: "on" });
+    await page.waitForTimeout(700); // the layer's own fade-in is a real-time animation outside the drawing
+    const clip = await measureClip(page);
+    await page.evaluate(() => {
+      for (const animation of document.getAnimations()) {
+        const effect = animation.effect as KeyframeEffect | null;
+        const target = effect?.target as Element | null;
+        if (!effect || !target?.closest(".wallpaper-flasks")) continue;
+        const timing = effect.getTiming();
+        let best = -1, at = 0;
+        for (const frame of effect.getKeyframes()) {
+          if (frame.opacity === undefined || frame.opacity === null) continue;
+          const value = Number.parseFloat(String(frame.opacity));
+          if (value > best) { best = value; at = Number(frame.computedOffset); }
+        }
+        animation.pause();
+        animation.currentTime = Number(timing.delay) + at * Number(timing.duration);
+      }
+    });
+    const peakCount = await page.evaluate(() => document.getAnimations().filter((animation) => ((animation.effect as KeyframeEffect | null)?.target as Element | null)?.closest(".wallpaper-flasks") && animation.playState === "paused").length);
+    expect(peakCount, "every animation of the drawing is held at its peak").toBeGreaterThan(50);
+    const region = await lumaStats(page, await page.screenshot({ clip, animations: "allow" }), await page.evaluate(() => window.devicePixelRatio));
+    const label = await page.evaluate(() => {
+      const probe = document.createElement("canvas").getContext("2d")!;
+      probe.fillStyle = getComputedStyle(document.querySelector(".desktop-icon")!).color;
+      probe.fillRect(0, 0, 1, 1);
+      const [r, g, b] = probe.getImageData(0, 0, 1, 1).data;
+      const linear = (value: number) => { const unit = value / 255; return unit <= 0.04045 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4; };
+      return { rgb: [r, g, b], luminance: 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b) };
+    });
+    const contrast = (label.luminance + 0.05) / (region.area + 0.05);
+    writeRun(`flasks-contrast-peak-${accent.id}--${testInfo.project.name}.json`, { accent: accent.id, project: testInfo.project.name, animationsAtPeak: peakCount, labelRgb: label.rgb, labelLuminance: label.luminance, brightest8pxSquareLuminance: region.area, brightestSinglePixelLuminance: region.peak, contrastOver8pxSquare: contrast, textThreshold: 4.5, clip });
+    expect(contrast, `shortcut label vs the brightest 8 px square at the peak of every animation (${accent.label})`).toBeGreaterThanOrEqual(4.5);
   });
 }
 
