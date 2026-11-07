@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-43-PLAN.md
-last_updated: "2026-11-07T08:07:14.249Z"
+stopped_at: Completed PORTIA-20-44-PLAN.md
+last_updated: "2026-11-07T11:33:09.296Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: 043760a7b8734de7765ad916846c3a5097d414b4
+state_head: 9867d3062c49a2bc0f74ca5c004d931c12aad64d
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 118
-  completed_plans: 111
+  completed_plans: 112
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 17 of 47
+Plan: 18 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-07 — Phase PORTIA-20 execution started
 
@@ -144,6 +144,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P41 | 9 min | 2 tasks | 6 files |
 | Phase PORTIA-20 P42 | 25 min | 2 tasks | 5 files |
 | Phase PORTIA-20 P43 | 23 min | 3 tasks | 11 files |
+| Phase PORTIA-20 P44 | 120 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -259,6 +260,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: D-54 (20-42): часы колб под полкой справа (x 1258, y 414), чтобы рисунок оставался 55.8% высоты и телефон видел циферблат; замер пика приводит время в пределы цикла (отрицательное currentTime не принимается)
 - [Phase PORTIA-20]: D-55 (20-43): предпросмотр шаблона рисует тот же VirusCardBody, что публичное досье (portia-virus-card.tsx); разметка досье побайтно прежняя; переключатель Поля/Предпросмотр, высота формы на PC 2033 -> 769 px
 - [Phase PORTIA-20]: D-55 (20-43): карточка шаблона двухколоночна как у архива только в развёрнутом окне (окно Повышение 760 px < порога 840 px); особый порог отвергнут, решение за владельцем по кадрам 20-47
+- [Phase PORTIA-20]: D-55 (20-44): downloaded HTML and PNG are the archive card itself (VirusCardBody markup + the card's own CSS from the site's sheets, closed policy over HTML and SVG before download); PNG is the SVG foreignObject raster at 1060 CSS px, scale 2 up to 4000 px, refusal above 8000 px
+- [Phase PORTIA-20]: 20-44: typed http(s):/url( in card text is neutralised with a character reference so a typed address never blocks an export; real addresses in attributes still fail the policy
 
 ### Pending Todos
 
@@ -302,8 +305,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-07T08:07:13.617Z
-Stopped at: Completed PORTIA-20-43-PLAN.md
+Last session: 2026-11-07T11:33:08.768Z
+Stopped at: Completed PORTIA-20-44-PLAN.md
 Resume file: None
 
 ## Operator Next Step
