@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-41-PLAN.md
-last_updated: "2026-11-07T07:12:20.071Z"
+stopped_at: Completed PORTIA-20-42-PLAN.md
+last_updated: "2026-11-07T07:40:56.428Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: 798e30b62a684586a8def02d1de0af985c536ed3
+state_head: a8c2f27bc85b1a2cc0ed8f730aa82ff7b2ddfb68
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 118
-  completed_plans: 109
+  completed_plans: 110
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 15 of 47
+Plan: 16 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-07 — Phase PORTIA-20 execution started
 
@@ -142,6 +142,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P45 | 3 min | 2 tasks | 2 files |
 | Phase PORTIA-20 P20-40 | 8 min | 2 tasks | 7 files |
 | Phase PORTIA-20 P41 | 9 min | 2 tasks | 6 files |
+| Phase PORTIA-20 P42 | 25 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -253,6 +254,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-40 (D-53): spider rim layer, rule and --spider-rim token removed entirely (cancels S1-A of D-50); legs have no white, strand follows accent; dark-accent legibility comes from the white body only (owner accepts); spider_art_commit f7a1faf172a9adbe029f066027e3890a0b18a598
 - [Phase PORTIA-20]: D-53 (20-41): размах каждой ноги считается из её длины (legSwingDegrees, LEG_REACH), около 9-10° у всех пар; таблицы размахов и подгиба по парам удалены — Ход стопы за опору 0.8-1.2 пути тела; задние пары на HEAD давали 0.25 и 0.49 и выглядели неподвижными
 - [Phase PORTIA-20]: D-53 (20-41): волны шага выделяются emitStepWaves с приоритетом над эхом, 16 слотов, жизнь 0.9 s, одна волна на сторону тела на постановку — Спрос 6.48 x 2 x 0.9 = 11.7 слотов при 16; на HEAD 607 из 874 постановок оставались без волны (8 слотов, 4 волны на постановку)
+- [Phase PORTIA-20]: D-54 (20-42): предел бесконечных анимаций рисунка колб 100 -> 140 (phone 80 с отображаемой целью); обоснование в 20-42-SUMMARY, без слияния переливов в группы
+- [Phase PORTIA-20]: D-54 (20-42): часы колб под полкой справа (x 1258, y 414), чтобы рисунок оставался 55.8% высоты и телефон видел циферблат; замер пика приводит время в пределы цикла (отрицательное currentTime не принимается)
 
 ### Pending Todos
 
@@ -296,8 +299,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-07T07:12:19.470Z
-Stopped at: Completed PORTIA-20-41-PLAN.md
+Last session: 2026-11-07T07:40:55.793Z
+Stopped at: Completed PORTIA-20-42-PLAN.md
 Resume file: None
 
 ## Operator Next Step
