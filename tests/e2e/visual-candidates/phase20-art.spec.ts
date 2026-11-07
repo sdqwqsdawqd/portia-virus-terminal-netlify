@@ -263,8 +263,21 @@ test("[STAB-A11Y-04] D-01..D-04 full walks, reduced and off stop looping motion,
     trace.push({ t: tick * 100, ...(await state()) });
   }
   const layoutReadsWhileWalking = (await page.evaluate(() => (window as unknown as { __layoutReads: { reads: number } }).__layoutReads.reads)) - readsBefore;
-  writeRun(`spider-gait-trace--${testInfo.project.name}.json`, { project: testInfo.project.name, layoutReadsWhileWalking, samples: trace });
+  // D-53 (20-37, plan 20-41): all eight legs step and every footfall waves the web. A sample counts as walking when the transform moved since the
+  // previous sample and a leg is still swung; the range of a leg is its largest minus its smallest rotation over those samples.
+  const legNames = await desktop.spider.evaluate((element) => [...element.querySelectorAll<SVGGElement>("[data-leg]")].map((leg) => leg.dataset.leg ?? ""));
+  const walkingSamples = trace.filter((sample, index) => index > 0 && sample.transform !== trace[index - 1].transform && swinging(sample.rotations));
+  const legRanges = legNames.map((leg, column) => {
+    const values = walkingSamples.map((sample) => Number.parseFloat(sample.rotations[column]) || 0);
+    return { leg, range: values.length ? Math.max(...values) - Math.min(...values) : 0 };
+  });
+  const waveShare = walkingSamples.length ? walkingSamples.filter((sample) => sample.pulses > 0).length / walkingSamples.length : 0;
+  writeRun(`spider-gait-trace--${testInfo.project.name}.json`, { project: testInfo.project.name, layoutReadsWhileWalking, walkingSamples: walkingSamples.length, legRanges, waveShare, samples: trace });
   expect(new Set(trace.map((sample) => sample.transform)).size, "the transform changes while walking").toBeGreaterThan(5);
+  expect(walkingSamples.length, "enough of the 4 s trace is walking to judge the gait").toBeGreaterThanOrEqual(12);
+  expect(legNames.length, "eight legs").toBe(8);
+  for (const { leg, range } of legRanges) expect(range, `D-53: leg ${leg} swings at least 8 degrees over the walk (${range.toFixed(1)})`).toBeGreaterThanOrEqual(8);
+  expect(waveShare, `D-53: waves are visible in at least 90% of the walking samples (${(waveShare * 100).toFixed(0)}%)`).toBeGreaterThanOrEqual(0.9);
   await captureCandidate(context, {
     id: "phase20-spider-full-walk",
     requirement: "STAB-BASE-03",

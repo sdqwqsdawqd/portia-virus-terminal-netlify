@@ -35,12 +35,14 @@ const edgeBetween = (u: number, v: number) => webEdges.findIndex((edge) => (edge
 
 test("the wallpaper spider starts randomly beside threads and relocates after an explicit off-to-on toggle", () => {
   const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
-  assert.match(source, /const LEG_SWING_BY_PAIR = \[0, 2\.4, 4\.8, 7\.4, 14\]/);
-  assert.match(source, /const LEG_TUCK_BY_PAIR = \[0, 0\.02, 0\.035, 0\.052, 0\.09\]/);
+  // D-53 (20-37) заменяет правило 18-UI-SPEC «амплитуды не растут»: все восемь ног шагают, размах каждой считается из её длины.
+  assert.doesNotMatch(source, /LEG_SWING_BY_PAIR/);
+  assert.doesNotMatch(source, /LEG_TUCK_BY_PAIR/);
+  assert.match(source, /const LEG_TUCK = 0\.05;/);
+  assert.match(source, /LEG_SWING\[id as LegId\] \* pose\.swing/);
   assert.match(source, /const PROBE_SWING = 8\.5;/);
   assert.match(source, /const FIRST_PROBE_MIN_DELAY = 3;/);
   assert.match(source, /const FIRST_PROBE_MAX_DELAY = 7;/);
-  assert.match(source, /LEG_SWING_BY_PAIR\[pair\]/);
   assert.match(source, /const BODY_BOB = 0\.006;/);
   assert.doesNotMatch(source, /STEP_CYCLE/);
   assert.match(source, /const PROBE_SWING =/);
@@ -435,8 +437,9 @@ test("a footfall wave is gone 0.9 s after it was born", () => {
 test("each footfall of the spider waves the nearest thread on both sides of the body", () => {
   const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
   assert.match(source, /footfallThreads\(/);
-  assert.match(source, /emitPulse\(pool, side\.edge, side\.at, 1, STEP_PEAK, time\)/);
-  assert.match(source, /emitPulse\(pool, side\.edge, side\.at, -1, STEP_PEAK, time\)/);
+  // D-53 (20-37): the footfall wave goes through the priority allocator, never through a bare emitPulse that can refuse silently.
+  assert.match(source, /emitStepWaves\(pool, sides, heading, STEP_PEAK, time, /);
+  assert.doesNotMatch(source, /emitPulse\(/);
   assert.doesNotMatch(source, /emitPulse\(pool, pose\.edge/);
 });
 
@@ -478,10 +481,13 @@ test("laneSideFor keeps the physical side of the thread when the direction turns
   assert.equal(laneSideFor(other[0], other[1], 500, 400, 0.4, offset), -1);
 });
 
-test("speed and leg swing are unchanged, and the spider only relocates on load and on show", () => {
+test("speed and stride are unchanged, and the spider only relocates on load and on show", () => {
   assert.equal(SPIDER_MOTION_RATE, 1.8);
+  assert.equal(web.GAIT_STRIDE, 20);
   const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
-  assert.match(source, /const LEG_SWING_BY_PAIR = \[0, 2\.4, 4\.8, 7\.4, 14\]/);
+  // D-53 (20-37) заменяет правило 18-UI-SPEC «амплитуды не растут»: размах ноги берётся из её длины, а не из массива по парам.
+  assert.doesNotMatch(source, /LEG_SWING_BY_PAIR/);
+  assert.match(source, /legSwingDegrees\(LEG_REACH\[leg\]\)/);
   assert.equal(source.match(/relocateVisible\(\)/g)?.length, 2, "initial load and the turnedOn branch only");
   assert.match(source, /const MAX_TURN_RATE = 3\.5;/);
   assert.match(source, /turnStep\(angle, /);
@@ -648,4 +654,270 @@ test("D-45 the spider builds every transform through spiderTransform and promote
   // A forwards fill of the fade-in keeps the element a composited, resampled layer for good: the fade only needs to hold the start while it waits.
   assert.doesNotMatch(styles, /html\[data-motion="full"\] \.wallpaper-spider \{ animation: fade-in 600ms ease-out 1\.8s both; \}/);
   assert.match(styles, /html\[data-motion="full"\] \.wallpaper-spider \{ animation: fade-in 600ms ease-out 1\.8s backwards; \}/);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// D-53 (20-37), plan 20-41: все восемь ног шагают, паутина отвечает волной на каждую постановку группы ног.
+// Эти проверки заменяют правила 18-UI-SPEC «амплитуды LEG_SWING_BY_PAIR не растут» и «слотов PULSE_SLOTS = 8 достаточно».
+// ---------------------------------------------------------------------------------------------------------------------
+const GAIT_LEGS = ["L1", "L2", "L3", "L4", "R1", "R2", "R3", "R4"] as const;
+const ARTWORK_PER_WEB_UNIT = 649.5 / 72; // the spider is 72 px wide on a 1440 x 900 screen and its drawing is 649.5 units wide
+const spiderSourceText = () => readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
+
+type StepWaves = (pool: ReturnType<typeof createPulsePool>, sides: ReturnType<typeof footfallThreads>, heading: number, peak: number, now: number, against: boolean) => { found: number; emitted: number };
+type KindOf = { kind: string };
+const gaitApi = () => web as unknown as {
+  emitStepWaves: StepWaves;
+  legSwingDegrees: (reach: number, stance?: number, unitsPerWeb?: number, fit?: number) => number;
+  PULSE_LIFE: number;
+  STEP_WAVES_PER_SIDE: number;
+};
+
+// Leg numbers as measured by the component: LEG_PIVOTS and LEG_REACH are read from its source.
+function declaredLegTable(source: string, name: string, pattern: RegExp) {
+  const start = source.indexOf(`const ${name}`);
+  assert.ok(start >= 0, `${name} is declared in the spider component`);
+  const block = source.slice(start, source.indexOf("};", start));
+  const table = new Map<string, number[]>();
+  for (const match of block.matchAll(pattern)) table.set(match[1], match.slice(2).map(Number));
+  return table;
+}
+
+// The endpoints of every command of an SVG path (M L H V C S Q T Z, absolute and relative, with implicit repeats), control points excluded.
+const PATH_ARGUMENTS: Record<string, number> = { m: 2, l: 2, h: 1, v: 1, c: 6, s: 4, q: 4, t: 2, z: 0 };
+function pathEndpoints(d: string): Point[] {
+  const tokens = d.match(/[MmLlHhVvCcSsQqTtAaZz]|-?(?:\d+\.?\d*|\.\d+)/g) ?? [];
+  const ends: Point[] = [];
+  let cx = 0, cy = 0, sx = 0, sy = 0, command = "", index = 0;
+  while (index < tokens.length) {
+    if (/[A-Za-z]/.test(tokens[index])) {
+      command = tokens[index]; index += 1;
+      if (command.toLowerCase() === "z") { cx = sx; cy = sy; continue; }
+    }
+    const lower = command.toLowerCase(), relative = command === lower;
+    assert.ok(lower in PATH_ARGUMENTS && lower !== "z", `path command ${command} is supported by the measurement`);
+    const count = PATH_ARGUMENTS[lower];
+    const values = tokens.slice(index, index + count).map(Number);
+    index += count;
+    let x = cx, y = cy;
+    if (lower === "h") x = relative ? cx + values[0] : values[0];
+    else if (lower === "v") y = relative ? cy + values[0] : values[0];
+    else { x = relative ? cx + values[count - 2] : values[count - 2]; y = relative ? cy + values[count - 1] : values[count - 1]; }
+    cx = x; cy = y;
+    if (lower === "m") { sx = x; sy = y; command = relative ? "l" : "L"; }
+    ends.push([x, y]);
+  }
+  return ends;
+}
+
+// The farthest path endpoint of each leg group from its own pivot, measured again from the paths in the component source.
+function measuredLegReach(source: string): Map<string, number> {
+  const pivots = declaredLegTable(source, "LEG_PIVOTS", /([LR][1-4]): \[([\d.]+), ([\d.]+)\]/g);
+  const from = source.indexOf("const LEG_PARTS"), to = source.indexOf("const LEG_DRAW_ORDER");
+  assert.ok(from >= 0 && to > from, "LEG_PARTS is declared");
+  const groups = source.slice(from, to).split(/^ {2}([LR][1-4]): \[/m);
+  const reach = new Map<string, number>();
+  for (let group = 1; group < groups.length; group += 2) {
+    const leg = groups[group], pivot = pivots.get(leg) as number[];
+    const paths = [...groups[group + 1].matchAll(/\["(?:dark|limb|pale)", "([^"]+)"\]/g)].map((match) => match[1]);
+    assert.ok(paths.length >= 4, `${leg} has its paths`);
+    let far = 0;
+    for (const d of paths) for (const [x, y] of pathEndpoints(d)) far = Math.max(far, Math.hypot(x - pivot[0], y - pivot[1]));
+    reach.set(leg, far);
+  }
+  return reach;
+}
+
+test("D-53 (20-37) LEG_REACH is the measured length of each leg: the farthest path point from its pivot, within 3 drawing units", () => {
+  const source = spiderSourceText();
+  const declared = declaredLegTable(source, "LEG_REACH", /([LR][1-4]): (\d+(?:\.\d+)?)/g);
+  const measured = measuredLegReach(source);
+  assert.equal(measured.size, 8, "eight leg groups are measured");
+  for (const leg of GAIT_LEGS) {
+    const value = declared.get(leg)?.[0] as number;
+    assert.ok(Number.isFinite(value), `${leg} has a LEG_REACH entry`);
+    assert.ok(Math.abs(value - (measured.get(leg) as number)) <= 3, `${leg}: declared ${value}, measured ${measured.get(leg)}`);
+  }
+});
+
+test("D-53 (20-37) every leg's foot travels 0.8-1.2 of the body's path in one stance, and the four pairs swing within a factor of 1.5", () => {
+  const source = spiderSourceText();
+  assert.match(source, /legSwingDegrees\(LEG_REACH\[leg\]\)/, "the swing of a leg comes from its length");
+  assert.doesNotMatch(source, /LEG_SWING_BY_PAIR/, "the per-pair table that left the rear pairs standing still is gone");
+  const declared = declaredLegTable(source, "LEG_REACH", /([LR][1-4]): (\d+(?:\.\d+)?)/g);
+  const bodyStance = 0.6 * web.GAIT_STRIDE; // the legs are in stance for 0.6 of the cycle (legPose), the body covers that part of one stride
+  const swings = GAIT_LEGS.map((leg) => gaitApi().legSwingDegrees(declared.get(leg)?.[0] as number));
+  GAIT_LEGS.forEach((leg, index) => {
+    const reach = declared.get(leg)?.[0] as number;
+    const peakToPeak = 2 * reach * Math.sin((swings[index] * Math.PI) / 180) / ARTWORK_PER_WEB_UNIT;
+    assert.ok(peakToPeak / bodyStance >= 0.8 && peakToPeak / bodyStance <= 1.2, `${leg}: foot travel ${peakToPeak.toFixed(2)} of ${bodyStance} (${(peakToPeak / bodyStance).toFixed(2)})`);
+  });
+  assert.ok(Math.max(...swings) / Math.min(...swings) <= 1.5, `the swings ${swings.map((value) => value.toFixed(1)).join(", ")} stay within a factor of 1.5`);
+  assert.ok(Math.min(...swings) >= 8, "no leg swings less than 8 degrees");
+});
+
+test("D-53 (20-37) legSwingDegrees: a longer leg swings less, a longer stance swings more, the fit factor scales the travel, the angle stays bounded", () => {
+  const swing = gaitApi().legSwingDegrees;
+  assert.ok(swing(300) > swing(340));
+  assert.ok(swing(320, 20) > swing(320, 12));
+  assert.ok(Math.abs(swing(320, 12, ARTWORK_PER_WEB_UNIT, 1) / swing(320, 12, ARTWORK_PER_WEB_UNIT, 0.5) - 2) < 0.05);
+  assert.ok(swing(10, 1000) <= 90, "a degenerate reach never asks for more than a right angle");
+  assert.equal(swing(0), 0, "a leg of no length does not swing");
+});
+
+// A deterministic replay of the walk of the real spider: the same functions as the frame loop, 40 routes from the rest crossing over the crossings
+// visible on 1440 x 900, one frame every 1/60 s, a 6 s pause between the routes. Footfalls are found once and replayed for each wave scheme.
+type Footfalls = ReturnType<typeof footfallThreads>;
+type Placement = { time: number; sides: Footfalls; heading: number; index: number };
+let placementCache: { placements: Placement[]; end: number } | null = null;
+function replayedPlacements() {
+  if (placementCache) return placementCache;
+  const visible = visibleNodes(1440, 900, 90);
+  const rand = seeded(12345);
+  const placements: Placement[] = [];
+  const dt = 1 / 60;
+  let node = REST_NODE, previous = -1, time = 0;
+  for (let route = 0; route < 40; route += 1) {
+    const path = planWalk(node, previous, visible, rand);
+    if (path.length < 2) continue;
+    const lane = rand() < 0.5 ? -1 : 1;
+    let walked = 0, gaitDistance = 0, pathDistance = 0, phase = 0, done = false;
+    while (!done) {
+      walked += dt; time += dt;
+      const pose = walkPose(path, walked);
+      gaitDistance += Math.max(0, pose.distance - pathDistance);
+      pathDistance = pose.distance;
+      const after = gaitPhase(gaitDistance);
+      if (after < phase || (phase < 0.5 && after >= 0.5)) {
+        const [x, y] = besideThread(pose.x, pose.y, pose.heading, lane, 30);
+        placements.push({ time, sides: footfallThreads(x, y, pose.heading), heading: pose.heading, index: placements.length });
+      }
+      phase = after;
+      done = pose.done;
+    }
+    previous = path[path.length - 2]; node = path[path.length - 1];
+    time += 6;
+  }
+  placementCache = { placements, end: time };
+  return placementCache;
+}
+
+type Waves = { found: number; waved: number };
+function replayWaves(slots: number, place: (pool: ReturnType<typeof createPulsePool>, placement: Placement) => Waves) {
+  const { placements, end } = replayedPlacements();
+  const pool = createPulsePool(slots);
+  const stats = { placements: placements.length, withThread: 0, unserved: 0, withoutAnyWave: 0, earlyEvictions: 0, maxAlive: 0, found: 0, waved: 0 };
+  const protectedLife = 0.75 * (web as unknown as { PULSE_LIFE?: number }).PULSE_LIFE!;
+  let next = 0;
+  for (let time = 0; time <= end + 1; time += 1 / 60) {
+    while (next < placements.length && placements[next].time <= time) {
+      const placement = placements[next]; next += 1;
+      const young = pool.slots.filter((slot) => slot.alive && (slot as unknown as Partial<KindOf>).kind !== "echo" && placement.time - slot.born < protectedLife).map((slot) => ({ slot, born: slot.born }));
+      const waves = place(pool, placement);
+      stats.found += waves.found; stats.waved += waves.waved;
+      if (waves.found > 0) stats.withThread += 1;
+      if (waves.waved < waves.found) stats.unserved += 1;
+      if (waves.found > 0 && waves.waved === 0) stats.withoutAnyWave += 1;
+      stats.earlyEvictions += young.filter(({ slot, born }) => slot.born !== born).length;
+    }
+    stepPulses(pool, time);
+    stats.maxAlive = Math.max(stats.maxAlive, pool.slots.filter((slot) => slot.alive).length);
+  }
+  return stats;
+}
+
+// The behaviour before D-53: eight slots, four waves per footfall (two sides, two directions), a bare emitPulse that refuses silently.
+const previousWaves = (pool: ReturnType<typeof createPulsePool>, placement: Placement): Waves => {
+  let found = 0, waved = 0;
+  for (const side of [placement.sides.left, placement.sides.right]) {
+    if (!side) continue;
+    found += 1;
+    const first = emitPulse(pool, side.edge, side.at, 1, 0.34, placement.time);
+    const second = emitPulse(pool, side.edge, side.at, -1, 0.34, placement.time);
+    if (first || second) waved += 1;
+  }
+  return { found, waved };
+};
+
+test("D-53 (20-37) the old wave scheme starved most footfalls: eight slots and four waves per footfall (self-check of the replay)", () => {
+  const { placements } = replayedPlacements();
+  assert.ok(placements.length >= 600, `${placements.length} footfalls over 40 routes`);
+  const old = replayWaves(8, previousWaves);
+  assert.ok(old.withThread >= 600, "nearly every footfall has a thread beside it");
+  assert.ok(old.withoutAnyWave / old.withThread > 0.5, `${old.withoutAnyWave} of ${old.withThread} footfalls got no wave at all on the old scheme`);
+});
+
+test("D-53 (20-37) every footfall with a thread beside it waves every side where the thread was found: no refusals over 40 routes, no step wave pushed out before 0.75 of its life", () => {
+  const source = spiderSourceText();
+  const slots = Number(source.match(/const PULSE_SLOTS = (\d+);/)?.[1]);
+  assert.ok(slots >= 8 && slots <= 16, `PULSE_SLOTS ${slots} is at most 16`);
+  const stats = replayWaves(slots, (pool, placement) => {
+    const { found, emitted } = gaitApi().emitStepWaves(pool, placement.sides, placement.heading, 0.34, placement.time, placement.index % 2 === 1);
+    return { found, waved: emitted };
+  });
+  assert.ok(stats.withThread >= 600, `${stats.withThread} footfalls with a thread`);
+  assert.equal(stats.unserved, 0, `no footfall is left without a wave on a side where a thread was found (${stats.unserved} of ${stats.withThread})`);
+  assert.equal(stats.earlyEvictions, 0, "no step wave is pushed out before 0.75 of its life");
+  assert.ok(stats.maxAlive <= slots, "the pool never exceeds its slots");
+});
+
+test("D-53 (20-37) the wave budget: at most 16 slots, a wave lives at most 0.9 s, and the footfall demand fits the slots", () => {
+  const { PULSE_LIFE: life, STEP_WAVES_PER_SIDE: perSide } = gaitApi();
+  const slots = Number(spiderSourceText().match(/const PULSE_SLOTS = (\d+);/)?.[1]);
+  assert.ok(life <= 0.9, `a wave lives ${life} s`);
+  assert.ok(slots <= 16, `${slots} slots`);
+  // Footfalls per second at full speed x waves per footfall (two sides) x life = slots held by step waves; the echoes use what is left.
+  const footfallsPerSecond = SPIDER_WALK_SPEED / (web.GAIT_STRIDE / 2);
+  const demand = footfallsPerSecond * 2 * perSide * life;
+  assert.ok(demand <= slots * 0.8, `${demand.toFixed(1)} slots held by step waves against ${slots} slots (a fifth stays free for echoes)`);
+  assert.ok(perSide >= 1);
+});
+
+test("D-53 (20-37) a step wave takes a free slot without pushing anything out; with no free slot it pushes out the oldest echo first", () => {
+  const { emitStepWaves } = gaitApi();
+  const spoke = webEdges.findIndex((candidate) => candidate.kind === "spoke");
+  const sides: Footfalls = { left: { edge: spoke, at: 10 }, right: { edge: spoke, at: 30 } };
+  const empty = createPulsePool(4);
+  assert.deepEqual(emitStepWaves(empty, sides, 0, 0.34, 0, false), { found: 2, emitted: 2 });
+  assert.equal(empty.slots.filter((slot) => slot.alive).length, 2);
+  assert.ok(empty.slots.filter((slot) => slot.alive).every((slot) => (slot as unknown as KindOf).kind === "step"));
+  // Pulses made at a crossing are echoes.
+  const echoes = createPulsePool(3);
+  web.emitAtCrossing(echoes, webEdges[spoke].a, 0.17, 0);
+  const alive = echoes.slots.filter((slot) => slot.alive);
+  assert.ok(alive.length >= 1 && alive.every((slot) => (slot as unknown as KindOf).kind === "echo"), "pulses made at a crossing are echoes");
+  // A pool full of echoes: the oldest echo goes first.
+  const crowded = createPulsePool(2);
+  emitPulse(crowded, spoke, 0, 1, 0.17, 0);
+  emitPulse(crowded, spoke, 0, 1, 0.17, 0.1);
+  crowded.slots.forEach((slot) => { (slot as unknown as KindOf).kind = "echo"; });
+  assert.deepEqual(emitStepWaves(crowded, { left: { edge: spoke, at: 5 }, right: null }, 0, 0.34, 0.2, false), { found: 1, emitted: 1 });
+  assert.equal((crowded.slots[0] as unknown as KindOf).kind, "step", "the oldest echo was the one pushed out");
+  assert.equal((crowded.slots[1] as unknown as KindOf).kind, "echo");
+});
+
+test("D-53 (20-37) a young step wave is never pushed out; one that lived 0.75 of its life may be; a side with no thread asks for nothing", () => {
+  const { emitStepWaves, PULSE_LIFE } = gaitApi();
+  const spoke = webEdges.findIndex((candidate) => candidate.kind === "spoke");
+  const pool = createPulsePool(2);
+  emitPulse(pool, spoke, 0, 1, 0.34, 1);
+  emitPulse(pool, spoke, 0, 1, 0.34, 1);
+  const sides: Footfalls = { left: { edge: spoke, at: 10 }, right: null };
+  assert.deepEqual(emitStepWaves(pool, sides, 0, 0.34, 1 + 0.7 * PULSE_LIFE, false), { found: 1, emitted: 0 }, "a wave at 0.7 of its life is kept");
+  assert.deepEqual(emitStepWaves(pool, sides, 0, 0.34, 1 + 0.8 * PULSE_LIFE, false), { found: 1, emitted: 1 }, "a wave past 0.75 of its life makes room");
+  assert.deepEqual(emitStepWaves(createPulsePool(2), { left: null, right: null }, 0, 0.34, 0, false), { found: 0, emitted: 0 });
+});
+
+test("D-53 (20-37) the footfall wave runs along the heading or against it, one wave per side", () => {
+  const { emitStepWaves } = gaitApi();
+  const spoke = webEdges.findIndex((candidate) => candidate.kind === "spoke");
+  const from = webGeometry.nodes[webEdges[spoke].a], to = webGeometry.nodes[webEdges[spoke].b];
+  const along = Math.atan2(to[1] - from[1], to[0] - from[0]);
+  const forward = createPulsePool(2), backward = createPulsePool(2);
+  const side: Footfalls = { left: { edge: spoke, at: 40 }, right: null };
+  emitStepWaves(forward, side, along, 0.34, 0, false);
+  emitStepWaves(backward, side, along, 0.34, 0, true);
+  assert.equal(forward.slots.filter((slot) => slot.alive).length, 1, "one wave per side");
+  assert.equal(forward.slots[0].dir, 1, "along the heading: toward the b end of a thread that points that way");
+  assert.equal(backward.slots[0].dir, -1, "against the heading: toward the a end");
 });
