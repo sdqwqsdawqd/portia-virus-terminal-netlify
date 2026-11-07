@@ -10,6 +10,8 @@ import { expect, test } from "../fixtures/test";
 // Картинки — отслеживаемые файлы public/assets, сеть к чужим хостам не нужна.
 
 const framed = { x: 20, y: 80, zoom: 160 };
+// Not a frame: a string where a number belongs and a key with a style injection. The site shows such a picture as it shows one without a frame.
+const garbage = { x: "20; background:url(//evil.example/x)", y: 80, zoom: 160, extra: "expression(alert(1))" };
 
 /** Every request that could write to our API or Supabase (GET and HEAD are reads). */
 function trackWrites(page: Page) {
@@ -85,6 +87,108 @@ test.describe("[STAB-REL-08] D-63 the site shows the part of a picture that the 
     await expectUnframed(plainBand.locator(".."));
     await expect(plainBand).not.toHaveAttribute("data-framing", /.*/);
 
+    expect(writes, "no request to write anything").toEqual([]);
+  });
+
+  test("D-63 the cover of a «Справочник» card shows the chosen part (4:3 frame); no frame and a garbage frame stay as before", async ({ page }) => {
+    const writes = trackWrites(page);
+    await stubContent(page, fixture({
+      guideSections: [{ id: "g", title: "Раздел", photo: "", cards: [
+        { id: "c-framed", title: "Карточка с кадром", cover: "/assets/portia-assistant.png", coverFraming: framed, blocks: [] },
+        { id: "c-plain", title: "Карточка без кадра", cover: "/assets/portia-logo.png", blocks: [] },
+        { id: "c-garbage", title: "Карточка с мусором", cover: "/assets/portia-virus-icon.png", coverFraming: garbage, blocks: [] },
+      ] }],
+    }));
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    await desktop.openApp("Справочник");
+    const guide = desktop.window("Справочник");
+    const cover = (title: string) => guide.locator(".guide-tile").filter({ hasText: title }).locator(".guide-tile-cover");
+    await expectFramed(cover("Карточка с кадром"), framed);
+    await expectUnframed(cover("Карточка без кадра"));
+    await expectUnframed(cover("Карточка с мусором"));
+    expect(writes, "no request to write anything").toEqual([]);
+  });
+
+  test("D-63 the dossier shows the chosen part of the photo after infection and of a mutation image", async ({ page }) => {
+    const writes = trackWrites(page);
+    const [virus] = defaultPortiaContent.viruses;
+    await stubContent(page, fixture({
+      viruses: [{
+        ...structuredClone(virus), id: "virus-framed",
+        infectedImage: "/assets/portia-virus-icon.png", infectedImageFraming: framed,
+        mutations: [
+          { name: "Мутация с кадром", description: "", image: "/assets/portia-assistant.png", imageFraming: { x: 70, y: 10, zoom: 220 } },
+          { name: "Мутация с мусором", description: "", image: "/assets/portia-logo.png", imageFraming: garbage },
+          { name: "Мутация без кадра", description: "", image: "/assets/portia-logo.png" },
+        ],
+      }],
+    }));
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    await desktop.openApp("База вирусов");
+    const media = desktop.window("База вирусов").locator(".record-view .subject-media");
+    await expect(media).toHaveCount(4);
+    await expectFramed(media.nth(0), framed);
+    await expectFramed(media.nth(1), { x: 70, y: 10, zoom: 220 });
+    await expectUnframed(media.nth(2));
+    await expectUnframed(media.nth(3));
+    expect(writes, "no request to write anything").toEqual([]);
+  });
+
+  test("D-63 an «Информация» photo block shows the chosen part (contain frame); no frame and a garbage frame stay as before", async ({ page }) => {
+    const writes = trackWrites(page);
+    await stubContent(page, fixture({
+      infoSections: [{ id: "i-1", title: "Раздел фото", body: "", subsections: [{ id: "i-1-s", title: "Страница фото", blocks: [
+        { id: "ph-framed", type: "photo", url: "/assets/portia-assistant.png", framing: framed },
+        { id: "ph-plain", type: "photo", url: "/assets/portia-logo.png" },
+        { id: "ph-garbage", type: "photo", url: "/assets/portia-virus-icon.png", framing: garbage },
+      ] }] }],
+    }));
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    await desktop.openApp("Информация");
+    const info = desktop.window("Информация");
+    // On a phone the section only opens its group; on PC it is already the open one. Either way the page is chosen from the row of the group.
+    await info.locator(".info-index > div > button").filter({ hasText: "Раздел фото" }).click();
+    await info.locator('.info-index [data-info-id="i-1-s"]').click();
+    const photos = info.locator(".info-document .info-block-photo");
+    await expect(photos).toHaveCount(3);
+    await expectFramed(photos.nth(0), framed);
+    await expectUnframed(photos.nth(1));
+    await expectUnframed(photos.nth(2));
+    expect(writes, "no request to write anything").toEqual([]);
+  });
+
+  test("D-63 the «Корзина» image file and the photo of a virus in the bin show the chosen part", async ({ page }) => {
+    const writes = trackWrites(page);
+    const [virus] = defaultPortiaContent.viruses;
+    await stubContent(page, fixture({
+      recycleFiles: [
+        { id: "f-framed", name: "Файл с кадром", location: "C:\PORTIA\RECYCLE_BIN", kind: "image", content: "", image: "/assets/portia-assistant.png", imageFraming: framed, virusId: "" },
+        { id: "f-plain", name: "Файл без кадра", location: "C:\PORTIA\RECYCLE_BIN", kind: "image", content: "", image: "/assets/portia-logo.png", virusId: "" },
+        { id: "f-garbage", name: "Файл с мусором", location: "C:\PORTIA\RECYCLE_BIN", kind: "image", content: "", image: "/assets/portia-virus-icon.png", imageFraming: garbage, virusId: "" },
+      ],
+      recycledViruses: [{ ...structuredClone(virus), id: "virus-recycled", name: "Вирус в корзине", infectedImage: "/assets/portia-virus-icon.png", infectedImageFraming: framed, mutations: [] }],
+      recycleOrder: ["file:f-framed", "file:f-plain", "file:f-garbage", "virus:virus-recycled"],
+    }));
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    await desktop.openApp("Корзина");
+    const trash = desktop.window("Корзина");
+    const open = async (name: string) => {
+      const close = trash.getByRole("button", { name: "Закрыть файл" });
+      if (await close.count()) await close.click();
+      await trash.locator(".trash-file-row").filter({ hasText: name }).click();
+    };
+    await open("Файл с кадром");
+    await expectFramed(trash.locator(".trash-image-document"), framed);
+    await open("Файл без кадра");
+    await expectUnframed(trash.locator(".trash-image-document"));
+    await open("Файл с мусором");
+    await expectUnframed(trash.locator(".trash-image-document"));
+    await open("Вирус в корзине");
+    await expectFramed(trash.locator(".trash-virus-document .subject-media").first(), framed);
     expect(writes, "no request to write anything").toEqual([]);
   });
 });

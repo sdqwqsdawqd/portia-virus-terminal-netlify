@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MAX_BLOCK_TEXT, MAX_CONDITIONS, MAX_SCIENTIST_LOGS } from "./content-limits.ts";
-import { classificationOptions, defaultPortiaContent, findInfo, type InfoSection } from "./portia-content.ts";
+import { classificationOptions, createVirusRecycleFiles, defaultPortiaContent, findInfo, type InfoSection } from "./portia-content.ts";
 import { contentRefusal } from "./editor-tabs.ts";
 import { buildSearchIndex, matchSearch } from "./search-index.ts";
 import { normalizeBroadcasts, normalizeGuideSections, normalizeInfoSections, normalizePortiaContent, parseYoutubeId } from "./portia-content-normalize.ts";
@@ -539,4 +539,123 @@ test("D-63 the frame of a guide section survives normalizePortiaContent and is i
   const once = normalizePortiaContent(content);
   assert.deepEqual(once?.guideSections[0].photoFraming, { x: 30, y: 70, zoom: 150 });
   assert.deepEqual(normalizePortiaContent(once), once);
+});
+
+// D-63 (20-51) the other surfaces. `...withoutNote(virus)` and `...withoutNote(mutation)` carry unknown keys through, so the frame fields are overwritten explicitly.
+const frameA = { x: 20, y: 80, zoom: 160 };
+const hostileFrame = { x: "50; background:url(//evil.example/x)", y: 50, zoom: 120, extra: "expression(alert(1))" };
+
+function contentWith(patch: Record<string, unknown>) {
+  return { ...structuredClone(defaultPortiaContent), ...patch } as Record<string, unknown>;
+}
+
+function virusWith(patch: Record<string, unknown>) {
+  return { ...structuredClone(defaultPortiaContent.viruses[0]), id: "virus-frame", ...patch };
+}
+
+test("D-63 a virus keeps the frame of its photo and of each mutation image, as numbers, and only with a picture", () => {
+  const content = normalizePortiaContent(contentWith({
+    viruses: [virusWith({
+      infectedImage: "/assets/portia-virus-icon.png", infectedImageFraming: { ...frameA, extra: "url(x)" },
+      mutations: [
+        { name: "A", description: "", image: "/assets/portia-logo.png", imageFraming: { x: 10.4, y: 120, zoom: 999 } },
+        { name: "B", description: "", image: "", imageFraming: frameA },
+        { name: "C", description: "", image: "/assets/portia-logo.png" },
+      ],
+    })],
+  }));
+  const virus = content?.viruses[0];
+  assert.deepEqual(virus?.infectedImageFraming, frameA);
+  assert.deepEqual(virus?.mutations[0].imageFraming, { x: 10, y: 100, zoom: 300 });
+  assert.equal("imageFraming" in (virus?.mutations[1] ?? {}), false, "no picture, no frame");
+  assert.equal("imageFraming" in (virus?.mutations[2] ?? {}), false);
+});
+
+test("D-63 a frame without a virus photo is dropped and a virus without a frame has no frame key", () => {
+  const content = normalizePortiaContent(contentWith({ viruses: [virusWith({ infectedImage: "", infectedImageFraming: frameA }), virusWith({ id: "v2", infectedImage: "/assets/portia-logo.png" })] }));
+  assert.equal("infectedImageFraming" in (content?.viruses[0] ?? {}), false);
+  assert.equal("infectedImageFraming" in (content?.viruses[1] ?? {}), false);
+});
+
+test("D-63 a hostile frame in a virus or a mutation does not pass through the spread of unknown keys", () => {
+  for (const framing of [hostileFrame, "50", ["20", "80", "160"], { x: Number.NaN, y: 1, zoom: 150 }, { x: 1, y: 1 }, { x: 50, y: 50, zoom: 100 }, null, { __proto__: { x: 1 } }]) {
+    const content = normalizePortiaContent(contentWith({
+      viruses: [virusWith({ infectedImage: "/assets/portia-logo.png", infectedImageFraming: framing, mutations: [{ name: "A", description: "", image: "/assets/portia-logo.png", imageFraming: framing }] })],
+      recycledViruses: [virusWith({ id: "recycled-frame", infectedImage: "/assets/portia-logo.png", infectedImageFraming: framing })],
+    }));
+    assert.equal("infectedImageFraming" in (content?.viruses[0] ?? {}), false, JSON.stringify(framing));
+    assert.equal("imageFraming" in (content?.viruses[0].mutations[0] ?? {}), false, JSON.stringify(framing));
+    assert.equal("infectedImageFraming" in (content?.recycledViruses[0] ?? {}), false, JSON.stringify(framing));
+  }
+});
+
+test("D-63 a virus in the recycle bin keeps its frames, so a restore keeps them", () => {
+  const content = normalizePortiaContent(contentWith({
+    recycledViruses: [virusWith({ id: "recycled-frame", infectedImage: "/assets/portia-logo.png", infectedImageFraming: frameA, mutations: [{ name: "A", description: "", image: "/assets/portia-logo.png", imageFraming: frameA }] })],
+  }));
+  assert.deepEqual(content?.recycledViruses[0].infectedImageFraming, frameA);
+  assert.deepEqual(content?.recycledViruses[0].mutations[0].imageFraming, frameA);
+});
+
+test("D-63 a guide card keeps the frame of its cover only with a cover", () => {
+  const [section] = normalizeGuideSections([{ id: "s", title: "T", photo: "", cards: [
+    { id: "c1", title: "A", cover: "/assets/a.png", coverFraming: { ...frameA, extra: 1 }, blocks: [] },
+    { id: "c2", title: "B", cover: "", coverFraming: frameA, blocks: [] },
+    { id: "c3", title: "C", cover: "//evil.example/x.png", coverFraming: frameA, blocks: [] },
+    { id: "c4", title: "D", cover: "/assets/a.png", coverFraming: hostileFrame, blocks: [] },
+    { id: "c5", title: "E", cover: "/assets/a.png", blocks: [] },
+  ] }]);
+  assert.deepEqual(section.cards[0].coverFraming, frameA);
+  for (const card of section.cards.slice(1)) assert.equal("coverFraming" in card, false, card.id);
+  assert.equal(JSON.stringify(section.cards[4]), JSON.stringify({ id: "c5", title: "E", cover: "/assets/a.png", blocks: [] }));
+});
+
+test("D-63 an «Информация» photo block keeps the frame of its picture only with a link", () => {
+  const [section] = normalizeInfoSections([{ id: "i", title: "T", body: "", subsections: [{ id: "s", title: "S", blocks: [
+    { id: "b1", type: "photo", url: "/assets/a.png", framing: { ...frameA, extra: "url(x)" } },
+    { id: "b2", type: "photo", url: "", framing: frameA },
+    { id: "b3", type: "photo", url: "/assets/a.png", framing: hostileFrame },
+    { id: "b4", type: "photo", url: "/assets/a.png" },
+    { id: "b5", type: "text", text: "t", framing: frameA },
+  ] }] }]);
+  const blocks = section.subsections[0].blocks;
+  assert.deepEqual(blocks[0], { id: "b1", type: "photo", url: "/assets/a.png", framing: frameA });
+  assert.deepEqual(blocks[1], { id: "b2", type: "photo", url: "" });
+  assert.deepEqual(blocks[2], { id: "b3", type: "photo", url: "/assets/a.png" });
+  assert.deepEqual(blocks[3], { id: "b4", type: "photo", url: "/assets/a.png" });
+  assert.deepEqual(blocks[4], { id: "b5", type: "text", text: "t" });
+});
+
+test("D-63 a recycle file keeps the frame of its image only with an image", () => {
+  const files = normalizePortiaContent(contentWith({
+    recycleFiles: [
+      { id: "f1", name: "a", kind: "image", location: "L", content: "", image: "/assets/a.png", imageFraming: { ...frameA, extra: "url(x)" }, virusId: "" },
+      { id: "f2", name: "b", kind: "image", location: "L", content: "", image: "", imageFraming: frameA, virusId: "" },
+      { id: "f3", name: "c", kind: "image", location: "L", content: "", image: "/assets/a.png", imageFraming: hostileFrame, virusId: "" },
+      { id: "f4", name: "d", kind: "image", location: "L", content: "", image: "/assets/a.png", virusId: "" },
+    ],
+  }))?.recycleFiles ?? [];
+  assert.deepEqual(files[0].imageFraming, frameA);
+  for (const file of files.slice(1)) assert.equal("imageFraming" in file, false, file.id);
+});
+
+test("D-63 the recycle file made from a virus carries the frame of the virus photo", () => {
+  const withFrame = virusWith({ infectedImage: "/assets/portia-logo.png", infectedImageFraming: frameA });
+  const without = virusWith({ id: "v2" });
+  const [first, second] = createVirusRecycleFiles([withFrame, without] as never);
+  assert.deepEqual(first.imageFraming, frameA);
+  assert.equal("imageFraming" in second, false);
+  assert.equal(JSON.stringify(second), JSON.stringify({ id: "recycle-v2", name: `${without.name}_${without.code}.virus`, location: "C:\\PORTIA\\VIRUS_ARCHIVE", kind: "virus", content: "", image: "", virusId: "v2" }));
+});
+
+test("D-63 normalizing content with frames on every surface twice gives the same content", () => {
+  const input = contentWith({
+    viruses: [virusWith({ infectedImage: "/assets/portia-logo.png", infectedImageFraming: frameA, mutations: [{ name: "A", description: "", image: "/assets/portia-logo.png", imageFraming: frameA }] })],
+    guideSections: [{ id: "g", title: "G", photo: "/assets/a.png", photoFraming: frameA, cards: [{ id: "c", title: "C", cover: "/assets/a.png", coverFraming: frameA, blocks: [] }] }],
+    infoSections: [{ id: "i", title: "I", body: "", subsections: [{ id: "s", title: "S", blocks: [{ id: "b", type: "photo", url: "/assets/a.png", framing: frameA }] }] }],
+    recycleFiles: [{ id: "f", name: "n", kind: "image", location: "L", content: "", image: "/assets/a.png", imageFraming: frameA, virusId: "" }],
+  });
+  const once = normalizePortiaContent(input);
+  assert.deepEqual(normalizePortiaContent(once), once);
+  assert.equal(JSON.stringify(once).includes("expression"), false);
 });
