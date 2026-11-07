@@ -1,7 +1,7 @@
 // Why: «Свой» drives the same tokens as a preset (D-04) and is quietly made readable (D-23: lightness only).
 // deriveAccentTokens is self-contained because accentBootScript embeds its source with Function.prototype.toString,
 // so it may not reference imports or anything outside its own body (no module-level names, no spread/destructuring helpers).
-export const accentTokenNames = ["--teal", "--teal-dim", "--teal-soft", "--desktop-glow", "--desktop-grid", "--desktop-base", "--desktop-deep", "--spider-rim", "--accent-hue", "--accent-chroma", "--mark-filter", "--assistant-filter"] as const;
+export const accentTokenNames = ["--teal", "--teal-dim", "--teal-soft", "--desktop-glow", "--desktop-grid", "--desktop-base", "--desktop-deep", "--accent-hue", "--accent-chroma", "--mark-filter", "--assistant-filter"] as const;
 
 export function deriveAccentTokens(picked: unknown): Record<string, string> | null {
   if (typeof picked !== "string" || !/^#[0-9a-f]{6}$/i.test(picked)) return null;
@@ -108,7 +108,6 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
     "--desktop-grid": grid.join(", "),
     "--desktop-base": hex(base),
     "--desktop-deep": hex(deep),
-    "--spider-rim": "#d0d0d0", // D-50 S1-А: one light neutral rim for every accent (matches :root in app/portia.css)
     "--accent-hue": String(accentHue),
     "--accent-chroma": String(k),
     "--mark-filter": filterFor(["#00b396"]),

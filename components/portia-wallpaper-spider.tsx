@@ -122,11 +122,10 @@ const LEG_DRAW_ORDER: readonly LegId[] = ["R4", "R3", "R2", "R1", "L4", "L3", "L
 // The four black eyes of the sample (cx, cy, r): two large in the middle, two small at the sides. No pupils.
 const EYES: readonly (readonly [number, number, number])[] = [[349.17, 368.47, 20.69], [300.11, 368.57, 20.71], [261.59, 352.57, 10.9], [387.49, 352.46, 10.9]];
 
-// Each group draws a rim layer first (D-50 S1-А): the black and strand parts repeated with a light neutral stroke, so the rim turns
-// with its leg. Plain strokes only: no filter, no blur (D-45).
+// D-53 (20-37): the parts only, without a rim and without a light layer: the gaps between the coils and strands of the legs stay
+// transparent and the desktop shows through them. No stroke, no filter, no blur (D-45).
 function SpiderParts({ parts }: { parts: readonly Part[] }) {
   return <>
-    <g className="wallpaper-spider-kant">{parts.filter(([kind]) => kind !== "pale").map(([, d], index) => <path key={index} d={d} />)}</g>
     {parts.map(([kind, d], index) => <path key={index} className={`wallpaper-spider-${kind}`} d={d} />)}
   </>;
 }

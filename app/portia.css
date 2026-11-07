@@ -23,7 +23,6 @@ html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-
   --danger: #d55449;
   --desktop-base: #07100f;
   --desktop-deep: #0c1715;
-  --spider-rim: #d0d0d0;
   --desktop-glow: 0, 188, 166;
   --desktop-grid: 96, 171, 157;
   --accent-hue: 180.4;
@@ -1549,13 +1548,12 @@ html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-
    straight on the page, so it is not resampled: the blur at rest came from a layer kept by will-change and by a forwards-filled fade. */
 .wallpaper-spider[data-spider-walking] { will-change: transform; }
 .wallpaper-spider svg { display: block; width: 100%; height: auto; }
-/* D-50 (20-34): the spider is the owner's logo spider. White body, near-black parts (neutral, no accent tint), the second strand of the legs in the accent.
-   Parts carry no stroke. Each group first draws a rim layer (.wallpaper-spider-kant): the same black and strand paths in --spider-rim with a round stroke,
-   18 units wide so 1 CSS px shows outside the silhouette at 72 px. Plain strokes only: no filter, no blur (D-45). Body and legs stay opaque (D-25). */
+/* D-50 (20-34), D-53 (20-37): the spider is the owner's logo spider. White body, near-black parts (neutral, no accent tint), the second strand of the legs in the accent.
+   Parts carry no stroke and there is no rim layer: the gaps between the coils and strands of the legs are transparent and the desktop shows through them.
+   No filter, no blur, no glow (D-45). The parts stay opaque (D-25). */
 .wallpaper-spider-dark { fill: #070707; }
 .wallpaper-spider-limb { fill: var(--teal); }
 .wallpaper-spider-pale { fill: #fdfdfd; }
-.wallpaper-spider-kant { fill: var(--spider-rim); stroke: var(--spider-rim); stroke-width: 18; stroke-linejoin: round; }
 .wallpaper-spider-leg { transform-box: view-box; }
 /* Waves along the threads: no filter, no blur (cost). The svg carries .desktop-wallpaper, so the accent and the reduce gate apply. */
 .wallpaper-web-pulses path { stroke-linecap: round; }
