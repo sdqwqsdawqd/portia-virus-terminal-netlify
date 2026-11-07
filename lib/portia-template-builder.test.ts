@@ -322,7 +322,7 @@ test("D-55 (20-37): the builder has no markup of its own for the preview", () =>
     expectNoMatch(code, new RegExp(name), `the builder source holds no ${name}`);
   }
   expectMatch(code, /"record-view template-card-preview/, "the preview is the archive's record-view");
-  expectMatch(code, /aria-label="Предпросмотр шаблона"/);
+  expectMatch(code, /label="Предпросмотр шаблона"/);
 });
 
 test("D-55 (20-37): the card module imports only react, the content types, the icons and the media splitter", () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { ClassificationField, DossierTabs, EditorGroup, Field } from "@/components/portia-editor-dossier";
 import {
   ActiveFormatContext,
@@ -30,20 +30,27 @@ import {
   type TemplateDossier,
 } from "@/lib/portia-template-dossier";
 import {
-  createTemplateDossierHtml,
-  createTemplateDossierPng,
   decodeLocalTemplateImage,
   downloadTemplateBlob,
   emptyTemplateText,
   isTemplatePngTooLargeError,
   mutationCaption,
   photoCaption,
+  renderTemplateCardPng,
+  templateCardCss,
+  templateCardDocument,
+  templateCardSvg,
+  templateCardVariableNames,
+  templateCardWidth,
+  templateDefaultTitle,
   templateExportError,
+  templateExportViolations,
   templateFileName,
   templateImageAccept,
   templateImageOpenError,
   templatePngFileName,
   templatePngTooLargeError,
+  type TemplateCssRule,
   type TemplateImage,
 } from "@/lib/portia-template-export";
 
@@ -134,10 +141,13 @@ function templateMedia(images: TemplateDossier["images"], slot: VirusCardSlot): 
   </figure>;
 }
 
-/** The template as the archive's own card (D-55): the same VirusCardBody as the public dossier, fed by the model's draft only. */
-function TemplatePreview({ dossier }: { dossier: TemplateDossier }) {
+/**
+ * The template as the archive's own card (D-55): the same VirusCardBody as the public dossier, fed by the model's draft only. The preview
+ * and the hidden frame the files are made from render this one component, so the files cannot differ from what the participant sees.
+ */
+function TemplateCard({ dossier, label, exporting = false }: { dossier: TemplateDossier; label?: string; exporting?: boolean }) {
   const code = dossier.virus.code.trim();
-  return <article className="record-view template-card-preview" aria-label="Предпросмотр шаблона">
+  return <article className={exporting ? "record-view template-card-preview template-export-card" : "record-view template-card-preview"} aria-label={label}>
     <VirusCardBody
       virus={dossier.virus}
       formattedText={cardFormattedText(dossier)}
@@ -147,6 +157,77 @@ function TemplatePreview({ dossier }: { dossier: TemplateDossier }) {
       footer={["PORTIA / SCIENCE REPORTS", code === "" ? "ШАБЛОН" : `ШАБЛОН ${code}`]}
     />
   </article>;
+}
+
+function TemplatePreview({ dossier }: { dossier: TemplateDossier }) {
+  return <TemplateCard dossier={dossier} label="Предпросмотр шаблона" />;
+}
+
+/* ---------------------------------------------------------------- the card as a file (D-55) */
+
+type CardCapture = Readonly<{ html: string; xhtml: string; css: string; title: string }>;
+
+/** The style rules of the site's own style sheets (same origin only), with the @media / @container wrapper of each; the module keeps the card's. */
+function readSiteStyleRules(): TemplateCssRule[] {
+  const rules: TemplateCssRule[] = [];
+  const visit = (list: CSSRuleList, wrapper: string | undefined) => {
+    for (const rule of Array.from(list)) {
+      if (rule instanceof CSSStyleRule) {
+        rules.push({ selector: rule.selectorText, declarations: rule.style.cssText, ...(wrapper === undefined ? {} : { wrapper }) });
+      } else if ("cssRules" in rule) {
+        const header = /^(@[a-z-]+[^{]*)\{/i.exec(rule.cssText)?.[1].trim() ?? "";
+        if (/^@(?:media|container)\s/i.test(header)) {
+          if (wrapper === undefined) visit((rule as CSSGroupingRule).cssRules, header);
+        } else if (/^@layer\b/i.test(header)) visit((rule as CSSGroupingRule).cssRules, wrapper);
+      }
+    }
+  };
+  for (const sheet of Array.from(document.styleSheets)) {
+    try {
+      if (sheet.href !== null && new URL(sheet.href, window.location.href).origin !== window.location.origin) continue;
+      visit(sheet.cssRules, undefined);
+    } catch {
+      // A sheet the browser will not let us read is skipped; the card's own rules live in the site's own sheets.
+    }
+  }
+  return rules;
+}
+
+/** Takes the card the frame holds: its markup (HTML for the page, XHTML for the PNG), the card's CSS and the computed values of its variables. */
+function captureCard(frame: HTMLElement | null, title: string): CardCapture {
+  const article = frame?.firstElementChild;
+  if (!article) throw new Error("the card was not drawn");
+  const rules = readSiteStyleRules();
+  const computed = getComputedStyle(document.documentElement);
+  const names = new Set([...templateCardVariableNames(rules), "--paper", "--ink", "--doc"]);
+  const variables: Record<string, string> = {};
+  for (const name of names) variables[name] = computed.getPropertyValue(name);
+  return { html: article.outerHTML, xhtml: new XMLSerializer().serializeToString(article), css: templateCardCss(rules, variables), title };
+}
+
+/** The height the page really has at the card's width, measured in a hidden frame of the same size (the page's own media queries apply there, not the phone's). */
+async function measureCardPage(page: string): Promise<number> {
+  const frame = document.createElement("iframe");
+  frame.setAttribute("sandbox", "allow-same-origin");
+  frame.setAttribute("aria-hidden", "true");
+  frame.tabIndex = -1;
+  frame.inert = true;
+  frame.style.cssText = `position:fixed;top:0;left:-12000px;width:${templateCardWidth}px;height:200px;border:0;visibility:hidden;pointer-events:none`;
+  const loaded = new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error("the page did not load")), 15_000);
+    frame.onload = () => { window.clearTimeout(timer); resolve(); };
+  });
+  frame.srcdoc = page;
+  document.body.append(frame);
+  try {
+    await loaded;
+    const doc = frame.contentDocument;
+    if (!doc) throw new Error("the page cannot be read");
+    await Promise.all(Array.from(doc.images).map((image) => image.decode().catch(() => undefined)));
+    return Math.ceil(Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight));
+  } finally {
+    frame.remove();
+  }
 }
 
 /**
@@ -171,6 +252,9 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
   const backRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  // The draft being exported: while it is set, the hidden frame draws the card the files are made from (D-55).
+  const [exportSource, setExportSource] = useState<TemplateDossier | null>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const exportingRef = useRef(false);
   const readingRef = useRef(false);
   const [reading, setReading] = useState(false);
@@ -252,10 +336,27 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
     setPhase("preparing");
     setConfirmClose(false);
     const minimumShown = new Promise<void>((resolve) => window.setTimeout(resolve, preparingMinimumMs));
+    // A file that breaks the closed policy is never downloaded; the draft stays as it is.
+    const ensureClean = (text: string, mode: "html" | "svg") => {
+      if (templateExportViolations(text, mode).length > 0) throw new Error(templateExportError);
+    };
     try {
-      const content = await (format === "png"
-        ? createTemplateDossierPng(snapshot)
-        : Promise.resolve().then(() => createTemplateDossierHtml(snapshot)));
+      let card: CardCapture;
+      try {
+        flushSync(() => setExportSource(snapshot));
+        card = captureCard(frameRef.current, snapshot.virus.name.trim() === "" ? templateDefaultTitle : snapshot.virus.name.trim());
+      } finally {
+        setExportSource(null);
+      }
+      const page = templateCardDocument(card.html, card.css, card.title);
+      ensureClean(page, "html");
+      let content: string | Blob = page;
+      if (format === "png") {
+        const height = await measureCardPage(page);
+        const svg = templateCardSvg(card.xhtml, card.css, templateCardWidth, height);
+        ensureClean(svg, "svg");
+        content = await renderTemplateCardPng(svg, height);
+      }
       await minimumShown;
       downloadTemplateBlob(content, format === "png" ? templatePngFileName : templateFileName);
       setExportedKey(snapshotKey);
@@ -391,5 +492,8 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
       </ActiveFormatContext.Provider>
       {formatterOpen && formatTarget && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={(_id, run) => run()} onClose={() => setFormatterOpen(false)} positionStorageKey={null} />, document.getElementById("desktop") ?? document.body)}
     </div>
+    {exportSource && <div ref={frameRef} className="template-export-frame" aria-hidden="true" inert>
+      <TemplateCard dossier={exportSource} exporting />
+    </div>}
   </div>;
 }

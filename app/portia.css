@@ -2339,6 +2339,11 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 /* A name typed without spaces must wrap inside the card, not widen the window (the archive's own names are short). */
 .template-card-preview .record-header > div:first-child { min-width: 0; }
 .template-card-preview .record-header h2, .template-card-preview .record-code, .template-card-preview .record-status, .template-card-preview .mutation-copy h4 { overflow-wrap: anywhere; }
+/* D-55 (20-44): the hidden frame the HTML and PNG are made from. It sits off screen at the card's file width; the card inside it has no sticky header
+   and no scrolling PPU cells, so nothing in the file is hidden behind a scroll. These .template-export-card rules travel into the file with the card. */
+.template-export-frame { position: fixed; top: 0; left: -12000px; width: 1060px; pointer-events: none; visibility: hidden; }
+.template-export-card .record-header { position: relative; }
+.template-export-card .metric-grid > div > .formatted-content { max-height: none; overflow: visible; padding-right: 0; }
 @media (max-width: 900px) {
   .template-shell { padding: 12px 14px 18px; }
   .template-view { display: grid; grid-template-columns: auto 1fr 1fr; width: 100%; }

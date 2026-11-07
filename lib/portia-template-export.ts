@@ -1,23 +1,16 @@
 /**
- * Local-only export of the participant's "Шаблон досье" (Phase 20, D-23, D-24, D-52).
+ * Local-only export of the participant's "Шаблон досье" (Phase 20, D-23, D-24, D-52, D-55).
  *
  * The draft is a TemplateDossier (lib/portia-template-dossier.ts): the shape of a site editor virus card without scientist logs,
  * so an archive record can never flow into it. Nothing here touches the network.
  *
- * Local images (D-24) live only in memory as a validated data URL. Both exports (standalone HTML and PNG) are built from the
- * same bounded model and never reference an external URL.
+ * D-55: the downloaded HTML and PNG are the archive's own card. The builder draws the card once (the shared VirusCardBody), hands this
+ * module the card's markup and the card's own style rules, and this module makes the two files from them: a single HTML page and the
+ * raster of the same page (SVG with a foreignObject, drawn on a canvas). There is no second layout of the card here.
+ *
+ * Local images (D-24) live only in memory as a validated data URL and reach the files only as `<img src="data:image/...">`. Every file
+ * is checked by the closed policy (`templateExportViolations`) before it leaves, and never references an external address.
  */
-
-import {
-  isLocalTemplateImage,
-  safeTemplateRunStyle,
-  templateFieldRuns,
-  templateRunBackground,
-  templateVirusId,
-  type TemplateDossier,
-  type TemplateRun,
-} from "./portia-template-dossier.ts";
-import { classificationOptions, portiaTextKey, type RichTextStyle, type Virus } from "./portia-content.ts";
 
 export const emptyTemplateText = "Не заполнено";
 export const templateFileName = "shablon-dosye.html";
@@ -33,8 +26,6 @@ export const templateImageAccept = "image/png,image/jpeg,image/webp";
 export const templateImageOpenError = "Не удалось открыть изображение. Выберите другой файл.";
 export const templateExportError = "Не удалось подготовить файл. Повторите скачивание.";
 export const templatePngTooLargeError = "Карточка слишком длинная для PNG, лишнее не обрезается. Сократите текст или скачайте HTML.";
-/** Display box shared by the preview, HTML and PNG so the three agree. */
-export const templateImageDisplayMaxHeight = 520;
 
 export type TemplateImageMime = "image/png" | "image/jpeg" | "image/webp";
 
@@ -67,6 +58,10 @@ export function isTemplateImageError(error: unknown): error is Error {
 
 export function isTemplatePngTooLargeError(error: unknown): error is Error {
   return error instanceof Error && error.name === "TemplatePngTooLargeError";
+}
+
+export function isTemplateExportError(error: unknown): error is Error {
+  return error instanceof Error && error.name === "TemplateExportError";
 }
 
 /** The format named by the first bytes, independent of the file name and the declared type. */
@@ -137,11 +132,6 @@ export async function decodeLocalTemplateImage(
   return Object.freeze({ name: file.name.trim().slice(0, 80) || "image", mime, dataUrl, width: decoded.width, height: decoded.height, bytes: bytes.length });
 }
 
-export function fitTemplateImage(image: Pick<TemplateImage, "width" | "height">, maxWidth: number, maxHeight = templateImageDisplayMaxHeight) {
-  const scale = Math.min(1, maxWidth / image.width, maxHeight / image.height);
-  return { width: Math.max(1, Math.round(image.width * scale)), height: Math.max(1, Math.round(image.height * scale)) };
-}
-
 export function escapeTemplateHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -150,31 +140,6 @@ export function escapeTemplateHtml(value: string) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
-
-function valueHtml(value: string) {
-  return value.trim() === ""
-    ? `<span class="empty">${emptyTemplateText}</span>`
-    : escapeTemplateHtml(value);
-}
-
-const standaloneCss = `
-*{box-sizing:border-box}
-body{margin:0;padding:24px;background:#e9e5d8;color:#1b2523;font:16px/1.55 system-ui,"Segoe UI",Roboto,Arial,sans-serif}
-.card{max-width:820px;margin:0 auto;padding:32px;background:#f6f3ea;border:1px solid #bdb8a6;border-radius:6px}
-header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;padding-bottom:16px;border-bottom:2px solid #1b2523}
-.code{display:block;font:700 12px/1.3 ui-monospace,Consolas,monospace;letter-spacing:.08em;color:#4a5a56}
-h1{margin:4px 0 0;font-size:28px;line-height:1.15;overflow-wrap:anywhere}
-.status{font:700 12px/1.3 ui-monospace,Consolas,monospace;letter-spacing:.06em;overflow-wrap:anywhere}
-section{margin-top:24px}
-h2{margin:0 0 8px;font:700 12px/1.3 ui-monospace,Consolas,monospace;letter-spacing:.08em;color:#2e6f64}
-dl{margin:0;display:grid;gap:12px}
-dt{font:700 11px/1.3 ui-monospace,Consolas,monospace;letter-spacing:.06em;color:#4a5a56}
-dd{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
-.empty{color:#7a7a6e;font-style:italic}
-.photo{margin:16px 0 0}
-.photo img{display:block;max-width:100%;max-height:520px;width:auto;height:auto;object-fit:contain;border:1px solid #bdb8a6}
-footer{margin-top:32px;padding-top:12px;border-top:1px solid #bdb8a6;font:11px/1.4 ui-monospace,Consolas,monospace;color:#4a5a56}
-`.trim();
 
 /** Starts a browser download of `content` (HTML text or a Blob) and releases the object URL afterwards. */
 export function downloadTemplateBlob(
@@ -201,83 +166,241 @@ export function downloadTemplateBlob(
   environment.setTimeout(() => environment.URL.revokeObjectURL(url), 10_000);
 }
 
-/* ---------------------------------------------------------------- PNG export */
+/* ---------------------------------------------------------------- captions shared with the preview */
 
-export const pngWidth = 1000;
-export const pngPadding = 40;
-export const pngMaxHeight = 8000;
+export const photoCaption = "Фото после заражения";
+export const mutationCaption = "Скриншот мутации";
 
-type Measure = (text: string, font: string) => number;
+/* ---------------------------------------------------------------- the card's own CSS (D-55) */
 
-export type PngOp =
-  | Readonly<{ kind: "rect"; x: number; y: number; width: number; height: number; fill?: string; stroke?: string }>
-  | Readonly<{ kind: "text"; x: number; y: number; text: string; font: string; fill: string }>
-  /** `slot` names the model slot a picture comes from (dossier layout only). */
-  | Readonly<{ kind: "image"; x: number; y: number; width: number; height: number; slot?: string }>;
+/** A rule as a browser reports it for the site's style sheets: the selector list, the declaration block and the @media / @container wrapper. */
+export type TemplateCssRule = Readonly<{ selector: string; declarations: string; wrapper?: string }>;
 
-export type PngLayout = Readonly<{ width: number; height: number; ops: readonly PngOp[] }>;
+// The classes of the archive card (components/portia-virus-card.tsx) and of the builder's frame around it. A rule reaches the file only
+// when every class in every one of its selectors is on this list, so nothing of the desktop, the windows or the editor is carried over.
+const cardClasses: ReadonlySet<string> = new Set([
+  "record-view", "record-body", "record-header", "record-code", "record-status", "record-document", "record-hero", "record-footer",
+  "classification-panel", "classification-grid", "class-cell", "class-badge",
+  "danger", "spread", "escape", "transmission", "mind", "appearance", "behavior", "level-1", "level-2", "level-3",
+  "section-kicker", "dossier-section", "lead-copy", "metric-grid", "mutation-grid", "mutation-card", "mutation-index", "mutation-copy",
+  "subject-media", "media-empty", "portia-image", "is-loaded", "formatted-content", "formatted-empty",
+  "template-card-preview", "template-export-card", "template-export",
+]);
 
-const pngPalette = { paper: "#f6f3ea", border: "#bdb8a6", ink: "#1b2523", soft: "#4a5a56", accent: "#2e6f64", empty: "#7a7a6e" };
-const sansFont = (size: number, weight = 400, style = "normal") => `${style} ${weight} ${size}px "Segoe UI", system-ui, Roboto, Arial, sans-serif`;
-const monoFont = (size: number) => `700 ${size}px ui-monospace, Consolas, monospace`;
+const cardTags: ReadonlySet<string> = new Set([
+  "div", "span", "strong", "small", "em", "p", "h2", "h3", "h4", "section", "header", "footer", "article", "figure", "figcaption", "img", "svg", "path",
+]);
 
-/** Greedy word wrap that keeps blank lines and breaks a word wider than the line by characters. Nothing is dropped. */
-export function wrapTemplateText(text: string, maxWidth: number, font: string, measure: Measure) {
-  const fits = (value: string) => measure(value.trimEnd(), font) <= maxWidth;
-  const lines: string[] = [];
-  for (const paragraph of text.replace(/\r\n?/g, "\n").split("\n")) {
-    if (paragraph === "") {
-      lines.push("");
-      continue;
+function selectorAllowed(selector: string) {
+  if (selector === "" || /[#[\]*\\@{}();"'`<&|=^$!%?,]/.test(selector)) return false;
+  // Only the pseudo-elements and structural pseudo-classes the card's rules use; any state (:hover, :focus) or function (:not) is refused.
+  const plain = selector.replace(/::?(?:before|after)(?![\w-])/g, "").replace(/:(?:first-child|last-child|first-of-type|last-of-type|only-child|empty)(?![\w-])/g, "");
+  if (plain.includes(":")) return false;
+  const compounds = plain.split(/\s*[>+~]\s*|\s+/).filter((part) => part !== "");
+  let classes = 0;
+  for (const compound of compounds) {
+    const match = /^([a-z][a-z0-9]*)?((?:\.[A-Za-z_][\w-]*)*)$/.exec(compound);
+    if (match === null) return false;
+    if (match[1] !== undefined && !cardTags.has(match[1])) return false;
+    for (const name of match[2].split(".")) {
+      if (name === "") continue;
+      if (!cardClasses.has(name)) return false;
+      classes += 1;
     }
-    let current = "";
-    for (const word of paragraph.match(/\S+\s*|\s+/g) ?? []) {
-      if (current !== "" && !fits(current + word)) {
-        lines.push(current.trimEnd());
-        current = "";
-      }
-      current += word;
-      if (fits(current)) continue;
-      // A single word wider than the line: split it by characters.
-      let piece = "";
-      for (const char of Array.from(current)) {
-        if (piece !== "" && !fits(piece + char)) {
-          lines.push(piece);
-          piece = char;
-        } else {
-          piece += char;
-        }
-      }
-      current = piece;
-    }
-    lines.push(current.trimEnd());
   }
-  return lines;
+  return compounds.length > 0 && classes > 0;
 }
 
-type Ctx2D = {
-  font: string;
+// Anything that can load a resource, run something or leave the style block.
+const unsafeCssValue = /url\(|image-set\(|src\(|expression\(|@|\\|<|>|\{|\}|https?:|javascript:|\/\*|[\u0000-\u001f]/i;
+
+function splitDeclarations(text: string) {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  let quote = "";
+  for (const char of text) {
+    if (quote !== "") {
+      current += char;
+      if (char === quote) quote = "";
+      continue;
+    }
+    if (char === "\"" || char === "'") quote = char;
+    else if (char === "(") depth += 1;
+    else if (char === ")") depth = Math.max(0, depth - 1);
+    if (char === ";" && depth === 0) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  parts.push(current);
+  return parts.map((part) => part.trim()).filter((part) => part !== "");
+}
+
+function cleanDeclaration(raw: string) {
+  const colon = raw.indexOf(":");
+  if (colon <= 0) return null;
+  const property = raw.slice(0, colon).trim();
+  if (!/^(?:--[A-Za-z0-9_-]+|-?[a-z][a-z-]*)$/.test(property)) return null;
+  // The card's own @keyframes stay behind, so an animation would leave elements in its first frame.
+  if (/^(?:-webkit-)?animation/i.test(property)) return null;
+  const value = raw.slice(colon + 1).trim();
+  if (value === "" || unsafeCssValue.test(value)) return null;
+  return `${property}:${value}`;
+}
+
+function cleanWrapper(wrapper: string | undefined) {
+  if (wrapper === undefined) return "";
+  const normal = wrapper.replace(/\s+/g, " ").trim();
+  return /^@(?:media|container) [A-Za-z0-9 :().,>=%-]+$/.test(normal) && !/url/i.test(normal) ? normal : null;
+}
+
+type CardRule = Readonly<{ selectors: readonly string[]; declarations: readonly string[]; wrapper: string }>;
+
+function cardRules(rules: readonly TemplateCssRule[]): CardRule[] {
+  const kept: CardRule[] = [];
+  for (const rule of rules) {
+    const selectors = rule.selector.split(",").map((selector) => selector.replace(/\s+/g, " ").trim());
+    if (selectors.length === 0 || !selectors.every(selectorAllowed)) continue;
+    const wrapper = cleanWrapper(rule.wrapper);
+    if (wrapper === null) continue;
+    const declarations = splitDeclarations(rule.declarations).map(cleanDeclaration).filter((declaration): declaration is string => declaration !== null);
+    if (declarations.length > 0) kept.push({ selectors, declarations, wrapper });
+  }
+  return kept;
+}
+
+/** The variable names the card's rules read, so the caller can pass their computed values to `templateCardCss`. */
+export function templateCardVariableNames(rules: readonly TemplateCssRule[]): string[] {
+  const names = new Set<string>();
+  for (const rule of cardRules(rules)) {
+    for (const declaration of rule.declarations) {
+      for (const match of declaration.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)/g)) names.add(match[1]);
+    }
+  }
+  return [...names].sort();
+}
+
+/**
+ * The card's style rules for the file: a `:root` block with the given (computed) variable values, then the rules whose selectors
+ * name only the card's classes, each in its own @media / @container wrapper. Rules for fonts, imports, anything with url(), and
+ * animations are never written, so the file loads nothing.
+ */
+export function templateCardCss(rules: readonly TemplateCssRule[], variables: Readonly<Record<string, string>>): string {
+  const root = Object.keys(variables)
+    .filter((name) => /^--[A-Za-z0-9_-]+$/.test(name))
+    .sort()
+    .map((name) => [name, variables[name].trim()] as const)
+    .filter(([, value]) => value !== "" && !unsafeCssValue.test(value) && !value.includes(";"))
+    .map(([name, value]) => `${name}:${value}`);
+  const body = cardRules(rules).map((rule) => {
+    const block = `${rule.selectors.join(",")}{${rule.declarations.join(";")}}`;
+    return rule.wrapper === "" ? block : `${rule.wrapper}{${block}}`;
+  });
+  return [`:root{${root.join(";")}}`, ...body].join("\n");
+}
+
+/* ---------------------------------------------------------------- the files */
+
+export const templateCardWidth = 1060;
+
+// Base of the page: the site's own `* { box-sizing }`, the paper and the ink, and the document face, nothing else.
+const baseCss = "*,*::before,*::after{box-sizing:border-box}html{background:var(--paper,#f3f0e6)}.template-export{margin:0;background:var(--paper,#f3f0e6);color:var(--ink,#1b2523);font:16px/1.55 var(--doc,system-ui,\"Segoe UI\",Roboto,Arial,sans-serif)}";
+
+/**
+ * A typed address stays readable text but is no address in the file: outside the tags `http:` and `url(` get a character reference
+ * for one character. Attributes and tags are never touched, so a real address in an attribute is still found by the policy.
+ */
+export function neutralizeTemplateText(markup: string) {
+  return markup
+    .split(/(<[^>]*>)/)
+    .map((part, index) => (index % 2 === 1 ? part : part.replace(/(https?):/gi, "$1&#58;").replace(/url\(/gi, "url&#40;")))
+    .join("");
+}
+
+/** The single-file page: the card's markup, its CSS, a closed content policy (no network at all, data images only). */
+export function templateCardDocument(markup: string, css: string, title: string) {
+  return [
+    "<!doctype html>",
+    "<html lang=\"ru\"><head><meta charset=\"utf-8\">",
+    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:\">",
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+    `<title>${neutralizeTemplateText(escapeTemplateHtml(title.trim() === "" ? templateDefaultTitle : title.trim()))}</title>`,
+    `<style>${baseCss}${css}</style></head>`,
+    `<body class="template-export">${neutralizeTemplateText(markup)}</body></html>`,
+  ].join("");
+}
+
+/** The same card as an SVG with a foreignObject, the source of the PNG. `markup` is XHTML (an XMLSerializer result). */
+export function templateCardSvg(markup: string, css: string, width: number, height: number) {
+  const w = Math.max(1, Math.ceil(width));
+  const h = Math.max(1, Math.ceil(height));
+  const style = `${baseCss}${css}`.replace(/&/g, "&amp;");
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`,
+    `<foreignObject x="0" y="0" width="${w}" height="${h}"><div xmlns="http://www.w3.org/1999/xhtml" class="template-export">`,
+    `<style>${style}</style>${neutralizeTemplateText(markup)}</div></foreignObject></svg>`,
+  ].join("");
+}
+
+/* ---------------------------------------------------------------- the closed policy of D-23 / D-24 */
+
+const dataImageSource = /^"data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}"$/;
+
+/**
+ * One check over a finished file: no external address, script, link, css url(), event handler, reference attribute, embedded content,
+ * scientist section, and no image but a data URL of the allowed types. `svg` mode (the source of the PNG) allows exactly the two
+ * namespace addresses of an SVG with XHTML inside it, written as xmlns attributes, and nothing else.
+ */
+export function templateExportViolations(content: string, mode: "html" | "svg" = "html"): string[] {
+  const text = mode === "svg"
+    ? content.split("xmlns=\"http://www.w3.org/2000/svg\"").join("").split("xmlns=\"http://www.w3.org/1999/xhtml\"").join("")
+    : content;
+  const found: string[] = [];
+  if (/https?:/i.test(text)) found.push("external address");
+  if (/<script/i.test(text)) found.push("script");
+  if (/<link/i.test(text)) found.push("link");
+  if (/url\(/i.test(text)) found.push("css url");
+  if (/<[^>]*\son[a-z]+\s*=/i.test(text)) found.push("event handler");
+  if (/<[^>]*\s(?:href|xlink:href|action|formaction|poster|srcset|ping|data)\s*=/i.test(text)) found.push("reference attribute");
+  if (/<(?:iframe|frame|object|embed|base|form|image|use|audio|video|source)(?![\w-])/i.test(text)) found.push("embedded content");
+  if (text.includes("ЗАПИСИ УЧЁНЫХ")) found.push("scientist records section");
+  for (const tag of text.match(/<img(?![\w-])[^>]*>/gi) ?? []) {
+    const sources = [...tag.matchAll(/\s([A-Za-z:-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/g)].filter((attribute) => /^(?:src|srcset|href|xlink:href)$/i.test(attribute[1]));
+    const allowed = sources.length === 1 && sources[0][1].toLowerCase() === "src" && dataImageSource.test(sources[0][2]);
+    if (!allowed) found.push(`image outside data:image/png|jpeg|webp: ${tag.slice(0, 40)}`);
+  }
+  return found;
+}
+
+export function assertTemplateExportClean(content: string, mode: "html" | "svg" = "html") {
+  if (templateExportViolations(content, mode).length > 0) throw namedError("TemplateExportError", templateExportError);
+}
+
+/* ---------------------------------------------------------------- PNG: the raster of the same card */
+
+export const pngMaxHeight = 8000;
+const pngPaper = "#f3f0e6";
+
+type CanvasContext = {
   fillStyle: string;
-  strokeStyle: string;
-  lineWidth: number;
-  textBaseline: string;
   fillRect: (x: number, y: number, width: number, height: number) => void;
-  strokeRect: (x: number, y: number, width: number, height: number) => void;
-  fillText: (text: string, x: number, y: number) => void;
   drawImage: (image: never, x: number, y: number, width: number, height: number) => void;
-  measureText: (text: string) => { width: number };
 };
 
 type CanvasLike = {
   width: number;
   height: number;
-  getContext: (type: "2d") => Ctx2D | null;
+  getContext: (type: "2d") => CanvasContext | null;
   toBlob: (callback: (blob: Blob | null) => void, type?: string) => void;
 };
 
 export type PngEnvironment = Readonly<{
   createCanvas: (width: number, height: number) => CanvasLike;
-  loadImage: (src: string) => Promise<ImageSource>;
+  /** Loads the SVG source and returns something the canvas can draw. */
+  loadImage: (src: string) => Promise<unknown>;
 }>;
 
 const browserPngEnvironment = (): PngEnvironment => ({
@@ -287,419 +410,36 @@ const browserPngEnvironment = (): PngEnvironment => ({
     canvas.height = height;
     return canvas as unknown as CanvasLike;
   },
-  loadImage: loadBrowserImage,
+  loadImage: async (src) => {
+    const image = await loadBrowserImage(src);
+    try {
+      await image.decode();
+    } catch {
+      // The load event already succeeded; a decode that cannot be awaited is not a failure.
+    }
+    return image;
+  },
 });
 
-/* ---------------------------------------------------------------- dossier model export (20-38, D-52) */
-
-export type TemplateStyledPiece = Readonly<{ text: string; font: string; fill: string; background?: string; width: number }>;
-export type TemplateWrappedLine = Readonly<{ pieces: readonly TemplateStyledPiece[]; height: number }>;
-
-const bodyFontSize = 16;
-const minLineHeight = 25;
-
-function pieceStyle(style: RichTextStyle | undefined) {
-  const safe = safeTemplateRunStyle(style);
-  const size = safe.fontSize ?? bodyFontSize;
-  return {
-    size,
-    font: sansFont(size, safe.fontWeight ?? 400),
-    fill: safe.color ?? pngPalette.ink,
-    background: templateRunBackground(safe),
-  };
-}
-
-type StyledChar = { ch: string; run: number };
-
 /**
- * Greedy word wrap over styled fragments. A word may span fragments; every piece is measured with its own font, a blank line stays a
- * blank line, a word wider than the line is cut by characters and no visible character is dropped. A line is as high as its
- * largest fragment (never below 25).
+ * Draws the card's SVG on a canvas (scale 2 while the canvas stays within 8000 px, else 1) and encodes it as PNG. Only the assembled
+ * SVG is loaded, as a data URL, after the closed policy has passed it. A card taller than 8000 px is refused, never cropped.
  */
-export function wrapTemplateRuns(runs: readonly TemplateRun[], maxWidth: number, measure: Measure): TemplateWrappedLine[] {
-  const styles = runs.map((run) => pieceStyle(run.style));
-  const paragraphs: StyledChar[][] = [[]];
-  runs.forEach((run, runIndex) => {
-    for (const ch of Array.from(run.text)) {
-      if (ch === "\r") continue;
-      if (ch === "\n") paragraphs.push([]);
-      else paragraphs[paragraphs.length - 1].push({ ch, run: runIndex });
-    }
-  });
-
-  const isSpace = (value: StyledChar) => /\s/.test(value.ch);
-  const trimEnd = (chars: StyledChar[]) => {
-    let end = chars.length;
-    while (end > 0 && isSpace(chars[end - 1])) end -= 1;
-    return chars.slice(0, end);
-  };
-  const toPieces = (chars: readonly StyledChar[]) => {
-    const pieces: { text: string; run: number }[] = [];
-    for (const value of chars) {
-      const last = pieces[pieces.length - 1];
-      if (last && last.run === value.run) last.text += value.ch;
-      else pieces.push({ text: value.ch, run: value.run });
-    }
-    return pieces;
-  };
-  const fits = (chars: StyledChar[]) => toPieces(trimEnd(chars)).reduce((total, piece) => total + measure(piece.text, styles[piece.run].font), 0) <= maxWidth;
-
-  const rawLines: StyledChar[][] = [];
-  for (const paragraph of paragraphs) {
-    if (paragraph.length === 0) {
-      rawLines.push([]);
-      continue;
-    }
-    // Same tokens as `\S+\s*|\s+`: a word with the spaces after it, or a run of spaces.
-    const tokens: StyledChar[][] = [];
-    for (let index = 0; index < paragraph.length;) {
-      const start = index;
-      if (isSpace(paragraph[index])) {
-        while (index < paragraph.length && isSpace(paragraph[index])) index += 1;
-      } else {
-        while (index < paragraph.length && !isSpace(paragraph[index])) index += 1;
-        while (index < paragraph.length && isSpace(paragraph[index])) index += 1;
-      }
-      tokens.push(paragraph.slice(start, index));
-    }
-    let current: StyledChar[] = [];
-    for (const token of tokens) {
-      if (current.length > 0 && !fits(current.concat(token))) {
-        rawLines.push(trimEnd(current));
-        current = [];
-      }
-      current = current.concat(token);
-      if (fits(current)) continue;
-      // A single word wider than the line: split it by characters.
-      let piece: StyledChar[] = [];
-      for (const value of current) {
-        if (piece.length > 0 && !fits(piece.concat(value))) {
-          rawLines.push(trimEnd(piece));
-          piece = [value];
-        } else {
-          piece.push(value);
-        }
-      }
-      current = piece;
-    }
-    rawLines.push(trimEnd(current));
-  }
-
-  return rawLines.map((chars) => {
-    const pieces = toPieces(chars).map((piece): TemplateStyledPiece => {
-      const style = styles[piece.run];
-      return {
-        text: piece.text,
-        font: style.font,
-        fill: style.fill,
-        ...(style.background ? { background: style.background } : {}),
-        width: measure(piece.text, style.font),
-      };
-    });
-    const size = chars.reduce((largest, value) => Math.max(largest, styles[value.run].size), bodyFontSize);
-    return { pieces, height: Math.max(minLineHeight, Math.ceil(size * 1.55)) };
-  });
-}
-
-/* ---- sections shared by the preview, HTML and PNG (same labels as VirusRecord in components/portia-desktop-dossier.tsx) */
-
-export const classificationAxes = [
-  ["danger", "Общий уровень опасности"],
-  ["spread", "Распространение"],
-  ["escapeRisk", "Угроза и риск побега"],
-  ["transmission", "Способ распространения"],
-  ["mind", "Разум"],
-  ["appearance", "Вид / внешность"],
-  ["behavior", "Поведение"],
-] as const satisfies readonly (readonly [keyof Virus["classification"], string])[];
-
-export const ppuFields = [
-  ["ppu-health", "ЗДОРОВЬЕ", (virus: Virus) => virus.ppu.health],
-  ["ppu-speed", "СКОРОСТЬ", (virus: Virus) => virus.ppu.speed],
-  ["ppu-abilities", "СПОСОБНОСТИ", (virus: Virus) => virus.ppu.abilities],
-] as const;
-
-export const sectionTitles = {
-  classification: ["01", "КЛАССИФИКАЦИЯ"],
-  external: ["02", "ВНЕШНИЕ ХАРАКТЕРИСТИКИ"],
-  ppu: ["03", "ХАРАКТЕРИСТИКИ С PPU"],
-  physiology: ["04", "ФИЗИОЛОГИЯ"],
-  mutations: ["05", "МУТАЦИИ ВИРУСА"],
-} as const;
-
-export const photoCaption = "Фото после заражения";
-export const mutationCaption = "Скриншот мутации";
-export const mutationLabel = (index: number) => `M-${String(index + 1).padStart(2, "0")}`;
-
-export function classificationLevel(axis: keyof Virus["classification"], value: string) {
-  return (classificationOptions[axis] as readonly { value: string; level?: number }[]).find((option) => option.value === value)?.level;
-}
-
-/* ---- HTML */
-
-const dossierCss = `${standaloneCss}
-.rich{white-space:pre-wrap;overflow-wrap:anywhere}
-.class-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.class-cell span,.class-cell small{display:block;font:700 11px/1.3 ui-monospace,Consolas,monospace;letter-spacing:.06em;color:#4a5a56}
-.class-cell strong{display:block;margin:2px 0}
-.mutation{margin-top:16px;padding-top:12px;border-top:1px solid #bdb8a6}
-.mutation-index{font:700 12px/1.3 ui-monospace,Consolas,monospace;letter-spacing:.08em;color:#2e6f64}
-h3{margin:4px 0 6px;font-size:16px;line-height:1.3;overflow-wrap:anywhere}
-figcaption{margin-top:4px;font:11px/1.4 ui-monospace,Consolas,monospace;color:#4a5a56}`;
-
-function runCss(style: RichTextStyle | undefined) {
-  const safe = safeTemplateRunStyle(style);
-  const parts: string[] = [];
-  if (safe.color) parts.push(`color:${safe.color}`);
-  if (safe.fontSize) parts.push(`font-size:${safe.fontSize}px`);
-  if (safe.fontWeight) parts.push(`font-weight:${safe.fontWeight}`);
-  const background = templateRunBackground(safe);
-  if (background) parts.push(`background-color:${background}`);
-  return parts.join(";");
-}
-
-/** A formatted field: escaped fragments, each with a style attribute built only from the allow-listed values. */
-function richHtml(dossier: TemplateDossier, key: string, text: string) {
-  if (text.trim() === "") return `<span class="empty">${emptyTemplateText}</span>`;
-  return templateFieldRuns(dossier, key, text).map((run) => {
-    const css = runCss(run.style);
-    const escaped = escapeTemplateHtml(run.text);
-    return css === "" ? escaped : `<span style="${css}">${escaped}</span>`;
-  }).join("");
-}
-
-/** The picture of a slot. Only a validated local data URL from the model slots is written, never an address from the virus record. */
-function figureHtml(slots: ReadonlyMap<string, TemplateImage>, slot: string, alt: string, caption: string | null) {
-  const image = slots.get(slot);
-  if (image === undefined) return "";
-  return `<figure class="photo"><img src="${image.dataUrl}" alt="${escapeTemplateHtml(alt)}">${caption === null ? "" : `<figcaption>${escapeTemplateHtml(caption)}</figcaption>`}</figure>`;
-}
-
-const sectionHtml = (kind: keyof typeof sectionTitles, body: string) => `<section><h2>${sectionTitles[kind][0]} ${sectionTitles[kind][1]}</h2>${body}</section>`;
-
-/**
- * A self-contained HTML document of the template dossier: sections 01-05 of the site's virus card, without scientist records.
- * Fragments carry only allow-listed styles, all text is escaped, the CSS is inline, there is no script, no link and no external
- * address; the embedded content policy allows `data:` images only.
- */
-export function createTemplateDossierHtml(dossier: TemplateDossier) {
-  const { virus } = dossier;
-  const slots = usableTemplateImages(dossier);
-  const key = (field: Parameters<typeof portiaTextKey.virus>[1]) => portiaTextKey.virus(templateVirusId, field);
-  const title = virus.name.trim() === "" ? templateDefaultTitle : escapeTemplateHtml(virus.name.trim());
-  const classification = classificationAxes.map(([axis, label]) => {
-    const value = virus.classification[axis];
-    const level = classificationLevel(axis, value);
-    return `<div class="class-cell"><span>${escapeTemplateHtml(label)}</span><strong>${valueHtml(value)}</strong>${level === undefined ? "" : `<small>УРОВЕНЬ ${level}</small>`}</div>`;
-  }).join("");
-  const ppu = ppuFields
-    .map(([field, label, read]) => `<div><dt>${label}</dt><dd class="rich">${richHtml(dossier, key(field), read(virus))}</dd></div>`)
-    .join("");
-  const mutations = virus.mutations.length === 0
-    ? `<p class="empty">${emptyTemplateText}</p>`
-    : virus.mutations.map((mutation, index) => [
-      `<div class="mutation"><div class="mutation-index">${mutationLabel(index)}</div>`,
-      figureHtml(slots, `mutation:${index}`, mutation.name.trim() === "" ? mutationCaption : mutation.name, null),
-      `<h3>${valueHtml(mutation.name)}</h3>`,
-      `<div class="rich">${richHtml(dossier, portiaTextKey.mutation(templateVirusId, index), mutation.description)}</div></div>`,
-    ].join("")).join("");
-  const sections = [
-    sectionHtml("classification", `<div class="class-grid">${classification}</div>`),
-    sectionHtml("external", `<div class="rich">${richHtml(dossier, key("external"), virus.external)}</div>`),
-    sectionHtml("ppu", `<dl>${ppu}</dl>`),
-    sectionHtml("physiology", `<div class="rich">${richHtml(dossier, key("physiology"), virus.physiology)}</div>`),
-    sectionHtml("mutations", mutations),
-  ].join("");
-  return [
-    "<!doctype html>",
-    `<html lang="ru"><head><meta charset="utf-8">`,
-    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`,
-    `<meta name="viewport" content="width=device-width, initial-scale=1">`,
-    `<title>${title}</title><style>${dossierCss}</style></head><body>`,
-    `<main class="card"><header><div><span class="code">${valueHtml(virus.code)}</span><h1>${virus.name.trim() === "" ? `<span class="empty">${emptyTemplateText}</span>` : title}</h1></div>`,
-    `<div class="status">${valueHtml(virus.status)}</div></header>`,
-    figureHtml(slots, "infected", photoCaption, photoCaption),
-    sections,
-    `<footer>${escapeTemplateHtml(templateDefaultTitle)} / PORTIA / локальный черновик участника, не запись архива</footer></main>`,
-    "</body></html>",
-  ].join("");
-}
-
-/* ---- PNG */
-
-/** The local images of the model by slot name. A slot that is not a valid local image is left out, so nothing else can be drawn. */
-function usableTemplateImages(dossier: TemplateDossier) {
-  const slots = new Map<string, TemplateImage>();
-  const { infected, mutations } = dossier.images;
-  if (isLocalTemplateImage(infected) && imageSizeWithinBounds(infected.width, infected.height)) slots.set("infected", infected);
-  mutations.slice(0, dossier.virus.mutations.length).forEach((image, index) => {
-    if (isLocalTemplateImage(image) && imageSizeWithinBounds(image.width, image.height)) slots.set(`mutation:${index}`, image);
-  });
-  return slots;
-}
-
-/** Lays the dossier out on the fixed-width page; throws TemplatePngTooLargeError instead of cropping a card that is too long. */
-export function layoutTemplateDossierCard(dossier: TemplateDossier, measure: Measure): PngLayout {
-  const { virus } = dossier;
-  const slots = usableTemplateImages(dossier);
-  const contentWidth = pngWidth - pngPadding * 2;
-  const columnGap = 24;
-  const columnWidth = (contentWidth - columnGap) / 2;
-  const ops: PngOp[] = [];
-  let y = pngPadding;
-  const overflowed = () => y > pngMaxHeight * 4;
-  const empty = (lineHeight: number, x = pngPadding) => {
-    ops.push({ kind: "text", x, y, text: emptyTemplateText, font: sansFont(16, 400, "italic"), fill: pngPalette.empty });
-    y += lineHeight;
-  };
-  const plain = (value: string, font: string, fill: string, lineHeight: number, x = pngPadding, width = contentWidth) => {
-    if (value.trim() === "") return empty(lineHeight, x);
-    for (const line of wrapTemplateText(value, width, font, measure)) {
-      if (line !== "") ops.push({ kind: "text", x, y, text: line, font, fill });
-      y += lineHeight;
-      if (overflowed()) break;
-    }
-  };
-  const rich = (key: string, value: string) => {
-    if (value.trim() === "") return empty(minLineHeight);
-    for (const line of wrapTemplateRuns(templateFieldRuns(dossier, key, value), contentWidth, measure)) {
-      let x = pngPadding;
-      for (const piece of line.pieces) {
-        if (piece.background) ops.push({ kind: "rect", x, y, width: piece.width, height: line.height, fill: piece.background });
-        if (piece.text.trim() !== "") ops.push({ kind: "text", x, y, text: piece.text, font: piece.font, fill: piece.fill });
-        x += piece.width;
-      }
-      y += line.height;
-      if (overflowed()) break;
-    }
-  };
-  const sectionHead = (kind: keyof typeof sectionTitles) => {
-    y += 24;
-    ops.push({ kind: "text", x: pngPadding, y, text: `${sectionTitles[kind][0]} ${sectionTitles[kind][1]}`, font: monoFont(12), fill: pngPalette.accent });
-    y += 26;
-  };
-  /** A picture scaled into the page width and the 520 px display height, with a 1 px frame just outside it. */
-  const picture = (slot: string) => {
-    const image = slots.get(slot);
-    if (image === undefined) return false;
-    y += 16;
-    const box = fitTemplateImage(image, contentWidth);
-    ops.push({ kind: "image", x: pngPadding, y, width: box.width, height: box.height, slot });
-    ops.push({ kind: "rect", x: pngPadding - 1, y: y - 1, width: box.width + 2, height: box.height + 2, stroke: pngPalette.border });
-    y += box.height;
-    return true;
-  };
-  const key = (field: Parameters<typeof portiaTextKey.virus>[1]) => portiaTextKey.virus(templateVirusId, field);
-
-  plain(virus.code, monoFont(12), pngPalette.soft, 18);
-  y += 4;
-  plain(virus.name, sansFont(28, 700), pngPalette.ink, 34);
-  y += 6;
-  plain(virus.status, monoFont(12), pngPalette.ink, 18);
-  y += 12;
-  ops.push({ kind: "rect", x: pngPadding, y, width: contentWidth, height: 2, fill: pngPalette.ink });
-  y += 2;
-  picture("infected");
-
-  sectionHead("classification");
-  for (let row = 0; row < classificationAxes.length; row += 2) {
-    const rowTop = y;
-    let rowBottom = y;
-    classificationAxes.slice(row, row + 2).forEach(([axis, label], column) => {
-      const x = pngPadding + column * (columnWidth + columnGap);
-      const value = virus.classification[axis];
-      const level = classificationLevel(axis, value);
-      y = rowTop;
-      ops.push({ kind: "text", x, y, text: label, font: monoFont(11), fill: pngPalette.soft });
-      y += 18;
-      plain(value, sansFont(16, 700), pngPalette.ink, 25, x, columnWidth);
-      if (level !== undefined) {
-        ops.push({ kind: "text", x, y, text: `УРОВЕНЬ ${level}`, font: monoFont(11), fill: pngPalette.soft });
-        y += 16;
-      }
-      rowBottom = Math.max(rowBottom, y);
-    });
-    y = rowBottom + 12;
-  }
-
-  sectionHead("external");
-  rich(key("external"), virus.external);
-
-  sectionHead("ppu");
-  for (const [field, label, read] of ppuFields) {
-    ops.push({ kind: "text", x: pngPadding, y, text: label, font: monoFont(11), fill: pngPalette.soft });
-    y += 18;
-    rich(key(field), read(virus));
-    y += 12;
-  }
-  y -= 12;
-
-  sectionHead("physiology");
-  rich(key("physiology"), virus.physiology);
-
-  sectionHead("mutations");
-  if (virus.mutations.length === 0) empty(minLineHeight);
-  virus.mutations.forEach((mutation, index) => {
-    if (index > 0) y += 16;
-    ops.push({ kind: "text", x: pngPadding, y, text: mutationLabel(index), font: monoFont(12), fill: pngPalette.accent });
-    y += 20;
-    if (picture(`mutation:${index}`)) y += 12;
-    plain(mutation.name, sansFont(16, 700), pngPalette.ink, 25);
-    y += 4;
-    rich(portiaTextKey.mutation(templateVirusId, index), mutation.description);
-  });
-
-  y += 32;
-  ops.push({ kind: "rect", x: pngPadding, y, width: contentWidth, height: 1, fill: pngPalette.border });
-  y += 12;
-  ops.push({ kind: "text", x: pngPadding, y, text: `${templateDefaultTitle} / PORTIA / локальный черновик участника, не запись архива`, font: monoFont(11), fill: pngPalette.soft });
-  y += 16 + pngPadding;
-
-  if (y > pngMaxHeight) throw namedError("TemplatePngTooLargeError", `card height ${y} exceeds ${pngMaxHeight}`);
-  return { width: pngWidth, height: y, ops };
-}
-
-/** Draws the dossier and encodes it as PNG. Only the data URLs held in the model slots are ever loaded. */
-export async function createTemplateDossierPng(dossier: TemplateDossier, environment: PngEnvironment = browserPngEnvironment()): Promise<Blob> {
-  const probe = environment.createCanvas(1, 1).getContext("2d");
-  if (probe === null) throw new Error("2d canvas is not available");
-  const layout = layoutTemplateDossierCard(dossier, (value, font) => {
-    probe.font = font;
-    return probe.measureText(value).width;
-  });
-  const slots = usableTemplateImages(dossier);
-  const loaded = new Map<string, ImageSource>();
-  for (const op of layout.ops) {
-    if (op.kind !== "image" || op.slot === undefined || loaded.has(op.slot)) continue;
-    const image = slots.get(op.slot);
-    if (image !== undefined) loaded.set(op.slot, await environment.loadImage(image.dataUrl));
-  }
-  const canvas = environment.createCanvas(layout.width, layout.height);
+export async function renderTemplateCardPng(svg: string, height: number, environment: PngEnvironment = browserPngEnvironment()): Promise<Blob> {
+  if (!Number.isFinite(height) || height < 1) throw namedError("TemplateExportError", templateExportError);
+  const pixels = Math.ceil(height);
+  const scale = pixels * 2 <= pngMaxHeight ? 2 : pixels <= pngMaxHeight ? 1 : 0;
+  if (scale === 0) throw namedError("TemplatePngTooLargeError", `card height ${pixels} exceeds ${pngMaxHeight}`);
+  assertTemplateExportClean(svg, "svg");
+  const image = await environment.loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+  const width = templateCardWidth * scale;
+  const canvasHeight = pixels * scale;
+  const canvas = environment.createCanvas(width, canvasHeight);
   const context = canvas.getContext("2d");
   if (context === null) throw new Error("2d canvas is not available");
-  context.fillStyle = pngPalette.paper;
-  context.fillRect(0, 0, layout.width, layout.height);
-  context.textBaseline = "top";
-  for (const op of layout.ops) {
-    if (op.kind === "rect") {
-      if (op.fill !== undefined) {
-        context.fillStyle = op.fill;
-        context.fillRect(op.x, op.y, op.width, op.height);
-      }
-      if (op.stroke !== undefined) {
-        context.strokeStyle = op.stroke;
-        context.lineWidth = 1;
-        context.strokeRect(op.x + 0.5, op.y + 0.5, op.width - 1, op.height - 1);
-      }
-    } else if (op.kind === "text") {
-      context.font = op.font;
-      context.fillStyle = op.fill;
-      context.fillText(op.text, op.x, op.y);
-    } else {
-      const picture = op.slot === undefined ? undefined : loaded.get(op.slot);
-      if (picture !== undefined) context.drawImage(picture as never, op.x, op.y, op.width, op.height);
-    }
-  }
+  context.fillStyle = pngPaper;
+  context.fillRect(0, 0, width, canvasHeight);
+  context.drawImage(image as never, 0, 0, width, canvasHeight);
   return new Promise<Blob>((resolve, reject) => {
     try {
       canvas.toBlob((value) => (value !== null && value.size > 0 ? resolve(value) : reject(new Error("PNG encoding failed"))), "image/png");
