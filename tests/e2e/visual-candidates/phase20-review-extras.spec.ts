@@ -12,8 +12,9 @@ import { test as portia } from "../fixtures/test";
 // Phase 20-47: review extras for the owner's gallery (review.html). NOT ledger rows and NOT baselines: 20-12 never promotes anything from
 // `extras/`. The files only let the owner judge what a still frame cannot show:
 //   - the spider walking for 8 s of real walking on the standard and on the very dark «Свой» accent #1a1a1a (D-53, 20-40, 20-41);
-//   - the full-motion «Лабораторные колбы» for 8 s (D-54, 20-42);
-//   - the template builder's downloaded HTML and PNG and a snapshot of the HTML opened without a network (D-55, 20-43, 20-44).
+//   - the full-motion «Лабораторные колбы» for 8 s (D-54, 20-42; D-59, 20-48: the four boards and the oscilloscope wave move in the frame);
+//   - the template builder's downloaded HTML and PNG and a snapshot of the HTML opened without a network (D-55, 20-43, 20-44; D-60, 20-49:
+//     the value «Предупреждение» is on one line in the card and in the opened file).
 // Real time, not a fake clock: the videos use Playwright's own `test` (no determinism fixture). Chromium only: chromium-desktop and chromium-phone.
 //
 // UI CONTRACT, NOT A ROLE PROOF (builder part): one answer is substituted, GET /api/promotion/status?nickname=, so the builder can be reached
@@ -112,6 +113,14 @@ base("[STAB-VIS-02] D-54 review video: the «Лабораторные колбы
     return Boolean(target?.closest(".wallpaper-flasks")) && animation.playState === "running";
   }).length);
   expect(running, "the drawing's animations run").toBeGreaterThan(0);
+  // D-59 (20-48): the boards (bars, chart line, table cells, tools) and the oscilloscope wave run in the recorded frame on a PC; on a phone they sit left of the frame and are not shown.
+  const boards = await page.evaluate(() => {
+    const selectors = [".wallpaper-flask-chart-bar", ".wallpaper-flask-chart-line", ".wallpaper-flask-table-cell", ".wallpaper-flask-tool", ".wallpaper-flask-scope-trace"];
+    const counts: Record<string, number> = {};
+    for (const selector of selectors) counts[selector] = document.getAnimations().filter((animation) => animation.playState === "running" && ((animation.effect as KeyframeEffect | null)?.target as Element | null)?.matches(selector)).length;
+    return counts;
+  });
+  expect(Object.values(boards).every((count) => count > 0), `every board part runs: ${JSON.stringify(boards)}`).toBe(true);
   await page.waitForTimeout(8_000);
   expect(writes).toEqual([]);
   await keepVideo(page, "flasks-motion", testInfo);
@@ -235,6 +244,8 @@ portia("[STAB-TMPL-01] D-55 review extras: a filled template's downloaded HTML a
   const selects = builder.locator("section.editor-group", { has: page.getByRole("heading", { name: "Классификация" }) }).locator("select");
   await selects.nth(0).selectOption("Апейрон");
   await selects.nth(1).selectOption("Тезей");
+  // D-60 (20-49): the longest value of the escape-risk axis, «Предупреждение», is the one that used to break in the middle of the word.
+  await selects.nth(3).selectOption("Предупреждение");
   const tabs = builder.getByRole("navigation", { name: "Разделы досье" });
   await tabs.getByRole("button", { name: "Описание", exact: true }).click();
   await styleFirstWord(page, builder, textField(builder, "Внешние характеристики"), "Бугристая", "Заголовок");
@@ -274,6 +285,15 @@ portia("[STAB-TMPL-01] D-55 review extras: a filled template's downloaded HTML a
       offlinePage.on("request", (request) => { if (!/^(?:file|data):/i.test(request.url())) requests.push(request.url()); });
       await offlinePage.goto(pathToFileURL(htmlKept).href);
       await expect(offlinePage.getByRole("heading", { name: "Подвальная плесень" })).toBeVisible();
+      const lines = await offlinePage.evaluate(() => [...document.querySelectorAll(".class-cell strong")].map((node) => {
+        const range = document.createRange();
+        range.selectNodeContents(node.firstChild ?? node);
+        const tops = [...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => rect.top).sort((a, b) => a - b);
+        const lines = tops.filter((top, index) => index === 0 || top - tops[index - 1] > 4).length;
+        return { text: node.textContent ?? "", lines, tops: tops.map((top) => Math.round(top)) };
+      }));
+      expect(lines.length, "the opened file shows the classification values").toBeGreaterThan(0);
+      expect(lines.filter((value) => value.lines > 1), "no classification value wraps in the opened file").toEqual([]);
       await offlinePage.screenshot({ path: testInfo.outputPath(`template-html-open-${label}.png`), fullPage: true, animations: "disabled" });
       expect(requests, "the opened file makes no request").toEqual([]);
       keep(testInfo.outputPath(`template-html-open-${label}.png`), `template-html-open-${label}`, testInfo);
@@ -282,5 +302,19 @@ portia("[STAB-TMPL-01] D-55 review extras: a filled template's downloaded HTML a
     }
   }
   await expect(builder.getByRole("status")).toContainText("Файл скачан на устройство");
+
+  // D-60 question for the gallery (q-template-columns): the card in the default-size window (one column) next to the same card in the maximized window (two columns).
+  if (testInfo.project.name === "chromium-desktop") {
+    await builder.getByRole("button", { name: "Предпросмотр", exact: true }).click();
+    await settle(promotion.window);
+    const defaultCard = testInfo.outputPath("template-card-default.png");
+    await promotion.window.screenshot({ path: defaultCard, animations: "disabled" });
+    keep(defaultCard, "template-card-default", testInfo);
+    await page.getByRole("button", { name: "Развернуть Повышение" }).click();
+    await settle(promotion.window);
+    const wideCard = testInfo.outputPath("template-card-maximized.png");
+    await promotion.window.screenshot({ path: wideCard, animations: "disabled" });
+    keep(wideCard, "template-card-maximized", testInfo);
+  }
   expect(writes, "the builder must not write to our API, Supabase or file uploads").toEqual([]);
 });

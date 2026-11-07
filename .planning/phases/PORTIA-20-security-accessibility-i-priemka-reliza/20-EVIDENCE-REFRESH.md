@@ -312,3 +312,66 @@ HEAD пересъёмки: `0929a084c13dc8cd420152c949c3332e82ed7e67`. Набо�
 ### Блокеры
 
 Незакрытых блокеров нет. B1-B5 остаются данными цели (BLOCKED), B4 не изолирован. Физический бюджет кадров на телефоне остаётся BLOCKED до 20-14 (на телефоне показано 55 из 118 анимаций колб при пределе 80, замер в `flasks-animation-count--chromium-phone.json`).
+
+## Пересъёмка после исправлений D-59..D-64 (20-54)
+
+Коммиты исправлений: колбы 20-48 `b003476abe7f0774d99ebdfc00a27d0819b32b1f` (D-59), конструктор шаблона 20-49 `b9ff7d0ecbe470ad5bc059162bc032a33c466052` (D-60, D-61), «Информация» 20-50, кадр картинок 20-51..20-53 (D-62, D-63; `employee_framing: b`, 20-52). Коммит съёмки H5 `a6e2918b2afb0539f468cfa5ac802d349cae0ffb` (тест раунда 14, `PLAN_BASE 9e68f1ebe6485b75634cc69b1140e255d1f3f2b3`), набор S5 `phase20-refresh-a6e2918b2afb` (в .gitignore). Сборка production на 127.0.0.1:3100 (visitor, только чтение, `PORTIA_E2E_ALLOW_HTTP=1`, Node 22.13.1, прямые команды: `npx` и `npm run` падают на node-gyp, Playwright запускался как `node node_modules/@playwright/test/cli.js test`), код app/components/public/lib равен H5 (`git diff --name-only H5 HEAD -- app components public lib` пуст). Эталоны `tests/e2e/visual/__screenshots__` не менялись (`git status --porcelain` пуст). `scripts/phase15-visual-manifest.mjs --verify` не запускался.
+
+### Прогоны на H5 (`--retries=0`)
+
+- Обязательные проверки до показа: UI-контракт конструктора и полоса «template builder» accessibility (`template-builder.spec.ts`, `accessibility.spec.ts`, chromium-desktop и chromium-phone): 38 passed; D-61 на пяти проектах (chromium-desktop, chromium-dpr125, firefox-desktop, chromium-phone, webkit-phone, форматы HTML и PNG): 10 passed; `editor-ui-contract.spec.ts` 34 passed; `image-framing.spec.ts` 10 passed; `phase20-art.spec.ts` и `visual-candidates/template-builder.spec.ts` в S5: 78 passed; тест ledger `lib/phase20-visual-approval.test.ts`: 44 tests, 43 pass, 0 fail, 1 skipped.
+- Остальные кандидатные спеки (apps, desktop, editor, motion, info-phone, class-icons, empty-art, promotion, editor-images): 157 passed, 178 skipped (чужие проекты и BLOCKED), 0 failed.
+- Спек сопровождения галереи `phase20-review-extras.spec.ts`: 8 passed, ноль запросов записи; в ролике колб на PC работают все пять частей досок (столбики, линия диаграммы, ячейки таблицы, инструменты, волна осциллографа), в скачанном HTML «Предупреждение» в одну строку на 1280 и 412 px.
+- Колбы (D-59): бесконечных анимаций 136 при пределе 140 (PC), на телефоне показано 55 при пределе 80 (`flasks-animation-count--*.json`); контраст подписей, пустые клетки и высота рисунка проверены тестами phase20-art.
+- Прежние эталоны: chromium-desktop и chromium-dpr125 11 failed, 5 passed, 14 skipped; chromium-phone, webkit-phone, firefox-desktop 5 failed (в одном общем запуске firefox-desktop дополнительно давал 5 разрывов `browserContext.close: Protocol error ... _maybeDontRestoreTabs`; одиночный прогон firefox-desktop: 1 failed (desktop:clean 1108 px), 14 skipped; это сбой Firefox при закрытии контекста под параллельной нагрузкой, не расхождение кадра).
+
+- Галерея `tests/e2e/visual-candidates/.runs/phase20-refresh-a6e2918b2afb/review.html`: 86 строк ОЖИДАЕТ, 170 ссылок (158 уникальных), 0 отсутствующих; пять вопросов раздела 7 с картинками; сервер на 3100 остановлен (PID 31332, `next start` этого проекта). Строгий прогон `PORTIA_REQUIRE_APPROVAL=1` красный только на «owner verdict is still pending» (86 строк) и «owner answer is missing» (пять вопросов 20-54): нет «captured outside candidates_set», «stale candidates», «does not match», «re-presents the rejected frame», «owner asked for a fix». `node --experimental-strip-types --test lib/*.test.ts`: 1591 tests, 1587 pass, 0 fail, 4 skipped; `tsc --noEmit` код 0; eslint по изменённым файлам чист.
+
+### Сводка по разделам ledger
+
+| Раздел ledger | Строк | Тот же SHA256 / прежнее одобрение | Новый SHA256 / ОЖИДАЕТ | Что изменилось |
+| --- | ---: | ---: | ---: | --- |
+| 1. Паук | 16 | 8 | 8 | Код паука не менялся; поза паука не детерминирована (раздел 9 ledger) |
+| 2. Колбы | 12 | 0 | 12 | D-59: один циферблат, доски и волна движутся |
+| 3. Пустые состояния (колба «Новости») | 8 | 4 | 4 | Поза паука у PC и лапа на телефоне |
+| 3. Пустые состояния («Справочник») | 8 | 0 | 0 | BLOCKED (DATA): цель отдаёт раздел «лол»; три строки телефона прежде были «принято», одобрение не перенесено |
+| 4. Promotion (участник) | 10 | 5 | 5 | Поза паука у PC |
+| 4. Конструктор шаблона | 8 | 2 | 6 | D-60/D-61 (20-49); phone `main` и `preview` без изменений |
+| 5. Иконки классов | 5 | 5 | 0 | Панели без паука |
+| 6. «Информация» на телефоне | 6 | 5 | 1 | `info-phone-next:phone-webkit` ниже порога канала 16 |
+| 10. Прежние эталоны (rebaseline-*) | 24 | 1 | 23 | Поза паука, фраза Вивьян, момент загрузки у `application-broadcasts`; `application-guide` переведена в BLOCKED (DATA) |
+| 15. Кадр картинок (новый) | 10 | 0 | 10 | Новые строки D-62, D-63 |
+
+Итого 143 строки: 12 «принято» (те же байты), 86 ОЖИДАЕТ, 45 BLOCKED, «исправить» 0. Ни один изменившийся SHA256 не оставлен с вердиктом «принято».
+
+### Прежние эталоны на H5
+
+| Снимок / проект | Итог, пиксели (допуск) | Класс / строка ledger |
+| --- | --- | --- |
+| `application-broadcasts--chromium-desktop` | FAIL 4993 (2300) | поза паука; кадр гейта на ecf5173a5d51 был скелетом загрузки, теперь загруженное пустое состояние; существующая строка |
+| `application-guide--chromium-desktop` | FAIL 5168 (2300) | данные цели (раздел «лол»); строка переведена в BLOCKED (DATA), actual в `S5/_work/blocker-actuals/` |
+| `application-search--chromium-desktop` | FAIL 21829 (2300) | подпись убрана по D-56, паук; существующая строка |
+| `application-settings--chromium-desktop` | FAIL 23310 (2300) | подпись окна убрана по D-56, паук; существующая строка |
+| `application-information--chromium-desktop` | FAIL 24851 (2300) | данные цели; строка BLOCKED (DATA), на ecf5173a5d51 проходила |
+| `application-trash`, `application-virus-archive`, `application-employees`, `application-table`, `application-charter` | PASS | строки BLOCKED (DATA) без изменений, PASS на сегодняшних данных не доказательство |
+| `editor-visitor-denied--chromium-desktop` | FAIL 22804 (2300) | окно «Настройки» D-56, паук; существующая строка |
+| `promotion-participant-lookup--chromium-desktop` | FAIL 21218 (2300) | подсказки D-56, паук; существующая строка |
+| `desktop-clean` на chromium-desktop, chromium-dpr125, firefox-desktop, chromium-phone | FAIL 1081, 1657, 1108, 4747 (256) | поза паука; существующие строки |
+| `desktop-dpr125--chromium-dpr125`, `phone-chromium--chromium-phone` | FAIL 1665, 5109 (256) | поза паука; существующие строки |
+| `desktop-start-open` на webkit-phone | FAIL 411 (256) | существующая строка |
+| `desktop-start-open` на chromium-desktop, chromium-dpr125, firefox-desktop, chromium-phone | гейт до снимка не дошёл (оценка не пересчитывалась) | существующие строки; кадр кандидата того же сценария, байты измерены против ecf5173a5d51 |
+| `motion-vivian-activity--chromium-desktop` | FAIL 2499 (2300) | поза паука и фраза Вивьян не детерминированы; `motion-web-rest`, `motion-vivian-idle`, `motion-vivian-offended`, `motion-vivian-recovery` гейт не достиг, строки существующие, кадр кандидата |
+| `window-search-minimized--firefox-desktop` | гейт не достиг | существующая строка, кадр кандидата |
+| `phone-webkit--webkit-phone` | FAIL 57215 (256) | B4, причина полосы прокрутки не изолирована, BLOCKED; строки в ledger нет |
+
+### Допущения исполнителя
+
+- Новые строки раздела 15 и кадры редактора сняты на подменённых чтениях GET /api/access и GET /api/content (UI-контракт, не доказательство ролей); картинки в них файлы `public/assets`, не настоящие фото. Как выбранная часть выглядит на настоящих фото владельца, проверяется физически (UAT EDITOR-FRAMING-01, EDITOR-INFO-ADD-01).
+- Восемь строк `empty-microscope-guide-*` и `rebaseline-application-guide--chromium-desktop:pc` переведены из CANDIDATE в BLOCKED (DATA): на цели теперь один раздел «Справочника» («лол»; `/api/content`: guideSections 1), пустое состояние показать нельзя без выдуманных данных, а кадр гейта с настоящим разделом цели не может быть кандидатом. Это меняет число «принято» (16 -> 12: три строки телефона «Справочника» и `empty-flask-news-custom-dark:phone`, у последней изменились 14 px у лапы паука).
+- `q-download-browser` не задаётся: 20-49 нашла причину ошибки скачивания измерением (вызов `setTimeout` как метода окружения, бросок TypeError во всех трёх движках) и воспроизвела её на пяти проектах.
+- Выбор видимой части для фото сотрудников не сделан по решению владельца «b» (20-52); кадров `editor-image-framing-employee` и `employee-portrait-framed` нет.
+- Расширение 20-12 на строки раздела 15 нужно сделать в самом 20-12; здесь оно не выполнялось.
+
+### Блокеры
+
+Незакрытых блокеров нет. B1-B5 остаются данными цели (BLOCKED), B4 не изолирован. Физический бюджет кадров на телефоне остаётся BLOCKED до 20-14 (на телефоне показано 55 из 136 анимаций колб при пределе 80, замер в `flasks-animation-count--chromium-phone.json`).
