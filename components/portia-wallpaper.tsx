@@ -291,6 +291,8 @@ const shelfCycles = [
   { duration: 6800, delay: -6760 }, { duration: 10100, delay: -1230 }, { duration: 7700, delay: -7350 }, { duration: 5400, delay: -3520 },
   { duration: 8600, delay: -7940 }, { duration: 6500, delay: -4410 },
 ];
+// D-59 (20-47): the cycle of each moving part of the boards — milliseconds, every duration and every phase different. phase20-art.spec.ts repeats this table as BOARD_CYCLES: the two change only together.
+const boardCycles = { scope: [{ duration: 2600, delay: -900 }] };
 const shelfItems: Array<{ shape: ShapeKey; x: number; scale: number; hue: string | null }> = [
   { shape: "bottle", x: 420, scale: 0.62, hue: "amber" }, { shape: "jar", x: 490, scale: 0.7, hue: "violet" }, { shape: "conical", x: 562, scale: 0.5, hue: "rose" },
   { shape: "bottle", x: 628, scale: 0.58, hue: "green" }, { shape: "beaker", x: 694, scale: 0.55, hue: "teal" }, { shape: "florence", x: 768, scale: 0.5, hue: "violet" },
@@ -303,16 +305,17 @@ const shelfItems: Array<{ shape: ShapeKey; x: number; scale: number; hue: string
 // the test-tube rack, an alcohol lamp and a mortar. Shelf and poster are the wall behind it.
 // D-54 (20-37): the doors carry louvres (eight upright slats), so the cabinet is a drawing and not four empty frames.
 const cabinetDoors = [64, 444, 824, 1204].map((left) => `M${left} 684h360v78h-360ZM${left + 166} 702h28${[36, 72, 108, 144, 216, 252, 288, 324].map((slat) => `M${left + slat} 696v54`).join("")}`).join("");
-// D-54 (20-37): the middle of the wall is fuller: a table of elements and a bar chart under the shelf (both end left of a phone's view), a pressure gauge and a clock (a phone sees both), a burette on the clamp rod,
-// a pegboard with hanging tools and an oscilloscope. Thin lines at the strength of the bench; nothing here moves.
-const GAUGE = { x: 1112, y: 424, r: 24 };
-const gaugeMarks = Array.from({ length: 9 }, (_, step) => {
-  const angle = ((-225 + step * 33.75) * Math.PI) / 180;
-  return `M${round(GAUGE.x + Math.cos(angle) * (GAUGE.r - 8))} ${round(GAUGE.y + Math.sin(angle) * (GAUGE.r - 8))}L${round(GAUGE.x + Math.cos(angle) * (GAUGE.r - 3))} ${round(GAUGE.y + Math.sin(angle) * (GAUGE.r - 3))}`;
-}).join("");
-const gaugePath = `M${GAUGE.x - GAUGE.r} ${GAUGE.y}a${GAUGE.r} ${GAUGE.r} 0 1 0 ${GAUGE.r * 2} 0a${GAUGE.r} ${GAUGE.r} 0 1 0 ${-GAUGE.r * 2} 0Z${gaugeMarks}M${GAUGE.x} ${GAUGE.y}L${round(GAUGE.x + Math.cos((-60 * Math.PI) / 180) * 16)} ${round(GAUGE.y + Math.sin((-60 * Math.PI) / 180) * 16)}M${GAUGE.x - 6} ${GAUGE.y + GAUGE.r}h12v6h-12Z`;
+// D-54 (20-37): the middle of the wall is fuller: a table of elements and a bar chart under the shelf (both end left of a phone's view), a clock (a phone sees it), a burette on the clamp rod,
+// a pegboard with hanging tools and an oscilloscope. Thin lines at the strength of the bench. D-59 (20-47, owner verdict of 2026-11-07): the manometer that hung beside the clock is gone (one dial
+// only, the ticking clock), and the boards move: the wave of the oscilloscope runs, see `scopeTrace`; the other boards follow in `boardCycles`.
 const tableOfElements = `M508 394h300v54h-300ZM508 412h300M508 430h300${Array.from({ length: 9 }, (_, step) => `M${538 + step * 30} 394v54`).join("")}`;
 const barChart = `M868 394h126v58h-126Z${[18, 32, 24, 40, 28, 36].map((bar, step) => `M${880 + step * 19} 446v-${bar}h12v${bar}`).join("")}M876 420L896 412L914 418L934 404L954 410L972 400L988 408`;
+
+// D-59 (20-47): the wave of the oscilloscope screen (x 918-996, y 466-546, centre line y 520). The same sine as before (half-waves of 12 units, period 24, crest 13), drawn from x 874
+// — two periods left of the old start, a whole number of periods so the picture is the same — to x 1018, so that sliding it right by one period (24 units, the `flask-scope` animation)
+// shows the same frame again and the left edge of the screen is never bare. The clip group (`#wp-scope-clip`, the rectangle of the screen) does not move; the trace does.
+const SCOPE = { x: 918, y: 466, width: 78, height: 80, period: 24 };
+const scopeTrace = `M${SCOPE.x + 4 - 2 * SCOPE.period} 520q6-26 12 0${"t12 0".repeat(11)}`;
 
 const coilPoints = Array.from({ length: 11 }, (_, step) => `${step ? "L" : "M"}${step % 2 ? 882 : 898} ${492 + step * 14}`).join("");
 const benchPaths = {
@@ -327,10 +330,9 @@ const benchPaths = {
   coil: `M872 470h36v190h-36ZM872 500h-14M908 630h14M866 560h48${coilPoints}`,
   chartTable: tableOfElements,
   chartBars: barChart,
-  gauge: gaugePath,
   burette: "M480 505h32M512 496v18M506 470v150M518 470v150M500 462l12 8 12-8M506 590h-9M518 590h9M509 620l3 14 3-14M506 490h6M506 510h6M506 530h6M506 550h6M506 570h6",
   pegboard: `M724 466h126v79h-126ZM724 492h126M724 522h126${[736, 752, 770, 788, 806, 824, 840].map((x, step) => `M${x} 492v${12 + (step % 3) * 8}`).join("")}${[742, 764, 786, 810, 834].map((x, step) => `M${x} 522v${10 + (step % 2) * 8}`).join("")}M836 506a4 4 0 1 0 8 0a4 4 0 1 0-8 0M760 540a4 4 0 1 0 8 0a4 4 0 1 0-8 0`,
-  scope: "M918 466h78v80h-78ZM918 493h78M918 520h78M944 466v80M970 466v80M922 520q6-26 12 0t12 0t12 0t12 0t12 0t12 0",
+  scope: "M918 466h78v80h-78ZM918 493h78M918 520h78M944 466v80M970 466v80",
 };
 const posterPaths = {
   frame: "M92 290h206v146H92ZM108 306h110M236 312h50M236 324h36",
@@ -378,6 +380,7 @@ function WallpaperFlasks() {
   return <g className="wallpaper-flasks">
     <defs>
       {(Object.keys(flaskShapes) as ShapeKey[]).map((key) => <clipPath key={key} id={`wp-flask-clip-${key}`}><path d={flaskShapes[key].outline} /></clipPath>)}
+      <clipPath id="wp-scope-clip"><rect x={SCOPE.x} y={SCOPE.y} width={SCOPE.width} height={SCOPE.height} /></clipPath>
       <linearGradient id="wp-liquid-teal" x1="0" y1="0" x2="0" y2="1"><stop stopColor="currentColor" stopOpacity=".7" /><stop offset="1" stopColor="currentColor" stopOpacity=".35" /></linearGradient>
       <linearGradient id="wp-liquid-violet" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#7462b8" /><stop offset="1" stopColor="#3b3170" /></linearGradient>
       <linearGradient id="wp-liquid-amber" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#8e7036" /><stop offset="1" stopColor="#54401e" /></linearGradient>
@@ -430,10 +433,12 @@ function WallpaperFlasks() {
       <path className="wallpaper-flask-coil" d={benchPaths.coil} />
       <path d={benchPaths.chartTable} />
       <path d={benchPaths.chartBars} />
-      <path d={benchPaths.gauge} />
       <path d={benchPaths.burette} />
       <path d={benchPaths.pegboard} />
-      <path d={benchPaths.scope} />
+      <g className="wallpaper-flask-board wallpaper-flask-board-scope">
+        <path d={benchPaths.scope} />
+        <g clipPath="url(#wp-scope-clip)"><path className="wallpaper-flask-scope-trace" d={scopeTrace} style={{ "--board-dur": `${boardCycles.scope[0].duration}ms`, "--board-delay": `${boardCycles.scope[0].delay}ms` } as CSSProperties} /></g>
+      </g>
     </g>
     {flasks.map((flask) => <g key={flask.index} className={`wallpaper-flask${flask.far ? " wallpaper-flask-far" : ""}`} data-flask={flask.index}
       transform={`translate(${flask.x} ${flask.y})${flask.scale === 1 ? "" : ` scale(${flask.scale})`}`}

@@ -1372,9 +1372,11 @@ test("[STAB-VIS-02] D-59 the oscilloscope wave moves: one endless linear shift o
   const probe = await page.evaluate(() => {
     const trace = document.querySelector<SVGPathElement>(".wallpaper-flask-scope-trace")!;
     const animation = document.getAnimations().find((candidate) => (candidate.effect as KeyframeEffect).target === trace)!;
-    const duration = Number(animation.effect!.getTiming().duration);
+    const timing = animation.effect!.getTiming();
+    const duration = Number(timing.duration), delay = Number(timing.delay);
     animation.pause();
-    const at = (ms: number) => { animation.currentTime = ms; return new DOMMatrixReadOnly(getComputedStyle(trace).transform).m41; };
+    // `ms` is the time inside the cycle; the phase delay is added and the time wrapped into one cycle (a negative current time is not honoured, and the cycle repeats for ever).
+    const at = (ms: number) => { animation.currentTime = (((ms + delay) % duration) + duration) % duration; return new DOMMatrixReadOnly(getComputedStyle(trace).transform).m41; };
     const shifts = { start: at(0), middle: at(duration / 2), end: at(duration - 1) };
     const clipGroup = trace.parentElement!;
     const clipId = /url\(#([^)]+)\)/.exec(clipGroup.getAttribute("clip-path") ?? "")?.[1] ?? null;
@@ -1387,9 +1389,10 @@ test("[STAB-VIS-02] D-59 the oscilloscope wave moves: one endless linear shift o
   expect(probe.shifts.end).toBeLessThanOrEqual(24);
   const match = /^M(\d+) 520q6-26 12 0((?:t12 0)+)$/.exec(probe.d);
   expect(match, "the same sine as before: half-waves of 12 units (period 24) on the screen centre line").not.toBeNull();
-  expect((Number(match![1]) - 922) % 24, "the trace starts a whole number of periods from the old start, so the picture is the same").toBe(0);
-  expect(Number(match![1]) + 12 * (1 + match![2].length / 5), "the trace is long enough to fill the screen at any shift").toBeGreaterThanOrEqual(996 + 24);
-  expect(Number(match![1]), "and starts far enough left").toBeLessThanOrEqual(918 - 24);
+  expect(Math.abs((Number(match![1]) - 922) % 24), "the trace starts a whole number of periods from the old start, so the picture is the same").toBe(0);
+  // The trace slides right by up to 24 units, so the window of the screen (x 918-996) looks at path x 918-s .. 996-s: the path must cover x 894 .. 996.
+  expect(Number(match![1]) + 12 * (1 + match![2].length / 5), "the trace reaches the right edge of the screen").toBeGreaterThanOrEqual(996);
+  expect(Number(match![1]), "and starts a period left of the screen, so the left edge is never bare").toBeLessThanOrEqual(918 - 24);
   expect(probe.ownClip, "the clip sits on the group, not on the moving trace").toBeNull();
   expect(probe.clipRect, "the trace is clipped by the screen of the oscilloscope").toEqual({ x: 918, y: 466, width: 78, height: 80 });
   // Stopped modes: no animation, the trace is in place.
