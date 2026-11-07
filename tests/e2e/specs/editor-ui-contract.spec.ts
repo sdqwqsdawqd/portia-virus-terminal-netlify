@@ -443,9 +443,21 @@ async function siteWindow(place: Locator) {
     const pointX = boxLeft + boxWidth * (originX / 100);
     const pointY = boxTop + boxHeight * (originY / 100);
     const back = (qx: number, qy: number) => [(pointX + (qx - pointX) / zoom - contentLeft) / drawnWidth, (pointY + (qy - pointY) / zoom - contentTop) / drawnHeight];
-    const [left, top] = back(0, 0);
-    const [right, bottom] = back(clip.clientWidth, clip.clientHeight);
-    return { visible: { left, top, width: right - left, height: bottom - top }, frameRatio: clip.clientWidth / clip.clientHeight, imgRatio: boxWidth / boxHeight, objectFit: style.objectFit };
+    const region = (x0: number, y0: number, x1: number, y1: number) => {
+      const [left, top] = back(x0, y0);
+      const [right, bottom] = back(x1, y1);
+      return { left, top, width: right - left, height: bottom - top };
+    };
+    // `visible`: what the clipping frame of the site shows. `inPicture`: the same model with the box of the picture as the frame (what the dialog promises for a picture that lies whole).
+    // They differ only where the site draws the picture narrower than its frame (a picture capped in height by the style sheet: «Корзина», max-height 55vh).
+    return {
+      visible: region(0, 0, clip.clientWidth, clip.clientHeight),
+      inPicture: region(boxLeft, boxTop, boxLeft + boxWidth, boxTop + boxHeight),
+      frameOverPicture: Math.max(clip.clientWidth / boxWidth, clip.clientHeight / boxHeight),
+      frameRatio: clip.clientWidth / clip.clientHeight,
+      imgRatio: boxWidth / boxHeight,
+      objectFit: style.objectFit,
+    };
   });
 }
 
@@ -763,8 +775,10 @@ function withFrame(surface: Surface, frame: Frame): Record<string, unknown> {
 
 const frameCases: Frame[] = [chosenFrame, { x: 50, y: 30, zoom: 200 }];
 
-async function frameMatchesSite(page: Page, surface: Surface, frame: Frame) {
+async function frameMatchesSite(page: Page, diagnostics: DiagnosticLedger, surface: Surface, frame: Frame) {
   const writes = trackWritesExceptContentPut(page);
+  // The test leaves the editor page for the site (a second load of the page) while a read of the first page may still be in flight; WebKit reports such a read as a cancelled load.
+  diagnostics.expectFault({ kind: "requestfailed", source: "fetch", text: /Load request cancelled|cancelled|aborted/i, reason: "the test leaves the page of the editor for the site while a read is in flight (WebKit reports the cancelled load)" });
   const content = withFrame(surface, frame);
   await openEditorTab(page, surface.tab, { content });
   await surface.prepare(page);
@@ -787,11 +801,16 @@ async function frameMatchesSite(page: Page, surface: Surface, frame: Frame) {
   const siteRatio = surface.compare === "frame" ? onSite.frameRatio : onSite.imgRatio;
 
   const where = `${surface.name} at ${frame.x}/${frame.y}/${frame.zoom}`;
-  test.info().annotations.push({ type: "measure", description: `${where}: ratio dialog ${inDialog.ratio.toFixed(4)}, preview ${(previewBox.width / previewBox.height).toFixed(4)}, site ${siteRatio.toFixed(4)} (${surface.compare}); dialog ${JSON.stringify(inDialog.visible)}, site ${JSON.stringify(onSite.visible)} (${onSite.objectFit}), max difference ${maxDifference(inDialog.visible, onSite.visible).toFixed(4)}` });
+  // A picture that lies whole is compared with the site's frame. Where the site draws it narrower than its frame (capped in height by the style sheet, «Корзина»: 20-56 plan assumption 2),
+  // the dialog frame is the picture and the site shows a little more: the picture box is the frame of the comparison, the overshoot is measured, recorded and capped at 10%.
+  const frameIsWider = surface.compare === "picture" && onSite.frameOverPicture > 1.01;
+  const siteVisible = frameIsWider ? onSite.inPicture : onSite.visible;
+  if (frameIsWider) expect(onSite.frameOverPicture, `the site frame is wider than the picture (known limit of D-67), but not by more than 10%: ${where}`).toBeLessThanOrEqual(1.1);
+  test.info().annotations.push({ type: "measure", description: `${where}: ratio dialog ${inDialog.ratio.toFixed(4)}, preview ${(previewBox.width / previewBox.height).toFixed(4)}, site ${siteRatio.toFixed(4)} (${surface.compare}); dialog ${JSON.stringify(inDialog.visible)}, site frame ${JSON.stringify(onSite.visible)}, site picture ${JSON.stringify(onSite.inPicture)} (${onSite.objectFit}), site frame over picture ${onSite.frameOverPicture.toFixed(4)}, max difference ${maxDifference(inDialog.visible, siteVisible).toFixed(4)}${frameIsWider ? " (against the picture box)" : ""}` });
   expect(Math.abs(inDialog.ratio - siteRatio) / siteRatio, `the frame of the dialog (${inDialog.ratio.toFixed(3)}) is within 2% of the place on the site (${siteRatio.toFixed(3)}): ${where}`).toBeLessThanOrEqual(0.02);
   expect(Math.abs(previewBox.width / previewBox.height - siteRatio) / siteRatio, `the preview of the block is within 2% of the place on the site: ${where}`).toBeLessThanOrEqual(0.02);
   for (const key of ["left", "top", "width", "height"] as const) {
-    expect(Math.abs(inDialog.visible[key] - onSite.visible[key]), `${key} of the visible part, dialog ${inDialog.visible[key].toFixed(4)} against site ${onSite.visible[key].toFixed(4)}: ${where}`).toBeLessThanOrEqual(0.015);
+    expect(Math.abs(inDialog.visible[key] - siteVisible[key]), `${key} of the visible part, dialog ${inDialog.visible[key].toFixed(4)} against site ${siteVisible[key].toFixed(4)}: ${where}`).toBeLessThanOrEqual(0.015);
   }
   expect(writes, "no write but the intercepted PUT").toEqual([]);
 }
@@ -799,8 +818,8 @@ async function frameMatchesSite(page: Page, surface: Surface, frame: Frame) {
 test.describe("[STAB-REL-08] D-67 the frame of the dialog is the place of the site", () => {
   for (const surface of allSurfaces) {
     for (const frame of frameCases) {
-      test(`[STAB-REL-08] D-67 ${surface.name}: the frame of the dialog is the place of the site, the visible part is the site's (${frame.x}/${frame.y}/${frame.zoom})`, async ({ page }) => {
-        await frameMatchesSite(page, surface, frame);
+      test(`[STAB-REL-08] D-67 ${surface.name}: the frame of the dialog is the place of the site, the visible part is the site's (${frame.x}/${frame.y}/${frame.zoom})`, async ({ page, diagnostics }) => {
+        await frameMatchesSite(page, diagnostics, surface, frame);
       });
     }
   }

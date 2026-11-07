@@ -146,7 +146,7 @@ test("D-66 framingFromDrag: the picture moves with the pointer, x and y go the o
   assert.deepEqual(left, { x: 100, y: 0, zoom: 200 });
   // After the picture moved, the frame of the stage shows the same part the numbers promise.
   const after = stageLayout({ image, frameAspect: aspect, framing: moved, stage });
-  near(after.image.x - layout.image.x, 20, 1.01, "the picture moved by the pointer distance");
+  near(after.image.x - layout.image.x, 20, spanX / 200 + 1e-6, "the picture moved by the pointer distance, to the nearest whole percent");
 });
 
 test("D-67 an axis the picture does not leave stays at 50 whatever the pointer or the keys do", () => {
@@ -215,9 +215,9 @@ test("D-67 frameAspectFor: tile 4:3, natural by the picture, band by the «Сп�
   near(frameAspectFor("band", { image, viewportWidth: 1440 }), 754 / 63, 1e-9, "band on PC");
   near(frameAspectFor("band", { image, viewportWidth: 412 }), 362 / 63, 1e-9, "band on Pixel 7");
   near(frameAspectFor("band", { image, viewportWidth: 390 }), 340 / 63, 1e-9, "band on iPhone 13");
-  // A narrow PC screen: the window is not wider than the work area minus 32 px.
-  near(bandFrameWidth(1000), 1000 - 32 - 66, 1e-9, "1000 px wide screen");
-  near(bandFrameWidth(901), 901 - 32 - 66, 1e-9, "901 px is still a window");
+  // Above 900 px the window is 820 px (min(820, work area - 32) is always 820 there); from 900 px down it is the whole screen.
+  near(bandFrameWidth(1000), 754, 1e-9, "a 1000 px screen: the window stays 820 px");
+  near(bandFrameWidth(901), 754, 1e-9, "901 px is still a window");
   near(bandFrameWidth(900), 900 - 50, 1e-9, "900 px is a phone: the window takes the whole screen");
   assert.equal(bandFrameHeight, 63);
 });

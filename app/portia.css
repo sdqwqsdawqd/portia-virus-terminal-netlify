@@ -925,28 +925,39 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 /* An employee photo is a portrait: a small square crop, as on the personnel card. */
 .editor-image-preview.employee { max-width: 220px; }
 .editor-image-preview.employee img { width: 100%; aspect-ratio: 1; object-fit: cover; }
-/* D-63 (20-53): the block «Видимая часть» under a picture field. The preview is the picture of the site in a frame of the site's kind:
-   a band (the «Справочник» section head: 12:1 in a PC window, 5.75:1 in a phone window, both measured), a 4:3 cover, or the picture as it lies. */
-.image-framing { grid-column: 1 / -1; display: grid; gap: 10px; min-width: 0; padding: 10px; border: 1px solid var(--line); background: var(--panel); box-sizing: border-box; }
+/* D-66/D-67 (20-56): the block «Видимая часть» under a picture field: a small preview in a frame of the proportions of its place (a band, a 4:3 cover, or the picture as it lies) and «Изменить».
+   The dialog (a native <dialog> on .portia-dialog) chooses the part: the whole picture dimmed, a light frame of the proportions of the place, the picture bright inside it. */
+.image-framing { grid-column: 1 / -1; display: grid; gap: 8px; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); background: var(--panel); box-sizing: border-box; }
+.image-framing-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
 .image-framing-title { color: oklch(.751 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
-.image-framing-frame { position: relative; width: 100%; min-width: 0; margin: 0 auto; box-shadow: 0 0 0 1px var(--line); background: var(--panel-2); box-sizing: border-box; overflow: hidden; }
-.image-framing-frame.band { --image-framing-band-ratio: 12 / 1; aspect-ratio: var(--image-framing-band-ratio); }
-.image-framing-frame.tile { max-width: 240px; aspect-ratio: 4 / 3; }
-.image-framing-frame.band img, .image-framing-frame.tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.image-framing-frame.natural { max-width: 540px; }
-.image-framing-frame.natural .portia-image img { display: block; width: 100%; height: auto; max-height: min(64vh, 620px); margin: 0 auto; object-fit: contain; }
-.image-framing-controls { display: grid; gap: 8px; }
-.image-framing-row { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) 4em; align-items: center; gap: 10px; }
-.image-framing-row label { color: oklch(.614 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; overflow-wrap: anywhere; }
-.image-framing-row input[type="range"] { width: 100%; min-height: 24px; padding: 0; border: 0; background: transparent; accent-color: var(--teal); cursor: pointer; }
-.image-framing-row output { color: oklch(.751 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); font-variant-numeric: tabular-nums; text-align: right; }
-.image-framing-reset { justify-self: start; }
+.image-framing-change { flex: none; min-height: 32px; padding: 0 14px; }
+.image-framing-preview { position: relative; justify-self: start; min-width: 0; margin: 0; overflow: hidden; background: var(--panel-2); box-shadow: 0 0 0 1px var(--line); box-sizing: border-box; }
+.image-framing-preview.band { width: 100%; max-width: 400px; }
+.image-framing-preview.tile { width: 144px; }
+.image-framing-preview .portia-image img { object-fit: cover; }
+.image-framing-preview.natural .portia-image img { object-fit: contain; }
+.image-framing-dialog { margin: auto; width: min(560px, calc(100vw - 24px)); max-height: calc(100svh - 24px); }
+.image-framing-dialog-head { display: grid; gap: 2px; min-width: 0; }
+.image-framing-dialog-head p { font-size: 12px; overflow-wrap: anywhere; }
+.image-framing-stage { position: relative; width: 100%; height: min(340px, 60vh); overflow: hidden; border: 1px solid var(--line); background: #050a09; box-sizing: border-box; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.image-framing-stage:active { cursor: grabbing; }
+.image-framing-stage:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.image-framing-stage img { position: absolute; display: block; max-width: none; max-height: none; pointer-events: none; user-select: none; -webkit-user-select: none; }
+.image-framing-dim { filter: brightness(.38); }
+.image-framing-window { position: absolute; overflow: hidden; box-shadow: 0 0 0 2px #f3f6f4, 0 0 0 3px rgba(0, 0, 0, .55); pointer-events: none; }
+.image-framing-zoom { display: grid; grid-template-columns: 24px minmax(0, 1fr) 24px 3.5em; align-items: center; gap: 10px; color: oklch(.614 calc(.027 * var(--accent-chroma)) var(--accent-hue)); }
+.image-framing-zoom input[type="range"] { width: 100%; min-height: 24px; padding: 0; border: 0; background: transparent; accent-color: var(--teal); cursor: pointer; }
+.image-framing-zoom-icon { justify-self: center; }
+.image-framing-zoom-icon.small { width: 16px; height: 16px; }
+.image-framing-zoom-icon.large { width: 24px; height: 24px; }
+.image-framing-zoom-value { color: oklch(.751 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); font-variant-numeric: tabular-nums; text-align: right; }
+.image-framing-actions .image-framing-reset { margin-right: auto; }
 @media (max-width: 900px) {
-  .image-framing-frame.band { --image-framing-band-ratio: 5.75 / 1; }
-  .image-framing-row { grid-template-columns: minmax(0, 1fr) 4em; row-gap: 2px; }
-  .image-framing-row label { grid-column: 1 / -1; }
-  .image-framing-row input[type="range"] { min-height: 44px; }
-  .image-framing-reset { min-height: 44px; min-width: 44px; }
+  .image-framing-change { min-height: 44px; min-width: 44px; }
+  .image-framing-dialog { width: calc(100vw - 16px); max-height: calc(100svh - 16px); }
+  .image-framing-stage { height: min(55svh, 360px); }
+  .image-framing-zoom input[type="range"] { min-height: 44px; }
+  .image-framing-actions button { min-height: 44px; min-width: 44px; }
 }
 
 .boot-screen { position: fixed; z-index: 999; inset: 0; display: grid; place-items: center; background: #020706; opacity: 1; visibility: visible; transition: opacity 220ms ease, visibility 220ms ease; animation: boot-screen-failsafe 220ms ease 2.2s forwards; }
