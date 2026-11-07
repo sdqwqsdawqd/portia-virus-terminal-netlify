@@ -793,8 +793,8 @@ test("[STAB-TMPL-01] D-55 compact: the view switch keeps the draft and the card 
   });
   expect(widths.card).toBeGreaterThanOrEqual(Math.min(widths.shell * 0.9, widths.shell - 60));
 
-  // The card is laid out like the archive's: one column while its own width is below 840 px (the archive's window does the same at its
-  // default size), two columns beside each other once the window is wide. The Promotion window opens 760 px wide, so a PC maximizes it.
+  // D-65 (20-55): on a PC the card is two columns (the photo left, the classification right) in the Promotion window of the normal size (760 px)
+  // and maximized; on a phone the photo is on top. (20-43 stacked the card in the window of the normal size; the owner's «Всегда как в «Базе вирусов»» replaced that.)
   const hero = () => page.evaluate(() => {
     const photo = document.querySelector(".template-card-preview .record-hero > .subject-media")!.getBoundingClientRect();
     const classification = document.querySelector(".template-card-preview .record-hero > .classification-panel")!.getBoundingClientRect();
@@ -805,7 +805,8 @@ test("[STAB-TMPL-01] D-55 compact: the view switch keeps the draft and the card 
     expect(one.panelTop).toBeGreaterThanOrEqual(one.photoBottom - 1);
   } else {
     const narrow = await hero();
-    expect(narrow.panelTop, "760 px window: the card stacks like the archive's at that width").toBeGreaterThanOrEqual(narrow.photoBottom - 1);
+    expect(narrow.panelTop - narrow.photoTop, "760 px window: the classification starts level with the photo").toBeLessThanOrEqual(20);
+    expect(narrow.panelLeft, "760 px window: the classification stands beside the photo").toBeGreaterThanOrEqual(narrow.photoRight - 1);
     await page.getByRole("button", { name: "Развернуть Повышение" }).click();
     await expect.poll(async () => (await promotion.window.boundingBox())?.width ?? 0).toBeGreaterThan(1200);
     const wide = await hero();
@@ -1028,11 +1029,11 @@ for (const format of ["HTML", "PNG"] as const) {
 const classAxes = ["danger", "spread", "transmission", "escapeRisk", "mind", "appearance", "behavior"] as const;
 const longestClassValues = classAxes.map((axis) => (classificationOptions[axis] as readonly { value: string }[]).reduce((best, option) => (option.value.length > best.length ? option.value : best), ""));
 
-type ClassValueMeasure = { text: string; lines: number; textRight: number; cellRight: number; cellOverflow: number; cellWidth: number };
+type ClassValueMeasure = { text: string; lines: number; textRight: number; cellRight: number; cellOverflow: number; cellWidth: number; fontSize: number };
 
 /** Per `.class-cell strong` of the card: how many lines its text takes (distinct tops of the text's boxes) and whether the cell holds it. */
-async function measureClassValues(page: Page): Promise<ClassValueMeasure[]> {
-  return page.evaluate(() => Array.from(document.querySelectorAll(".template-card-preview .class-cell strong")).map((strong) => {
+async function measureClassValues(page: Page, scope = ".template-card-preview"): Promise<ClassValueMeasure[]> {
+  return page.evaluate((root) => Array.from(document.querySelectorAll(`${root} .class-cell strong`)).map((strong) => {
     const cell = strong.closest(".class-cell")!;
     const tops = new Set<number>();
     let right = 0;
@@ -1053,8 +1054,9 @@ async function measureClassValues(page: Page): Promise<ClassValueMeasure[]> {
       cellRight: Math.round(box.right * 10) / 10,
       cellOverflow: cell.scrollWidth - cell.clientWidth,
       cellWidth: Math.round(box.width * 10) / 10,
+      fontSize: Number.parseFloat(getComputedStyle(strong).fontSize),
     };
-  }));
+  }), scope);
 }
 
 function expectClassValuesWhole(measures: ClassValueMeasure[], where: string) {
@@ -1108,5 +1110,120 @@ test("[STAB-TMPL-01] D-60 class values stay whole in the preview and in the down
     }
   }
   testInfo.annotations.push({ type: "d60-checked", description: `${testInfo.project.name}: ${sizes.join(", ")}, file 1060 and 412` });
+  expect(writes).toEqual([]);
+});
+
+/* ---------------------------------------------------------------- D-65 (20-55): the card is laid out like the archive's record */
+
+// The owner (2026-11-08): «было три сверху, посередине способ распространения и три снизу, а не как сейчас» and, to the question about the columns,
+// «Всегда как в «Базе вирусов»». The card's classification is the archive's grid (three cells, the method of spread across the whole width, three cells);
+// a class value never breaks in the middle of a word because its size follows the cell's width (not smaller than 12 px), not because the grid changes.
+// On a PC the card is always two columns (the photo left, the classification right) in the Promotion window of the normal size and maximized.
+// The reading «always as in the archive» is the planner's; it is put to the owner in the gallery of 20-58 (q-template-phone for the phone).
+
+type Box = { top: number; left: number; right: number; bottom: number; width: number };
+type CardLayout = {
+  heroColumns: number;
+  photo: Box;
+  panel: Box;
+  gridColumns: number;
+  gridInner: number;
+  cells: { label: string; box: Box }[];
+  documentWidth: number;
+  cardWidth: number;
+  pageOverflow: number;
+};
+
+/** Runs inside the page: the geometry of one card (`scope` is the card's selector). Installed as window.__cardProbe so one source serves every measurement. */
+function cardProbe(scope: string) {
+  const root = document.querySelector(scope);
+  if (root === null) return null;
+  const box = (element: Element) => {
+    const rect = element.getBoundingClientRect();
+    return { top: rect.top, left: rect.left, right: rect.right, bottom: rect.bottom, width: rect.width };
+  };
+  const hero = root.querySelector(".record-hero")!;
+  const grid = root.querySelector(".classification-grid")!;
+  return {
+    heroColumns: getComputedStyle(hero).gridTemplateColumns.split(/\s+/).filter((track) => track !== "").length,
+    photo: box(hero.querySelector(":scope > .subject-media")!),
+    panel: box(hero.querySelector(":scope > .classification-panel")!),
+    gridColumns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/).filter((track) => track !== "").length,
+    gridInner: grid.clientWidth,
+    cells: Array.from(grid.querySelectorAll(".class-cell")).map((cell) => ({ label: cell.querySelector("span")?.textContent ?? "", box: box(cell) })),
+    documentWidth: root.querySelector(".record-document")!.clientWidth,
+    cardWidth: root.getBoundingClientRect().width,
+    pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  };
+}
+
+async function installCardProbe(page: Page) {
+  await page.evaluate(`window.__cardProbe = ${cardProbe.toString()}`);
+}
+
+async function measureCardLayout(page: Page, scope = ".template-card-preview"): Promise<CardLayout> {
+  await installCardProbe(page);
+  const layout = await page.evaluate((root) => (window as unknown as { __cardProbe: (scope: string) => unknown }).__cardProbe(root), scope);
+  expect(layout, `the card ${scope} is on the page`).not.toBeNull();
+  return layout as CardLayout;
+}
+
+const near = (a: number, b: number, tolerance = 1) => Math.abs(a - b) <= tolerance;
+
+/** The archive's order: three cells on one line, then the method of spread across the grid, then three cells on one line. */
+function expectArchiveGrid(layout: CardLayout, where: string) {
+  expect(layout.gridColumns, `${where}: the grid keeps the archive's three columns`).toBe(3);
+  expect(layout.cells.map((cell) => cell.label), `${where}: the cells keep the archive's order`).toEqual([
+    "Общий уровень опасности", "Распространение", "Угроза и риск побега", "Способ распространения", "Разум", "Вид / внешность", "Поведение",
+  ]);
+  const [danger, spread, escape, transmission, mind, appearance, behavior] = layout.cells.map((cell) => cell.box);
+  expect(near(danger.top, spread.top) && near(spread.top, escape.top), `${where}: danger, spread and escape share a top`).toBe(true);
+  expect(transmission.top, `${where}: the method of spread is under the first three`).toBeGreaterThanOrEqual(Math.max(danger.bottom, spread.bottom, escape.bottom) - 1);
+  expect(near(transmission.width, layout.gridInner), `${where}: the method of spread takes the whole grid (${transmission.width} of ${layout.gridInner})`).toBe(true);
+  expect(near(mind.top, appearance.top) && near(appearance.top, behavior.top), `${where}: mind, appearance and behavior share a top`).toBe(true);
+  expect(mind.top, `${where}: the last three are under the method of spread`).toBeGreaterThanOrEqual(transmission.bottom - 1);
+}
+
+function expectValuesFit(measures: ClassValueMeasure[], where: string) {
+  expectClassValuesWhole(measures, where);
+  for (const measure of measures) expect(measure.fontSize, `${where}: «${measure.text}» is not smaller than 12 px`).toBeGreaterThanOrEqual(12);
+}
+
+function expectTwoColumns(layout: CardLayout, where: string) {
+  expect(layout.panel.left, `${where}: the classification stands beside the photo`).toBeGreaterThanOrEqual(layout.photo.right - 1);
+  expect(layout.panel.top - layout.photo.top, `${where}: the classification starts level with the photo`).toBeLessThanOrEqual(20);
+}
+
+test("[STAB-TMPL-01] D-65 the card is laid out like the archive's record: photo left, three classes, the method of spread, three classes", async ({ page, browser, isMobile }, testInfo) => {
+  test.skip(isMobile, "The two-column PC layout; the phone is the next test.");
+  const writes = trackWrites(page);
+  const { builder } = await openBuilder(page);
+  await nameField(builder).fill("Раскладка как в базе");
+  await chooseLongestClassValues(builder);
+  await showPreview(builder);
+
+  // Window of the normal size (760 px): the card is two columns here too.
+  const normal = await measureCardLayout(page);
+  testInfo.annotations.push({ type: "d65-normal", description: `card ${normal.cardWidth}px, document ${normal.documentWidth}px, hero columns ${normal.heroColumns}, photo ${normal.photo.width}px, panel ${normal.panel.width}px, cell ${normal.cells[0].box.width}px` });
+  expect(normal.heroColumns, "window of the normal size: two columns").toBe(2);
+  expectTwoColumns(normal, "window of the normal size");
+  expectArchiveGrid(normal, "window of the normal size");
+  expectValuesFit(await measureClassValues(page), "window of the normal size");
+
+  // The downloaded file at the card's own width: the same hero, grid and values.
+  const { target } = await downloadHtml(page, builder, testInfo, "layout.html");
+  const offline = await browser.newContext({ offline: true, locale: "ru-RU", viewport: { width: 1060, height: 900 } });
+  try {
+    const filePage = await offline.newPage();
+    await filePage.goto(pathToFileURL(target).href);
+    await expect(filePage.getByRole("heading", { level: 2 })).toHaveText("Раскладка как в базе");
+    const file = await measureCardLayout(filePage);
+    expect(file.heroColumns, "downloaded HTML at 1060 px: two columns").toBe(2);
+    expectTwoColumns(file, "downloaded HTML at 1060 px");
+    expectArchiveGrid(file, "downloaded HTML at 1060 px");
+    expectValuesFit(await measureClassValues(filePage), "downloaded HTML at 1060 px");
+  } finally {
+    await offline.close();
+  }
   expect(writes).toEqual([]);
 });
