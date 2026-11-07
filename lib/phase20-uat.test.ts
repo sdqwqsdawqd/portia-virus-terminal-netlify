@@ -23,7 +23,7 @@ export const requiredUatIds = {
     "OWNER-MIG-D36", "OWNER-MIG-NOTES", "STAGING-FREE", "REVIEWER-ROLE", "VISUAL-APPROVED", "RELEASE-GATE",
   ],
   both: [
-    ...seq("SPIDER-", 3), ...seq("CLASS-", 4), "SEARCH-01", "SEARCH-03", ...seq("EDITOR-", 4), ...seq("REG-", 7), ...seq("PROMO-", 5),
+    ...seq("SPIDER-", 3), ...seq("CLASS-", 4), "SEARCH-01", "SEARCH-03", ...seq("EDITOR-", 4), "EDITOR-FRAMING-01", "EDITOR-INFO-ADD-01", ...seq("REG-", 7), ...seq("PROMO-", 5),
     "TMPL-01", "WIN-01", "QUAL-LOCK-01", "WALL-01", "SVG-01", "SHORTCUT-01", "VIVIAN-01", "MOTION-01", "MEDIA-01", "A11Y-SR-01",
   ],
   pcOnly: ["INFO-PC-01", "SEARCH-02", "A11Y-KEY-01", "A11Y-CONTRAST-D10"],
