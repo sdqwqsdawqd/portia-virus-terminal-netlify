@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-42-PLAN.md
-last_updated: "2026-11-07T07:40:56.428Z"
+stopped_at: Completed PORTIA-20-43-PLAN.md
+last_updated: "2026-11-07T08:07:14.249Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: a8c2f27bc85b1a2cc0ed8f730aa82ff7b2ddfb68
+state_head: 043760a7b8734de7765ad916846c3a5097d414b4
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 118
-  completed_plans: 110
+  completed_plans: 111
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 16 of 47
+Plan: 17 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-07 — Phase PORTIA-20 execution started
 
@@ -143,6 +143,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P20-40 | 8 min | 2 tasks | 7 files |
 | Phase PORTIA-20 P41 | 9 min | 2 tasks | 6 files |
 | Phase PORTIA-20 P42 | 25 min | 2 tasks | 5 files |
+| Phase PORTIA-20 P43 | 23 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -256,6 +257,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: D-53 (20-41): волны шага выделяются emitStepWaves с приоритетом над эхом, 16 слотов, жизнь 0.9 s, одна волна на сторону тела на постановку — Спрос 6.48 x 2 x 0.9 = 11.7 слотов при 16; на HEAD 607 из 874 постановок оставались без волны (8 слотов, 4 волны на постановку)
 - [Phase PORTIA-20]: D-54 (20-42): предел бесконечных анимаций рисунка колб 100 -> 140 (phone 80 с отображаемой целью); обоснование в 20-42-SUMMARY, без слияния переливов в группы
 - [Phase PORTIA-20]: D-54 (20-42): часы колб под полкой справа (x 1258, y 414), чтобы рисунок оставался 55.8% высоты и телефон видел циферблат; замер пика приводит время в пределы цикла (отрицательное currentTime не принимается)
+- [Phase PORTIA-20]: D-55 (20-43): предпросмотр шаблона рисует тот же VirusCardBody, что публичное досье (portia-virus-card.tsx); разметка досье побайтно прежняя; переключатель Поля/Предпросмотр, высота формы на PC 2033 -> 769 px
+- [Phase PORTIA-20]: D-55 (20-43): карточка шаблона двухколоночна как у архива только в развёрнутом окне (окно Повышение 760 px < порога 840 px); особый порог отвергнут, решение за владельцем по кадрам 20-47
 
 ### Pending Todos
 
@@ -299,8 +302,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-07T07:40:55.793Z
-Stopped at: Completed PORTIA-20-42-PLAN.md
+Last session: 2026-11-07T08:07:13.617Z
+Stopped at: Completed PORTIA-20-43-PLAN.md
 Resume file: None
 
 ## Operator Next Step
