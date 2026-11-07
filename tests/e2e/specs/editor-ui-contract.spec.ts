@@ -2,7 +2,9 @@ import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page, Request } from "@playwright/test";
 import { defaultPortiaContent } from "../../../lib/portia-content.ts";
 import { tabRegistry } from "../../../lib/editor-tabs.ts";
+import { DesktopPage } from "../pages/desktop.page";
 import { EditorPage } from "../pages/editor.page";
+import type { DiagnosticLedger } from "../fixtures/diagnostics";
 import { expect, test } from "../fixtures/test";
 
 type AxeViolation = Awaited<ReturnType<AxeBuilder["analyze"]>>["violations"][number];
@@ -27,8 +29,9 @@ function trackWrites(page: Page) {
   return writes;
 }
 
-/** Stubs only the two READS the desktop needs to mount the editor; a write to either path is aborted (and the tracker records it). */
-async function stubEditorReads(page: Page) {
+/** Stubs only the two READS the desktop needs to mount the editor; a write to either path is aborted (and the tracker records it).
+ *  D-63 chain: `content` replaces the default fixture and `puts` collects the body of PUT /api/content, which is then aborted too (the only write the chain tolerates). */
+async function stubEditorReads(page: Page, options: { content?: unknown; revision?: number; puts?: { content: Record<string, unknown>; revision: number }[] } = {}) {
   await page.route("**/api/access", async (route) => {
     if (route.request().method() !== "GET") return route.abort();
     await route.fulfill({
@@ -39,25 +42,33 @@ async function stubEditorReads(page: Page) {
     });
   });
   await page.route("**/api/content**", async (route) => {
-    if (route.request().method() !== "GET") return route.abort();
+    if (route.request().method() !== "GET") {
+      if (route.request().method() === "PUT" && options.puts) options.puts.push(JSON.parse(route.request().postData() ?? "null"));
+      return route.abort();
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       headers: { "cache-control": "no-store" },
-      body: JSON.stringify({ content: defaultPortiaContent, revision: 1, updatedAt: null }),
+      body: JSON.stringify({ content: options.content ?? defaultPortiaContent, revision: options.revision ?? 1, updatedAt: null }),
     });
   });
 }
 
-async function openInfoTab(page: Page) {
-  await stubEditorReads(page);
+async function openEditorTab(page: Page, tabName: RegExp, options?: Parameters<typeof stubEditorReads>[1]) {
+  await stubEditorReads(page, options);
   const editor = new EditorPage(page);
   await editor.desktop.goto();
   await editor.openSettings();
   await expect(editor.openEditor).toBeEnabled();
   await editor.openEditor.click();
   await expect(editor.editorNavigation()).toBeVisible();
-  await editor.editorNavigation().getByRole("button", { name: /^Информация/ }).click();
+  await editor.editorNavigation().getByRole("button", { name: tabName }).click();
+  return editor;
+}
+
+async function openInfoTab(page: Page) {
+  const editor = await openEditorTab(page, /^Информация/);
   await expect(page.getByRole("navigation", { name: "Разделы информации" })).toBeVisible();
   return editor;
 }
@@ -272,5 +283,151 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
       .map(describe);
     expect(unexpected, "critical or serious axe violations other than the two known ones").toEqual([]);
     expect(writes, "the UI contract never writes").toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// [STAB-REL-08] D-63 (20-53): the block «Видимая часть» under a picture field. Same UI contract as above, with ONE tolerated write: PUT /api/content is
+// intercepted, its body is recorded and the request is aborted (the abort is declared per test through DiagnosticLedger.expectFault). Any other
+// non-GET request fails the test. The chain: editor sliders -> preview of the editor -> body of the PUT -> the site fed with that body.
+// Not proven here: editor rights, saving on the server, real photos (the owner's check, 20-UAT EDITOR-FRAMING-01).
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+
+type PutBody = { content: Record<string, unknown>; revision: number };
+type Frame = { x: number; y: number; zoom: number };
+const chosenFrame: Frame = { x: 20, y: 80, zoom: 160 };
+
+/** Every non-GET request to our API or Supabase except PUT /api/content, which the chain intercepts and aborts itself. */
+function trackWritesExceptContentPut(page: Page) {
+  const writes: string[] = [];
+  page.on("request", (request: Request) => {
+    const url = new URL(request.url());
+    const own = url.pathname === "/api" || url.pathname.startsWith("/api/");
+    const supabase = url.hostname.endsWith(".supabase.co");
+    const readOnly = request.method() === "GET" || request.method() === "HEAD";
+    const interceptedSave = request.method() === "PUT" && url.pathname === "/api/content";
+    if ((own || supabase) && !readOnly && !interceptedSave) writes.push(`${request.method()} ${url.pathname}`);
+  });
+  return writes;
+}
+
+/** The aborted save is a fault of the test itself: declared before the click (rules of the same kind as app-states.spec.ts). */
+function expectAbortedSave(diagnostics: DiagnosticLedger) {
+  diagnostics.expectFault({ kind: "requestfailed", source: /^(fetch|xhr)$/, text: /ERR_FAILED|NS_ERROR|aborted|cancelled/i, reason: "the test aborts its own PUT /api/content on purpose (D-63 chain)" });
+  diagnostics.expectFault({ kind: "console", source: /^browser:\/api\//, text: /Failed to load resource: net::ERR_FAILED/, reason: "the browser mirrors the aborted own /api request to its console" });
+}
+
+/** What a picture shows: computed object-position and transform, the INLINE transform-origin (the computed one is in pixels and follows the box, the style is the percent pair), the frame box. */
+async function pictureState(frame: Locator) {
+  const img = frame.locator("img").first();
+  await expect(img).toBeVisible();
+  const state = await img.evaluate((element: HTMLImageElement) => {
+    const computed = getComputedStyle(element);
+    return { objectPosition: computed.objectPosition, transform: computed.transform, transformOrigin: element.style.transformOrigin };
+  });
+  const rect = await box(frame);
+  return { ...state, ratio: rect.width / rect.height };
+}
+
+type Surface = {
+  /** The record the surface shows. */
+  name: string;
+  tab: RegExp;
+  /** The fixture the editor and the site both show: the picture has NO frame yet. */
+  content: Record<string, unknown>;
+  /** Brings the record with the field on screen in the editor. */
+  prepare: (page: Page) => Promise<void>;
+  field: (page: Page) => Locator;
+  /** The frame this surface got in the body of the PUT. */
+  saved: (content: Record<string, any>) => unknown;
+  /** Opens the site app with the surface and returns the span `.portia-image` that holds the picture. */
+  site: (page: Page) => Promise<Locator>;
+};
+
+const saveButton = (page: Page) => page.getByRole("button", { name: "СОХРАНИТЬ", exact: true });
+
+async function setSlider(group: Locator, name: string, from: number, to: number) {
+  const slider = group.getByRole("slider", { name });
+  await slider.focus();
+  const steps = (to - from) / 5;
+  for (let step = 0; step < Math.abs(steps); step += 1) await slider.press(steps > 0 ? "ArrowRight" : "ArrowLeft");
+  await expect(slider).toHaveValue(String(to));
+  await expect(slider).toHaveAttribute("aria-valuetext", `${to} %`);
+}
+
+/** Answers GET /api/content with `content` (a write passes nowhere: the tracker sees it). */
+async function stubContent(page: Page, content: Record<string, unknown>, revision = 1) {
+  await page.route("**/api/content**", async (route) => {
+    if (route.request().method() !== "GET") return route.abort();
+    await route.fulfill({ status: 200, contentType: "application/json", headers: { "cache-control": "no-store" }, body: JSON.stringify({ content, revision, updatedAt: null }) });
+  });
+}
+
+/** Editor -> preview -> PUT body -> site, for one surface. Returns the recorded PUT bodies for further checks. */
+async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Surface) {
+  const writes = trackWritesExceptContentPut(page);
+  const puts: PutBody[] = [];
+  expectAbortedSave(diagnostics);
+  await openEditorTab(page, surface.tab, { content: surface.content, puts });
+  await surface.prepare(page);
+
+  const field = surface.field(page);
+  await expect(field).toBeVisible();
+  const group = field.getByRole("group", { name: "Видимая часть" });
+  await expect(group, "the block of the visible part stands under a picture that opened").toBeVisible();
+  await setSlider(group, "По горизонтали", 50, chosenFrame.x);
+  await setSlider(group, "По вертикали", 50, chosenFrame.y);
+  await setSlider(group, "Масштаб", 100, chosenFrame.zoom);
+  const preview = await pictureState(group.locator(".portia-image").first());
+  expect(preview.objectPosition).toBe(`${chosenFrame.x}% ${chosenFrame.y}%`);
+  expect(preview.transform).toBe(`matrix(${chosenFrame.zoom / 100}, 0, 0, ${chosenFrame.zoom / 100}, 0, 0)`);
+  expect(preview.transformOrigin).toBe(`${chosenFrame.x}% ${chosenFrame.y}%`);
+
+  await expect(saveButton(page)).toBeEnabled();
+  await saveButton(page).click();
+  await expect.poll(() => puts.length, "the save reached the intercepted PUT").toBe(1);
+  expect(surface.saved(puts[0].content), "the body of the PUT holds the chosen frame").toEqual(chosenFrame);
+
+  // The site, fed with exactly the body of the PUT (a fresh revision, an empty device cache: no copy of the editor's fixture is shown instead).
+  await page.unroute("**/api/content**");
+  await stubContent(page, puts[0].content, puts[0].revision + 1);
+  await page.addInitScript(() => window.localStorage.clear());
+  const picture = await surface.site(page);
+  const site = await pictureState(picture);
+  expect(site.objectPosition, "object-position: the site equals the preview").toBe(preview.objectPosition);
+  expect(site.transform, "transform: the site equals the preview").toBe(preview.transform);
+  expect(site.transformOrigin, "transform-origin: the site equals the preview").toBe(preview.transformOrigin);
+  expect(Math.abs(site.ratio - preview.ratio) / site.ratio, `the frame ratio of the preview (${preview.ratio.toFixed(3)}) is within 2% of the site (${site.ratio.toFixed(3)})`).toBeLessThanOrEqual(0.02);
+  expect(writes, "no write but the intercepted PUT").toEqual([]);
+  return { puts, preview, site };
+}
+
+const fixtureContent = (patch: Record<string, unknown>): Record<string, unknown> => ({ ...structuredClone(defaultPortiaContent), ...patch });
+
+/** The section card is the one top-level card of its column; a section opens by its toggle. */
+async function openSelectedSectionCard(page: Page) {
+  const toggle = sectionCard(page).locator(":scope > .nested-editor-head .nested-editor-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
+
+const guideSectionSurface: Surface = {
+  name: "«Справочник» section photo",
+  tab: /^Справочник/,
+  content: fixtureContent({ guideSections: [{ id: "g-d63", title: "Раздел с фото", photo: "/assets/portia-assistant.png", cards: [] }] }),
+  prepare: openSelectedSectionCard,
+  field: (page) => page.locator(".image-editor-field").filter({ hasText: "Фото раздела" }),
+  saved: (content) => content.guideSections.find((section: { id: string }) => section.id === "g-d63")?.photoFraming,
+  site: async (page) => {
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    await desktop.openApp("Справочник");
+    return desktop.window("Справочник").locator(".guide-section").filter({ hasText: "Раздел с фото" }).locator(".guide-section-band");
+  },
+};
+
+test.describe("[STAB-REL-08] D-63 the editor chooses the visible part of a picture", () => {
+  test("[STAB-REL-08] D-63 «Справочник» section photo: the editor preview is the site", async ({ page, diagnostics }) => {
+    await frameChain(page, diagnostics, guideSectionSurface);
   });
 });
