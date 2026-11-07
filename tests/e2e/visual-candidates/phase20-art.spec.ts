@@ -1335,6 +1335,70 @@ test("[STAB-VIS-02] D-54 the shelf vessels move: every vessel with liquid on the
   }
 });
 
+// D-59 (20-47): the owner's verdict of 2026-11-07 — «убрать лишние часы ведь их там два» — one dial only. The pressure gauge under the shelf (x 1112, y 424, r 24) had the same
+// round face with a scale and a needle as the ticking clock (x 1258, y 414, r 24); the gauge is gone and the clock stays. Units are the 1440x900 wallpaper frame.
+test("[STAB-VIS-02] D-59 one clock: the drawing has one round dial (the ticking clock), and nothing is drawn where the pressure gauge used to hang", async ({ page }) => {
+  await openFlasks(page, { motion: "on" });
+  expect(await page.locator(".wallpaper-flasks .wallpaper-flask-clock").count(), "one clock group").toBe(1);
+  const probe = await page.evaluate(() => {
+    const zone = { left: 1084, right: 1140, top: 396, bottom: 458 }; // the old gauge: dial 1088..1136 x 400..448 and a foot down to 454, with a margin
+    const inside = (x: number, y: number) => x >= zone.left && x <= zone.right && y >= zone.top && y <= zone.bottom;
+    const strokes = [...document.querySelectorAll<SVGGeometryElement>(".wallpaper-flask-stand path, .wallpaper-flask-stand circle, .wallpaper-flask-stand rect, .wallpaper-flask-scene-wall path, .wallpaper-flask-scene-wall circle")];
+    const hits = strokes.filter((shape) => {
+      // Sampled along the outline, not by the box of the whole path (a long path with several sub-paths has a box that covers the zone by accident).
+      const length = shape.getTotalLength();
+      for (let at = 0; at <= length; at += 2) { const point = shape.getPointAtLength(at); if (inside(point.x, point.y)) return true; }
+      return false;
+    }).map((shape) => `${shape.tagName} ${(shape.getAttribute("d") ?? shape.getAttribute("class") ?? "").slice(0, 40)}`);
+    // Any other circle with a dial-sized radius outside the clock.
+    const dials = [...document.querySelectorAll<SVGCircleElement>(".wallpaper-flasks circle")].filter((circle) => circle.r.baseVal.value >= 20 && !circle.closest(".wallpaper-flask-clock")).length;
+    return { hits, dials, scaled: strokes.length };
+  });
+  expect(probe.scaled, "the probe saw the drawing").toBeGreaterThan(20);
+  expect(probe.hits, "no stroke of the bench or the wall inside the former gauge area (x 1084-1140, y 396-458)").toEqual([]);
+  expect(probe.dials, "no second round dial").toBe(0);
+});
+
+// D-59 (20-47): the wave on the oscilloscope screen runs. The trace is its own element under a clip group (the clip must not move with the trace), it is the same sine
+// as before and two periods longer, one animation shifts it by one period (24 units) per cycle, so the loop has no seam. Opacity is not touched: the brightness of the wave stays
+// at the strength of the other strokes (the peak-contrast tests hold).
+test("[STAB-VIS-02] D-59 the oscilloscope wave moves: one endless linear shift of exactly one period (24 units) per cycle, clipped by the screen, still in the stopped modes", async ({ page }) => {
+  await openFlasks(page, { motion: "on" });
+  const cycles = await cyclesOf(page, ".wallpaper-flask-scope-trace");
+  expect(cycles, "exactly one animation on the trace").toHaveLength(1);
+  expect(cycles[0].iterations, "the wave runs for ever").toBe(Infinity);
+  expect(cycles[0].properties, "keyframes touch transform only").toEqual(["transform"]);
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector(".wallpaper-flask-scope-trace")!).animationTimingFunction), "a constant speed").toBe("linear");
+  const probe = await page.evaluate(() => {
+    const trace = document.querySelector<SVGPathElement>(".wallpaper-flask-scope-trace")!;
+    const animation = document.getAnimations().find((candidate) => (candidate.effect as KeyframeEffect).target === trace)!;
+    const duration = Number(animation.effect!.getTiming().duration);
+    animation.pause();
+    const at = (ms: number) => { animation.currentTime = ms; return new DOMMatrixReadOnly(getComputedStyle(trace).transform).m41; };
+    const shifts = { start: at(0), middle: at(duration / 2), end: at(duration - 1) };
+    const clipGroup = trace.parentElement!;
+    const clipId = /url\(#([^)]+)\)/.exec(clipGroup.getAttribute("clip-path") ?? "")?.[1] ?? null;
+    const clipRect = clipId ? document.getElementById(clipId)?.querySelector("rect") : null;
+    return { shifts, ownClip: trace.getAttribute("clip-path"), clipRect: clipRect ? { x: clipRect.x.baseVal.value, y: clipRect.y.baseVal.value, width: clipRect.width.baseVal.value, height: clipRect.height.baseVal.value } : null, d: trace.getAttribute("d") ?? "" };
+  });
+  expect(probe.shifts.start, "the loop starts at rest").toBeCloseTo(0, 3);
+  expect(probe.shifts.middle, "constant speed: half a period at half a cycle").toBeCloseTo(12, 1);
+  expect(probe.shifts.end, "a whole period of 24 units at the end of the cycle").toBeGreaterThan(23.9);
+  expect(probe.shifts.end).toBeLessThanOrEqual(24);
+  const match = /^M(\d+) 520q6-26 12 0((?:t12 0)+)$/.exec(probe.d);
+  expect(match, "the same sine as before: half-waves of 12 units (period 24) on the screen centre line").not.toBeNull();
+  expect((Number(match![1]) - 922) % 24, "the trace starts a whole number of periods from the old start, so the picture is the same").toBe(0);
+  expect(Number(match![1]) + 12 * (1 + match![2].length / 5), "the trace is long enough to fill the screen at any shift").toBeGreaterThanOrEqual(996 + 24);
+  expect(Number(match![1]), "and starts far enough left").toBeLessThanOrEqual(918 - 24);
+  expect(probe.ownClip, "the clip sits on the group, not on the moving trace").toBeNull();
+  expect(probe.clipRect, "the trace is clipped by the screen of the oscilloscope").toEqual({ x: 918, y: 466, width: 78, height: 80 });
+  // Stopped modes: no animation, the trace is in place.
+  await openFlasks(page, { motion: "off" });
+  expect(await page.locator(".wallpaper-flask-scope-trace").count(), "the trace is drawn in «Выключены»").toBe(1);
+  expect(await cyclesOf(page, ".wallpaper-flask-scope-trace"), "no animation in «Выключены»").toHaveLength(0);
+  expect(await page.evaluate(() => new DOMMatrixReadOnly(getComputedStyle(document.querySelector(".wallpaper-flask-scope-trace")!).transform).m41), "the resting position").toBe(0);
+});
+
 // D-54 (20-37): the endless-animation limit inside the drawing goes from 100 to 140 and a limit of 80 is added for the animations a phone actually shows.
 // The old number was a technical guide set by plan 20-36, not by the owner; D-54 asks for more motion; the extra motion is only opacity and transform
 // (compositor properties) and no page code reads layout per frame. Merging the shelf cycles into shared groups was rejected: the owner has already complained
