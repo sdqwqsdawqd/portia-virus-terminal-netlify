@@ -58,9 +58,21 @@ test("D-63: ImageEditorField shows the block only for an opened picture with a h
   assert.match(source, /addressAtPick\.current = value/, "an upload remembers the address it was picked on");
 });
 
-test("D-63: the captions of the block live in its own file, not in the editor file (D-58)", () => {
+test("D-66: the captions of the block and of its window live in its own file, not in the editor file (D-58); the three sliders of D-63 are gone", () => {
   const block = read("components/portia-image-framing.tsx");
-  for (const text of ["Видимая часть", "По горизонтали", "По вертикали", "Масштаб", "Сбросить"]) assert.ok(block.includes(text), `«${text}» is in portia-image-framing.tsx`);
+  for (const text of ["Видимая часть", "Изменить", "Положение картинки", "Масштаб", "Сбросить", "Отмена", "Применить"]) assert.ok(block.includes(text), `«${text}» is in portia-image-framing.tsx`);
+  for (const text of ["По горизонтали", "По вертикали"]) assert.equal(block.includes(`"${text}"`) || block.includes(`>${text}<`), false, `«${text}» (a slider of D-63) is gone from portia-image-framing.tsx`);
   const editor = read("components/portia-editor.tsx");
-  for (const text of ["По горизонтали", "По вертикали", "Масштаб", "Сбросить"]) assert.equal(editor.includes(`>${text}<`) || editor.includes(`"${text}"`), false, `«${text}» is not a text of the editor file`);
+  // «Отмена» is a word of the editor in another place, so it is not checked here.
+  for (const text of ["Положение картинки", "Масштаб", "Сбросить", "Применить"]) assert.equal(editor.includes(`>${text}<`) || editor.includes(`"${text}"`), false, `«${text}» is not a text of the editor file`);
+  const dossier = read("components/portia-editor-dossier.tsx");
+  for (const text of ["Положение картинки", "Масштаб", "Применить"]) assert.equal(dossier.includes(`>${text}<`) || dossier.includes(`"${text}"`), false, `«${text}» is not a text of the picture field file`);
+});
+
+test("D-66: the block uses the geometry module and the frame format only (no PortiaImage: the template builder shares the picture field)", () => {
+  const block = read("components/portia-image-framing.tsx");
+  assert.match(block, /from "@\/lib\/image-framing-crop"/, "the geometry comes from lib/image-framing-crop.ts");
+  assert.match(block, /from "@\/lib\/image-framing"/, "the preview is made with imageFramingStyles of the site");
+  assert.equal(/portia-desktop-media/.test(block), false, "the block does not import PortiaImage");
+  assert.equal(/type="range"[^>]*min=\{imageFramingLimits\.position/.test(block), false, "no slider for a position");
 });

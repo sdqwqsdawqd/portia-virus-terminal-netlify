@@ -287,10 +287,12 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
-// [STAB-REL-08] D-63 (20-53): the block «Видимая часть» under a picture field. Same UI contract as above, with ONE tolerated write: PUT /api/content is
+// [STAB-REL-08] D-66 (20-56, replaces the three sliders of D-63 / 20-53): the block «Видимая часть» under a picture field is a compact preview and «Изменить»;
+// the dialog «Видимая часть» (native <dialog>) chooses the part. Same UI contract as above, with ONE tolerated write: PUT /api/content is
 // intercepted, its body is recorded and the request is aborted (the abort is declared per test through DiagnosticLedger.expectFault). Any other
-// non-GET request fails the test. The chain: editor sliders -> preview of the editor -> body of the PUT -> the site fed with that body.
-// Not proven here: editor rights, saving on the server, real photos (the owner's check, 20-UAT EDITOR-FRAMING-01).
+// non-GET request fails the test. The chain: dialog -> «Применить» -> preview of the editor -> body of the PUT -> the site fed with that body.
+// D-67: the frame of the dialog is the place of the site (proportions and the visible part, against the site on the same fixture).
+// Not proven here: editor rights, saving on the server, real photos (the owner's check, 20-UAT EDITOR-FRAMING-01), dragging by finger and mouse, cyclic Tab, axe of the dialog (20-57).
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 
 type PutBody = { content: PortiaContent; revision: number };
@@ -359,14 +361,95 @@ async function save(page: Page) {
   await button.click();
 }
 
-async function setSlider(group: Locator, name: string, from: number, to: number) {
-  const slider = group.getByRole("slider", { name });
+// The dialog «Видимая часть» (D-66): the closed block holds the preview and «Изменить»; the dialog is a native <dialog> in the top layer.
+const dialogOf = (page: Page) => page.getByRole("dialog", { name: /^Видимая часть/ });
+const positionOf = (dialog: Locator) => dialog.getByRole("slider", { name: "Положение картинки" });
+const zoomOf = (dialog: Locator) => dialog.getByRole("slider", { name: "Масштаб" });
+const positionText = ({ x, y }: { x: number; y: number }) => `по горизонтали ${x} %, по вертикали ${y} %`;
+
+/** Clicks «Изменить» and waits until the dialog has laid the picture out under its frame. */
+async function openFraming(page: Page, group: Locator) {
+  const change = group.getByRole("button", { name: "Изменить" });
+  await expect(change, "the closed block has the button «Изменить»").toBeVisible();
+  await change.click();
+  const dialog = dialogOf(page);
+  await expect(dialog, "«Изменить» opens the dialog «Видимая часть»").toBeVisible();
+  await expect(dialog.locator(".image-framing-window"), "the picture of the dialog is laid out under its frame").toBeVisible();
+  return dialog;
+}
+
+/** «Масштаб» by the arrow keys of the slider (steps of 5) to `to`. */
+async function setZoom(dialog: Locator, to: number) {
+  const slider = zoomOf(dialog);
   await slider.focus();
-  const steps = (to - from) / 5;
+  const steps = (to - Number(await slider.inputValue())) / 5;
   for (let step = 0; step < Math.abs(steps); step += 1) await slider.press(steps > 0 ? "ArrowRight" : "ArrowLeft");
   await expect(slider).toHaveValue(String(to));
   await expect(slider).toHaveAttribute("aria-valuetext", `${to} %`);
 }
+
+/** «Положение картинки» by the arrow keys (steps of 5) to `to`; the value is read from aria-valuetext. */
+async function movePart(dialog: Locator, to: { x: number; y: number }) {
+  const part = positionOf(dialog);
+  await part.focus();
+  const text = (await part.getAttribute("aria-valuetext")) ?? "";
+  const found = /по горизонтали (\d+) %, по вертикали (\d+) %/.exec(text);
+  expect(found, `aria-valuetext of the position «${text}»`).not.toBeNull();
+  const from = { x: Number(found![1]), y: Number(found![2]) };
+  for (let step = 0; step < Math.abs(to.x - from.x) / 5; step += 1) await part.press(to.x > from.x ? "ArrowRight" : "ArrowLeft");
+  for (let step = 0; step < Math.abs(to.y - from.y) / 5; step += 1) await part.press(to.y > from.y ? "ArrowDown" : "ArrowUp");
+  await expect(part).toHaveAttribute("aria-valuetext", positionText(to));
+}
+
+async function applyFraming(dialog: Locator) {
+  await dialog.getByRole("button", { name: "Применить" }).click();
+  await expect(dialog, "«Применить» closes the dialog").toBeHidden();
+}
+
+type Fractions = { left: number; top: number; width: number; height: number };
+
+/** The window of the dialog, from the rectangles of its frame and of its dimmed picture: the part of the picture inside the frame, in fractions. */
+async function dialogWindow(dialog: Locator) {
+  const frame = await box(dialog.locator(".image-framing-window"));
+  const image = await box(dialog.locator(".image-framing-dim"));
+  const visible: Fractions = { left: (frame.x - image.x) / image.width, top: (frame.y - image.y) / image.height, width: frame.width / image.width, height: frame.height / image.height };
+  return { frame, image, ratio: frame.width / frame.height, visible };
+}
+
+/** The part of the picture the SITE shows, by an independent model of the DOM: the clipping frame (.portia-image), the layout box of the img, its natural size,
+ *  computed object-fit and object-position, the scale of the computed transform and the percent pair of the inline transform-origin. The frame region is mapped
+ *  back through the transform onto the content rectangle of the picture. */
+async function siteWindow(place: Locator) {
+  await expect.poll(() => place.locator("img").first().evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0), "the site picture is loaded").toBe(true);
+  return place.evaluate((element: HTMLElement) => {
+    const clip = (element.matches(".portia-image") ? element : element.querySelector(".portia-image")) as HTMLElement;
+    const img = clip.querySelector("img") as HTMLImageElement;
+    const style = getComputedStyle(img);
+    const percent = (text: string) => text.split(/\s+/).map((part) => (part.endsWith("%") ? Number.parseFloat(part) : 50));
+    const boxLeft = img.offsetLeft, boxTop = img.offsetTop, boxWidth = img.offsetWidth, boxHeight = img.offsetHeight;
+    const natural = { width: img.naturalWidth, height: img.naturalHeight };
+    let drawnWidth = boxWidth, drawnHeight = boxHeight;
+    if (style.objectFit === "cover" || style.objectFit === "contain") {
+      const scale = (style.objectFit === "cover" ? Math.max : Math.min)(boxWidth / natural.width, boxHeight / natural.height);
+      drawnWidth = natural.width * scale;
+      drawnHeight = natural.height * scale;
+    }
+    const [positionX, positionY] = percent(style.objectPosition);
+    const contentLeft = boxLeft + (boxWidth - drawnWidth) * (positionX / 100);
+    const contentTop = boxTop + (boxHeight - drawnHeight) * (positionY / 100);
+    const matrix = style.transform === "none" ? null : new DOMMatrixReadOnly(style.transform);
+    const zoom = matrix ? matrix.a : 1;
+    const [originX, originY] = percent(img.style.transformOrigin || "50% 50%");
+    const pointX = boxLeft + boxWidth * (originX / 100);
+    const pointY = boxTop + boxHeight * (originY / 100);
+    const back = (qx: number, qy: number) => [(pointX + (qx - pointX) / zoom - contentLeft) / drawnWidth, (pointY + (qy - pointY) / zoom - contentTop) / drawnHeight];
+    const [left, top] = back(0, 0);
+    const [right, bottom] = back(clip.clientWidth, clip.clientHeight);
+    return { visible: { left, top, width: right - left, height: bottom - top }, frameRatio: clip.clientWidth / clip.clientHeight, imgRatio: boxWidth / boxHeight, objectFit: style.objectFit };
+  });
+}
+
+const maxDifference = (a: Fractions, b: Fractions) => Math.max(Math.abs(a.left - b.left), Math.abs(a.top - b.top), Math.abs(a.width - b.width), Math.abs(a.height - b.height));
 
 /** Answers GET /api/content with `content` (a write passes nowhere: the tracker sees it). */
 async function stubContent(page: Page, content: Record<string, unknown>, revision = 1) {
@@ -378,20 +461,24 @@ async function stubContent(page: Page, content: Record<string, unknown>, revisio
 
 const groupOf = (surface: Surface, page: Page) => surface.field(page).getByRole("group", { name: "Видимая часть" });
 
-/** Editor -> preview -> PUT body -> site, then (on the same draft) reset and a new address, for one surface. */
+/** Editor -> dialog -> «Применить» -> preview -> PUT body -> site, then (on the same draft) «Отмена», Esc, the backdrop, «Сбросить» and a new address, for one surface. */
 async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Surface) {
   const writes = trackWritesExceptContentPut(page);
   const puts: PutBody[] = [];
   expectAbortedSave(diagnostics);
-  await openEditorTab(page, surface.tab, { content: surface.content, puts });
+  const editor = await openEditorTab(page, surface.tab, { content: surface.content, puts });
   await surface.prepare(page);
 
   await expect(surface.field(page)).toBeVisible();
   const group = groupOf(surface, page);
   await expect(group, "the block of the visible part stands under a picture that opened").toBeVisible();
-  await setSlider(group, "По горизонтали", 50, chosenFrame.x);
-  await setSlider(group, "По вертикали", 50, chosenFrame.y);
-  await setSlider(group, "Масштаб", 100, chosenFrame.zoom);
+  await expect(group.getByRole("slider"), "the closed block holds no slider").toHaveCount(0);
+
+  const dialog = await openFraming(page, group);
+  await setZoom(dialog, chosenFrame.zoom);
+  await movePart(dialog, chosenFrame);
+  await applyFraming(dialog);
+  await expect(group.getByRole("button", { name: "Изменить" }), "the focus returns to «Изменить»").toBeFocused();
   const preview = await pictureState(group.locator(".portia-image").first());
   expect(preview.objectPosition).toBe(`${chosenFrame.x}% ${chosenFrame.y}%`);
   expect(preview.transform).toBe(`matrix(${chosenFrame.zoom / 100}, 0, 0, ${chosenFrame.zoom / 100}, 0, 0)`);
@@ -400,8 +487,9 @@ async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Su
   await save(page);
   await expect.poll(() => puts.length, "the save reached the intercepted PUT").toBe(1);
   expect(surface.holder(puts[0].content)?.[surface.frameKey], "the body of the PUT holds the chosen frame").toEqual(chosenFrame);
+  await expect(editor.editorNavigation()).toBeVisible();
 
-  // The site, fed with exactly that body (the frame chosen in the preview): a fresh revision, an empty device cache.
+  // The site, fed with exactly that body (the frame chosen in the dialog): a fresh revision, an empty device cache.
   await page.unroute("**/api/content**");
   await stubContent(page, puts[0].content, puts[0].revision + 1);
   await page.addInitScript(() => window.localStorage.clear());
@@ -413,30 +501,54 @@ async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Su
   const [siteRatio, previewRatio] = surface.compare === "frame" ? [site.frameRatio, preview.frameRatio] : [site.imgRatio, preview.imgRatio];
   expect(Math.abs(siteRatio - previewRatio) / siteRatio, `the ${surface.compare} ratio of the preview (${previewRatio.toFixed(3)}) is within 2% of the site (${siteRatio.toFixed(3)})`).toBeLessThanOrEqual(0.02);
 
-  // The editor again, now on content that already carries the frame (the body above): it reads the frame back, «Сбросить» takes it out of the
-  // data, and a new address takes a chosen frame with it. Each save is intercepted: the key is looked for in the body.
+  // The editor again, now on content that already carries the frame (the body above): the dialog reads the frame back; «Отмена», Esc and a click
+  // on the backdrop change nothing; «Сбросить» + «Применить» takes the frame out of the data; a new address takes a chosen frame with it.
   await page.unroute("**/api/content**");
   const second: PutBody[] = [];
-  await openEditorTab(page, surface.tab, { content: puts[0].content, revision: puts[0].revision + 1, puts: second });
+  const again = await openEditorTab(page, surface.tab, { content: puts[0].content, revision: puts[0].revision + 1, puts: second });
   await surface.prepare(page);
   await expect(surface.field(page)).toBeVisible();
   const framed = groupOf(surface, page);
-  await expect(framed.getByRole("slider", { name: "По горизонтали" }), "the stored frame is read back").toHaveValue(String(chosenFrame.x));
-  await expect(framed.getByRole("slider", { name: "По вертикали" })).toHaveValue(String(chosenFrame.y));
-  await expect(framed.getByRole("slider", { name: "Масштаб" })).toHaveValue(String(chosenFrame.zoom));
+  const storedState = async () => (await pictureState(framed.locator(".portia-image").first())).objectPosition;
 
-  await framed.getByRole("button", { name: "Сбросить" }).click();
-  await expect(framed.getByRole("slider", { name: "Масштаб" })).toHaveValue("100");
+  let open = await openFraming(page, framed);
+  await expect(positionOf(open), "the stored frame is read back").toHaveAttribute("aria-valuetext", positionText(chosenFrame));
+  await expect(zoomOf(open)).toHaveValue(String(chosenFrame.zoom));
+  await movePart(open, { x: 35, y: 65 });
+  await open.getByRole("button", { name: "Отмена" }).click();
+  await expect(open, "«Отмена» closes the dialog").toBeHidden();
+  await expect(page.locator(".editor-save-chip"), "«Отмена» leaves the draft unchanged").toHaveCount(0);
+  expect(await storedState(), "«Отмена»: the preview is as before").toBe(`${chosenFrame.x}% ${chosenFrame.y}%`);
+
+  open = await openFraming(page, framed);
+  await movePart(open, { x: 35, y: 65 });
+  await positionOf(open).press("Escape");
+  await expect(open, "Esc closes the dialog").toBeHidden();
+  await expect(again.editorNavigation(), "Esc leaves the window of the editor open").toBeVisible();
+  await expect(page.locator(".editor-save-chip"), "Esc leaves the draft unchanged").toHaveCount(0);
+  expect(await storedState(), "Esc: the preview is as before").toBe(`${chosenFrame.x}% ${chosenFrame.y}%`);
+
+  open = await openFraming(page, framed);
+  await page.mouse.click(3, 3);
+  await expect(open, "a click on the dimmed backdrop does not close the dialog").toBeVisible();
+
+  await open.getByRole("button", { name: "Сбросить" }).click();
+  await expect(zoomOf(open)).toHaveValue("100");
+  await expect(positionOf(open), "«Сбросить» puts the window back to 50 / 50 / 100").toHaveAttribute("aria-valuetext", positionText({ x: 50, y: 50 }));
+  await applyFraming(open);
   await save(page);
   await expect.poll(() => second.length).toBe(1);
   const afterReset = surface.holder(second[0].content);
   expect(afterReset, "the record is still in the body").toBeDefined();
-  expect(Object.prototype.hasOwnProperty.call(afterReset!, surface.frameKey), "no frame key after «Сбросить»").toBe(false);
+  expect(Object.prototype.hasOwnProperty.call(afterReset!, surface.frameKey), "no frame key after «Сбросить» and «Применить»").toBe(false);
   expect(afterReset?.[surface.addressKey], "the address is untouched by «Сбросить»").toBe(surface.holder(puts[0].content)?.[surface.addressKey]);
 
-  await setSlider(framed, "По горизонтали", 50, 55);
+  open = await openFraming(page, framed);
+  await setZoom(open, 150);
+  await applyFraming(open);
+  await expect(framed.locator(".portia-image").first()).toHaveAttribute("data-framing", "true");
   await surface.field(page).getByRole("textbox").first().fill(otherPicture);
-  await expect(framed.getByRole("slider", { name: "По горизонтали" }), "the sliders are back at the default").toHaveValue("50");
+  await expect(framed.locator(".portia-image").first(), "the preview of the new picture is without a frame").not.toHaveAttribute("data-framing", "true");
   await save(page);
   await expect.poll(() => second.length).toBe(2);
   const afterAddress = surface.holder(second[1].content);
@@ -632,66 +744,136 @@ async function openSelectedSectionCard(page: Page) {
 
 const allSurfaces = [guideSectionSurface, guideCoverSurface, virusPhotoSurface, mutationSurface, infoPhotoSurface, recycleFileSurface, archivedPhotoSurface, archivedMutationSurface];
 
-test.describe("[STAB-REL-08] D-63 the editor chooses the visible part of a picture", () => {
+test.describe("[STAB-REL-08] D-66 the dialog «Видимая часть» chooses the visible part of a picture", () => {
   for (const surface of allSurfaces) {
-    test(`[STAB-REL-08] D-63 ${surface.name}: the editor preview is the site; «Сбросить» and a new address drop the frame`, async ({ page, diagnostics }) => {
+    test(`[STAB-REL-08] D-66 ${surface.name}: the dialog chooses the part, the preview is the site`, async ({ page, diagnostics }) => {
       await frameChain(page, diagnostics, surface);
     });
   }
 });
 
-test.describe("[STAB-A11Y-01] D-63 the block «Видимая часть» is operable by keyboard and touch", () => {
-  test("[STAB-A11Y-01] D-63 sliders have names and values in percent, Tab reaches them and «Сбросить»; on a phone targets are 44 px and nothing overflows or covers the address and upload fields", async ({ page }) => {
+// [STAB-REL-08] D-67: the frame of the dialog is the place of the site. The content carries the frame, so the dialog reads it back and the site draws it.
+// Proportions: the frame of the dialog against the place on the site (the clipping frame of a band or a cover, the picture itself for pictures that lie whole), 2%.
+// Visible part: the rectangles of the dialog (frame over the dimmed picture) against an independent model of the DOM of the site, 0.015 of the picture.
+function withFrame(surface: Surface, frame: Frame): Record<string, unknown> {
+  const content = structuredClone(surface.content);
+  (surface.holder(content as unknown as PortiaContent) as Record<string, unknown>)[surface.frameKey] = frame;
+  return content;
+}
+
+const frameCases: Frame[] = [chosenFrame, { x: 50, y: 30, zoom: 200 }];
+
+async function frameMatchesSite(page: Page, surface: Surface, frame: Frame) {
+  const writes = trackWritesExceptContentPut(page);
+  const content = withFrame(surface, frame);
+  await openEditorTab(page, surface.tab, { content });
+  await surface.prepare(page);
+  await expect(surface.field(page)).toBeVisible();
+  const group = groupOf(surface, page);
+  await expect(group).toBeVisible();
+  await expect(group.locator(".portia-image.is-loaded"), "the preview of the block is loaded").toBeVisible();
+  const previewBox = await box(group.locator(".portia-image").first());
+
+  const dialog = await openFraming(page, group);
+  const inDialog = await dialogWindow(dialog);
+  await dialog.getByRole("button", { name: "Отмена" }).click();
+  await expect(dialog).toBeHidden();
+
+  await page.unroute("**/api/content**");
+  await stubContent(page, content, 2);
+  await page.addInitScript(() => window.localStorage.clear());
+  const place = await surface.site(page);
+  const onSite = await siteWindow(place);
+  const siteRatio = surface.compare === "frame" ? onSite.frameRatio : onSite.imgRatio;
+
+  const where = `${surface.name} at ${frame.x}/${frame.y}/${frame.zoom}`;
+  test.info().annotations.push({ type: "measure", description: `${where}: ratio dialog ${inDialog.ratio.toFixed(4)}, preview ${(previewBox.width / previewBox.height).toFixed(4)}, site ${siteRatio.toFixed(4)} (${surface.compare}); dialog ${JSON.stringify(inDialog.visible)}, site ${JSON.stringify(onSite.visible)} (${onSite.objectFit}), max difference ${maxDifference(inDialog.visible, onSite.visible).toFixed(4)}` });
+  expect(Math.abs(inDialog.ratio - siteRatio) / siteRatio, `the frame of the dialog (${inDialog.ratio.toFixed(3)}) is within 2% of the place on the site (${siteRatio.toFixed(3)}): ${where}`).toBeLessThanOrEqual(0.02);
+  expect(Math.abs(previewBox.width / previewBox.height - siteRatio) / siteRatio, `the preview of the block is within 2% of the place on the site: ${where}`).toBeLessThanOrEqual(0.02);
+  for (const key of ["left", "top", "width", "height"] as const) {
+    expect(Math.abs(inDialog.visible[key] - onSite.visible[key]), `${key} of the visible part, dialog ${inDialog.visible[key].toFixed(4)} against site ${onSite.visible[key].toFixed(4)}: ${where}`).toBeLessThanOrEqual(0.015);
+  }
+  expect(writes, "no write but the intercepted PUT").toEqual([]);
+}
+
+test.describe("[STAB-REL-08] D-67 the frame of the dialog is the place of the site", () => {
+  for (const surface of allSurfaces) {
+    for (const frame of frameCases) {
+      test(`[STAB-REL-08] D-67 ${surface.name}: the frame of the dialog is the place of the site, the visible part is the site's (${frame.x}/${frame.y}/${frame.zoom})`, async ({ page }) => {
+        await frameMatchesSite(page, surface, frame);
+      });
+    }
+  }
+
+  test("[STAB-REL-08] D-67 virus photo after infection (natural): at 100% the frame is the whole picture and the arrows move nothing; zoomed, the picture leaves the frame and moves; back at 100% the position is 50 / 50 and «Применить» stores no frame", async ({ page }) => {
     const writes = trackWritesExceptContentPut(page);
-    await openEditorTab(page, guideSectionSurface.tab, { content: guideSectionSurface.content });
-    await guideSectionSurface.prepare(page);
-    const field = guideSectionSurface.field(page);
-    const group = groupOf(guideSectionSurface, page);
+    await openEditorTab(page, virusPhotoSurface.tab, { content: virusPhotoSurface.content });
+    await virusPhotoSurface.prepare(page);
+    const group = groupOf(virusPhotoSurface, page);
     await expect(group).toBeVisible();
+    const dialog = await openFraming(page, group);
+    const flat = await dialogWindow(dialog);
+    for (const key of ["x", "y", "width", "height"] as const) expect(Math.abs(flat.frame[key] - flat.image[key]), `at 100% the frame ${key} equals the picture ${key} (1 px)`).toBeLessThanOrEqual(1);
+    const part = positionOf(dialog);
+    await part.focus();
+    for (const key of ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"]) await part.press(key);
+    await expect(part, "at 100% the arrows change nothing").toHaveAttribute("aria-valuetext", positionText({ x: 50, y: 50 }));
 
-    for (const [name, value] of [["По горизонтали", "50 %"], ["По вертикали", "50 %"], ["Масштаб", "100 %"]] as const) {
-      const slider = group.getByRole("slider", { name });
-      await expect(slider).toHaveAttribute("aria-valuetext", value);
-      await expect(slider).toHaveAttribute("step", "5");
-    }
-    await expect(group.getByRole("slider", { name: "Масштаб" })).toHaveAttribute("min", "100");
-    await expect(group.getByRole("slider", { name: "Масштаб" })).toHaveAttribute("max", "300");
-    await expect(group.getByRole("slider", { name: "По горизонтали" })).toHaveAttribute("min", "0");
-    await expect(group.getByRole("slider", { name: "По горизонтали" })).toHaveAttribute("max", "100");
+    await setZoom(dialog, 150);
+    const zoomed = await dialogWindow(dialog);
+    expect(zoomed.image.width, "the zoomed picture leaves the frame (width)").toBeGreaterThan(zoomed.frame.width + 1);
+    expect(zoomed.image.height, "the zoomed picture leaves the frame (height)").toBeGreaterThan(zoomed.frame.height + 1);
+    await part.focus();
+    await part.press("ArrowRight");
+    await expect(part, "after the zoom the arrows move the visible part").toHaveAttribute("aria-valuetext", positionText({ x: 55, y: 50 }));
 
-    // Tab from the address field walks through the sliders and «Сбросить», in this order.
-    await field.getByRole("textbox").first().focus();
-    const visited: string[] = [];
-    for (let step = 0; step < 8; step += 1) {
-      await page.keyboard.press("Tab");
-      visited.push(await page.evaluate(() => {
-        const active = document.activeElement as HTMLElement | null;
-        const label = active?.id ? document.querySelector(`label[for="${active.id}"]`)?.textContent : null;
-        return label ?? active?.textContent?.trim() ?? active?.tagName ?? "";
-      }));
-    }
-    const walk = visited.filter((entry) => ["По горизонтали", "По вертикали", "Масштаб", "Сбросить"].includes(entry));
-    expect(walk, `Tab reaches the three sliders and the reset button in order (visited: ${JSON.stringify(visited)})`).toEqual(["По горизонтали", "По вертикали", "Масштаб", "Сбросить"]);
-
-    // The block never covers the address field or the upload zone.
-    const groupBox = await box(group);
-    expect(overlaps(groupBox, await box(field.getByRole("textbox").first())), "the block over the address field").toBe(false);
-    expect(overlaps(groupBox, await box(field.locator(".editor-dropzone"))), "the block over the upload zone").toBe(false);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), "no horizontal overflow of the page").toBeLessThanOrEqual(0);
-
-    if (isPhone()) {
-      const targets = [...await group.getByRole("slider").all(), group.getByRole("button", { name: "Сбросить" })];
-      const sizes: string[] = [];
-      for (const target of targets) {
-        const size = await box(target);
-        sizes.push(`${Math.round(size.width)}x${Math.round(size.height)}`);
-        expect(size.height, "phone target height").toBeGreaterThanOrEqual(44);
-        expect(size.width, "phone target width").toBeGreaterThanOrEqual(44);
-      }
-      test.info().annotations.push({ type: "measure", description: `phone targets (3 sliders, reset): ${sizes.join(", ")}` });
-    }
+    await setZoom(dialog, 100);
+    await expect(part, "back at 100% the position is 50 / 50 again").toHaveAttribute("aria-valuetext", positionText({ x: 50, y: 50 }));
+    await applyFraming(dialog);
+    await expect(group.locator(".portia-image").first(), "the default frame is not stored: the preview has no frame").not.toHaveAttribute("data-framing", "true");
+    await expect(page.locator(".editor-save-chip"), "nothing changed, nothing to save").toHaveCount(0);
     expect(writes, "the UI contract never writes").toEqual([]);
   });
+});
+
+// Heights of the block of 20-53 (three sliders) on the same field, project and fixture, measured on PLAN_BASE 9d3e607 before 20-56 removed the sliders (20-56 Task 1).
+const blockHeightBefore: Record<string, { band: number; natural: number }> = {
+  "chromium-desktop": { band: 274, natural: 550 },
+  "chromium-phone": { band: 358.953125, natural: 506.65625 },
+  "webkit-phone": { band: 355.125, natural: 492 },
+};
+
+test.describe("[STAB-REL-08] D-66 the closed block is compact", () => {
+  for (const [kind, surface] of [["band", guideSectionSurface], ["natural", virusPhotoSurface]] as const) {
+    test(`[STAB-REL-08] D-66 ${surface.name}: the closed block has no slider and is at most half as high as the block of 20-53; it covers neither the address field nor the upload zone`, async ({ page }, testInfo) => {
+      const before = blockHeightBefore[testInfo.project.name];
+      test.skip(!before, `no height of the block of 20-53 was measured on the project ${testInfo.project.name}`);
+      const writes = trackWritesExceptContentPut(page);
+      await openEditorTab(page, surface.tab, { content: surface.content });
+      await surface.prepare(page);
+      const field = surface.field(page);
+      const group = groupOf(surface, page);
+      await expect(group).toBeVisible();
+      await expect(group.locator(".portia-image.is-loaded"), "the preview is loaded").toBeVisible();
+      await expect(group.getByRole("slider"), "no slider in the closed block").toHaveCount(0);
+      const height = (await box(group)).height;
+      testInfo.annotations.push({ type: "measure", description: `${surface.name} on ${testInfo.project.name}: block ${height.toFixed(1)} px, before ${before[kind]} px, ratio ${(height / before[kind]).toFixed(3)}` });
+      expect(height / before[kind], `the closed block (${height.toFixed(1)} px) is at most half of the block of 20-53 (${before[kind]} px)`).toBeLessThanOrEqual(0.5);
+      const groupBox = await box(group);
+      expect(overlaps(groupBox, await box(field.getByRole("textbox").first())), "the block over the address field").toBe(false);
+      expect(overlaps(groupBox, await box(field.locator(".editor-dropzone"))), "the block over the upload zone").toBe(false);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), "no horizontal overflow of the page").toBeLessThanOrEqual(0);
+      if (isPhone()) {
+        const change = await box(group.getByRole("button", { name: "Изменить" }));
+        expect(change.height, "phone target height of «Изменить»").toBeGreaterThanOrEqual(44);
+        expect(change.width, "phone target width of «Изменить»").toBeGreaterThanOrEqual(44);
+      }
+      expect(writes, "the UI contract never writes").toEqual([]);
+    });
+  }
+});
+
+test.describe("[STAB-A11Y-02] D-66 the closed block «Видимая часть» is accessible", () => {
 
   // Found while D-63 was checked, in nodes the plan does not touch (the hint under a text field with GIF, the small caption of a record row of «База вирусов» and «Корзина»; deferred-items.md 20-53):
   // tolerated node by node, together with the two known before D-62. Anything inside the block «Видимая часть» is tolerated never.
