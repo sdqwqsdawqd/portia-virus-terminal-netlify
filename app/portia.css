@@ -2382,11 +2382,22 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 /* A name typed without spaces must wrap inside the card, not widen the window (the archive's own names are short). */
 .template-card-preview .record-header > div:first-child { min-width: 0; }
 .template-card-preview .record-header h2, .template-card-preview .record-code, .template-card-preview .record-status, .template-card-preview .mutation-copy h4 { overflow-wrap: anywhere; }
-/* D-60 (20-49): a class value ("Предупреждение") is never broken in the middle of a word. The columns give way instead: a column is at least as wide as the
-   longest value, so a narrow classification panel (the card beside its photo in a wide window) shows two columns, not three narrow ones.
+/* D-65 (20-55, replaces the columns-by-value rule of 20-49): the card's classification is the archive's grid (three cells, the method of spread across
+   the whole width, three cells). A class value ("Предупреждение") is never broken in the middle of a word and has no hyphen; instead its size follows the width
+   of its cell (not below 12 px, as in the archive not above 15 px, 13 px on a phone) and, when badge and word do not fit one line, the whole word goes under the badge.
    Scoped to the card of the builder; the archive's own card (no .template-card-preview) is untouched. These rules travel into the file with the card. */
-.template-card-preview .classification-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
-.template-card-preview .class-cell strong { overflow-wrap: normal; word-break: normal; hyphens: manual; }
+.template-card-preview .class-cell { container-type: inline-size; }
+.template-card-preview .class-cell strong { flex-wrap: wrap; gap: 2px 6px; overflow-wrap: normal; word-break: normal; hyphens: manual; font-size: clamp(12px, calc((100cqw - 24px) / 8.6), 15px); }
+@media (max-width: 900px) {
+  .template-card-preview .class-cell strong { font-size: clamp(12px, calc((100cqw - 24px) / 8.6), 13px); }
+}
+/* D-65: on a PC the card is always two columns, the photo left and the classification right. The archive stacks them below 840 px of the card's own width, which is
+   what the Promotion window of the normal size gives (about 616 px); the card stays two columns from 584 px (a photo of 170 px, a gap of 24 px and a classification of
+   390 px, three cells that hold "Предупреждение" at 12 px) and stacks only below that (the window narrowed by hand towards its 620 px minimum). */
+@container (min-width: 584px) and (max-width: 840px) {
+  .template-card-preview .record-hero { grid-template-columns: minmax(170px, 1fr) minmax(390px, 1.4fr); gap: 24px; }
+  .template-card-preview .record-hero > .subject-media { max-width: none; justify-self: stretch; }
+}
 /* D-55 (20-44): the hidden frame the HTML and PNG are made from. It sits off screen at the card's file width; the card inside it has no sticky header
    and no scrolling PPU cells, so nothing in the file is hidden behind a scroll. These .template-export-card rules travel into the file with the card. */
 .template-export-frame { position: fixed; top: 0; left: -12000px; width: 1060px; pointer-events: none; visibility: hidden; }
