@@ -296,6 +296,7 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
 type PutBody = { content: PortiaContent; revision: number };
 type Frame = { x: number; y: number; zoom: number };
 const chosenFrame: Frame = { x: 20, y: 80, zoom: 160 };
+const otherPicture = "/assets/portia-logo.png";
 
 /** Every non-GET request to our API or Supabase except PUT /api/content, which the chain intercepts and aborts itself. */
 function trackWritesExceptContentPut(page: Page) {
@@ -317,7 +318,7 @@ function expectAbortedSave(diagnostics: DiagnosticLedger) {
   diagnostics.expectFault({ kind: "console", source: /^browser:\/api\//, text: /Failed to load resource: net::ERR_FAILED/, reason: "the browser mirrors the aborted own /api request to its console" });
 }
 
-/** What a picture shows: computed object-position and transform, the INLINE transform-origin (the computed one is in pixels and follows the box, the style is the percent pair), the frame box. */
+/** What a picture shows: computed object-position and transform, the INLINE transform-origin (the computed one is in pixels and follows the box, the style is the percent pair), and the ratios of the frame and of the picture. */
 async function pictureState(frame: Locator) {
   const img = frame.locator("img").first();
   await expect(img).toBeVisible();
@@ -325,8 +326,9 @@ async function pictureState(frame: Locator) {
     const computed = getComputedStyle(element);
     return { objectPosition: computed.objectPosition, transform: computed.transform, transformOrigin: element.style.transformOrigin };
   });
-  const rect = await box(frame);
-  return { ...state, ratio: rect.width / rect.height };
+  const frameBox = await box(frame);
+  const imgBox = await box(img);
+  return { ...state, frameRatio: frameBox.width / frameBox.height, imgRatio: imgBox.width / imgBox.height };
 }
 
 type Surface = {
@@ -338,19 +340,23 @@ type Surface = {
   /** Brings the record with the field on screen in the editor. */
   prepare: (page: Page) => Promise<void>;
   field: (page: Page) => Locator;
-  /** The frame this surface got in the body of the PUT. */
-  saved: (content: PortiaContent) => unknown;
+  /** The record of the PUT body that carries the picture and its frame, the keys of its address and of its frame. */
+  holder: (content: PortiaContent) => Record<string, unknown> | undefined;
+  addressKey: string;
+  frameKey: string;
   /** Opens the site app with the surface and returns the span `.portia-image` that holds the picture. */
   site: (page: Page) => Promise<Locator>;
+  /** What the ratio check compares: the clipping frame (a band, a cover) or the picture box (a picture that lies as it is: the frame of the site is a wider span). */
+  compare: "frame" | "picture";
 };
-
-const saveButton = (page: Page) => page.locator(".editor-save-popover").getByRole("button", { name: "СОХРАНИТЬ", exact: true });
 
 /** Unsaved edits sit behind the chip of the save bar: it opens the panel with «СОХРАНИТЬ». */
 async function save(page: Page) {
-  await page.locator(".editor-save-chip > button").click();
-  await expect(saveButton(page)).toBeEnabled();
-  await saveButton(page).click();
+  const popover = page.locator(".editor-save-popover");
+  if (!(await popover.isVisible())) await page.locator(".editor-save-chip > button").click();
+  const button = popover.getByRole("button", { name: "СОХРАНИТЬ", exact: true });
+  await expect(button).toBeEnabled();
+  await button.click();
 }
 
 async function setSlider(group: Locator, name: string, from: number, to: number) {
@@ -370,7 +376,9 @@ async function stubContent(page: Page, content: Record<string, unknown>, revisio
   });
 }
 
-/** Editor -> preview -> PUT body -> site, for one surface. Returns the recorded PUT bodies for further checks. */
+const groupOf = (surface: Surface, page: Page) => surface.field(page).getByRole("group", { name: "Видимая часть" });
+
+/** Editor -> preview -> PUT body -> site, then (on the same draft) reset and a new address, for one surface. */
 async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Surface) {
   const writes = trackWritesExceptContentPut(page);
   const puts: PutBody[] = [];
@@ -378,9 +386,8 @@ async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Su
   await openEditorTab(page, surface.tab, { content: surface.content, puts });
   await surface.prepare(page);
 
-  const field = surface.field(page);
-  await expect(field).toBeVisible();
-  const group = field.getByRole("group", { name: "Видимая часть" });
+  await expect(surface.field(page)).toBeVisible();
+  const group = groupOf(surface, page);
   await expect(group, "the block of the visible part stands under a picture that opened").toBeVisible();
   await setSlider(group, "По горизонтали", 50, chosenFrame.x);
   await setSlider(group, "По вертикали", 50, chosenFrame.y);
@@ -392,9 +399,9 @@ async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Su
 
   await save(page);
   await expect.poll(() => puts.length, "the save reached the intercepted PUT").toBe(1);
-  expect(surface.saved(puts[0].content), "the body of the PUT holds the chosen frame").toEqual(chosenFrame);
+  expect(surface.holder(puts[0].content)?.[surface.frameKey], "the body of the PUT holds the chosen frame").toEqual(chosenFrame);
 
-  // The site, fed with exactly the body of the PUT (a fresh revision, an empty device cache: no copy of the editor's fixture is shown instead).
+  // The site, fed with exactly that body (the frame chosen in the preview): a fresh revision, an empty device cache.
   await page.unroute("**/api/content**");
   await stubContent(page, puts[0].content, puts[0].revision + 1);
   await page.addInitScript(() => window.localStorage.clear());
@@ -403,37 +410,315 @@ async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Su
   expect(site.objectPosition, "object-position: the site equals the preview").toBe(preview.objectPosition);
   expect(site.transform, "transform: the site equals the preview").toBe(preview.transform);
   expect(site.transformOrigin, "transform-origin: the site equals the preview").toBe(preview.transformOrigin);
-  expect(Math.abs(site.ratio - preview.ratio) / site.ratio, `the frame ratio of the preview (${preview.ratio.toFixed(3)}) is within 2% of the site (${site.ratio.toFixed(3)})`).toBeLessThanOrEqual(0.02);
+  const [siteRatio, previewRatio] = surface.compare === "frame" ? [site.frameRatio, preview.frameRatio] : [site.imgRatio, preview.imgRatio];
+  expect(Math.abs(siteRatio - previewRatio) / siteRatio, `the ${surface.compare} ratio of the preview (${previewRatio.toFixed(3)}) is within 2% of the site (${siteRatio.toFixed(3)})`).toBeLessThanOrEqual(0.02);
+
+  // The editor again, now on content that already carries the frame (the body above): it reads the frame back, «Сбросить» takes it out of the
+  // data, and a new address takes a chosen frame with it. Each save is intercepted: the key is looked for in the body.
+  await page.unroute("**/api/content**");
+  const second: PutBody[] = [];
+  await openEditorTab(page, surface.tab, { content: puts[0].content, revision: puts[0].revision + 1, puts: second });
+  await surface.prepare(page);
+  await expect(surface.field(page)).toBeVisible();
+  const framed = groupOf(surface, page);
+  await expect(framed.getByRole("slider", { name: "По горизонтали" }), "the stored frame is read back").toHaveValue(String(chosenFrame.x));
+  await expect(framed.getByRole("slider", { name: "По вертикали" })).toHaveValue(String(chosenFrame.y));
+  await expect(framed.getByRole("slider", { name: "Масштаб" })).toHaveValue(String(chosenFrame.zoom));
+
+  await framed.getByRole("button", { name: "Сбросить" }).click();
+  await expect(framed.getByRole("slider", { name: "Масштаб" })).toHaveValue("100");
+  await save(page);
+  await expect.poll(() => second.length).toBe(1);
+  const afterReset = surface.holder(second[0].content);
+  expect(afterReset, "the record is still in the body").toBeDefined();
+  expect(Object.prototype.hasOwnProperty.call(afterReset!, surface.frameKey), "no frame key after «Сбросить»").toBe(false);
+  expect(afterReset?.[surface.addressKey], "the address is untouched by «Сбросить»").toBe(surface.holder(puts[0].content)?.[surface.addressKey]);
+
+  await setSlider(framed, "По горизонтали", 50, 55);
+  await surface.field(page).getByRole("textbox").first().fill(otherPicture);
+  await expect(framed.getByRole("slider", { name: "По горизонтали" }), "the sliders are back at the default").toHaveValue("50");
+  await save(page);
+  await expect.poll(() => second.length).toBe(2);
+  const afterAddress = surface.holder(second[1].content);
+  expect(afterAddress?.[surface.addressKey], "the new address is in the body").toBe(otherPicture);
+  expect(Object.prototype.hasOwnProperty.call(afterAddress!, surface.frameKey), "no frame key after the address changed").toBe(false);
   expect(writes, "no write but the intercepted PUT").toEqual([]);
-  return { puts, preview, site };
 }
 
 const fixtureContent = (patch: Record<string, unknown>): Record<string, unknown> => ({ ...structuredClone(defaultPortiaContent), ...patch });
 
-/** The section card is the one top-level card of its column; a section opens by its toggle. */
-async function openSelectedSectionCard(page: Page) {
-  const toggle = sectionCard(page).locator(":scope > .nested-editor-head .nested-editor-toggle");
+/** A card of the editor (section, subsection, block, guide card) opens by the toggle of its head; an open one stays open. */
+async function openCard(page: Page, id: string) {
+  const toggle = page.locator(`#card-${id} > .nested-editor-head .nested-editor-toggle`);
+  await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
 }
 
+/** The first virus row opens its record (on a phone the list comes first), and the dossier tab is chosen. */
+async function openVirusRecord(page: Page, dossierTab: string) {
+  await page.locator(".editor-record-list .editor-record-row button").first().click();
+  await page.getByRole("navigation", { name: "Разделы досье" }).getByRole("button", { name: dossierTab }).click();
+}
+
+const baseVirus = () => ({ ...structuredClone(defaultPortiaContent.viruses[0]), id: "virus-d63", name: "Вирус с фото", infectedImage: "/assets/portia-assistant.png", mutations: [{ name: "Мутация с фото", description: "", image: "/assets/portia-assistant.png" }] });
+const imageField = (page: Page) => page.locator(".image-editor-field").first();
+const guideCard = { id: "c-d63", title: "Карточка с обложкой", cover: "/assets/portia-assistant.png", blocks: [] };
+const infoSection = { id: "i-d63", title: "Раздел с фото", body: "", subsections: [{ id: "i-d63-s", title: "Страница с фото", blocks: [{ id: "ph-d63", type: "photo", url: "/assets/portia-assistant.png" }] }] };
+const recycleImageFile = { id: "f-d63", name: "Файл с фото", location: "C:\\PORTIA\\RECYCLE_BIN", kind: "image", content: "", image: "/assets/portia-assistant.png", virusId: "" };
+
 const guideSectionSurface: Surface = {
-  name: "«Справочник» section photo",
+  name: "«Справочник» section photo (band)",
   tab: /^Справочник/,
   content: fixtureContent({ guideSections: [{ id: "g-d63", title: "Раздел с фото", photo: "/assets/portia-assistant.png", cards: [] }] }),
   prepare: openSelectedSectionCard,
   field: (page) => page.locator(".image-editor-field").filter({ hasText: "Фото раздела" }),
-  saved: (content) => content.guideSections.find((section) => section.id === "g-d63")?.photoFraming,
+  holder: (content) => content.guideSections.find((section) => section.id === "g-d63") as unknown as Record<string, unknown>,
+  addressKey: "photo",
+  frameKey: "photoFraming",
   site: async (page) => {
     const desktop = new DesktopPage(page);
     await desktop.goto();
     await desktop.openApp("Справочник");
     return desktop.window("Справочник").locator(".guide-section").filter({ hasText: "Раздел с фото" }).locator(".guide-section-band");
   },
+  compare: "frame",
 };
 
+const guideCoverSurface: Surface = {
+  name: "«Справочник» card cover (tile)",
+  tab: /^Справочник/,
+  content: fixtureContent({ guideSections: [{ id: "g-d63", title: "Раздел", photo: "", cards: [guideCard] }] }),
+  prepare: async (page) => { await openSelectedSectionCard(page); await openCard(page, guideCard.id); },
+  field: (page) => page.locator(`#card-${guideCard.id}`).locator(".image-editor-field").filter({ hasText: "Обложка" }),
+  holder: (content) => content.guideSections[0].cards.find((card) => card.id === guideCard.id) as unknown as Record<string, unknown>,
+  addressKey: "cover",
+  frameKey: "coverFraming",
+  site: async (page) => {
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    await desktop.openApp("Справочник");
+    const guide = desktop.window("Справочник");
+    const head = guide.locator('.guide-section-head[aria-expanded="false"]');
+    if (await head.count()) await head.first().click();
+    return guide.locator(".guide-tile").filter({ hasText: guideCard.title }).locator(".guide-tile-cover");
+  },
+  compare: "frame",
+};
+
+const virusPhotoSurface: Surface = {
+  name: "virus photo after infection (natural)",
+  tab: /^Вирусы/,
+  content: fixtureContent({ viruses: [baseVirus()] }),
+  prepare: (page) => openVirusRecord(page, "Основное"),
+  field: imageField,
+  holder: (content) => content.viruses.find((virus) => virus.id === "virus-d63") as unknown as Record<string, unknown>,
+  addressKey: "infectedImage",
+  frameKey: "infectedImageFraming",
+  site: async (page) => {
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    await desktop.openApp("База вирусов");
+    return desktop.window("База вирусов").locator(".record-view .subject-media").nth(0);
+  },
+  compare: "picture",
+};
+
+const mutationSurface: Surface = {
+  name: "mutation image (natural)",
+  tab: /^Вирусы/,
+  content: fixtureContent({ viruses: [baseVirus()] }),
+  prepare: (page) => openVirusRecord(page, "Мутации"),
+  field: imageField,
+  holder: (content) => content.viruses.find((virus) => virus.id === "virus-d63")?.mutations[0] as unknown as Record<string, unknown>,
+  addressKey: "image",
+  frameKey: "imageFraming",
+  site: async (page) => {
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    await desktop.openApp("База вирусов");
+    return desktop.window("База вирусов").locator(".record-view .subject-media").nth(1);
+  },
+  compare: "picture",
+};
+
+const infoPhotoSurface: Surface = {
+  name: "«Информация» photo block (natural)",
+  tab: /^Информация/,
+  content: fixtureContent({ infoSections: [infoSection] }),
+  prepare: async (page) => { await openSelectedSectionCard(page); await openCard(page, "i-d63-s"); await openCard(page, "ph-d63"); },
+  field: imageField,
+  holder: (content) => content.infoSections[0].subsections[0].blocks.find((block) => block.id === "ph-d63") as unknown as Record<string, unknown>,
+  addressKey: "url",
+  frameKey: "framing",
+  site: async (page) => {
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    await desktop.openApp("Информация");
+    const info = desktop.window("Информация");
+    await info.locator(".info-index > div > button").filter({ hasText: "Раздел с фото" }).click();
+    await info.locator('.info-index [data-info-id="i-d63-s"]').click();
+    return info.locator(".info-document .info-block-photo").first();
+  },
+  compare: "picture",
+};
+
+const recycleFileSurface: Surface = {
+  name: "«Корзина» image file (natural)",
+  tab: /^Корзина/,
+  content: fixtureContent({ recycleFiles: [recycleImageFile], recycledViruses: [], recycleOrder: ["file:f-d63"] }),
+  prepare: async (page) => { await page.locator(".editor-record-list .editor-record-row button").filter({ hasText: "Файл с фото" }).click(); },
+  field: (page) => page.locator(".image-editor-field").filter({ hasText: "Фотография или GIF" }),
+  holder: (content) => content.recycleFiles.find((file) => file.id === "f-d63") as unknown as Record<string, unknown>,
+  addressKey: "image",
+  frameKey: "imageFraming",
+  site: async (page) => {
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    await desktop.openApp("Корзина");
+    const trash = desktop.window("Корзина");
+    await trash.locator(".trash-file-row").filter({ hasText: "Файл с фото" }).click();
+    return trash.locator(".trash-image-document");
+  },
+  compare: "picture",
+};
+
+const archivedVirus = () => ({ ...baseVirus(), id: "virus-d63-bin", name: "Вирус в корзине с фото" });
+const archivedVirusSite = async (page: Page, index: number) => {
+  const desktop = new DesktopPage(page);
+  await desktop.goto();
+  await desktop.openApp("Корзина");
+  const trash = desktop.window("Корзина");
+  await trash.locator(".trash-file-row").filter({ hasText: "Вирус в корзине с фото" }).click();
+  return trash.locator(".trash-virus-document .subject-media").nth(index);
+};
+
+const archivedPhotoSurface: Surface = {
+  name: "«Корзина» virus photo (natural)",
+  tab: /^Корзина/,
+  content: fixtureContent({ recycleFiles: [], recycledViruses: [archivedVirus()], recycleOrder: ["virus:virus-d63-bin"] }),
+  prepare: async (page) => { await page.locator(".editor-record-list .editor-record-row button").filter({ hasText: "Вирус в корзине с фото" }).click(); },
+  field: imageField,
+  holder: (content) => content.recycledViruses.find((virus) => virus.id === "virus-d63-bin") as unknown as Record<string, unknown>,
+  addressKey: "infectedImage",
+  frameKey: "infectedImageFraming",
+  site: (page) => archivedVirusSite(page, 0),
+  compare: "picture",
+};
+
+const archivedMutationSurface: Surface = {
+  name: "«Корзина» virus mutation image (natural)",
+  tab: /^Корзина/,
+  content: fixtureContent({ recycleFiles: [], recycledViruses: [archivedVirus()], recycleOrder: ["virus:virus-d63-bin"] }),
+  prepare: async (page) => {
+    await page.locator(".editor-record-list .editor-record-row button").filter({ hasText: "Вирус в корзине с фото" }).click();
+    await page.getByRole("navigation", { name: "Разделы досье" }).getByRole("button", { name: "Мутации" }).click();
+  },
+  field: imageField,
+  holder: (content) => content.recycledViruses.find((virus) => virus.id === "virus-d63-bin")?.mutations[0] as unknown as Record<string, unknown>,
+  addressKey: "image",
+  frameKey: "imageFraming",
+  site: (page) => archivedVirusSite(page, 1),
+  compare: "picture",
+};
+
+/** The section card is the one top-level card of its column; a section opens by its toggle. */
+async function openSelectedSectionCard(page: Page) {
+  const toggle = sectionCard(page).locator(":scope > .nested-editor-head .nested-editor-toggle");
+  await expect(toggle).toBeVisible();
+  if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
+
+const allSurfaces = [guideSectionSurface, guideCoverSurface, virusPhotoSurface, mutationSurface, infoPhotoSurface, recycleFileSurface, archivedPhotoSurface, archivedMutationSurface];
+
 test.describe("[STAB-REL-08] D-63 the editor chooses the visible part of a picture", () => {
-  test("[STAB-REL-08] D-63 «Справочник» section photo: the editor preview is the site", async ({ page, diagnostics }) => {
-    await frameChain(page, diagnostics, guideSectionSurface);
+  for (const surface of allSurfaces) {
+    test(`[STAB-REL-08] D-63 ${surface.name}: the editor preview is the site; «Сбросить» and a new address drop the frame`, async ({ page, diagnostics }) => {
+      await frameChain(page, diagnostics, surface);
+    });
+  }
+});
+
+test.describe("[STAB-A11Y-01] D-63 the block «Видимая часть» is operable by keyboard and touch", () => {
+  test("[STAB-A11Y-01] D-63 sliders have names and values in percent, Tab reaches them and «Сбросить»; on a phone targets are 44 px and nothing overflows or covers the address and upload fields", async ({ page }) => {
+    const writes = trackWritesExceptContentPut(page);
+    await openEditorTab(page, guideSectionSurface.tab, { content: guideSectionSurface.content });
+    await guideSectionSurface.prepare(page);
+    const field = guideSectionSurface.field(page);
+    const group = groupOf(guideSectionSurface, page);
+    await expect(group).toBeVisible();
+
+    for (const [name, value] of [["По горизонтали", "50 %"], ["По вертикали", "50 %"], ["Масштаб", "100 %"]] as const) {
+      const slider = group.getByRole("slider", { name });
+      await expect(slider).toHaveAttribute("aria-valuetext", value);
+      await expect(slider).toHaveAttribute("step", "5");
+    }
+    await expect(group.getByRole("slider", { name: "Масштаб" })).toHaveAttribute("min", "100");
+    await expect(group.getByRole("slider", { name: "Масштаб" })).toHaveAttribute("max", "300");
+    await expect(group.getByRole("slider", { name: "По горизонтали" })).toHaveAttribute("min", "0");
+    await expect(group.getByRole("slider", { name: "По горизонтали" })).toHaveAttribute("max", "100");
+
+    // Tab from the address field walks through the sliders and «Сбросить», in this order.
+    await field.getByRole("textbox").first().focus();
+    const visited: string[] = [];
+    for (let step = 0; step < 8; step += 1) {
+      await page.keyboard.press("Tab");
+      visited.push(await page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        const label = active?.id ? document.querySelector(`label[for="${active.id}"]`)?.textContent : null;
+        return label ?? active?.textContent?.trim() ?? active?.tagName ?? "";
+      }));
+    }
+    const walk = visited.filter((entry) => ["По горизонтали", "По вертикали", "Масштаб", "Сбросить"].includes(entry));
+    expect(walk, `Tab reaches the three sliders and the reset button in order (visited: ${JSON.stringify(visited)})`).toEqual(["По горизонтали", "По вертикали", "Масштаб", "Сбросить"]);
+
+    // The block never covers the address field or the upload zone.
+    const groupBox = await box(group);
+    expect(overlaps(groupBox, await box(field.getByRole("textbox").first())), "the block over the address field").toBe(false);
+    expect(overlaps(groupBox, await box(field.locator(".editor-dropzone"))), "the block over the upload zone").toBe(false);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), "no horizontal overflow of the page").toBeLessThanOrEqual(0);
+
+    if (isPhone()) {
+      const targets = [...await group.getByRole("slider").all(), group.getByRole("button", { name: "Сбросить" })];
+      const sizes: string[] = [];
+      for (const target of targets) {
+        const size = await box(target);
+        sizes.push(`${Math.round(size.width)}x${Math.round(size.height)}`);
+        expect(size.height, "phone target height").toBeGreaterThanOrEqual(44);
+        expect(size.width, "phone target width").toBeGreaterThanOrEqual(44);
+      }
+      test.info().annotations.push({ type: "measure", description: `phone targets (3 sliders, reset): ${sizes.join(", ")}` });
+    }
+    expect(writes, "the UI contract never writes").toEqual([]);
   });
+
+  const axeSurfaces: [string, Surface][] = [["Справочник", guideSectionSurface], ["Вирусы", virusPhotoSurface], ["Информация", infoPhotoSurface], ["Корзина", recycleFileSurface]];
+  for (const [tabName, surface] of axeSurfaces) {
+    test(`[STAB-A11Y-02] D-63 axe finds nothing critical or serious in the block «Видимая часть» of the «${tabName}» tab`, async ({ page }, testInfo) => {
+      const writes = trackWritesExceptContentPut(page);
+      await openEditorTab(page, surface.tab, { content: surface.content });
+      await surface.prepare(page);
+      await expect(groupOf(surface, page)).toBeVisible();
+      const describe = (violation: AxeViolation) => `${violation.id}:${violation.impact} @ ${violation.nodes.slice(0, 3).map((node) => `${node.target.join(" ")} ${node.html.slice(0, 160)} ${node.failureSummary?.replace(/\s+/g, " ").slice(0, 200) ?? ""}`).join(" | ")}`;
+      const blockingOf = (violations: AxeViolation[]) => violations.filter((violation) => violation.impact === "critical" || violation.impact === "serious");
+
+      // The block itself: no tolerance at all.
+      const own = await new AxeBuilder({ page }).include(".image-framing").analyze();
+      expect(blockingOf(own.violations).map(describe), "critical or serious axe violations in the block «Видимая часть»").toEqual([]);
+
+      // The whole tab: the findings measured before D-62/D-63 are tolerated node by node (knownBeforeD62), nothing else.
+      const results = await new AxeBuilder({ page }).analyze();
+      await testInfo.attach(`axe-editor-${tabName}`, {
+        body: Buffer.from(JSON.stringify(results.violations.map((violation) => ({ fingerprint: `${violation.id}:${violation.impact ?? "unknown"}`, nodes: violation.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })) })), null, 2)),
+        contentType: "application/json",
+      });
+      const unexpected = blockingOf(results.violations)
+        .map((violation) => ({ ...violation, nodes: violation.nodes.filter((node) => !(knownBeforeD62[violation.id] ?? []).some((marker) => node.html.includes(marker))) }))
+        .filter((violation) => violation.nodes.length > 0)
+        .map(describe);
+      expect(unexpected, "critical or serious axe violations other than the known ones").toEqual([]);
+      expect(writes, "the UI contract never writes").toEqual([]);
+    });
+  }
 });
