@@ -43,23 +43,43 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
   assert.match(shared, /aria-label=\{labels\.accessibleName\}/);
 });
 
-// D-57 (20-37): одобренное владельцем исключение из правила 20-39 («portia-editor.tsx не меняется»), ограниченное кнопкой запуска формата.
+// Охрана файла редактора: реестр одобренных правок (D-64).
 //
-// Охрана ниже берёт образец файла редактора из истории git (`git show <коммит>:components/portia-editor.tsx`),
+// D-57 (20-37) — одобренное владельцем исключение из правила 20-39 («portia-editor.tsx не меняется»), ограниченное кнопкой запуска формата.
+// D-62 (20-50) — одобренный владельцем перенос «+ ДОБАВИТЬ РАЗДЕЛ» во вкладке «Информация» наверх, к вкладкам разделов (как в «Справочнике»).
+// D-64: в components/portia-editor.tsx разрешены ТОЛЬКО правки этого реестра (и подключение кадра картинок D-63 в плане 20-53, которое
+// расширит реестр своей записью). Любая другая правка роняет тест.
+//
+// Охрана берёт образец файла редактора из истории git (`git show <коммит>:components/portia-editor.tsx`),
 // поэтому ей нужен ПОЛНЫЙ клон, не shallow: в shallow-клоне коммита-образца нет. Clean-checkout (20-13) обязан клонировать
 // с историей. Если git недоступен, клон shallow или коммита нет, тест ПАДАЕТ с понятным сообщением (git fetch --unshallow);
 // он никогда не пропускается и не проходит молча.
 //
 // Одобренные правки components/portia-editor.tsx после 20-39:
 //   1. 449c756 — key={index} у recommendation-preview-item (ошибка React «unique key», о которой сообщил владелец). Уже в образце.
-//   2. D-57 — кнопка «ОФОРМЛЕНИЕ» стала общим FormatLaunchButton. Это единственная замена, которую делает охрана (applyLaunchButtonHunk).
-// D-58 запрещает в этом файле правки подсказок. Любая будущая одобренная правка файла обязана расширить охрану:
-// новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
+//   2. D-57 — кнопка «ОФОРМЛЕНИЕ» стала общим FormatLaunchButton (applyLaunchButtonHunk).
+//   3. D-62 — во вкладке «Информация» блок SectionAddBar перед SectionTabs «Разделы информации», нижней кнопки раздела нет (applyInfoAddSectionHunk).
+// D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
+// Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
 const EDITOR_PATH = "components/portia-editor.tsx";
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const RICH_TEXT_IMPORT_FROM = "@/components/portia-editor-rich-text";
 const LAUNCH_BUTTON_LINE = "<FormatLaunchButton target={formatTarget} open={formatterOpen} onToggle={() => setFormatterOpen((current) => !current)} />";
+// D-62: нижняя кнопка раздела вкладки «Информация», которую правка убирает (одна строка образца, без отступа).
+const INFO_BOTTOM_ADD_SECTION_LINE = '<button className="secondary-control" type="button" onClick={() => { const id = makeId("info"); changeDraft((next) => next.infoSections.push({ id, title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] })); setSelectedInfoSection(id); setOpen([id], true); }}>+ ДОБАВИТЬ РАЗДЕЛ</button>';
+// D-62: вкладки «Информация»; блок SectionAddBar встаёт непосредственно перед этой строкой.
+const INFO_TABS_LINE_START = '<SectionTabs label="Разделы информации"';
+// D-62: вставляемый блок, побайтно (отступы относительные: первая и последняя строки стоят на отступе SectionTabs).
+const INFO_ADD_SECTION_BLOCK: readonly string[] = [
+  "<SectionAddBar onCreate={(title) => {",
+  '  const id = makeId("info");',
+  '  changeDraft((next) => { next.infoSections.push({ id, title: title || "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] }); });',
+  "  setSelectedInfoSection(id);",
+  "  setOpen([id], true);",
+  "  requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#card-${id} > .nested-editor-body input`)?.focus());",
+  "}} />",
+];
 
 function toLf(text: string): string {
   return text.replace(/\r\n/g, "\n");
@@ -96,7 +116,7 @@ function readSampleEditor(): string {
   }
 }
 
-/** Образец + единственная разрешённая замена: встроенный блок кнопки запуска -> строка FormatLaunchButton и имя в импорте. */
+/** Образец + разрешённая замена D-57: встроенный блок кнопки запуска -> строка FormatLaunchButton и имя в импорте. */
 function applyLaunchButtonHunk(sample: string): string {
   const lines = sample.split("\n");
   const starts = lines.flatMap((line, index) => (line.trim() === '<div className="global-format-launch">' ? [index] : []));
@@ -120,6 +140,44 @@ function applyLaunchButtonHunk(sample: string): string {
   return next.join("\n");
 }
 
+/** Разрешённая замена D-62: нижняя кнопка раздела «Информации» уходит, блок SectionAddBar встаёт перед SectionTabs «Разделы информации». */
+function applyInfoAddSectionHunk(text: string): string {
+  const lines = text.split("\n");
+  const bottom = lines.flatMap((line, index) => (line.trim() === INFO_BOTTOM_ADD_SECTION_LINE ? [index] : []));
+  assert.equal(bottom.length, 1, "the file holds exactly one bottom add-section button of the «Информация» tab");
+  const tabs = lines.flatMap((line, index) => (line.trim().startsWith(INFO_TABS_LINE_START) ? [index] : []));
+  assert.equal(tabs.length, 1, "the file holds exactly one SectionTabs of the «Информация» tab");
+  assert.ok(bottom[0] > tabs[0], "the bottom add-section button stands below the section tabs");
+  const indent = /^[ \t]*/.exec(lines[tabs[0]])![0];
+  // Сначала нижняя строка (она ниже вкладок), затем вставка: индекс вкладок не сдвигается.
+  lines.splice(bottom[0], 1);
+  lines.splice(tabs[0], 0, ...INFO_ADD_SECTION_BLOCK.map((line) => `${indent}${line}`));
+  return lines.join("\n");
+}
+
+/** Реестр одобренных правок (D-64): порядок применения к образцу. */
+const approvedEditorEdits: readonly { id: string; apply: (text: string) => string }[] = [
+  { id: "D-57", apply: applyLaunchButtonHunk },
+  { id: "D-62", apply: applyInfoAddSectionHunk },
+];
+
+function expectedEditor(sample: string): string {
+  return approvedEditorEdits.reduce((text, edit) => edit.apply(text), sample);
+}
+
+/** D-58: русские строки в кавычках и тексты JSX (без комментариев), как множество. */
+function russianTexts(code: string): Set<string> {
+  const source = stripComments(code);
+  const found = new Set<string>();
+  const cyrillic = /[А-Яа-яЁё]/;
+  for (const match of source.matchAll(/"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)) {
+    const value = match[1] ?? match[2] ?? match[3] ?? "";
+    if (cyrillic.test(value)) found.add(value);
+  }
+  for (const match of source.matchAll(/>([^<>{}\n]*[А-Яа-яЁё][^<>{}\n]*)</g)) found.add(match[1].trim());
+  return found;
+}
+
 function firstDifference(expected: string, actual: string): string | null {
   if (expected === actual) return null;
   const left = expected.split("\n");
@@ -128,6 +186,13 @@ function firstDifference(expected: string, actual: string): string | null {
     if (left[index] !== right[index]) return `line ${index + 1}: expected ${JSON.stringify(left[index])}, got ${JSON.stringify(right[index])}`;
   }
   return "files differ";
+}
+
+function textSetDifference(expected: Set<string>, actual: Set<string>): string | null {
+  const added = [...actual].filter((text) => !expected.has(text));
+  const missing = [...expected].filter((text) => !actual.has(text));
+  if (added.length === 0 && missing.length === 0) return null;
+  return `added ${JSON.stringify(added)}, missing ${JSON.stringify(missing)}`;
 }
 
 function currentEditor(): string {
@@ -145,20 +210,50 @@ test("D-57: the editor renders the shared launch button", () => {
   assert.ok(imported.split(",").map((name) => name.trim()).includes("FormatLaunchButton"), "FormatLaunchButton comes from the rich text module");
 });
 
-test("D-57: portia-editor.tsx differs from 449c756 only by the launch button hunk", () => {
-  const sample = readSampleEditor();
-  const expected = applyLaunchButtonHunk(sample);
-  const actual = currentEditor();
-  assert.equal(firstDifference(expected, actual), null, "components/portia-editor.tsx may differ from the sample only by the launch button hunk; extend the guard for any new approved edit");
+test("D-62: the «Информация» tab starts with the add-section bar and has no add-section button below the columns", () => {
+  const code = stripComments(currentEditor());
+  const start = code.indexOf('{tab === "info" && (');
+  const end = code.indexOf('{tab === "guide" && (');
+  assert.ok(start > 0 && end > start, "the «Информация» tab block is found");
+  const info = code.slice(start, end);
+  const bar = info.indexOf("<SectionAddBar");
+  const tabs = info.indexOf(INFO_TABS_LINE_START);
+  assert.ok(bar >= 0 && tabs > bar, "SectionAddBar stands above the section tabs");
+  assert.equal(info.split("+ ДОБАВИТЬ РАЗДЕЛ</button>").length - 1, 0, "no add-section button below the columns");
+  assert.ok(info.includes("+ ПОДРАЗДЕЛ</button>"), "the add-subsection button stays at the bottom of the section card");
 });
 
-test("D-57: the guard notices any other edit, a missing hunk and an unreadable sample", () => {
+test("D-64: portia-editor.tsx differs from 449c756 only by the approved edits (D-57 launch button, D-62 «Информация» add-section)", () => {
   const sample = readSampleEditor();
-  const expected = applyLaunchButtonHunk(sample);
+  const expected = expectedEditor(sample);
+  const actual = currentEditor();
+  assert.equal(firstDifference(expected, actual), null, "components/portia-editor.tsx may differ from the sample only by the approved edits (D-57, D-62); extend the registry for any new approved edit");
+});
+
+test("D-58: the set of Russian texts of the editor file equals the sample's after the approved edits", () => {
+  const sample = readSampleEditor();
+  const expected = russianTexts(expectedEditor(sample));
+  assert.ok(expected.size > 100, `the sample holds many Russian texts (${expected.size})`);
+  assert.equal(textSetDifference(expected, russianTexts(currentEditor())), null, "D-58 forbids changing hints and texts in the editor file");
+});
+
+test("D-64: the guard notices any other edit, a missing hunk, a changed text and an unreadable sample", () => {
+  const sample = readSampleEditor();
+  const expected = expectedEditor(sample);
   const lines = expected.split("\n");
   const touched = lines.slice();
   touched[touched.length - 2] = `${touched[touched.length - 2]} // stray edit`;
   assert.notEqual(firstDifference(expected, touched.join("\n")), null, "one extra changed line is a difference");
   assert.notEqual(firstDifference(expected, `${expected}\n`), null, "an extra trailing line is a difference");
   assert.throws(() => applyLaunchButtonHunk(expected), /exactly one inline launch button block/, "a file without the inline block cannot be turned into the expected one");
+  assert.throws(() => applyInfoAddSectionHunk(expected), /exactly one bottom add-section button/, "a file without the bottom button cannot be turned into the expected one");
+  // Без правки D-62 (только D-57) файл отличается от ожидаемого.
+  assert.notEqual(firstDifference(expected, applyLaunchButtonHunk(sample)), null, "a file without the D-62 hunk is a difference");
+  // Изменённая подсказка (D-58) ловится по набору русских строк.
+  const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
+  assert.ok(expected.includes(hint), "the fixture hint is in the sample");
+  const reworded = expected.replace(hint, "Каждый блок становится отдельным разделом.");
+  assert.notEqual(textSetDifference(russianTexts(expected), russianTexts(reworded)), null, "a changed hint changes the set of Russian texts");
+  const extra = expected.replace("<SectionAddBar onCreate", '<p className="editor-guidance">Новая подсказка.</p><SectionAddBar onCreate');
+  assert.notEqual(textSetDifference(russianTexts(expected), russianTexts(extra)), null, "an added text changes the set of Russian texts");
 });
