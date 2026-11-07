@@ -1402,6 +1402,94 @@ test("[STAB-VIS-02] D-59 the oscilloscope wave moves: one endless linear shift o
   expect(await page.evaluate(() => new DOMMatrixReadOnly(getComputedStyle(document.querySelector(".wallpaper-flask-scope-trace")!).transform).m41), "the resting position").toBe(0);
 });
 
+// D-59 (20-47): the cycles of the moving parts of the boards, milliseconds, in the order of the elements in components/portia-wallpaper.tsx. This table and `boardCycles` there change only together.
+// 18 endless animations in all (1 wave, 1 chart line, 6 bars, 4 table cells, 6 tools): 118 + 18 = 136, under the unchanged limit of 140.
+const BOARD_CYCLES: Record<string, Array<{ duration: number; delay: number }>> = {
+  ".wallpaper-flask-scope-trace": [{ duration: 2600, delay: -900 }],
+  ".wallpaper-flask-chart-line": [{ duration: 3700, delay: -1300 }],
+  ".wallpaper-flask-chart-bar": [{ duration: 3100, delay: -700 }, { duration: 4300, delay: -1800 }, { duration: 3500, delay: -2600 }, { duration: 5100, delay: -2100 }, { duration: 4700, delay: -3300 }, { duration: 3900, delay: -1500 }],
+  ".wallpaper-flask-table-cell": [{ duration: 6100, delay: -2300 }, { duration: 7300, delay: -4100 }, { duration: 5300, delay: -1100 }, { duration: 8300, delay: -5700 }],
+  ".wallpaper-flask-tool": [{ duration: 2300, delay: -400 }, { duration: 2700, delay: -1600 }, { duration: 3300, delay: -2000 }, { duration: 2900, delay: -800 }, { duration: 3400, delay: -2700 }, { duration: 2500, delay: -1900 }],
+};
+const BOARD_PROPERTIES: Record<string, string[]> = { ".wallpaper-flask-table-cell": ["opacity"], ".wallpaper-flask-scope-trace": ["transform"], ".wallpaper-flask-chart-line": ["transform"], ".wallpaper-flask-chart-bar": ["transform"], ".wallpaper-flask-tool": ["transform"] };
+
+test("[STAB-VIS-02] D-59 the boards move: bars grow and sink, the chart line breathes, table cells light up in turn, tools sway; each part has its own cycle, opacity and transform only", async ({ page }, testInfo) => {
+  await openFlasks(page, { motion: "on" });
+  const everyCycle: Array<{ duration: number; delay: number }> = [];
+  for (const [selector, table] of Object.entries(BOARD_CYCLES)) {
+    expect(await page.locator(selector).count(), `${selector}: one element per row of the table`).toBe(table.length);
+    const cycles = await cyclesOf(page, selector);
+    expect(cycles, `${selector}: exactly one animation on each part`).toHaveLength(table.length);
+    for (const cycle of cycles) {
+      expect(cycle.iterations, `${selector} ${cycle.index} runs for ever`).toBe(Infinity);
+      expect(cycle.properties, `${selector} ${cycle.index}: only opacity and transform, and the one that belongs to the part`).toEqual(BOARD_PROPERTIES[selector]);
+      expect({ duration: cycle.duration, delay: cycle.delay }, `${selector} ${cycle.index} follows the table`).toEqual(table[cycle.index]);
+      if (isPhone(testInfo.project.name)) expect(cycle.visible, "the boards are left of a phone's frame and are not shown there").toBe(false);
+      everyCycle.push({ duration: cycle.duration, delay: cycle.delay });
+    }
+  }
+  expect(everyCycle, "eighteen moving parts").toHaveLength(18);
+  expect(new Set(everyCycle.map((cycle) => cycle.duration)).size, "every part has its own length").toBe(everyCycle.length);
+  expect(new Set(everyCycle.map((cycle) => cycle.delay)).size, "every part has its own phase").toBe(everyCycle.length);
+  // A phone does not show the boards, so the shapes are measured on a PC only (a hidden element has no box).
+  if (isPhone(testInfo.project.name)) return;
+  // The shapes at the two extremes of the cycle (held at the start and at the half of the cycle).
+  const probe = await page.evaluate(() => {
+    const hold = (selector: string, fraction: number) => {
+      for (const animation of document.getAnimations()) {
+        const target = (animation.effect as KeyframeEffect | null)?.target as Element | null;
+        if (!target?.matches(selector)) continue;
+        const timing = animation.effect!.getTiming();
+        const cycle = Number(timing.duration);
+        animation.pause();
+        animation.currentTime = (((Number(timing.delay) + fraction * cycle) % cycle) + cycle) % cycle;
+      }
+    };
+    const boxes = (selector: string) => [...document.querySelectorAll(selector)].map((element) => { const box = element.getBoundingClientRect(); return { top: box.top, bottom: box.bottom, left: box.left, right: box.right }; });
+    const frame = document.querySelector(".wallpaper-flask-board-chart > path")!.getBoundingClientRect();
+    const angles = () => [...document.querySelectorAll(".wallpaper-flask-tool")].map((tool) => { const [a, b] = getComputedStyle(tool).transform.replace(/matrix\(|\)/g, "").split(",").map(Number); return (Math.atan2(b, a) * 180) / Math.PI; });
+    hold(".wallpaper-flask-chart-bar", 0); hold(".wallpaper-flask-chart-line", 0); hold(".wallpaper-flask-tool", 0);
+    const low = { bars: boxes(".wallpaper-flask-chart-bar"), line: boxes(".wallpaper-flask-chart-line"), angles: angles() };
+    hold(".wallpaper-flask-chart-bar", 0.5); hold(".wallpaper-flask-chart-line", 0.5); hold(".wallpaper-flask-tool", 0.5);
+    const high = { bars: boxes(".wallpaper-flask-chart-bar"), line: boxes(".wallpaper-flask-chart-line"), angles: angles() };
+    const cellOpacities = [...document.querySelectorAll(".wallpaper-flask-table-cell")].map((cell) => (document.getAnimations().find((animation) => (animation.effect as KeyframeEffect).target === cell)!.effect as KeyframeEffect).getKeyframes().map((keyframe) => Number(keyframe.opacity)));
+    return { frame: { top: frame.top, bottom: frame.bottom }, low, high, cellOpacities };
+  });
+  probe.low.bars.forEach((bar, index) => {
+    const high = probe.high.bars[index];
+    expect(high.top, `bar ${index} grows`).toBeLessThan(bar.top - 1);
+    expect(Math.abs(high.bottom - bar.bottom), `bar ${index} stays on the base line`).toBeLessThan(0.5);
+    expect(high.top, `bar ${index} stays under the top of the chart frame`).toBeGreaterThanOrEqual(probe.frame.top);
+    expect(high.bottom, `bar ${index} stays inside the chart frame`).toBeLessThanOrEqual(probe.frame.bottom);
+  });
+  const [lineLow] = probe.low.line, [lineHigh] = probe.high.line;
+  expect(lineHigh.bottom - lineHigh.top, "the line breathes").toBeGreaterThan((lineLow.bottom - lineLow.top) * 1.3);
+  expect(lineHigh.top, "the line stays inside the chart frame (top)").toBeGreaterThanOrEqual(probe.frame.top);
+  expect(lineHigh.bottom, "the line stays inside the chart frame (bottom)").toBeLessThanOrEqual(probe.frame.bottom);
+  probe.low.angles.forEach((angle, index) => {
+    expect(Math.abs(angle), `tool ${index} sways between 3 and 5 degrees`).toBeGreaterThanOrEqual(2.99);
+    expect(Math.abs(angle)).toBeLessThanOrEqual(5.01);
+    expect(Math.sign(angle) * Math.sign(probe.high.angles[index]), `tool ${index} swings to both sides`).toBe(-1);
+  });
+  for (const frames of probe.cellOpacities) expect(Math.max(...frames), "a lit cell is never stronger than the bench strokes (.42)").toBeLessThanOrEqual(0.42);
+});
+
+for (const mode of ["reduced", "off"] as const) {
+  test(`[STAB-A11Y-04] D-59 ${mode === "off" ? "«Выключены»" : "«Уменьшены»"}: the boards stand still and finished (bars at full height, wave unshifted, tools straight)`, async ({ page }) => {
+    await openFlasks(page, { motion: mode });
+    expect(await motionOf(page)).toBe(mode);
+    expect(await page.locator(".wallpaper-flask-board").count(), "four boards are drawn").toBe(4);
+    expect(await page.evaluate(() => document.getAnimations().filter((animation) => ((animation.effect as KeyframeEffect | null)?.target as Element | null)?.closest(".wallpaper-flask-board")).length), "nothing runs on a board").toBe(0);
+    const resting = await page.evaluate(() => {
+      const transform = (selector: string) => [...document.querySelectorAll(selector)].map((element) => getComputedStyle(element).transform);
+      return { bars: transform(".wallpaper-flask-chart-bar"), line: transform(".wallpaper-flask-chart-line"), tools: transform(".wallpaper-flask-tool"), trace: transform(".wallpaper-flask-scope-trace"),
+        cells: [...document.querySelectorAll(".wallpaper-flask-table-cell")].map((cell) => getComputedStyle(cell).opacity) };
+    });
+    for (const value of [...resting.bars, ...resting.line, ...resting.tools, ...resting.trace]) expect(value === "none" || value === "matrix(1, 0, 0, 1, 0, 0)", `a resting part is not transformed (${value})`).toBe(true);
+    expect(resting.cells, "a table cell rests at a quiet highlight").toEqual(["0.15", "0.15", "0.15", "0.15"]);
+  });
+}
+
 // D-54 (20-37): the endless-animation limit inside the drawing goes from 100 to 140 and a limit of 80 is added for the animations a phone actually shows.
 // The old number was a technical guide set by plan 20-36, not by the owner; D-54 asks for more motion; the extra motion is only opacity and transform
 // (compositor properties) and no page code reads layout per frame. Merging the shelf cycles into shared groups was rejected: the owner has already complained

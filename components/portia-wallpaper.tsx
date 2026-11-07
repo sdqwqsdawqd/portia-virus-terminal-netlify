@@ -292,7 +292,15 @@ const shelfCycles = [
   { duration: 8600, delay: -7940 }, { duration: 6500, delay: -4410 },
 ];
 // D-59 (20-47): the cycle of each moving part of the boards — milliseconds, every duration and every phase different. phase20-art.spec.ts repeats this table as BOARD_CYCLES: the two change only together.
-const boardCycles = { scope: [{ duration: 2600, delay: -900 }] };
+// Every duration and every phase differs from all the others (durations 2.3–8.3 s). The first block is the oscilloscope wave (a linear shift, so its duration is the speed), then the line over the chart, six bars, four table
+// cells and six swaying tools, in the order of the elements above.
+const boardCycles = {
+  scope: [{ duration: 2600, delay: -900 }],
+  line: [{ duration: 3700, delay: -1300 }],
+  bars: [{ duration: 3100, delay: -700 }, { duration: 4300, delay: -1800 }, { duration: 3500, delay: -2600 }, { duration: 5100, delay: -2100 }, { duration: 4700, delay: -3300 }, { duration: 3900, delay: -1500 }],
+  cells: [{ duration: 6100, delay: -2300 }, { duration: 7300, delay: -4100 }, { duration: 5300, delay: -1100 }, { duration: 8300, delay: -5700 }],
+  tools: [{ duration: 2300, delay: -400 }, { duration: 2700, delay: -1600 }, { duration: 3300, delay: -2000 }, { duration: 2900, delay: -800 }, { duration: 3400, delay: -2700 }, { duration: 2500, delay: -1900 }],
+};
 const shelfItems: Array<{ shape: ShapeKey; x: number; scale: number; hue: string | null }> = [
   { shape: "bottle", x: 420, scale: 0.62, hue: "amber" }, { shape: "jar", x: 490, scale: 0.7, hue: "violet" }, { shape: "conical", x: 562, scale: 0.5, hue: "rose" },
   { shape: "bottle", x: 628, scale: 0.58, hue: "green" }, { shape: "beaker", x: 694, scale: 0.55, hue: "teal" }, { shape: "florence", x: 768, scale: 0.5, hue: "violet" },
@@ -308,8 +316,23 @@ const cabinetDoors = [64, 444, 824, 1204].map((left) => `M${left} 684h360v78h-36
 // D-54 (20-37): the middle of the wall is fuller: a table of elements and a bar chart under the shelf (both end left of a phone's view), a clock (a phone sees it), a burette on the clamp rod,
 // a pegboard with hanging tools and an oscilloscope. Thin lines at the strength of the bench. D-59 (20-47, owner verdict of 2026-11-07): the manometer that hung beside the clock is gone (one dial
 // only, the ticking clock), and the boards move: the wave of the oscilloscope runs, see `scopeTrace`; the other boards follow in `boardCycles`.
-const tableOfElements = `M508 394h300v54h-300ZM508 412h300M508 430h300${Array.from({ length: 9 }, (_, step) => `M${538 + step * 30} 394v54`).join("")}`;
-const barChart = `M868 394h126v58h-126Z${[18, 32, 24, 40, 28, 36].map((bar, step) => `M${880 + step * 19} 446v-${bar}h12v${bar}`).join("")}M876 420L896 412L914 418L934 404L954 410L972 400L988 408`;
+// D-59 (20-47): every board is a group `.wallpaper-flask-board` (all four end left of a phone's view, so the container query hides them there) with a still frame and moving parts, each part its own element and its own cycle in `boardCycles`.
+// The table of elements: ten columns of 30 and three rows of 18 from (508, 394); four cells light up one after another (a dark highlight, opacity only).
+const tableFrame = `M508 394h300v54h-300ZM508 412h300M508 430h300${Array.from({ length: 9 }, (_, step) => `M${538 + step * 30} 394v54`).join("")}`;
+const tableCells = [{ col: 2, row: 0 }, { col: 6, row: 1 }, { col: 4, row: 2 }, { col: 8, row: 0 }].map((cell) => ({ x: 508 + cell.col * 30 + 1, y: 394 + cell.row * 18 + 1 }));
+// The bar chart: a frame (868-994 x 394-452), six bars that grow from the base line y 446 (scaleY), and a line over them that breathes around its own middle (y 410).
+const chartFrame = "M868 394h126v58h-126Z";
+const chartBarHeights = [18, 32, 24, 40, 28, 36];
+const chartBars = chartBarHeights.map((bar, step) => `M${880 + step * 19} 446v-${bar}h12v${bar}`);
+const chartLine = "M876 420L896 412L914 418L934 404L954 410L972 400L988 408";
+// The tool board (724-850 x 466-545): two rails, twelve tools hanging from them and two hooks; six of the tools sway from their hook (rotate about the top of the tool).
+const toolHangs = [736, 752, 770, 788, 806, 824, 840].map((x, step) => ({ x, y: 492, length: 12 + (step % 3) * 8 })).concat([742, 764, 786, 810, 834].map((x, step) => ({ x, y: 522, length: 10 + (step % 2) * 8 })));
+const swayingTools = [1, 2, 4, 5, 8, 10]; // indices in `toolHangs`: x 752, 770, 806, 824 on the upper rail, x 764, 810 on the lower one
+const toolSway = [4, 3.5, 4.5, 3, 5, 3.5]; // degrees, each tool its own
+const toolPath = (tool: { x: number; y: number; length: number }) => `M${tool.x} ${tool.y}v${tool.length}m-3 0h6`;
+const toolBoard = `M724 466h126v79h-126ZM724 492h126M724 522h126M836 506a4 4 0 1 0 8 0a4 4 0 1 0-8 0M760 540a4 4 0 1 0 8 0a4 4 0 1 0-8 0`;
+const stillTools = toolHangs.filter((_, index) => !swayingTools.includes(index)).map(toolPath).join("");
+const boardStyle = (cycle: { duration: number; delay: number }, extra: Record<string, string> = {}) => ({ "--board-dur": `${cycle.duration}ms`, "--board-delay": `${cycle.delay}ms`, ...extra }) as CSSProperties;
 
 // D-59 (20-47): the wave of the oscilloscope screen (x 918-996, y 466-546, centre line y 520). The same sine as before (half-waves of 12 units, period 24, crest 13), drawn from x 874
 // — two periods left of the old start, a whole number of periods so the picture is the same — to x 1018, so that sliding it right by one period (24 units, the `flask-scope` animation)
@@ -328,10 +351,7 @@ const benchPaths = {
   lamp: "M926 660q-6-24 6-38h32q12 14 6 38ZM942 622v-10h12v10M948 612v-8",
   mortar: "M988 625h48q-2 28-24 33q-22-5-24-33ZM1022 625l20-32",
   coil: `M872 470h36v190h-36ZM872 500h-14M908 630h14M866 560h48${coilPoints}`,
-  chartTable: tableOfElements,
-  chartBars: barChart,
   burette: "M480 505h32M512 496v18M506 470v150M518 470v150M500 462l12 8 12-8M506 590h-9M518 590h9M509 620l3 14 3-14M506 490h6M506 510h6M506 530h6M506 550h6M506 570h6",
-  pegboard: `M724 466h126v79h-126ZM724 492h126M724 522h126${[736, 752, 770, 788, 806, 824, 840].map((x, step) => `M${x} 492v${12 + (step % 3) * 8}`).join("")}${[742, 764, 786, 810, 834].map((x, step) => `M${x} 522v${10 + (step % 2) * 8}`).join("")}M836 506a4 4 0 1 0 8 0a4 4 0 1 0-8 0M760 540a4 4 0 1 0 8 0a4 4 0 1 0-8 0`,
   scope: "M918 466h78v80h-78ZM918 493h78M918 520h78M944 466v80M970 466v80",
 };
 const posterPaths = {
@@ -431,13 +451,24 @@ function WallpaperFlasks() {
       <path className="wallpaper-flask-flame-core" d="M948 604q-3-5 0-11q3 6 0 11Z" style={flameStyle(flameCycles.lamp[1])} />
       <path d={benchPaths.mortar} />
       <path className="wallpaper-flask-coil" d={benchPaths.coil} />
-      <path d={benchPaths.chartTable} />
-      <path d={benchPaths.chartBars} />
+      <g className="wallpaper-flask-board wallpaper-flask-board-table">
+        <path d={tableFrame} />
+        {tableCells.map((cell, index) => <rect key={index} className="wallpaper-flask-table-cell" x={cell.x} y={cell.y} width={28} height={16} style={boardStyle(boardCycles.cells[index])} />)}
+      </g>
+      <g className="wallpaper-flask-board wallpaper-flask-board-chart">
+        <path d={chartFrame} />
+        {chartBars.map((bar, index) => <path key={index} className="wallpaper-flask-chart-bar" d={bar} style={boardStyle(boardCycles.bars[index])} />)}
+        <path className="wallpaper-flask-chart-line" d={chartLine} style={boardStyle(boardCycles.line[0])} />
+      </g>
       <path d={benchPaths.burette} />
-      <path d={benchPaths.pegboard} />
+      <g className="wallpaper-flask-board wallpaper-flask-board-tools">
+        <path d={toolBoard} />
+        <path d={stillTools} />
+        {swayingTools.map((hang, index) => <path key={hang} className="wallpaper-flask-tool" d={toolPath(toolHangs[hang])} style={boardStyle(boardCycles.tools[index], { "--tool-sway": `${toolSway[index]}deg` })} />)}
+      </g>
       <g className="wallpaper-flask-board wallpaper-flask-board-scope">
         <path d={benchPaths.scope} />
-        <g clipPath="url(#wp-scope-clip)"><path className="wallpaper-flask-scope-trace" d={scopeTrace} style={{ "--board-dur": `${boardCycles.scope[0].duration}ms`, "--board-delay": `${boardCycles.scope[0].delay}ms` } as CSSProperties} /></g>
+        <g clipPath="url(#wp-scope-clip)"><path className="wallpaper-flask-scope-trace" d={scopeTrace} style={boardStyle(boardCycles.scope[0])} /></g>
       </g>
     </g>
     {flasks.map((flask) => <g key={flask.index} className={`wallpaper-flask${flask.far ? " wallpaper-flask-far" : ""}`} data-flask={flask.index}

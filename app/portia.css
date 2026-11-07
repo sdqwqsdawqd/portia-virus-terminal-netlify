@@ -1665,6 +1665,20 @@ html[data-motion="full"] .wallpaper-flask-clock .wallpaper-flask-clock-minute { 
 .wallpaper-flask-stand .wallpaper-flask-scope-trace { transform: translateX(0); }
 html[data-motion="full"] .wallpaper-flask-scope-trace { animation: flask-scope var(--board-dur) linear var(--board-delay) infinite; }
 @keyframes flask-scope { from { transform: translateX(0); } to { transform: translateX(24px); } }
+/* The other boards, same rules: the bars of the chart grow from the base line and sink back (scaleY, never above the frame of the chart), the line over them breathes around its own middle, four cells of the
+   table light up one after another (a dark highlight, never above the strength of the bench strokes, .42), the tools sway from their hooks (rotate about the top of the tool). The resting value is in the base rule. */
+.wallpaper-flask-stand .wallpaper-flask-chart-bar { transform-box: fill-box; transform-origin: 50% 100%; transform: scaleY(1); }
+.wallpaper-flask-stand .wallpaper-flask-chart-line { transform-box: fill-box; transform-origin: 50% 50%; transform: scaleY(1); }
+.wallpaper-flask-stand .wallpaper-flask-tool { transform-box: fill-box; transform-origin: 50% 0%; transform: rotate(0deg); --tool-sway: 4deg; }
+.wallpaper-flask-stand .wallpaper-flask-table-cell { fill: color-mix(in oklab, currentColor 45%, #46545c); fill-opacity: .5; stroke: none; opacity: .15; }
+html[data-motion="full"] .wallpaper-flask-chart-bar { animation: flask-bar var(--board-dur) ease-in-out var(--board-delay) infinite; }
+html[data-motion="full"] .wallpaper-flask-chart-line { animation: flask-chart-line var(--board-dur) ease-in-out var(--board-delay) infinite; }
+html[data-motion="full"] .wallpaper-flask-table-cell { animation: flask-cell var(--board-dur) ease-in-out var(--board-delay) infinite; }
+html[data-motion="full"] .wallpaper-flask-tool { animation: flask-tool var(--board-dur) ease-in-out var(--board-delay) infinite; }
+@keyframes flask-bar { 0%, 100% { transform: scaleY(.6); } 50% { transform: scaleY(1.14); } }
+@keyframes flask-chart-line { 0%, 100% { transform: scaleY(.8); } 50% { transform: scaleY(1.2); } }
+@keyframes flask-cell { 0%, 30%, 100% { opacity: 0; } 42%, 66% { opacity: .42; } }
+@keyframes flask-tool { 0%, 100% { transform: rotate(calc(var(--tool-sway) * -1)); } 50% { transform: rotate(var(--tool-sway)); } }
 @keyframes flask-flicker { 0%, 100% { opacity: .4; transform: scale(1, 1) skewX(0deg); } 11% { opacity: .27; transform: scale(.94, .88) skewX(-3deg); } 23% { opacity: .38; transform: scale(1.05, 1.1) skewX(2deg); } 38% { opacity: .24; transform: scale(.96, .84) skewX(3deg); } 52% { opacity: .4; transform: scale(1.02, 1.06) skewX(-2deg); } 67% { opacity: .3; transform: scale(.93, .93) skewX(2deg); } 81% { opacity: .38; transform: scale(1.06, 1.12) skewX(-3deg); } }
 @keyframes flask-flicker-core { 0%, 100% { opacity: .45; transform: scale(1, 1); } 17% { opacity: .3; transform: scale(.9, .8); } 29% { opacity: .5; transform: scale(1.08, 1.15); } 46% { opacity: .32; transform: scale(.92, .85); } 63% { opacity: .48; transform: scale(1.05, 1.1); } 78% { opacity: .28; transform: scale(.88, .78); } }
 @keyframes flask-shelf { 0%, 100% { opacity: .6; transform: rotate(-6deg) translateY(1.5px); } 50% { opacity: 1; transform: rotate(6deg) translateY(-1.5px); } }
