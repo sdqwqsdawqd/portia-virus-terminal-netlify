@@ -5,7 +5,7 @@
 // it reads no layout and sets no React state.
 
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
-import { REST_NODE, besideThread, createPulsePool, emitPulse, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, planSpawn, planWalk, pulseShape, seeded, spiderTransform, stepPulses, turnGate, turnStep, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
+import { REST_NODE, besideThread, createPulsePool, emitStepWaves, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, legSwingDegrees, planSpawn, planWalk, pulseShape, seeded, spiderTransform, stepPulses, turnGate, turnStep, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
 
 type LegId = "L1" | "L2" | "L3" | "L4" | "R1" | "R2" | "R3" | "R4";
 
@@ -16,6 +16,12 @@ const LEG_PIVOTS: Record<LegId, [number, number]> = {
 };
 // The head (eyes and fangs) points down the artwork, along +y, found from a render of the SVG.
 const ARTWORK_HEADING = Math.PI / 2;
+// Measured once from the same paths: the length of each leg, the farthest path point from its pivot, in artwork units (D-53, plan 20-41).
+// The legs are nearly equal (about 304-343 units, 34-38 px on a 72 px spider), so one sweep rule fits all of them.
+const LEG_REACH: Record<LegId, number> = {
+  L1: 321, L2: 318, L3: 304, L4: 342,
+  R1: 320, R2: 318, R3: 305, R4: 343,
+};
 const legOrigin = (leg: LegId): CSSProperties => ({ transformOrigin: `${LEG_PIVOTS[leg][0]}px ${LEG_PIVOTS[leg][1]}px` });
 
 // Gait (D-06): alternating tetrapods. Group A (first and third legs of one side with second and fourth of the other)
@@ -27,10 +33,12 @@ const legBack = (leg: string) => (leg.startsWith("R") ? -1 : 1);
 const legGroup = (leg: string) => (GAIT_A.includes(leg) ? 0 : 1);
 // Legs of one group do not land as one rigid block: each pair trails the one in front a little.
 const legLag = (leg: string) => (4 - Number(leg[1])) * 0.035;
-// Artwork pair 4 is anatomical front (beside the fangs); pair 1 is rear. The shorter front pair needs a
-// wider sweep to read at desktop scale, while the long rear pair is deliberately quiet.
-const LEG_SWING_BY_PAIR = [0, 2.4, 4.8, 7.4, 14] as const;
-const LEG_TUCK_BY_PAIR = [0, 0.02, 0.035, 0.052, 0.09] as const;
+// D-53 (20-37, plan 20-41): all eight legs step. A foot on the ground must travel as far back as the body moves forward in one stance, so the
+// sweep of each leg is worked out from its length (legSwingDegrees, about 9-10 degrees for all four pairs). The earlier per-pair table
+// (2.4, 4.8, 7.4, 14 degrees) took the legs for unequal and sent the two rear pairs at a quarter and a half of the body's path: they slid
+// along with the body and looked frozen, while the front pair overshot at 1.5 times. The tuck is one share for every leg.
+const LEG_SWING = Object.fromEntries((Object.keys(LEG_REACH) as LegId[]).map((leg) => [leg, legSwingDegrees(LEG_REACH[leg])])) as Record<LegId, number>;
+const LEG_TUCK = 0.05;
 const BODY_BOB = 0.006; // nearly still abdomen; no conspicuous pulsing in the background
 const GAIT_EASE = 0.45; // legs settle softly after a stop
 const TURN_STEP_RADIUS = 20; // units of gait travel per radian of body turn: the legs step while the body turns, at about the walking cadence
@@ -50,8 +58,10 @@ const THREAD_LANE_OFFSET = 30; // travel beside the silk, visually through the c
 const LANE_SETTLE_TIME = 0.16;
 const LANE_BLEND_DISTANCE = 2 * THREAD_LANE_OFFSET; // the side shift of a new route is woven into its first 60 units of acceleration
 
-// Waves (D-05): only footfalls make waves, one pair of pulses each time a leg group plants; at most 8 alive.
-const PULSE_SLOTS = 8;
+// Waves (D-05, D-53): only footfalls make waves, one on each side of the body each time a leg group plants, and none is refused for want of
+// a slot: 16 slots (the ceiling) against about 11.7 held by footfall waves at full speed (6.48 footfalls a second x 2 sides x 0.9 s life);
+// the echoes at the crossings use the rest and are pushed out first.
+const PULSE_SLOTS = 16;
 const STEP_PEAK = 0.34;
 
 type PartKind = "dark" | "limb" | "pale";
@@ -245,15 +255,12 @@ export function WallpaperSpider() {
         gaitDistance += Math.max(0, pose.distance - pathDistance);
         pathDistance = pose.distance;
         // A group plants its feet when the gait phase passes 0 (group A) or 0.5 (group B). The feet land on both sides of the
-        // body, so a wave runs both ways along the nearest thread on each side. A busy pool refuses silently, which caps the cost.
+        // body, so a wave starts at the nearest thread on each side; group A sends it along the heading, group B against it. The pool gives
+        // the footfall a slot before anything else (a free one, the oldest echo, an old step wave), so every footfall waves; the slot count caps the cost.
         const before = phase, after = gaitPhase(gaitDistance);
         if (after < before || (before < 0.5 && after >= 0.5)) {
           const sides = footfallThreads(x, y, heading);
-          for (const side of [sides.left, sides.right]) {
-            if (!side) continue;
-            emitPulse(pool, side.edge, side.at, 1, STEP_PEAK, time);
-            emitPulse(pool, side.edge, side.at, -1, STEP_PEAK, time);
-          }
+          emitStepWaves(pool, sides, heading, STEP_PEAK, time, after >= before);
         }
         if (pose.done) {
           // The body is not copied onto the target: it keeps easing onto it from the next frame, so there is no jump at the stop.
@@ -316,10 +323,9 @@ export function WallpaperSpider() {
           leg.style.scale = "1";
           return;
         }
-        const pair = Number(id[1]) as 1 | 2 | 3 | 4;
         const pose = legPose((phase + legGroup(id) * 0.5 + legLag(id)) % 1);
-        leg.style.rotate = `${(LEG_SWING_BY_PAIR[pair] * pose.swing * gait * legBack(id)).toFixed(2)}deg`;
-        leg.style.scale = (1 - LEG_TUCK_BY_PAIR[pair] * pose.tuck * gait).toFixed(4);
+        leg.style.rotate = `${(LEG_SWING[id as LegId] * pose.swing * gait * legBack(id)).toFixed(2)}deg`;
+        leg.style.scale = (1 - LEG_TUCK * pose.tuck * gait).toFixed(4);
       });
       legsNeutral = gait === 0 && !probing;
     };

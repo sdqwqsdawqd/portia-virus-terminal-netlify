@@ -213,6 +213,8 @@ export function selectSpawn(visible: number[], previous: number, rand: () => num
   return pool.length ? pool[Math.min(pool.length - 1, Math.floor(rand() * pool.length))] : REST_NODE;
 }
 
+export type Footfall = { edge: number; at: number } | null;
+
 export const GAIT_STRIDE = 20;
 export function gaitPhase(distance: number) {
   const phase = (Math.max(0, distance) / GAIT_STRIDE) % 1;
@@ -263,24 +265,77 @@ export function planSpawn(visible: number[], previous: number, rand: () => numbe
 // and fades over 0.9 s. The pool has a fixed number of slots, so a step allocates nothing and the cost has a ceiling.
 const PULSE_SPEED = 260;
 const PULSE_LENGTH = 120;
-const PULSE_LIFE = 0.9; // a wave dies out within 0.9s (UI-SPEC: at most 900ms)
+export const PULSE_LIFE = 0.9; // a wave dies out within 0.9s (UI-SPEC: at most 900ms)
 const PULSE_POINTS = 8;
 const PULSE_MIN_PEAK = 0.04;
 const FOOTFALL_STEP = 8; // sampling step (units) when searching a thread for the point nearest the body
 
+// D-53 (20-37, plan 20-41): a footfall wave is never refused for want of a slot. Waves per footfall: one on each side of the body where a thread
+// was found (two at most). At full speed (SPIDER_WALK_SPEED 64.8 units/s, a footfall every GAIT_STRIDE / 2 = 10 units) that is 6.48 footfalls a second,
+// so 6.48 x 2 x 1 wave x 0.9 s = 11.7 slots held by step waves; the spider's pool has 16 slots (the ceiling), the other 4.3 hold the echoes.
+export const STEP_WAVES_PER_SIDE = 1;
+// A step wave is safe from being pushed out for this share of its life.
+const STEP_WAVE_SAFE = 0.75;
+
 // at = distance from the edge's a end; dir 1 runs toward b, -1 toward a; times are in seconds.
-export type Pulse = { alive: boolean; edge: number; at: number; dir: 1 | -1; peak: number; born: number; spawned: boolean };
+// kind: "step" is the wave of a footfall; "echo" is what a wave leaves at a crossing and is pushed out first.
+export type PulseKind = "step" | "echo";
+export type Pulse = { alive: boolean; edge: number; at: number; dir: 1 | -1; peak: number; born: number; spawned: boolean; kind: PulseKind };
 export type PulsePool = { slots: Pulse[] };
 
 export function createPulsePool(size = 8): PulsePool {
-  return { slots: Array.from({ length: size }, (): Pulse => ({ alive: false, edge: 0, at: 0, dir: 1, peak: 0, born: 0, spawned: false })) };
+  return { slots: Array.from({ length: size }, (): Pulse => ({ alive: false, edge: 0, at: 0, dir: 1, peak: 0, born: 0, spawned: false, kind: "step" })) };
 }
 
-export function emitPulse(pool: PulsePool, edge: number, at: number, dir: 1 | -1, peak: number, now: number): boolean {
+const fill = (slot: Pulse, edge: number, at: number, dir: 1 | -1, peak: number, now: number, kind: PulseKind) => {
+  slot.alive = true; slot.edge = edge; slot.at = at; slot.dir = dir; slot.peak = peak; slot.born = now; slot.spawned = false; slot.kind = kind;
+};
+
+// A busy pool refuses silently: this is the low-priority way in (echoes); a footfall uses emitStepWaves.
+export function emitPulse(pool: PulsePool, edge: number, at: number, dir: 1 | -1, peak: number, now: number, kind: PulseKind = "step"): boolean {
   const slot = pool.slots.find((candidate) => !candidate.alive);
   if (!slot) return false;
-  slot.alive = true; slot.edge = edge; slot.at = at; slot.dir = dir; slot.peak = peak; slot.born = now; slot.spawned = false;
+  fill(slot, edge, at, dir, peak, now, kind);
   return true;
+}
+
+// The slot a step wave takes: a free one, else the oldest echo, else the oldest step wave that has lived at least 0.75 of its life; null when none.
+function claimSlot(pool: PulsePool, now: number): Pulse | null {
+  let echo: Pulse | null = null, step: Pulse | null = null;
+  for (const slot of pool.slots) {
+    const age = now - slot.born;
+    if (!slot.alive || age >= PULSE_LIFE) return slot;
+    if (slot.kind === "echo") { if (!echo || slot.born < echo.born) echo = slot; }
+    else if (age >= STEP_WAVE_SAFE * PULSE_LIFE && (!step || slot.born < step.born)) step = slot;
+  }
+  return echo ?? step;
+}
+
+// How far a leg turns to carry its foot as far as the body moves in one stance (D-53): the foot of a leg of length `reach` (drawing units) swings
+// 2 x reach x sin(angle) from one end of the stance to the other, and the body covers `stance` web units over the same time; a web unit is
+// `unitsPerWeb` drawing units. `fit` (0.8-1.2) lengthens or shortens the foot's path against the body's. Degrees, half of the sweep.
+export function legSwingDegrees(reach: number, stance = 0.6 * GAIT_STRIDE, unitsPerWeb = 649.5 / 72, fit = 1): number {
+  if (!(reach > 0)) return 0;
+  const ratio = Math.min(1, (stance * unitsPerWeb * fit) / (2 * reach));
+  return (Math.asin(ratio) * 180) / Math.PI;
+}
+
+// One wave on each side of the body where a thread was found: a footfall that has a thread beside it always waves it. The wave runs along the
+// heading or against it (`against`), so the two groups of legs send the waves opposite ways. Returns how many sides asked and how many were waved.
+export function emitStepWaves(pool: PulsePool, sides: { left: Footfall; right: Footfall }, heading: number, peak: number, now: number, against: boolean): { found: number; emitted: number } {
+  let found = 0, emitted = 0;
+  for (const side of [sides.left, sides.right]) {
+    if (!side) continue;
+    found += 1;
+    const slot = claimSlot(pool, now);
+    if (!slot) continue;
+    const thread = webEdges[side.edge];
+    const [dx, dy] = tangentAt(thread, parameterAt(side.edge, side.at));
+    const along = Math.cos(heading) * dx + Math.sin(heading) * dy >= 0;
+    fill(slot, side.edge, side.at, along !== against ? 1 : -1, peak, now, "step");
+    emitted += 1;
+  }
+  return { found, emitted };
 }
 
 // One pulse into every thread of a crossing, running away from it (except the thread it came along, when given).
@@ -288,7 +343,7 @@ export function emitAtCrossing(pool: PulsePool, node: number, peak: number, now:
   for (const index of touching[node]) {
     if (index === except) continue;
     const atStart = webEdges[index].a === node;
-    emitPulse(pool, index, atStart ? 0 : webEdges[index].length, atStart ? 1 : -1, peak, now);
+    emitPulse(pool, index, atStart ? 0 : webEdges[index].length, atStart ? 1 : -1, peak, now, "echo");
   }
 }
 
@@ -346,8 +401,6 @@ export function laneSideFor(x: number, y: number, px: number, py: number, direct
   const left = besideThread(px, py, direction, 1, offset), right = besideThread(px, py, direction, -1, offset);
   return Math.hypot(left[0] - x, left[1] - y) <= Math.hypot(right[0] - x, right[1] - y) ? 1 : -1;
 }
-
-export type Footfall = { edge: number; at: number } | null;
 
 // Waves run along the threads on both sides of the body (D-08): the nearest thread point within reach strictly left (cross product > 0) and right (< 0) of the heading.
 export function footfallThreads(x: number, y: number, heading: number, reach = 120): { left: Footfall; right: Footfall } {
