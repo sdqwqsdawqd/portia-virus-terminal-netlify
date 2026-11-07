@@ -113,6 +113,12 @@ async function openBuilder(page: Page) {
   return { promotion, builder };
 }
 
+/** The preview is shown through the view switch «Предпросмотр» once the builder has one (20-43 Task 2); before that it stands beside the form. */
+async function showPreview(builder: Locator) {
+  const toggle = builder.getByRole("group", { name: "Вид" }).getByRole("button", { name: "Предпросмотр", exact: true });
+  if (await toggle.count()) await toggle.click();
+}
+
 /** The dossier tabs are plain buttons in the navigation «Разделы досье», exactly like the site editor's virus card. */
 async function openTab(builder: Locator, name: "Основное" | "Описание" | "Мутации") {
   await builder.getByRole("navigation", { name: "Разделы досье" }).getByRole("button", { name, exact: true }).click();
@@ -314,6 +320,50 @@ test("[STAB-TMPL-01] classification: a changed value shows in the preview and th
   const { html } = await downloadHtml(page, builder, testInfo);
   expect(html).toContain("Апейрон</strong><small>УРОВЕНЬ 3</small>");
   expect(html).toContain("Тезей</strong><small>УРОВЕНЬ 2</small>");
+  expect(writes).toEqual([]);
+});
+
+// D-55 (20-37): the preview is the archive's own card (VirusCardBody): coloured class icons, the section kickers 01-05, no scientist records.
+test("[STAB-TMPL-01] D-55 the preview is the archive card with coloured class icons", async ({ page }) => {
+  const writes = trackWrites(page);
+  const { builder } = await openBuilder(page);
+  await nameField(builder).fill("Вирус с иконками");
+  const group = builder.locator("section.editor-group", { has: page.getByRole("heading", { name: "Классификация" }) });
+  const selects = group.locator("select");
+  await expect(selects).toHaveCount(7);
+  // Axis order of the form: danger, spread, transmission, escapeRisk, mind, appearance, behavior.
+  await selects.nth(0).selectOption("Апейрон");
+  await selects.nth(1).selectOption("Номос");
+  await selects.nth(2).selectOption("Контактно-бытовой");
+  await selects.nth(3).selectOption("Риск");
+  await selects.nth(4).selectOption("Люцидиум");
+  await selects.nth(5).selectOption("Ксеноморф");
+  await selects.nth(6).selectOption("Инфернар");
+
+  const preview = builder.getByLabel("Предпросмотр шаблона");
+  await showPreview(builder);
+  await expect(preview).toHaveClass(/\brecord-view\b/);
+  const panel = preview.locator(".record-hero .classification-panel");
+  await expect(panel.locator(".class-cell")).toHaveCount(7);
+  // Every one of the seven chosen values has an icon, drawn beside the name inside its own cell.
+  await expect(panel.locator(".class-cell svg.class-badge")).toHaveCount(7);
+
+  const strongColor = (cell: string) => panel.locator(`.class-cell.${cell} strong`);
+  await expect(strongColor("danger")).toHaveCSS("color", "rgb(180, 54, 50)"); // level 3
+  await expect(panel.locator(".class-cell.danger")).toHaveClass(/\blevel-3\b/);
+  await expect(strongColor("spread")).toHaveCSS("color", "rgb(22, 122, 77)"); // level 1
+  await expect(strongColor("escape")).toHaveCSS("color", "rgb(128, 88, 0)"); // level 2
+  await expect(strongColor("transmission")).toHaveCSS("color", "rgb(11, 117, 104)");
+  // The icon takes the colour of its level (stroke currentColor).
+  await expect(panel.locator(".class-cell.danger svg.class-badge")).toHaveCSS("color", "rgb(180, 54, 50)");
+  await expect(panel.locator(".class-cell.spread svg.class-badge")).toHaveCSS("color", "rgb(22, 122, 77)");
+
+  // Sections 01-05 only: five kickers, the scientist records and the old preview markup are absent.
+  await expect(preview.locator(".section-kicker")).toHaveCount(5);
+  await expect(preview.getByText("ЗАПИСИ УЧЁНЫХ")).toHaveCount(0);
+  await expect(preview.locator("[class*=template-]")).toHaveCount(0);
+  await expect(preview.locator("footer.record-footer")).toContainText("ШАБЛОН");
+  await expect(preview.locator("footer.record-footer")).not.toContainText("ЗАПИСЬ");
   expect(writes).toEqual([]);
 });
 

@@ -298,6 +298,49 @@ test("the builder keeps its draft in the 20-38 model and changes it only through
   expectMatch(code, /createTemplateDossierHtml/);
 });
 
+/* ---------------------------------------------------------------- D-55 (20-37): the preview is the archive card */
+
+const cardPath = "components/portia-virus-card.tsx";
+
+test("D-55 (20-37): the public dossier and the builder's preview render the same VirusCardBody", () => {
+  const code = stripComments(subjectSource());
+  assert.ok(namedImports(code, "@/components/portia-virus-card").includes("VirusCardBody"), "the builder imports VirusCardBody from the shared card module");
+  expectMatch(code, /<VirusCardBody\b/, "the builder renders <VirusCardBody");
+  const dossier = stripComments(read("components/portia-desktop-dossier.tsx"));
+  expectMatch(dossier, /<VirusCardBody\b/, "VirusRecord renders <VirusCardBody");
+  expectMatch(dossier, /export function VirusRecord\(/);
+  const card = stripComments(read(cardPath));
+  expectMatch(card, /export function VirusCardBody\(/);
+  for (const exported of ["FormattedText", "DossierSection", "classificationLevel"]) {
+    expectMatch(card, new RegExp(`export function ${exported}\\(`), `${exported} is exported by the card module`);
+  }
+});
+
+test("D-55 (20-37): the builder has no markup of its own for the preview", () => {
+  const code = stripComments(subjectSource());
+  for (const name of ["template-preview", "template-class-grid", "template-class-cell", "template-kicker", "template-mutation"]) {
+    expectNoMatch(code, new RegExp(name), `the builder source holds no ${name}`);
+  }
+  expectMatch(code, /className="record-view template-card-preview"/, "the preview is the archive's record-view");
+  expectMatch(code, /aria-label="Предпросмотр шаблона"/);
+});
+
+test("D-55 (20-37): the card module imports only react, the content types, the icons and the media splitter", () => {
+  const code = stripComments(read(cardPath));
+  assert.deepEqual(importsOf(code).sort(), ["@/components/portia-icons", "@/lib/portia-content", "@/lib/rich-text-media", "react"]);
+  assert.deepEqual(ioTokens(code), []);
+});
+
+test("D-55 (20-37): the builder keeps links as text and draws pictures only from the model's local slots", () => {
+  const code = stripComments(subjectSource());
+  expectMatch(code, /\bembedMedia=\{false\}/, "links to pictures in the text stay text");
+  expectMatch(code, /\bemptyText=\{emptyTemplateText\}/);
+  expectNoMatch(code, /\binfectedImage\b/, "the record's own picture address is never read");
+  expectNoMatch(code, /\bmutation\.image\b|\.mutations\[[^\]]*\]\??\.image\b/, "a mutation's picture address is never read");
+  expectMatch(code, /\bdossier\.images\b|\bimages\.mutations\b/, "the pictures come from the model's slots");
+  expectMatch(code, /isLocalTemplateImage\(/, "a slot is checked before it is drawn");
+});
+
 /* ---------------------------------------------------------------- guard self-check */
 
 test("the guards recognise a violating source (guard self-check)", () => {
