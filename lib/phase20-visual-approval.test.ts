@@ -133,9 +133,17 @@ export const rejectedIdsRound12 = [
   "flasks-full", "flasks-off", "flasks-reduced", "flasks-accent-default", "flasks-accent-custom-dark", "flasks-accent-custom-light",
 ].flatMap((base) => devices.map((device) => `${base}:${device}`));
 
+// 20-47: rows the owner rejected on 2026-11-07 (spider D-53, flasks D-54, template builder D-55). spider-off is not here for the same reason as in round 12.
+export const rejectedIdsRound13 = [
+  "spider-accent-default", "spider-accent-custom-dark", "spider-accent-custom-light", "spider-full-walk", "spider-motion-off", "spider-rest-sharp", "spider-rest-sharp-off",
+  "flasks-full", "flasks-off", "flasks-reduced", "flasks-accent-default", "flasks-accent-custom-dark", "flasks-accent-custom-light",
+  "template-builder-main", "template-builder-text", "template-builder-mutations", "template-builder-preview",
+].flatMap((base) => devices.map((device) => `${base}:${device}`));
+
 const rejectedRounds = {
   11: { heading: /^## 11\. [^\r\n]+\r?\n/m, ids: rejectedIds },
   12: { heading: /^## 12\. [^\r\n]+\r?\n/m, ids: rejectedIdsRound12 },
+  13: { heading: /^## 13\. [^\r\n]+\r?\n/m, ids: rejectedIdsRound13 },
 } as const;
 
 // Section 11 (20-33, 2026-11-05); the signature is kept for the existing tests.
@@ -234,6 +242,7 @@ export function validateLedger(text: string, options: Options = {}): string[] {
   errors.push(...candidatesSetProblems(candidatesCommit, frontmatter.candidates_set));
   errors.push(...rejectedFixProblems(text, rows, candidatesCommit, options.git));
   errors.push(...rejectedRoundProblems(text, rows, candidatesCommit, 12, options.git));
+  errors.push(...rejectedRoundProblems(text, rows, candidatesCommit, 13, options.git));
   if (options.requireSetMembership) errors.push(...candidateMembershipProblems(rows, frontmatter.candidates_set));
   if (options.requireApproval && options.changedSince && /^[0-9a-f]{40}$/.test(candidatesCommit ?? "")) {
     errors.push(...staleCandidateProblems(candidatesCommit, { changedSince: options.changedSince }));
@@ -385,6 +394,92 @@ describe("20-37 recapture guard", () => {
     assert.ok(validateLedger(fixture).some((error) => error === "spider-accent-default:pc: rejected frame is missing from section 12"));
     assert.ok(validateLedger(ledger.split(/^## 12\./m)[0]).some((error) => error.includes("section 12: rejected frames and fix commits are missing")));
     assert.ok(!validateLedger(fixture).some((error) => error.includes("section 11")));
+    assert.ok(validateLedger(ledger.split(/^## 11\./m)[0]).some((error) => error.includes("section 11: rejected frames and fix commits are missing")));
+  });
+});
+
+describe("20-47 recapture guard", () => {
+  const rejected = rejectedIdsRound13;
+  // spider_fix_commit (20-41), flask_fix_commit (20-42), template_fix_commit (20-44).
+  const spiderFix = "db151677cf01d45f852b32e14d73725dd515dc70";
+  const flaskFix = "859a493fb295cd6a7a879b0f0ae12b25efeac45f";
+  const templateFix = "be9af79925cb12dd1d6dcb933d7b48a3de3c956e";
+  const fixFor = (id: string) => id.startsWith("spider-") ? spiderFix : id.startsWith("flasks-") ? flaskFix : templateFix;
+  const heading = "\n## 13. Вердикт владельца 2026-11-07 по пересъёмке 20-37 (D-53..D-57)\n\nТекст раздела.\n";
+  const header = "\nРаунд 13: отклонённые кадры и коммиты исправления (20-40..20-44, 20-47)\n\n| Строка | Отклонённый hash | Просьба владельца | Коммит исправления |\n| --- | --- | --- | --- |\n";
+  const table = (ids: string[], hash = "d".repeat(64)) => `${heading}${header}${ids.map((id) => `| ${id} | ${hash} | исправить: тест | ${fixFor(id)} |`).join("\n")}\n`;
+  const before13 = ledger.split(/^## 13\./m)[0];
+  const withSection = (ids = rejected, hash?: string) => `${before13}${table(ids, hash)}`;
+  const capture = "346316129101a934c26f9305e6aeb03f75b5f458";
+  const rows = parseLedger(ledger).rows;
+
+  test("section 13 lists 34 rejected frames and the real ledger has them", () => {
+    assert.equal(rejected.length, 34);
+    assert.equal(new Set(rejected).size, 34);
+    assert.ok(rejectedRoundProblems(before13, rows, capture, 13).some((error) => error.includes("section 13: rejected frames and fix commits are missing")));
+    assert.deepEqual(rejectedRoundProblems(withSection(), rows, capture, 13), []);
+    assert.equal((ledger.match(/^## 13\. /gm) ?? []).length, 1);
+    assert.deepEqual(rejectedRoundProblems(ledger, rows, ledgerFrontmatter(ledger).candidates_commit, 13), []);
+  });
+
+  test("a section 13 with a heading and no table names every one of the 34 rows", () => {
+    const errors = rejectedRoundProblems(`${before13}${heading}`, rows, capture, 13);
+    assert.deepEqual(errors, rejected.map((id) => `${id}: rejected frame is missing from section 13`));
+  });
+
+  test("a row missing from section 13 is an error; spider-off is not required there", () => {
+    for (const id of ["spider-accent-default:pc", "flasks-reduced:phone", "template-builder-mutations:phone", "template-builder-preview:pc"]) {
+      assert.ok(rejectedRoundProblems(withSection(rejected.filter((candidate) => candidate !== id)), rows, capture, 13).some((error) => error === `${id}: rejected frame is missing from section 13`), id);
+    }
+    assert.ok(!rejected.some((id) => id.startsWith("spider-off:")));
+    assert.deepEqual(rejectedRoundProblems(withSection(), rows, capture, 13).filter((error) => error.startsWith("spider-off")), []);
+  });
+
+  test("the rejected bytes cannot be presented again (a candidate with the rejected sha256 fails)", () => {
+    for (const id of ["flasks-full:pc", "spider-rest-sharp:phone", "template-builder-text:phone"]) {
+      const same = rows.find((row) => row.id === id)!;
+      const errors = rejectedRoundProblems(withSection(rejected, same.candidateSha), rows, capture, 13);
+      assert.ok(errors.some((error) => error === `${id}: re-presents the rejected frame`), id);
+    }
+    assert.ok(rejectedRoundProblems(withSection(rejected, "xyz"), rows, capture, 13).some((error) => error.includes("rejected sha256 is malformed")));
+  });
+
+  test("fix commit: malformed, unverifiable, captured before the fix, git not runnable all fail closed", () => {
+    const fixture = withSection();
+    assert.deepEqual(rejectedRoundProblems(fixture, rows, capture, 13, () => ({ status: 0 })), []);
+    assert.ok(rejectedRoundProblems(fixture, rows, capture, 13, () => ({ status: 1 })).some((error) => error.includes("could not be verified")));
+    assert.ok(rejectedRoundProblems(fixture, rows, capture, 13, () => ({ status: 128 })).some((error) => error.includes("could not be verified")));
+    assert.ok(rejectedRoundProblems(fixture, rows, capture, 13, (args) => ({ status: args[0] === "merge-base" ? 1 : 0 })).some((error) => error.includes("captured before the fix")));
+    assert.ok(rejectedRoundProblems(fixture, rows, capture, 13, (args) => ({ status: args[0] === "merge-base" ? null : 0, error: "spawn git ENOENT" })).some((error) => error.includes("captured before the fix")));
+    assert.ok(rejectedRoundProblems(fixture, rows, capture, 13, () => ({ status: null, error: "spawn git ENOENT" })).some((error) => error.includes("could not be verified")));
+    for (const fix of [spiderFix, flaskFix, templateFix]) {
+      assert.ok(rejectedRoundProblems(fixture.replaceAll(fix, "abc123"), rows, capture, 13).some((error) => error.includes("fix commit is not a full 40-hex hash")), fix);
+    }
+  });
+
+  test("each family names its own fix commit: spider 20-41, flasks 20-42, template builder 20-44", () => {
+    const section = ledger.split(/^## 13\. [^\n]+\n/m)[1] ?? "";
+    for (const id of rejected) {
+      const line = section.split(/\r?\n/).find((candidate) => candidate.startsWith(`| ${id} |`));
+      assert.ok(line, `${id} is in the real section 13`);
+      assert.ok(line.trim().endsWith(`| ${fixFor(id)} |`), `${id} names ${fixFor(id)}`);
+    }
+  });
+
+  test("the real candidate frames come from the code after the fixes (captured after every fix commit)", () => {
+    const commit = ledgerFrontmatter(ledger).candidates_commit;
+    for (const fix of [spiderFix, flaskFix, templateFix]) {
+      const result = realGit(["merge-base", "--is-ancestor", fix, commit]);
+      assert.equal(result.status, 0, `${fix} is an ancestor of candidates_commit`);
+    }
+  });
+
+  test("validateLedger runs rounds 11, 12 and 13", () => {
+    const fixture = withSection(rejected.slice(1));
+    assert.ok(validateLedger(fixture).some((error) => error === "spider-accent-default:pc: rejected frame is missing from section 13"));
+    assert.ok(validateLedger(before13).some((error) => error.includes("section 13: rejected frames and fix commits are missing")));
+    assert.ok(!validateLedger(fixture).some((error) => error.includes("section 11") || error.includes("section 12")));
+    assert.ok(validateLedger(ledger.split(/^## 12\./m)[0]).some((error) => error.includes("section 12: rejected frames and fix commits are missing")));
     assert.ok(validateLedger(ledger.split(/^## 11\./m)[0]).some((error) => error.includes("section 11: rejected frames and fix commits are missing")));
   });
 });
