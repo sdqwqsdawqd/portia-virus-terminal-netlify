@@ -1,9 +1,11 @@
-import { readFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { deflateSync } from "node:zlib";
 import type { Locator, Page, Request, TestInfo } from "@playwright/test";
 import { DesktopPage } from "../pages/desktop.page";
 import { PromotionPage } from "../pages/promotion.page";
+import { templateExportViolations } from "../../../lib/portia-template-export.ts";
 import { expect, test } from "../fixtures/test";
 
 // UI-contract lane (STAB-TMPL-01, D-52). The participant READ status is stubbed so the builder entry can be reached without
@@ -383,6 +385,58 @@ test("[STAB-TMPL-01] D-55 the preview is the archive card with coloured class ic
   await expect(preview.locator("[class*=template-]")).toHaveCount(0);
   await expect(preview.locator("footer.record-footer")).toContainText("ШАБЛОН");
   await expect(preview.locator("footer.record-footer")).not.toContainText("ЗАПИСЬ");
+  expect(writes).toEqual([]);
+});
+
+/** The runs' downloaded files are kept next to the work-set frames (ignored by git) so the gallery of 20-47 can show them. */
+async function keepExport(testInfo: TestInfo, source: string, name: string) {
+  const setId = process.env.PORTIA_VISUAL_SET_ID;
+  if (!setId) return;
+  const directory = path.join(process.cwd(), "tests", "e2e", "visual-candidates", ".runs", setId, "exports");
+  await mkdir(directory, { recursive: true });
+  await copyFile(source, path.join(directory, `${name}--${testInfo.project.name}${path.extname(source)}`));
+}
+
+// D-55 (20-37, 20-44): the downloaded HTML is the archive's card itself: the markup of VirusCardBody, the card's own CSS taken from the
+// site's style sheets, coloured class icons, no font file, no address; opened without a network it makes no request and looks like the card.
+test("[STAB-TMPL-01] D-55 the downloaded HTML is the archive card", async ({ page, browser }, testInfo) => {
+  const writes = trackWrites(page);
+  const { builder } = await openBuilder(page);
+  await nameField(builder).fill("Вирус из файла");
+  const group = builder.locator("section.editor-group", { has: page.getByRole("heading", { name: "Классификация" }) });
+  await group.locator("select").nth(0).selectOption("Апейрон"); // level 3
+
+  const { html, target } = await downloadHtml(page, builder, testInfo);
+  await keepExport(testInfo, target, "template-html");
+  expect(html).toContain('class="record-view');
+  expect(html).toContain("classification-panel");
+  expect(html).toMatch(/class-cell danger level-3[\s\S]*?<svg[^>]*class="class-badge"/);
+  expect(html).toContain(".class-cell.level-3 strong");
+  expect(html).toContain("@container (max-width: 840px)");
+  expect(html).toContain("default-src 'none'; style-src 'unsafe-inline'; img-src data:");
+  expect(html).not.toContain("ЗАПИСИ УЧЁНЫХ");
+  expect(templateExportViolations(html)).toEqual([]);
+  const style = /<style>([\s\S]*?)<\/style>/.exec(html)?.[1] ?? "";
+  expect(style.length).toBeGreaterThan(2000);
+  expect(templateExportViolations(style)).toEqual([]);
+  expect(style).not.toMatch(/@font-face|@import|url\(|https?:/i);
+
+  const offline = await browser.newContext({ offline: true, locale: "ru-RU", viewport: { width: 1280, height: 900 } });
+  try {
+    const offlinePage = await offline.newPage();
+    const requests: string[] = [];
+    offlinePage.on("request", (request) => { if (!/^(?:file|data):/i.test(request.url())) requests.push(request.url()); });
+    await offlinePage.goto(pathToFileURL(target).href);
+    await expect(offlinePage.getByRole("heading", { name: "Вирус из файла" })).toBeVisible();
+    const strong = offlinePage.locator(".class-cell.danger strong");
+    await expect(strong).toHaveCSS("color", "rgb(180, 54, 50)");
+    await expect(offlinePage.locator(".class-cell.danger svg.class-badge")).toHaveCSS("color", "rgb(180, 54, 50)");
+    const columns = await offlinePage.locator(".record-hero").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
+    expect(columns, "two columns at 1280 px, as the archive's card").toBe(2);
+    expect(requests).toEqual([]);
+  } finally {
+    await offline.close();
+  }
   expect(writes).toEqual([]);
 });
 

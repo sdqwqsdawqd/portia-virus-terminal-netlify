@@ -295,7 +295,7 @@ test("the builder keeps its draft in the 20-38 model and changes it only through
   expectMatch(code, /emptyTemplateDossier/);
   for (const name of ["editTemplateVirus", "editTemplateText", "addTemplateMutation", "removeTemplateMutation"]) expectMatch(code, new RegExp(`\\b${name}\\b`), name);
   expectMatch(code, /templateDossierSnapshotKey/);
-  expectMatch(code, /createTemplateDossierHtml/);
+  expectMatch(code, /templateCardDocument/); // D-55 (20-37): the file is made from the rendered card, not from a document of its own
 });
 
 /* ---------------------------------------------------------------- D-55 (20-37): the preview is the archive card */
@@ -321,7 +321,7 @@ test("D-55 (20-37): the builder has no markup of its own for the preview", () =>
   for (const name of ["template-preview", "template-class-grid", "template-class-cell", "template-kicker", "template-mutation"]) {
     expectNoMatch(code, new RegExp(name), `the builder source holds no ${name}`);
   }
-  expectMatch(code, /className="record-view template-card-preview"/, "the preview is the archive's record-view");
+  expectMatch(code, /"record-view template-card-preview/, "the preview is the archive's record-view");
   expectMatch(code, /aria-label="Предпросмотр шаблона"/);
 });
 
@@ -352,6 +352,41 @@ test("D-55 (20-43): the builder shows the form or the card through a view switch
   expectMatch(toolbar, /Скачать PNG/, "the download buttons sit outside the form, so both views have them");
   expectMatch(toolbar, /Скачать HTML/);
   expectMatch(toolbar, /role="status"/, "the status line is outside the form too");
+});
+
+/* ---------------------------------------------------------------- D-55 (20-37): the files are the same card (20-44) */
+
+test("D-55 (20-37): the HTML and the PNG are made from the card the builder renders, through one component", () => {
+  const code = stripComments(subjectSource());
+  const names = namedImports(code, "@/lib/portia-template-export");
+  for (const name of ["templateCardCss", "templateCardDocument", "templateCardSvg", "templateExportViolations", "renderTemplateCardPng"]) {
+    assert.ok(names.includes(name), `the builder imports ${name}`);
+  }
+  for (const gone of ["createTemplateDossierHtml", "createTemplateDossierPng", "layoutTemplateDossierCard", "wrapTemplateRuns"]) {
+    expectNoMatch(code, new RegExp(`\\b${gone}\\b`), `${gone} is gone from the builder`);
+  }
+  assert.equal((code.match(/<VirusCardBody\b/g) ?? []).length, 1, "one card markup for the preview and the export frame");
+  assert.ok((code.match(/<TemplateCard\b/g) ?? []).length >= 2, "the preview and the export frame both render <TemplateCard");
+  expectMatch(code, /className="template-export-frame"[^>]*\baria-hidden\b|\baria-hidden\b[^>]*className="template-export-frame"/, "the export frame is hidden from assistive technology");
+  expectMatch(code, /\binert\b/);
+  expectMatch(code, /template-export-card/, "the frame's card carries the export class");
+  expectMatch(code, /document\.styleSheets/, "the card's rules are read from the site's style sheets");
+  expectMatch(code, /XMLSerializer/, "the PNG takes the card's markup as XHTML");
+});
+
+test("D-55 (20-37): the builder checks the closed policy before every download and removes the frame afterwards", () => {
+  const code = stripComments(subjectSource());
+  const start = code.indexOf("const runExport");
+  assert.ok(start > 0, "runExport exists");
+  const body = code.slice(start, code.indexOf("const dismissConfirm", start));
+  expectMatch(body, /templateExportViolations\(/, "runExport checks the policy");
+  const downloads = [...body.matchAll(/downloadTemplateBlob\(/g)].map((match) => match.index ?? 0);
+  assert.ok(downloads.length >= 1, "runExport downloads");
+  for (const at of downloads) {
+    assert.ok(body.slice(0, at).includes("templateExportViolations("), "the policy runs before the download");
+  }
+  expectMatch(body, /setExportSource\(null\)/, "the frame is removed after the export, also on failure");
+  expectMatch(body, /templateExportError/, "a violation ends in the export error, not in a file");
 });
 
 /* ---------------------------------------------------------------- guard self-check */

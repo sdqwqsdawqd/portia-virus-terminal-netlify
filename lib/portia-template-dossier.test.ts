@@ -21,9 +21,12 @@ import {
   type TemplateDossier,
 } from "./portia-template-dossier.ts";
 import {
-  createTemplateDossierHtml,
-  createTemplateDossierPng,
   downloadTemplateBlob,
+  renderTemplateCardPng,
+  templateCardCss,
+  templateCardDocument,
+  templateCardSvg,
+  templateCardWidth,
   type PngEnvironment,
   type TemplateImage,
 } from "./portia-template-export.ts";
@@ -182,16 +185,21 @@ function fakeCanvasEnvironment() {
   const loaded: string[] = [];
   const environment: PngEnvironment = {
     createCanvas: (width, height) => {
-      const context = {
-        font: "", fillStyle: "", strokeStyle: "", lineWidth: 1, textBaseline: "",
-        fillRect: () => {}, strokeRect: () => {}, fillText: () => {}, drawImage: () => {},
-        measureText: (text: string) => ({ width: Array.from(text).length * 8 }),
-      };
+      const context = { fillStyle: "", fillRect: () => {}, drawImage: () => {} };
       return { width, height, getContext: () => context, toBlob: (callback: (blob: Blob | null) => void) => callback(new Blob(["png-bytes"], { type: "image/png" })) };
     },
-    loadImage: async (src) => { loaded.push(src); return { width: 10, height: 10 }; },
+    loadImage: async (src) => { loaded.push(src); return {}; },
   };
   return { environment, loaded };
+}
+
+/** The same two files the builder makes from the card: a page and a PNG raster of the same markup (D-55, 20-44). */
+async function exportBoth(dossier: TemplateDossier, environment: PngEnvironment) {
+  const markup = `<article class="record-view"><span class="formatted-content">${dossier.virus.external}</span></article>`;
+  const css = templateCardCss([{ selector: ".record-view", declarations: "color: var(--ink)" }], { "--ink": "#1b2523" });
+  const html = templateCardDocument(markup, css, dossier.virus.name.trim() || "Шаблон досье");
+  const svg = templateCardSvg(markup.replace("<article", `<article xmlns="http://www.w3.org/1999/xhtml"`), css, templateCardWidth, 900);
+  return { html, png: await renderTemplateCardPng(svg, 900, environment) };
 }
 
 test("the whole path from edit to HTML, PNG and download makes no request and touches no browser storage", async () => {
@@ -204,8 +212,7 @@ test("the whole path from edit to HTML, PNG and download makes no request and to
   };
   const { result, hits } = await withIoTraps(async () => {
     const edited = editExternal(emptyTemplateDossier());
-    const html = createTemplateDossierHtml(edited);
-    const png = await createTemplateDossierPng(edited, fakeCanvasEnvironment().environment);
+    const { html, png } = await exportBoth(edited, fakeCanvasEnvironment().environment);
     downloadTemplateBlob(html, "a.html", downloadEnvironment);
     downloadTemplateBlob(png, "a.png", downloadEnvironment);
     return { html, png };
@@ -451,8 +458,7 @@ test("a whole editing session with every edit function and both exports makes no
     dossier = removeTemplateMutation(addTemplateMutation(dossier), 1);
     dossier = setTemplateImage(dossier, "infected", tinyPng);
     dossier = editTemplateVirus(dossier, (virus) => { virus.status = "НАБЛЮДЕНИЕ"; });
-    const html = createTemplateDossierHtml(dossier);
-    const png = await createTemplateDossierPng(dossier, fake.environment);
+    const { html, png } = await exportBoth(dossier, fake.environment);
     downloadTemplateBlob(html, "a.html", downloadEnvironment);
     downloadTemplateBlob(png, "a.png", downloadEnvironment);
     return { key: templateDossierSnapshotKey(dossier), content: hasTemplateDossierContent(dossier) };
@@ -460,5 +466,5 @@ test("a whole editing session with every edit function and both exports makes no
   assert.deepEqual(hits, []);
   assert.equal(result.content, true);
   assert.ok(result.key.length > 0);
-  assert.ok(fake.loaded.length > 0 && fake.loaded.every((source) => source.startsWith("data:image/")), "only slot data URLs were loaded");
+  assert.ok(fake.loaded.length === 1 && fake.loaded[0].startsWith("data:image/svg+xml"), "only the assembled SVG was loaded");
 });

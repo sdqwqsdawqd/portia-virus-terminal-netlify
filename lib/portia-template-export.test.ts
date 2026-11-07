@@ -2,29 +2,29 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { portiaTextKey, type RichTextDocument } from "./portia-content.ts";
-import { addTemplateMutation, editTemplateText, editTemplateVirus, emptyTemplateDossier, setTemplateImage, templateVirusId, type TemplateDossier } from "./portia-template-dossier.ts";
 import {
-  createTemplateDossierHtml,
-  createTemplateDossierPng,
+  assertTemplateExportClean,
   decodeLocalTemplateImage,
   downloadTemplateBlob,
-  emptyTemplateText,
   escapeTemplateHtml,
   imageSizeWithinBounds,
+  isTemplateExportError,
   isTemplateImageError,
   isTemplatePngTooLargeError,
-  layoutTemplateDossierCard,
+  neutralizeTemplateText,
   pngMaxHeight,
-  pngPadding,
-  pngWidth,
+  renderTemplateCardPng,
   sniffImageMime,
+  templateCardCss,
+  templateCardDocument,
+  templateCardSvg,
+  templateCardVariableNames,
+  templateCardWidth,
+  templateExportViolations,
   templateImageMaxBytes,
-  wrapTemplateRuns,
-  wrapTemplateText,
   type LocalImageFile,
   type PngEnvironment,
-  type TemplateImage,
+  type TemplateCssRule,
 } from "./portia-template-export.ts";
 
 const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -37,9 +37,6 @@ function fileOf(bytes: readonly number[], type: string, name = "photo.png", size
 }
 
 const okImage = (width = 40, height = 20) => async () => ({ width, height });
-
-// 10 px per character keeps the fake measurement deterministic.
-const measure = (text: string) => Array.from(text).length * 10;
 
 test("escapeTemplateHtml neutralises markup and quotes", () => {
   assert.equal(escapeTemplateHtml(`<img src=x onerror="a()"> & 'b'`), "&lt;img src=x onerror=&quot;a()&quot;&gt; &amp; &#39;b&#39;");
@@ -91,49 +88,6 @@ test("an unsupported, mislabelled, empty, oversized or undecodable image is refu
   await refused(fileOf([...pngSignature], "image/png"), { loadImage: okImage(4096, 4096) });
 });
 
-test("wrapping keeps every word, preserves blank lines and splits an over-wide word by characters", () => {
-  const text = "один два три\n\nчетыре";
-  const lines = wrapTemplateText(text, 90, "16px x", measure);
-  assert.deepEqual(lines, ["один два", "три", "", "четыре"]);
-  const long = "x".repeat(25);
-  const split = wrapTemplateText(long, 100, "16px x", measure);
-  assert.equal(split.join(""), long);
-  assert.ok(split.every((line) => measure(line) <= 100));
-});
-
-type Call = { name: string; args: unknown[] };
-
-function fakePngEnvironment(options: { toBlob?: "ok" | "null" | "throw" | "empty"; contextNull?: boolean } = {}) {
-  const calls: Call[] = [];
-  const sizes: Array<[number, number]> = [];
-  const loadedSources: string[] = [];
-  const environment: PngEnvironment = {
-    createCanvas: (width, height) => {
-      sizes.push([width, height]);
-      const context = {
-        font: "", fillStyle: "", strokeStyle: "", lineWidth: 1, textBaseline: "",
-        fillRect: (...args: unknown[]) => { calls.push({ name: "fillRect", args }); },
-        strokeRect: (...args: unknown[]) => { calls.push({ name: "strokeRect", args }); },
-        fillText: (...args: unknown[]) => { calls.push({ name: "fillText", args }); },
-        drawImage: (...args: unknown[]) => { calls.push({ name: "drawImage", args }); },
-        measureText: (text: string) => ({ width: measure(text) }),
-      };
-      return {
-        width, height,
-        getContext: () => (options.contextNull ? null : context),
-        toBlob: (callback: (blob: Blob | null) => void) => {
-          if (options.toBlob === "throw") throw new Error("SecurityError");
-          if (options.toBlob === "null") callback(null);
-          else if (options.toBlob === "empty") callback(new Blob([], { type: "image/png" }));
-          else callback(new Blob(["png-bytes"], { type: "image/png" }));
-        },
-      };
-    },
-    loadImage: async (src) => { loadedSources.push(src); return { width: 800, height: 400 }; },
-  };
-  return { environment, calls, sizes, loadedSources };
-}
-
 test("a download of a Blob or HTML text releases its object URL, also when the click fails", () => {
   const revoked: string[] = [];
   const timers: Array<() => void> = [];
@@ -154,316 +108,249 @@ test("a download of a Blob or HTML text releases its object URL, also when the c
   assert.deepEqual(revoked, ["blob:test", "blob:test"]);
 });
 
-/* ---------------------------------------------------------------- dossier model export (20-38, D-52) */
+/* ---------------------------------------------------------------- D-55 (20-44): the file is the archive card */
 
-const externalKey = portiaTextKey.virus(templateVirusId, "external");
-const dangerDoc: RichTextDocument = { runs: [{ text: "Опасно", style: { color: "#B43632", fontWeight: 600 } }, { text: " для всех" }] };
-const dangerText = "Опасно для всех";
-const dangerDossier = (): TemplateDossier => editTemplateText(emptyTemplateDossier(), externalKey, dangerText, dangerDoc, (next, text) => { next.virus.external = text; });
+// The rules a browser reports for the site's style sheets: a selector, the declaration block and the @media / @container wrapper.
+const siteRules: TemplateCssRule[] = [
+  { selector: ".record-view", declarations: "min-width: 0; overflow-y: auto; color: var(--ink); background: var(--paper)" },
+  { selector: ".class-cell.level-3 strong, .class-cell.level-3 small", declarations: "color: #b43632" },
+  { selector: ".class-cell span", declarations: "min-height: 2.6em; font: 11px var(--sans); text-transform: uppercase" },
+  { selector: ".class-cell", declarations: "background: url(/x.png); color: red; border: 1px solid var(--line)" },
+  { selector: ".section-kicker::after", declarations: "content: \"\"; flex: 1; height: 1px; background: #c9c4b7" },
+  { selector: ".record-body", declarations: "animation: fade-in 200ms ease-out; color: var(--ink)" },
+  { selector: ".record-hero", declarations: "grid-template-columns: 1fr", wrapper: "@container (max-width: 840px)" },
+  { selector: ".record-header", declarations: "position: relative; display: block", wrapper: "@media (max-width: 900px)" },
+  // Everything below belongs to the site, not to the card, and must not reach the file.
+  { selector: ".desktop", declarations: "color: red" },
+  { selector: "body", declarations: "margin: 0" },
+  { selector: "html[data-motion] .portia-image img", declarations: "transition: opacity 1s" },
+  { selector: ".app-window .record-view", declarations: "color: blue" },
+  { selector: ".record-view, .desktop", declarations: "color: green" },
+  { selector: ".record-view:hover", declarations: "color: teal" },
+  { selector: "[data-area] .record-view", declarations: "color: teal" },
+  { selector: "#desktop .record-view", declarations: "color: teal" },
+  { selector: ".content-fade", declarations: "animation: fade-in 200ms" },
+  { selector: "@font-face", declarations: "font-family: x; src: url(https://fonts.example/a.woff2)" },
+  { selector: "@import url(https://fonts.example/a.css)", declarations: "x: 1" },
+  { selector: ".record-header", declarations: "display: none", wrapper: "@media url(https://evil.example/a)" },
+  { selector: ".record-header", declarations: "display: none", wrapper: "@keyframes spin" },
+  { selector: ".record-footer", declarations: "background: image-set(\"a.png\" 1x); border-top: 1px solid #c4beb0; color: expression(alert(1))" },
+  { selector: ".record-code", declarations: "content: \"</style><script>alert(1)</script>\"; color: red" },
+  { selector: ".record-code", declarations: "background: url(data:image/png;base64,AAAA)" },
+];
 
-// Width follows the font size, so a larger fragment is measurably wider.
-const sizeMeasure = (text: string, font: string) => Array.from(text).length * Number(/(\d+)px/.exec(font)?.[1] ?? 16) * 0.5;
-const pieceText = (line: { pieces: readonly { text: string }[] }) => line.pieces.map((piece) => piece.text).join("");
+const variables = {
+  "--ink": "oklch(0.238 calc(0.013 * 1) 180.4)",
+  "--paper": "#f3f0e6",
+  "--line": "oklch(0.33 0.027 180.4)",
+  "--sans": "\"IBM Plex Mono\", \"IBM Plex Mono Fallback\", Consolas, monospace",
+};
 
-test("dossier HTML shows a styled fragment, an honest empty marker and a closed content policy", () => {
-  const html = createTemplateDossierHtml(dangerDossier());
-  assert.ok(html.includes(`<span style="color:#b43632;font-weight:600">Опасно</span>`));
-  assert.ok(html.includes(" для всех"));
-  assert.ok(html.includes(emptyTemplateText));
-  assert.ok(html.includes("ВНЕШНИЕ ХАРАКТЕРИСТИКИ"));
-  assert.ok(html.includes("default-src 'none'; style-src 'unsafe-inline'; img-src data:"));
-  for (const forbidden of ["<script", "<link", "url(", "http:", "https:", "undefined"]) assert.ok(!html.includes(forbidden), forbidden);
+test("templateCardCss keeps only the card's rules, in their @media / @container wrapper, and starts with :root", () => {
+  const css = templateCardCss(siteRules, variables);
+  assert.ok(css.startsWith(":root{"), css.slice(0, 40));
+  assert.ok(css.includes(".record-view{min-width:0;overflow-y:auto;color:var(--ink);background:var(--paper)}"));
+  assert.ok(css.includes(".class-cell.level-3 strong,.class-cell.level-3 small{color:#b43632}"));
+  assert.ok(css.includes(".class-cell span{min-height:2.6em;font:11px var(--sans);text-transform:uppercase}"));
+  assert.ok(css.includes(".section-kicker::after{content:\"\";flex:1;height:1px;background:#c9c4b7}"));
+  assert.ok(css.includes("@container (max-width: 840px){.record-hero{grid-template-columns:1fr}}"));
+  assert.ok(css.includes("@media (max-width: 900px){.record-header{position:relative;display:block}}"));
+  assert.ok(css.includes(".record-footer{border-top:1px solid #c4beb0}"), "a declaration with image-set() or expression() is dropped, the rest stays");
 });
 
-test("dossier HTML escapes typed markup and refuses style values outside the allow-list", () => {
-  const dossier = editTemplateText(
-    emptyTemplateDossier(), externalKey, `<b onmouseover="x()">два</b>`,
-    { runs: [{ text: `<b onmouseover="x()">два</b>`, style: { color: "#b43632;background:url(//evil.example/p)", fontSize: 9999, fontWeight: 450, backgroundColor: "red" } as never }] },
-    (next, text) => { next.virus.external = text; },
-  );
-  dossier.virus.name = "<script>alert(1)</script>";
-  const html = createTemplateDossierHtml(dossier);
-  assert.ok(html.includes("&lt;b onmouseover=&quot;x()&quot;&gt;два&lt;/b&gt;"));
-  assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
-  assert.deepEqual([...html.matchAll(/ style="([^"]*)"/g)].map((match) => match[1]), ["font-size:48px"], "only the in-range size survives as a fragment style");
-  for (const forbidden of ["<script", "<b ", "url(", "evil", "font-weight:450"]) assert.ok(!html.includes(forbidden), forbidden);
-});
-
-test("wrapping across fragments keeps every character, blank lines and the fragment fonts", () => {
-  const measureTen = (text: string) => Array.from(text).length * 10;
-  const lines = wrapTemplateRuns([{ text: "один два", style: { fontWeight: 700 } }, { text: " три\n\nчетыре" }], 90, measureTen);
-  assert.deepEqual(lines.map(pieceText), ["один два", "три", "", "четыре"]);
-  assert.ok(lines[0].pieces[0].font.includes(" 700 "));
-  assert.ok(!lines[1].pieces[0].font.includes(" 700 "));
-  assert.deepEqual(lines[2].pieces, []);
-  assert.ok(lines.every((line) => line.height >= 25));
-});
-
-test("wrapping breaks an over-wide word by characters and never drops a visible character", () => {
-  const long = "x".repeat(25);
-  const lines = wrapTemplateRuns([{ text: long.slice(0, 10), style: { color: "#112233" } }, { text: long.slice(10) }], 100, (text) => Array.from(text).length * 10);
-  assert.equal(lines.map(pieceText).join(""), long);
-  for (const line of lines) assert.ok(line.pieces.reduce((total, piece) => total + piece.width, 0) <= 100);
-  assert.ok(lines.length >= 3);
-});
-
-test("a larger fragment raises the line height and the width is measured with the fragment font", () => {
-  const lines = wrapTemplateRuns([{ text: "мелко " }, { text: "крупно", style: { fontSize: 40 } }], 1000, sizeMeasure);
-  assert.equal(lines.length, 1);
-  assert.ok(lines[0].height >= 40, `line height ${lines[0].height} grows with the biggest font`);
-  const [small, big] = lines[0].pieces;
-  assert.equal(small.width, sizeMeasure("мелко ", small.font));
-  assert.equal(big.width, sizeMeasure("крупно", big.font));
-  assert.ok(big.font.includes("40px"));
-  const plain = wrapTemplateRuns([{ text: "мелко" }], 1000, sizeMeasure);
-  assert.equal(plain[0].height, 25);
-});
-
-test("the dossier card layout draws a styled fragment in its colour and weight inside a 1000 px page", () => {
-  const layout = layoutTemplateDossierCard(dangerDossier(), sizeMeasure);
-  assert.equal(layout.width, pngWidth);
-  assert.ok(layout.height <= pngMaxHeight);
-  const texts = layout.ops.filter((op) => op.kind === "text");
-  const danger = texts.find((op) => op.text === "Опасно");
-  assert.ok(danger && danger.fill === "#b43632" && danger.font.includes(" 600 "), "styled fragment keeps colour and weight");
-  const rest = texts.find((op) => op.text.includes("для всех"));
-  assert.ok(rest && rest.fill === "#1b2523" && !rest.font.includes(" 600 "), "the rest keeps the body text style");
-  assert.ok(danger.x < rest.x, "the second fragment follows the first on the same line");
-  assert.equal(danger.y, rest.y);
-  for (const op of layout.ops) {
-    assert.ok(op.x >= 0 && op.y >= 0 && op.y <= layout.height, "every operation starts inside the canvas");
-    if (op.kind !== "text") assert.ok(op.x + op.width <= layout.width && op.y + op.height <= layout.height);
+test("templateCardCss drops foreign selectors, fonts, imports, url() declarations and animations", () => {
+  const css = templateCardCss(siteRules, variables);
+  for (const forbidden of ["url(", "http", "@font-face", "@import", ".desktop", "[data-area]", "#desktop", "html", ":hover", ".app-window", ".content-fade", "animation", "image-set", "expression", "</style", "<script", "@keyframes"]) {
+    assert.ok(!css.includes(forbidden), forbidden);
   }
+  assert.ok(css.includes(".class-cell{color:red;border:1px solid var(--line)}"), "the url() declaration goes, the other two stay");
+  assert.ok(!css.includes("fade-in"));
+  assert.ok(!/(^|[{},\s])body\s*\{/.test(css), "no rule for the site body");
+  assert.ok(!css.includes("color:green") && !css.includes("color:blue") && !css.includes("color:teal"), "a rule with any foreign selector is dropped whole");
 });
 
-test("dossier PNG draws the styled fragment with its own fill and returns a png blob", async () => {
-  const drawn: Array<{ text: string; fill: string; font: string }> = [];
-  const environment: PngEnvironment = {
-    createCanvas: (width, height) => {
-      const context = {
-        font: "", fillStyle: "", strokeStyle: "", lineWidth: 1, textBaseline: "",
-        fillRect: () => {}, strokeRect: () => {}, drawImage: () => {},
-        fillText(text: string) { drawn.push({ text, fill: this.fillStyle, font: this.font }); },
-        measureText: (text: string) => ({ width: sizeMeasure(text, "16px x") }),
-      };
-      return { width, height, getContext: () => context, toBlob: (callback: (blob: Blob | null) => void) => callback(new Blob(["png-bytes"], { type: "image/png" })) };
-    },
-    loadImage: async () => ({ width: 1, height: 1 }),
-  };
-  const blob = await createTemplateDossierPng(dangerDossier(), environment);
-  assert.equal(blob.type, "image/png");
-  assert.ok(blob.size > 0);
-  const danger = drawn.find((item) => item.text === "Опасно");
-  assert.ok(danger && danger.fill === "#b43632" && danger.font.includes(" 600 "));
-  assert.ok(drawn.some((item) => item.text.includes("для всех") && item.fill === "#1b2523"));
-});
-
-/* ---------------------------------------------------------------- all card sections (Task 2) */
-
-const pngImage: TemplateImage = Object.freeze({ name: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,iVBORw0KGgo=", width: 3000, height: 3000, bytes: 8 });
-const jpegImage: TemplateImage = Object.freeze({ name: "b.jpg", mime: "image/jpeg", dataUrl: "data:image/jpeg;base64,/9j/4AAQ", width: 400, height: 200, bytes: 6 });
-
-function fullDossier(): TemplateDossier {
-  let dossier = emptyTemplateDossier();
-  dossier = editTemplateVirus(dossier, (virus) => {
-    virus.code = "VIR-77";
-    virus.name = "Тестовый вирус";
-    virus.status = "НАБЛЮДЕНИЕ";
-    virus.classification.danger = "Протей";
-    virus.classification.transmission = "Половой";
+test("templateCardCss writes only the variables it is given, and only safe ones", () => {
+  const css = templateCardCss([{ selector: ".record-view", declarations: "color: var(--ink)" }], {
+    ...variables,
+    "--evil": "url(https://evil.example/p)",
+    "--break": "red;}body{display:none",
+    "--brace": "{}",
+    "bad name": "1",
+    "--empty": "   ",
   });
-  const set = (key: string, text: string, style: object | undefined, apply: (next: TemplateDossier, value: string) => void) => {
-    dossier = editTemplateText(dossier, key, text, { runs: [{ text, ...(style ? { style } : {}) }] }, apply);
-  };
-  set(portiaTextKey.virus(templateVirusId, "external"), "Внешний вид", { color: "#b43632", fontWeight: 700 }, (next, text) => { next.virus.external = text; });
-  set(portiaTextKey.virus(templateVirusId, "ppu-health"), "Здоровье 100", { backgroundColor: "#102030", backgroundOpacity: 0.5 }, (next, text) => { next.virus.ppu.health = text; });
-  set(portiaTextKey.virus(templateVirusId, "ppu-speed"), "Скорость 3", undefined, (next, text) => { next.virus.ppu.speed = text; });
-  set(portiaTextKey.virus(templateVirusId, "ppu-abilities"), "Способности ", { fontSize: 20 }, (next, text) => { next.virus.ppu.abilities = text; });
-  set(portiaTextKey.virus(templateVirusId, "physiology"), "Физиология", { color: "#2e6f64" }, (next, text) => { next.virus.physiology = text; });
-  dossier = addTemplateMutation(addTemplateMutation(dossier));
-  dossier = editTemplateVirus(dossier, (virus) => { virus.mutations[0].name = "Первая мутация"; });
-  set(portiaTextKey.mutation(templateVirusId, 0), "Описание первой", { color: "#112233" }, (next, text) => { next.virus.mutations[0].description = text; });
-  dossier = setTemplateImage(dossier, "infected", pngImage);
-  dossier = setTemplateImage(dossier, 0, jpegImage);
-  return dossier;
-}
-
-test("dossier HTML has sections 01-05 in order with the site's labels and no scientist records", () => {
-  const html = createTemplateDossierHtml(fullDossier());
-  const positions = ["01 КЛАССИФИКАЦИЯ", "02 ВНЕШНИЕ ХАРАКТЕРИСТИКИ", "03 ХАРАКТЕРИСТИКИ С PPU", "04 ФИЗИОЛОГИЯ", "05 МУТАЦИИ ВИРУСА"].map((title) => html.indexOf(title));
-  assert.ok(positions.every((position) => position >= 0), "every section is present");
-  assert.deepEqual([...positions].sort((a, b) => a - b), positions, "sections keep the site's order");
-  for (const label of ["Общий уровень опасности", "Распространение", "Угроза и риск побега", "Способ распространения", "Разум", "Вид / внешность", "Поведение", "ЗДОРОВЬЕ", "СКОРОСТЬ", "СПОСОБНОСТИ", "M-01", "M-02", "Первая мутация", "Протей", "Половой"]) {
-    assert.ok(html.includes(escapeTemplateHtml(label)), label);
-  }
-  assert.ok(html.includes("УРОВЕНЬ 2"), "Протей is level 2");
-  assert.ok(!html.includes("ЗАПИСИ УЧЁНЫХ"));
-  assert.ok(!/LOG-\d/.test(html));
-  assert.ok(html.includes(`<span style="color:#112233">Описание первой</span>`));
-  assert.ok(html.includes(`style="background-color:rgba(16,32,48,0.5)"`));
-  assert.ok(html.includes(`style="font-size:20px"`));
-  assert.ok(html.includes(emptyTemplateText), "the second mutation has no name or description");
+  const root = /^:root\{([^}]*)\}/.exec(css);
+  assert.ok(root, "starts with a :root block");
+  const names = root[1].split(";").map((entry) => entry.split(":")[0]).filter(Boolean).sort();
+  assert.deepEqual(names, ["--ink", "--line", "--paper", "--sans"]);
+  assert.ok(!css.includes("evil") && !css.includes("display:none"));
+  assert.ok(templateCardCss([], {}).startsWith(":root{}"));
 });
 
-test("dossier HTML embeds exactly the filled image slots and never reads an address from the record", () => {
-  const dossier = fullDossier();
-  dossier.virus.infectedImage = "https://evil.example/a.png";
-  dossier.virus.mutations[1].image = "https://evil.example/m.png";
-  const html = createTemplateDossierHtml(dossier);
-  assert.equal((html.match(/<img/g) ?? []).length, 2);
-  assert.ok(html.includes(`src="${pngImage.dataUrl}"`) && html.includes(`src="${jpegImage.dataUrl}"`));
-  assert.ok(!html.includes("evil.example"));
-  assert.equal((createTemplateDossierHtml(emptyTemplateDossier()).match(/<img/g) ?? []).length, 0);
+test("templateCardVariableNames lists the variables the kept rules use", () => {
+  assert.deepEqual(templateCardVariableNames(siteRules), ["--ink", "--line", "--paper", "--sans"]);
+  assert.deepEqual(templateCardVariableNames([{ selector: ".desktop", declarations: "color: var(--secret)" }]), []);
 });
 
-/** One check over a finished export document: the closed content policy of D-23/D-24. */
-function exportViolations(html: string) {
-  const found: string[] = [];
-  if (/https?:/i.test(html)) found.push("external address");
-  if (/<script/i.test(html)) found.push("script");
-  if (/<link/i.test(html)) found.push("link");
-  if (/url\(/i.test(html)) found.push("css url");
-  if (/<[^>]*\son[a-z]+\s*=/i.test(html)) found.push("event handler");
-  if (html.includes("ЗАПИСИ УЧЁНЫХ")) found.push("scientist records section");
-  for (const image of html.match(/<img[^>]*>/gi) ?? []) {
-    if (!/^<img src="data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}"/.test(image)) found.push(`image outside data:image/png|jpeg|webp: ${image.slice(0, 40)}`);
-  }
-  return found;
-}
+const cleanMarkup = `<article class="record-view template-card-preview"><span class="formatted-content"><span style="color: rgb(180, 54, 50);">Опасно</span></span><img src="data:image/png;base64,iVBORw0KGgo=" alt="Фото" width="64" height="32"></article>`;
 
-function hostileDossier(): TemplateDossier {
-  const dossier = emptyTemplateDossier();
-  dossier.virus.name = `<img src=x onerror="a()">`;
-  dossier.virus.code = `"><script>alert(1)</script>`;
-  dossier.virus.external = `<link rel=stylesheet href=//evil.example/x.css>`;
-  dossier.virus.classification.danger = `<script>x</script>`;
-  dossier.virus.infectedImage = "https://evil.example/a.png";
-  dossier.virus.mutations.push({ name: `<b onmouseover="x()">`, description: `<script>y</script>`, image: "https://evil.example/m.png" });
-  dossier.virus.scientistLogs.push({ id: "log-1", title: "ЗАПИСИ УЧЁНЫХ", scientist: "X", lockedLevel: 1, content: ["секрет"] });
-  dossier.images.infected = { ...pngImage, dataUrl: "https://evil.example/x.png" };
-  dossier.images.mutations = [{ ...jpegImage, dataUrl: `data:image/jpeg;base64,AAAA" onerror="x` }];
-  dossier.formattedText[portiaTextKey.virus(templateVirusId, "external")] = {
-    runs: [{ text: dossier.virus.external, style: { color: "#b43632;background:url(//evil.example/p)", fontSize: 9999 } as never }],
-  };
-  return dossier;
+test("templateCardDocument is a closed single-file page with the card's CSS and an escaped title", () => {
+  const css = templateCardCss(siteRules, variables);
+  const html = templateCardDocument(cleanMarkup, css, `Вирус <b>"A"</b>`);
+  assert.ok(html.startsWith("<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\">"));
+  assert.ok(html.includes(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`));
+  assert.ok(html.includes("<title>Вирус &lt;b&gt;&quot;A&quot;&lt;/b&gt;</title>"));
+  assert.equal((html.match(/<style>/g) ?? []).length, 1);
+  assert.ok(html.includes(`<body class="template-export">${cleanMarkup}</body>`));
+  assert.ok(html.includes(css));
+  assert.deepEqual(templateExportViolations(html), []);
+});
+
+test("templateCardSvg wraps the same markup in a foreignObject and allows only the two namespace addresses", () => {
+  const css = templateCardCss(siteRules, variables);
+  const xhtml = `<article xmlns="http://www.w3.org/1999/xhtml" class="record-view"><svg xmlns="http://www.w3.org/2000/svg" class="class-badge"><path d="M1 1"/></svg><img src="data:image/png;base64,iVBORw0KGgo=" alt="x"/></article>`;
+  const svg = templateCardSvg(xhtml, css, templateCardWidth, 1234.2);
+  assert.ok(svg.startsWith(`<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="1235" viewBox="0 0 1060 1235">`));
+  assert.ok(svg.includes(`<foreignObject x="0" y="0" width="1060" height="1235"><div xmlns="http://www.w3.org/1999/xhtml" class="template-export"><style>`));
+  assert.ok(svg.includes(xhtml));
+  assert.deepEqual(templateExportViolations(svg, "svg"), []);
+  assert.ok(templateExportViolations(svg, "html").includes("external address"), "in a file the same namespace text is an address");
+  assert.ok(templateExportViolations(svg.replace("http://www.w3.org/1999/xhtml", "http://evil.example/x"), "svg").includes("external address"));
+  assert.ok(templateExportViolations(svg.replace("<path", `<image href="https://evil.example/a.png"/><path`), "svg").length > 0);
+});
+
+test("a typed address or url( in the card text stays visible but is not an address in the file", () => {
+  const typed = `<p>see https://typed.example/a and HTTP://x.example and url(not-css)</p>`;
+  assert.equal(neutralizeTemplateText(typed), `<p>see https&#58;//typed.example/a and HTTP&#58;//x.example and url&#40;not-css)</p>`);
+  assert.equal(neutralizeTemplateText(`<a href="https://evil.example/">t</a>`), `<a href="https://evil.example/">t</a>`, "an attribute is never rewritten");
+  const html = templateCardDocument(`<article class="record-view">${typed}</article>`, templateCardCss([], {}), "https://title.example");
+  assert.deepEqual(templateExportViolations(html), []);
+  assert.ok(html.includes("<title>https&#58;//title.example</title>"));
+  const svg = templateCardSvg(`<article xmlns="http://www.w3.org/1999/xhtml">${typed}</article>`, templateCardCss([], {}), templateCardWidth, 200);
+  assert.deepEqual(templateExportViolations(svg, "svg"), []);
+});
+
+/** The closed content policy of D-23/D-24 over a finished file, with the same list of rules as before. */
+test("the policy names every kind of violation (check self-check)", () => {
+  const found = templateExportViolations(`<body onload="a()"><img src="https://x.example/a.png"><section>ЗАПИСИ УЧЁНЫХ</section><script>1</script><link href=a><i style="background:url(a)"></i><a href="//evil.example">x</a><iframe src="a"></iframe></body>`);
+  for (const expected of ["external address", "script", "link", "css url", "event handler", "scientist records section", "reference attribute", "embedded content"]) assert.ok(found.includes(expected), expected);
+  assert.ok(found.some((entry) => entry.startsWith("image outside")));
+  for (const image of [`<img src="data:image/svg+xml;base64,AAAA">`, `<img src="data:image/png;base64,AAAA" srcset="a 1x">`, `<img alt="x">`, `<img src=x>`, `<img src="data:image/png;base64,AA AA">`]) {
+    assert.ok(templateExportViolations(image).some((entry) => entry.startsWith("image outside")), image);
+  }
+  for (const image of [`<img src="data:image/png;base64,iVBORw0KGgo=" alt="x" width="4" height="2">`, `<img src="data:image/jpeg;base64,/9j/4AAQ"/>`, `<img src="data:image/webp;base64,AAAA==" alt="">`]) {
+    assert.deepEqual(templateExportViolations(image), [], image);
+  }
+});
+
+function hostileDocument() {
+  const css = templateCardCss([
+    { selector: ".record-view", declarations: "background: url(https://evil.example/p); color: red" },
+    { selector: "@font-face", declarations: "src: url(https://evil.example/f.woff2)" },
+  ], { "--paper": "#fff", "--evil": "url(https://evil.example/v)" });
+  const markup = `<article class="record-view"><img src="https://evil.example/a.png" alt="x"><script>alert(1)</script><link rel="stylesheet" href="//evil.example/x.css"><p onclick="a()">ЗАПИСИ УЧЁНЫХ</p><span>https://typed.example/text url(x) &lt;script&gt;</span></article>`;
+  return { css, html: templateCardDocument(markup, css, `"><script>alert(1)</script>`) };
 }
 
 test("the export stays inside the closed policy: no address, script, link, url(), handler, foreign image or scientist section", () => {
   const subject = process.env.GSD_PROHIB_SUBJECT;
-  const html = subject ? readFileSync(path.resolve(process.cwd(), subject), "utf8") : createTemplateDossierHtml(hostileDossier());
-  assert.deepEqual(exportViolations(html), []);
-  if (!subject) {
-    assert.deepEqual(exportViolations(createTemplateDossierHtml(fullDossier())), []);
-    assert.deepEqual(exportViolations(createTemplateDossierHtml(emptyTemplateDossier())), []);
-    assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), "typed markup is escaped, not dropped");
+  if (subject) {
+    assert.deepEqual(templateExportViolations(readFileSync(path.resolve(process.cwd(), subject), "utf8")), []);
+    return;
   }
-});
-
-test("the closed-policy check recognises a violating document (check self-check)", () => {
-  const found = exportViolations(`<body onload="a()"><img src="https://x.example/a.png"><section>ЗАПИСИ УЧЁНЫХ</section><script>1</script><link href=a><i style="background:url(a)"></i></body>`);
-  for (const expected of ["external address", "script", "link", "css url", "event handler", "scientist records section"]) assert.ok(found.includes(expected), expected);
+  const { css, html } = hostileDocument();
+  assert.ok(!/url\(|https?:|@font-face/i.test(css), "the CSS carries nothing that loads");
+  const found = templateExportViolations(html);
+  for (const expected of ["script", "link", "event handler", "scientist records section", "external address", "reference attribute"]) assert.ok(found.includes(expected), expected);
   assert.ok(found.some((entry) => entry.startsWith("image outside")));
+  assert.ok(!html.includes("<title>\"><script>"), "the title is escaped");
+  assert.throws(() => assertTemplateExportClean(html, "html"), (error) => isTemplateExportError(error) && /Не удалось подготовить файл/.test((error as Error).message));
+  assert.doesNotThrow(() => assertTemplateExportClean(templateCardDocument(cleanMarkup, templateCardCss(siteRules, variables), "Вирус"), "html"));
 });
 
-type DrawnText = { text: string; fill: string; font: string };
+/* ---------------------------------------------------------------- PNG: the raster of the same card */
 
-function recordingPngEnvironment(options: { measureOf?: (text: string) => number } = {}) {
-  const texts: DrawnText[] = [];
-  const rects: Array<{ x: number; y: number; width: number; height: number; fill: string }> = [];
-  const images: Array<{ x: number; y: number; width: number; height: number }> = [];
-  const loaded: string[] = [];
+type Call = { name: string; args: unknown[] };
+
+function fakeSvgEnvironment(options: { toBlob?: "ok" | "null" | "throw" | "empty"; contextNull?: boolean; loadFails?: boolean } = {}) {
+  const calls: Call[] = [];
+  const sizes: Array<[number, number]> = [];
+  const loadedSources: string[] = [];
   const environment: PngEnvironment = {
     createCanvas: (width, height) => {
+      sizes.push([width, height]);
       const context = {
-        font: "", fillStyle: "", strokeStyle: "", lineWidth: 1, textBaseline: "",
-        fillRect(x: number, y: number, rectWidth: number, rectHeight: number) { rects.push({ x, y, width: rectWidth, height: rectHeight, fill: this.fillStyle }); },
-        strokeRect: () => {},
-        fillText(text: string) { texts.push({ text, fill: this.fillStyle, font: this.font }); },
-        drawImage: (_image: never, x: number, y: number, imageWidth: number, imageHeight: number) => { images.push({ x, y, width: imageWidth, height: imageHeight }); },
-        measureText: (text: string) => ({ width: (options.measureOf ?? ((value: string) => Array.from(value).length * 8))(text) }),
+        fillStyle: "",
+        fillRect: (...args: unknown[]) => { calls.push({ name: "fillRect", args }); },
+        drawImage: (...args: unknown[]) => { calls.push({ name: "drawImage", args }); },
       };
-      return { width, height, getContext: () => context, toBlob: (callback: (blob: Blob | null) => void) => callback(new Blob(["png-bytes"], { type: "image/png" })) };
+      return {
+        width, height,
+        getContext: () => (options.contextNull ? null : context),
+        toBlob: (callback: (blob: Blob | null) => void) => {
+          if (options.toBlob === "throw") throw new Error("SecurityError");
+          if (options.toBlob === "null") callback(null);
+          else if (options.toBlob === "empty") callback(new Blob([], { type: "image/png" }));
+          else callback(new Blob(["png-bytes"], { type: "image/png" }));
+        },
+      };
     },
-    loadImage: async (src) => { loaded.push(src); return { width: 100, height: 100 }; },
+    loadImage: async (src) => {
+      if (options.loadFails) throw new Error("decode failed");
+      loadedSources.push(src);
+      return { rendered: true };
+    },
   };
-  return { environment, texts, rects, images, loaded };
+  return { environment, calls, sizes, loadedSources };
 }
 
-test("dossier PNG draws every visible character, the fragment background, bounded images and only slot data URLs", async () => {
-  const dossier = fullDossier();
-  const fake = recordingPngEnvironment();
-  const blob = await createTemplateDossierPng(dossier, fake.environment);
+const cleanSvg = (height: number) => templateCardSvg(`<article xmlns="http://www.w3.org/1999/xhtml" class="record-view">Опасно</article>`, templateCardCss(siteRules, variables), templateCardWidth, height);
+
+test("the PNG is the raster of the SVG: one source, scale 2 up to 4000 px, 1 up to 8000 px, a refusal beyond", async () => {
+  const fake = fakeSvgEnvironment();
+  const blob = await renderTemplateCardPng(cleanSvg(1500), 1500, fake.environment);
+  assert.equal(blob.type, "image/png");
   assert.ok(blob.size > 0);
-  const drawn = fake.texts.map((item) => item.text).join("");
-  const visible = (value: string) => Array.from(value.replace(/\s/g, ""));
-  for (const field of ["VIR-77", "Тестовый вирус", "НАБЛЮДЕНИЕ", "Внешний вид", "Здоровье 100", "Скорость 3", "Способности", "Физиология", "Первая мутация", "Описание первой", "Протей", "Половой", "УРОВЕНЬ 2", "M-01", "M-02", "КЛАССИФИКАЦИЯ", "МУТАЦИИ ВИРУСА"]) {
-    for (const character of visible(field)) assert.ok(drawn.includes(character), `${character} of ${field}`);
-    assert.ok(drawn.replace(/\s/g, "").includes(field.replace(/\s/g, "")), field);
+  assert.equal(fake.loadedSources.length, 1);
+  assert.ok(fake.loadedSources[0].startsWith("data:image/svg+xml"));
+  assert.deepEqual(fake.sizes, [[2120, 3000]]);
+  assert.deepEqual(fake.calls.find((call) => call.name === "drawImage")?.args.slice(1), [0, 0, 2120, 3000]);
+
+  for (const [height, expected] of [[4000, [2120, 8000]], [4001, [1060, 4001]], [pngMaxHeight, [1060, pngMaxHeight]]] as const) {
+    const sized = fakeSvgEnvironment();
+    await renderTemplateCardPng(cleanSvg(height), height, sized.environment);
+    assert.deepEqual(sized.sizes, [expected], String(height));
   }
-  assert.ok(!drawn.includes("ЗАПИСИ УЧЁНЫХ"));
-  assert.ok(fake.rects.some((rect) => rect.fill === "rgba(16,32,48,0.5)"), "the fragment with a background gets a rectangle");
-  assert.equal(fake.images.length, 2);
-  for (const image of fake.images) assert.ok(image.width <= pngWidth && image.height <= 520 && image.width >= 1);
-  assert.deepEqual([...fake.loaded].sort(), [jpegImage.dataUrl, pngImage.dataUrl].sort());
-  assert.ok(fake.texts.some((item) => item.text === "Внешний вид" && item.fill === "#b43632" && item.font.includes(" 700 ")));
+  const tall = fakeSvgEnvironment();
+  await assert.rejects(renderTemplateCardPng(cleanSvg(pngMaxHeight + 1), pngMaxHeight + 1, tall.environment), (error) => isTemplatePngTooLargeError(error));
+  assert.deepEqual(tall.sizes, [], "an over-long card draws nothing");
+  assert.deepEqual(tall.loadedSources, []);
 });
 
-test("dossier PNG never loads an address that was written around the edit functions", async () => {
-  const fake = recordingPngEnvironment();
-  await createTemplateDossierPng(hostileDossier(), fake.environment);
-  assert.deepEqual(fake.loaded, []);
-  assert.deepEqual(fake.images, []);
+test("the PNG fails loudly when the encoder, the canvas or the decoding misbehaves, and never writes an empty file", async () => {
+  const svg = cleanSvg(800);
+  await assert.rejects(renderTemplateCardPng(svg, 800, fakeSvgEnvironment({ toBlob: "null" }).environment), /PNG encoding failed/);
+  await assert.rejects(renderTemplateCardPng(svg, 800, fakeSvgEnvironment({ toBlob: "empty" }).environment), /PNG encoding failed/);
+  await assert.rejects(renderTemplateCardPng(svg, 800, fakeSvgEnvironment({ toBlob: "throw" }).environment), /SecurityError/);
+  await assert.rejects(renderTemplateCardPng(svg, 800, fakeSvgEnvironment({ contextNull: true }).environment), /canvas/);
+  await assert.rejects(renderTemplateCardPng(svg, 800, fakeSvgEnvironment({ loadFails: true }).environment), /decode failed/);
 });
 
-test("a dossier card taller than the canvas limit is refused instead of cropped", async () => {
-  const tall = emptyTemplateDossier();
-  tall.virus.external = "a\n".repeat(1999);
-  tall.virus.physiology = "a\n".repeat(1999);
-  assert.throws(() => layoutTemplateDossierCard(tall, measure), (error) => isTemplatePngTooLargeError(error));
-  const fake = recordingPngEnvironment();
-  await assert.rejects(createTemplateDossierPng(tall, fake.environment), (error) => isTemplatePngTooLargeError(error));
-  assert.deepEqual(fake.texts, []);
+test("the SVG is checked by the policy before anything is loaded or drawn", async () => {
+  const hostile = cleanSvg(800).replace("<article", `<article><image href="https://evil.example/a.png"/><script>1</script`);
+  const fake = fakeSvgEnvironment();
+  await assert.rejects(renderTemplateCardPng(hostile, 800, fake.environment), (error) => isTemplateExportError(error));
+  assert.deepEqual(fake.loadedSources, []);
+  assert.deepEqual(fake.sizes, []);
 });
 
-test("the dossier layout keeps every operation inside the page and scales images into the page width", () => {
-  const layout = layoutTemplateDossierCard(fullDossier(), sizeMeasure);
-  assert.equal(layout.width, pngWidth);
-  assert.ok(layout.height <= pngMaxHeight);
-  const images = layout.ops.filter((op) => op.kind === "image");
-  assert.equal(images.length, 2);
-  for (const image of images) {
-    assert.ok(image.kind === "image" && image.width <= pngWidth - pngPadding * 2 && image.height <= 520 && image.slot !== undefined);
-    assert.equal(image.x, pngPadding);
-  }
-  for (const op of layout.ops) {
-    assert.ok(op.x >= 0 && op.y >= 0 && op.y <= layout.height);
-    if (op.kind !== "text") assert.ok(op.x + op.width <= layout.width && op.y + op.height <= layout.height);
-  }
-});
-
-/* ---------------------------------------------------------------- failure and network behaviour of the dossier PNG (20-39) */
-
-test("dossier PNG fails loudly when the encoder or canvas misbehaves", async () => {
-  const dossier = dangerDossier();
-  await assert.rejects(createTemplateDossierPng(dossier, fakePngEnvironment({ toBlob: "null" }).environment), /PNG encoding failed/);
-  await assert.rejects(createTemplateDossierPng(dossier, fakePngEnvironment({ toBlob: "empty" }).environment), /PNG encoding failed/);
-  await assert.rejects(createTemplateDossierPng(dossier, fakePngEnvironment({ toBlob: "throw" }).environment), /SecurityError/);
-  await assert.rejects(createTemplateDossierPng(dossier, fakePngEnvironment({ contextNull: true }).environment), /canvas/);
-  const long = "a\n".repeat(1999);
-  const tooLongDossier = editTemplateText(dossier, portiaTextKey.virus(templateVirusId, "physiology"), long, { runs: [{ text: long }] }, (next, text) => { next.virus.physiology = text; });
-  const tooLong = fakePngEnvironment();
-  await assert.rejects(createTemplateDossierPng(tooLongDossier, tooLong.environment), (error) => isTemplatePngTooLargeError(error));
-  assert.equal(tooLong.calls.length, 0, "an over-long card draws nothing and encodes nothing");
-});
-
-test("the dossier exports and the image check never touch the network", async () => {
+test("the card export and the image check never touch the network", async () => {
   const original = globalThis.fetch;
   let requests = 0;
   globalThis.fetch = (async () => { requests += 1; throw new Error("network is off"); }) as typeof fetch;
   try {
-    await createTemplateDossierPng(dangerDossier(), fakePngEnvironment().environment);
+    templateCardDocument(cleanMarkup, templateCardCss(siteRules, variables), "Вирус");
+    await renderTemplateCardPng(cleanSvg(900), 900, fakeSvgEnvironment().environment);
     await decodeLocalTemplateImage(fileOf(pngSignature, "image/png"), { loadImage: okImage() });
-    createTemplateDossierHtml(dangerDossier());
   } finally {
     globalThis.fetch = original;
   }
