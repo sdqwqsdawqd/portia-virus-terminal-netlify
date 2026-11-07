@@ -510,3 +510,33 @@ test("D-47 the search index cannot find a section by its note text", () => {
   assert.deepEqual(matchSearch(index, NOTE_TEXT), []);
   assert.equal(JSON.stringify(index).includes(NOTE_TEXT), false);
 });
+
+// D-63 (20-51): the visible part of a picture. Slice 1 is the photo of a «Справочник» section; the other surfaces follow in the same plan.
+test("D-63 a guide section keeps a normalized photo frame only while it has a photo", () => {
+  const [kept] = normalizeGuideSections([{ id: "s", title: "T", photo: "/assets/a.png", photoFraming: { x: 20.4, y: 80, zoom: 160, extra: "url(x)" }, cards: [] }]);
+  assert.deepEqual(kept.photoFraming, { x: 20, y: 80, zoom: 160 });
+  assert.deepEqual(Object.keys(kept), ["id", "title", "photo", "photoFraming", "cards"]);
+
+  const [noPhoto] = normalizeGuideSections([{ id: "s", title: "T", photo: "", photoFraming: { x: 20, y: 80, zoom: 160 }, cards: [] }]);
+  assert.equal("photoFraming" in noPhoto, false);
+
+  const [badPhoto] = normalizeGuideSections([{ id: "s", title: "T", photo: "javascript:alert(1)", photoFraming: { x: 20, y: 80, zoom: 160 }, cards: [] }]);
+  assert.equal("photoFraming" in badPhoto, false, "a refused link is no picture, so its frame goes too");
+});
+
+test("D-63 a garbage or default frame is dropped and a section without a frame keeps today's JSON", () => {
+  for (const photoFraming of ["50", [20, 80, 160], { x: "20", y: 80, zoom: 160 }, { x: 20, y: Number.NaN, zoom: 160 }, { x: 20, y: 80 }, { x: 50, y: 50, zoom: 100 }, null, 7]) {
+    const [section] = normalizeGuideSections([{ id: "s", title: "T", photo: "/assets/a.png", photoFraming, cards: [] }]);
+    assert.equal("photoFraming" in section, false, JSON.stringify(photoFraming));
+  }
+  const [plain] = normalizeGuideSections([{ id: "s", title: "T", photo: "/assets/a.png", cards: [] }]);
+  assert.equal(JSON.stringify(plain), JSON.stringify({ id: "s", title: "T", photo: "/assets/a.png", cards: [] }));
+});
+
+test("D-63 the frame of a guide section survives normalizePortiaContent and is idempotent", () => {
+  const content: Record<string, unknown> = structuredClone(defaultPortiaContent);
+  content.guideSections = [{ id: "s", title: "T", photo: "/assets/a.png", photoFraming: { x: 30, y: 70, zoom: 150 }, cards: [] }];
+  const once = normalizePortiaContent(content);
+  assert.deepEqual(once?.guideSections[0].photoFraming, { x: 30, y: 70, zoom: 150 });
+  assert.deepEqual(normalizePortiaContent(once), once);
+});
