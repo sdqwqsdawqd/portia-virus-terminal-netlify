@@ -565,12 +565,12 @@ test("the spider has an independent saved switch and stays visible and still whe
   assert.match(spiderSource, /attributeFilter:\s*\["data-motion", "data-spider"\]/);
 });
 
-// D-50 (20-34) заменяет D-26 в части цвета тела и деталей: паук как на логотипе владельца. Supersedes the quick 261102-d7r
-// «no outline» rule and the dark-palette fills: white body, near-black parts, accent second strand, thin light neutral rim (S1-А).
-// The full check lives in lib/wallpaper-web.test.ts.
-test("D-50 the spider rim token is a light neutral and its rim layer follows it", () => {
-  assert.match(css, /--spider-rim:\s*#d0d0d0;/);
-  assert.match(css, /\.wallpaper-spider-kant\s*\{[^}]*stroke:\s*var\(--spider-rim\)/);
+// D-53 (20-37) отменяет S1-А из D-50: без канта, без ободка, без токена канта (уточнение владельца 2026-11-07).
+// Остаётся окраска D-50: белое тело, чёрные части, вторая нить ног цвета акцента. Полная проверка рисунка — в lib/wallpaper-web.test.ts.
+test("D-53 (20-37) the spider has no rim token and no rim layer; the strand follows the accent", () => {
+  assert.doesNotMatch(css, /--spider-rim/);
+  assert.doesNotMatch(css, /wallpaper-spider-kant/);
+  assert.ok(!(accentTokenNames as readonly string[]).includes("--spider-rim"), "accentTokenNames has no rim token");
   assert.match(css, /\.wallpaper-spider-dark\s*\{[^}]*#070707/);
   assert.match(css, /\.wallpaper-spider-limb\s*\{[^}]*var\(--teal\)/);
   assert.match(css, /\.wallpaper-spider-pale\s*\{[^}]*#fdfdfd/);
@@ -578,17 +578,19 @@ test("D-50 the spider rim token is a light neutral and its rim layer follows it"
   assert.doesNotMatch(css, /wallpaper-spider-accent/);
 });
 
-// D-50 (20-34); G1 2026-11-05 — светлый кант на тёмном «Своём» — сохраняется: один светлый нейтральный кант на любом акценте,
-// контраст к столу не ниже 3:1 на пресетах и на очень тёмных и очень светлых «Своих».
-test("G1: the light spider rim keeps 3:1 against the desktop on presets and on very dark and very light custom accents", () => {
-  const rim = root.get("--spider-rim")!;
+// D-53 (20-37); уточнение владельца 2026-11-07: канта нет ни на каком акценте, на очень тёмном «Своём» ноги читаются хуже (владелец это
+// принимает), различимость на тёмном столе даёт белое тело: контраст #fdfdfd к столу не ниже 3:1 на пресетах и на шести «Своих».
+// Вторая нить ног — это --teal производного токена, то есть цвет акцента.
+test("D-53 (20-37): no rim token for any pick; the white body keeps 3:1 against the desktop and the strand is the derived accent", () => {
+  const body = hex("#fdfdfd");
   for (const [id, tokens] of [["root", root], ...Object.entries(themes)] as const) {
-    assert.ok(contrast(hex(rim), hex((tokens.get("--desktop-base") ?? root.get("--desktop-base"))!)) >= 3, `${id}: rim ${rim} on its desktop base`);
+    assert.ok(contrast(body, hex((tokens.get("--desktop-base") ?? root.get("--desktop-base"))!)) >= 3, `${id}: white body on its desktop base`);
   }
   for (const pick of ["#1a1a1a", "#0d0d0d", "#101820", "#f2f2f2", "#a0a0a0", "#ffffff"]) {
     const tokens = deriveAccentTokens(pick)!;
-    assert.equal(tokens["--spider-rim"], rim, `${pick}: S1-А — the same light neutral rim for any pick`);
-    assert.ok(contrast(hex(tokens["--spider-rim"]), hex(tokens["--desktop-base"])) >= 3, pick);
+    assert.equal(tokens["--spider-rim"], undefined, `${pick}: D-53 — no rim token`);
+    assert.match(tokens["--teal"], /^#[0-9a-f]{6}$/, `${pick}: the strand colour is the derived accent`);
+    assert.ok(contrast(body, hex(tokens["--desktop-base"])) >= 3, `${pick}: white body on the derived desktop base`);
   }
 });
 

@@ -70,9 +70,9 @@ test("the wallpaper spider starts randomly beside threads and relocates after an
   assert.ok(source.includes('const motionOn = () => root.dataset.motion !== "reduced" && root.dataset.motion !== "off";'));
 });
 
-// D-50 (20-34) заменяет D-26 в части цвета тела и деталей: паук как на логотипе владельца
-// (белое тело, чёрные части, вторая нить цвета акцента, тонкий светлый кант).
-test("D-50 the spider is drawn as the owner's logo spider: white body, black parts, accent strand, light rim", () => {
+// D-53 (20-37) отменяет S1-А из D-50: без канта и без белого внутри ног (уточнение владельца 2026-11-07). Остаётся окраска D-50:
+// белое тело, чёрные части, вторая нить ног цвета акцента.
+test("D-53 (20-37) the spider is the owner's logo spider: white body, black parts, accent strand, no rim and no white inside the legs", () => {
   const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
   const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
   const rule = (selector: string) => {
@@ -84,21 +84,16 @@ test("D-50 the spider is drawn as the owner's logo spider: white body, black par
   assert.match(dark, /fill:\s*#070707/, "the black parts are the sample's neutral near-black");
   assert.doesNotMatch(dark, /var\(--teal\)|color-mix/, "no accent tint in the black parts");
   assert.match(rule(".wallpaper-spider-limb"), /fill:\s*var\(--teal\)/, "S2-А: the second strand of the legs is the accent");
-  // D-50 S1-А: a thin light neutral rim round the outer edge, drawn as a rim layer under the parts; the parts themselves carry no stroke.
-  const kant = rule(".wallpaper-spider-kant");
-  assert.match(kant, /stroke:\s*var\(--spider-rim\)/);
-  assert.match(kant, /fill:\s*var\(--spider-rim\)/);
-  assert.match(kant, /stroke-linejoin:\s*round/);
-  assert.equal(rule(".wallpaper-spider :is(path, circle)").trim(), "", "the parts no longer carry the old dark stroke");
-  const width = Number(kant.match(/stroke-width:\s*([\d.]+)/)?.[1]);
-  assert.ok(width >= 14 && width <= 22, `about 1 CSS px of rim outside the silhouette at 72 px (stroke-width ${width} units, half of it shows)`);
-  const rim = styles.match(/(?:^|\n)\s*--spider-rim:\s*(#[0-9a-f]{6});/i)?.[1] ?? "";
-  const channels = [1, 3, 5].map((at) => parseInt(rim.slice(at, at + 2), 16));
-  assert.ok(Math.max(...channels) - Math.min(...channels) < 6 && Math.min(...channels) >= 0xb0, `:root --spider-rim ${rim} is a light neutral`);
+  // D-53: no rim layer, no rim token, no stroke on any part.
+  assert.ok(!source.includes("wallpaper-spider-kant"), "the component has no rim layer");
+  assert.doesNotMatch(styles, /wallpaper-spider-kant/, "the stylesheet has no rim rule");
+  assert.doesNotMatch(styles, /--spider-rim/, "no rim token in the stylesheet");
+  assert.doesNotMatch(source, /spider-rim/, "no rim token in the component");
+  assert.equal(rule(".wallpaper-spider :is(path, circle)").trim(), "", "the parts carry no stroke rule");
   assert.doesNotMatch(rule(".wallpaper-spider"), /color:\s*var\(--teal\)|opacity:\s*0?\.\d/, "the spider wrapper does not tint its parts with the accent");
-  // D-45: no SVG filter, blur or shadow anywhere in the spider rules.
+  // D-45 and D-53: no SVG filter, blur, shadow or stroke anywhere in the spider rules.
   for (const [, selector, body] of styles.matchAll(/([^{}]*\.wallpaper-spider[^{}]*)\{([^{}]*)\}/g)) {
-    assert.doesNotMatch(body, /filter|blur|drop-shadow/, `${selector.trim()} has no filter`);
+    assert.doesNotMatch(body, /filter|blur|drop-shadow|stroke-width|stroke:/, `${selector.trim()} has no filter and no stroke`);
   }
   assert.doesNotMatch(source, /<filter|filter=|feGaussianBlur|drop-shadow/);
   // The old accent pupils over the eyes are gone.
@@ -109,7 +104,8 @@ test("D-50 the spider is drawn as the owner's logo spider: white body, black par
 });
 
 // D-50 без вируса: the artwork is exactly the body (silhouette, head, fangs, four eyes) and eight leg groups; any extra group or shape fails here.
-test("D-50 без вируса: the artwork is the body, four eyes and eight [data-leg] groups with the same pivots", () => {
+// D-53 (20-37): тот же точный набор, но без слоя канта; белое только в теле, ноги без pale.
+test("D-53 (20-37) без вируса: the artwork is the body, four eyes and eight [data-leg] groups with the same pivots, no rim layer", () => {
   const source = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
   const ids = ["L1", "L2", "L3", "L4", "R1", "R2", "R3", "R4"];
   const legBlock = source.match(/const LEG_PARTS: [^=]*= \{([\s\S]*?)\n\};/)?.[1] ?? "";
@@ -123,15 +119,19 @@ test("D-50 без вируса: the artwork is the body, four eyes and eight [da
   assert.match(source, /type PartKind = "dark" \| "limb" \| "pale";/, "only the three artwork colours exist");
   assert.equal([...source.matchAll(/\["(dark|limb|pale)", "M/g)].length, 39, "the 39 paths of Spider.svg are kept");
   assert.equal(source.match(/\["(?!dark"|limb"|pale")\w+", "M/g), null, "no other part kind");
-  assert.equal(source.match(/<g[ >]/g)?.length, 3, "markup groups: leg, rim layer, body");
+  assert.equal(source.match(/<g[ >]/g)?.length, 2, "markup groups: leg and body only (D-53: no rim layer)");
   assert.match(source, /<g className="wallpaper-spider-leg" data-leg=\{leg\} style=\{legOrigin\(leg\)\} key=\{leg\}>/);
   assert.match(source, /<g className="wallpaper-spider-body">/);
   assert.equal(source.match(/<circle[ >]/g)?.length, 1, "one circle in the markup, drawn for each of the four eyes");
   const eyes = source.match(/const EYES[^=]*= \[([\s\S]*?)\];/)?.[1] ?? "";
   assert.equal([...eyes.matchAll(/\[[\d.]+, [\d.]+, [\d.]+\]/g)].length, 4, "four black eyes, no accent pupils");
-  // The rim layer sits in every leg group and in the body group, before the parts, and repeats only the black and strand parts.
-  assert.match(source, /<g className="wallpaper-spider-kant">\{parts\.filter\(\(\[kind\]\) => kind !== "pale"\)/);
-  assert.ok(source.indexOf('className="wallpaper-spider-kant"') < source.indexOf("parts.map(([kind, d]"), "the rim layer comes first");
+  // D-53 (20-37): the legs have no white part: pale parts live only in BODY_PARTS, and no rim layer is drawn.
+  const legsText = source.match(/const LEG_PARTS: [^=]*= \{([\s\S]*?)\n\};/)?.[1] ?? "";
+  assert.equal([...legsText.matchAll(/\["pale", "M/g)].length, 0, "no pale part in any leg (D-53)");
+  const bodyText = source.match(/const BODY_PARTS: [^=]*= \[([\s\S]*?)\n\];/)?.[1] ?? "";
+  assert.ok([...bodyText.matchAll(/\["pale", "M/g)].length >= 1, "the white parts are in the body group");
+  assert.ok(!source.includes("wallpaper-spider-kant"), "no rim layer in the groups");
+  assert.ok(source.includes("{parts.map(([kind, d], index) => <path key={index} className={`wallpaper-spider-${kind}`} d={d} />)}"), "a group draws only its parts");
   assert.match(source, /<SpiderParts parts=\{LEG_PARTS\[leg\]\} \/>/);
   assert.match(source, /<SpiderParts parts=\{BODY_PARTS\} \/>/);
 });
