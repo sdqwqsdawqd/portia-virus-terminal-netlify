@@ -1139,7 +1139,8 @@ const cyclesOf = (page: Page, selector: string): Promise<Array<CycleProbe & { in
     let best = -1, peak: number | null = null;
     if (properties.includes("opacity")) {
       for (let at = 0; at < duration; at += 20) {
-        animation.currentTime = delay + at;
+        // A negative current time is not honoured by the browser, so the time is wrapped into one cycle (the animations are endless, one cycle is the same as the next).
+        animation.currentTime = (((delay + at) % duration) + duration) % duration;
         const value = Number(getComputedStyle(target).opacity);
         if (value > best + 1e-6) { best = value; peak = at; }
       }
@@ -1383,7 +1384,9 @@ for (const accent of accents) {
           if (value > best) { best = value; at = Number(frame.computedOffset); }
         }
         animation.pause();
-        animation.currentTime = Number(timing.delay) + at * Number(timing.duration);
+        // The seek time is wrapped into one cycle: a negative current time (a phase delay longer than the peak) is not honoured by the browser.
+        const cycle = Number(timing.duration);
+        animation.currentTime = (((Number(timing.delay) + at * cycle) % cycle) + cycle) % cycle;
       }
     });
     const peakCount = await page.evaluate(() => document.getAnimations().filter((animation) => ((animation.effect as KeyframeEffect | null)?.target as Element | null)?.closest(".wallpaper-flasks") && animation.playState === "paused").length);
