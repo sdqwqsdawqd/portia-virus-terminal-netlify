@@ -4,6 +4,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { dossierTabs, type DossierTab } from "@/lib/editor-changes";
 import { makeId } from "@/lib/editor-items";
 import { classificationOptions, scientistLogPlainText, type Virus } from "@/lib/portia-content";
+import { ImageFramingEditor, type ImageFramingBox } from "@/components/portia-image-framing";
+import type { ImageFraming } from "@/lib/image-framing";
 import { isLocalMediaPath } from "@/lib/media-url";
 import { MAX_SCIENTIST_LOGS } from "@/lib/content-limits";
 import { passesTarget, type Box } from "@/lib/sort-order";
@@ -348,7 +350,7 @@ export function Field({ label, children, wide = false, error, errorId }: { label
   return <label className={`editor-field${wide ? " wide" : ""}${error ? " is-invalid" : ""}`}><span>{label}</span>{children}{error && <small id={errorId} className="editor-field-error" aria-hidden="true">{error}</small>}</label>;
 }
 
-export function ImageEditorField({ label, value, placement, maxHint, removeLabel, showPreview = true, uploadState = "idle", uploadMessage = "", onChange, onUpload }: {
+export function ImageEditorField({ label, value, placement, maxHint, removeLabel, showPreview = true, uploadState = "idle", uploadMessage = "", framing, framingBox, onFramingChange, onChange, onUpload }: {
   label: string;
   value: string;
   placement: ImagePlacement;
@@ -359,6 +361,11 @@ export function ImageEditorField({ label, value, placement, maxHint, removeLabel
   uploadState?: "idle" | "uploading" | "error";
   // Server or network refusal text, shown under the field; the value itself is never touched on refusal.
   uploadMessage?: string;
+  // D-63: the visible part of the picture. The block «Видимая часть» shows under the preview when the picture opened and a handler is given.
+  // A new, cleared or uploaded address drops the frame: it belonged to the old picture.
+  framing?: ImageFraming;
+  framingBox?: ImageFramingBox;
+  onFramingChange?: (framing: ImageFraming | undefined) => void;
   onChange: (value: string) => void;
   onUpload?: (file: File) => void;
 }) {
@@ -369,16 +376,33 @@ export function ImageEditorField({ label, value, placement, maxHint, removeLabel
   const [picked, setPicked] = useState(false);
   const uploading = uploadState === "uploading";
 
+  // A typed, pasted or cleared address that differs from the current one takes the frame of the old picture with it.
+  const changeAddress = (next: string) => {
+    if (next !== value && framing && onFramingChange) onFramingChange(undefined);
+    onChange(next);
+  };
+  // An upload brings a new address through the parent: the value the file was picked on is remembered, and the first different value drops the frame.
+  const addressAtPick = useRef<string | null>(null);
+  useEffect(() => {
+    if (addressAtPick.current === null || addressAtPick.current === value) return;
+    addressAtPick.current = null;
+    if (framing && onFramingChange) onFramingChange(undefined);
+  }, [value, framing, onFramingChange]);
+  useEffect(() => { if (uploadState === "error") addressAtPick.current = null; }, [uploadState]);
+
   const receiveFile = (file: File | undefined) => {
     if (uploading) return;
     if (file) setPicked(true);
-    if (file && onUpload) onUpload(file);
+    if (file && onUpload) {
+      addressAtPick.current = value;
+      onUpload(file);
+    }
   };
   const refusal = picked && uploadState === "error" ? uploadMessage : "";
 
   return <div className={`editor-field wide image-editor-field image-placement-${placement}`}>
     <span>{label}</span>
-    <input value={value} inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="Прямая HTTPS-ссылка на изображение или .gif" onChange={(event) => onChange(event.target.value)} onBlur={(event) => onChange(mediaUrlFromText(event.currentTarget.value))} onPaste={(event) => { const text = event.clipboardData.getData("text"); const url = mediaUrlFromText(text); if (url && url !== text) { event.preventDefault(); onChange(url); } }} />
+    <input value={value} inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="Прямая HTTPS-ссылка на изображение или .gif" onChange={(event) => changeAddress(event.target.value)} onBlur={(event) => changeAddress(mediaUrlFromText(event.currentTarget.value))} onPaste={(event) => { const text = event.clipboardData.getData("text"); const url = mediaUrlFromText(text); if (url && url !== text) { event.preventDefault(); changeAddress(url); } }} />
     <small className="editor-media-hint">{maxHint}. Для Tenor нужна ссылка с <b>media.tenor.com</b>.</small>
     {onUpload && <label className="editor-dropzone" aria-disabled={uploading || undefined} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event) => { event.preventDefault(); receiveFile(event.dataTransfer.files?.[0]); }}>
       <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => { receiveFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
@@ -387,7 +411,8 @@ export function ImageEditorField({ label, value, placement, maxHint, removeLabel
     </label>}
     {refusal && <span className="editor-media-error" role="alert">{refusal}</span>}
       {value && showPreview && !previewFailed && <figure className={`editor-image-preview ${placement}`}><img src={value} alt={`Предпросмотр: ${label}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedPreviewUrl(value)} /></figure>}
-    {value && removeLabel && <button type="button" className="secondary-control" onClick={() => onChange("")}>{removeLabel}</button>}
+    {value && !previewFailed && framingBox && onFramingChange && <ImageFramingEditor src={value} framing={framing} box={framingBox} label={label} onChange={onFramingChange} />}
+    {value && removeLabel && <button type="button" className="secondary-control" onClick={() => changeAddress("")}>{removeLabel}</button>}
     {value && previewFailed && <span className="editor-media-error">Не удалось открыть. Нужна прямая HTTPS-ссылка на файл.</span>}
   </div>;
 }

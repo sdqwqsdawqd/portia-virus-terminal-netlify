@@ -925,6 +925,29 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 /* An employee photo is a portrait: a small square crop, as on the personnel card. */
 .editor-image-preview.employee { max-width: 220px; }
 .editor-image-preview.employee img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+/* D-63 (20-53): the block «Видимая часть» under a picture field. The preview is the picture of the site in a frame of the site's kind:
+   a band (the «Справочник» section head: 12:1 in a PC window, 5.75:1 in a phone window, both measured), a 4:3 cover, or the picture as it lies. */
+.image-framing { grid-column: 1 / -1; display: grid; gap: 10px; min-width: 0; padding: 10px; border: 1px solid var(--line); background: var(--panel); box-sizing: border-box; }
+.image-framing-title { color: oklch(.751 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.image-framing-frame { position: relative; width: 100%; min-width: 0; margin: 0 auto; box-shadow: 0 0 0 1px var(--line); background: var(--panel-2); box-sizing: border-box; overflow: hidden; }
+.image-framing-frame.band { --image-framing-band-ratio: 12 / 1; aspect-ratio: var(--image-framing-band-ratio); }
+.image-framing-frame.tile { max-width: 240px; aspect-ratio: 4 / 3; }
+.image-framing-frame.band img, .image-framing-frame.tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.image-framing-frame.natural { max-width: 540px; }
+.image-framing-frame.natural .portia-image img { display: block; width: 100%; height: auto; max-height: min(64vh, 620px); margin: 0 auto; object-fit: contain; }
+.image-framing-controls { display: grid; gap: 8px; }
+.image-framing-row { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) 4em; align-items: center; gap: 10px; }
+.image-framing-row label { color: oklch(.614 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; overflow-wrap: anywhere; }
+.image-framing-row input[type="range"] { width: 100%; min-height: 24px; padding: 0; border: 0; background: transparent; accent-color: var(--teal); cursor: pointer; }
+.image-framing-row output { color: oklch(.751 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); font-variant-numeric: tabular-nums; text-align: right; }
+.image-framing-reset { justify-self: start; }
+@media (max-width: 900px) {
+  .image-framing-frame.band { --image-framing-band-ratio: 5.75 / 1; }
+  .image-framing-row { grid-template-columns: minmax(0, 1fr) 4em; row-gap: 2px; }
+  .image-framing-row label { grid-column: 1 / -1; }
+  .image-framing-row input[type="range"] { min-height: 44px; }
+  .image-framing-reset { min-height: 44px; min-width: 44px; }
+}
 
 .boot-screen { position: fixed; z-index: 999; inset: 0; display: grid; place-items: center; background: #020706; opacity: 1; visibility: visible; transition: opacity 220ms ease, visibility 220ms ease; animation: boot-screen-failsafe 220ms ease 2.2s forwards; }
 .boot-screen::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(var(--desktop-glow), .025) 0 1px, transparent 1px 4px); pointer-events: none; }

@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page, Request } from "@playwright/test";
-import { defaultPortiaContent } from "../../../lib/portia-content.ts";
+import { defaultPortiaContent, type PortiaContent } from "../../../lib/portia-content.ts";
 import { tabRegistry } from "../../../lib/editor-tabs.ts";
 import { DesktopPage } from "../pages/desktop.page";
 import { EditorPage } from "../pages/editor.page";
@@ -31,7 +31,7 @@ function trackWrites(page: Page) {
 
 /** Stubs only the two READS the desktop needs to mount the editor; a write to either path is aborted (and the tracker records it).
  *  D-63 chain: `content` replaces the default fixture and `puts` collects the body of PUT /api/content, which is then aborted too (the only write the chain tolerates). */
-async function stubEditorReads(page: Page, options: { content?: unknown; revision?: number; puts?: { content: Record<string, unknown>; revision: number }[] } = {}) {
+async function stubEditorReads(page: Page, options: { content?: unknown; revision?: number; puts?: { content: PortiaContent; revision: number }[] } = {}) {
   await page.route("**/api/access", async (route) => {
     if (route.request().method() !== "GET") return route.abort();
     await route.fulfill({
@@ -293,7 +293,7 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
 // Not proven here: editor rights, saving on the server, real photos (the owner's check, 20-UAT EDITOR-FRAMING-01).
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 
-type PutBody = { content: Record<string, unknown>; revision: number };
+type PutBody = { content: PortiaContent; revision: number };
 type Frame = { x: number; y: number; zoom: number };
 const chosenFrame: Frame = { x: 20, y: 80, zoom: 160 };
 
@@ -339,12 +339,19 @@ type Surface = {
   prepare: (page: Page) => Promise<void>;
   field: (page: Page) => Locator;
   /** The frame this surface got in the body of the PUT. */
-  saved: (content: Record<string, any>) => unknown;
+  saved: (content: PortiaContent) => unknown;
   /** Opens the site app with the surface and returns the span `.portia-image` that holds the picture. */
   site: (page: Page) => Promise<Locator>;
 };
 
-const saveButton = (page: Page) => page.getByRole("button", { name: "СОХРАНИТЬ", exact: true });
+const saveButton = (page: Page) => page.locator(".editor-save-popover").getByRole("button", { name: "СОХРАНИТЬ", exact: true });
+
+/** Unsaved edits sit behind the chip of the save bar: it opens the panel with «СОХРАНИТЬ». */
+async function save(page: Page) {
+  await page.locator(".editor-save-chip > button").click();
+  await expect(saveButton(page)).toBeEnabled();
+  await saveButton(page).click();
+}
 
 async function setSlider(group: Locator, name: string, from: number, to: number) {
   const slider = group.getByRole("slider", { name });
@@ -383,8 +390,7 @@ async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Su
   expect(preview.transform).toBe(`matrix(${chosenFrame.zoom / 100}, 0, 0, ${chosenFrame.zoom / 100}, 0, 0)`);
   expect(preview.transformOrigin).toBe(`${chosenFrame.x}% ${chosenFrame.y}%`);
 
-  await expect(saveButton(page)).toBeEnabled();
-  await saveButton(page).click();
+  await save(page);
   await expect.poll(() => puts.length, "the save reached the intercepted PUT").toBe(1);
   expect(surface.saved(puts[0].content), "the body of the PUT holds the chosen frame").toEqual(chosenFrame);
 
@@ -417,7 +423,7 @@ const guideSectionSurface: Surface = {
   content: fixtureContent({ guideSections: [{ id: "g-d63", title: "Раздел с фото", photo: "/assets/portia-assistant.png", cards: [] }] }),
   prepare: openSelectedSectionCard,
   field: (page) => page.locator(".image-editor-field").filter({ hasText: "Фото раздела" }),
-  saved: (content) => content.guideSections.find((section: { id: string }) => section.id === "g-d63")?.photoFraming,
+  saved: (content) => content.guideSections.find((section) => section.id === "g-d63")?.photoFraming,
   site: async (page) => {
     const desktop = new DesktopPage(page);
     await desktop.goto();
