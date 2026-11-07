@@ -4,7 +4,7 @@ title: Паук на фоне «Паутина» должен выглядеть
 area: wallpaper-spider
 phase: 20
 severity: medium
-status: implemented
+status: resolved
 files:
   - components/portia-wallpaper-spider.tsx
   - app/portia.css
@@ -38,3 +38,5 @@ files:
 Статус: реализовано (implemented), ждёт вердикта владельца по пересъёмке 20-47. Источник: вердикт владельца 2026-11-07 (20-37).
 
 D-53: без канта — 20-40 (f7a1faf172a9adbe029f066027e3890a0b18a598), походка и волны — 20-41 (db151677cf01d45f852b32e14d73725dd515dc70); вердикт владельца — 20-47.
+
+Принято владельцем 2026-11-08, 20-54: все строки spider-* (16) приняты («Да, остальное принято»), принятые hash записаны в 20-VISUAL-APPROVAL.md.
