@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-40-PLAN.md
-last_updated: "2026-11-07T06:59:19.891Z"
+stopped_at: Completed PORTIA-20-41-PLAN.md
+last_updated: "2026-11-07T07:12:20.071Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase PORTIA-20 execution started
-state_head: 560ad8f91da82724ce3603c5779e5b17122720f8
+state_head: 798e30b62a684586a8def02d1de0af985c536ed3
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 118
-  completed_plans: 108
+  completed_plans: 109
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — EXECUTING
-Plan: 14 of 47
+Plan: 15 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-07 — Phase PORTIA-20 execution started
 
@@ -141,6 +141,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P20-39 | split | 3 tasks | 12 files |
 | Phase PORTIA-20 P45 | 3 min | 2 tasks | 2 files |
 | Phase PORTIA-20 P20-40 | 8 min | 2 tasks | 7 files |
+| Phase PORTIA-20 P41 | 9 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -250,6 +251,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 20]: 20-37 outcome stopped-for-fixes: owner verdict 2026-11-07 asks to fix 36 rows (16 spider, 12 flasks, 8 template builder), decisions D-53..D-57 in 20-CONTEXT.md; 39 rebaseline/other rows have no verdict; access-request gate is a deferred idea; phase 20 needs a new gap cycle before 20-12
 - [Phase PORTIA-20]: 20-45 (D-57): editor launch button is the shared FormatLaunchButton; portia-editor.tsx guarded by a git sample test (449c756 + the one allowed hunk), needs full non-shallow clone; any future approved editor edit must extend the guard
 - [Phase PORTIA-20]: 20-40 (D-53): spider rim layer, rule and --spider-rim token removed entirely (cancels S1-A of D-50); legs have no white, strand follows accent; dark-accent legibility comes from the white body only (owner accepts); spider_art_commit f7a1faf172a9adbe029f066027e3890a0b18a598
+- [Phase PORTIA-20]: D-53 (20-41): размах каждой ноги считается из её длины (legSwingDegrees, LEG_REACH), около 9-10° у всех пар; таблицы размахов и подгиба по парам удалены — Ход стопы за опору 0.8-1.2 пути тела; задние пары на HEAD давали 0.25 и 0.49 и выглядели неподвижными
+- [Phase PORTIA-20]: D-53 (20-41): волны шага выделяются emitStepWaves с приоритетом над эхом, 16 слотов, жизнь 0.9 s, одна волна на сторону тела на постановку — Спрос 6.48 x 2 x 0.9 = 11.7 слотов при 16; на HEAD 607 из 874 постановок оставались без волны (8 слотов, 4 волны на постановку)
 
 ### Pending Todos
 
@@ -293,8 +296,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-07T06:59:19.319Z
-Stopped at: Completed PORTIA-20-40-PLAN.md
+Last session: 2026-11-07T07:12:19.470Z
+Stopped at: Completed PORTIA-20-41-PLAN.md
 Resume file: None
 
 ## Operator Next Step
