@@ -21,7 +21,7 @@ export function formatLaunchLabels(title: string | null): FormatLaunchLabels {
       // Whole words count (axe label-content-name-mismatch): «выберите текстовое» would not hold the word «текст».
       accessibleName: "Выберите текст: сначала выберите текстовое поле",
       tooltip: "Сначала выберите текстовое поле",
-      hint: "Одна кнопка форматирования работает со всеми большими текстовыми полями.",
+      hint: "Работает со всеми большими текстовыми полями.",
     };
   }
   return {
@@ -29,7 +29,7 @@ export function formatLaunchLabels(title: string | null): FormatLaunchLabels {
     visibleTitle: title,
     accessibleName: `Оформление ${title}: панель оформления текста`,
     tooltip: `Оформление: ${title}`,
-    hint: "Выделите текст в активном поле или поставьте курсор в слово, чтобы оформить его.",
+    hint: "Выделите текст или поставьте курсор в слово.",
   };
 }
 

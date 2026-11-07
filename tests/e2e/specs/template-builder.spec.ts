@@ -239,8 +239,8 @@ test("[STAB-TMPL-01] the form is the editor's virus card: three tabs, the same g
   for (const label of ["Внешние характеристики", "Физиологические характеристики", "Здоровье", "Скорость", "Способности"]) {
     await expect(textField(builder, label)).toBeVisible();
   }
-  // Pictures come only as files: the text hint says so and there is no address field anywhere.
-  await expect(builder.getByText("Картинки по ссылке в тексте шаблона не загружаются: добавьте изображение файлом.").first()).toBeVisible();
+  // Pictures come only as files: the text hint says so and there is no address field anywhere. D-56 (20-37): the hint is one short phrase.
+  await expect(builder.getByText("Изображения — только файлом.").first()).toBeVisible();
   await expect(builder.getByLabel(/адрес|ссылк/i)).toHaveCount(0);
 
   await openTab(builder, "Мутации");
@@ -829,14 +829,15 @@ test("[STAB-TMPL-01] participant builds a text template, downloads it and opens 
 
   const builder = promotion.window.locator(".template-builder");
   await expect(builder.getByRole("heading", { name: "Шаблон досье", level: 1 })).toBeVisible();
-  await expect(builder).toContainText("Текст и изображения хранятся только в этом сеансе и не отправляются на сервер; сайт и архив шаблон не меняет.");
+  // D-56 (20-37): the note at the top is one short phrase; the storage rules are no longer retold.
+  await expect(builder).toContainText("Скачайте файл и отправьте проверяющему вне сайта.");
   // The Promotion view is kept underneath, not rebuilt.
   await expect(promotion.heading(nickname)).toBeHidden();
 
   // Empty draft: labelled fields, honest preview, nothing to download yet.
   await expect(nameField(builder)).toHaveValue("");
   await expect(builder.getByRole("button", { name: "Скачать HTML" })).toBeDisabled();
-  await expect(builder.getByText("Введите текст хотя бы в одно поле или добавьте изображение, чтобы скачать файл.")).toBeVisible();
+  await expect(builder.getByText("Чтобы скачать, введите текст или добавьте изображение.")).toBeVisible(); // D-56 (20-37)
   await showPreview(builder);
   await expect(builder.getByLabel("Предпросмотр шаблона")).toContainText("Не заполнено");
   await showFields(builder);
@@ -918,8 +919,8 @@ test("[STAB-TMPL-01] unsaved text asks before leaving and a partial draft stays 
   await builder.getByRole("button", { name: "Вернуться к повышению" }).click();
   const confirm = builder.getByRole("alertdialog");
   await expect(confirm).toContainText("Черновик ещё не скачан");
-  await expect(confirm).toContainText("Текст и изображения хранятся только в этом сеансе");
-  await expect(confirm).toContainText("Данные на сервер не отправляются");
+  // D-56 (20-37): the confirmation keeps the consequence and drops the retold storage rules.
+  await expect(confirm).toContainText("Если вернуться сейчас, набранное будет потеряно.");
   await expect(confirm.getByRole("button", { name: "Остаться и скачать" })).toBeFocused();
 
   // Staying keeps every typed value.

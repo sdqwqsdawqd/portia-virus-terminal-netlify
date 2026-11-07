@@ -67,7 +67,8 @@ const hasCyrillic = (text: string) => /[Ѐ-ӿ]/.test(text);
 
 export function parseRegistry(markdown: string): HintRow[] {
   const rows: HintRow[] = [];
-  markdown.split("\n").forEach((text, index) => {
+  markdown.split("\n").forEach((raw, index) => {
+    const text = raw.trimEnd();
     if (!text.startsWith("| h-")) return;
     const cells = text.slice(2, text.endsWith(" |") ? -2 : undefined).split(" | ").map((cell) => cell.trim());
     assert.equal(cells.length, 7, `register line ${index + 1}: seven columns expected, got ${cells.length}`);

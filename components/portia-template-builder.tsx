@@ -63,7 +63,7 @@ type ExportFormat = "png" | "html";
 const preparingMinimumMs = 400;
 
 // The editor says "Текст и GIF можно использовать вместе"; a template is self-contained, so pictures are added as files only (D-24).
-const textHint = "Картинки по ссылке в тексте шаблона не загружаются: добавьте изображение файлом.";
+const textHint = "Изображения — только файлом.";
 
 type ImageSlot = "infected" | number;
 const slotKey = (slot: ImageSlot) => (slot === "infected" ? "infected" : `mutation:${slot}`);
@@ -85,17 +85,15 @@ function TemplateImageField({ label, placement, image, error, busy, onFile, onRe
 }) {
   const titleId = useId();
   const actionId = useId();
-  const hint = image
-    ? `Выбрано: ${image.name}, ${image.width}×${image.height}, ${sizeLabel(image.bytes)}. Файл не покидает это устройство.`
-    : "PNG, JPEG или WebP до 5 МБ. Файл остаётся на этом устройстве.";
+  const hint = image ? `Выбрано: ${image.name}, ${image.width}×${image.height}, ${sizeLabel(image.bytes)}.` : null;
   return <div className={`editor-field wide image-editor-field image-placement-${placement}`}>
     <span id={titleId}>{label}</span>
     <label className="editor-dropzone" aria-disabled={busy || undefined} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event) => { event.preventDefault(); onFile(event.dataTransfer.files?.[0]); }}>
       <input className="sr-only" type="file" accept={templateImageAccept} disabled={busy} aria-labelledby={`${titleId} ${actionId}`} data-testid="template-image-input" onChange={(event) => { onFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
       <strong id={actionId}>ВЫБРАТЬ ФАЙЛ С КОМПЬЮТЕРА</strong>
-      <small>или перетащите изображение сюда · PNG, JPEG, WebP · до 5 МБ</small>
+      <small>Перетащите · PNG, JPEG, WebP · до 5 МБ</small>
     </label>
-    <small className="editor-media-hint">{hint}</small>
+    {hint && <small className="editor-media-hint">{hint}</small>}
     {error && <span className="editor-media-error" role="alert">{templateImageOpenError}</span>}
     {image && <figure className={`editor-image-preview ${placement}`}>
       {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL; next/image cannot optimise it */}
@@ -398,7 +396,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
 
   const status = busy
     ? "Готовим файл…"
-    : phase === "done" ? "Файл скачан на устройство. Отправьте его проверяющему вне сайта." : "";
+    : phase === "done" ? "Файл скачан на устройство." : "";
 
   return <div
     className="template-builder promotion-app"
@@ -412,11 +410,11 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
         </div>
         <button ref={backRef} type="button" className="promotion-action template-back" onClick={requestClose} disabled={busy}>Вернуться к повышению</button>
       </header>
-      <p className="template-note">Работа скачивается на ваше устройство. Отправьте файл проверяющему вне сайта. Текст и изображения хранятся только в этом сеансе и не отправляются на сервер; сайт и архив шаблон не меняет.</p>
+      <p className="template-note">Скачайте файл и отправьте проверяющему вне сайта.</p>
 
       {confirmClose && <section ref={confirmRef} onKeyDown={trapConfirmTab} className="template-confirm" role="alertdialog" aria-modal="true" aria-labelledby={`${idPrefix}-confirm-title`} aria-describedby={`${idPrefix}-confirm-text`}>
         <strong id={`${idPrefix}-confirm-title`}>Черновик ещё не скачан</strong>
-        <p id={`${idPrefix}-confirm-text`}>Текст и изображения хранятся только в этом сеансе. Если вернуться сейчас, набранное будет потеряно. Данные на сервер не отправляются.</p>
+        <p id={`${idPrefix}-confirm-text`}>Если вернуться сейчас, набранное будет потеряно.</p>
         <div className="template-confirm-actions">
           <button ref={stayRef} type="button" className="promotion-action" onClick={dismissConfirm}>Остаться и скачать</button>
           <button type="button" className="promotion-action template-discard" onClick={onClose}>Вернуться без скачивания</button>
@@ -437,7 +435,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
             {phase === "error" && <button type="button" className="promotion-action" disabled={busy} onClick={() => { void runExport(lastFormat); }}>Повторить скачивание</button>}
           </div>
           <p id={`${idPrefix}-hint`} className="template-hint">
-            {hasContent ? (dirty ? "Текущий черновик ещё не скачан." : "Текущий черновик уже скачан.") : "Введите текст хотя бы в одно поле или добавьте изображение, чтобы скачать файл."}
+            {hasContent ? (dirty ? "Текущий черновик ещё не скачан." : "Текущий черновик уже скачан.") : "Чтобы скачать, введите текст или добавьте изображение."}
           </p>
           <p className="template-status" role="status" aria-live="polite">{status}</p>
           {phase === "error" && <p className="promotion-error" role="alert">{templateExportError}</p>}
