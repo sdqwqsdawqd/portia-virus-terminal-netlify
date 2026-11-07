@@ -434,7 +434,11 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), "u
 
 test("D-41 section editing stays in Справочник; Сводка and Рекомендации are plain lists (owner, 20-33)", () => {
   const editor = source("../components/portia-editor.tsx");
-  assert.equal((editor.match(/<SectionAddBar/g) ?? []).length, 1);
+  // D-62 (20-50): «Информация» takes the same pinned bar as «Справочник»; the other tabs never get one.
+  assert.equal((editor.match(/<SectionAddBar/g) ?? []).length, 2);
+  const tabBlock = (name: string, next: string) => editor.slice(editor.indexOf(`{tab === "${name}" && (`), editor.indexOf(`{tab === "${next}" && (`));
+  assert.equal((tabBlock("info", "guide").match(/<SectionAddBar/g) ?? []).length, 1, "«Информация» has the bar");
+  assert.equal((tabBlock("guide", "broadcasts").match(/<SectionAddBar/g) ?? []).length, 1, "«Справочник» has the bar");
   assert.match(editor, /next\.searchRecommendationSections = \[\]/);
   assert.match(editor, /draft\.searchRecommendations\.join\("\\n"\)/);
   assert.match(editor, /trimRecommendationSections\(/);
