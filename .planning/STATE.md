@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed 20-54-PLAN.md (stopped-for-fixes)
-last_updated: "2026-11-07T22:34:31.083Z"
-last_activity: 2026-11-07
+stopped_at: Completed 20-55-PLAN.md
+last_updated: "2026-11-07T23:01:22.200Z"
+last_activity: 2026-11-08
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: 4a2613e79ec7351d3aa05614b2ff164aa0f2134d
+state_head: 7f51705202c4c931da759b4012c37e3ded3b642b
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 129
-  completed_plans: 121
+  completed_plans: 122
   percent: 50
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 27 of 47
+Plan: 28 of 47
 Status: Executing Phase PORTIA-20
-Last activity: 2026-11-07 — Phase PORTIA-20 execution resumed (wave continue)
+Last activity: 2026-11-08 — Phase PORTIA-20 execution resumed (wave continue)
 
 Progress: [█████░░░░░] 50%
 
@@ -154,6 +154,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P52 | 5min | 1 tasks | 1 files |
 | Phase PORTIA-20 P53 | 100min | 3 tasks | 13 files |
 | Phase PORTIA-20 P54 | n/a | 3 tasks | 6 files |
+| Phase PORTIA-20 P55 | 2h | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -283,6 +284,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-52: владелец выбрал вариант b — фото сотрудников без выбора кадра; миграции и кода нет, 20-53 не подключает кадр к полю «Фото сотрудника»
 - [Phase PORTIA-20]: 20-53: блок «Видимая часть» во всех полях картинок редактора кроме фото сотрудника (b) и фото-блока страницы карточки; предпросмотр рисует рамку сайта сам (без импорта PortiaImage: граница конструктора шаблона); сброс кадра при смене адреса в обработчике и по метке загрузки; охрана D-64 вырезает атрибуты кадра только из строк <ImageEditorField
 - [Phase PORTIA-20]: 20-54: владелец 2026-11-08 принял 70 строк (колбы, паук, rebaseline, прочие, кнопка раздела в «Информации»), 16 строк на исправление: карточка шаблона (классификация как раньше, всегда две колонки) и выбор видимой части (предпросмотр с рамкой как баннер в Discord вместо ползунков); outcome stopped-for-fixes, 20-12 не запускается
+- [Phase PORTIA-20]: 20-55 D-65: template card classification is the archive's grid; two columns on a PC from 584px content width; values sized by cell width (12-15px), whole word under badge; template_fix_commit d1d7b0f177522a14303171621398ed12ecd7ded5
 
 ### Pending Todos
 
@@ -326,8 +328,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-07T21:50:06.724Z
-Stopped at: Completed 20-54-PLAN.md (stopped-for-fixes)
+Last session: 2026-11-07T23:01:21.631Z
+Stopped at: Completed 20-55-PLAN.md
 Resume file: None
 
 ## Operator Next Step
