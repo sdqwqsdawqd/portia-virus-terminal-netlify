@@ -34,8 +34,8 @@ const stateLimit = 12;
 const longTextWords = 7;
 const ownerPhrases = ["локальный черновик", "не запись архива", "не запись в архив"];
 
-// Files whose register rows are applied: the old text must be gone and the new one present. Task 1 of 20-46 starts with the builder and the launch
-// button, Task 2 adds the desktop, Promotion, the editors' shared components and the login page, Task 3 closes the list.
+// Files whose register rows are applied: the old text must be gone and the new one present. 20-46 applied them in three steps (the builder and the
+// launch button, then the desktop, Promotion, the shared editor components and the login page, then the editor file); this list is now every file of the register.
 const appliedFiles = [
   "components/portia-template-builder.tsx",
   "lib/format-launch.ts",
@@ -48,6 +48,8 @@ const appliedFiles = [
   "components/portia-promotion-ordinary-editor.tsx",
   "components/portia-promotion-qualification-editor.tsx",
   "app/owner-login/page.tsx",
+  // The editor file is listed too: its rows are all kept (D-58), and they are checked like every other row.
+  "components/portia-editor.tsx",
 ];
 
 export type HintRow = {
@@ -217,6 +219,19 @@ test("D-56 (20-37): the register has a row for every hint and the rows are well 
 test("D-56 (20-37): the register and the sources agree (old texts gone, new texts present, nothing unrecorded, no sample phrases)", () => {
   const errors = validateRegistry(registry(), realEnv, appliedFiles);
   assert.deepEqual(errors, [], `\n${errors.join("\n")}\n`);
+});
+
+test("D-56 (20-37): every file of the register is applied and the «Итог» numbers match the rows", () => {
+  const rows = registry();
+  assert.deepEqual([...appliedFiles].sort(), [...new Set(rows.map((row) => row.file))].sort(), "the applied list is the set of the register files");
+  const markdown = readFileSync(`${root}${registryPath}`, "utf8");
+  const number = (label: string) => Number(new RegExp("^\\s*[-*] " + label + ": (\\d+)\\s*$", "m").exec(markdown)?.[1] ?? Number.NaN);
+  const count = (predicate: (row: HintRow) => boolean) => rows.filter(predicate).length;
+  assert.equal(number("Строк всего"), rows.length);
+  assert.equal(number("Сокращено"), count((row) => row.decision === shortened));
+  assert.equal(number("Убрано"), count((row) => row.decision === removed));
+  assert.equal(number("Оставлено"), count((row) => row.decision.startsWith("оставлено")));
+  assert.equal(number("D-58"), count((row) => row.decision === editorKept));
 });
 
 test("D-58: every editor row keeps its text and no hint of the editor file is shortened or removed", () => {

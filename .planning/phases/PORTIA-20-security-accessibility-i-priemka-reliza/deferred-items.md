@@ -31,3 +31,8 @@
 
 - `npm.cmd test` на HEAD после db6deb1 даёт 4 fail из 1452: `lib/phase20-release-gate.test.ts` тесты «readWaivers reads the real registry: PW-07 accepted by the owner, PW-10 still awaiting», «classifyPlaywright + waivers: a failure under a waiver without the owner's verdict is FAIL», «aggregate: the registry itself is judged when Playwright gates ran» и «runGate Playwright: the e2e gate with a waiver registry marks only an owner-accepted failure as waived». Причина: db6deb1 (запись владельца о принятии PW-10 в 20-PLAYWRIGHT-WAIVERS.md) сделан после 20-30, а тесты 20-30 ждут PW-10 без вердикта в реальном реестре. 20-29 этих файлов не менял. Нужно привязать фикстуры к копии реестра, а не к живому файлу (план 20-30 или 20-13).
   → Закрыто в 74ce5c7 (проверено в 20-31): реальный реестр судится как «все waivers приняты» (PW-07 и PW-10 приняты владельцем 2026-11-04), правила для непринятого waiver доказываются на копии реестра с PW-10 без вердикта; `npm.cmd test` на HEAD: 0 fail.
+
+Найдено при выполнении 20-46 (вне объёма плана, не исправлено):
+
+- `accessibility.spec.ts:674` «[STAB-A11Y-02] «Информация» on a phone: the list and an article screen have no critical or serious axe violations» (chromium-phone): тест берёт первый раздел с названием из `/api/content` (id `what-is-virus`) и ищет `[data-info-id]` в списке, а на телефоне после 20-16 (D-29) список показывает только разделы верхнего уровня («01 Вирус ▸ 3»), подраздел не виден, и `click` ждёт 30 с. Правки 20-46 «Информацию» не касаются (в `portia-desktop.tsx` изменены только тексты подсказок настроек, поиска, Корзины и уведомления). Тест нужно привести к устройству списка D-29: раскрыть раздел перед выбором подраздела.
+  status: open
