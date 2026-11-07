@@ -91,7 +91,7 @@
 
 - [ ] **STAB-A11Y-01**: PC controls имеют name/role/state, видимый focus, корректный trap/restore в dialogs и keyboard alternative для действия, доступного только drag. (Pending — gap closure 20-31: живой trap/restore квалификации — BLOCKED (ENV), пройден только контракт UI на заглушке (20-28); ролевые поверхности и ручки редактора — BLOCKED (ENV); физический PC (20-14) не проведён.)
 - [ ] **STAB-A11Y-02**: Phone actions доступны touch без hover, не перекрываются keyboard/sticky bars, имеют практичную tap area и не создают page-level horizontal overflow.
-- [x] **STAB-A11Y-03**: Русские labels, success/error/disabled reason понятны и объявляются; нет пустых, шуточных, удвоенных или непереведённых technical labels; alt соответствует назначению изображения. (Pending — gap closure 20-31: экранный диктор не проверен (A11Y-SR-01; без устройства — BLOCKED (DEVICE)); medium-контраст в «Архиве», «Глобальном поиске» и «Корзине» — FAIL до вердикта владельца D-10.)
+- [ ] **STAB-A11Y-03**: Русские labels, success/error/disabled reason понятны и объявляются; нет пустых, шуточных, удвоенных или непереведённых technical labels; alt соответствует назначению изображения. (Pending — gap closure 20-31: экранный диктор не проверен (A11Y-SR-01; без устройства — BLOCKED (DEVICE)); medium-контраст в «Архиве», «Глобальном поиске» и «Корзине» — FAIL до вердикта владельца D-10.)
 - [ ] **STAB-A11Y-04**: Итоговая motion-настройка применяется ко всем поверхностям; off/reduced прекращает looping movement, но сохраняет content и feedback.
 - [x] **STAB-SEC-01**: Anon, authenticated, editor, reviewer и owner видят и изменяют только разрешённые данные; запрещённые UI/API/table/RPC действия fail-closed, revoke действует без rebuild.
 - [x] **STAB-SEC-02**: Participant network/UI не получает answer keys, future questions, internal notes, bank payload и reviewer identity; sensitive responses используют no-store.
@@ -207,7 +207,7 @@
 | STAB-MEDIA-07 | Phase 20 | Pending |
 | STAB-A11Y-01 | Phase 20 | Pending |
 | STAB-A11Y-02 | Phase 20 | Pending |
-| STAB-A11Y-03 | Phase 20 | Complete |
+| STAB-A11Y-03 | Phase 20 | Pending |
 | STAB-A11Y-04 | Phase 20 | Pending |
 | STAB-SEC-01 | Phase 16 | Complete |
 | STAB-SEC-02 | Phase 20 | Complete |
