@@ -18,7 +18,9 @@ import { captureCandidate } from "./support";
 //
 // D-55 (20-43): the builder has a view switch «Поля» / «Предпросмотр». The frames main, text and mutations are taken in the view «Поля»;
 // the frame preview is taken in the view «Предпросмотр», where the card is the archive's own card (VirusCardBody) over the whole width.
-// A PC frame of the preview maximizes the Promotion window first, as the archive's card needs about 840 px of its own width for two columns.
+// D-65 (20-55): the PC frame of the preview is taken in the Promotion window of the NORMAL size (the owner's «Всегда как в «Базе вирусов»»): the card is two columns
+// (the photo left, the classification right), the classes are three, the method of spread, three, and the values are whole. The phone frame is the card as the archive's
+// record is on the same phone.
 
 const lanes = new Set(["chromium-desktop", "chromium-phone"]);
 test.beforeEach(({}, testInfo) => {
@@ -270,12 +272,8 @@ test("[STAB-TMPL-01] template-builder-preview: a filled draft scrolled to the pr
   await styleFirstWord(page, builder, textField(builder, "Описание"), "Реагирует", "Важно", true);
   await builder.locator("[data-testid=template-image-input]").setInputFiles({ name: "mutation.png", mimeType: "image/png", buffer: mutationPng });
 
-  // The view «Предпросмотр»: the archive's card over the whole width; on a PC the window is maximized so the card is two-column like the archive's.
+  // The view «Предпросмотр»: the archive's card over the whole width of the window; on a PC the window keeps its normal size (D-65).
   await builder.getByRole("group", { name: "Вид", exact: true }).getByRole("button", { name: "Предпросмотр", exact: true }).click();
-  if (testInfo.project.name === "chromium-desktop") {
-    await page.getByRole("button", { name: "Развернуть Повышение" }).click();
-    await expect.poll(async () => (await promotion.window.boundingBox())?.width ?? 0).toBeGreaterThan(1200);
-  }
   const preview = builder.getByLabel("Предпросмотр шаблона");
   await expect(preview.getByRole("img", { name: "Фото после заражения" })).toBeVisible();
   await expect(preview.locator(".section-kicker")).toHaveCount(5);
@@ -287,7 +285,10 @@ test("[STAB-TMPL-01] template-builder-preview: a filled draft scrolled to the pr
   await assertNoOverflow(page, builder);
   await captureCandidate(context, {
     id: "template-builder-preview", requirement: "STAB-BASE-03", surface, actor,
-    state: "D-52 / STAB-TMPL-01 UI-контракт (подменено одно чтение статуса участника, не доказательство ролей): заполненный черновик, вид «Предпросмотр» (D-55): карточка «Базы вирусов» на всю ширину, окрашенные иконки классов, разделы 01–05, подвал «ШАБЛОН» (на PC окно развёрнуто)",
+    state: "D-52 / STAB-TMPL-01 UI-контракт (подменено одно чтение статуса участника, не доказательство ролей): заполненный черновик, вид «Предпросмотр» (D-55): карточка «Базы вирусов» на всю ширину, окрашенные иконки классов, разделы 01–05, подвал «ШАБЛОН»; " +
+      (testInfo.project.name === "chromium-desktop"
+        ? "D-65: окно «Повышение» обычного размера: фото слева, классы три — способ распространения — три, значения цельные"
+        : "D-65: как «База вирусов» на телефоне: фото сверху, классы под ним в том же порядке"),
     intendedSnapshot: snapshot("preview", testInfo.project.name),
   });
 });

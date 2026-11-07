@@ -6,7 +6,7 @@ import type { Browser, Locator, Page, Request, TestInfo, ViewportSize } from "@p
 import { DesktopPage } from "../pages/desktop.page";
 import { PromotionPage } from "../pages/promotion.page";
 import { templateExportViolations } from "../../../lib/portia-template-export.ts";
-import { classificationOptions } from "../../../lib/portia-content.ts";
+import { classificationOptions, defaultPortiaContent } from "../../../lib/portia-content.ts";
 import { deterministicContract } from "../fixtures/determinism";
 import { expect, test } from "../fixtures/test";
 
@@ -1097,7 +1097,9 @@ test("[STAB-TMPL-01] D-60 class values stay whole in the preview and in the down
   const { html, target } = await downloadHtml(page, builder, testInfo, "classes.html");
   // The rule travels into the file with the card (templateCardCss), so the file is read at the card's own width and at a phone's.
   expect(html).toContain("class-cell");
-  expect(html, "the card's rule for class values is in the file").toMatch(/\.template-card-preview \.class-cell strong\{[^}]*overflow-wrap:normal/);
+  // D-65 (20-55): the rule is the size of the value by the width of its cell (not below 12 px) and no break inside a word, not columns by value.
+  expect(html, "the card's rule for class values is in the file").toMatch(/\.template-card-preview \.class-cell strong\{[^}]*overflow-wrap:normal[^}]*font-size:clamp\(12px,/);
+  expect(html, "the card's grid is the archive's (no columns by value)").not.toContain("min(100%, 200px)");
   for (const width of [1060, 412]) {
     const offline = await browser.newContext({ offline: true, locale: "ru-RU", viewport: { width, height: 900 } });
     try {
@@ -1118,8 +1120,11 @@ test("[STAB-TMPL-01] D-60 class values stay whole in the preview and in the down
 // The owner (2026-11-08): «было три сверху, посередине способ распространения и три снизу, а не как сейчас» and, to the question about the columns,
 // «Всегда как в «Базе вирусов»». The card's classification is the archive's grid (three cells, the method of spread across the whole width, three cells);
 // a class value never breaks in the middle of a word because its size follows the cell's width (not smaller than 12 px), not because the grid changes.
-// On a PC the card is always two columns (the photo left, the classification right) in the Promotion window of the normal size and maximized.
-// The reading «always as in the archive» is the planner's; it is put to the owner in the gallery of 20-58 (q-template-phone for the phone).
+// On a PC the card is always two columns (the photo left, the classification right) in the Promotion window of the normal size and maximized; below
+// the measured width of the card (the window narrowed by hand towards its 620 px minimum) it stacks. On a phone it is laid out like the archive on the
+// same phone. The reading «always as in the archive» is the planner's; it is put to the owner in the gallery of 20-58 (q-template-phone for the phone).
+// The phone test answers GET /api/content with a fixture for the archive's own record (a read only; trackWrites on both pages stays empty): a UI contract,
+// not a proof of roles or of live data.
 
 type Box = { top: number; left: number; right: number; bottom: number; width: number };
 type CardLayout = {
@@ -1129,12 +1134,13 @@ type CardLayout = {
   gridColumns: number;
   gridInner: number;
   cells: { label: string; box: Box }[];
+  values: ClassValueMeasure[];
   documentWidth: number;
   cardWidth: number;
   pageOverflow: number;
 };
 
-/** Runs inside the page: the geometry of one card (`scope` is the card's selector). Installed as window.__cardProbe so one source serves every measurement. */
+/** Runs inside the page: the geometry of one card or record (`scope` is its selector). Installed as window.__cardProbe so one source serves every measurement. */
 function cardProbe(scope: string) {
   const root = document.querySelector(scope);
   if (root === null) return null;
@@ -1142,15 +1148,40 @@ function cardProbe(scope: string) {
     const rect = element.getBoundingClientRect();
     return { top: rect.top, left: rect.left, right: rect.right, bottom: rect.bottom, width: rect.width };
   };
+  const tracks = (element: Element) => getComputedStyle(element).gridTemplateColumns.split(/\s+/).filter((track) => track !== "").length;
   const hero = root.querySelector(".record-hero")!;
   const grid = root.querySelector(".classification-grid")!;
   return {
-    heroColumns: getComputedStyle(hero).gridTemplateColumns.split(/\s+/).filter((track) => track !== "").length,
+    heroColumns: tracks(hero),
     photo: box(hero.querySelector(":scope > .subject-media")!),
     panel: box(hero.querySelector(":scope > .classification-panel")!),
-    gridColumns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/).filter((track) => track !== "").length,
+    gridColumns: tracks(grid),
     gridInner: grid.clientWidth,
     cells: Array.from(grid.querySelectorAll(".class-cell")).map((cell) => ({ label: cell.querySelector("span")?.textContent ?? "", box: box(cell) })),
+    values: Array.from(grid.querySelectorAll(".class-cell strong")).map((strong) => {
+      const cell = strong.closest(".class-cell")!;
+      const tops = new Set<number>();
+      let right = -1e9; // the hidden export frame sits at a negative x, so the running maximum must start far below it
+      for (const node of Array.from(strong.childNodes)) {
+        if (node.nodeType !== Node.TEXT_NODE || (node.textContent ?? "").trim() === "") continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        for (const rect of Array.from(range.getClientRects())) {
+          tops.add(Math.round(rect.top));
+          right = Math.max(right, rect.right);
+        }
+      }
+      const cellBox = cell.getBoundingClientRect();
+      return {
+        text: (strong.textContent ?? "").trim(),
+        lines: tops.size,
+        textRight: Math.round(right * 10) / 10,
+        cellRight: Math.round(cellBox.right * 10) / 10,
+        cellOverflow: cell.scrollWidth - cell.clientWidth,
+        cellWidth: Math.round(cellBox.width * 10) / 10,
+        fontSize: Number.parseFloat(getComputedStyle(strong).fontSize),
+      };
+    }),
     documentWidth: root.querySelector(".record-document")!.clientWidth,
     cardWidth: root.getBoundingClientRect().width,
     pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -1168,14 +1199,31 @@ async function measureCardLayout(page: Page, scope = ".template-card-preview"): 
   return layout as CardLayout;
 }
 
+/**
+ * The hidden export frame is mounted, read and unmounted inside one synchronous step (flushSync, then captureCard), so nothing outside can see it between
+ * tasks. captureCard serializes the card for the PNG, so a pass-through spy on XMLSerializer measures the card at that very moment, while the frame still
+ * holds it; the spy changes nothing and calls the original.
+ */
+async function watchExportFrame(page: Page) {
+  await installCardProbe(page);
+  await page.evaluate(() => {
+    const store = window as unknown as { __cardProbe: (scope: string) => unknown; __frameLayout?: unknown };
+    store.__frameLayout = undefined;
+    const original = XMLSerializer.prototype.serializeToString;
+    XMLSerializer.prototype.serializeToString = function serializeToString(this: XMLSerializer, node: Node) {
+      if (store.__frameLayout === undefined && node instanceof Element && node.matches(".template-export-frame .template-card-preview")) store.__frameLayout = store.__cardProbe(".template-export-frame .template-card-preview");
+      return original.call(this, node);
+    };
+  });
+}
+
 const near = (a: number, b: number, tolerance = 1) => Math.abs(a - b) <= tolerance;
+const classLabels = ["Общий уровень опасности", "Распространение", "Угроза и риск побега", "Способ распространения", "Разум", "Вид / внешность", "Поведение"];
 
 /** The archive's order: three cells on one line, then the method of spread across the grid, then three cells on one line. */
 function expectArchiveGrid(layout: CardLayout, where: string) {
   expect(layout.gridColumns, `${where}: the grid keeps the archive's three columns`).toBe(3);
-  expect(layout.cells.map((cell) => cell.label), `${where}: the cells keep the archive's order`).toEqual([
-    "Общий уровень опасности", "Распространение", "Угроза и риск побега", "Способ распространения", "Разум", "Вид / внешность", "Поведение",
-  ]);
+  expect(layout.cells.map((cell) => cell.label), `${where}: the cells keep the archive's order`).toEqual(classLabels);
   const [danger, spread, escape, transmission, mind, appearance, behavior] = layout.cells.map((cell) => cell.box);
   expect(near(danger.top, spread.top) && near(spread.top, escape.top), `${where}: danger, spread and escape share a top`).toBe(true);
   expect(transmission.top, `${where}: the method of spread is under the first three`).toBeGreaterThanOrEqual(Math.max(danger.bottom, spread.bottom, escape.bottom) - 1);
@@ -1190,25 +1238,57 @@ function expectValuesFit(measures: ClassValueMeasure[], where: string) {
 }
 
 function expectTwoColumns(layout: CardLayout, where: string) {
+  expect(layout.heroColumns, `${where}: the hero has two columns`).toBe(2);
   expect(layout.panel.left, `${where}: the classification stands beside the photo`).toBeGreaterThanOrEqual(layout.photo.right - 1);
   expect(layout.panel.top - layout.photo.top, `${where}: the classification starts level with the photo`).toBeLessThanOrEqual(20);
+}
+
+function expectStacked(layout: CardLayout, where: string) {
+  expect(layout.heroColumns, `${where}: the hero has one column`).toBe(1);
+  expect(layout.panel.top, `${where}: the photo is on top, the classification under it`).toBeGreaterThanOrEqual(layout.photo.bottom - 1);
+}
+
+const describeLayout = (layout: CardLayout) => `card ${Math.round(layout.cardWidth)}px, document ${layout.documentWidth}px, hero columns ${layout.heroColumns}, photo ${Math.round(layout.photo.width)}px, panel ${Math.round(layout.panel.width)}px, grid columns ${layout.gridColumns}, cell ${Math.round(layout.cells[0].box.width)}px, «Предупреждение» ${layout.values.find((value) => value.text === "Предупреждение")?.fontSize}px`;
+
+/** The Promotion window's own edge is dragged, as a hand does it (the same way desktop-windows.spec.ts resizes). */
+async function dragWindowEdge(page: Page, window: Locator, edge: "e" | "w", by: number) {
+  const handle = await window.locator(`.window-edge-${edge}`).boundingBox();
+  if (handle === null) throw new Error("the window edge has no box");
+  const from = { x: handle.x + handle.width / 2, y: handle.y + handle.height / 2 };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + by / 2, from.y, { steps: 4 });
+  await page.mouse.move(from.x + by, from.y, { steps: 4 });
+  await page.mouse.up();
 }
 
 test("[STAB-TMPL-01] D-65 the card is laid out like the archive's record: photo left, three classes, the method of spread, three classes", async ({ page, browser, isMobile }, testInfo) => {
   test.skip(isMobile, "The two-column PC layout; the phone is the next test.");
   const writes = trackWrites(page);
-  const { builder } = await openBuilder(page);
+  const { promotion, builder } = await openBuilder(page);
   await nameField(builder).fill("Раскладка как в базе");
   await chooseLongestClassValues(builder);
   await showPreview(builder);
+  const note = (kind: string, layout: CardLayout) => testInfo.annotations.push({ type: `d65-${kind}`, description: describeLayout(layout) });
 
   // Window of the normal size (760 px): the card is two columns here too.
   const normal = await measureCardLayout(page);
-  testInfo.annotations.push({ type: "d65-normal", description: `card ${normal.cardWidth}px, document ${normal.documentWidth}px, hero columns ${normal.heroColumns}, photo ${normal.photo.width}px, panel ${normal.panel.width}px, cell ${normal.cells[0].box.width}px` });
-  expect(normal.heroColumns, "window of the normal size: two columns").toBe(2);
+  note("normal", normal);
   expectTwoColumns(normal, "window of the normal size");
   expectArchiveGrid(normal, "window of the normal size");
-  expectValuesFit(await measureClassValues(page), "window of the normal size");
+  expectValuesFit(normal.values, "window of the normal size");
+
+  // The hidden frame the PNG is made from: laid out at the file's width, with the same hero, grid and values.
+  await watchExportFrame(page);
+  const png = page.waitForEvent("download");
+  await builder.getByRole("button", { name: "Скачать PNG" }).click();
+  await png;
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __frameLayout?: unknown }).__frameLayout !== undefined)).toBe(true);
+  const frame = (await page.evaluate(() => (window as unknown as { __frameLayout: unknown }).__frameLayout)) as CardLayout;
+  note("frame", frame);
+  expectTwoColumns(frame, "export frame (source of the PNG)");
+  expectArchiveGrid(frame, "export frame (source of the PNG)");
+  expectValuesFit(frame.values, "export frame (source of the PNG)");
 
   // The downloaded file at the card's own width: the same hero, grid and values.
   const { target } = await downloadHtml(page, builder, testInfo, "layout.html");
@@ -1218,12 +1298,93 @@ test("[STAB-TMPL-01] D-65 the card is laid out like the archive's record: photo 
     await filePage.goto(pathToFileURL(target).href);
     await expect(filePage.getByRole("heading", { level: 2 })).toHaveText("Раскладка как в базе");
     const file = await measureCardLayout(filePage);
-    expect(file.heroColumns, "downloaded HTML at 1060 px: two columns").toBe(2);
+    note("file-1060", file);
     expectTwoColumns(file, "downloaded HTML at 1060 px");
     expectArchiveGrid(file, "downloaded HTML at 1060 px");
-    expectValuesFit(await measureClassValues(filePage), "downloaded HTML at 1060 px");
+    expectValuesFit(file.values, "downloaded HTML at 1060 px");
+  } finally {
+    await offline.close();
+  }
+
+  // The window narrowed by hand to its minimum (620 px): the grid and the values hold; the hero is two columns or one, exactly as the measured threshold
+  // says (two columns from 584 px of the document's content width), and the number is written down for the owner's question q-template-phone.
+  await dragWindowEdge(page, promotion.window, "e", -300);
+  await expect.poll(async () => Math.round((await promotion.window.boundingBox())?.width ?? 0)).toBeLessThanOrEqual(621);
+  const narrow = await measureCardLayout(page);
+  note("min-620", narrow);
+  const content = await page.evaluate(() => {
+    const documentElement = document.querySelector(".template-card-preview .record-document")!;
+    const style = getComputedStyle(documentElement);
+    return documentElement.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+  });
+  if (content >= 584) expectTwoColumns(narrow, `window of the minimum width (content ${content}px)`);
+  else expectStacked(narrow, `window of the minimum width (content ${content}px)`);
+  expectArchiveGrid(narrow, "window of the minimum width");
+  expectValuesFit(narrow.values, "window of the minimum width");
+  testInfo.annotations.push({ type: "d65-min-content", description: `${content}px of the document's content at the window's minimum` });
+
+  // Maximized: two columns, the archive's own wide layout.
+  await page.getByRole("button", { name: "Развернуть Повышение" }).click();
+  await expect.poll(async () => (await promotion.window.boundingBox())?.width ?? 0).toBeGreaterThan(1200);
+  const wide = await measureCardLayout(page);
+  note("maximized", wide);
+  expectTwoColumns(wide, "window maximized");
+  expectArchiveGrid(wide, "window maximized");
+  expectValuesFit(wide.values, "window maximized");
+  expect(writes).toEqual([]);
+});
+
+test("[STAB-TMPL-01] D-65 on a phone the card is laid out like the archive's record on the same phone", async ({ page, isMobile, browser }, testInfo) => {
+  test.skip(!isMobile, "The phone layout; the PC is the previous test.");
+  const writes = trackWrites(page);
+  // The archive's record of a virus with the longest value of all seven axes, on the same phone (a second page of this context, a read answered by a fixture).
+  const content = structuredClone(defaultPortiaContent);
+  content.viruses[0].classification = Object.fromEntries(classAxes.map((axis, index) => [axis, longestClassValues[index]])) as typeof content.viruses[0]["classification"];
+  const archivePage = await page.context().newPage();
+  const archiveWrites = trackWrites(archivePage);
+  await archivePage.route("**/api/content**", async (route) => {
+    if (route.request().method() !== "GET") return route.abort();
+    await route.fulfill({ status: 200, contentType: "application/json", headers: { "cache-control": "no-store" }, body: JSON.stringify({ content, revision: 1, updatedAt: null }) });
+  });
+  const archiveDesktop = new DesktopPage(archivePage);
+  await archiveDesktop.goto();
+  await archiveDesktop.openApp("База вирусов");
+  await expect(archiveDesktop.window("База вирусов").locator(".record-view .record-body")).toBeVisible();
+  const archive = await measureCardLayout(archivePage, '[aria-label="База вирусов"] .record-view');
+  await archivePage.close();
+  testInfo.annotations.push({ type: "d65-archive-phone", description: describeLayout(archive) });
+  expectStacked(archive, "the archive on the phone");
+
+  const { builder } = await openBuilder(page);
+  await nameField(builder).fill("Телефон как в базе");
+  await chooseLongestClassValues(builder);
+  await showPreview(builder);
+  const card = await measureCardLayout(page);
+  testInfo.annotations.push({ type: "d65-phone", description: describeLayout(card) });
+  expectStacked(card, "the card on the phone");
+  expect(card.gridColumns, "the card's grid has the archive's number of columns on this phone").toBe(archive.gridColumns);
+  expect(card.cells.map((cell) => cell.label), "the cells keep the archive's order").toEqual(archive.cells.map((cell) => cell.label));
+  expect(card.cells.map((cell) => cell.label)).toEqual(classLabels);
+  expectValuesFit(card.values, "the card on the phone");
+  expect(card.pageOverflow, "the page does not scroll sideways").toBeLessThanOrEqual(0);
+
+  // The downloaded file at a phone's width: the same layout as the archive on the phone.
+  const { target } = await downloadHtml(page, builder, testInfo, "phone.html");
+  const offline = await browser.newContext({ offline: true, locale: "ru-RU", viewport: { width: 412, height: 900 } });
+  try {
+    const filePage = await offline.newPage();
+    await filePage.goto(pathToFileURL(target).href);
+    await expect(filePage.getByRole("heading", { level: 2 })).toHaveText("Телефон как в базе");
+    const file = await measureCardLayout(filePage);
+    testInfo.annotations.push({ type: "d65-file-412", description: describeLayout(file) });
+    expectStacked(file, "downloaded HTML at 412 px");
+    expect(file.gridColumns, "the file's grid has the archive's number of columns at 412 px").toBe(archive.gridColumns);
+    expect(file.cells.map((cell) => cell.label)).toEqual(archive.cells.map((cell) => cell.label));
+    expectValuesFit(file.values, "downloaded HTML at 412 px");
+    expect(file.pageOverflow, "the file does not scroll sideways at 412 px").toBeLessThanOrEqual(0);
   } finally {
     await offline.close();
   }
   expect(writes).toEqual([]);
+  expect(archiveWrites).toEqual([]);
 });
