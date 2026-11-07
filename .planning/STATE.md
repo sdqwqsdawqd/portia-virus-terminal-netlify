@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-51-PLAN.md
-last_updated: "2026-11-07T18:11:54.587Z"
+stopped_at: Completed PORTIA-20-52-PLAN.md
+last_updated: "2026-11-07T18:17:45.911Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: b44fc3d60348616b03024acf5d51a7fdd00c2be2
+state_head: 69050f99a2042aeb00ce669aabd6d4570ee08b0a
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 125
-  completed_plans: 118
+  completed_plans: 119
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 24 of 47
+Plan: 25 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-07 — Phase PORTIA-20 execution resumed (wave continue)
 
@@ -151,6 +151,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P49 | 50 min | 2 tasks | 6 files |
 | Phase PORTIA-20 P50 | 12 min | 2 tasks | 7 files |
 | Phase PORTIA-20 P51 | 28 min | 3 tasks | 10 files |
+| Phase PORTIA-20 P52 | 5min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -277,6 +278,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-50: STAB-EDIT-01, STAB-EDIT-02 и STAB-A11Y-02 не отмечены Complete (ждут галереи 20-54); STAB-A11Y-03 возвращён в Pending (закрытие 20-49 отметило его без вердикта PC)
 - [Phase PORTIA-20]: 20-50: axe редактора терпит два прежних узла (метка .nested-editor-toggle, контраст .eyebrow) по разметке узла; перенесённый блок без допусков; находки в deferred-items.md
 - [Phase PORTIA-20]: 20-51: кадр картинки D-63 = три целых числа (x,y 0–100, zoom 100–300), читаются только собственные конечные числа, кадр без картинки и кадр по умолчанию отбрасываются; поля вируса и мутации вынимаются из разворота withoutNote и ставятся заново из нормализованных чисел; PortiaImage нормализует кадр вторым разом, стиль только числами
+- [Phase PORTIA-20]: 20-52: владелец выбрал вариант b — фото сотрудников без выбора кадра; миграции и кода нет, 20-53 не подключает кадр к полю «Фото сотрудника»
 
 ### Pending Todos
 
@@ -320,8 +322,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-07T18:11:53.960Z
-Stopped at: Completed PORTIA-20-51-PLAN.md
+Last session: 2026-11-07T18:17:45.314Z
+Stopped at: Completed PORTIA-20-52-PLAN.md
 Resume file: None
 
 ## Operator Next Step
