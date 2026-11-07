@@ -144,7 +144,10 @@ async function pasteText(field: Locator, text: string) {
   await field.evaluate((element, value) => {
     const data = new DataTransfer();
     data.setData("text/plain", value);
-    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    // A plain Event with an own clipboardData reads the same in every engine: Firefox hands a synthetic ClipboardEvent a protected, empty DataTransfer (D-61, 20-49: first Firefox run of this spec).
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: data });
+    element.dispatchEvent(paste);
   }, text);
 }
 

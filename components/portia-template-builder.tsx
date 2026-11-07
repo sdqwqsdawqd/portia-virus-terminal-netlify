@@ -358,6 +358,8 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
         content = await renderTemplateCardPng(svg, height);
       }
       await minimumShown;
+      // D-61: downloadTemplateBlob throws only before the browser has the file; once it returns the file is handed over, so "done" is
+      // set whatever the cleanup after the click did, and the error below can only mean that no file was passed.
       downloadTemplateBlob(content, format === "png" ? templatePngFileName : templateFileName);
       setExportedKey(snapshotKey);
       setPhase("done");

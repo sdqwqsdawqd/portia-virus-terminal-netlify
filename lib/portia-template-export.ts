@@ -141,29 +141,60 @@ export function escapeTemplateHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-/** Starts a browser download of `content` (HTML text or a Blob) and releases the object URL afterwards. */
+export type TemplateDownloadEnvironment = { document: Document; URL: typeof URL; setTimeout: typeof setTimeout };
+
+/**
+ * The window's own functions, wrapped so that none of them is ever called as a method of this object (D-61): a native Window function such as
+ * setTimeout throws a TypeError ("Illegal invocation", "does not implement interface Window") when its `this` is any other object.
+ */
+function windowDownloadEnvironment(): TemplateDownloadEnvironment {
+  return {
+    document,
+    URL,
+    setTimeout: ((handler: TimerHandler, timeout?: number) => window.setTimeout(handler, timeout)) as typeof setTimeout,
+  };
+}
+
+/**
+ * Starts a browser download of `content` (HTML text or a Blob) and releases the object URL afterwards.
+ *
+ * D-61: it throws only while the file has NOT been handed to the browser (the anchor could not be built or clicked). Once `anchor.click()` has
+ * returned the file is the browser's, and nothing that follows (removing the anchor, scheduling the release of the link) may throw out of here,
+ * so the caller's "downloaded" status always matches what happened.
+ */
 export function downloadTemplateBlob(
   content: string | Blob,
   fileName: string = templateFileName,
-  environment: { document: Document; URL: typeof URL; setTimeout: typeof setTimeout } = { document, URL, setTimeout },
+  environment: TemplateDownloadEnvironment = windowDownloadEnvironment(),
 ) {
   const blob = typeof content === "string" ? new Blob([content], { type: "text/html;charset=utf-8" }) : content;
   const url = environment.URL.createObjectURL(blob);
+  let anchor: HTMLAnchorElement | null = null;
   try {
-    const anchor = environment.document.createElement("a");
+    anchor = environment.document.createElement("a");
     anchor.href = url;
     anchor.download = fileName;
     anchor.rel = "noopener";
     anchor.style.display = "none";
     environment.document.body.append(anchor);
     anchor.click();
-    anchor.remove();
   } catch (error) {
+    try { anchor?.remove(); } catch { /* the failure that matters is the one being rethrown */ }
     environment.URL.revokeObjectURL(url);
     throw error;
   }
-  // Revoking in the same tick can cancel the download in some browsers.
-  environment.setTimeout(() => environment.URL.revokeObjectURL(url), 10_000);
+  // From here on the file is with the browser: cleanup failures are swallowed.
+  try { anchor.remove(); } catch { /* a stray hidden anchor is harmless */ }
+  const release = () => { try { environment.URL.revokeObjectURL(url); } catch { /* nothing left to release */ } };
+  try {
+    // Revoking in the same tick can cancel the download in some browsers. The function is read off the environment and called on its own:
+    // as a method of that object a native setTimeout throws (D-61).
+    const schedule = environment.setTimeout;
+    schedule(release, 10_000);
+  } catch {
+    // No timer: releasing now is the fallback, and the download has already started.
+    release();
+  }
 }
 
 /* ---------------------------------------------------------------- captions shared with the preview */
