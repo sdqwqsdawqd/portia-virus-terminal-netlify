@@ -1,5 +1,6 @@
 "use client";
 
+import { type ImageFraming } from "@/lib/image-framing";
 import { type PortiaContent, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
 import { PortiaIcon } from "@/components/portia-icons";
 import { PortiaImage } from "@/components/portia-desktop-media";
@@ -16,7 +17,7 @@ export function VirusRecord({ virus, formattedText, onOpenLog }: { virus: Virus;
     key={virus.id}
     virus={virus}
     formattedText={formattedText}
-    media={(slot) => <MediaBlock src={slot.kind === "infected" ? virus.infectedImage : virus.mutations[slot.index]?.image ?? ""} alt={slot.alt} label={slot.label} recordId={slot.recordId} priority={slot.priority} />}
+    media={(slot) => <MediaBlock src={slot.kind === "infected" ? virus.infectedImage : virus.mutations[slot.index]?.image ?? ""} framing={slot.kind === "infected" ? virus.infectedImageFraming : virus.mutations[slot.index]?.imageFraming} alt={slot.alt} label={slot.label} recordId={slot.recordId} priority={slot.priority} />}
     after={records}
     footer={["PORTIA / SCIENCE REPORTS", <>ЗАПИСЬ {virus.code}</>]}
   />;
@@ -76,10 +77,10 @@ function ScientistRichText({ log }: { log: ScientistLog }) {
   return <FormattedText className="scientist-rich-text" text={log.content.join("\n\n")} document={document} />;
 }
 
-function LoadingMedia({ src, alt, label, recordId, priority }: { src: string; alt: string; label: string; recordId: string; priority: "hero" | "lazy" }) {
+function LoadingMedia({ src, alt, label, recordId, priority, framing }: { src: string; alt: string; label: string; recordId: string; priority: "hero" | "lazy"; framing?: ImageFraming }) {
   // A failed, blocked or slow picture becomes the «Изображение недоступно» placeholder of the same size; the label stays readable (STAB-MEDIA-05).
   return <figure className="subject-media">
-    <PortiaImage src={src} alt={alt} recordId={recordId} priority={priority} icon="virus" />
+    <PortiaImage src={src} alt={alt} recordId={recordId} priority={priority} icon="virus" framing={framing} />
     <figcaption>{label}</figcaption>
   </figure>;
 }
@@ -90,7 +91,7 @@ export function LoadingState({ label }: { label: string }) {
 }
 
 // recordId names the record the picture belongs to; priority is "hero" only for the opened dossier's own image.
-export function MediaBlock({ src, alt, label, recordId, priority }: { src: string; alt: string; label: string; recordId: string; priority: "hero" | "lazy" }) {
-  if (src) return <LoadingMedia src={src} alt={alt} label={label} recordId={recordId} priority={priority} />;
+export function MediaBlock({ src, alt, label, recordId, priority, framing }: { src: string; alt: string; label: string; recordId: string; priority: "hero" | "lazy"; framing?: ImageFraming }) {
+  if (src) return <LoadingMedia src={src} alt={alt} label={label} recordId={recordId} priority={priority} framing={framing} />;
   return <figure className="subject-media media-empty"><img src="/assets/portia-logo.png" alt="" aria-hidden="true" /><div><span>ВИЗУАЛЬНЫЙ МАТЕРИАЛ</span><strong>ОЖИДАЕТ ЗАГРУЗКИ</strong><small>{label}</small></div></figure>;
 }

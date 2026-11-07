@@ -171,7 +171,7 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
         <div className="guide-grid" id={gridId} hidden={folded}>
           {!section.cards.length && <p className="guide-section-empty">В разделе пока нет карточек</p>}
           {section.cards.map((item) => <button key={item.id} type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}${hitId === item.id ? " search-hit" : ""}`} data-card-id={item.id} {...(hitId === item.id ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => openTile(item.id)}>
-            {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" /></span>}
+            {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" framing={item.coverFraming} /></span>}
             <span className="guide-tile-title">{item.title || "Без названия"}</span>
           </button>)}
         </div>

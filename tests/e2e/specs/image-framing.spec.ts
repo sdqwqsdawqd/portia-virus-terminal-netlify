@@ -11,7 +11,8 @@ import { expect, test } from "../fixtures/test";
 
 const framed = { x: 20, y: 80, zoom: 160 };
 // Not a frame: a string where a number belongs and a key with a style injection. The site shows such a picture as it shows one without a frame.
-const garbage = { x: "20; background:url(//evil.example/x)", y: 80, zoom: 160, extra: "expression(alert(1))" };
+// The cast only silences the type of the fixture field: the value is exactly what a hostile request could carry.
+const garbage = { x: "20; background:url(//evil.example/x)", y: 80, zoom: 160, extra: "expression(alert(1))" } as unknown as typeof framed;
 
 /** Every request that could write to our API or Supabase (GET and HEAD are reads). */
 function trackWrites(page: Page) {
@@ -103,6 +104,9 @@ test.describe("[STAB-REL-08] D-63 the site shows the part of a picture that the 
     await desktop.goto();
     await desktop.openApp("Справочник");
     const guide = desktop.window("Справочник");
+    // A folded section is not rendered, and the computed transform of an element without a box reads «none»: open it first.
+    const head = guide.locator('.guide-section-head[aria-expanded="false"]');
+    if (await head.count()) await head.first().click();
     const cover = (title: string) => guide.locator(".guide-tile").filter({ hasText: title }).locator(".guide-tile-cover");
     await expectFramed(cover("Карточка с кадром"), framed);
     await expectUnframed(cover("Карточка без кадра"));

@@ -36,13 +36,15 @@ function normalizeRecycleFiles(value: unknown, viruses: PortiaContent["viruses"]
       !["virus", "text", "image"].includes(file.kind ?? "")
     ) return [];
 
+    const image = normalizeMediaUrl(file.image);
     return [{
       id: file.id,
       name: file.name,
       location: typeof file.location === "string" ? file.location : "C:\\PORTIA\\RECYCLE_BIN",
       kind: file.kind as RecycleFile["kind"],
       content: typeof file.content === "string" ? file.content : "",
-      image: normalizeMediaUrl(file.image),
+      image,
+      ...framingEntry("imageFraming", image, file.imageFraming),
       virusId: typeof file.virusId === "string" ? file.virusId : "",
     }];
   });
@@ -110,6 +112,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(v
 const withoutNote = (record: Record<string, unknown>): Record<string, unknown> => {
   const rest = { ...record };
   delete rest.note;
+  return rest;
+};
+
+// D-63: the spreads of virus and mutation keep unknown keys, so a frame field is taken out of the spread and set again from normalized numbers.
+const withoutNoteAndKey = (record: Record<string, unknown>, key: string): Record<string, unknown> => {
+  const rest = withoutNote(record);
+  delete rest[key];
   return rest;
 };
 
@@ -197,8 +206,10 @@ function normalizeInfoBlock(value: unknown, subsectionId: string, index: number)
       return [{ id, type: "text", text: asText(value.text) }];
     case "table":
       return [{ id, type: "table", rows: normalizeTableRows(value.rows, id) }];
-    case "photo":
-      return [{ id, type: "photo", url: normalizeMediaUrl(value.url) }];
+    case "photo": {
+      const url = normalizeMediaUrl(value.url);
+      return [{ id, type: "photo", url, ...framingEntry("framing", url, value.framing) }];
+    }
     case "video":
       return [{ id, type: "video", videoId: typeof value.videoId === "string" && youtubeIdPattern.test(value.videoId) ? value.videoId : "" }];
     default:
@@ -260,10 +271,12 @@ function normalizeGuideBlock(value: unknown, cardId: string, index: number): Gui
 function normalizeGuideCard(value: unknown, sectionId: string, index: number): GuideCard[] {
   if (!isRecord(value)) return [];
   const id = typeof value.id === "string" && value.id ? value.id : `${sectionId}-card-${index}`;
+  const cover = normalizeMediaUrl(value.cover);
   return [{
     id,
     title: asText(value.title),
-    cover: normalizeMediaUrl(value.cover),
+    cover,
+    ...framingEntry("coverFraming", cover, value.coverFraming),
     blocks: (Array.isArray(value.blocks) ? value.blocks : []).flatMap((block, blockIndex) => normalizeGuideBlock(block, id, blockIndex)),
   }];
 }
@@ -298,8 +311,9 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
   const normalizeVirus = (virus: Record<string, unknown>, id: string): Virus => {
     const ppu = isRecord(virus.ppu) ? virus.ppu : {};
     const classification = isRecord(virus.classification) ? virus.classification : {};
+    const infectedImage = normalizeMediaUrl(virus.infectedImage);
     return {
-      ...withoutNote(virus),
+      ...withoutNoteAndKey(virus, "infectedImageFraming"),
       id,
       code: textOf(virus.code),
       name: textOf(virus.name),
@@ -310,11 +324,13 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
       classification: Object.fromEntries(
         Object.keys(classificationOptions).map((key) => [key, canonicalClassificationName(textOf(classification[key]))]),
       ) as Virus["classification"],
-      infectedImage: normalizeMediaUrl(virus.infectedImage),
+      infectedImage,
+      ...framingEntry("infectedImageFraming", infectedImage, virus.infectedImageFraming),
       mutations: Array.isArray(virus.mutations)
         ? virus.mutations.map((item) => {
             const mutation = isRecord(item) ? item : {};
-            return { ...withoutNote(mutation), name: textOf(mutation.name), description: textOf(mutation.description), image: normalizeMediaUrl(mutation.image) };
+            const image = normalizeMediaUrl(mutation.image);
+            return { ...withoutNoteAndKey(mutation, "imageFraming"), name: textOf(mutation.name), description: textOf(mutation.description), image, ...framingEntry("imageFraming", image, mutation.imageFraming) };
           })
         : [],
       scientistLogs: Array.isArray(virus.scientistLogs)

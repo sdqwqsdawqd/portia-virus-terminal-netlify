@@ -1768,7 +1768,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                       // nocookie embed, id validated by normalizePortiaContent (D-09); default referrer policy, YouTube refuses embeds without a Referer.
                       ? <YoutubeFigure key={block.id} videoId={block.videoId} title={selectedSubsection.title} />
                       : block.type === "photo" && block.url
-                        ? <figure key={block.id} className="info-block-photo"><PortiaImage src={block.url} alt={`Иллюстрация: ${selectedSubsection.title}`} recordId={block.id} priority="lazy" icon="info" /></figure>
+                        ? <figure key={block.id} className="info-block-photo"><PortiaImage src={block.url} alt={`Иллюстрация: ${selectedSubsection.title}`} recordId={block.id} priority="lazy" icon="info" framing={block.framing} /></figure>
                         : null)}</div>{infoNext && <div className="info-next"><button type="button" onClick={() => goInfoNext(infoNext)}>Далее: {infoNext.title}</button></div>}</div>
                 : <div className="content-fade" key={selectedInfo.id}><h1 tabIndex={infoPhone ? -1 : undefined}>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} />{infoNext && <div className="info-next"><button type="button" onClick={() => goInfoNext(infoNext)}>Далее: {infoNext.title}</button></div>}</div>
               ) : null}</article>
@@ -1832,7 +1832,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
                   <div className="trash-viewer-body doc-print">
                     {activeTrashFile.kind === "image" ? (
                       <figure className="trash-image-document">
-                        <PortiaImage src={activeTrashFile.image} alt={activeTrashFile.name} recordId={activeTrashFile.id} priority="lazy" icon="trash" />
+                        <PortiaImage src={activeTrashFile.image} alt={activeTrashFile.name} recordId={activeTrashFile.id} priority="lazy" icon="trash" framing={activeTrashFile.imageFraming} />
                         {activeTrashFile.content && <figcaption><FormattedText text={activeTrashFile.content} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} /></figcaption>}
                       </figure>
                     ) : (
