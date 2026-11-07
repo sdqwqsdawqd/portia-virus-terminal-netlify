@@ -659,3 +659,102 @@ test("D-63 normalizing content with frames on every surface twice gives the same
   assert.deepEqual(normalizePortiaContent(once), once);
   assert.equal(JSON.stringify(once).includes("expression"), false);
 });
+
+// D-63 / T-20-107 (20-51): the end-to-end case of «запрос PUT». PUT /api/content stores only normalizePortiaContent(body.content) (the route is not changed in this plan),
+// so a body with trap frames in all six fields goes through it and nothing but bounded whole numbers may come out.
+const TRAP = "TRAPMARK";
+
+function trapFrames(): unknown[] {
+  return [
+    { x: `1;background:url(//${TRAP}.example/x)`, y: 2, zoom: 150 },
+    { x: 1, y: `expression(${TRAP})`, zoom: 150 },
+    { x: 1, y: 2, zoom: `150;position:fixed;${TRAP}` },
+    { x: { a: `url(${TRAP})` }, y: 2, zoom: 150 },
+    { x: [`url(${TRAP})`], y: 2, zoom: 150 },
+    { x: 1, y: 2, zoom: 150, extra: `url(${TRAP})`, style: `expression(${TRAP})` },
+    JSON.parse(`{"x":1,"y":2,"zoom":150,"__proto__":{"x":"${TRAP};url(","polluted":"${TRAP}"},"constructor":{"x":"${TRAP}"}}`),
+    JSON.parse(`{"__proto__":{"x":1,"y":2,"zoom":150}}`),
+    { x: 1e9, y: -1e9, zoom: 1e9 },
+    { x: -1e9, y: 1e9, zoom: -1e9 },
+    { x: Number.MAX_VALUE, y: -Number.MAX_VALUE, zoom: Number.MAX_VALUE },
+    `url(${TRAP})`,
+    [1, 2, 150],
+  ];
+}
+
+/** Every frame the normalized content holds, with where it sits. */
+function allFrames(content: NonNullable<ReturnType<typeof normalizePortiaContent>>) {
+  const found: { path: string; value: unknown }[] = [];
+  const add = (path: string, value: unknown, owner: object, key: string) => {
+    if (key in owner) found.push({ path, value });
+  };
+  for (const [listName, viruses] of [["viruses", content.viruses], ["recycledViruses", content.recycledViruses]] as const) {
+    viruses.forEach((virus, index) => {
+      add(`${listName}[${index}].infectedImageFraming`, (virus as Record<string, unknown>).infectedImageFraming, virus, "infectedImageFraming");
+      virus.mutations.forEach((mutation, mutationIndex) => add(`${listName}[${index}].mutations[${mutationIndex}].imageFraming`, (mutation as Record<string, unknown>).imageFraming, mutation, "imageFraming"));
+    });
+  }
+  content.guideSections.forEach((section, index) => {
+    add(`guideSections[${index}].photoFraming`, (section as Record<string, unknown>).photoFraming, section, "photoFraming");
+    section.cards.forEach((card, cardIndex) => add(`guideSections[${index}].cards[${cardIndex}].coverFraming`, (card as Record<string, unknown>).coverFraming, card, "coverFraming"));
+  });
+  content.infoSections.forEach((section, index) => section.subsections.forEach((sub, subIndex) => sub.blocks.forEach((block, blockIndex) => {
+    if (block.type === "photo") add(`infoSections[${index}].subsections[${subIndex}].blocks[${blockIndex}].framing`, (block as Record<string, unknown>).framing, block, "framing");
+  })));
+  content.recycleFiles.forEach((file, index) => add(`recycleFiles[${index}].imageFraming`, (file as Record<string, unknown>).imageFraming, file, "imageFraming"));
+  return found;
+}
+
+test("D-63 T-20-107 a PUT body with trap frames in all six fields leaves only bounded whole numbers or no key", () => {
+  for (const [trapIndex, trap] of trapFrames().entries()) {
+    const body = contentWith({
+      viruses: [virusWith({ infectedImage: "/assets/portia-logo.png", infectedImageFraming: trap, mutations: [{ name: "A", description: "", image: "/assets/portia-logo.png", imageFraming: trap }] })],
+      recycledViruses: [virusWith({ id: "recycled-trap", infectedImage: "/assets/portia-logo.png", infectedImageFraming: trap, mutations: [{ name: "B", description: "", image: "/assets/portia-logo.png", imageFraming: trap }] })],
+      guideSections: [{ id: "g", title: "G", photo: "/assets/a.png", photoFraming: trap, cards: [{ id: "c", title: "C", cover: "/assets/a.png", coverFraming: trap, blocks: [] }] }],
+      infoSections: [{ id: "i", title: "I", body: "", subsections: [{ id: "s", title: "S", blocks: [{ id: "b", type: "photo", url: "/assets/a.png", framing: trap }] }] }],
+      recycleFiles: [{ id: "f", name: "n", kind: "image", location: "L", content: "", image: "/assets/a.png", imageFraming: trap, virusId: "" }],
+    });
+    // The wire: the route reads JSON text, so the body is serialized and parsed the way the request body is.
+    const content = normalizePortiaContent(JSON.parse(JSON.stringify(body)));
+    assert.ok(content, `trap ${trapIndex} still normalizes`);
+    const frames = allFrames(content);
+    for (const { path, value } of frames) {
+      assert.ok(value && typeof value === "object", `${path} (trap ${trapIndex}) is an object when present`);
+      const frame = value as Record<string, unknown>;
+      assert.deepEqual(Object.keys(frame).sort(), ["x", "y", "zoom"], `${path} (trap ${trapIndex}) has exactly three keys`);
+      assert.ok(Number.isInteger(frame.x) && (frame.x as number) >= 0 && (frame.x as number) <= 100, `${path}.x`);
+      assert.ok(Number.isInteger(frame.y) && (frame.y as number) >= 0 && (frame.y as number) <= 100, `${path}.y`);
+      assert.ok(Number.isInteger(frame.zoom) && (frame.zoom as number) >= 100 && (frame.zoom as number) <= 300, `${path}.zoom`);
+      assert.equal(Object.getPrototypeOf(frame), Object.prototype, `${path} is a plain object`);
+    }
+    const text = JSON.stringify(content);
+    assert.equal(text.includes(TRAP), false, `no part of trap ${trapIndex} is stored`);
+    assert.equal(text.includes("url("), false);
+    assert.equal(text.includes("expression("), false);
+    // Frames, taken alone, hold no character that could open a style value: no «;», «(», quote inside a value or letter outside the three keys.
+    const frameText = JSON.stringify(frames.map((frame) => frame.value));
+    assert.match(frameText, /^[\d[\]{},:"xyzom-]*$/, `trap ${trapIndex}: frames hold digits and the three keys only`);
+    assert.equal(({} as Record<string, unknown>).polluted, undefined, "Object.prototype is untouched");
+    assert.equal(({} as Record<string, unknown>).x, undefined);
+  }
+});
+
+test("D-63 T-20-107 a trap that is a real frame under its junk is kept as the three clamped numbers", () => {
+  const body = contentWith({ guideSections: [{ id: "g", title: "G", photo: "/assets/a.png", photoFraming: trapFrames()[5], cards: [] }] });
+  const content = normalizePortiaContent(JSON.parse(JSON.stringify(body)));
+  assert.deepEqual(content?.guideSections[0].photoFraming, { x: 1, y: 2, zoom: 150 });
+  const wild = normalizePortiaContent(JSON.parse(JSON.stringify(contentWith({ guideSections: [{ id: "g", title: "G", photo: "/assets/a.png", photoFraming: trapFrames()[8], cards: [] }] }))));
+  assert.deepEqual(wild?.guideSections[0].photoFraming, { x: 100, y: 0, zoom: 300 });
+});
+
+test("D-63 T-20-109 a restricted editor without the «Справочник» tab cannot change a frame inside it", () => {
+  const stored = contentWith({ guideSections: [{ id: "g", title: "G", photo: "/assets/a.png", photoFraming: frameA, cards: [{ id: "c", title: "C", cover: "/assets/a.png", coverFraming: frameA, blocks: [] }] }] });
+  const baseline = normalizePortiaContent(stored);
+  const changedPhoto = normalizePortiaContent(contentWith({ guideSections: [{ id: "g", title: "G", photo: "/assets/a.png", photoFraming: { x: 21, y: 80, zoom: 160 }, cards: [{ id: "c", title: "C", cover: "/assets/a.png", coverFraming: frameA, blocks: [] }] }] }));
+  const changedCover = normalizePortiaContent(contentWith({ guideSections: [{ id: "g", title: "G", photo: "/assets/a.png", photoFraming: frameA, cards: [{ id: "c", title: "C", cover: "/assets/a.png", coverFraming: { x: 20, y: 80, zoom: 170 }, blocks: [] }] }] }));
+  assert.ok(baseline && changedPhoto && changedCover);
+  assert.equal(contentRefusal(baseline, baseline, ["info", "broadcasts"]), null, "an unchanged frame is no change");
+  assert.equal(contentRefusal(baseline, changedPhoto, ["info", "broadcasts"])?.code, "section-closed");
+  assert.equal(contentRefusal(baseline, changedCover, ["info", "broadcasts"])?.code, "section-closed");
+  assert.equal(contentRefusal(baseline, changedPhoto, ["info", "broadcasts", "guide"]), null, "with the tab open the same change is allowed");
+});
