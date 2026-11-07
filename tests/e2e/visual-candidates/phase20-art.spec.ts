@@ -121,10 +121,17 @@ for (const accent of accents) {
     for (const fill of probe.eyes) expect(luminance(fill), `eye ${fill} is black`).toBeLessThan(0.01);
 
     // Pixel probe (D-53): hide the white body for the measurement only, shoot the spider element and read every pixel with alpha above 0.5.
+    // Shortcut labels and the assistant are page furniture drawn above the wallpaper (on a phone the label «Таблица» sits over the resting spider); they are hidden for the measurement too, so only the legs are read.
     // What is left is the legs over the desktop: black parts, the accent strand and the transparent gaps. Nothing may be brighter than the strand.
+    const hideFurniture = await page.addStyleTag({ content: ".desktop-icons, .desktop-assistant { visibility: hidden !important; }" });
+    // The crop with the body is kept for the by-eye comparison with the sample (logo-check), ×4 and the sample raster are made by the run notes.
+    const cropDir = path.join(runRoot, "logo-check");
+    mkdirSync(cropDir, { recursive: true });
+    writeFileSync(path.join(cropDir, `spider-crop-${accent.id}--${testInfo.project.name}.png`), await desktop.spider.screenshot({ type: "png" }));
     const hideBody = await page.addStyleTag({ content: ".wallpaper-spider-body { visibility: hidden !important; }" });
     const shot = await desktop.spider.screenshot({ type: "png" });
     await hideBody.evaluate((node) => (node as Element).remove());
+    await hideFurniture.evaluate((node) => (node as Element).remove());
     const decoder = await browser.newPage();
     let pixels: { max: number; at: [number, number]; rgb: number[]; counted: number; width: number; height: number };
     try {
