@@ -214,6 +214,9 @@ const WALLPAPER_FADE_MS = 500;
 // Units are the 1440×900 wallpaper frame; the right ~405 units stay in view on a phone, so the four vessels there carry no `far` flag
 // and everything left of them is hidden by a container query. The cycle lengths and phases are authored: the first four are the D-22
 // pairs, the others differ (6–12 s) and their first glow peaks are at least 0.7 s apart (the spec table repeats these numbers).
+// D-54 (20-37, plan 20-42): the owner asked for more motion and less empty space. The burner and the lamps flicker (an outer flame and a core, each on its
+// own irregular cycle), the vessels of the back shelf overflow (one cycle each, `shelfCycles`), the wall clock ticks (the second hand steps 60 times a minute,
+// the minute hand turns in an hour) and the wall is fuller (charts, a burette, a pegboard, an oscilloscope, a louvered cabinet). Only opacity and transform move.
 const FLASK_BENCH_Y = 660;
 type FlaskShape = { outline: string; lip: string; shine: string; marks: string; label: string; cork: string; level: number; floor: number; span: number; height: number; half: number; radius: [number, number] };
 const flaskShapes = {
@@ -279,11 +282,21 @@ const flasks = flaskSpecs.map((spec, index) => {
 
 // Still vessels on the wall shelf: the same glass, a flat liquid (or none), no animation.
 const shelfY = 372;
+// D-54 (20-37): the overflow cycle of each shelf vessel that holds liquid, in the order of `shelfItems` — milliseconds, so the spec compares exact numbers.
+// Durations 5.4–10.6 s, every duration and every phase different, the first glow peaks (at half a cycle) at least 380 ms apart.
+// phase20-art.spec.ts repeats this table as SHELF_CYCLES: the two change only together.
+const shelfCycles = [
+  { duration: 7300, delay: -3250 }, { duration: 5600, delay: -2020 }, { duration: 9400, delay: -3540 }, { duration: 6200, delay: -1560 },
+  { duration: 10600, delay: -3380 }, { duration: 8100, delay: -1750 }, { duration: 5900, delay: -270 }, { duration: 9000, delay: -1440 },
+  { duration: 6800, delay: -6760 }, { duration: 10100, delay: -1230 }, { duration: 7700, delay: -7350 }, { duration: 5400, delay: -3520 },
+  { duration: 8600, delay: -7940 }, { duration: 6500, delay: -4410 },
+];
+const SHELF_ANIMATED = 1;
 const shelfItems: Array<{ shape: ShapeKey; x: number; scale: number; hue: string | null }> = [
   { shape: "bottle", x: 420, scale: 0.62, hue: "amber" }, { shape: "jar", x: 490, scale: 0.7, hue: "violet" }, { shape: "conical", x: 562, scale: 0.5, hue: "rose" },
   { shape: "bottle", x: 628, scale: 0.58, hue: "green" }, { shape: "beaker", x: 694, scale: 0.55, hue: "teal" }, { shape: "florence", x: 768, scale: 0.5, hue: "violet" },
   { shape: "jar", x: 842, scale: 0.7, hue: "amber" }, { shape: "bottle", x: 908, scale: 0.65, hue: "rose" }, { shape: "cylinder", x: 962, scale: 0.45, hue: "teal" },
-  { shape: "conical", x: 1034, scale: 0.5, hue: "green" }, { shape: "jar", x: 1102, scale: 0.7, hue: null }, { shape: "bottle", x: 1170, scale: 0.6, hue: "violet" },
+  { shape: "conical", x: 1034, scale: 0.5, hue: "green" }, { shape: "bottle", x: 1170, scale: 0.6, hue: "violet" },
   { shape: "beaker", x: 1236, scale: 0.55, hue: "amber" }, { shape: "florence", x: 1306, scale: 0.5, hue: "rose" }, { shape: "bottle", x: 1376, scale: 0.62, hue: "green" },
 ];
 
@@ -308,11 +321,33 @@ const posterPaths = {
   chain: "M176 345L200 331L224 345L248 331M176 375L200 389L224 375L248 389",
 };
 
-function FlaskShelfItem({ item }: { item: typeof shelfItems[number] }) {
+// The shelf vessels with their overflow cycle attached (a liquid takes the next row of `shelfCycles`).
+let shelfLiquids = 0;
+const shelfVessels = shelfItems.map((item) => {
+  const cycle = item.hue ? shelfCycles[shelfLiquids] : undefined;
+  if (item.hue) shelfLiquids += 1;
+  return { ...item, cycle: cycle && shelfLiquids <= SHELF_ANIMATED ? cycle : undefined };
+});
+// D-54 (20-37): the flames. [outer layer, core] x [burner, bench lamp, shelf lamp]: a flicker is quick (0.8–3 s) and every layer has its own length.
+const flameCycles = { burner: [{ duration: 1700, delay: -300 }, { duration: 1100, delay: -650 }], lamp: [{ duration: 2300, delay: -900 }, { duration: 1300, delay: -200 }], shelf: [{ duration: 1900, delay: -1200 }, { duration: 1500, delay: -450 }] };
+const flameStyle = (cycle: { duration: number; delay: number }) => ({ "--flame-dur": `${cycle.duration}ms`, "--flame-delay": `${cycle.delay}ms` }) as CSSProperties;
+// D-54 (20-37): the wall clock, on the right part of the wall (a phone shows it): a dial, twelve marks, an hour hand that stands, a minute hand (3600 s) and a
+// second hand (60 s in 60 steps). The hands are drawn pointing up and carry a resting angle in CSS; the dial centre is the pivot of both moving hands.
+const CLOCK = { x: 1240, y: 258, r: 26 };
+const clockMarks = Array.from({ length: 12 }, (_, hour) => {
+  const angle = (hour / 12) * Math.PI * 2, from = CLOCK.r - (hour % 3 === 0 ? 7 : 4), to = CLOCK.r - 1.5;
+  return `M${round(CLOCK.x + Math.sin(angle) * from)} ${round(CLOCK.y - Math.cos(angle) * from)}L${round(CLOCK.x + Math.sin(angle) * to)} ${round(CLOCK.y - Math.cos(angle) * to)}`;
+}).join("");
+
+function FlaskShelfItem({ item }: { item: typeof shelfVessels[number] }) {
   const shape = flaskShapes[item.shape];
   return <g className="wallpaper-flask-scene-vessel" transform={`translate(${item.x} ${shelfY}) scale(${item.scale})`}>
     <path className="wallpaper-flask-scene-depth" d={shape.outline} />
-    {item.hue && <rect className="wallpaper-flask-scene-liquid" x={-60} y={shape.level} width={120} height={-shape.level} fill={`url(#wp-liquid-${item.hue})`} clipPath={`url(#wp-flask-clip-${item.shape})`} />}
+    {item.hue && <g clipPath={`url(#wp-flask-clip-${item.shape})`}>
+      {/* Wider and taller than the glass, so the tilt of the overflow never shows an edge; the glass outline clips it. */}
+      <rect className="wallpaper-flask-scene-liquid" x={-120} y={shape.level} width={240} height={14 - shape.level} fill={`url(#wp-liquid-${item.hue})`}
+        style={item.cycle ? { "--shelf-dur": `${item.cycle.duration}ms`, "--shelf-delay": `${item.cycle.delay}ms` } as CSSProperties : undefined} />
+    </g>}
     <path className="wallpaper-flask-scene-glass" d={shape.outline} />
     {shape.marks && <path className="wallpaper-flask-scene-line" d={shape.marks} />}
     {shape.label && <path className="wallpaper-flask-scene-line" d={shape.label} />}
@@ -341,10 +376,24 @@ function WallpaperFlasks() {
         <path d={posterPaths.ring} />
         <path d={posterPaths.chain} />
         <circle cx={200} cy={331} r={4} /><circle cx={248} cy={331} r={4} /><circle cx={200} cy={389} r={4} /><circle cx={248} cy={389} r={4} />
-        {/* A wall clock between the poster and the shelf. */}
-        <circle cx={330} cy={328} r={22} /><path d="M330 328V312M330 328l11 6M330 308v3M330 345v3M310 328h3M347 328h3" />
+        {/* A wall thermometer between the poster and the shelf (the clock moved to the right of the wall, where a phone sees it). */}
+        <path d="M326 304h8v36a9 9 0 1 1-8 0ZM330 314v26M334 312h5M334 322h5M334 332h5" />
       </g>
-      {shelfItems.map((item) => <FlaskShelfItem key={item.x} item={item} />)}
+      {shelfVessels.map((item) => <FlaskShelfItem key={item.x} item={item} />)}
+      {/* A spirit lamp on the shelf where a phone sees it: its flame flickers like the two on the bench. */}
+      <g className="wallpaper-flask-scene-lamp" transform={`translate(1102 ${shelfY}) scale(.85)`}>
+        <path d="M-22 0q-6-24 6-38h32q12 14 6 38ZM-6-38v-10h12v10M0-48v-8" />
+        <path className="wallpaper-flask-flame" d="M0-56q-8-10 0-22q8 12 0 22Z" style={flameStyle(flameCycles.shelf[0])} />
+        <path className="wallpaper-flask-flame-core" d="M0-56q-3-5 0-11q3 6 0 11Z" style={flameStyle(flameCycles.shelf[1])} />
+      </g>
+      <g className="wallpaper-flask-clock" style={{ "--clock-x": `${CLOCK.x}px`, "--clock-y": `${CLOCK.y}px` } as CSSProperties}>
+        <circle className="wallpaper-flask-clock-face" cx={CLOCK.x} cy={CLOCK.y} r={CLOCK.r} />
+        <path d={clockMarks} />
+        <path className="wallpaper-flask-clock-hour" d={`M${CLOCK.x} ${CLOCK.y}V${CLOCK.y - 12}`} transform={`rotate(-60 ${CLOCK.x} ${CLOCK.y})`} />
+        <path className="wallpaper-flask-clock-minute" d={`M${CLOCK.x} ${CLOCK.y}V${CLOCK.y - 19}`} />
+        <path className="wallpaper-flask-clock-second" d={`M${CLOCK.x} ${CLOCK.y + 4}V${CLOCK.y - 23}`} />
+        <circle className="wallpaper-flask-clock-pin" cx={CLOCK.x} cy={CLOCK.y} r={2} />
+      </g>
     </g>
     <g className="wallpaper-flask-stand">
       {/* The bench first (its top edge is the widest line), then what stands on it. */}
@@ -352,12 +401,14 @@ function WallpaperFlasks() {
       <path d={benchPaths.cabinet} />
       <path d={benchPaths.tripod} />
       <path d={benchPaths.burner} />
-      <path className="wallpaper-flask-flame" d="M395 622q-9-14 0-30q9 16 0 30Z" />
+      <path className="wallpaper-flask-flame" d="M395 622q-9-14 0-30q9 16 0 30Z" style={flameStyle(flameCycles.burner[0])} />
+      <path className="wallpaper-flask-flame-core" d="M395 622q-4-7 0-15q4 8 0 15Z" style={flameStyle(flameCycles.burner[1])} />
       <path d={benchPaths.rod} />
       <circle cx="480" cy="432" r="5" />
       <path d={benchPaths.rack} />
       <path d={benchPaths.lamp} />
-      <path className="wallpaper-flask-flame" d="M948 604q-8-10 0-22q8 12 0 22Z" />
+      <path className="wallpaper-flask-flame" d="M948 604q-8-10 0-22q8 12 0 22Z" style={flameStyle(flameCycles.lamp[0])} />
+      <path className="wallpaper-flask-flame-core" d="M948 604q-3-5 0-11q3 6 0 11Z" style={flameStyle(flameCycles.lamp[1])} />
       <path d={benchPaths.mortar} />
       <path className="wallpaper-flask-coil" d={benchPaths.coil} />
     </g>

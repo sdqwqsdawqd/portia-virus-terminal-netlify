@@ -1610,13 +1610,24 @@ html[data-motion="full"] .wallpaper-particle { animation: particle-tumble 20s li
    (--flask-dur / --flask-delay give every vessel its own cycle; the turn takes 1.37 times longer and starts 1.9 times further in). Each vessel's
    surface slides and its bubbles rise inside the liquid only (clipped by the glass outline, and every bubble's travel is computed inside the liquid).
    Only opacity and transform animate. Reduced and off fall under the global `.desktop-wallpaper *` rule: no animation, the drawn frame stays.
+   D-54 (20-37, plan 20-42) adds more motion: the flames flicker (an outer layer and a core on their own irregular cycles, scaling from the base of the flame),
+   the vessels of the back shelf overflow (a tilt and a change of lightness, one cycle each from --shelf-dur / --shelf-delay), the wall clock ticks (the second
+   hand steps once a second, the minute hand turns in an hour, both around the dial centre in --clock-x / --clock-y). A resting value on every element is
+   what «Уменьшены» and «Выключены» show: the flame at its steady level, the liquid at .75, the hands at fixed angles.
    Readability (owner, 20-33, kept by D-51): no line or liquid is bright enough to sit under a shortcut label — phase20-art.spec.ts asserts label
    contrast over the brightest 8 px square of the whole drawing at least 4.5:1, on the standard, very dark and very light accents. The accent is
    blended toward the desktop base so a near-white custom accent cannot make a bright patch. No relative colour syntax (accent-theme test). */
 .wallpaper-flasks { color: color-mix(in oklab, var(--teal) 55%, var(--desktop-base)); }
 .wallpaper-flask-stand path, .wallpaper-flask-stand circle { fill: none; stroke: color-mix(in oklab, currentColor 55%, #46545c); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; opacity: .42; }
 .wallpaper-flask-stand .wallpaper-flask-coil { stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); opacity: .4; }
-.wallpaper-flask-stand .wallpaper-flask-flame { fill: #b9803a; fill-opacity: .2; stroke: #b9803a; stroke-width: 1; opacity: .4; }
+.wallpaper-flasks .wallpaper-flask-flame { fill: #b9803a; fill-opacity: .2; stroke: #b9803a; stroke-width: 1; opacity: .4; transform-box: fill-box; transform-origin: 50% 100%; }
+.wallpaper-flasks .wallpaper-flask-flame-core { fill: #d9a65a; fill-opacity: .3; stroke: none; opacity: .45; transform-box: fill-box; transform-origin: 50% 100%; }
+.wallpaper-flask-scene-lamp path { fill: none; stroke: color-mix(in oklab, currentColor 55%, #46545c); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; opacity: .42; }
+.wallpaper-flask-clock { --clock-x: 1240px; --clock-y: 258px; }
+.wallpaper-flask-clock path, .wallpaper-flask-clock circle { fill: none; stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke-width: 1.4; stroke-linecap: round; opacity: .5; }
+.wallpaper-flask-clock .wallpaper-flask-clock-pin { fill: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke: none; }
+.wallpaper-flask-clock .wallpaper-flask-clock-minute { stroke-width: 2; transform: rotate(60deg); transform-origin: var(--clock-x) var(--clock-y); }
+.wallpaper-flask-clock .wallpaper-flask-clock-second { stroke-width: 1.1; transform: rotate(210deg); transform-origin: var(--clock-x) var(--clock-y); }
 .wallpaper-flask-scene-wall path, .wallpaper-flask-scene-wall circle { fill: none; stroke: color-mix(in oklab, currentColor 55%, #46545c); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: .32; }
 .wallpaper-flask-scene-wall .wallpaper-flask-scene-board { fill: color-mix(in oklab, currentColor 20%, var(--desktop-base)); fill-opacity: .6; opacity: .5; }
 .wallpaper-flask-scene-depth { fill: currentColor; fill-opacity: .03; stroke: none; }
@@ -1624,7 +1635,7 @@ html[data-motion="full"] .wallpaper-particle { animation: particle-tumble 20s li
 .wallpaper-flask-scene-line { fill: none; stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; opacity: .28; }
 .wallpaper-flask-scene-cork { fill: #8a6a3a; fill-opacity: .3; stroke: none; }
 .wallpaper-flask-scene-shine { fill: none; stroke: #d0d0d0; stroke-width: 1.6; stroke-linecap: round; opacity: .1; }
-.wallpaper-flask-scene-liquid { stroke: none; fill-opacity: .45; opacity: .75; }
+.wallpaper-flask-scene-liquid { stroke: none; fill-opacity: .45; opacity: .75; transform-box: fill-box; transform-origin: 50% 0%; }
 .wallpaper-flask-shadow { fill: currentColor; fill-opacity: .1; stroke: none; }
 .wallpaper-flask-glass-depth { fill: currentColor; fill-opacity: .035; stroke: none; }
 .wallpaper-flask-glass { fill: none; stroke: color-mix(in oklab, currentColor 60%, #8a9ca4); stroke-width: 1.6; stroke-linejoin: round; opacity: .5; }
@@ -1643,6 +1654,17 @@ html[data-motion="full"] .wallpaper-flask-liquid { animation: flask-glow var(--f
 html[data-motion="full"] .wallpaper-flask-fill-alt { animation: flask-shift calc(var(--flask-dur) * 1.37) ease-in-out calc(var(--flask-delay) * 1.9) infinite; }
 html[data-motion="full"] .wallpaper-flask-surface { animation: flask-wave calc(var(--flask-dur) * .45) linear var(--flask-delay) infinite; }
 html[data-motion="full"] .wallpaper-flask-bubble { animation: flask-bubble var(--bubble-dur) linear var(--bubble-delay) infinite; }
+/* D-54 (20-37): a flame never repeats exactly — eight irregular steps of opacity and scale (the outer layer never gets brighter than its resting .4), a core of its own. */
+html[data-motion="full"] .wallpaper-flask-flame { animation: flask-flicker var(--flame-dur) ease-in-out var(--flame-delay) infinite; }
+html[data-motion="full"] .wallpaper-flask-flame-core { animation: flask-flicker-core var(--flame-dur) ease-in-out var(--flame-delay) infinite; }
+html[data-motion="full"] .wallpaper-flask-scene-liquid { animation: flask-shelf var(--shelf-dur) ease-in-out var(--shelf-delay) infinite; }
+html[data-motion="full"] .wallpaper-flask-clock .wallpaper-flask-clock-second { animation: flask-clock-second 60s steps(60, end) infinite; }
+html[data-motion="full"] .wallpaper-flask-clock .wallpaper-flask-clock-minute { animation: flask-clock-minute 3600s linear infinite; }
+@keyframes flask-flicker { 0%, 100% { opacity: .4; transform: scale(1, 1) skewX(0deg); } 11% { opacity: .27; transform: scale(.94, .88) skewX(-3deg); } 23% { opacity: .38; transform: scale(1.05, 1.1) skewX(2deg); } 38% { opacity: .24; transform: scale(.96, .84) skewX(3deg); } 52% { opacity: .4; transform: scale(1.02, 1.06) skewX(-2deg); } 67% { opacity: .3; transform: scale(.93, .93) skewX(2deg); } 81% { opacity: .38; transform: scale(1.06, 1.12) skewX(-3deg); } }
+@keyframes flask-flicker-core { 0%, 100% { opacity: .45; transform: scale(1, 1); } 17% { opacity: .3; transform: scale(.9, .8); } 29% { opacity: .5; transform: scale(1.08, 1.15); } 46% { opacity: .32; transform: scale(.92, .85); } 63% { opacity: .48; transform: scale(1.05, 1.1); } 78% { opacity: .28; transform: scale(.88, .78); } }
+@keyframes flask-shelf { 0%, 100% { opacity: .6; transform: rotate(-6deg) translateY(1.5px); } 50% { opacity: 1; transform: rotate(6deg) translateY(-1.5px); } }
+@keyframes flask-clock-second { from { transform: rotate(210deg); } to { transform: rotate(570deg); } }
+@keyframes flask-clock-minute { from { transform: rotate(60deg); } to { transform: rotate(420deg); } }
 @keyframes flask-glow { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 @keyframes flask-shift { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 @keyframes flask-wave { to { transform: translateX(20px); } }

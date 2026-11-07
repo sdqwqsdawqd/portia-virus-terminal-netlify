@@ -1275,7 +1275,7 @@ test("[STAB-VIS-02] D-54 the clock ticks: the second hand steps once a second (6
   const start = await angleAt(0);
   expect(Math.abs(wrap((await angleAt(990)) - start)), "no creeping between beats").toBeLessThan(0.01);
   expect(Math.abs(wrap((await angleAt(1010)) - start) - 6), "a 6 degree step on the beat").toBeLessThan(0.05);
-  expect(Math.abs(wrap((await angleAt(30_500)) - start) - 180), "half a turn in 30 s").toBeLessThan(0.05);
+  expect(Math.abs(Math.abs(wrap((await angleAt(30_500)) - start)) - 180), "half a turn in 30 s").toBeLessThan(0.05);
   // Both hands turn around the dial centre: the middle of a hand's box walks round the middle of the dial.
   const handsAround = async (selector: string, times: number[]) => page.evaluate(([query, stops]) => {
     const hand = document.querySelector(query as string)!;
