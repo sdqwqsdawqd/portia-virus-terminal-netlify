@@ -30,17 +30,16 @@ test("D-63 the default frame is the same as no frame", () => {
 });
 
 test("D-63 anything that is not an object of three finite numbers gives no frame", () => {
-  for (const value of [
+  const cases: unknown[] = [
     undefined, null, "", "50", "x=1", 5, true, [], [50, 50, 100], () => undefined,
     {}, { x: 1, y: 2 }, { x: 1, zoom: 120 }, { y: 1, zoom: 120 },
     { x: "50", y: 50, zoom: 120 }, { x: 50, y: "50", zoom: 120 }, { x: 50, y: 50, zoom: "120" },
     { x: Number.NaN, y: 50, zoom: 120 }, { x: 50, y: Number.POSITIVE_INFINITY, zoom: 120 }, { x: 50, y: 50, zoom: Number.NEGATIVE_INFINITY },
-    { x: null, y: 50, zoom: 120 }, { x: {}, y: 50, zoom: 120 }, { x: [1], y: 50, zoom: 120 }, { x: 10n, y: 50, zoom: 120 },
+    { x: null, y: 50, zoom: 120 }, { x: {}, y: 50, zoom: 120 }, { x: [1], y: 50, zoom: 120 }, { x: BigInt(10), y: 50, zoom: 120 },
     { x: "50; background:url(//evil.example/x)", y: 50, zoom: 120 },
     { x: "expression(alert(1))", y: 50, zoom: 120 },
-  ]) {
-    assert.equal(normalizeImageFraming(value), undefined, `no frame for ${typeof value === "bigint" ? "bigint" : JSON.stringify(value) ?? String(value)}`);
-  }
+  ];
+  cases.forEach((value, index) => assert.equal(normalizeImageFraming(value), undefined, `no frame for case ${index}`));
 });
 
 test("D-63 extra keys never survive and the result is a fresh object", () => {

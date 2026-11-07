@@ -19,6 +19,7 @@ import {
 import { MAX_SCIENTIST_LOGS } from "./content-limits.ts";
 import { normalizeOutlineSections, normalizeRecommendationSections } from "./editor-outline.ts";
 import { isAllowedMediaUrl } from "./media-url.ts";
+import { type ImageFraming, normalizeImageFraming } from "./image-framing.ts";
 
 // Every save and every cached read passes through here: unknown input in, a complete PortiaContent out.
 // It coerces shape and never cuts or drops user content (D-01); the limits in content-limits.ts only drive editor warnings.
@@ -89,7 +90,14 @@ function normalizeMediaUrl(value: unknown, fallback = "") {
   return isAllowedMediaUrl(url) ? url : fallback;
 }
 
-const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
+// D-63: a frame is kept only for a picture that is there. The result is a field to spread: nothing at all for no frame, so the JSON of a
+// record without a frame stays what it was. It is built from the normalized numbers only, never from the raw object.
+const framingEntry = <Key extends string>(key: Key, picture: string, framing: unknown): Partial<Record<Key, ImageFraming>> => {
+  const safe = picture ? normalizeImageFraming(framing) : undefined;
+  return safe ? ({ [key]: safe } as Record<Key, ImageFraming>) : {};
+};
+
+const dayPattern =/^\d{4}-\d{2}-\d{2}$/;
 const normalizeDay = (value: unknown) => (typeof value === "string" && dayPattern.test(value) ? value : "");
 
 // Text slots only ever hold text: a number or boolean becomes its text, anything else "" (D-20, never an object in a text slot).
@@ -266,10 +274,12 @@ export function normalizeGuideSections(value: unknown): GuideSection[] {
   return value.flatMap((item, index) => {
     if (!isRecord(item)) return [];
     const id = typeof item.id === "string" && item.id ? item.id : `guide-${index}`;
+    const photo = normalizeMediaUrl(item.photo);
     return [{
       id,
       title: asText(item.title),
-      photo: normalizeMediaUrl(item.photo),
+      photo,
+      ...framingEntry("photoFraming", photo, item.photoFraming),
       cards: (Array.isArray(item.cards) ? item.cards : []).flatMap((card, cardIndex) => normalizeGuideCard(card, id, cardIndex)),
     }];
   });

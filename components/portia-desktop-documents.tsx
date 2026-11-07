@@ -164,7 +164,7 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
       const gridId = `guide-grid-${section.id}`;
       return <section className="guide-section" key={section.id}>
         <button type="button" className={`guide-section-head${section.photo ? " has-photo" : ""}`} aria-expanded={!folded} aria-controls={gridId} onClick={() => setCollapsed((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}>
-          {section.photo && <PortiaImage src={section.photo} alt="" recordId={`${section.id}:band`} priority="lazy" icon="guide" className="guide-section-band is-fill is-quiet" />}
+          {section.photo && <PortiaImage src={section.photo} alt="" recordId={`${section.id}:band`} priority="lazy" icon="guide" className="guide-section-band is-fill is-quiet" framing={section.photoFraming} />}
           <span className="guide-section-title">{section.title || "Без названия"}</span>
           <span className="guide-section-chevron" aria-hidden="true" />
         </button>

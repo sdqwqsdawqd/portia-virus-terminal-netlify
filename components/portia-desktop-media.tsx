@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { preconnect, preload } from "react-dom";
+import { imageFramingStyles, normalizeImageFraming, type ImageFraming } from "@/lib/image-framing";
 import { MEDIA_SLOW_MS, mediaLoadingAttrs, mediaSource, visibleTimerRunning } from "@/lib/media-display";
 import { PortiaIcon, PortiaIllustration, type PortiaIconName, type PortiaIllustrationName } from "@/components/portia-icons";
 
@@ -61,6 +62,8 @@ type PortiaImageProps = {
   className?: string;
   caption?: string;
   style?: CSSProperties;
+  // D-63: the visible part chosen by the editor. Without it the picture and its markup are exactly as before.
+  framing?: ImageFraming;
 };
 
 // Every record picture goes through here: link check before any request, a quiet skeleton, the PORTIA placeholder on error, block or 15 seconds.
@@ -70,7 +73,7 @@ export function PortiaImage({ src, recordId, ...rest }: PortiaImageProps) {
   return <PortiaImageFrame key={`${recordId}|${link}`} link={link} {...rest} />;
 }
 
-function PortiaImageFrame({ link, alt, priority, icon = "microscopeGuide", className, caption, style }: Omit<PortiaImageProps, "src" | "recordId"> & { link: string }) {
+function PortiaImageFrame({ link, alt, priority, icon = "microscopeGuide", className, caption, style, framing }: Omit<PortiaImageProps, "src" | "recordId"> & { link: string }) {
   const [state, setState] = useState<ImageState>(link ? "loading" : "failed");
   const image = useRef<HTMLImageElement>(null);
   const frameRef = useRef<HTMLSpanElement>(null);
@@ -87,15 +90,17 @@ function PortiaImageFrame({ link, alt, priority, icon = "microscopeGuide", class
   }, [state]);
 
   const trimmedCaption = caption?.trim() ?? "";
+  // Second line of defence: whatever arrives here is normalized again, and only numbers reach the style (the server already did it once).
+  const framed = imageFramingStyles(normalizeImageFraming(framing));
   return <>
-    <span ref={frameRef} className={`portia-image is-${state}${className ? ` ${className}` : ""}`} data-media-state={state} data-media-armed={String(visible && state === "loading")}>
+    <span ref={frameRef} className={`portia-image is-${state}${className ? ` ${className}` : ""}`} data-media-state={state} data-media-armed={String(visible && state === "loading")} data-framing={framed.frame ? "true" : undefined} style={framed.frame}>
       {state !== "failed" && <>
         <span className="portia-image-skeleton" aria-hidden="true" />
         <img
           ref={image}
           src={link}
           alt={alt}
-          style={style}
+          style={framed.image ? { ...style, ...framed.image } : style}
           {...mediaLoadingAttrs(priority)}
           referrerPolicy="no-referrer"
           onLoad={() => setState("loaded")}

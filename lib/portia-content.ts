@@ -1,7 +1,11 @@
+import type { ImageFraming } from "./image-framing.ts";
+
 export type Mutation = {
   name: string;
   description: string;
   image: string;
+  // D-63: the visible part of the picture; absent means the whole picture as before.
+  imageFraming?: ImageFraming;
 };
 
 export type RichTextStyle = {
@@ -97,6 +101,7 @@ export type Virus = {
   name: string;
   status: string;
   infectedImage: string;
+  infectedImageFraming?: ImageFraming;
   external: string;
   ppu: { health: string; speed: string; abilities: string };
   physiology: string;
@@ -117,7 +122,7 @@ export type Virus = {
 export type InfoBlock =
   | { id: string; type: "text"; text: string }
   | { id: string; type: "table"; rows: { id: string; key: string; value: string }[] }
-  | { id: string; type: "photo"; url: string }
+  | { id: string; type: "photo"; url: string; framing?: ImageFraming }
   | { id: string; type: "video"; videoId: string };
 
 export type InfoSubsection = {
@@ -156,6 +161,7 @@ export type GuideCard = {
   id: string;
   title: string;
   cover: string;
+  coverFraming?: ImageFraming;
   blocks: GuideBlock[];
 };
 
@@ -163,6 +169,7 @@ export type GuideSection = {
   id: string;
   title: string;
   photo: string;
+  photoFraming?: ImageFraming;
   cards: GuideCard[];
 };
 
@@ -205,6 +212,7 @@ export type RecycleFile = {
   kind: "virus" | "text" | "image";
   content: string;
   image: string;
+  imageFraming?: ImageFraming;
   virusId: string;
 };
 
@@ -259,6 +267,8 @@ export function createVirusRecycleFiles(viruses: Virus[]): RecycleFile[] {
     kind: "virus",
     content: "",
     image: "",
+    // D-63: the file made from a virus carries the frame of the virus photo.
+    ...(virus.infectedImageFraming ? { imageFraming: virus.infectedImageFraming } : {}),
     virusId: virus.id,
   }));
 }
