@@ -6,6 +6,7 @@ import type { Browser, Locator, Page, Request, TestInfo, ViewportSize } from "@p
 import { DesktopPage } from "../pages/desktop.page";
 import { PromotionPage } from "../pages/promotion.page";
 import { templateExportViolations } from "../../../lib/portia-template-export.ts";
+import { classificationOptions } from "../../../lib/portia-content.ts";
 import { deterministicContract } from "../fixtures/determinism";
 import { expect, test } from "../fixtures/test";
 
@@ -1017,3 +1018,95 @@ for (const format of ["HTML", "PNG"] as const) {
     }
   });
 }
+
+/* ---------------------------------------------------------------- D-60 (20-49): class values stay whole in the card and in the files */
+
+// The owner saw «Предупреждени-е»: a class value broken in the middle of a word in the template card. Every `.class-cell strong` of the
+// card must be one line, and its cell must hold it. Checked in the preview (window of the normal size and maximized on a PC, the phone's
+// full screen) and in the downloaded HTML opened at the card's own width (1060) and at a phone's (412). The public archive is not touched
+// by this (the rule lives under .template-card-preview); the interpretation «this is the break the owner meant» is confirmed in the gallery of 20-54.
+const classAxes = ["danger", "spread", "transmission", "escapeRisk", "mind", "appearance", "behavior"] as const;
+const longestClassValues = classAxes.map((axis) => (classificationOptions[axis] as readonly { value: string }[]).reduce((best, option) => (option.value.length > best.length ? option.value : best), ""));
+
+type ClassValueMeasure = { text: string; lines: number; textRight: number; cellRight: number; cellOverflow: number; cellWidth: number };
+
+/** Per `.class-cell strong` of the card: how many lines its text takes (distinct tops of the text's boxes) and whether the cell holds it. */
+async function measureClassValues(page: Page): Promise<ClassValueMeasure[]> {
+  return page.evaluate(() => Array.from(document.querySelectorAll(".template-card-preview .class-cell strong")).map((strong) => {
+    const cell = strong.closest(".class-cell")!;
+    const tops = new Set<number>();
+    let right = 0;
+    for (const node of Array.from(strong.childNodes)) {
+      if (node.nodeType !== Node.TEXT_NODE || (node.textContent ?? "").trim() === "") continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of Array.from(range.getClientRects())) {
+        tops.add(Math.round(rect.top));
+        right = Math.max(right, rect.right);
+      }
+    }
+    const box = cell.getBoundingClientRect();
+    return {
+      text: (strong.textContent ?? "").trim(),
+      lines: tops.size,
+      textRight: Math.round(right * 10) / 10,
+      cellRight: Math.round(box.right * 10) / 10,
+      cellOverflow: cell.scrollWidth - cell.clientWidth,
+      cellWidth: Math.round(box.width * 10) / 10,
+    };
+  }));
+}
+
+function expectClassValuesWhole(measures: ClassValueMeasure[], where: string) {
+  expect(measures.map((measure) => measure.text).sort(), `${where}: all seven values are drawn`).toEqual([...longestClassValues].sort());
+  for (const measure of measures) {
+    expect(measure.lines, `${where}: «${measure.text}» is one line (cell ${measure.cellWidth}px)`).toBe(1);
+    expect(measure.cellOverflow, `${where}: «${measure.text}» stays inside its cell`).toBeLessThanOrEqual(0);
+    expect(measure.textRight, `${where}: «${measure.text}» ends before the cell's border`).toBeLessThanOrEqual(measure.cellRight);
+  }
+}
+
+async function chooseLongestClassValues(builder: Locator) {
+  await openTab(builder, "Основное");
+  const fields = builder.locator(".classification-editor-field select");
+  await expect(fields).toHaveCount(classAxes.length);
+  for (const [index, value] of longestClassValues.entries()) await fields.nth(index).selectOption(value);
+}
+
+test("[STAB-TMPL-01] D-60 class values stay whole in the preview and in the downloaded HTML", async ({ page, browser, isMobile }, testInfo) => {
+  const writes = trackWrites(page);
+  const { promotion, builder } = await openBuilder(page);
+  await nameField(builder).fill("Класс без переноса");
+  await chooseLongestClassValues(builder);
+  // «Предупреждение» is the default of the axis «Угроза и риск побега» and the longest value of it: it is one of the seven.
+  expect(longestClassValues[classAxes.indexOf("escapeRisk")]).toBe("Предупреждение");
+  await showPreview(builder);
+  const sizes: string[] = [];
+
+  expectClassValuesWhole(await measureClassValues(page), isMobile ? "preview, phone" : "preview, window of the normal size");
+  sizes.push(isMobile ? "phone" : "pc-normal");
+  if (!isMobile) {
+    await page.getByRole("button", { name: "Развернуть Повышение" }).click();
+    await expect.poll(async () => (await promotion.window.boundingBox())?.width ?? 0).toBeGreaterThan(1200);
+    expectClassValuesWhole(await measureClassValues(page), "preview, window maximized");
+    sizes.push("pc-maximized");
+  }
+
+  const { html, target } = await downloadHtml(page, builder, testInfo, "classes.html");
+  // The rule travels into the file with the card (templateCardCss), so the file is read at the card's own width and at a phone's.
+  expect(html).toContain("class-cell");
+  expect(html, "the card's rule for class values is in the file").toMatch(/\.template-card-preview \.class-cell strong\{[^}]*overflow-wrap:normal/);
+  for (const width of [1060, 412]) {
+    const offline = await browser.newContext({ offline: true, locale: "ru-RU", viewport: { width, height: 900 } });
+    try {
+      const filePage = await offline.newPage();
+      await filePage.goto(pathToFileURL(target).href);
+      await expect(filePage.getByRole("heading", { level: 2 })).toHaveText("Класс без переноса");
+      expectClassValuesWhole(await measureClassValues(filePage), `downloaded HTML at ${width}px`);
+    } finally {
+      await offline.close();
+    }
+  }
+  testInfo.annotations.push({ type: "d60-checked", description: `${testInfo.project.name}: ${sizes.join(", ")}, file 1060 and 412` });
+  expect(writes).toEqual([]);
+});
