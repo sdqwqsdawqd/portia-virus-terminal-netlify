@@ -32,7 +32,7 @@ import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS, MAX_TABLE_ROWS, bodyTooLargeMessage, contentBodyBytes, limitStatus, limitText, oversizeFields, oversizeMessage } from "@/lib/content-limits";
 import { compactRuns, expandStyles } from "@/lib/rich-text-style";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
-import { ActiveFormatContext, FloatingTextFormatPanel, FormattedTextarea, findFormatField, replaceRichText, type EditorPreviewSurface, type FormatTarget } from "@/components/portia-editor-rich-text";
+import { ActiveFormatContext, FloatingTextFormatPanel, FormatLaunchButton, FormattedTextarea, findFormatField, replaceRichText, type EditorPreviewSurface, type FormatTarget } from "@/components/portia-editor-rich-text";
 import { PromotionEditor } from "@/components/portia-promotion-editor";
 import { AppDeniedPanel } from "@/components/portia-desktop-states";
 import { accessCheckFailedText } from "@/lib/app-state";
@@ -1209,26 +1209,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
         </details>
       )}
 
-      <div className="global-format-launch">
-        <button
-          type="button"
-          disabled={!formatTarget}
-          aria-label={formatTarget ? `Оформление текста: ${formatTarget.title}` : "Сначала выберите текстовое поле"}
-          aria-expanded={formatterOpen}
-          title={formatTarget ? `Оформление: ${formatTarget.title}` : "Сначала выберите текстовое поле"}
-          onPointerDown={(event) => event.preventDefault()}
-          onClick={() => {
-            // Phone: the field loses focus once per opening so the keyboard leaves (D-06).
-            if (!formatterOpen && formatTarget && window.matchMedia("(max-width: 900px)").matches) findFormatField(formatTarget.key)?.blur();
-            setFormatterOpen((current) => !current);
-          }}
-        >
-          <span aria-hidden="true">✎</span>
-          <strong>{formatTarget ? "ОФОРМЛЕНИЕ" : "ВЫБЕРИТЕ ТЕКСТ"}</strong>
-          {formatTarget && <em>{formatTarget.title}</em>}
-        </button>
-        <small>{formatTarget ? "Выделите текст в активном поле или поставьте курсор в слово, чтобы оформить его." : "Одна кнопка форматирования работает со всеми большими текстовыми полями."}</small>
-      </div>
+      <FormatLaunchButton target={formatTarget} open={formatterOpen} onToggle={() => setFormatterOpen((current) => !current)} />
 
       {tab === "viruses" && (
         <div className="virus-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>
