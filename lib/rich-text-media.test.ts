@@ -42,7 +42,9 @@ test("IN-01: segments rebuild the original mixed Cyrillic text with two links", 
 });
 
 test("IN-01: dossier uses splitEmbeddedMedia and shows a Russian fallback for a broken inline image", () => {
-  const source = readFileSync(new URL("../components/portia-desktop-dossier.tsx", import.meta.url), "utf8");
+  // The formatted text moved with the virus card to components/portia-virus-card.tsx (D-55); the dossier re-exports it.
+  const source = readFileSync(new URL("../components/portia-virus-card.tsx", import.meta.url), "utf8");
+  assert.ok(readFileSync(new URL("../components/portia-desktop-dossier.tsx", import.meta.url), "utf8").includes("export { DossierSection, FormattedText }"));
   assert.ok(source.includes('import { splitEmbeddedMedia } from "@/lib/rich-text-media"'));
   assert.ok(source.includes("onError"));
   assert.ok(source.includes("Изображение недоступно"));

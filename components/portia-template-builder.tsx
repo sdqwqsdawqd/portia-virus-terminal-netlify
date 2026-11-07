@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ClassificationField, DossierTabs, EditorGroup, Field } from "@/components/portia-editor-dossier";
 import {
@@ -13,7 +13,8 @@ import {
   type FormatTarget,
 } from "@/components/portia-editor-rich-text";
 import type { DossierTab } from "@/lib/editor-changes";
-import { portiaTextKey, type RichTextDocument, type RichTextStyle, type Virus } from "@/lib/portia-content";
+import { portiaTextKey, type PortiaContent, type RichTextDocument, type Virus } from "@/lib/portia-content";
+import { VirusCardBody, type VirusCardSlot } from "@/components/portia-virus-card";
 import {
   addTemplateMutation,
   editTemplateText,
@@ -22,17 +23,13 @@ import {
   hasTemplateDossierContent,
   isLocalTemplateImage,
   removeTemplateMutation,
-  safeTemplateRunStyle,
   setTemplateImage,
   templateDossierSnapshotKey,
   templateFieldRuns,
-  templateRunBackground,
   templateVirusId,
   type TemplateDossier,
 } from "@/lib/portia-template-dossier";
 import {
-  classificationAxes,
-  classificationLevel,
   createTemplateDossierHtml,
   createTemplateDossierPng,
   decodeLocalTemplateImage,
@@ -40,10 +37,7 @@ import {
   emptyTemplateText,
   isTemplatePngTooLargeError,
   mutationCaption,
-  mutationLabel,
   photoCaption,
-  ppuFields,
-  sectionTitles,
   templateExportError,
   templateFileName,
   templateImageAccept,
@@ -104,85 +98,52 @@ function TemplateImageField({ label, placement, image, error, busy, onFile, onRe
 
 /* ---------------------------------------------------------------- preview of the card, sections 01-05 */
 
-function runStyle(style: RichTextStyle | undefined): CSSProperties | undefined {
-  const safe = safeTemplateRunStyle(style);
-  const css: CSSProperties = {};
-  if (safe.color) css.color = safe.color;
-  if (safe.fontSize) css.fontSize = `${safe.fontSize}px`;
-  if (safe.fontWeight) css.fontWeight = safe.fontWeight;
-  const background = templateRunBackground(safe);
-  if (background) css.backgroundColor = background;
-  return Object.keys(css).length > 0 ? css : undefined;
+/**
+ * The formatting of every card field, each fragment passed through the model's style filter (colour and background as hex only, size and
+ * weight from a short list). The shared card draws these documents exactly as the archive draws the stored ones.
+ */
+function cardFormattedText(dossier: TemplateDossier): PortiaContent["formattedText"] {
+  const { virus } = dossier;
+  const formattedText: PortiaContent["formattedText"] = {};
+  const put = (key: string, text: string) => { formattedText[key] = { runs: templateFieldRuns(dossier, key, text) }; };
+  put(portiaTextKey.virus(templateVirusId, "external"), virus.external);
+  put(portiaTextKey.virus(templateVirusId, "ppu-health"), virus.ppu.health);
+  put(portiaTextKey.virus(templateVirusId, "ppu-speed"), virus.ppu.speed);
+  put(portiaTextKey.virus(templateVirusId, "ppu-abilities"), virus.ppu.abilities);
+  put(portiaTextKey.virus(templateVirusId, "physiology"), virus.physiology);
+  virus.mutations.forEach((mutation, index) => put(portiaTextKey.mutation(templateVirusId, index), mutation.description));
+  return formattedText;
 }
 
-function PreviewPlain({ value }: { value: string }) {
-  return value.trim() === "" ? <span className="template-empty">{emptyTemplateText}</span> : <>{value}</>;
-}
-
-/** The fragments of a field with their formatting. Links stay plain text; nothing is turned into an element. */
-function PreviewRich({ dossier, fieldKey, text }: { dossier: TemplateDossier; fieldKey: string; text: string }) {
-  if (text.trim() === "") return <span className="template-empty">{emptyTemplateText}</span>;
-  return <>{templateFieldRuns(dossier, fieldKey, text).map((run, index) => <span key={index} style={runStyle(run.style)}>{run.text}</span>)}</>;
-}
-
-function PreviewFigure({ image, alt, caption }: { image: TemplateImage | null; alt: string; caption: string | null }) {
-  if (!isLocalTemplateImage(image)) return null;
-  return <figure className="template-figure">
-    {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL; next/image cannot optimise it */}
-    <img src={image.dataUrl} alt={alt} width={image.width} height={image.height} />
-    {caption !== null && <figcaption>{caption}</figcaption>}
+/** One picture place of the card, in the archive's markup (figure.subject-media with its caption) but from a local slot only. */
+function templateMedia(images: TemplateDossier["images"], slot: VirusCardSlot): ReactNode {
+  const image = slot.kind === "infected" ? images.infected : images.mutations[slot.index] ?? null;
+  if (!isLocalTemplateImage(image)) {
+    // The archive's empty place without its logo: the logo is loaded from the site and a template stays self-contained.
+    return <figure className="subject-media media-empty"><div><span>ВИЗУАЛЬНЫЙ МАТЕРИАЛ</span><strong>ОЖИДАЕТ ЗАГРУЗКИ</strong><small>{slot.label}</small></div></figure>;
+  }
+  const alt = slot.kind === "infected" ? photoCaption : slot.alt.trim() === "" ? mutationCaption : slot.alt;
+  return <figure className="subject-media">
+    <span className="portia-image is-loaded">
+      {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL; next/image cannot optimise it */}
+      <img src={image.dataUrl} alt={alt} width={image.width} height={image.height} />
+    </span>
+    <figcaption>{slot.label}</figcaption>
   </figure>;
 }
 
-function PreviewKicker({ kind }: { kind: keyof typeof sectionTitles }) {
-  return <div className="template-kicker"><span>{sectionTitles[kind][0]}</span>{sectionTitles[kind][1]}</div>;
-}
-
+/** The template as the archive's own card (D-55): the same VirusCardBody as the public dossier, fed by the model's draft only. */
 function TemplatePreview({ dossier }: { dossier: TemplateDossier }) {
-  const { virus, images } = dossier;
-  const fieldKey = (field: Parameters<typeof portiaTextKey.virus>[1]) => portiaTextKey.virus(templateVirusId, field);
-  return <article className="template-preview" aria-label="Предпросмотр шаблона">
-    <header>
-      <div><span className="template-code"><PreviewPlain value={virus.code} /></span><h2><PreviewPlain value={virus.name} /></h2></div>
-      <div className="template-status-badge"><PreviewPlain value={virus.status} /></div>
-    </header>
-    <PreviewFigure image={images.infected} alt={photoCaption} caption={photoCaption} />
-    <section className="template-section">
-      <PreviewKicker kind="classification" />
-      <div className="template-class-grid">
-        {classificationAxes.map(([axis, label]) => {
-          const value = virus.classification[axis];
-          const level = classificationLevel(axis, value);
-          return <div className="template-class-cell" key={axis}><span>{label}</span><strong><PreviewPlain value={value} /></strong>{level !== undefined && <small>УРОВЕНЬ {level}</small>}</div>;
-        })}
-      </div>
-    </section>
-    <section className="template-section">
-      <PreviewKicker kind="external" />
-      <div className="template-rich"><PreviewRich dossier={dossier} fieldKey={fieldKey("external")} text={virus.external} /></div>
-    </section>
-    <section className="template-section">
-      <PreviewKicker kind="ppu" />
-      <dl>
-        {ppuFields.map(([field, label, read]) => <div key={field}><dt>{label}</dt><dd className="template-rich"><PreviewRich dossier={dossier} fieldKey={fieldKey(field)} text={read(virus)} /></dd></div>)}
-      </dl>
-    </section>
-    <section className="template-section">
-      <PreviewKicker kind="physiology" />
-      <div className="template-rich"><PreviewRich dossier={dossier} fieldKey={fieldKey("physiology")} text={virus.physiology} /></div>
-    </section>
-    <section className="template-section">
-      <PreviewKicker kind="mutations" />
-      {virus.mutations.length === 0
-        ? <p className="template-empty">{emptyTemplateText}</p>
-        : virus.mutations.map((mutation, index) => <div className="template-mutation" key={index}>
-          <div className="template-mutation-index">{mutationLabel(index)}</div>
-          <PreviewFigure image={images.mutations[index] ?? null} alt={mutation.name.trim() === "" ? mutationCaption : mutation.name} caption={null} />
-          <h3><PreviewPlain value={mutation.name} /></h3>
-          <div className="template-rich"><PreviewRich dossier={dossier} fieldKey={portiaTextKey.mutation(templateVirusId, index)} text={mutation.description} /></div>
-        </div>)}
-    </section>
-    <footer>Шаблон досье / PORTIA / локальный черновик, не запись архива</footer>
+  const code = dossier.virus.code.trim();
+  return <article className="record-view template-card-preview" aria-label="Предпросмотр шаблона">
+    <VirusCardBody
+      virus={dossier.virus}
+      formattedText={cardFormattedText(dossier)}
+      media={(slot) => templateMedia(dossier.images, slot)}
+      embedMedia={false}
+      emptyText={emptyTemplateText}
+      footer={["PORTIA / SCIENCE REPORTS", code === "" ? "ШАБЛОН" : `ШАБЛОН ${code}`]}
+    />
   </article>;
 }
 

@@ -1,35 +1,25 @@
 "use client";
 
-import { useState } from "react";
-import { classificationOptions, portiaTextKey, type PortiaContent, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
-import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
+import { type PortiaContent, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
+import { PortiaIcon } from "@/components/portia-icons";
 import { PortiaImage } from "@/components/portia-desktop-media";
-import { splitEmbeddedMedia } from "@/lib/rich-text-media";
+import { DossierSection, FormattedText, VirusCardBody } from "@/components/portia-virus-card";
+
+// The card itself lives in portia-virus-card.tsx and is shared with the template builder (D-55); these two names stay importable from here.
+export { DossierSection, FormattedText };
 
 const roman = (level: number) => ({ 1: "I", 2: "II", 3: "III", 4: "IV" })[level] ?? String(level);
 
-function classificationLevel(key: keyof Virus["classification"], value: string) {
-  const options = classificationOptions[key] as readonly { value: string; level?: number }[];
-  return options.find((option) => option.value === value)?.level;
-}
-
 export function VirusRecord({ virus, formattedText, onOpenLog }: { virus: Virus; formattedText: PortiaContent["formattedText"]; onOpenLog: (id: string) => void }) {
-  const classification = [
-    ["danger", "Общий уровень опасности", virus.classification.danger, "danger"], ["spread", "Распространение", virus.classification.spread, "spread"], ["escapeRisk", "Угроза и риск побега", virus.classification.escapeRisk, "escape"],
-    ["transmission", "Способ распространения", virus.classification.transmission, "transmission"], ["mind", "Разум", virus.classification.mind, "mind"], ["appearance", "Вид / внешность", virus.classification.appearance, "appearance"], ["behavior", "Поведение", virus.classification.behavior, "behavior"],
-  ] as const;
-  return <div className="record-body content-fade" key={virus.id}>
-    <header className="record-header"><div><span className="record-code">{virus.code}</span><h2>{virus.name}</h2></div><div className="record-status"><span />{virus.status}</div></header>
-    <div className="record-document">
-      <section className="record-hero"><MediaBlock src={virus.infectedImage} alt={`Субъект после заражения вирусом ${virus.name}`} label="Фото после заражения" recordId={`${virus.id}:infected`} priority="hero" /><div className="classification-panel"><div className="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div><div className="classification-grid">{classification.map(([key, label, value, tone]) => { const level = classificationLevel(key, value); const badge = classificationIconFor(value); return <div className={`class-cell ${tone}${level ? ` level-${level}` : ""}`} key={label}><span>{label}</span><strong>{badge && <PortiaIcon name={badge} className="class-badge" />}{value}</strong>{level && <small>УРОВЕНЬ {level}</small>}</div>; })}</div></div></section>
-      <DossierSection index="02" title="ВНЕШНИЕ ХАРАКТЕРИСТИКИ"><FormattedText className="lead-copy" text={virus.external} document={formattedText[portiaTextKey.virus(virus.id, "external")]} /></DossierSection>
-      <DossierSection index="03" title="ХАРАКТЕРИСТИКИ С PPU"><div className="metric-grid"><div><span>ЗДОРОВЬЕ</span><FormattedText text={virus.ppu.health} document={formattedText[portiaTextKey.virus(virus.id, "ppu-health")]} /></div><div><span>СКОРОСТЬ</span><FormattedText text={virus.ppu.speed} document={formattedText[portiaTextKey.virus(virus.id, "ppu-speed")]} /></div><div><span>СПОСОБНОСТИ</span><FormattedText text={virus.ppu.abilities} document={formattedText[portiaTextKey.virus(virus.id, "ppu-abilities")]} /></div></div></DossierSection>
-      <DossierSection index="04" title="ФИЗИОЛОГИЯ"><FormattedText className="lead-copy" text={virus.physiology} document={formattedText[portiaTextKey.virus(virus.id, "physiology")]} /></DossierSection>
-      <DossierSection index="05" title="МУТАЦИИ ВИРУСА"><div className="mutation-grid">{virus.mutations.map((mutation, index) => <section className="mutation-card" key={`${mutation.name}-${index}`}><div className="mutation-index">M-{String(index + 1).padStart(2, "0")}</div><MediaBlock src={mutation.image} alt={mutation.name} label="Скриншот мутации" recordId={`${virus.id}:mutation:${index}`} priority="lazy" /><div className="mutation-copy"><h4>{mutation.name}</h4><FormattedText text={mutation.description} document={formattedText[portiaTextKey.mutation(virus.id, index)]} /></div></section>)}</div></DossierSection>
-      <DossierSection index="06" title="ЗАПИСИ УЧЁНЫХ"><div className="access-summary"><span>ТЕКУЩИЙ УРОВЕНЬ ДОСТУПА</span><strong>II</strong></div><div className="scientist-log-list">{virus.scientistLogs.map((log, index) => { const isOpen = log.lockedLevel <= 2; return <button className={`scientist-log-row ${isOpen ? "available" : "locked"}`} type="button" key={log.id} onClick={() => onOpenLog(log.id)}><span className="log-number">LOG-{String(index + 1).padStart(2, "0")}</span><span className="log-name"><strong>{log.title}</strong><small>{log.scientist}</small></span><span className="log-clearance"><PortiaIcon name={isOpen ? "lock-open" : "lock-closed"} className="log-lock" />УРОВЕНЬ {roman(log.lockedLevel)}</span><span className="log-action">{isOpen ? "ОТКРЫТЬ" : "ЗАБЛОКИРОВАНО"}</span></button>; })}{virus.scientistLogs.length === 0 && <div className="scientist-log-empty">ЗАПИСИ ОТСУТСТВУЮТ</div>}</div></DossierSection>
-      <footer className="record-footer"><span>PORTIA / SCIENCE REPORTS</span><span>ЗАПИСЬ {virus.code}</span></footer>
-    </div>
-  </div>;
+  const records = <DossierSection index="06" title="ЗАПИСИ УЧЁНЫХ"><div className="access-summary"><span>ТЕКУЩИЙ УРОВЕНЬ ДОСТУПА</span><strong>II</strong></div><div className="scientist-log-list">{virus.scientistLogs.map((log, index) => { const isOpen = log.lockedLevel <= 2; return <button className={`scientist-log-row ${isOpen ? "available" : "locked"}`} type="button" key={log.id} onClick={() => onOpenLog(log.id)}><span className="log-number">LOG-{String(index + 1).padStart(2, "0")}</span><span className="log-name"><strong>{log.title}</strong><small>{log.scientist}</small></span><span className="log-clearance"><PortiaIcon name={isOpen ? "lock-open" : "lock-closed"} className="log-lock" />УРОВЕНЬ {roman(log.lockedLevel)}</span><span className="log-action">{isOpen ? "ОТКРЫТЬ" : "ЗАБЛОКИРОВАНО"}</span></button>; })}{virus.scientistLogs.length === 0 && <div className="scientist-log-empty">ЗАПИСИ ОТСУТСТВУЮТ</div>}</div></DossierSection>;
+  return <VirusCardBody
+    key={virus.id}
+    virus={virus}
+    formattedText={formattedText}
+    media={(slot) => <MediaBlock src={slot.kind === "infected" ? virus.infectedImage : virus.mutations[slot.index]?.image ?? ""} alt={slot.alt} label={slot.label} recordId={slot.recordId} priority={slot.priority} />}
+    after={records}
+    footer={["PORTIA / SCIENCE REPORTS", <>ЗАПИСЬ {virus.code}</>]}
+  />;
 }
 
 export function ScientistDocument({ virus, logId, onBack }: { virus: Virus; logId: string; onBack: () => void }) {
@@ -81,62 +71,9 @@ function generatedRedaction(id: string) {
   return paragraphs;
 }
 
-function documentBackground(hex: string | undefined, opacity: number | undefined) {
-  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return undefined;
-  const value = Number.parseInt(hex.slice(1), 16);
-  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${opacity ?? 1})`;
-}
-
 function ScientistRichText({ log }: { log: ScientistLog }) {
   const document = scientistDocument(log);
   return <FormattedText className="scientist-rich-text" text={log.content.join("\n\n")} document={document} />;
-}
-
-// An inline image that fails to load is replaced by a short Russian note instead of the browser's broken-image icon (D-07).
-function EmbeddedImage({ src, eager = false }: { src: string; eager?: boolean }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return <span className="embedded-rich-media-unavailable">Изображение недоступно</span>;
-  return <img
-    className="embedded-rich-media"
-    src={src}
-    alt="Анимированное изображение"
-    loading={eager ? "eager" : "lazy"}
-    decoding="async"
-    referrerPolicy="no-referrer"
-    onError={() => setFailed(true)}
-  />;
-}
-
-export function FormattedText({ text, document, className = "", trimLeadingBlankLines = false, eagerMedia = false }: { text?: string; document?: RichTextDocument; className?: string; trimLeadingBlankLines?: boolean; eagerMedia?: boolean }) {
-  const runs = document?.runs?.length ? document.runs : [{ text: text ?? "" }];
-  const fullText = runs.map((run) => run.text).join("");
-  const contentStart = trimLeadingBlankLines ? (fullText.match(/^(?:[ \t]*\r?\n)+/)?.[0].length ?? 0) : 0;
-  const runRanges = runs.map((run, index) => {
-    const start = runs.slice(0, index).reduce((total, item) => total + item.text.length, 0);
-    return { run, start, end: start + run.text.length };
-  });
-  const nodes: React.ReactNode[] = [];
-
-  const appendStyledText = (start: number, end: number, key: string) => {
-    runRanges.forEach(({ run, start: runStart, end: runEnd }, runIndex) => {
-      const from = Math.max(start, runStart);
-      const to = Math.min(end, runEnd);
-      if (from >= to) return;
-      nodes.push(<span key={`${key}-${runIndex}-${from}`} style={{
-        color: run.style?.color,
-        fontSize: run.style?.fontSize ? `${run.style.fontSize}px` : undefined,
-        fontWeight: run.style?.fontWeight,
-        backgroundColor: documentBackground(run.style?.backgroundColor, run.style?.backgroundOpacity),
-      }}>{fullText.slice(from, to)}</span>);
-    });
-  };
-
-  splitEmbeddedMedia(fullText).forEach((segment, index) => {
-    if (segment.kind === "text") appendStyledText(Math.max(segment.start, contentStart), segment.end, `text-${index}`);
-    else nodes.push(<EmbeddedImage key={`media-${index}-${segment.start}`} src={segment.url} eager={eagerMedia} />);
-  });
-
-  return <span className={`formatted-content${className ? ` ${className}` : ""}`}>{nodes}</span>;
 }
 
 function LoadingMedia({ src, alt, label, recordId, priority }: { src: string; alt: string; label: string; recordId: string; priority: "hero" | "lazy" }) {
@@ -145,10 +82,6 @@ function LoadingMedia({ src, alt, label, recordId, priority }: { src: string; al
     <PortiaImage src={src} alt={alt} recordId={recordId} priority={priority} icon="virus" />
     <figcaption>{label}</figcaption>
   </figure>;
-}
-
-export function DossierSection({ index, title, children }: { index: string; title: string; children: React.ReactNode }) {
-  return <section className="dossier-section"><div className="section-kicker"><span>{index}</span>{title}</div>{children}</section>;
 }
 
 // Shown while data is on its way. It fades in only after a short wait, so cached data never flashes it.

@@ -112,7 +112,8 @@ test("component families start with the full main file", () => {
 
 test("component families import only their own seams and the known shared components", () => {
   const allowed = {
-    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion"],
+    // portia-virus-card: the archive's virus card, shared with the template builder (D-55, 20-43).
+    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card"],
     // portia-desktop-states: the shared «Доступ закрыт» panel the editor shows when the rights check fails (STAB-APP-09).
     "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states"],
   } as const;
@@ -389,7 +390,10 @@ test("every record picture goes through PortiaImage with its record id and the r
     // LoadingMedia forwards the priority its MediaBlock caller chose; every other call site names it literally.
     assert.match(tag, /priority="(?:hero|lazy)"|priority=\{priority\}/, tag);
   }
-  assert.ok(part("portia-desktop-dossier.tsx").includes('recordId={`${virus.id}:infected`} priority="hero"'));
+  // The card (portia-virus-card.tsx) names each picture place; the dossier hands them to MediaBlock as they are.
+  const card = readFileSync(new URL("../components/portia-virus-card.tsx", import.meta.url), "utf8");
+  assert.ok(card.includes('recordId: `${virus.id}:infected`, priority: "hero"'));
+  assert.ok(part("portia-desktop-dossier.tsx").includes("recordId={slot.recordId} priority={slot.priority}"));
   const heroes = all.filter(({ tag }) => tag.includes('priority="hero"')).map(({ tag }) => tag);
   assert.equal(heroes.length, 3, "selected employee avatar and the portrait (its linked and plain variants); the dossier hero is checked above");
   assert.ok(heroes.every((tag) => /:avatar`|:portrait`|:infected`/.test(tag)));
@@ -397,7 +401,7 @@ test("every record picture goes through PortiaImage with its record id and the r
   const lazyOf = (file: string) => all.filter((entry) => entry.file === file).map((entry) => entry.tag);
   assert.ok(lazyOf("portia-desktop-documents.tsx").length >= 3 && lazyOf("portia-desktop-documents.tsx").every((tag) => tag.includes('priority="lazy"')));
   assert.ok(lazyOf("portia-desktop.tsx").filter((tag) => tag.includes('priority="lazy"')).length >= 2, "information photo and trash image");
-  assert.ok(part("portia-desktop-dossier.tsx").includes('recordId={`${virus.id}:mutation:${index}`} priority="lazy"'));
+  assert.ok(card.includes('recordId: `${virus.id}:mutation:${index}`, priority: "lazy"'));
   // No loading policy outside PortiaImage; the one fetchPriority left is the PORTIA mark of the boot screen.
   assert.ok(!source.includes('loading="eager"'));
   for (const line of source.split(NL).filter((entry) => entry.includes('fetchPriority="high"'))) assert.ok(line.includes("portia-logo.png"), line);
