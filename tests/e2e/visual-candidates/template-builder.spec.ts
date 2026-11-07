@@ -15,6 +15,10 @@ import { captureCandidate } from "./support";
 // The requirement id of a frame is STAB-BASE-03 because that is the only family support.ts accepts; the evidence belongs to STAB-TMPL-01.
 //
 // A request tracker fails the test on any non-GET request to our own /api, any request to Supabase and any request to file uploads.
+//
+// D-55 (20-43): the builder has a view switch «Поля» / «Предпросмотр». The frames main, text and mutations are taken in the view «Поля»;
+// the frame preview is taken in the view «Предпросмотр», where the card is the archive's own card (VirusCardBody) over the whole width.
+// A PC frame of the preview maximizes the Promotion window first, as the archive's card needs about 840 px of its own width for two columns.
 
 const lanes = new Set(["chromium-desktop", "chromium-phone"]);
 test.beforeEach(({}, testInfo) => {
@@ -171,12 +175,14 @@ async function styleFirstWord(page: Page, builder: Locator, field: Locator, word
   }
 }
 
-async function touchTargetsOnPhone(builder: Locator, testName: string) {
+/** In the view «Предпросмотр» the form is hidden, so its tabs and the format button are not laid out; the view switch and the downloads are. */
+async function touchTargetsOnPhone(builder: Locator, testName: string, view: "fields" | "preview" = "fields") {
   if (testName !== "chromium-phone") return;
   const tabs = builder.getByRole("navigation", { name: "Разделы досье" }).getByRole("button");
   await assertTouchTargets([
-    ...(await tabs.all()),
-    builder.locator(".global-format-launch > button"),
+    ...(view === "fields" ? await tabs.all() : []),
+    ...(await builder.getByRole("group", { name: "Вид", exact: true }).getByRole("button").all()),
+    ...(view === "fields" ? [builder.locator(".global-format-launch > button")] : []),
     builder.getByRole("button", { name: "Скачать PNG" }),
     builder.getByRole("button", { name: "Скачать HTML" }),
   ]);
@@ -264,17 +270,24 @@ test("[STAB-TMPL-01] template-builder-preview: a filled draft scrolled to the pr
   await styleFirstWord(page, builder, textField(builder, "Описание"), "Реагирует", "Важно", true);
   await builder.locator("[data-testid=template-image-input]").setInputFiles({ name: "mutation.png", mimeType: "image/png", buffer: mutationPng });
 
+  // The view «Предпросмотр»: the archive's card over the whole width; on a PC the window is maximized so the card is two-column like the archive's.
+  await builder.getByRole("group", { name: "Вид", exact: true }).getByRole("button", { name: "Предпросмотр", exact: true }).click();
+  if (testInfo.project.name === "chromium-desktop") {
+    await page.getByRole("button", { name: "Развернуть Повышение" }).click();
+    await expect.poll(async () => (await promotion.window.boundingBox())?.width ?? 0).toBeGreaterThan(1200);
+  }
   const preview = builder.getByLabel("Предпросмотр шаблона");
   await expect(preview.getByRole("img", { name: "Фото после заражения" })).toBeVisible();
-  await expect(preview.locator(".template-kicker")).toHaveCount(5);
-  await expect(preview.locator(".template-mutation-index")).toHaveText("M-01");
+  await expect(preview.locator(".section-kicker")).toHaveCount(5);
+  await expect(preview.locator(".mutation-index")).toHaveText("M-01");
+  await expect(preview.locator(".class-cell svg.class-badge").first()).toBeVisible();
   await preview.evaluate((node) => node.scrollIntoView({ block: "start", inline: "nearest" }));
   await settle(promotion.window);
-  await touchTargetsOnPhone(builder, testInfo.project.name);
+  await touchTargetsOnPhone(builder, testInfo.project.name, "preview");
   await assertNoOverflow(page, builder);
   await captureCandidate(context, {
     id: "template-builder-preview", requirement: "STAB-BASE-03", surface, actor,
-    state: "D-52 / STAB-TMPL-01 UI-контракт (подменено одно чтение статуса участника, не доказательство ролей): заполненный черновик, прокрутка к предпросмотру 01–05 (на телефоне — после полей)",
+    state: "D-52 / STAB-TMPL-01 UI-контракт (подменено одно чтение статуса участника, не доказательство ролей): заполненный черновик, вид «Предпросмотр» (D-55): карточка «Базы вирусов» на всю ширину, окрашенные иконки классов, разделы 01–05, подвал «ШАБЛОН» (на PC окно развёрнуто)",
     intendedSnapshot: snapshot("preview", testInfo.project.name),
   });
 });

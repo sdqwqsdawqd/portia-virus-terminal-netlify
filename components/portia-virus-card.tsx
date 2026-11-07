@@ -66,7 +66,7 @@ export function FormattedText({ text, document, className = "", trimLeadingBlank
   };
 
   if (emptyText !== undefined && fullText.trim() === "") {
-    return <span className={`formatted-content${className ? ` ${className}` : ""}`}><span className="formatted-empty">{emptyText}</span></span>;
+    return <span className={`formatted-content${className ? ` ${className}` : ""}`}><em className="formatted-empty">{emptyText}</em></span>;
   }
 
   const segments = embedMedia ? splitEmbeddedMedia(fullText) : [{ kind: "text" as const, start: 0, end: fullText.length }];
@@ -107,7 +107,7 @@ export function VirusCardBody({ virus, formattedText, media, embedMedia = true, 
     ["danger", "Общий уровень опасности", virus.classification.danger, "danger"], ["spread", "Распространение", virus.classification.spread, "spread"], ["escapeRisk", "Угроза и риск побега", virus.classification.escapeRisk, "escape"],
     ["transmission", "Способ распространения", virus.classification.transmission, "transmission"], ["mind", "Разум", virus.classification.mind, "mind"], ["appearance", "Вид / внешность", virus.classification.appearance, "appearance"], ["behavior", "Поведение", virus.classification.behavior, "behavior"],
   ] as const;
-  const plain = (value: string): ReactNode => (emptyText !== undefined && value.trim() === "" ? <span className="formatted-empty">{emptyText}</span> : value);
+  const plain = (value: string): ReactNode => (emptyText !== undefined && value.trim() === "" ? <em className="formatted-empty">{emptyText}</em> : value);
   const text = { embedMedia, emptyText };
   return <div className="record-body content-fade">
     <header className="record-header"><div><span className="record-code">{plain(virus.code)}</span><h2>{plain(virus.name)}</h2></div><div className="record-status"><span />{plain(virus.status)}</div></header>

@@ -341,6 +341,19 @@ test("D-55 (20-37): the builder keeps links as text and draws pictures only from
   expectMatch(code, /isLocalTemplateImage\(/, "a slot is checked before it is drawn");
 });
 
+test("D-55 (20-43): the builder shows the form or the card through a view switch with aria-pressed and keeps the form mounted", () => {
+  const code = stripComments(subjectSource());
+  expectMatch(code, /aria-pressed=\{view === "fields"\}/);
+  expectMatch(code, /aria-pressed=\{view === "preview"\}/);
+  expectMatch(code, /className="template-form"[^>]*\bhidden=\{view !== "fields"\}/, "the form stays mounted and is only hidden");
+  expectMatch(code, /\{view === "preview" && <TemplatePreview\b/, "the card is drawn only in its own view");
+  expectMatch(code, /closeFormatter\(\);\s*setView\(next\)/, "a view change closes the format panel as a tab change does");
+  const toolbar = /<div ref=\{toolbarRef\} className="template-toolbar">[\s\S]*?<div className="template-form"/.exec(code)?.[0] ?? "";
+  expectMatch(toolbar, /Скачать PNG/, "the download buttons sit outside the form, so both views have them");
+  expectMatch(toolbar, /Скачать HTML/);
+  expectMatch(toolbar, /role="status"/, "the status line is outside the form too");
+});
+
 /* ---------------------------------------------------------------- guard self-check */
 
 test("the guards recognise a violating source (guard self-check)", () => {

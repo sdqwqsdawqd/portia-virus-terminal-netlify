@@ -248,6 +248,28 @@ test.describe("[STAB-A11Y-01] PC controls: axe, names, focus", () => {
     await expectNamedFields("Мутации");
     expect(await scan(page, testInfo, "template-mutations").then(summary)).toEqual([]);
 
+    // D-55: the view switch is two named buttons with aria-pressed, and axe finds nothing critical or serious in either view.
+    const views = builder.getByRole("group", { name: "Вид", exact: true });
+    const fieldsView = views.getByRole("button", { name: "Поля", exact: true });
+    const previewView = views.getByRole("button", { name: "Предпросмотр", exact: true });
+    await expect(fieldsView).toHaveAccessibleName("Поля");
+    await expect(previewView).toHaveAccessibleName("Предпросмотр");
+    await expect(fieldsView).toHaveAttribute("aria-pressed", "true");
+    await expect(previewView).toHaveAttribute("aria-pressed", "false");
+    await previewView.click();
+    await expect(previewView).toHaveAttribute("aria-pressed", "true");
+    await expect(fieldsView).toHaveAttribute("aria-pressed", "false");
+    const card = builder.getByLabel("Предпросмотр шаблона");
+    await expect(card).toBeVisible();
+    await expect(builder.getByRole("button", { name: "Скачать HTML" })).toBeVisible();
+    // The card fades in when it mounts (the archive's content-fade): measure it at rest, not a frame of the fade.
+    await settle(page);
+    expect(await scan(page, testInfo, "template-preview").then(summary)).toEqual([]);
+    await fieldsView.click();
+    await expect(builder.getByRole("group", { name: "Поля шаблона" })).toBeVisible();
+    await expect(card).toHaveCount(0);
+    expect(await scan(page, testInfo, "template-fields-after-view").then(summary)).toEqual([]);
+
     // empty, Cyrillic and long values keep the preview named and the page unwidened
     await tabs.getByRole("button", { name: "Основное", exact: true }).click();
     const first = builder.getByLabel("Название", { exact: true });

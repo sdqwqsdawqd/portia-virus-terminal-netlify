@@ -48,6 +48,8 @@ import {
 } from "@/lib/portia-template-export";
 
 type ExportPhase = "idle" | "preparing" | "error" | "too-large" | "done";
+// The builder shows the form or the card, never both: the card takes the full width and the form stays compact (D-55).
+type BuilderView = "fields" | "preview";
 type ExportFormat = "png" | "html";
 
 // The status line must be on screen for a moment even though building the file is instant.
@@ -156,6 +158,7 @@ function TemplatePreview({ dossier }: { dossier: TemplateDossier }) {
 export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
   const [dossier, setDossier] = useState<TemplateDossier>(() => emptyTemplateDossier());
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
+  const [view, setView] = useState<BuilderView>("fields");
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface | null>(null);
@@ -167,6 +170,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
   const stayRef = useRef<HTMLButtonElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const exportingRef = useRef(false);
   const readingRef = useRef(false);
   const [reading, setReading] = useState(false);
@@ -198,6 +202,13 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
     if (id === "logs") return;
     setDossierTab(id);
     closeFormatter();
+  };
+  // The form stays mounted while the card is shown (the draft, the open tab and the typed text are kept); the format panel closes as on a tab change.
+  const selectView = (next: BuilderView) => {
+    if (next === view) return;
+    closeFormatter();
+    setView(next);
+    requestAnimationFrame(() => toolbarRef.current?.scrollIntoView({ block: "nearest" }));
   };
   const removeMutation = (index: number) => {
     if (busy) return;
@@ -311,7 +322,25 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
 
       <ActiveFormatContext.Provider value={{ key: formatTarget?.key ?? null, surface: previewSurface, phonePanelOpen: formatterOpen && window.matchMedia("(max-width: 900px)").matches }}>
       <div className="template-grid" inert={confirmClose || undefined}>
-        <div className="template-form" aria-label="Поля шаблона" role="group">
+        <div ref={toolbarRef} className="template-toolbar">
+          <div className="template-view" role="group" aria-labelledby={`${idPrefix}-view`}>
+            <span id={`${idPrefix}-view`}>Вид</span>
+            <button type="button" aria-pressed={view === "fields"} onClick={() => selectView("fields")}>Поля</button>
+            <button type="button" aria-pressed={view === "preview"} onClick={() => selectView("preview")}>Предпросмотр</button>
+          </div>
+          <div className="template-actions">
+            <button type="button" className="promotion-action" disabled={!hasContent || busy} aria-describedby={`${idPrefix}-hint`} onClick={() => { void runExport("png"); }}>Скачать PNG</button>
+            <button type="button" className="promotion-action" disabled={!hasContent || busy} aria-describedby={`${idPrefix}-hint`} onClick={() => { void runExport("html"); }}>Скачать HTML</button>
+            {phase === "error" && <button type="button" className="promotion-action" disabled={busy} onClick={() => { void runExport(lastFormat); }}>Повторить скачивание</button>}
+          </div>
+          <p id={`${idPrefix}-hint`} className="template-hint">
+            {hasContent ? (dirty ? "Текущий черновик ещё не скачан." : "Текущий черновик уже скачан.") : "Введите текст хотя бы в одно поле или добавьте изображение, чтобы скачать файл."}
+          </p>
+          <p className="template-status" role="status" aria-live="polite">{status}</p>
+          {phase === "error" && <p className="promotion-error" role="alert">{templateExportError}</p>}
+          {phase === "too-large" && <p className="promotion-error" role="alert">{templatePngTooLargeError}</p>}
+        </div>
+        <div className="template-form" aria-label="Поля шаблона" role="group" hidden={view !== "fields"}>
           <FormatLaunchButton target={formatTarget} open={formatterOpen} onToggle={() => setFormatterOpen((current) => !current)} />
 
           <div className="editor-form virus-editor-form">
@@ -356,19 +385,8 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
             </EditorGroup>}
           </div>
 
-          <div className="template-actions">
-            <button type="button" className="promotion-action" disabled={!hasContent || busy} aria-describedby={`${idPrefix}-hint`} onClick={() => { void runExport("png"); }}>Скачать PNG</button>
-            <button type="button" className="promotion-action" disabled={!hasContent || busy} aria-describedby={`${idPrefix}-hint`} onClick={() => { void runExport("html"); }}>Скачать HTML</button>
-            {phase === "error" && <button type="button" className="promotion-action" disabled={busy} onClick={() => { void runExport(lastFormat); }}>Повторить скачивание</button>}
-          </div>
-          <p id={`${idPrefix}-hint`} className="template-hint">
-            {hasContent ? (dirty ? "Текущий черновик ещё не скачан." : "Текущий черновик уже скачан.") : "Введите текст хотя бы в одно поле или добавьте изображение, чтобы скачать файл."}
-          </p>
-          <p className="template-status" role="status" aria-live="polite">{status}</p>
-          {phase === "error" && <p className="promotion-error" role="alert">{templateExportError}</p>}
-          {phase === "too-large" && <p className="promotion-error" role="alert">{templatePngTooLargeError}</p>}
         </div>
-        <TemplatePreview dossier={dossier} />
+        {view === "preview" && <TemplatePreview dossier={dossier} />}
       </div>
       </ActiveFormatContext.Provider>
       {formatterOpen && formatTarget && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={(_id, run) => run()} onClose={() => setFormatterOpen(false)} positionStorageKey={null} />, document.getElementById("desktop") ?? document.body)}

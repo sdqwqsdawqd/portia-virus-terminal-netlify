@@ -11,6 +11,8 @@ import { expect, test } from "../fixtures/test";
 // evidence and must never be reported as such (CLAUDE.md: roles and staging stay BLOCKED until their phase proves them).
 // The form is the site editor's virus card (tabs «Основное», «Описание», «Мутации», formatted text, panel «ОФОРМЛЕНИЕ») without
 // the scientist records; every scenario ends with an empty write tracker.
+// D-55 (20-43): a view switch «Поля» / «Предпросмотр» shows the form or the archive's own card (VirusCardBody), never both; the download
+// buttons and the status line stay in both views. Preview checks therefore switch the view first.
 const nickname = "portia_e2e_template";
 const markup = `<img src=x onerror="window.__pwned=1"> & "кавычки"`;
 
@@ -113,10 +115,15 @@ async function openBuilder(page: Page) {
   return { promotion, builder };
 }
 
-/** The preview is shown through the view switch «Предпросмотр» once the builder has one (20-43 Task 2); before that it stands beside the form. */
+/** The view switch: two buttons with aria-pressed in the group «Вид». */
+const viewGroup = (builder: Locator) => builder.getByRole("group", { name: "Вид", exact: true });
 async function showPreview(builder: Locator) {
-  const toggle = builder.getByRole("group", { name: "Вид" }).getByRole("button", { name: "Предпросмотр", exact: true });
-  if (await toggle.count()) await toggle.click();
+  await viewGroup(builder).getByRole("button", { name: "Предпросмотр", exact: true }).click();
+  await expect(builder.getByLabel("Предпросмотр шаблона")).toBeVisible();
+}
+async function showFields(builder: Locator) {
+  await viewGroup(builder).getByRole("button", { name: "Поля", exact: true }).click();
+  await expect(builder.getByRole("group", { name: "Поля шаблона" })).toBeVisible();
 }
 
 /** The dossier tabs are plain buttons in the navigation «Разделы досье», exactly like the site editor's virus card. */
@@ -204,6 +211,11 @@ test("[STAB-TMPL-01] the form is the editor's virus card: three tabs, the same g
   await expect(builder.getByRole("button", { name: /Записи учёных/ })).toHaveCount(0);
   await expect(builder.getByText("Записи учёных")).toHaveCount(0);
   await expect(builder.getByRole("group", { name: "Поля шаблона" })).toBeVisible();
+  // The view switch: «Поля» is on at the start and the card is not on the page until «Предпросмотр» is chosen.
+  await expect(viewGroup(builder).getByRole("button")).toHaveText(["Поля", "Предпросмотр"]);
+  await expect(viewGroup(builder).getByRole("button", { name: "Поля", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(viewGroup(builder).getByRole("button", { name: "Предпросмотр", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(builder.getByLabel("Предпросмотр шаблона")).toHaveCount(0);
 
   // Before any text field is chosen the one format button says so and is off.
   const launch = builder.locator(".global-format-launch > button");
@@ -241,11 +253,12 @@ test("[STAB-TMPL-01] styling: a ready style on a word reaches the preview span a
   await openTab(builder, "Описание");
   await styleFirstWord(page, builder, textField(builder, "Внешние характеристики"), "Слово", "Заголовок");
 
-  const styled = preview.locator(".template-rich span", { hasText: /^Слово$/ });
+  await showPreview(builder);
+  const styled = preview.locator(".formatted-content span", { hasText: /^Слово$/ });
   await expect(styled).toHaveCount(1);
   await expect(styled).toHaveCSS("font-weight", "800");
   await expect(styled).toHaveCSS("font-size", "22px");
-  await expect(preview.locator(".template-rich span", { hasText: "и далее" })).not.toHaveCSS("font-weight", "800");
+  await expect(preview.locator(".formatted-content span", { hasText: "и далее" })).not.toHaveCSS("font-weight", "800");
 
   const { html } = await downloadHtml(page, builder, testInfo);
   expect(html).toMatch(/<span style="font-size:22px;font-weight:800">Слово<\/span>/);
@@ -267,26 +280,31 @@ test("[STAB-TMPL-01] mutations: add two, style the second, delete the first - on
   await add.click();
   await expect(builder.getByText("МУТАЦИЯ 01")).toBeVisible();
   await expect(builder.getByText("МУТАЦИЯ 02")).toBeVisible();
-  await expect(preview.locator(".template-mutation h3")).toHaveText(["НОВАЯ МУТАЦИЯ", "НОВАЯ МУТАЦИЯ"]);
+  await showPreview(builder);
+  await expect(preview.locator(".mutation-copy h4")).toHaveText(["НОВАЯ МУТАЦИЯ", "НОВАЯ МУТАЦИЯ"]);
+  await showFields(builder);
 
   await nameField(builder).nth(0).fill("Первая");
   await nameField(builder).nth(1).fill("Вторая");
   await styleFirstWord(page, builder, textField(builder, "Описание").nth(1), "Слово", "Важно");
   await builder.locator("[data-testid=template-image-input]").nth(1).setInputFiles({ name: "red.png", mimeType: "image/png", buffer: redPng });
+  await showPreview(builder);
   await expect(preview.getByRole("img", { name: "Вторая" })).toBeVisible();
-  await expect(preview.locator(".template-mutation")).toHaveCount(2);
+  await expect(preview.locator(".mutation-card")).toHaveCount(2);
+  await showFields(builder);
 
   await builder.getByRole("button", { name: "Удалить" }).first().click();
   await expect(builder.getByText("МУТАЦИЯ 02")).toHaveCount(0);
-  await expect(preview.locator(".template-mutation")).toHaveCount(1);
-  await expect(preview.locator(".template-mutation-index")).toHaveText("M-01");
-  await expect(preview.locator(".template-mutation h3")).toHaveText("Вторая");
-  const styled = preview.locator(".template-mutation .template-rich span", { hasText: /^Слово$/ });
+  await expect(builder.getByLabel("Название", { exact: true })).toHaveValue("Вторая");
+  await showPreview(builder);
+  await expect(preview.locator(".mutation-card")).toHaveCount(1);
+  await expect(preview.locator(".mutation-index")).toHaveText("M-01");
+  await expect(preview.locator(".mutation-copy h4")).toHaveText("Вторая");
+  const styled = preview.locator(".mutation-card .formatted-content span", { hasText: /^Слово$/ });
   await expect(styled).toHaveCSS("font-weight", "600");
   await expect(styled).toHaveCSS("color", "rgb(180, 54, 50)");
   // The picture followed its mutation; the removed one's name is gone from the draft.
   await expect(preview.getByRole("img", { name: "Вторая" })).toBeVisible();
-  await expect(builder.getByLabel("Название", { exact: true })).toHaveValue("Вторая");
 
   await expect(builder.getByRole("button", { name: "Скачать HTML" })).toBeEnabled();
   const { html } = await downloadHtml(page, builder, testInfo);
@@ -310,10 +328,11 @@ test("[STAB-TMPL-01] classification: a changed value shows in the preview and th
 
   await selects.nth(0).selectOption("Апейрон");
   await selects.nth(1).selectOption("Тезей");
-  const danger = preview.locator(".template-class-cell", { hasText: /^Общий уровень опасности/ });
+  await showPreview(builder);
+  const danger = preview.locator(".class-cell", { hasText: /^общий уровень опасности/i });
   await expect(danger).toContainText("Апейрон");
   await expect(danger).toContainText("УРОВЕНЬ 3");
-  const spread = preview.locator(".template-class-cell", { hasText: /^Распространение/ });
+  const spread = preview.locator(".class-cell", { hasText: /^распространение/i });
   await expect(spread).toContainText("Тезей");
   await expect(spread).toContainText("УРОВЕНЬ 2");
 
@@ -380,10 +399,13 @@ test("[STAB-TMPL-01] a local image and long text reach the preview, the offline 
   await builder.locator("[data-testid=template-image-input]").setInputFiles({ name: "red.png", mimeType: "image/png", buffer: redPng });
   const preview = builder.getByLabel("Предпросмотр шаблона");
   const previewImage = preview.getByRole("img", { name: "Фото после заражения" });
-  await expect(previewImage).toBeVisible();
-  expect(await previewImage.evaluate((element: HTMLImageElement) => [element.naturalWidth, element.naturalHeight])).toEqual([64, 32]);
   await expect(builder.getByRole("button", { name: "Убрать изображение" })).toBeVisible();
   await expect(builder.getByText("Выбрано: red.png, 64×32")).toBeVisible();
+  await showPreview(builder);
+  await expect(previewImage).toBeVisible();
+  expect(await previewImage.evaluate((element: HTMLImageElement) => [element.naturalWidth, element.naturalHeight])).toEqual([64, 32]);
+  // The archive's caption stays under the local photo.
+  await expect(preview.locator("figure.subject-media figcaption")).toHaveText("Фото после заражения");
 
   // HTML: the image is embedded, nothing points at a server, and it opens offline.
   const { html, target: htmlPath } = await downloadHtml(page, builder, testInfo);
@@ -428,7 +450,9 @@ test("[STAB-TMPL-01] a local image and long text reach the preview, the offline 
   await expect(builder.getByRole("status")).toContainText("Файл скачан на устройство");
 
   // Removing the image removes it from the preview and from the next file.
+  await showFields(builder);
   await builder.getByRole("button", { name: "Убрать изображение" }).click();
+  await showPreview(builder);
   await expect(previewImage).toHaveCount(0);
   expect(writes).toEqual([]);
 });
@@ -457,9 +481,11 @@ test("[STAB-TMPL-01] an unsupported, corrupt, oversized or unreadable image is r
     await input.setInputFiles(file);
     await expect(builder.getByRole("alert")).toHaveText(imageRefusal);
     await expect(nameField(builder)).toHaveValue("Остаётся");
+    await expect(builder.getByRole("button", { name: "Скачать HTML" })).toBeEnabled();
+    await showPreview(builder);
     await expect(preview.getByRole("img")).toHaveCount(0);
     await expect(preview).toContainText("Первая строка");
-    await expect(builder.getByRole("button", { name: "Скачать HTML" })).toBeEnabled();
+    await showFields(builder);
   };
   await refused({ name: "fake.png", mimeType: "image/png", buffer: Buffer.from("это не изображение") });
   await refused({ name: "vector.svg", mimeType: "image/svg+xml", buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>') });
@@ -470,21 +496,26 @@ test("[STAB-TMPL-01] an unsupported, corrupt, oversized or unreadable image is r
 
   // A good file clears the message and shows up in the preview.
   await input.setInputFiles({ name: "red.png", mimeType: "image/png", buffer: redPng });
-  await expect(preview.getByRole("img")).toBeVisible();
   await expect(builder.getByRole("alert")).toHaveCount(0);
+  await showPreview(builder);
+  await expect(preview.getByRole("img")).toBeVisible();
+  await showFields(builder);
 
   // A later refusal does not throw away the image that was already accepted.
   await input.setInputFiles({ name: "fake.png", mimeType: "image/png", buffer: Buffer.from("нет") });
   await expect(builder.getByRole("alert")).toHaveText(imageRefusal);
+  await showPreview(builder);
   await expect(preview.getByRole("img")).toBeVisible();
+  await showFields(builder);
 
   // The decoder itself failing is reported the same way.
   await builder.getByRole("button", { name: "Убрать изображение" }).click();
   await page.evaluate(() => { (window as unknown as { __failDecode?: boolean }).__failDecode = true; });
   await input.setInputFiles({ name: "red.png", mimeType: "image/png", buffer: redPng });
   await expect(builder.getByRole("alert")).toHaveText(imageRefusal);
-  await expect(preview.getByRole("img")).toHaveCount(0);
   await expect(nameField(builder)).toHaveValue("Остаётся");
+  await showPreview(builder);
+  await expect(preview.getByRole("img")).toHaveCount(0);
   await expect(preview).toContainText("Первая строка");
   expect(writes).toEqual([]);
 });
@@ -519,7 +550,6 @@ test("[STAB-TMPL-01] an encoding failure keeps the draft, shows a status and ret
   const preview = builder.getByLabel("Предпросмотр шаблона");
   await nameField(builder).fill("Черновик остаётся");
   await builder.locator("[data-testid=template-image-input]").setInputFiles({ name: "red.png", mimeType: "image/png", buffer: redPng });
-  await expect(preview.getByRole("img")).toBeVisible();
   await openTab(builder, "Описание");
   await textField(builder, "Физиологические характеристики").fill("Текст участника");
   await openTab(builder, "Основное");
@@ -533,10 +563,13 @@ test("[STAB-TMPL-01] an encoding failure keeps the draft, shows a status and ret
     await expect(builder.getByRole("button", { name: "Повторить скачивание" })).toBeVisible();
     await expect(builder.getByRole("status")).toHaveText("");
     await expect(nameField(builder)).toHaveValue("Черновик остаётся");
-    await expect(preview).toContainText("Текст участника");
-    await expect(preview.getByRole("img")).toBeVisible();
     expect(downloads).toEqual([]);
   }
+  // The draft, text and picture are still in the card after four failed encodings.
+  await showPreview(builder);
+  await expect(preview).toContainText("Текст участника");
+  await expect(preview.getByRole("img")).toBeVisible();
+  await showFields(builder);
 
   // The encoder works again: the retry produces the PNG (the format that failed), and the error goes away.
   await page.evaluate(() => { (window as unknown as { __pngMode?: string }).__pngMode = undefined; });
@@ -573,7 +606,7 @@ test("[STAB-TMPL-01] a card too long for PNG is refused with an HTML alternative
   expect(writes).toEqual([]);
 });
 
-test("[STAB-TMPL-01] long unbroken text and a wide image stay inside the window and the phone shows the preview after the fields", async ({ page, isMobile }) => {
+test("[STAB-TMPL-01] long unbroken text and a wide image stay inside the window in both views", async ({ page }) => {
   const writes = trackWrites(page);
   const { promotion, builder } = await openBuilder(page);
   await nameField(builder).fill("Д".repeat(110));
@@ -581,38 +614,117 @@ test("[STAB-TMPL-01] long unbroken text and a wide image stay inside the window 
   await openTab(builder, "Описание");
   await pasteText(textField(builder, "Физиологические характеристики"), `${"длинноеслово".repeat(300)} ${"x".repeat(900)}`);
   const preview = builder.getByLabel("Предпросмотр шаблона");
-  await expect(preview.getByRole("img")).toBeVisible();
 
-  const metrics = await page.evaluate(() => {
+  const overflowOf = () => page.evaluate(() => {
     const root = document.documentElement;
-    const form = document.querySelector(".template-form")!.getBoundingClientRect();
-    const card = document.querySelector(".template-preview")!;
-    const cardRect = card.getBoundingClientRect();
     const builderElement = document.querySelector(".template-builder")!;
-    const imageRect = card.querySelector("img")!.getBoundingClientRect();
+    const card = document.querySelector(".template-card-preview");
     return {
       pageOverflow: root.scrollWidth - root.clientWidth,
       builderOverflow: builderElement.scrollWidth - builderElement.clientWidth,
-      cardOverflow: card.scrollWidth - card.clientWidth,
-      formBottom: form.bottom, formRight: form.right,
-      cardTop: cardRect.top, cardLeft: cardRect.left, cardRight: cardRect.right,
-      imageRight: imageRect.right,
+      cardOverflow: card ? card.scrollWidth - card.clientWidth : 0,
+      imageRight: card?.querySelector("img")?.getBoundingClientRect().right ?? 0,
+      cardRight: card?.getBoundingClientRect().right ?? 0,
     };
   });
-  expect(metrics.pageOverflow).toBeLessThanOrEqual(1);
-  expect(metrics.builderOverflow).toBeLessThanOrEqual(1);
-  expect(metrics.cardOverflow).toBeLessThanOrEqual(1);
-  expect(metrics.imageRight).toBeLessThanOrEqual(metrics.cardRight + 1);
-  if (isMobile) expect(metrics.cardTop).toBeGreaterThanOrEqual(metrics.formBottom - 1);
-  else expect(metrics.cardLeft).toBeGreaterThanOrEqual(metrics.formRight - 1);
+
+  // The fields view: long text in the form does not widen the page or the builder.
+  const fields = await overflowOf();
+  expect(fields.pageOverflow).toBeLessThanOrEqual(1);
+  expect(fields.builderOverflow).toBeLessThanOrEqual(1);
+
+  // The card view: the same, and the wide picture stays inside the card.
+  await showPreview(builder);
+  await expect(preview.getByRole("img")).toBeVisible();
+  const card = await overflowOf();
+  expect(card.pageOverflow).toBeLessThanOrEqual(1);
+  expect(card.builderOverflow).toBeLessThanOrEqual(1);
+  expect(card.cardOverflow).toBeLessThanOrEqual(1);
+  expect(card.imageRight).toBeLessThanOrEqual(card.cardRight + 1);
 
   // The card is reachable by scrolling inside the window, not by a page-level scroll.
-  await preview.scrollIntoViewIfNeeded();
-  await expect(preview.locator("footer")).toBeVisible();
+  await preview.locator("footer.record-footer").scrollIntoViewIfNeeded();
+  await expect(preview.locator("footer.record-footer")).toBeVisible();
   const box = await promotion.window.boundingBox();
   const viewport = page.viewportSize();
   expect(box).not.toBeNull();
   expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width + 1);
+  expect(writes).toEqual([]);
+});
+
+// D-55 (20-37) compact (20-43): the view switch keeps the draft, the card takes the whole width, the form is short.
+// scrollHeight of the builder's scroll container (.template-builder) on an empty draft, tab «Основное», measured on the build of 20-43 Task 1
+// (the new card beside the form): chromium-desktop 2033 px (window 760x620), chromium-phone 3384 px (the container grows with its content).
+const heightBefore = { "chromium-desktop": 2033, "chromium-phone": 3384 } as const;
+test("[STAB-TMPL-01] D-55 compact: the view switch keeps the draft and the card is two-column on a PC", async ({ page, isMobile }, testInfo) => {
+  const writes = trackWrites(page);
+  const { promotion, builder } = await openBuilder(page);
+
+  // The form alone is at least a quarter shorter on a PC than the builder with the card beside it was.
+  const project = testInfo.project.name as keyof typeof heightBefore;
+  const fieldsHeight = await builder.evaluate((element) => element.scrollHeight);
+  testInfo.annotations.push({ type: "scrollHeight-fields", description: String(fieldsHeight) });
+  if (project in heightBefore) {
+    if (!isMobile) expect(fieldsHeight).toBeLessThanOrEqual(Math.floor(heightBefore[project] * 0.75));
+    else expect(fieldsHeight).toBeLessThan(heightBefore[project]);
+  }
+
+  // The draft survives the switch: the typed name, the open tab and a typed text field.
+  await nameField(builder).fill("Черновик остаётся");
+  await openTab(builder, "Описание");
+  await pasteText(textField(builder, "Физиологические характеристики"), "Первая строка");
+  const launch = builder.getByRole("button", { name: /^Оформление .+: панель оформления текста$/ });
+  await expect(launch).toBeEnabled();
+  await launch.click();
+  const panel = page.getByRole("region", { name: /^Форматирование:/ });
+  await expect(panel).toBeVisible();
+
+  await showPreview(builder);
+  // The switch closes the format panel as a tab change does, the form is out of the way and the card says what was typed.
+  await expect(panel).toHaveCount(0);
+  await expect(builder.getByRole("group", { name: "Поля шаблона" })).toBeHidden();
+  await expect(viewGroup(builder).getByRole("button", { name: "Предпросмотр", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(viewGroup(builder).getByRole("button", { name: "Поля", exact: true })).toHaveAttribute("aria-pressed", "false");
+  const preview = builder.getByLabel("Предпросмотр шаблона");
+  await expect(preview.getByRole("heading", { name: "Черновик остаётся" })).toBeVisible();
+  await expect(preview).toContainText("Первая строка");
+  // The download buttons and the hint stay in the card view.
+  await expect(builder.getByRole("button", { name: "Скачать HTML" })).toBeEnabled();
+  await expect(builder.getByText("Текущий черновик ещё не скачан.")).toBeVisible();
+
+  // The card takes the whole width of the builder.
+  const widths = await page.evaluate(() => {
+    const shell = document.querySelector(".template-shell")!.getBoundingClientRect();
+    const card = document.querySelector(".template-card-preview")!.getBoundingClientRect();
+    return { shell: shell.width, card: card.width };
+  });
+  expect(widths.card).toBeGreaterThanOrEqual(Math.min(widths.shell * 0.9, widths.shell - 60));
+
+  // The card is laid out like the archive's: one column while its own width is below 840 px (the archive's window does the same at its
+  // default size), two columns beside each other once the window is wide. The Promotion window opens 760 px wide, so a PC maximizes it.
+  const hero = () => page.evaluate(() => {
+    const photo = document.querySelector(".template-card-preview .record-hero > .subject-media")!.getBoundingClientRect();
+    const classification = document.querySelector(".template-card-preview .record-hero > .classification-panel")!.getBoundingClientRect();
+    return { photoTop: photo.top, photoLeft: photo.left, photoRight: photo.right, photoBottom: photo.bottom, panelTop: classification.top, panelLeft: classification.left };
+  });
+  if (isMobile) {
+    const one = await hero();
+    expect(one.panelTop).toBeGreaterThanOrEqual(one.photoBottom - 1);
+  } else {
+    const narrow = await hero();
+    expect(narrow.panelTop, "760 px window: the card stacks like the archive's at that width").toBeGreaterThanOrEqual(narrow.photoBottom - 1);
+    await page.getByRole("button", { name: "Развернуть Повышение" }).click();
+    await expect.poll(async () => (await promotion.window.boundingBox())?.width ?? 0).toBeGreaterThan(1200);
+    const wide = await hero();
+    expect(wide.panelTop - wide.photoTop, "maximized: the classification starts level with the photo").toBeLessThanOrEqual(20);
+    expect(wide.panelLeft, "maximized: the classification stands beside the photo").toBeGreaterThanOrEqual(wide.photoRight - 1);
+  }
+
+  // Back to the fields: nothing typed was lost and the tab is the one that was open.
+  await showFields(builder);
+  await expect(textField(builder, "Физиологические характеристики")).toContainText("Первая строка");
+  await openTab(builder, "Основное");
+  await expect(nameField(builder)).toHaveValue("Черновик остаётся");
   expect(writes).toEqual([]);
 });
 
@@ -637,11 +749,14 @@ test("[STAB-TMPL-01] participant builds a text template, downloads it and opens 
   await expect(nameField(builder)).toHaveValue("");
   await expect(builder.getByRole("button", { name: "Скачать HTML" })).toBeDisabled();
   await expect(builder.getByText("Введите текст хотя бы в одно поле или добавьте изображение, чтобы скачать файл.")).toBeVisible();
+  await showPreview(builder);
   await expect(builder.getByLabel("Предпросмотр шаблона")).toContainText("Не заполнено");
+  await showFields(builder);
 
   await nameField(builder).fill(markup);
   await openTab(builder, "Описание");
   await pasteText(textField(builder, "Физиологические характеристики"), "Первая строка\nВторая строка");
+  await showPreview(builder);
   await expect(builder.getByLabel("Предпросмотр шаблона")).toContainText("Вторая строка");
 
   const download = builder.getByRole("button", { name: "Скачать HTML" });
@@ -704,10 +819,12 @@ test("[STAB-TMPL-01] unsaved text asks before leaving and a partial draft stays 
   await expect(builder.getByRole("heading", { name: "Шаблон досье", level: 1 })).toBeFocused();
   const preview = builder.getByLabel("Предпросмотр шаблона");
   await nameField(builder).fill("Только название");
+  await showPreview(builder);
   await expect(preview.getByRole("heading", { name: "Только название" })).toBeVisible();
   // Fields that were not filled are shown as empty, never invented.
-  await expect(preview.locator(".template-empty").first()).toHaveText("Не заполнено");
+  await expect(preview.locator(".formatted-empty").first()).toHaveText("Не заполнено");
   await expect(builder.getByText("Текущий черновик ещё не скачан.")).toBeVisible();
+  await showFields(builder);
 
   await builder.getByRole("button", { name: "Вернуться к повышению" }).click();
   const confirm = builder.getByRole("alertdialog");
