@@ -218,7 +218,7 @@ export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUploa
 }) {
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
   return <div className="editor-form virus-editor-form">
-    <p className="editor-guidance">Это полная запись вируса в Корзине. Она не показывается в основной базе, но остаётся доступной посетителям в Корзине и может быть восстановлена.</p>
+    <p className="editor-guidance">Полная запись вируса в Корзине.</p>
     <DossierTabs active={dossierTab} changed={dossierChanged} onSelect={setDossierTab} />
     {dossierTab === "main" && <EditorGroup title="Основные данные">
       <Field label="Название"><input value={virus.name} onChange={(event) => onChange((item) => { item.name = event.target.value; })} /></Field>
@@ -378,16 +378,16 @@ export function ImageEditorField({ label, value, placement, maxHint, removeLabel
 
   return <div className={`editor-field wide image-editor-field image-placement-${placement}`}>
     <span>{label}</span>
-    <input value={value} inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="Вставьте прямую HTTPS-ссылку на изображение или .gif" onChange={(event) => onChange(event.target.value)} onBlur={(event) => onChange(mediaUrlFromText(event.currentTarget.value))} onPaste={(event) => { const text = event.clipboardData.getData("text"); const url = mediaUrlFromText(text); if (url && url !== text) { event.preventDefault(); onChange(url); } }} />
-    <small className="editor-media-hint">{maxHint}. GIF запускается автоматически. Для Tenor используйте ссылку с <b>media.tenor.com</b>, а не адрес страницы просмотра.</small>
+    <input value={value} inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="Прямая HTTPS-ссылка на изображение или .gif" onChange={(event) => onChange(event.target.value)} onBlur={(event) => onChange(mediaUrlFromText(event.currentTarget.value))} onPaste={(event) => { const text = event.clipboardData.getData("text"); const url = mediaUrlFromText(text); if (url && url !== text) { event.preventDefault(); onChange(url); } }} />
+    <small className="editor-media-hint">{maxHint}. Для Tenor нужна ссылка с <b>media.tenor.com</b>.</small>
     {onUpload && <label className="editor-dropzone" aria-disabled={uploading || undefined} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event) => { event.preventDefault(); receiveFile(event.dataTransfer.files?.[0]); }}>
       <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => { receiveFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
       <strong>{uploading ? "ЗАГРУЖАЕМ…" : "ВЫБРАТЬ ФАЙЛ С КОМПЬЮТЕРА"}</strong>
-      <small>или перетащите изображение сюда · PNG, JPG, WEBP, GIF · до 4 МБ</small>
+      <small>Перетащите · PNG, JPG, WEBP, GIF · до 4 МБ</small>
     </label>}
     {refusal && <span className="editor-media-error" role="alert">{refusal}</span>}
       {value && showPreview && !previewFailed && <figure className={`editor-image-preview ${placement}`}><img src={value} alt={`Предпросмотр: ${label}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedPreviewUrl(value)} /></figure>}
     {value && removeLabel && <button type="button" className="secondary-control" onClick={() => onChange("")}>{removeLabel}</button>}
-    {value && previewFailed && <span className="editor-media-error">Не удалось открыть ссылку. Нужна прямая HTTPS-ссылка на файл изображения или GIF.</span>}
+    {value && previewFailed && <span className="editor-media-error">Не удалось открыть. Нужна прямая HTTPS-ссылка на файл.</span>}
   </div>;
 }

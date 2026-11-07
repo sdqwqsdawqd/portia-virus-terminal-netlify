@@ -31,7 +31,8 @@ test("qualification UI fails closed on desktop focus and every connection loss",
   for (const event of ["visibilitychange", "blur", "pagehide", "offline"]) assert.ok(participant.includes(event), event);
   assert.ok(participant.includes('clientMode === "desktop"'));
   assert.ok(participant.includes("promotion-qualification-terminal"));
-  assert.ok(participant.includes("Соединение прервано. Попытка завершена и передана проверяющему."));
+  // D-56 (20-37): the result text lost «завершена и».
+  assert.ok(participant.includes("Соединение прервано. Попытка передана проверяющему."));
 });
 
 test("qualification runner starts once, heartbeats within the lease and cleans every interval", () => {

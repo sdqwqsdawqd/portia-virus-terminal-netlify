@@ -332,7 +332,7 @@ export function FormattedTextarea({ label, area, value, document, formatKey, onC
         commitEditorValue(event.currentTarget, nextValue, selection);
       }}
     />
-    <small className="formatted-text-field-hint">{hint ?? "Текст и GIF можно использовать вместе. Не добавляйте лишних элементов."}</small>
+    <small className="formatted-text-field-hint">{hint ?? "Текст и GIF можно сочетать."}</small>
   </div>;
 }
 
@@ -643,7 +643,7 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
       {([["color", "Цвет"], ["size", "Размер"], ["background", "Фон"]] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "selected" : ""} onClick={() => setTab(id)}>{label}</button>)}
     </div>
     <div className="rich-text-toolbar" aria-label="Оформление текста" data-tab={tab}>
-      {target.area === "assistant" && <p className="format-area-note">Помощник показывает фразы своим цветом, размером и толщиной — эти настройки здесь не действуют. Фон текста работает.</p>}
+      {target.area === "assistant" && <p className="format-area-note">Цвет и размер фраз помощника не действуют.</p>}
       <div data-tab-group="background" className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={surface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={surface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
       <div data-tab-group="color" className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: style.color ?? baseInk[surface] }} />{style.color ? style.color.toUpperCase() : "ОСНОВНОЙ"}</b></span><div className="format-swatches"><button type="button" disabled={!hasTarget} className={style.color ? "" : "selected"} title="Основной" aria-label="Основной" onClick={() => { setColorPicker(null); applyOp("colour-base", (doc, from, to) => removeRichTextStyleKeys(doc, from, to, ["color"])); }}><i style={{ backgroundColor: baseInk[surface] }} /></button>{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!hasTarget} className={style.color?.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle(`color:${item.value}`, { color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!hasTarget} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
       <div data-tab-group="size" className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" disabled={!hasTarget} className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle(`size:${value}`, { fontSize: value }); }}>{label}</button>)}</div></div>
@@ -666,7 +666,7 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
         onClose={() => setColorPicker(null)}
       />}
     </div>
-    <footer><div className="format-notes"><p>Изменения применяются сразу. Без выделения меняется слово под курсором.</p><p className="format-multi-hint">Ctrl (Cmd на Mac) + выделение добавляет фрагмент. Esc снимает все.</p></div><div><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
+    <footer><div className="format-notes"><p>Без выделения — слово под курсором.</p><p className="format-multi-hint">Ctrl (Cmd) — добавить фрагмент. Esc — снять.</p></div><div><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
   </section>;
 }
 

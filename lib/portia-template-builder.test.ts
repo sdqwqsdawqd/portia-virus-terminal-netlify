@@ -279,7 +279,8 @@ test("the shared components only gained optional properties and keep their defau
   expectMatch(dossier, /dossierTabs\.filter\(\(\[id\]\) => !tabs \|\| tabs\.includes\(id\)\)/, "no list means all four tabs");
   const rich = read("components/portia-editor-rich-text.tsx");
   expectMatch(rich, /hint\?: string/);
-  expectMatch(rich, /\{hint \?\? "Текст и GIF можно использовать вместе\. Не добавляйте лишних элементов\."\}/, "the default hint is the editor's text");
+  // D-56 (20-37): the default hint of the shared field is one short phrase, in the editor and in the builder alike.
+  expectMatch(rich, /\{hint \?\? "Текст и GIF можно сочетать\."\}/, "the default hint is the editor's text");
   expectMatch(rich, /aria-labelledby=\{labelId\}/);
   expectMatch(rich, /<span id=\{labelId\}>\{label\}<\/span>/);
 });

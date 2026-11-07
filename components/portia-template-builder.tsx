@@ -62,7 +62,7 @@ type ExportFormat = "png" | "html";
 // The status line must be on screen for a moment even though building the file is instant.
 const preparingMinimumMs = 400;
 
-// The editor says "Текст и GIF можно использовать вместе"; a template is self-contained, so pictures are added as files only (D-24).
+// The editor says "Текст и GIF можно сочетать"; a template is self-contained, so pictures are added as files only (D-24).
 const textHint = "Изображения — только файлом.";
 
 type ImageSlot = "infected" | number;

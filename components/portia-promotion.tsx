@@ -43,7 +43,7 @@ function formatDate(value?: string) {
 }
 
 const desktopModeWarning = "Не переключайте вкладку и окно: потеря фокуса завершит попытку как проваленную.";
-const phoneModeWarning = "Можно переключаться между приложениями. Попытка завершится при потере связи или по истечении времени.";
+const phoneModeWarning = "Можно переключаться между приложениями.";
 
 /** A submit counts as accepted only when the server answered with the created request id. */
 function createdRequest(value: unknown) {
@@ -202,11 +202,11 @@ function QualificationRunner({ attemptId, visible, onLockChange, onFinished }: {
     } catch { reportFailure("offline"); } finally { setBusy(false); }
   };
 
-  if (terminal) return <section className="promotion-qualification-terminal" role="alert"><span aria-hidden="true">×</span><h3>{terminal === "timeout" ? "ВРЕМЯ ИСТЕКЛО" : "ПОПЫТКА ЗАВЕРШЕНА"}</h3><p>{terminal === "timeout" ? "Время истекло. Проверка завершена и передана проверяющему." : terminal === "offline" ? "Соединение прервано. Попытка завершена и передана проверяющему." : "Зафиксирован выход из проверки на ПК. Попытка завершена и передана проверяющему."}</p></section>;
+  if (terminal) return <section className="promotion-qualification-terminal" role="alert"><span aria-hidden="true">×</span><h3>{terminal === "timeout" ? "ВРЕМЯ ИСТЕКЛО" : "ПОПЫТКА ЗАВЕРШЕНА"}</h3><p>{terminal === "timeout" ? "Время истекло. Проверка передана проверяющему." : terminal === "offline" ? "Соединение прервано. Попытка передана проверяющему." : "Выход из проверки. Попытка передана проверяющему."}</p></section>;
   if (busy && !test) return <div className="promotion-test-loading" role="status">Загружаем текущий вопрос…</div>;
   if (!test) return <section className="promotion-qualification-terminal"><h3>ПРОВЕРКА НЕДОСТУПНА</h3><p>Обновите состояние позже.</p></section>;
   if (test.result || test.status === "passed" || test.status === "failed") return <section className={`promotion-qualification-result ${test.result ?? test.status}`}><span className="promotion-eyebrow">ИТОГ КВАЛИФИКАЦИИ</span><h3>{(test.result ?? test.status) === "passed" ? "ПРОВЕРКА ПРОЙДЕНА" : "ПРОВЕРКА НЕ ПРОЙДЕНА"}</h3>{Number.isInteger(test.percent) && <p>Процент: <strong>{test.percent}%</strong></p>}<p>Подробности ответов участнику не показываются.</p></section>;
-  if (test.status === "submitted" || !test.question) return <section className="promotion-qualification-result"><span className="promotion-eyebrow">ОЖИДАНИЕ РЕШЕНИЯ</span><h3>ОТВЕТЫ ПЕРЕДАНЫ</h3><p>Проверяющий оценит ответы и отдельно примет итоговое решение.</p></section>;
+  if (test.status === "submitted" || !test.question) return <section className="promotion-qualification-result"><span className="promotion-eyebrow">ОЖИДАНИЕ РЕШЕНИЯ</span><h3>ОТВЕТЫ ПЕРЕДАНЫ</h3></section>;
 
   const timer = minuteSecond(test.deadlineAt, now);
   const question = test.question;
@@ -236,16 +236,16 @@ export function PromotionIdentityGate({ nickname, busy, error, onNickname, onSub
 }) {
   return <div className="promotion-gate">
     <div className="promotion-gate-mark" aria-hidden="true">↑</div>
-    <header><span className="promotion-eyebrow">PORTIA // ПОВЫШЕНИЕ</span><h1>ПРОВЕРИТЬ ПОВЫШЕНИЕ</h1><p>Узнайте доступность повышения, состояние заданий и квалификационной проверки.</p></header>
+    <header><span className="promotion-eyebrow">PORTIA // ПОВЫШЕНИЕ</span><h1>ПРОВЕРИТЬ ПОВЫШЕНИЕ</h1></header>
     <form onSubmit={onSubmit}>
       <label htmlFor="promotion-nickname">Ник Roblox, указанный в таблице</label>
       <input id="promotion-nickname" value={nickname} onChange={(event) => onNickname(event.target.value)} maxLength={64} autoComplete="off" spellCheck={false} placeholder="Введите ник Roblox из таблицы" disabled={busy} />
-      {!error && <p className="promotion-binding-note">Первая заявка закрепит этот ник за устройством. Сменить его сможет проверяющий.</p>}
+      {!error && <p className="promotion-binding-note">Первая заявка закрепит ник за устройством.</p>}
       {error && <p className="promotion-error" role="alert">{error}</p>}
-      {error && !busy && <p className="promotion-next-note">Введённый ник сохранён. Нажмите «Проверить ник», чтобы повторить проверку.</p>}
+      {error && !busy && <p className="promotion-next-note">Ник сохранён. Нажмите «Проверить ник» ещё раз.</p>}
       {busy && <p className="promotion-next-note" role="status">Проверяем ник. Введённый ник сохранён.</p>}
       {/* The visible cue is the field's label and placeholder; this sentence only gives the disabled button a spoken reason, so the approved lookup frame does not change. */}
-      {!busy && !nickname.trim() && <span id="promotion-nickname-reason" className="sr-only">Кнопка станет доступна, когда вы введёте ник Roblox из таблицы.</span>}
+      {!busy && !nickname.trim() && <span id="promotion-nickname-reason" className="sr-only">Введите ник Roblox из таблицы.</span>}
       <button className="promotion-action" type="submit" disabled={busy || !nickname.trim()} aria-describedby={!busy && !nickname.trim() ? "promotion-nickname-reason" : undefined}>{busy ? "ПРОВЕРЯЕМ…" : "ПРОВЕРИТЬ НИК"}</button>
     </form>
   </div>;
@@ -308,7 +308,7 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, next, fee
     {!ordinary && active?.attemptId && <QualificationRunner attemptId={active.attemptId} visible={visible !== false} onLockChange={onQualificationLockChange ?? (() => undefined)} onFinished={onQualificationFinished ?? (() => undefined)} />}
     {tasks.length > 0 && <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task) => <li key={task.id}><span>{String(task.sortOrder).padStart(2, "0")}</span><div><p>{task.text}</p></div></li>)}</ol></div>}
     {canRequest && <button className="promotion-action" type="button" disabled={busy || stale} onClick={() => onRequest(kind)}>{busy ? "ОТПРАВЛЯЕМ…" : ordinary ? "ПОДАТЬ ЗАЯВКУ НА ЗАДАНИЯ" : "ЗАПРОСИТЬ КВАЛИФИКАЦИЮ"}</button>}
-    {canRequest && stale && <p className="promotion-next-note">Отправка недоступна, пока состояние не обновится. Страница проверит его сама.</p>}
+    {canRequest && stale && <p className="promotion-next-note">Отправка недоступна, пока состояние не обновится.</p>}
   </section>;
 }
 
@@ -425,14 +425,14 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
       setSubmitState((current) => ({ ...current, [kind]: {
         phase: "success",
         message: kind === "ordinary"
-          ? "Заявка на задания отправлена в очередь. Проверяющий ещё не взял её в работу."
-          : "Запрос на квалификацию отправлен в очередь. Проверяющий ещё не взял его в работу.",
+          ? "Заявка на задания отправлена в очередь."
+          : "Запрос на квалификацию отправлен в очередь.",
       } }));
       requestAnimationFrame(() => submitFeedbackRefs.current[kind]?.focus());
       await loadStatus(checkedNickname);
     } catch {
       setStale(true);
-      setSubmitState((current) => ({ ...current, [kind]: { phase: "error", message: "Заявку не удалось отправить. Проверьте соединение и повторите позже." } }));
+      setSubmitState((current) => ({ ...current, [kind]: { phase: "error", message: "Заявку не удалось отправить. Повторите позже." } }));
       requestAnimationFrame(() => submitFeedbackRefs.current[kind]?.focus());
     } finally { submittingRef.current.delete(kind); }
   };
@@ -464,7 +464,7 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
 
   if (status.promotionRecord === null) return <div className="promotion-app"><div className="promotion-shell" aria-live="polite">
     <header className="promotion-identity"><div><span className="promotion-eyebrow">УЧАСТНИК</span><h1 ref={headingRef} tabIndex={-1}>{status.nickname}</h1></div></header>
-    <section className="promotion-empty promotion-no-record"><strong>Запись о повышении пока не заведена</strong><p>Ник найден в основном составе PORTIA. Данные звания и действия появятся после добавления отдельной строки повышения.</p></section>
+    <section className="promotion-empty promotion-no-record"><strong>Запись о повышении пока не заведена</strong></section>
   </div></div>;
 
   return <>
@@ -474,19 +474,19 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
         <div><span className="promotion-eyebrow">УЧАСТНИК</span><h1 ref={headingRef} tabIndex={-1}>{status.nickname}</h1></div>
         <dl><div><dt>ТЕКУЩЕЕ ЗВАНИЕ</dt><dd>{status.currentTitle.label}</dd></div><div><dt>СЛЕДУЮЩЕЕ</dt><dd>{status.nextTitle?.label ?? "Высшее звание"}</dd></div></dl>
       </header>
-      {stale && <div className="promotion-stale"><strong>Состояние временно не обновляется</strong><span>Показаны последние безопасные данные. Действия отключены до восстановления связи.</span></div>}
+      {stale && <div className="promotion-stale"><strong>Состояние временно не обновляется</strong><span>Показаны последние данные. Действия отключены.</span></div>}
       {error && <p className="promotion-error" role="alert">{error}</p>}
       <section className="promotion-template-entry" aria-label="Конструктор шаблона">
         <button className="promotion-action" type="button" onClick={(event) => openTemplate(event.currentTarget)}>Создать шаблон</button>
-        <p>Отдельный инструмент для оформления досье. Работа скачивается на ваше устройство. Отправьте файл проверяющему вне сайта. Создание шаблона само по себе не засчитывает задание.</p>
+        <p>Шаблон не засчитывает задание сам по себе.</p>
       </section>
       <div className="promotion-flow-list">
         {status.ordinary.eligibility.status === "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} next={nextKind === "qualification"} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
         <PromotionStatusCard kind="ordinary" active={status.ordinary.active} eligibility={status.ordinary.eligibility} busy={submitState.ordinary.phase === "submitting"} stale={stale} next={nextKind === "ordinary"} feedback={submitState.ordinary} feedbackRef={(node) => { submitFeedbackRefs.current.ordinary = node; }} onRequest={requestPromotion} />
         {status.ordinary.eligibility.status !== "qualification-required" && <PromotionStatusCard kind="qualification" active={status.qualification.active} eligibility={status.qualification.eligibility} busy={submitState.qualification.phase === "submitting"} stale={stale} next={nextKind === "qualification"} feedback={submitState.qualification} feedbackRef={(node) => { submitFeedbackRefs.current.qualification = node; }} onRequest={requestPromotion} visible={visible} onQualificationLockChange={onQualificationLockChange} onQualificationFinished={refreshAfterQualification} />}
       </div>
-      <p className="promotion-cleanup-hint">Подробные данные проверки удаляются после закрытия. Хранятся три последних результата.</p>
-      {status.results.length === 0 && <p className="promotion-history-empty">Результатов пока нет. Здесь появятся три последних.</p>}
+      <p className="promotion-cleanup-hint">Хранятся три последних результата.</p>
+      {status.results.length === 0 && <p className="promotion-history-empty">Результатов пока нет.</p>}
       {status.results.length > 0 && <details className="promotion-history"><summary>Последние результаты <span>{Math.min(status.results.length, 3)}</span></summary><ul>{status.results.slice(0, 3).map((result, index) => <li key={`${result.createdAt}-${index}`}><span>{result.kind === "ordinary" ? "ЗАДАНИЯ" : "КВАЛИФИКАЦИЯ"}</span><strong>{outcomeLabels[result.outcome] ?? "Результат обновлён"}</strong><time dateTime={result.createdAt}>{formatDate(result.createdAt)}</time></li>)}</ul></details>}
     </div>
   </div>

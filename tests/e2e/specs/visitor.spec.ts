@@ -50,7 +50,7 @@ test("[STAB-BASE-02] Promotion exposes a safe participant identity gate", async 
   await expect(promotion.checkNickname).toBeDisabled();
   await promotion.nickname.fill("portia_e2e_missing");
   await expect(promotion.checkNickname).toBeEnabled();
-  await expect(promotion.window).toContainText("Первая заявка закрепит этот ник за устройством");
+  await expect(promotion.window).toContainText("Первая заявка закрепит ник за устройством"); // D-56 (20-37)
 });
 
 test("[STAB-BASE-02] @smoke touch viewport keeps primary controls usable", async ({ page, isMobile }) => {

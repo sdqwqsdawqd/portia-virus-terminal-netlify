@@ -14,7 +14,8 @@ test("participant gate explains lookup binding and restores only through the Htt
   assert.ok(!source.includes("КАДРОВЫЙ КОНТУР"));
   assert.ok(!source.includes("Portia_User"));
   assert.ok(source.includes("ПРОВЕРИТЬ НИК"));
-  assert.ok(source.includes("Первая заявка закрепит этот ник за устройством. Сменить его сможет проверяющий."));
+  // D-56 (20-37): the binding note is one short phrase.
+  assert.ok(source.includes("Первая заявка закрепит ник за устройством."));
   assert.ok(source.includes('!error && <p className="promotion-binding-note"'));
   assert.ok(source.includes('autoComplete="off"'));
   assert.ok(source.includes('spellCheck={false}'));
@@ -145,7 +146,8 @@ test("promotion copy and visual tokens follow the reviewed accessibility contrac
 
 test("the mode warning shows both approved owner texts, chosen by the server clientMode, and never claims hardware attestation", () => {
   const desktopText = "Не переключайте вкладку и окно: потеря фокуса завершит попытку как проваленную.";
-  const phoneText = "Можно переключаться между приложениями. Попытка завершится при потере связи или по истечении времени.";
+  // D-56 (20-37): the phone text is one short phrase; the desktop warning keeps the owner-approved wording of 19.
+  const phoneText = "Можно переключаться между приложениями.";
   assert.ok(source.includes(desktopText));
   assert.ok(source.includes(phoneText));
   assert.match(source, /className="promotion-mode-warning"/);
@@ -154,7 +156,8 @@ test("the mode warning shows both approved owner texts, chosen by the server cli
 });
 
 test("the cleanup hint sits under the action cards and history stays at three results", () => {
-  assert.ok(source.includes('<p className="promotion-cleanup-hint">Подробные данные проверки удаляются после закрытия. Хранятся три последних результата.</p>'));
+  // D-56 (20-37): the hint keeps the limit of three results and drops the retold cleanup rule.
+  assert.ok(source.includes('<p className="promotion-cleanup-hint">Хранятся три последних результата.</p>'));
   assert.ok(source.indexOf("promotion-cleanup-hint") > source.indexOf("promotion-flow-list"));
   assert.ok(source.includes("status.results.slice(0, 3)"));
   assert.ok(source.includes("Math.min(status.results.length, 3)"));
@@ -167,7 +170,9 @@ test("the submitted message is produced only after the server created the reques
   const successAt = submit.indexOf('phase: "success"');
   const sendingAt = submit.indexOf("Отправляем заявку…");
   assert.ok(sendingAt >= 0 && createdAt > sendingAt && successAt > createdAt, "success text must follow the created check");
-  assert.equal(source.split("в очередь. Проверяющий ещё не взял").length - 1, 2);
+  // D-56 (20-37): the two success texts lost their second sentence.
+  assert.equal(source.split('? "Заявка на задания отправлена в очередь."').length - 1, 1);
+  assert.equal(source.split(': "Запрос на квалификацию отправлен в очередь."').length - 1, 1);
   assert.match(source, /function createdRequest[\s\S]*typeof [^\n]*requestId === "string"/);
   assert.match(submit, /if \(!response\.ok \|\| !createdRequest\(body\)\)[\s\S]*phase: "error"[\s\S]*publicError/);
 });

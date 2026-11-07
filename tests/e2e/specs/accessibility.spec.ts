@@ -196,7 +196,8 @@ test.describe("[STAB-A11Y-01] PC controls: axe, names, focus", () => {
     expect(alertText.length).toBeGreaterThan(8);
     expect(alertText).toMatch(/[А-Яа-яЁё]/u);
     await expect(promotion.nickname).toHaveValue(long);
-    await expect(promotion.window.getByText("Введённый ник сохранён", { exact: false })).toHaveCount(1);
+    // D-56 (20-37): the saved-nickname note is one short phrase.
+    await expect(promotion.window.getByText("Ник сохранён. Нажмите «Проверить ник» ещё раз.", { exact: false })).toHaveCount(1);
     const texts = await promotion.window.locator('[role="alert"], [role="status"]').allInnerTexts();
     const visibleTexts = texts.map((text) => text.trim()).filter(Boolean);
     expect(new Set(visibleTexts).size, `no status or alert text is announced twice: ${JSON.stringify(visibleTexts)}`).toBe(visibleTexts.length);
@@ -825,7 +826,7 @@ test.describe("[STAB-A11Y-04] motion modes (D-01..D-04); the physical verdict st
     await expect(page.locator("html")).toHaveAttribute("data-motion", "full");
     await desktop.openApp("Настройки");
     await expect(desktop.setting("Анимации", "Включены")).toHaveAttribute("aria-pressed", "true");
-    await expect(desktop.window("Настройки").getByText("Системная настройка «уменьшить движение» не учитывается", { exact: false })).toBeVisible();
+    await expect(desktop.window("Настройки").getByText("Системная настройка движения не учитывается", { exact: false })).toBeVisible();
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-motion", "full");
     forgiveFaults(diagnostics);

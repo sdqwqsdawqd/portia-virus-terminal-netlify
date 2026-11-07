@@ -824,7 +824,8 @@ test("[STAB-TMPL-01] participant builds a text template, downloads it and opens 
 
   const trigger = promotion.window.getByRole("button", { name: "Создать шаблон" });
   await expect(trigger).toHaveCount(1);
-  await expect(promotion.window).toContainText("Работа скачивается на ваше устройство. Отправьте файл проверяющему вне сайта.");
+  // D-56 (20-37): the card of the builder says one short phrase.
+  await expect(promotion.window).toContainText("Шаблон не засчитывает задание сам по себе.");
   await trigger.click();
 
   const builder = promotion.window.locator(".template-builder");

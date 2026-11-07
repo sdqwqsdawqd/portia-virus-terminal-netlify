@@ -39,6 +39,15 @@ const ownerPhrases = ["локальный черновик", "не запись 
 const appliedFiles = [
   "components/portia-template-builder.tsx",
   "lib/format-launch.ts",
+  "components/portia-desktop.tsx",
+  "components/portia-desktop-dossier.tsx",
+  "components/portia-editor-dossier.tsx",
+  "components/portia-editor-rich-text.tsx",
+  "components/portia-promotion.tsx",
+  "components/portia-promotion-editor-main.tsx",
+  "components/portia-promotion-ordinary-editor.tsx",
+  "components/portia-promotion-qualification-editor.tsx",
+  "app/owner-login/page.tsx",
 ];
 
 export type HintRow = {

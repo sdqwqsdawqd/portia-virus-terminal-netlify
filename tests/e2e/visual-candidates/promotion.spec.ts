@@ -118,7 +118,7 @@ test("[STAB-VIS-04] E4 participant lookup: empty gate keeps one clear step, 44px
   await expect(promotion.nickname).toHaveValue("");
   await expect(promotion.checkNickname).toBeDisabled();
   await settle(promotion.window);
-  await expect(promotion.window.getByText("Первая заявка закрепит этот ник за устройством. Сменить его сможет проверяющий.")).toBeVisible();
+  await expect(promotion.window.getByText("Первая заявка закрепит ник за устройством.") /* D-56 (20-37) */).toBeVisible();
   await settle(promotion.window);
   await assertTouchTargets([promotion.nickname, promotion.checkNickname]);
   await assertNoOverflow(page, promotion.window);
@@ -167,8 +167,8 @@ test("[STAB-VIS-04] E4 error: a failed lookup says why, keeps the nickname and o
   await expect(promotion.nickname).toHaveValue(longNickname);
   await expect(promotion.checkNickname).toBeEnabled();
   await expect(promotion.checkNickname).toHaveText("ПРОВЕРИТЬ НИК");
-  await expect(promotion.window.getByText("Введённый ник сохранён. Нажмите «Проверить ник», чтобы повторить проверку.")).toBeVisible();
-  await expect(promotion.window.getByText("Первая заявка закрепит этот ник за устройством.")).toHaveCount(0);
+  await expect(promotion.window.getByText("Ник сохранён. Нажмите «Проверить ник» ещё раз.") /* D-56 (20-37) */).toBeVisible();
+  await expect(promotion.window.getByText("Первая заявка закрепит ник за устройством.")).toHaveCount(0); // D-56 (20-37)
   await settle(promotion.window);
   await assertTouchTargets([promotion.nickname, promotion.checkNickname]);
   await assertNoOverflow(page, promotion.window);
@@ -194,7 +194,7 @@ test("[STAB-VIS-04] E4 error from the real target: an unlisted nickname is refus
   expect((await promotion.alert().innerText()).trim().length).toBeGreaterThan(10);
   await expect(promotion.nickname).toHaveValue(longNickname);
   await expect(promotion.checkNickname).toBeEnabled();
-  await expect(promotion.window.getByText("Введённый ник сохранён. Нажмите «Проверить ник», чтобы повторить проверку.")).toBeVisible();
+  await expect(promotion.window.getByText("Ник сохранён. Нажмите «Проверить ник» ещё раз.") /* D-56 (20-37) */).toBeVisible();
   await settle(promotion.window);
   await assertTouchTargets([promotion.nickname, promotion.checkNickname]);
   await assertNoOverflow(page, promotion.window);
@@ -232,7 +232,8 @@ test("[STAB-VIS-04] E4/E5 source contract: order, separate flows, one action per
   const tabs = ["ЗАПРОСЫ", "ЗАДАНИЯ", "КВАЛИФИКАЦИЯ"].map((label) => main.indexOf(`'${label}'`));
   expect(tabs.every((at) => at >= 0)).toBe(true);
   expect([...tabs].sort((a, b) => a - b)).toEqual(tabs);
-  expect(main).toContain("Процент не принимает решение автоматически.");
+  // D-56 (20-37): the hint under the percentage is gone.
+  expect(main).not.toContain("Процент не принимает решение автоматически.");
   expect(main).toContain("Подтвердите итог");
   for (const label of ["Отклонить и удалить", "Удалить запрос", "Сбросить привязку"]) expect(main, label).toContain(label);
   // 409 keeps both alternatives and the typed forms live (the forms own their drafts; this view never clears them).

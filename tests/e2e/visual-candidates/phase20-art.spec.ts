@@ -555,7 +555,8 @@ for (const rest of [{ id: "off", label: "motion off", motion: "off" }, { id: "fu
 
 const oldWallpapers: Array<[string, string]> = [["radar", "Паутина"], ["grid", "Спирали ДНК"], ["gel", "Гель"], ["cells", "Клетки"], ["quiet", "Чистый"]];
 const FLASKS_LABEL = "Лабораторные колбы";
-const SAVE_FAILED_TEXT = "Не удалось сохранить фон на этом устройстве. Остался прежний фон.";
+// D-56 (20-37): the failure text is one short phrase.
+const SAVE_FAILED_TEXT = "Фон не сохранён. Остался прежний.";
 const isPhone = (name: string) => name === "chromium-phone";
 
 async function openFlasks(page: Page, patch: Settings = {}) {

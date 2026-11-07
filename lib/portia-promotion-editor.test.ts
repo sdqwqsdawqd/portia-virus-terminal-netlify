@@ -38,7 +38,8 @@ test("claim is the gate for mutations and cleanup stays an unobtrusive hint", ()
   assert.ok(main.includes("ВЗЯТЬ ЗАПРОС"));
   assert.ok(main.includes("assignedToMe"));
   assert.ok(main.includes("ОТКЛОНИТЬ"));
-  assert.ok(main.includes("Незавершённые данные удаляются через 3 дня."));
+  // D-56 (20-37): the retention rule is no longer retold under the request; the list label stays.
+  assert.ok(!main.includes("Незавершённые данные удаляются через 3 дня."));
 });
 
 test("owner/admin can reset a binding by exact nickname while selected reset keeps its existing guard", () => {
@@ -129,8 +130,9 @@ test("request rejection and owner deletion use explicit irreversible confirmatio
   assert.ok(main.includes('reviewerCommand("reject"'));
   assert.ok(main.includes('reviewerCommand("delete-request"'));
   assert.ok(main.includes("УДАЛИТЬ ЗАЯВКУ"));
-  assert.ok(main.includes("без возможности восстановления"));
-  assert.ok(main.includes("Привязка устройства останется активной"));
+  assert.ok(main.includes("без восстановления"));
+  // D-56 (20-37): the confirmation is one short phrase and keeps the irreversibility.
+  assert.ok(main.includes("Запрос и связанные данные будут удалены без восстановления."));
   assert.match(main, /action === "reject" \|\| action === "delete-request"[\s\S]*setSelectedRequestId\(""\)/);
 });
 
@@ -171,7 +173,8 @@ test("promotion reviewer layout has desktop workbench and phone sequential view"
 
 test("actual request workspace exposes contractual empty and cleanup states", () => {
   assert.ok(main.includes("НОВЫХ ЗАПРОСОВ НЕТ"));
-  assert.ok(main.includes("Оставьте вкладку открытой — список обновится автоматически."));
+  // D-56 (20-37): the empty state has its title only; the hint under it is gone.
+  assert.ok(!main.includes("Оставьте вкладку открытой"));
   assert.ok(main.includes("cleanupPreview"));
   assert.ok(main.includes("promotion-cleanup-disclosure"));
   assert.ok(main.includes("Дата удаления"));
@@ -224,7 +227,7 @@ test("confirmations name the action being declined and never use a generic cance
   assert.doesNotMatch(all, />\s*Отмена\s*</);
   assert.doesNotMatch(all, /ПОДТВЕРДИТЬ<\/button><\/div>/);
   for (const label of ["Удалить запрос", "Не удалять", "Снять claim", "Не снимать"]) assert.ok(main.includes(label), label);
-  for (const label of ["Удалить вопрос", "Оставить вопрос", "Вопрос будет удалён из банка. Это нельзя отменить."]) assert.ok(qualification.includes(label), label);
+  for (const label of ["Удалить вопрос", "Оставить вопрос", "Вопрос будет удалён. Это нельзя отменить."]) assert.ok(qualification.includes(label), label);
   assert.equal([...(all.match(/requestConfirm\(\{|setConfirm\(\{|onConfirm\(\{/g) ?? [])].length, [...(all.match(/cancelLabel: "/g) ?? [])].length);
 });
 
@@ -256,7 +259,8 @@ test("a save response never overwrites newer edits of counts and quotas", () => 
 });
 
 test("a failed save keeps the typed draft and reports the network failure in Russian", () => {
-  assert.ok(main.includes("Нет связи с сервером. Черновик сохранён в форме — повторите попытку."));
+  // D-56 (20-37): the failure text lost its «повторите попытку» tail.
+  assert.ok(main.includes("Нет связи с сервером. Черновик сохранён в форме."));
   for (const editor of [ordinary, qualification]) {
     const afterFailure = editor.slice(editor.indexOf("if (!result?.state)"), editor.indexOf("setPreview(null);"));
     assert.ok(afterFailure.includes('phase: "error"'));

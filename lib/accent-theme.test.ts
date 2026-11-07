@@ -273,8 +273,8 @@ test("the boot screen plays only in full mode; reduced and off skip it, the fail
   assert.match(desktopSource, /if \(!bootSkipped\) try \{ window\.sessionStorage\.setItem\(bootSeenStorageKey,/);
   assert.match(css, /html:is\(\[data-motion="reduced"\], \[data-motion="off"\]\) \.boot-screen\s*\{\s*display:\s*none/);
   assert.match(css, /boot-screen-failsafe 220ms ease 2\.2s/);
-  // Approved hint (18-MOTION-APPROVAL item 4) sits under the group and wraps inside the window.
-  assert.match(desktopSource, /<p className="setting-hint">Системная настройка «уменьшить движение» не учитывается: управляйте анимациями здесь\.<\/p>/);
+  // The hint (18-MOTION-APPROVAL item 4) sits under the group and wraps inside the window. D-56 (20-37): it is one short phrase now.
+  assert.match(desktopSource, /<p className="setting-hint">Системная настройка движения не учитывается\.<\/p>/);
   assert.match(css, /\.setting-hint\s*\{[^}]*font:\s*500 11px[^}]*overflow-wrap:\s*anywhere/);
 });
 
