@@ -1,11 +1,11 @@
 "use client";
 
-import { useId } from "react";
-import { PortiaImage } from "@/components/portia-desktop-media";
-import { defaultImageFraming, imageFramingLimits, imageFramingStep, normalizeImageFraming, type ImageFraming } from "@/lib/image-framing";
+import { useId, useState } from "react";
+import { defaultImageFraming, imageFramingLimits, imageFramingStep, imageFramingStyles, normalizeImageFraming, type ImageFraming } from "@/lib/image-framing";
 
-// D-63 (20-53): the block «Видимая часть» under a picture field of the editor. The preview is the picture of the site itself (PortiaImage with the same
-// frame), in a frame of the same kind as the site's, so what the editor sees here is what a visitor gets. Three sliders (keyboard steps of 5, touch targets
+// D-63 (20-53): the block «Видимая часть» under a picture field of the editor. The preview is the picture of the site (the same `.portia-image` frame
+// and `.portia-image img` styles, the same imageFramingStyles), in a frame of the same kind as the site's, so what the editor sees here is what a visitor gets.
+// It does not import PortiaImage: the template builder shares the editor's picture field, and its import graph may hold no desktop module (portia-template-builder.test). Three sliders (keyboard steps of 5, touch targets
 // of 44 px on a phone) replace dragging; «Сбросить» removes the frame. Every value goes through normalizeImageFraming: the default frame is never stored.
 // The captions are short (D-56) and live here, not in the editor file (D-58).
 
@@ -36,7 +36,7 @@ export function ImageFramingEditor({ src, framing, box, label, onChange }: {
     <strong id={titleId} className="image-framing-title">Видимая часть</strong>
     <span id={fieldId} className="sr-only">{label}</span>
     <div className={`image-framing-frame ${box}`}>
-      <PortiaImage src={src} alt="" recordId="image-framing-preview" priority="lazy" className={box === "natural" ? undefined : "is-fill"} framing={framing} />
+      <FramedPreview key={src} src={src} framing={framing} fill={box !== "natural"} />
     </div>
     <div className="image-framing-controls">
       {sliders.map(({ key, label: name, min, max }) => {
@@ -50,4 +50,15 @@ export function ImageFramingEditor({ src, framing, box, label, onChange }: {
       <button type="button" className="secondary-control image-framing-reset" onClick={() => onChange(undefined)}>Сбросить</button>
     </div>
   </div>;
+}
+
+/** The picture as the site draws it: a quiet skeleton until it loads, then the frame clips it and the numbers of the frame place it. Remounted per address. */
+function FramedPreview({ src, framing, fill }: { src: string; framing: ImageFraming | undefined; fill: boolean }) {
+  const [loaded, setLoaded] = useState(false);
+  const styles = imageFramingStyles(normalizeImageFraming(framing));
+  return <span className={`portia-image ${loaded ? "is-loaded" : "is-loading"}${fill ? " is-fill" : ""}`} data-framing={styles.frame ? "true" : undefined} style={styles.frame}>
+    {!loaded && <span className="portia-image-skeleton" aria-hidden="true" />}
+    {/* eslint-disable-next-line @next/next/no-img-element */}
+    <img src={src} alt="" style={styles.image} loading="lazy" decoding="async" referrerPolicy="no-referrer" onLoad={() => setLoaded(true)} />
+  </span>;
 }

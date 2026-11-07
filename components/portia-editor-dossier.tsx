@@ -393,10 +393,8 @@ export function ImageEditorField({ label, value, placement, maxHint, removeLabel
   const receiveFile = (file: File | undefined) => {
     if (uploading) return;
     if (file) setPicked(true);
-    if (file && onUpload) {
-      addressAtPick.current = value;
-      onUpload(file);
-    }
+    if (file && onUpload) addressAtPick.current = value;
+    if (file && onUpload) onUpload(file);
   };
   const refusal = picked && uploadState === "error" ? uploadMessage : "";
 
