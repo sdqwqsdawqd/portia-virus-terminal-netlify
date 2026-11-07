@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-47-PLAN.md (stopped-for-fixes)
-last_updated: "2026-11-07T16:34:42.726Z"
+stopped_at: Completed 20-48-PLAN.md
+last_updated: "2026-11-07T17:06:56.256Z"
 last_activity: 2026-11-07
-last_activity_desc: Phase PORTIA-20 execution started
-state_head: bb6fc3e6d5b96bc7d87e936f3c3770b1633a9b46
+last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
+state_head: d869d72d7899a71dd04b78c9424537df2c76f560
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 125
-  completed_plans: 114
+  completed_plans: 115
   percent: 50
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 20 of 47
+Plan: 21 of 47
 Status: Executing Phase PORTIA-20
-Last activity: 2026-11-07 — Phase PORTIA-20 execution started
+Last activity: 2026-11-07 — Phase PORTIA-20 execution resumed (wave continue)
 
 Progress: [█████░░░░░] 50%
 
@@ -147,6 +147,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P44 | 120 min | 3 tasks | 7 files |
 | Phase PORTIA-20 P46 | 28 min | 3 tasks | 21 files |
 | Phase PORTIA-20 P47 | 3 sessions | 3 tasks | 6 files |
+| Phase PORTIA-20 P48 | 41 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -267,6 +268,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-46: D-56 в объёме D-58 выполнен; подсказки сайта сокращены или убраны, components/portia-editor.tsx не менялся; предупреждение теста на ПК (утверждено в 19) оставлено дословно
 - [Phase PORTIA-20]: 20-47: owner verdict 2026-11-07: flasks rows fix (remove extra clock, animate boards and board-pinned waves), animation cap 140 and shortened D-56 texts accepted, spider rows without verdict; plan stopped-for-fixes
 - [Phase PORTIA-20]: 20-47: ambiguous owner answer 4 recorded as fix for the word break Предупреждение on template-builder-preview:pc (orchestrator reading, to confirm in next gallery)
+- [Phase PORTIA-20]: 20-48: манометр убран, доски и волны у доски двигаются (D-59); предел 140/80 не тронут: 136 анимаций на PC, 55 на phone; D-59 прочтения планировщика показываются владельцу в 20-54
 
 ### Pending Todos
 
@@ -310,8 +312,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-07T12:56:21.031Z
-Stopped at: Completed PORTIA-20-47-PLAN.md (stopped-for-fixes)
+Last session: 2026-11-07T17:06:55.623Z
+Stopped at: Completed 20-48-PLAN.md
 Resume file: None
 
 ## Operator Next Step
