@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed 20-48-PLAN.md
-last_updated: "2026-11-07T17:06:56.256Z"
+stopped_at: Completed PORTIA-20-49-PLAN.md
+last_updated: "2026-11-07T17:26:55.083Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: d869d72d7899a71dd04b78c9424537df2c76f560
+state_head: 726bd1aa0bd04c4ee123e8bba4dce1d05ee68e1c
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 125
-  completed_plans: 115
+  completed_plans: 116
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 21 of 47
+Plan: 22 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-07 — Phase PORTIA-20 execution resumed (wave continue)
 
@@ -148,6 +148,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P46 | 28 min | 3 tasks | 21 files |
 | Phase PORTIA-20 P47 | 3 sessions | 3 tasks | 6 files |
 | Phase PORTIA-20 P48 | 41 min | 2 tasks | 6 files |
+| Phase PORTIA-20 P49 | 50 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -269,6 +270,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-47: owner verdict 2026-11-07: flasks rows fix (remove extra clock, animate boards and board-pinned waves), animation cap 140 and shortened D-56 texts accepted, spider rows without verdict; plan stopped-for-fixes
 - [Phase PORTIA-20]: 20-47: ambiguous owner answer 4 recorded as fix for the word break Предупреждение on template-builder-preview:pc (orchestrator reading, to confirm in next gallery)
 - [Phase PORTIA-20]: 20-48: манометр убран, доски и волны у доски двигаются (D-59); предел 140/80 не тронут: 136 анимаций на PC, 55 на phone; D-59 прочтения планировщика показываются владельцу в 20-54
+- [Phase PORTIA-20]: D-61 (20-49): причина ложной ошибки скачивания — нативный setTimeout вызывался как метод объекта окружения (TypeError во всех движках); тесты не видели из-за поддельных часов Playwright, проверка идёт на странице с нативными таймерами
+- [Phase PORTIA-20]: D-60 (20-49, толкование оркестратора): значения классов в карточке шаблона не рвутся посреди слова — колонки не уже 200 px и overflow-wrap normal только под .template-card-preview; в развёрнутом окне классы теперь в две колонки; вопрос 1 про колонки карточки открыт
 
 ### Pending Todos
 
@@ -312,8 +315,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-07T17:06:55.623Z
-Stopped at: Completed 20-48-PLAN.md
+Last session: 2026-11-07T17:26:54.464Z
+Stopped at: Completed PORTIA-20-49-PLAN.md
 Resume file: None
 
 ## Operator Next Step
