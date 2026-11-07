@@ -108,6 +108,45 @@ test("a download of a Blob or HTML text releases its object URL, also when the c
   assert.deepEqual(revoked, ["blob:test", "blob:test"]);
 });
 
+// D-61 (20-49): Firefox and WebKit throw a TypeError when a Window function (setTimeout) is called as a method of another object.
+// After `anchor.click()` the file is already with the browser, so nothing that follows may throw out of the download.
+function strictWindowFunction<T extends (...args: never[]) => unknown>(body: T): T {
+  return function strictThis(this: unknown, ...args: Parameters<T>) {
+    if (this !== undefined && this !== globalThis) throw new TypeError("'setTimeout' called on an object that does not implement interface Window.");
+    return body(...args);
+  } as unknown as T;
+}
+
+test("D-61 a download does not throw after the file was handed over, even if a Window function is called with a foreign this", () => {
+  const revoked: string[] = [];
+  const timers: Array<() => void> = [];
+  let clicks = 0;
+  let removed = 0;
+  const anchor = { href: "", download: "", rel: "", style: { display: "" }, click: () => { clicks += 1; }, remove: () => { removed += 1; } };
+  const environment = {
+    document: { createElement: () => anchor, body: { append: () => {} } } as unknown as Document,
+    URL: { createObjectURL: () => "blob:test", revokeObjectURL: (url: string) => { revoked.push(url); } } as unknown as typeof URL,
+    setTimeout: strictWindowFunction(((callback: () => void) => { timers.push(callback); return 0; }) as unknown as typeof setTimeout),
+  };
+  assert.doesNotThrow(() => downloadTemplateBlob("<p>x</p>", "a.html", environment));
+  assert.equal(clicks, 1, "the file was handed to the browser");
+  assert.equal(removed, 1, "the anchor is removed");
+  assert.equal(revoked.length + timers.length >= 1, true, "the link is revoked now or scheduled");
+  for (const timer of timers) timer();
+  assert.deepEqual(revoked, ["blob:test"], "the object URL is released exactly once");
+
+  // A timer that is not there at all, or one that throws for any other reason, still must not turn a handed-over file into an error.
+  const noTimer = { ...environment, setTimeout: (() => { throw new Error("no timers"); }) as unknown as typeof setTimeout };
+  revoked.length = 0;
+  assert.doesNotThrow(() => downloadTemplateBlob("<p>x</p>", "b.html", noTimer));
+  assert.deepEqual(revoked, ["blob:test"], "without a timer the link is revoked at once");
+
+  // Cleanup that fails after the click (the anchor cannot be removed) does not undo the hand-over either.
+  const stuckAnchor = { ...anchor, remove: () => { throw new Error("detached"); } };
+  const stuck = { ...environment, document: { createElement: () => stuckAnchor, body: { append: () => {} } } as unknown as Document };
+  assert.doesNotThrow(() => downloadTemplateBlob("<p>x</p>", "c.html", stuck));
+});
+
 /* ---------------------------------------------------------------- D-55 (20-44): the file is the archive card */
 
 // The rules a browser reports for the site's style sheets: a selector, the declaration block and the @media / @container wrapper.

@@ -2,10 +2,11 @@ import { copyFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { deflateSync } from "node:zlib";
-import type { Locator, Page, Request, TestInfo } from "@playwright/test";
+import type { Browser, Locator, Page, Request, TestInfo, ViewportSize } from "@playwright/test";
 import { DesktopPage } from "../pages/desktop.page";
 import { PromotionPage } from "../pages/promotion.page";
 import { templateExportViolations } from "../../../lib/portia-template-export.ts";
+import { deterministicContract } from "../fixtures/determinism";
 import { expect, test } from "../fixtures/test";
 
 // UI-contract lane (STAB-TMPL-01, D-52). The participant READ status is stubbed so the builder entry can be reached without
@@ -938,3 +939,78 @@ test("[STAB-TMPL-01] unsaved text asks before leaving and a partial draft stays 
   await expect(trigger).toBeFocused();
   expect(writes).toEqual([]);
 });
+
+/* ---------------------------------------------------------------- D-61 (20-49): the status says what happened to the file */
+
+// The owner saw «Не удалось подготовить файл. Повторите скачивание.» although the file had been downloaded. The status must follow the
+// fact: the browser received the file (event «download») <=> «Файл скачан на устройство.» and no export alert; no file <=> the alert
+// and «Повторить скачивание». Both outcomes at once, or neither, is a failure. Run on every project (Chromium, Firefox, WebKit).
+// The shared `page` fixture installs Playwright's fake clock, which REPLACES window.setTimeout with a plain script function. A native
+// Window function called as a method of another object throws a TypeError in every engine ("Illegal invocation" in Chromium), and the
+// fake one does not, so on the shared page this bug can never be seen. The check therefore runs on its own page with native timers.
+async function openNativeTimerPage(
+  browser: Browser,
+  options: Readonly<{ baseURL: string | undefined; viewport: ViewportSize | null; isMobile: boolean; hasTouch: boolean; deviceScaleFactor: number | undefined; userAgent: string | undefined }>,
+) {
+  const context = await browser.newContext({
+    baseURL: options.baseURL,
+    locale: "ru-RU",
+    timezoneId: "Europe/Moscow",
+    colorScheme: "dark",
+    viewport: options.viewport,
+    isMobile: options.isMobile,
+    hasTouch: options.hasTouch,
+    deviceScaleFactor: options.deviceScaleFactor,
+    userAgent: options.userAgent,
+  });
+  await context.addInitScript((settings) => {
+    if (!window.localStorage.getItem("portia-desktop-settings-v1")) window.localStorage.setItem("portia-desktop-settings-v1", JSON.stringify(settings));
+    window.sessionStorage.setItem("portia-boot-seen-v1", "1");
+  }, deterministicContract.settings);
+  const page = await context.newPage();
+  return { context, page };
+}
+
+for (const format of ["HTML", "PNG"] as const) {
+  test(`[STAB-TMPL-01] D-61 a downloaded file never shows the export error (${format})`, async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
+    const { context, page } = await openNativeTimerPage(browser, { baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent });
+    const writes = trackWrites(page);
+    const browserErrors: string[] = [];
+    page.on("pageerror", (error) => browserErrors.push(`pageerror: ${error.name}: ${error.message}`));
+    try {
+      const { builder } = await openBuilder(page);
+      expect(await page.evaluate(() => window.setTimeout.toString()), "native timers, not the fake clock").toContain("[native code]");
+      await nameField(builder).fill("Скачанный шаблон");
+      await openTab(builder, "Описание");
+      await pasteText(textField(builder, "Физиологические характеристики"), "Первая строка\nВторая строка");
+
+      const received = page.waitForEvent("download", { timeout: 20_000 }).then((file) => file.suggestedFilename(), () => null);
+      await builder.getByRole("button", { name: `Скачать ${format}` }).click();
+      await expect(builder.getByRole("status")).toHaveText("Готовим файл…");
+      const fileName = await received;
+      // The export is over when the buttons are enabled again; only then is the status final.
+      await expect(builder.getByRole("button", { name: `Скачать ${format}` })).toBeEnabled();
+
+      const exportAlert = builder.getByRole("alert").filter({ hasText: exportRefusal });
+      const retry = builder.getByRole("button", { name: "Повторить скачивание" });
+      testInfo.annotations.push({ type: "d61-outcome", description: `${testInfo.project.name} ${format}: ${fileName === null ? "no file" : `file ${fileName}`}; page errors: ${JSON.stringify(browserErrors)}` });
+      if (fileName !== null) {
+        expect(fileName).toBe(format === "PNG" ? "shablon-dosye.png" : "shablon-dosye.html");
+        await expect(builder.getByRole("status")).toContainText("Файл скачан на устройство");
+        await expect(exportAlert).toHaveCount(0);
+        await expect(builder.getByRole("alert")).toHaveCount(0);
+        await expect(retry).toHaveCount(0);
+      } else {
+        // No file reached the browser: the error is shown honestly and the draft stays (WebKit may refuse PNG; that is an observation, not a pass).
+        await expect(exportAlert).toHaveCount(1);
+        await expect(retry).toBeVisible();
+        await expect(builder.getByRole("status")).toHaveText("");
+      }
+      await openTab(builder, "Основное");
+      await expect(nameField(builder)).toHaveValue("Скачанный шаблон");
+      expect(writes).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+}
