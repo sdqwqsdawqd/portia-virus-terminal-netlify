@@ -60,7 +60,9 @@ key-decisions:
   - "Предупреждение теста на ПК («Не переключайте вкладку и окно…», утверждено владельцем в 19) оставлено дословно как предупреждение безопасности (11 слов); текст для телефона из того же утверждения (13 слов, больше предела 12) сокращён до «Можно переключаться между приложениями.»; подсказка «Анимации» (утверждена в 18) сокращена. Оба случая вынесены в заметки реестра для галереи 20-47."
   - "Подтверждения необратимых действий оставлены или сокращены с сохранением последствия: «Если вернуться сейчас, набранное будет потеряно.», «Запрос и связанные данные будут удалены без восстановления.», «Вопрос будет удалён. Это нельзя отменить.»"
 
-requirements-completed: [STAB-A11Y-03, STAB-VIS-04, STAB-TMPL-01]
+requirements-completed: []
+# Orchestrator correction: these IDs are addressed, not completed. STAB-A11Y-03 is still BLOCKED (DEVICE) for screen reader / FAIL until D-10, and STAB-VIS-04 needs the owner's acceptance. The REQUIREMENTS.md marks from 8f62f10 are reverted.
+requirements-addressed: [STAB-A11Y-03, STAB-VIS-04, STAB-TMPL-01]
 
 coverage:
   - id: D1
