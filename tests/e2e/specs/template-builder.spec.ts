@@ -190,18 +190,21 @@ async function inspectPng(page: Page, bytes: Buffer) {
     let red = 0;
     let ink = 0;
     let footerInk = 0;
+    let level3 = 0;
     for (let y = 0; y < bitmap.height; y += 1) {
       for (let x = 0; x < bitmap.width; x += 1) {
         const i = (y * bitmap.width + x) * 4;
         const [r, g, b] = [data[i], data[i + 1], data[i + 2]];
         if (r > 190 && g < 80 && b < 80) red += 1;
-        if (r < 110 && g < 120 && b < 120) {
+        // The colour of a level-3 class cell (#b43632), within 12 per channel.
+        if (Math.abs(r - 180) <= 12 && Math.abs(g - 54) <= 12 && Math.abs(b - 50) <= 12) level3 += 1;
+        if (r < 150 && g < 150 && b < 150) {
           ink += 1;
-          if (y >= bitmap.height - 62 && y <= bitmap.height - 38) footerInk += 1;
+          if (y >= bitmap.height - 200) footerInk += 1;
         }
       }
     }
-    return { width: bitmap.width, height: bitmap.height, red, ink, footerInk };
+    return { width: bitmap.width, height: bitmap.height, red, ink, footerInk, level3 };
   }, bytes.toString("base64"));
 }
 
@@ -263,7 +266,7 @@ test("[STAB-TMPL-01] styling: a ready style on a word reaches the preview span a
   await expect(preview.locator(".formatted-content span", { hasText: "и далее" })).not.toHaveCSS("font-weight", "800");
 
   const { html } = await downloadHtml(page, builder, testInfo);
-  expect(html).toMatch(/<span style="font-size:22px;font-weight:800">Слово<\/span>/);
+  expect(html).toMatch(/<span style="font-size: 22px; font-weight: 800;">Слово<\/span>/);
   expect(html).toContain("и далее");
   expect(html).not.toMatch(/<script/i);
 
@@ -312,10 +315,10 @@ test("[STAB-TMPL-01] mutations: add two, style the second, delete the first - on
   const { html } = await downloadHtml(page, builder, testInfo);
   expect(html).toContain("M-01");
   expect(html).not.toContain("M-02");
-  expect(html).toContain("<h3>Вторая</h3>");
+  expect(html).toContain("<h4>Вторая</h4>");
   expect(html).not.toContain("Первая");
-  expect(html).toMatch(/<span style="color:#b43632;font-weight:600">Слово<\/span>/i);
-  expect(html).toContain('<img src="data:image/png;base64,');
+  expect(html).toMatch(/<span style="color: rgb\(180, 54, 50\); font-weight: 600;">Слово<\/span>/i);
+  expect(html).toMatch(/<img [^>]*src="data:image\/png;base64,/);
   expect(writes).toEqual([]);
 });
 
@@ -440,6 +443,36 @@ test("[STAB-TMPL-01] D-55 the downloaded HTML is the archive card", async ({ pag
   expect(writes).toEqual([]);
 });
 
+// D-55 (20-44): the PNG is the raster of the same card (SVG with a foreignObject drawn on a canvas): at least 1060 CSS px wide, with the pixels
+// of the chosen level's colour. Runs on a PC and on a phone, where the card is still laid out at the file's width.
+test("[STAB-TMPL-01] D-55 the downloaded PNG is the archive card", async ({ page }, testInfo) => {
+  const writes = trackWrites(page);
+  const { builder } = await openBuilder(page);
+  await nameField(builder).fill("Вирус из растра");
+  const group = builder.locator("section.editor-group", { has: page.getByRole("heading", { name: "Классификация" }) });
+  await group.locator("select").nth(0).selectOption("Апейрон"); // level 3, #b43632
+
+  const pending = page.waitForEvent("download");
+  await builder.getByRole("button", { name: "Скачать PNG" }).click();
+  const file = await pending;
+  expect(file.suggestedFilename()).toBe("shablon-dosye.png");
+  const target = testInfo.outputPath("shablon-dosye.png");
+  await file.saveAs(target);
+  await keepExport(testInfo, target, "template-png");
+  const bytes = await readFile(target);
+  expect([...bytes.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const width = bytes.readUInt32BE(16);
+  const height = bytes.readUInt32BE(20);
+  expect(width, "1060 CSS px wide at scale 1 or 2").toBeGreaterThanOrEqual(1060);
+  expect(width % 1060).toBe(0);
+  expect(height).toBeGreaterThan(1000);
+  const png = await inspectPng(page, bytes);
+  expect(png.width).toBe(width);
+  expect(png.level3, "the class cell of level 3 is drawn in its colour").toBeGreaterThanOrEqual(40);
+  await expect(builder.getByRole("status")).toContainText("Файл скачан на устройство");
+  expect(writes).toEqual([]);
+});
+
 test("[STAB-TMPL-01] a local image and long text reach the preview, the offline HTML and the PNG without any server write", async ({ page, browser }, testInfo) => {
   const writes = trackWrites(page);
   const { builder } = await openBuilder(page);
@@ -463,7 +496,7 @@ test("[STAB-TMPL-01] a local image and long text reach the preview, the offline 
 
   // HTML: the image is embedded, nothing points at a server, and it opens offline.
   const { html, target: htmlPath } = await downloadHtml(page, builder, testInfo);
-  expect(html).toContain('<img src="data:image/png;base64,');
+  expect(html).toMatch(/<img [^>]*src="data:image\/png;base64,/);
   expect(html).not.toMatch(/(?:src|href)=["']?(?:https?:)?\/\//i);
   expect(html).not.toMatch(/<script|<link|url\(/i);
   expect(html).toContain("строка-89 описание");
@@ -495,8 +528,9 @@ test("[STAB-TMPL-01] a local image and long text reach the preview, the offline 
   const pngBytes = await readFile(pngPath);
   expect([...pngBytes.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const png = await inspectPng(page, pngBytes);
-  expect(png.width).toBe(1000);
-  expect(png.height).toBeGreaterThan(2400);
+  // D-55 (20-44): the raster of the file's card, 1060 CSS px wide at scale 2 (or 1 for a tall card).
+  expect([1060, 2120]).toContain(png.width);
+  expect(png.height / (png.width / 1060)).toBeGreaterThan(2400);
   expect(png.height).toBeLessThanOrEqual(8000);
   expect(png.red).toBeGreaterThanOrEqual(64 * 32 - 40);
   expect(png.ink).toBeGreaterThan(2000);
@@ -840,7 +874,8 @@ test("[STAB-TMPL-01] participant builds a text template, downloads it and opens 
     offlinePage.on("request", (request) => { if (/^https?:/i.test(request.url())) remote.push(request.url()); });
     offlinePage.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
     await offlinePage.goto(pathToFileURL(savedPath).href);
-    await expect(offlinePage.getByRole("heading", { level: 1 })).toHaveText(markup);
+    // The card's own title is the record header's h2.
+    await expect(offlinePage.getByRole("heading", { level: 2 })).toHaveText(markup);
     await expect(offlinePage.getByText("Вторая строка")).toBeVisible();
     await expect(offlinePage.getByText("Не заполнено").first()).toBeVisible();
     expect(await offlinePage.evaluate(() => (window as unknown as { __pwned?: number }).__pwned)).toBeUndefined();

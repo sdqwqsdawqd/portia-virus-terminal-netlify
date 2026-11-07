@@ -224,7 +224,9 @@ async function measureCardPage(page: string): Promise<number> {
     const doc = frame.contentDocument;
     if (!doc) throw new Error("the page cannot be read");
     await Promise.all(Array.from(doc.images).map((image) => image.decode().catch(() => undefined)));
-    return Math.ceil(Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight));
+    // The card itself ends where the file ends; the document's own scroll height can be taller in some engines (an empty tail in the raster).
+    const card = doc.body.firstElementChild;
+    return Math.ceil(card ? card.getBoundingClientRect().bottom : doc.documentElement.scrollHeight);
   } finally {
     frame.remove();
   }
