@@ -2422,3 +2422,168 @@ test("main --verify-docs: exit 0 for consistent documents, 1 with reasons otherw
   gate.main(["--bogus"], { ...docsRepo(), ...io });
   assert.match(err, /--verify-docs/);
 });
+
+// --- 20-15 Task 3 (D-70, D-68, D-14, D-34): --verify-reconciliation and --verify-independent ----------------------------------------------
+
+const PLAN_COUNT = 60;
+const planNames = (count = PLAN_COUNT) => Array.from({ length: count }, (_, i) => String(i + 1).padStart(2, "0"));
+const planCommit = (nn: string) => nn.repeat(20);
+const SUMMARY_MD = `${gate.PHASE_DIR}/20-RELEASE-SUMMARY.md`;
+const VERIFICATION_MD = `${gate.PHASE_DIR}/20-RELEASE-VERIFICATION.md`;
+const DEPLOYED_MD = `${gate.PHASE_DIR}/20-DEPLOYED-EVIDENCE.md`;
+const SELF_ROW = `SUMMARY создаётся после гейта; проверяется --verify-independent; FRC ${FRC_COMMIT}`;
+
+const planSummary = (nn: string, o: { status?: string; commit?: boolean } = {}) =>
+  ["---", `plan: ${Number(nn)}`, `status: ${o.status ?? "complete"}`, ...(o.commit === false ? [] : [`plan_head_after: ${planCommit(nn)}`]), "---", "", "# Summary", "", o.commit === false ? "без хеша" : ""].join("\n");
+
+const crosswalkText = (o: { skip?: string; row14?: string; release?: string; count?: number } = {}) => {
+  const rows = planNames(o.count).filter((nn) => nn !== o.skip).map((nn) => {
+    if (nn === "14") return `| 20-14 | 20-14-SUMMARY.md | ${planCommit(nn)} | ${o.row14 ?? D70_LEDGER_VERDICT} | FRC ${FRC_COMMIT} |`;
+    if (nn === "15") return `| 20-15 | - | - | ${SELF_ROW} | FRC ${FRC_COMMIT} |`;
+    return `| 20-${nn} | 20-${nn}-SUMMARY.md | ${planCommit(nn)} | выполнен | FRC ${FRC_COMMIT} |`;
+  });
+  return ["# 20-RELEASE-SUMMARY", "", "| План | SUMMARY | Commit | Результат | Связь с FRC |", "|---|---|---|---|---|", ...rows, "", `Итог релиза: ${o.release ?? "BLOCKED"}`, ""].join("\n");
+};
+
+const verificationDocText = (o: { status?: Record<string, string>; skip?: string; release?: string; device?: boolean } = {}) => {
+  const ids = [...DEBT20, "STAB-SEC-06"].filter((id) => id !== o.skip);
+  const rows = ids.map((id) => `| ${id} | ${o.status?.[id] ?? (id === "STAB-SEC-06" ? "PASS" : DEBT_STATUS)} | 20-RELEASE-EVIDENCE.md | ${FRC_COMMIT} |`);
+  return ["# 20-RELEASE-VERIFICATION", "", "| ID | Статус | Источник | FRC |", "|---|---|---|---|", ...rows, "", ...(o.device === false ? [] : [`Приёмка на устройствах: ${D70_LEDGER_VERDICT}`]), `Итог релиза: ${o.release ?? "BLOCKED"}`, ""].join("\n");
+};
+
+const DEPLOYED_BLOCKED = "# 20-DEPLOYED-EVIDENCE\n\nСтатус: BLOCKED\n\nДоверенных метаданных Netlify deploy нет; опубликованный сайт не запрашивался (D-14).\n";
+const DEPLOYED_OK = "# 20-DEPLOYED-EVIDENCE\n\nDeploy ID: 6543abcd\nCommit: 0123456789abcdef\nИсточник: Netlify deploy metadata\n";
+
+function reconRepo(o: { files?: Record<string, string | null>; changes?: string[] | null; count?: number } = {}) {
+  const dir = gate.PHASE_DIR;
+  const count = o.count ?? PLAN_COUNT;
+  const files: Record<string, string | null> = {
+    [SUMMARY_MD]: crosswalkText({ count }),
+    [VERIFICATION_MD]: verificationDocText(),
+    [DEPLOYED_MD]: DEPLOYED_BLOCKED,
+    [`${dir}/20-CLASS-MIGRATION-EVIDENCE.md`]: "# class\n",
+    [`${dir}/20-EDITOR-NOTES-EVIDENCE.md`]: "# notes\n",
+  };
+  for (const nn of planNames(count)) {
+    files[`${dir}/20-${nn}-PLAN.md`] = "# plan\n";
+    if (nn !== "15") files[`${dir}/20-${nn}-SUMMARY.md`] = planSummary(nn);
+  }
+  files[`${dir}/20-58-SUMMARY.md`] = OWNER_SUMMARY();
+  files[`${dir}/20-12-SUMMARY.md`] = planSummary("12");
+  const repo = docsRepo({ files: { ...files, ...(o.files ?? {}) } });
+  const git = (args: string[]) => {
+    if (args[0] === "diff" && args[1] === "--name-only" && args[3] === "HEAD") return o.changes === null ? { status: 128, stdout: "", stderr: "fatal" } : { status: 0, stdout: (o.changes ?? [".planning/STATE.md"]).join("\n"), stderr: "" };
+    return repo.git(args);
+  };
+  return { ...repo, git };
+}
+const reconErrors = (o: Parameters<typeof reconRepo>[0] = {}) => gate.verifyReconciliation(reconRepo(o));
+
+test("verifyReconciliation: consistent summaries, crosswalk, release verification, deployed evidence and post-FRC files have no errors", () => {
+  assert.deepEqual(reconErrors(), []);
+});
+
+test("verifyReconciliation: a missing SUMMARY of any plan but 20-15 is rejected, including a gap plan such as 20-58", () => {
+  for (const nn of ["01", "33", "58", "60"]) mentions(reconErrors({ files: { [`${gate.PHASE_DIR}/20-${nn}-SUMMARY.md`]: null } }), new RegExp(`20-${nn}-SUMMARY\\.md`));
+  assert.deepEqual(reconErrors({ files: { [`${gate.PHASE_DIR}/20-15-SUMMARY.md`]: null } }), [], "20-15-SUMMARY.md is created after the gate");
+});
+
+test("verifyReconciliation: a SUMMARY without a commit or with a status that is not complete is rejected", () => {
+  mentions(reconErrors({ files: { [`${gate.PHASE_DIR}/20-22-SUMMARY.md`]: planSummary("22", { commit: false }) } }), /20-22-SUMMARY\.md.*commit/);
+  mentions(reconErrors({ files: { [`${gate.PHASE_DIR}/20-23-SUMMARY.md`]: planSummary("23", { status: "in-progress" }) } }), /20-23-SUMMARY\.md.*status/);
+});
+
+test("verifyReconciliation: the number of plans is read from the files; fewer than 58 is an error; new plans beyond are covered", () => {
+  mentions(reconErrors({ count: 10 }), /меньше 58 файлов 20-NN-PLAN\.md/);
+  mentions(reconErrors({ files: { [`${gate.PHASE_DIR}/20-61-PLAN.md`]: "# plan\n" } }), /20-61-SUMMARY\.md/);
+});
+
+test("verifyReconciliation: every plan needs a crosswalk row; 20-14 is «ПРИНЯТО ВЛАДЕЛЬЦЕМ БЕЗ UAT (D-70)»; 20-15 carries the after-the-gate note", () => {
+  mentions(reconErrors({ files: { [SUMMARY_MD]: crosswalkText({ skip: "37" }) } }), /20-37.*crosswalk/);
+  mentions(reconErrors({ files: { [SUMMARY_MD]: crosswalkText({ skip: "15" }) } }), /20-15.*crosswalk/);
+  mentions(reconErrors({ files: { [SUMMARY_MD]: crosswalkText({ row14: "PASS" }) } }), /20-14.*ПРИНЯТО ВЛАДЕЛЬЦЕМ БЕЗ UAT \(D-70\)/);
+  mentions(reconErrors({ files: { [SUMMARY_MD]: crosswalkText().replace(SELF_ROW, "готово") } }), /20-15.*SUMMARY создаётся после гейта/);
+  mentions(reconErrors({ files: { [SUMMARY_MD]: null } }), /20-RELEASE-SUMMARY\.md/);
+});
+
+test("verifyReconciliation: release verification needs a row per Phase 20 ID; PASS for a register debt, or a status that contradicts REQUIREMENTS.md, is rejected", () => {
+  mentions(reconErrors({ files: { [VERIFICATION_MD]: verificationDocText({ skip: "STAB-REL-05" }) } }), /STAB-REL-05.*20-RELEASE-VERIFICATION/);
+  mentions(reconErrors({ files: { [VERIFICATION_MD]: verificationDocText({ status: { "STAB-REL-05": "PASS" } }) } }), /STAB-REL-05.*PASS у принятого долга/);
+  mentions(reconErrors({ files: { [VERIFICATION_MD]: verificationDocText({ status: { "STAB-SEC-06": DEBT_STATUS } }) } }), /STAB-SEC-06.*REQUIREMENTS\.md/);
+  mentions(reconErrors({ files: { [VERIFICATION_MD]: verificationDocText({ device: false }) } }), /Приёмка на устройствах/);
+  mentions(reconErrors({ files: { [VERIFICATION_MD]: null } }), /20-RELEASE-VERIFICATION\.md/);
+});
+
+test("verifyReconciliation: «Итог релиза» must be the same in the reconciliation, the crosswalk and the verification, and is never PASS", () => {
+  mentions(reconErrors({ files: { [SUMMARY_MD]: crosswalkText({ release: "PASS-WITH-OWNER-WAIVERS" }) } }), /Итог релиза.*20-RELEASE-SUMMARY\.md/);
+  mentions(reconErrors({ files: { [VERIFICATION_MD]: verificationDocText({ release: "FAIL" }) } }), /Итог релиза.*20-RELEASE-VERIFICATION\.md/);
+  mentions(reconErrors({ files: { [SUMMARY_MD]: crosswalkText({ release: "PASS" }), [VERIFICATION_MD]: verificationDocText({ release: "PASS" }) } }), /Итог релиза: PASS/);
+  mentions(reconErrors({ files: { [SUMMARY_MD]: crosswalkText().replace(/Итог релиза: .*/, "") } }), /Итог релиза.*20-RELEASE-SUMMARY\.md/);
+});
+
+test("verifyReconciliation: deployed evidence is trusted metadata or an explicit BLOCKED; an unconfirmed deploy or BLOCKED named PASS is rejected", () => {
+  assert.deepEqual(reconErrors({ files: { [DEPLOYED_MD]: DEPLOYED_OK } }), []);
+  mentions(reconErrors({ files: { [DEPLOYED_MD]: null } }), /20-DEPLOYED-EVIDENCE\.md/);
+  mentions(reconErrors({ files: { [DEPLOYED_MD]: "# deploy\n\nDeploy ID: 6543abcd\n" } }), /неподтверждённый deploy/);
+  mentions(reconErrors({ files: { [DEPLOYED_MD]: "# deploy\n\nвсё хорошо\n" } }), /неподтверждённый deploy/);
+  mentions(reconErrors({ files: { [DEPLOYED_MD]: `${DEPLOYED_BLOCKED}\nСтатус: PASS\n` } }), /BLOCKED.*PASS/);
+});
+
+test("verifyReconciliation: after the FRC only .planning, the runner and its test may change; a git error is an error", () => {
+  assert.deepEqual(reconErrors({ changes: [".planning/ROADMAP.md", "scripts/phase20-release-gate.mjs", "lib/phase20-release-gate.test.ts"] }), []);
+  mentions(reconErrors({ changes: [".planning/STATE.md", "components/portia-desktop.tsx"] }), /после FRC.*components\/portia-desktop\.tsx/);
+  mentions(reconErrors({ changes: ["lib/portia-content.ts"] }), /после FRC.*lib\/portia-content\.ts/);
+  mentions(reconErrors({ changes: ["package-lock.json"] }), /после FRC.*package-lock\.json/);
+  mentions(reconErrors({ changes: null }), /git diff FRC\.\.HEAD не выполнен/);
+});
+
+test("verifyReconciliation: the sources 20-UAT.md, 20-CLASS-MIGRATION-EVIDENCE.md and 20-EDITOR-NOTES-EVIDENCE.md must exist; the owner verdict must stay accepted", () => {
+  mentions(reconErrors({ files: { [`${gate.PHASE_DIR}/20-CLASS-MIGRATION-EVIDENCE.md`]: null } }), /20-CLASS-MIGRATION-EVIDENCE\.md/);
+  mentions(reconErrors({ files: { [`${gate.PHASE_DIR}/20-EDITOR-NOTES-EVIDENCE.md`]: null } }), /20-EDITOR-NOTES-EVIDENCE\.md/);
+  mentions(reconErrors({ files: { [`${gate.PHASE_DIR}/20-UAT.md`]: null } }), /20-UAT\.md/);
+  mentions(reconErrors({ files: { [`${gate.PHASE_DIR}/20-58-SUMMARY.md`]: OWNER_SUMMARY("fixes-requested") } }), /fixes-requested/);
+});
+
+const summary15 = (o: { frc?: string; verdict?: string; closure?: string; completed?: string } = {}) =>
+  ["---", "plan: 15", "status: complete", `final_release_commit: ${o.frc ?? FRC_COMMIT}`, `release_verdict: ${o.verdict ?? "BLOCKED"}`, `phase_closure: ${o.closure ?? "С ПРИНЯТЫМИ ДОЛГАМИ (D-70)"}`, `requirements-completed: [${o.completed ?? "STAB-SEC-06"}]`, "---", "", "# Summary", ""].join("\n");
+const independentFiles = (extra: Record<string, string | null> = {}) => ({ [`${gate.PHASE_DIR}/20-15-SUMMARY.md`]: summary15(), [`${gate.PHASE_DIR}/20-VERIFICATION.md`]: "---\nstatus: passed\n---\n", ...extra });
+const independentErrors = (extra: Record<string, string | null> = {}) => gate.verifyIndependent(reconRepo({ files: independentFiles(extra) }));
+
+test("verifyIndependent: with 20-15-SUMMARY.md, 20-VERIFICATION.md and all plan summaries it passes; the FRC and verdict agree with the row of 20-15 and the reconciliation", () => {
+  assert.deepEqual(independentErrors(), []);
+});
+
+test("verifyIndependent: a missing 20-15-SUMMARY.md, 20-VERIFICATION.md or any plan SUMMARY is rejected", () => {
+  mentions(independentErrors({ [`${gate.PHASE_DIR}/20-15-SUMMARY.md`]: null }), /20-15-SUMMARY\.md/);
+  mentions(independentErrors({ [`${gate.PHASE_DIR}/20-VERIFICATION.md`]: null }), /20-VERIFICATION\.md/);
+  mentions(independentErrors({ [`${gate.PHASE_DIR}/20-44-SUMMARY.md`]: null }), /20-44-SUMMARY\.md/);
+});
+
+test("verifyIndependent: final_release_commit, release_verdict or phase_closure of 20-15-SUMMARY.md that differ from the row and the reconciliation are rejected", () => {
+  mentions(independentErrors({ [`${gate.PHASE_DIR}/20-15-SUMMARY.md`]: summary15({ frc: RC_COMMIT }) }), /final_release_commit/);
+  mentions(independentErrors({ [`${gate.PHASE_DIR}/20-15-SUMMARY.md`]: summary15({ verdict: "PASS-WITH-OWNER-WAIVERS" }) }), /release_verdict/);
+  mentions(independentErrors({ [`${gate.PHASE_DIR}/20-15-SUMMARY.md`]: summary15({ closure: "ЗАБЛОКИРОВАНО: x" }) }), /phase_closure/);
+  mentions(independentErrors({ [SUMMARY_MD]: crosswalkText().replace(`${SELF_ROW} | FRC ${FRC_COMMIT} |`, `${SELF_ROW} | FRC ${RC_COMMIT} |`) }), /20-15.*FRC/);
+});
+
+test("verifyIndependent: requirements-completed of 20-15-SUMMARY.md must not hold a register debt", () => {
+  mentions(independentErrors({ [`${gate.PHASE_DIR}/20-15-SUMMARY.md`]: summary15({ completed: "STAB-SEC-06, STAB-REL-07" }) }), /requirements-completed.*STAB-REL-07/);
+  mentions(independentErrors({ [`${gate.PHASE_DIR}/20-15-SUMMARY.md`]: summary15({ completed: "STAB-A11Y-04" }) }), /requirements-completed.*STAB-A11Y-04/);
+});
+
+test("main --verify-reconciliation and --verify-independent: exit codes and usage line", () => {
+  let out = "";
+  let err = "";
+  const io = { out: (text: string) => { out += text; }, err: (text: string) => { err += text; } };
+  assert.equal(gate.main(["--verify-reconciliation"], { ...reconRepo(), ...io }), 0, err);
+  assert.match(out, /reconciliation verified/);
+  assert.equal(gate.main(["--verify-reconciliation"], { ...reconRepo({ changes: ["app/page.tsx"] }), ...io }), 1);
+  assert.match(err, /PORTIA_RELEASE_GATE:verify-failed.*после FRC/);
+  out = "";
+  assert.equal(gate.main(["--verify-independent"], { ...reconRepo({ files: independentFiles() }), ...io }), 0, err);
+  assert.match(out, /independent verification passed/);
+  assert.equal(gate.main(["--verify-independent"], { ...reconRepo(), ...io }), 1);
+  err = "";
+  gate.main(["--bogus"], { ...reconRepo(), ...io });
+  assert.match(err, /--verify-reconciliation \| --verify-independent/);
+});
