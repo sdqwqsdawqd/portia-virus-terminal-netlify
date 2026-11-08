@@ -391,8 +391,9 @@ test("the real release notes draft is consistent with the real security matrix a
   const matrix = read(`${phaseDir}/20-SECURITY-MATRIX.md`);
   const waivers = read(`${phaseDir}/20-PLAYWRIGHT-WAIVERS.md`);
   const notes = parseNotes(read(`${phaseDir}/20-RELEASE-NOTES.md`));
-  assert.equal(notes.frontmatter.status, "draft");
-  assert.equal(notes.frontmatter.release_commit, "ОЖИДАЕТ 20-15");
+  // 20-15: the notes are final and bound to the final release commit of the reconciliation (D-70 revision).
+  assert.equal(notes.frontmatter.status, "final");
+  assert.equal(notes.frontmatter.release_commit, /^final_release_commit: ([0-9a-f]{40})$/m.exec(read(`${phaseDir}/20-RECONCILIATION.md`))?.[1]);
   assert.ok(findingsOf(matrix).length >= 25, "the matrix has at least the 25 findings SEC20-01..SEC20-25");
   assert.ok(waiverRows(waivers).length >= 10, "the waiver registry has at least PW-01..PW-10");
   assert.deepEqual(d33Rows(matrix).map((row) => row.id), ["WR-03", "WR-05", "IN-01", "IN-02", "IN-03", "IN-04", "IN-05"]);
