@@ -148,7 +148,7 @@ for (const scene of emptyScenes) {
 // ---- D-18, D-20: «Повышение» ---------------------------------------------------------------------------------------------------------------
 // Participant: the gate «ПРОВЕРИТЬ ПОВЫШЕНИЕ» of the redesigned window, as the real server serves it (no substituted read).
 test("@phase20 promotion participant: the lookup gate of the redesigned window (D-18, D-20)", async ({ page }, testInfo) => {
-  const desktop = await openDesktopStill(page);
+  await openDesktopStill(page);
   const promotion = new PromotionPage(page);
   await promotion.open();
   await expect(promotion.heading("ПРОВЕРИТЬ ПОВЫШЕНИЕ")).toBeVisible();
