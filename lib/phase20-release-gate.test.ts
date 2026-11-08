@@ -1183,7 +1183,7 @@ test("verifyEvidence (D-68): «Эталоны 20-12» must name the verdict comm
   const other = "1111111111111111111111111111111111111111";
   mentions(verify(withVisual(visualRow("Эталоны 20-12", { evidence: `коммит вердикта реестра: ${other}` }))), /Эталоны 20-12: commit .* differs from owner_verdict_commit/);
   mentions(verify(withVisual(visualRow("Эталоны 20-12", { evidence: "без коммита" }))), /Эталоны 20-12: no verdict commit/);
-  mentions(verify(goodEvidence(), { ...depsOk, baselinesCommit: other }), /register phase20-baselines\.json has ownerVerdict\.commit/);
+  mentions(verify(goodEvidence(), { ...depsOk, baselinesCommit: other }), /register .*phase20-baselines\.json has ownerVerdict\.commit/);
 });
 
 test("verifyEvidence (D-68): «Код продукта» is НЕ ИЗМЕНЁН, ИЗМЕНЁН ПОСЛЕ ВЕРДИКТА: <файлы> or BLOCKED; the runner recomputes it", () => {

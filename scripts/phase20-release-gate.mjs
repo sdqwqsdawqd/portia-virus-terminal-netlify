@@ -1,7 +1,8 @@
 import * as nodeFs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 // Phase 20 release gate runner (20-30, prepares 20-13). Fail-closed: a gate is PASS only with proof.
@@ -9,6 +10,9 @@ import { fileURLToPath } from "node:url";
 //   --self-check                        clean worktree of HEAD -> node-version + tree-clean -> receipt -> evidence table -> worktree removed;
 //   --run --commit <sha> [--only a,b]   runs the gates in a clean temporary git worktree of that commit;
 //   --verify-evidence [--evidence <p>]  fail-closed check of 20-RELEASE-EVIDENCE.md (written by 20-13 Task 2).
+// D-68 (20-13): visual acceptance is the owner's overall verdict from 20-58-SUMMARY.md plus the 20-12 baselines on fixed data. The three
+// offline gates (ui-contract-offline, visual-approved, visual-phase20) start the production server of the checkout under
+// tests/e2e/harness/offline-supabase.cjs and are labelled «offline D-68»; they say nothing about real data.
 // Statuses: PASS | FAIL | BLOCKED | SKIPPED. Flaky, a retry, a skip and BLOCKED are never PASS.
 // No environment file is read. Only variable NAMES of a fixed list and their presence reach the report, never values.
 // Nothing here runs git clean, git reset --hard or git stash; only the worktree this run created is removed.
@@ -25,6 +29,16 @@ export const STATUSES = Object.freeze(["PASS", "FAIL", "BLOCKED", "SKIPPED"]);
 export const VERDICTS = Object.freeze(["PASS", "PASS-WITH-OWNER-WAIVERS", "FAIL", "BLOCKED"]);
 const VERDICT_RANK = { FAIL: 0, BLOCKED: 1, "PASS-WITH-OWNER-WAIVERS": 2, PASS: 3 };
 const PLAYWRIGHT_RESULTS = "test-results/playwright/results.json";
+export const BASELINES_JSON = "tests/e2e/visual/phase20-baselines.json";
+export const OWNER_SUMMARY_MD = `${PHASE_DIR}/20-58-SUMMARY.md`;
+export const OFFLINE_HARNESS = "tests/e2e/harness/offline-supabase.cjs";
+export const OFFLINE_FLAG = "PORTIA_E2E_OFFLINE_SUPABASE";
+export const OFFLINE_PORT = 3100;
+export const OFFLINE_BASE_URL = `http://127.0.0.1:${OFFLINE_PORT}`;
+export const OFFLINE_MODE = "offline D-68";
+export const VISUAL_SECTION = "Визуальная приёмка владельца (D-68)";
+export const VISUAL_ROWS = Object.freeze(["Общий вердикт", "Эталоны 20-12", "Код продукта"]);
+export const VISUAL_GATES = Object.freeze(["ui-contract-offline", "visual-approved", "visual-phase20", "visual-manifest"]);
 
 export class GateError extends Error {
   constructor(code, detail = "") {
@@ -70,6 +84,15 @@ export function envPresence(names, env) {
 const PLAYWRIGHT_FLAGS = ["--retries=0", "--fail-on-flaky-tests", "--trace=retain-on-first-failure"];
 const playwrightStep = (script, extra, outputName) => ({ file: "npm.cmd", args: ["run", script, "--", ...PLAYWRIGHT_FLAGS, ...extra], playwright: true, outputName });
 const npmStep = (...args) => ({ file: "npm.cmd", args });
+// Offline gates call the Playwright CLI of the checkout directly: `npm run` and `npx` are unreliable here (20-54) and the
+// webServer of playwright.config.ts would build with the real environment. The runner owns the server (see runGate).
+const offlineStep = (extra, outputName, { snapshots = false } = {}) => ({
+  file: "node",
+  args: ["node_modules/@playwright/test/cli.js", "test", ...PLAYWRIGHT_FLAGS, ...(snapshots ? ["--update-snapshots=none"] : []), ...extra],
+  playwright: true,
+  outputName,
+});
+const OFFLINE_FILES = [{ path: OFFLINE_HARNESS, kind: "ENV", reason: "нет обвязки офлайн-режима D-68" }];
 const nodeStep = (...args) => ({ file: "node", args });
 
 function displayStep(gateId, step, index) {
@@ -111,36 +134,51 @@ export const GATES = Object.freeze([
     title: "Playwright, retries=0, без @phase20",
     kind: "playwright",
     steps: [playwrightStep("test:e2e", ["--grep-invert", "@phase20"], "e2e")],
+    dataMode: "цель",
     counts: "playwright",
     strictSkips: true,
     envMarkers: true,
     requires: { gates: NEEDS_INSTALL, env: PUBLIC_ENV },
+  }),
+  defineGate({
+    id: "ui-contract-offline",
+    title: "Функциональные проверки D-68 п. 4 на фиксированных данных (20-58)",
+    kind: "playwright",
+    offline: true,
+    projectSkips: true,
+    steps: [
+      offlineStep(["--project=chromium-desktop", "--project=chromium-phone", "tests/e2e/specs/template-builder.spec.ts", "tests/e2e/specs/accessibility.spec.ts", "-g", "STAB-TMPL-01|template builder"], "ui-contract-1"),
+      offlineStep(["--project=chromium-desktop", "--project=chromium-dpr125", "--project=firefox-desktop", "--project=chromium-phone", "--project=webkit-phone", "tests/e2e/specs/template-builder.spec.ts", "-g", "D-61|D-65"], "ui-contract-2"),
+      offlineStep(["--project=chromium-desktop", "--project=chromium-phone", "tests/e2e/specs/editor-ui-contract.spec.ts", "tests/e2e/specs/image-framing.spec.ts"], "ui-contract-3"),
+      offlineStep(["--project=firefox-desktop", "--project=webkit-phone", "tests/e2e/specs/editor-ui-contract.spec.ts", "-g", "D-66 touch|D-66 dialog|D-67 «Справочник» section photo"], "ui-contract-4"),
+    ],
+    counts: "playwright",
+    requires: { gates: NEEDS_INSTALL, files: OFFLINE_FILES },
   }),
   defineGate({
     id: "visual-approved",
-    title: "Прежние одобренные эталоны (без @phase20)",
+    title: "Прежние эталоны (без @phase20) на фиксированных данных",
     kind: "playwright",
+    offline: true,
     steps: [
-      playwrightStep("test:e2e:visual", ["--grep-invert", "@phase20"]),
-      playwrightStep("test:e2e", ["--project=chromium-phone", "--project=webkit-phone", "--project=firefox-desktop", "tests/e2e/visual", "--grep-invert", "@phase20"]),
+      offlineStep(["--project=chromium-desktop", "--project=chromium-dpr125", "tests/e2e/visual", "--grep-invert", "@phase20"], "visual-approved-1", { snapshots: true }),
+      offlineStep(["--project=chromium-phone", "--project=webkit-phone", "--project=firefox-desktop", "tests/e2e/visual", "--grep-invert", "@phase20"], "visual-approved-2", { snapshots: true }),
     ],
     counts: "playwright",
     strictSkips: true,
-    envMarkers: true,
-    requires: { gates: NEEDS_INSTALL, env: PUBLIC_ENV },
+    requires: { gates: NEEDS_INSTALL, files: OFFLINE_FILES },
   }),
   defineGate({
     id: "visual-phase20",
-    title: "@phase20 эталоны (20-12)",
+    title: "@phase20 эталоны (20-12) на фиксированных данных",
     kind: "playwright",
-    steps: [playwrightStep("test:e2e", ["--project=chromium-desktop", "--project=chromium-phone", "tests/e2e/visual/phase20.spec.ts"])],
+    offline: true,
+    steps: [offlineStep(["--project=chromium-desktop", "--project=chromium-phone", "tests/e2e/visual/phase20.spec.ts"], "visual-phase20-1", { snapshots: true })],
     counts: "playwright",
     strictSkips: true,
-    envMarkers: true,
     requires: {
       gates: NEEDS_INSTALL,
-      env: PUBLIC_ENV,
-      files: [{ path: "tests/e2e/visual/phase20.spec.ts", kind: "OWNER", reason: "нет одобренных эталонов 20-12" }],
+      files: [{ path: "tests/e2e/visual/phase20.spec.ts", kind: "OWNER", reason: "нет одобренных эталонов 20-12" }, ...OFFLINE_FILES],
     },
   }),
   defineGate({
@@ -148,12 +186,14 @@ export const GATES = Object.freeze([
     title: "Аттестация изолированного staging (preflight:mutation)",
     kind: "command",
     steps: [npmStep("run", "test:e2e:preflight:mutation")],
+    dataMode: "staging",
     requires: { gates: NEEDS_INSTALL, env: MUTATION_ENV.map((name) => [name]) },
   }),
   defineGate({
     id: "e2e-mutation",
     title: "Mutation lane и редактор D-40..D-42, D-47",
     kind: "playwright",
+    dataMode: "staging",
     steps: [
       playwrightStep("test:e2e:mutation", [], "e2e-mutation"),
       playwrightStep("test:e2e:mutation", ["tests/e2e/specs/editor-layout.spec.ts"]),
@@ -168,6 +208,7 @@ export const GATES = Object.freeze([
     title: "Live-тесты isolated staging",
     kind: "command",
     steps: [npmStep("run", "test:staging-live")],
+    dataMode: "staging",
     counts: "node-test",
     strictSkips: true,
     requires: { gates: ["mutation-attest"] },
@@ -175,6 +216,36 @@ export const GATES = Object.freeze([
 ]);
 
 const GATE_BY_ID = new Map(GATES.map((gate) => [gate.id, gate]));
+
+/** Data mode of a gate for the «Данные» column: `offline D-68` for the three offline gates, otherwise `цель`, `staging` or `-`. */
+export function dataModeOf(id) {
+  const gate = GATE_BY_ID.get(id);
+  if (!gate) return "-";
+  return gate.offline ? OFFLINE_MODE : gate.dataMode ?? "-";
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Offline environment (D-68). Names are removed by pattern; no value is ever printed.
+
+const privilegedName = new RegExp(["service", "role"].join("_"), "i");
+
+/** Environment of the Playwright process of an offline gate: no mutation, staging, privileged or real public names, plus the invented values. */
+export function offlineChildEnv(base, offlineValues) {
+  const env = {};
+  for (const [name, value] of Object.entries(base ?? {})) {
+    if (MUTATION_ENV.includes(name) || privilegedName.test(name)) continue;
+    if (/^PORTIA_STAGING_/.test(name) || /^PORTIA_PROMO_LIVE_/.test(name) || /^NEXT_PUBLIC_SUPABASE_/.test(name)) continue;
+    if (name === "PORTIA_PROMOTION_DEVICE_SECRET" || name === "NODE_OPTIONS" || name === OFFLINE_FLAG || name === "PORTIA_E2E_BASE_URL") continue;
+    env[name] = value;
+  }
+  return { ...env, ...offlineValues, PORTIA_E2E_ALLOW_HTTP: "1", PORTIA_E2E_BASE_URL: OFFLINE_BASE_URL };
+}
+
+/** The harness is preloaded into the server process only. */
+export function offlineServerEnv(childEnv, harnessPath) {
+  const normalized = String(harnessPath).replace(/\\/g, "/");
+  return { ...childEnv, NODE_OPTIONS: `--require=${/\s/.test(normalized) ? `"${normalized}"` : normalized}`, [OFFLINE_FLAG]: "1" };
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Markdown helpers.
@@ -261,13 +332,25 @@ function* walkSpecs(suites, inheritedFile = "") {
  * that carries the owner's «принято» and a date; fixed and expected-fault rows never excuse a failure.
  * @returns {any}
  */
-export function classifyPlaywright(report, waivers = []) {
+export function classifyPlaywright(report, waivers = [], options = {}) {
   const counts = { passed: 0, failed: 0, flaky: 0, skipped: 0, blocked: 0 };
   const failures = [];
   const blockedKinds = new Set();
-  if (!report || typeof report !== "object") return { status: "FAIL", counts, failures, blockedKinds: [], waived: false, reasons: ["Playwright report is missing or not an object"] };
+  let projectSkipped = 0;
+  if (!report || typeof report !== "object") return { status: "FAIL", counts, failures, blockedKinds: [], waived: false, projectSkipped, reasons: ["Playwright report is missing or not an object"] };
   const reasons = [];
   if (Array.isArray(report.errors) && report.errors.length > 0) reasons.push(`report has ${report.errors.length} global error(s)`);
+
+  // D-68 (ui-contract-offline): a skip by a project condition is accepted only when the same test passed on another project.
+  const passedElsewhere = new Set();
+  if (options.projectSkips) {
+    for (const { spec, file } of walkSpecs(report.suites)) {
+      for (const test of spec.tests ?? []) {
+        const retried = (Array.isArray(test.results) ? test.results : []).some((result) => Number(result?.retry ?? 0) > 0);
+        if (test.status === "expected" && !retried) passedElsewhere.add(`${file}|${spec.title}`);
+      }
+    }
+  }
 
   for (const { spec, file } of walkSpecs(report.suites)) {
     for (const test of spec.tests ?? []) {
@@ -288,6 +371,8 @@ export function classifyPlaywright(report, waivers = []) {
         if (blocking.length > 0) {
           counts.blocked += 1;
           for (const text of blocking) blockedKinds.add(text.match(BLOCKED_KIND)?.[1]?.trim() ?? "");
+        } else if (options.projectSkips && passedElsewhere.has(`${file}|${spec.title}`)) {
+          projectSkipped += 1;
         }
       } else if (test.status === "expected") {
         counts.passed += 1;
@@ -314,9 +399,9 @@ export function classifyPlaywright(report, waivers = []) {
   let status = "PASS";
   if (counts.failed + counts.flaky > 0 || reasons.length > 0) status = "FAIL";
   else if (counts.blocked > 0) status = "BLOCKED";
-  else if (counts.skipped > 0) status = "SKIPPED";
+  else if (counts.skipped - projectSkipped > 0) status = "SKIPPED";
   const waived = status === "FAIL" && reasons.length === 0 && failures.length > 0 && failures.every((failure) => failure.waived);
-  return { status, counts, failures, blockedKinds: kinds, waived, first: failures[0]?.id ?? null, reasons };
+  return { status, counts, failures, blockedKinds: kinds, waived, first: failures[0]?.id ?? null, projectSkipped, reasons };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -450,12 +535,13 @@ function evaluateStep(gate, step, run, context) {
       } catch { problem = "Playwright results.json is not valid JSON"; }
     }
     if (!report) return { ...base, status: "FAIL", reason: problem };
-    const classified = classifyPlaywright(report, context.waivers ?? []);
+    const classified = classifyPlaywright(report, context.waivers ?? [], { projectSkips: Boolean(gate.projectSkips) });
     let status = classified.status;
     let reason = classified.reasons.join("; ");
     if (status === "FAIL" && !reason) reason = `${classified.counts.failed} failed, ${classified.counts.flaky} flaky/retried; first: ${classified.first}`;
     if (status === "BLOCKED") reason = `${classified.counts.blocked} test(s) skipped as BLOCKED`;
     if (status === "SKIPPED") reason = `${classified.counts.skipped} test(s) skipped without BLOCKED`;
+    if (status === "PASS" && classified.projectSkipped > 0) reason = `${classified.projectSkipped} skip(s) by project condition; each such test passed on another project`;
     let waived = classified.waived;
     if (code !== 0 && status === "PASS") { status = "FAIL"; reason = `exit code ${code} although the report shows no failure`; waived = false; }
     else if (code !== 0 && status !== "FAIL") { status = "FAIL"; reason = `exit code ${code}; ${reason}`; waived = false; }
@@ -499,7 +585,7 @@ function evaluateStep(gate, step, run, context) {
  */
 export function runGate(gate, context) {
   const { deps, worktree, artifactsDir, results } = context;
-  const result = { id: gate.id, title: gate.title, command: gate.command, status: "PASS", blockedKind: "", exitCode: null, reason: "", counts: null, artifacts: [], waived: false, waivedBy: [], first: null, detail: "" };
+  const result = { id: gate.id, title: gate.title, command: gate.command, dataMode: dataModeOf(gate.id), status: "PASS", blockedKind: "", exitCode: null, reason: "", counts: null, artifacts: [], waived: false, waivedBy: [], first: null, detail: "" };
   const blocked = (kind, reason) => ({ ...result, status: "BLOCKED", blockedKind: kind, reason });
 
   for (const file of gate.requires.files ?? []) {
@@ -514,27 +600,51 @@ export function runGate(gate, context) {
     if (dependency.status !== "PASS") return blocked(kind, `${id} is ${dependency.status}`);
   }
 
-  const evaluated = [];
-  gate.steps.forEach((step, index) => {
-    const stepNumber = index + 1;
-    const args = step.playwright ? [...step.args, "--output", path.join(artifactsDir, step.outputName ?? `${gate.id}-${stepNumber}`)] : step.args;
-    if (step.playwright) deps.fs.rmSync(path.join(worktree, PLAYWRIGHT_RESULTS), { force: true });
-    const run = deps.exec(step.file, args, { cwd: worktree, env: deps.env, timeoutMs: step.playwright ? 90 * 60_000 : 30 * 60_000 });
-    const logName = `${gate.id}-${stepNumber}.log`;
-    deps.fs.writeFileSync(path.join(artifactsDir, logName), `$ ${displayStep(gate.id, step, index)}\n# exit ${run.status}\n${run.stdout ?? ""}\n${run.stderr ?? ""}\n`);
-    result.artifacts.push(logName);
-    if (step.playwright) {
-      result.artifacts.push(`${gate.id}-${stepNumber}-results.json`);
-      result.artifacts.push(`${step.outputName ?? `${gate.id}-${stepNumber}`}/`);
+  // D-68: an offline gate brings its own server (production build of the checkout under the harness) and its own invented values.
+  let offline = null;
+  if (gate.offline) {
+    const harnessPath = path.join(worktree, OFFLINE_HARNESS);
+    let values;
+    try {
+      values = deps.loadOfflineEnv(harnessPath);
+    } catch (error) {
+      return blocked("ENV", `offline harness could not be loaded: ${clip(error?.message ?? error)}`);
     }
-    const verdict = evaluateStep(gate, step, run, { ...context, stepNumber });
-    evaluated.push({ ...verdict, exit: run.status });
-  });
+    const childEnv = offlineChildEnv(deps.env, values);
+    const server = deps.startServer({ worktree, env: offlineServerEnv(childEnv, harnessPath), buildEnv: childEnv, artifactsDir, gateId: gate.id });
+    if (!server?.ok) return blocked("ENV", `offline server did not answer on 127.0.0.1:${OFFLINE_PORT}: ${server?.reason ?? "no reason given"}`);
+    offline = { env: childEnv, server };
+  }
+
+  const evaluated = [];
+  let stopProblem = "";
+  try {
+    gate.steps.forEach((step, index) => {
+      const stepNumber = index + 1;
+      const args = step.playwright ? [...step.args, "--output", path.join(artifactsDir, step.outputName ?? `${gate.id}-${stepNumber}`)] : step.args;
+      if (step.playwright) deps.fs.rmSync(path.join(worktree, PLAYWRIGHT_RESULTS), { force: true });
+      const run = deps.exec(step.file, args, { cwd: worktree, env: offline ? offline.env : deps.env, timeoutMs: step.playwright ? 90 * 60_000 : 30 * 60_000 });
+      const logName = `${gate.id}-${stepNumber}.log`;
+      deps.fs.writeFileSync(path.join(artifactsDir, logName), `$ ${displayStep(gate.id, step, index)}\n# exit ${run.status}\n${run.stdout ?? ""}\n${run.stderr ?? ""}\n`);
+      result.artifacts.push(logName);
+      if (step.playwright) {
+        result.artifacts.push(`${gate.id}-${stepNumber}-results.json`);
+        result.artifacts.push(`${step.outputName ?? `${gate.id}-${stepNumber}`}/`);
+      }
+      const verdict = evaluateStep(gate, step, run, { ...context, stepNumber });
+      evaluated.push({ ...verdict, exit: run.status });
+    });
+  } finally {
+    if (offline) {
+      const stopped = deps.stopServer(offline.server);
+      if (!stopped?.stopped) stopProblem = `the offline server (pid ${offline.server.pid ?? "?"}) could not be stopped`;
+    }
+  }
 
   let worst = evaluated[0];
   for (const step of evaluated) if (PRIORITY[step.status] > PRIORITY[worst.status]) worst = step;
   result.status = worst.status;
-  result.reason = worst.reason;
+  result.reason = worst.status === "PASS" ? evaluated.map((step) => step.reason).filter(Boolean).join("; ") : worst.reason;
   result.first = evaluated.find((step) => step.first)?.first ?? null;
   result.detail = evaluated.find((step) => step.detail)?.detail ?? "";
   result.exitCode = evaluated.find((step) => step.exit !== 0)?.exit ?? evaluated[evaluated.length - 1].exit;
@@ -546,6 +656,13 @@ export function runGate(gate, context) {
   const failing = evaluated.filter((step) => step.status === "FAIL");
   result.waived = failing.length > 0 && failing.every((step) => step.waived);
   result.waivedBy = [...new Set(failing.flatMap((step) => step.waivedBy))];
+  if (stopProblem) {
+    result.status = "FAIL";
+    result.blockedKind = "";
+    result.waived = false;
+    result.waivedBy = [];
+    result.reason = [stopProblem, result.reason].filter(Boolean).join("; ");
+  }
   return result;
 }
 
@@ -576,11 +693,11 @@ export function renderEvidence(run) {
     "",
     "## Гейты",
     "",
-    "| Gate | Команда | Exit | Статус | Passed/Failed/Skipped/Flaky | Артефакты |",
-    "|---|---|---|---|---|---|",
+    "| Gate | Команда | Exit | Статус | Passed/Failed/Skipped/Flaky | Артефакты | Данные |",
+    "|---|---|---|---|---|---|---|",
   ];
   for (const result of run.results) {
-    lines.push(`| ${result.id} | \`${tableCell(result.command)}\` | ${result.exitCode ?? "-"} | ${tableCell(renderStatus(result))} | ${renderCounts(result.counts)} | ${tableCell((result.artifacts ?? []).join(", ") || "-")} |`);
+    lines.push(`| ${result.id} | \`${tableCell(result.command)}\` | ${result.exitCode ?? "-"} | ${tableCell(renderStatus(result))} | ${renderCounts(result.counts)} | ${tableCell((result.artifacts ?? []).join(", ") || "-")} | ${tableCell(result.dataMode ?? dataModeOf(result.id))} |`);
   }
   const notes = run.results.filter((result) => result.reason);
   if (notes.length > 0) {
@@ -594,6 +711,10 @@ export function renderEvidence(run) {
   if (Array.isArray(run.decisions)) {
     lines.push("", "## Решения D-35..D-45", "", "| Решение | Статус | Доказательство |", "|---|---|---|");
     for (const row of run.decisions) lines.push(`| ${tableCell(row.id)} | ${tableCell(row.status)} | ${tableCell(row.evidence ?? "-")} |`);
+  }
+  if (Array.isArray(run.visual)) {
+    lines.push("", `## ${VISUAL_SECTION}`, "", "| Пункт | Статус | Доказательство |", "|---|---|---|");
+    for (const row of run.visual) lines.push(`| ${tableCell(row.id)} | ${tableCell(row.status)} | ${tableCell(row.evidence ?? "-")} |`);
   }
   lines.push("", "## Окружение (только имена)", "", "| Переменная | Задана |", "|---|---|");
   for (const entry of run.env ?? []) lines.push(`| ${entry.name} | ${entry.present ? "да" : "нет"} |`);
@@ -639,6 +760,10 @@ function readGateRows(markdown, requireAll) {
         }
       }
     }
+    if (gate.offline) {
+      const mode = String(cellsOfRow[6] ?? "").trim();
+      if (mode !== OFFLINE_MODE) errors.push(`${id}: offline gate row must carry the data mode «${OFFLINE_MODE}», got "${mode || "(none)"}"`);
+    }
     rows.push({ id, status, waived, exitCode: exit, counts });
   }
   if (requireAll) for (const gate of GATES) if (!seen.has(gate.id)) errors.push(`${gate.id}: gate row is missing`);
@@ -663,9 +788,177 @@ export function matrixBlockers(matrixMarkdown) {
   return table.rows.map((row) => stripTicks(row[0] ?? "")).filter((id) => id !== "" && id.toLowerCase() !== "нет");
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// D-68: visual acceptance = the owner's overall verdict (20-58-SUMMARY.md) + the 20-12 baselines + unchanged product code.
+
+/** `owner_verdict`, `owner_verdict_date`, `owner_verdict_commit` from the frontmatter of 20-58-SUMMARY.md; null without frontmatter. */
+export function readOwnerVerdict(markdown) {
+  const front = normalizeText(markdown).match(/^---\n([\s\S]*?)\n---/);
+  if (!front) return null;
+  const read = (name) => front[1].match(new RegExp(`^${name}:[ \\t]*(.*?)[ \\t]*$`, "m"))?.[1]?.replace(/^["']|["']$/g, "") ?? "";
+  return { verdict: read("owner_verdict"), date: read("owner_verdict_date"), commit: read("owner_verdict_commit") };
+}
+
+const OWNER_WAITING = "ОЖИДАЕТ ВЛАДЕЛЬЦА";
+
+/** The status text of the «Общий вердикт» row. It is built only from a verdict that was read; the agent decides nothing. */
+export function ownerStatusText(owner) {
+  if (!owner || !owner.verdict || !/^\d{4}-\d{2}-\d{2}$/.test(owner.date)) return OWNER_WAITING;
+  if (owner.verdict === "accepted") return `ПРИНЯТО ВЛАДЕЛЬЦЕМ ${owner.date}`;
+  if (/^(fixes-requested|fix|rejected)$/.test(owner.verdict)) return `ИСПРАВИТЬ (владелец) ${owner.date}`;
+  return OWNER_WAITING;
+}
+
+/** Non-test files of app, components, public and lib that differ between the two commits; null when git fails or `from` is empty. */
+export function productCodeChanges(deps, from, to) {
+  if (!from || !to) return null;
+  const diff = deps.git(["diff", "--name-only", from, to, "--", "app", "components", "public", "lib"]);
+  if (diff.status !== 0) return null;
+  return String(diff.stdout ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !/\.test\./.test(line));
+}
+
+/** The three rows of «Визуальная приёмка владельца (D-68)». `baselines` = { commit, rows } or null, `changed` = file list or null. */
+export function visualAcceptanceRows({ owner, baselines, changed, releaseCommit }) {
+  const ownerCommit = owner?.commit ?? "";
+  return [
+    {
+      id: "Общий вердикт",
+      status: ownerStatusText(owner),
+      evidence: owner ? `owner_verdict: ${owner.verdict || "нет"}; owner_verdict_date: ${owner.date || "-"}; owner_verdict_commit: ${ownerCommit || "-"}; источник: 20-58-SUMMARY.md` : "20-58-SUMMARY.md не прочитан",
+    },
+    {
+      id: "Эталоны 20-12",
+      status: baselines ? `${baselines.rows} строк реестра` : "BLOCKED (ENV): реестр не прочитан",
+      evidence: `${BASELINES_JSON}; коммит вердикта реестра: ${baselines?.commit || "-"}`,
+    },
+    {
+      id: "Код продукта",
+      status: changed === null || changed === undefined ? "BLOCKED (ENV): git diff не выполнен" : changed.length === 0 ? "НЕ ИЗМЕНЁН" : `ИЗМЕНЁН ПОСЛЕ ВЕРДИКТА: ${changed.join(", ")}`,
+      evidence: `git diff --name-only ${ownerCommit ? ownerCommit.slice(0, 12) : "<owner_verdict_commit>"} ${String(releaseCommit ?? "").slice(0, 12)} -- app components public lib (без *.test.*)`,
+    },
+  ];
+}
+
+/** Caps the run verdict by the visual acceptance: no owner «принято», changed product code or a red visual gate never gives PASS. */
+export function applyVisualAcceptance(verdict, rows, results = null) {
+  const status = (id) => String(rows.find((row) => row.id === id)?.status ?? "");
+  const verdictStatus = status("Общий вердикт");
+  const codeStatus = status("Код продукта");
+  const reasons = [];
+  let cap = "PASS";
+  if (verdictStatus.startsWith("ИСПРАВИТЬ")) { cap = "FAIL"; reasons.push(`Общий вердикт: ${verdictStatus}`); }
+  else if (!verdictStatus.startsWith("ПРИНЯТО ВЛАДЕЛЬЦЕМ")) { cap = "BLOCKED"; reasons.push(`Общий вердикт: ${verdictStatus || OWNER_WAITING} (D-68)`); }
+  if (codeStatus.startsWith("ИЗМЕНЁН")) { cap = "FAIL"; reasons.push(`Код продукта: ${codeStatus}`); }
+  else if (codeStatus !== "НЕ ИЗМЕНЁН" && cap === "PASS") { cap = "BLOCKED"; reasons.push(`Код продукта: ${codeStatus || "не определён"}`); }
+  if (results && cap === "PASS") {
+    const red = VISUAL_GATES.filter((id) => results.some((row) => row.id === id && row.status !== "PASS"));
+    if (red.length > 0 && verdict.startsWith("PASS")) { cap = "FAIL"; reasons.push(`визуальные гейты не PASS: ${red.join(", ")}`); }
+  }
+  if (VERDICT_RANK[cap] < VERDICT_RANK[verdict]) return { verdict: cap, reasons };
+  return { verdict, reasons: [] };
+}
+
+/** Rows of the visual section for a release commit, read from that commit's worktree (commit-bound). */
+function computeVisualRows(deps, created) {
+  let owner = null;
+  let baselines = null;
+  try {
+    const summaryPath = path.join(created.path, OWNER_SUMMARY_MD);
+    if (deps.fs.existsSync(summaryPath)) owner = readOwnerVerdict(deps.fs.readFileSync(summaryPath, "utf8"));
+  } catch { owner = null; }
+  try {
+    const registerPath = path.join(created.path, BASELINES_JSON);
+    if (deps.fs.existsSync(registerPath)) {
+      const register = JSON.parse(deps.fs.readFileSync(registerPath, "utf8"));
+      baselines = { commit: String(register?.ownerVerdict?.commit ?? ""), rows: Array.isArray(register?.rows) ? register.rows.length : 0 };
+    }
+  } catch { baselines = null; }
+  const changed = owner?.commit ? productCodeChanges(deps, owner.commit, created.commit) : null;
+  return visualAcceptanceRows({ owner, baselines, changed, releaseCommit: created.commit });
+}
+
+const OWNER_STATUS_FORMS = "«ПРИНЯТО ВЛАДЕЛЬЦЕМ ГГГГ-ММ-ДД», «ИСПРАВИТЬ (владелец) ГГГГ-ММ-ДД» or «ОЖИДАЕТ ВЛАДЕЛЬЦА»";
+
+/** Problems of the visual section; `info.stated` is the verdict word of the protocol, `info.gateRows` its parsed gate rows. */
+function verifyVisualSection(text, deps, info) {
+  const errors = [];
+  const visual = sectionTable(text, VISUAL_SECTION);
+  if (!visual) return { errors: [`table «${VISUAL_SECTION}» is missing`], verdictOk: false, codeOk: false };
+  const byId = new Map(visual.rows.map((row) => [normalizeLabel(row[0] ?? ""), row]));
+  const row = (id) => byId.get(normalizeLabel(id));
+  for (const id of VISUAL_ROWS) if (!row(id)) errors.push(`${id}: visual acceptance row is missing`);
+
+  const hasSummary = typeof deps.ownerSummary === "string" && deps.ownerSummary.trim() !== "";
+  const owner = hasSummary ? readOwnerVerdict(deps.ownerSummary) ?? { verdict: "", date: "", commit: "" } : null;
+  let verdictOk = false;
+  let codeOk = false;
+
+  const verdictRow = row("Общий вердикт");
+  if (verdictRow) {
+    const status = String(verdictRow[1] ?? "").trim();
+    if (verdictRow.some((cell) => /(?<!не\s)(?<!not\s)\bPASS\b/i.test(cell))) errors.push("Общий вердикт: an owner verdict row must not contain PASS (it is the owner's word, never an agent result)");
+    const accepted = status.match(/^ПРИНЯТО ВЛАДЕЛЬЦЕМ (\d{4}-\d{2}-\d{2})/);
+    if (accepted) {
+      if (!owner) errors.push("Общий вердикт: row says ПРИНЯТО ВЛАДЕЛЬЦЕМ, but 20-58-SUMMARY.md is unreadable");
+      else if (owner.verdict !== "accepted") errors.push(`Общий вердикт: row says ПРИНЯТО ВЛАДЕЛЬЦЕМ, but 20-58-SUMMARY.md has owner_verdict "${owner.verdict}"`);
+      else if (owner.date !== accepted[1]) errors.push(`Общий вердикт: date ${accepted[1]} differs from owner_verdict_date ${owner.date || "(none)"} in 20-58-SUMMARY.md`);
+      else verdictOk = true;
+    } else if (!/^ИСПРАВИТЬ \(владелец\) \d{4}-\d{2}-\d{2}/.test(status) && !/^ОЖИДАЕТ ВЛАДЕЛЬЦА/.test(status)) {
+      errors.push(`Общий вердикт: status must be ${OWNER_STATUS_FORMS}, got "${status || "(empty)"}"`);
+    }
+  }
+
+  const registerRow = row("Эталоны 20-12");
+  if (registerRow) {
+    const hits = registerRow.join(" ").match(/\b[0-9a-f]{40}\b/g);
+    if (!hits) errors.push("Эталоны 20-12: no verdict commit (40 hex) in the row");
+    else {
+      const ownerCommit = owner?.commit ?? "";
+      for (const hit of new Set(hits)) if (ownerCommit && hit !== ownerCommit) errors.push(`Эталоны 20-12: commit ${hit.slice(0, 12)} differs from owner_verdict_commit ${ownerCommit.slice(0, 12)} of 20-58-SUMMARY.md`);
+    }
+    if (deps.baselinesCommit !== undefined) {
+      if (!deps.baselinesCommit) errors.push(`Эталоны 20-12: register ${BASELINES_JSON} is unreadable or has no ownerVerdict.commit`);
+      else if (owner?.commit && deps.baselinesCommit !== owner.commit) errors.push(`Эталоны 20-12: register ${BASELINES_JSON} has ownerVerdict.commit ${deps.baselinesCommit.slice(0, 12)} but 20-58-SUMMARY.md has owner_verdict_commit ${owner.commit.slice(0, 12)}`);
+    }
+  }
+
+  const codeRow = row("Код продукта");
+  if (codeRow) {
+    const status = String(codeRow[1] ?? "").trim();
+    const releaseCommit = text.match(/^Commit:\s*`?([0-9a-f]{40})`?\s*$/m)?.[1];
+    const recompute = () => (typeof deps.productChanges === "function" && owner?.commit && releaseCommit ? deps.productChanges(owner.commit, releaseCommit) : undefined);
+    if (status === "НЕ ИЗМЕНЁН") {
+      const changed = recompute();
+      if (changed === null) errors.push("Код продукта: claims НЕ ИЗМЕНЁН but the diff cannot be recomputed");
+      else if (Array.isArray(changed) && changed.length > 0) errors.push(`Код продукта: claims НЕ ИЗМЕНЁН but ${changed.join(", ")} changed since owner_verdict_commit`);
+      else codeOk = true;
+    } else if (/^ИЗМЕНЁН ПОСЛЕ ВЕРДИКТА: \S/.test(status)) {
+      const changed = recompute();
+      if (Array.isArray(changed) && changed.length === 0) errors.push("Код продукта: claims ИЗМЕНЁН ПОСЛЕ ВЕРДИКТА but the recomputed diff is empty");
+    } else if (!/^BLOCKED/.test(status)) {
+      errors.push(`Код продукта: status must be «НЕ ИЗМЕНЁН», «ИЗМЕНЁН ПОСЛЕ ВЕРДИКТА: <файлы>» or BLOCKED, got "${status || "(empty)"}"`);
+    }
+  }
+
+  if (info.stated?.startsWith("PASS")) {
+    if (!verdictOk) errors.push(`verdict ${info.stated} needs «Общий вердикт» = «ПРИНЯТО ВЛАДЕЛЬЦЕМ ГГГГ-ММ-ДД» matching 20-58-SUMMARY.md`);
+    if (!codeOk) errors.push(`verdict ${info.stated} needs «Код продукта» = «НЕ ИЗМЕНЁН»`);
+    for (const id of VISUAL_GATES) {
+      const gateRow = info.gateRows.find((candidate) => candidate.id === id);
+      if (gateRow && (gateRow.status !== "PASS" || gateRow.waived)) errors.push(`verdict ${info.stated} needs ${id} = PASS (a waived or red visual gate is not acceptance)`);
+    }
+  }
+  return { errors, verdictOk, codeOk };
+}
+
 /**
- * Every problem in 20-RELEASE-EVIDENCE.md. deps = { commitExists(sha) => boolean, matrix: string | null }.
- * Checks: commit, Node, gates, D-33 table, «Решения D-35..D-45», production rows, verdict versus gates and matrix blockers.
+ * Every problem in 20-RELEASE-EVIDENCE.md. deps = { commitExists(sha) => boolean, matrix: string | null, ownerSummary: string | null,
+ * baselinesCommit?: string | null, productChanges?(from, to) => string[] | null }.
+ * Checks: commit, Node, gates and data modes, D-33 table, «Решения D-35..D-45», production rows, «Визуальная приёмка владельца (D-68)»,
+ * verdict versus gates, matrix blockers and the owner's verdict.
  */
 export function verifyEvidence(markdown, deps = {}) {
   const errors = [];
@@ -713,6 +1006,7 @@ export function verifyEvidence(markdown, deps = {}) {
   }
 
   const stated = text.match(/^Итог:\s*(\S+)/m)?.[1];
+  errors.push(...verifyVisualSection(text, deps, { stated: stated && VERDICTS.includes(stated) ? stated : undefined, gateRows: gates.rows }).errors);
   if (!stated || !VERDICTS.includes(stated)) errors.push(`verdict line «Итог:» is missing or unknown ("${stated ?? ""}")`);
   else {
     const rows = gates.rows;
@@ -732,6 +1026,78 @@ export function verifyEvidence(markdown, deps = {}) {
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Orchestration.
+
+// Offline server of a checkout (D-68). Synchronous on purpose: runGate is synchronous. The port is fixed (3100); a foreign listener is never taken over.
+
+const PROBE_SCRIPT = [
+  "const http = require('node:http');",
+  "const url = process.argv[1];",
+  "const deadline = Date.now() + Number(process.argv[2]);",
+  "function once() {",
+  "  const req = http.get(url, (res) => { res.resume(); process.exit(0); });",
+  "  req.on('error', retry);",
+  "  req.setTimeout(2000, () => req.destroy());",
+  "}",
+  "function retry() { if (Date.now() >= deadline) process.exit(1); setTimeout(once, 500); }",
+  "once();",
+].join("\n");
+
+/** True when something answers HTTP at `url` within `timeoutMs`. */
+function probeUrl(url, timeoutMs) {
+  const run = spawnSync(process.execPath, ["-e", PROBE_SCRIPT, url, String(timeoutMs)], { timeout: timeoutMs + 10_000, windowsHide: true });
+  return run.status === 0;
+}
+
+const builtWorktrees = new Set();
+
+function startOfflineServer({ worktree, env, buildEnv, artifactsDir, gateId }) {
+  if (probeUrl(OFFLINE_BASE_URL, 1500)) return { ok: false, reason: `${OFFLINE_BASE_URL} already answers; the runner does not take over a foreign server` };
+  const nextBin = path.join(worktree, "node_modules", "next", "dist", "bin", "next");
+  if (!builtWorktrees.has(worktree)) {
+    const build = spawnSync(process.execPath, [nextBin, "build"], { cwd: worktree, env: buildEnv, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, timeout: 20 * 60_000, windowsHide: true });
+    nodeFs.writeFileSync(path.join(artifactsDir, "offline-build.log"), `$ next build (offline values)\n# exit ${build.status}\n${build.stdout ?? ""}\n${build.stderr ?? ""}\n`);
+    if (build.status !== 0) return { ok: false, reason: `next build exited with ${build.status ?? build.error?.message ?? "no status"} (see offline-build.log)` };
+    builtWorktrees.add(worktree);
+  }
+  const log = nodeFs.openSync(path.join(artifactsDir, `offline-server-${gateId}.log`), "a");
+  let child;
+  try {
+    child = spawn(process.execPath, [nextBin, "start", "--hostname", "127.0.0.1", "--port", String(OFFLINE_PORT)], { cwd: worktree, env, detached: true, stdio: ["ignore", log, log], windowsHide: true });
+  } finally {
+    nodeFs.closeSync(log);
+  }
+  child.on("error", () => {});
+  child.unref();
+  if (!child.pid) return { ok: false, reason: "the server process did not start" };
+  if (!probeUrl(OFFLINE_BASE_URL, 120_000)) {
+    stopOfflineServer({ pid: child.pid });
+    return { ok: false, reason: `no answer on ${OFFLINE_BASE_URL} within 120 s (see offline-server-${gateId}.log)`, pid: child.pid };
+  }
+  return { ok: true, pid: child.pid };
+}
+
+/** Stops the server this runner started, by its PID (and its tree on Windows), then proves the port is quiet. */
+function stopOfflineServer(server) {
+  const pid = server?.pid;
+  if (!pid) return { stopped: true, pid: null };
+  if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true });
+  else {
+    try { process.kill(-pid, "SIGTERM"); } catch { try { process.kill(pid, "SIGTERM"); } catch { /* already gone */ } }
+  }
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500);
+  return { stopped: !probeUrl(OFFLINE_BASE_URL, 1500), pid };
+}
+
+/** OFFLINE_ENV of the harness file of the checkout. The harness installs itself only when the flag is set, so the flag is cleared while loading. */
+function loadOfflineEnv(harnessPath) {
+  const saved = process.env[OFFLINE_FLAG];
+  delete process.env[OFFLINE_FLAG];
+  try {
+    return createRequire(harnessPath)(harnessPath).OFFLINE_ENV;
+  } finally {
+    if (saved !== undefined) process.env[OFFLINE_FLAG] = saved;
+  }
+}
 
 /** @returns {any} */
 function defaultDeps() {
@@ -758,6 +1124,9 @@ function defaultDeps() {
     fs: nodeFs,
     git,
     exec,
+    loadOfflineEnv,
+    startServer: startOfflineServer,
+    stopServer: stopOfflineServer,
     root: ROOT,
     env: process.env,
     tmpdir: os.tmpdir(),
@@ -810,6 +1179,14 @@ export function runRelease(deps, options) {
       }
     }
     const verdict = aggregate(results, { playwright: includesPlaywright, waivers });
+    // D-68: a full run is capped by the owner's overall verdict, the product code since that verdict and the visual gates.
+    let visual = null;
+    if (!only) {
+      visual = computeVisualRows(deps, created);
+      const capped = applyVisualAcceptance(verdict.verdict, visual, results);
+      verdict.verdict = capped.verdict;
+      verdict.reasons = [...verdict.reasons, ...capped.reasons];
+    }
     const nodeVersion = results.find((result) => result.id === "node-version")?.detail || process.version;
     run = {
       schema: SCHEMA,
@@ -821,6 +1198,7 @@ export function runRelease(deps, options) {
       only: only ?? [],
       artifactsDir: artifactsRelative,
       results,
+      visual,
       verdict: verdict.verdict,
       reasons: verdict.reasons,
       env: envPresence(ENV_NAMES, deps.env),
@@ -874,8 +1252,17 @@ function verifyEvidenceMode(deps, argv) {
     return 1;
   }
   const matrixPath = path.join(deps.root, MATRIX_MD);
+  const summaryPath = path.join(deps.root, OWNER_SUMMARY_MD);
+  const registerPath = path.join(deps.root, BASELINES_JSON);
+  let baselinesCommit = null;
+  try {
+    if (deps.fs.existsSync(registerPath)) baselinesCommit = String(JSON.parse(deps.fs.readFileSync(registerPath, "utf8"))?.ownerVerdict?.commit ?? "") || null;
+  } catch { baselinesCommit = null; }
   const errors = verifyEvidence(deps.fs.readFileSync(evidencePath, "utf8"), {
     matrix: deps.fs.existsSync(matrixPath) ? deps.fs.readFileSync(matrixPath, "utf8") : null,
+    ownerSummary: deps.fs.existsSync(summaryPath) ? deps.fs.readFileSync(summaryPath, "utf8") : null,
+    baselinesCommit,
+    productChanges: (from, to) => productCodeChanges(deps, from, to),
     commitExists: (sha) => deps.git(["cat-file", "-e", `${sha}^{commit}`]).status === 0,
   });
   // Extension point (20-15): --verify-lineage, --verify-docs and --verify-reconciliation attach here without touching the checks above.
