@@ -9,70 +9,92 @@
   "data": "offline-заглушка tests/e2e/harness/offline-supabase.cjs: пустой portia_content -> стартовый контент сайта, выдуманные публичные значения OFFLINE_ENV; production-сборка во временной копии, next start на 127.0.0.1:3100, Node 22.13.1, chromium-desktop 1440x900 DPR 1 и chromium-phone (Pixel 7); сцены с подменёнными чтениями кандидатных спеков — UI-контракт, не доказательство ролей, сохранения или живого источника данных; captureCommit — коммит, с которого собрана production-сборка (код продукта равен ownerVerdict.commit)",
   "rows": [
     {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-class-icons--chromium-desktop.png",
+      "sha256": "a8951ac2f65ffbbb74f6901ab52885de0dbcbe9f6ba817133d6889e46026fb03",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Иконки классов: панель .classification-panel досье МОРОК (Транзитиум / Полиморф / Стабилар), ПК",
+      "decisions": [
+        "D-39"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены» (паук стоит); запись vir-d17 стартового контента, три новых класса из девяти"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-class-icons--chromium-phone.png",
+      "sha256": "f6da99f3190142aae19b927d8e672b1298820f7db81c01672b6816194f59b5ce",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Иконки классов: панель .classification-panel досье МОРОК (Транзитиум / Полиморф / Стабилар), телефон (окно просмотра на этот кадр выше, ширина и масштаб телефона)",
+      "decisions": [
+        "D-39"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены» (паук стоит); запись vir-d17 стартового контента, три новых класса из девяти"
+    },
+    {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-guide-microscope--chromium-desktop.png",
-      "sha256": "17a3184d5ff2276c2b8c26506fe3eaefed83b07198f4526a464114bb848d8d42",
+      "sha256": "5333f060565a124da5fd0f52def47a1dc05b660ca58b11a755d4dde19fa0ba30",
       "supersedes": null,
       "class": "phase20",
       "surface": "«Справочник»: пустое состояние, микроскоп (ПК); подменённое чтение GET /api/content",
       "decisions": [
         "D-21"
       ],
-      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены» (паук стоит); пустое состояние — фикстура чтения, UI-контракт"
     },
     {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-guide-microscope--chromium-phone.png",
-      "sha256": "39900137df9c4bcfd31448823e2e1b51329bdd2a5b5b9257c727c7b9f044bba8",
+      "sha256": "c58f7d61d378f7b8bc8c36aec4ef9f8382fceb49c24085ff51fcf94ef6489162",
       "supersedes": null,
       "class": "phase20",
       "surface": "«Справочник»: пустое состояние, микроскоп (телефон); подменённое чтение GET /api/content",
       "decisions": [
         "D-21"
       ],
-      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены» (паук стоит); пустое состояние — фикстура чтения, UI-контракт"
     },
     {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-info-flask--chromium-desktop.png",
-      "sha256": "689f0525d96f9d3ff908e11014982b39abb6650c5866843db9872ba5ed8ef365",
+      "sha256": "2713b03b92c4ddf3eab018822daabaf6fa2dc9ae3c3d50074edd4827a51f5e29",
       "supersedes": null,
       "class": "phase20",
       "surface": "«Информация»: пустое состояние, колба (ПК); подменённое чтение GET /api/content",
       "decisions": [
         "D-21"
       ],
-      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены» (паук стоит); пустое состояние — фикстура чтения, UI-контракт"
     },
     {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-info-flask--chromium-phone.png",
-      "sha256": "1d5d1281c4116cbd56fbee190f7f94392c111842037accd66bec4a162a466bde",
+      "sha256": "77b52f02ff71b22192d60e0f06c0f97045bfb60bc4648d47b4f828c44229bebb",
       "supersedes": null,
       "class": "phase20",
       "surface": "«Информация»: пустое состояние, колба (телефон); подменённое чтение GET /api/content",
       "decisions": [
         "D-21"
       ],
-      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены» (паук стоит); пустое состояние — фикстура чтения, UI-контракт"
     },
     {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-news-flask--chromium-desktop.png",
-      "sha256": "a5d48221abc83f900a8ea40298c58cb57b742fa5e5b33442feb850c1a97349c1",
+      "sha256": "a7a1558f93f7dd89213980fed5bda6f80dfcb44c577f79a722c0f4ddd4e93ae8",
       "supersedes": null,
       "class": "phase20",
       "surface": "«Сводка» → «Новости»: «Новостей пока нет», колба (ПК); подменённое чтение GET /api/content",
       "decisions": [
         "D-21"
       ],
-      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены» (паук стоит); пустое состояние — фикстура чтения, UI-контракт"
     },
     {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-news-flask--chromium-phone.png",
-      "sha256": "6965e2122b2365c8105623ba98b271a14e1a758428b6e7d83dde7a5544808a2a",
+      "sha256": "6669be65e4d96b05573afab869e4ef4086adb589998efdd51487660c96ec76d7",
       "supersedes": null,
       "class": "phase20",
       "surface": "«Сводка» → «Новости»: «Новостей пока нет», колба (телефон); подменённое чтение GET /api/content",
       "decisions": [
         "D-21"
       ],
-      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены» (паук стоит); пустое состояние — фикстура чтения, UI-контракт"
     },
     {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-flasks--chromium-desktop.png",
@@ -97,6 +119,30 @@
         "D-59"
       ],
       "reason": "Эталон принятого вида (20-58) на стартовом контенте; паук выключен, четыре сосуда"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-promotion-participant--chromium-desktop.png",
+      "sha256": "2fd708f7c7d466ab020664f080c9f8e62698419d23785f0ba3752280c2e9f8d3",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "«Повышение»: окно участника, вход «ПРОВЕРИТЬ ПОВЫШЕНИЕ» (ПК)",
+      "decisions": [
+        "D-18",
+        "D-20"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены» (паук стоит) на стартовом контенте; без ника и без данных участника"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-promotion-participant--chromium-phone.png",
+      "sha256": "8f00778d0e2398edca16b65247bb2dc16ad9a0bd7e66b861ad078d6c9b85585f",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "«Повышение»: окно участника, вход «ПРОВЕРИТЬ ПОВЫШЕНИЕ» (телефон)",
+      "decisions": [
+        "D-18",
+        "D-20"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены» (паук стоит) на стартовом контенте; без ника и без данных участника"
     },
     {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-spider--chromium-desktop.png",

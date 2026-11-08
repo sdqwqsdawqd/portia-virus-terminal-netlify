@@ -1,5 +1,6 @@
 import { DesktopPage } from "../pages/desktop.page";
 import { parkClock } from "../fixtures/determinism";
+import { PromotionPage } from "../pages/promotion.page";
 import { expect, test } from "../fixtures/test";
 import { visualPolicy, type VisualState } from "../fixtures/visual-policy";
 import type { Locator, Page, Request } from "@playwright/test";
@@ -37,6 +38,15 @@ async function openStill(page: Page, patch: Settings) {
     await page.clock.runFor(50);
     await expect(desktop.desktop).toBeVisible({ timeout: 250 });
   }).toPass({ timeout: 20_000 });
+  return desktop;
+}
+
+// The window scenes are taken with animations «Выключены» (settings motion: off): the spider then stands at its resting place, so no frame depends on
+// how far the fake clock ran before the frame (a running spider moved between two runs once in five; the window itself is the subject, not the spider).
+async function openDesktopStill(page: Page) {
+  await page.addInitScript((value) => window.localStorage.setItem("portia-desktop-settings-v1", JSON.stringify(value)), { ...baseSettings, motion: "off" });
+  const desktop = new DesktopPage(page);
+  await desktop.goto();
   return desktop;
 }
 
@@ -117,8 +127,7 @@ for (const scene of emptyScenes) {
   test(`@phase20 empty state ${scene.key} (D-21; UI contract on a substituted GET /api/content, not proof of live content)`, async ({ page }, testInfo) => {
     trackWrites(page);
     await stubContent(page, emptyContent());
-    const desktop = new DesktopPage(page);
-    await desktop.goto();
+    const desktop = await openDesktopStill(page);
     await desktop.openApp(scene.app);
     const window = desktop.window(scene.app);
     await expect(window.locator('.app-skeleton[aria-busy="true"]')).toHaveCount(0, { timeout: 20_000 });
@@ -132,3 +141,46 @@ for (const scene of emptyScenes) {
     await compare(page, `empty-art-${scene.key}`, testInfo.project.name, `phase20:empty-art-${scene.key}`);
   });
 }
+
+// ---- D-18, D-20: «Повышение» ---------------------------------------------------------------------------------------------------------------
+// Participant: the gate «ПРОВЕРИТЬ ПОВЫШЕНИЕ» of the redesigned window, as the real server serves it (no substituted read).
+test("@phase20 promotion participant: the lookup gate of the redesigned window (D-18, D-20)", async ({ page }, testInfo) => {
+  const desktop = await openDesktopStill(page);
+  const promotion = new PromotionPage(page);
+  await promotion.open();
+  await expect(promotion.heading("ПРОВЕРИТЬ ПОВЫШЕНИЕ")).toBeVisible();
+  await expect(promotion.nickname).toBeVisible();
+  await expect(promotion.checkNickname).toBeDisabled();
+  await settle(promotion.window);
+  await parkClock(page);
+  await compare(page, "promotion-participant", testInfo.project.name, "phase20:promotion-participant");
+});
+
+// Reviewer: the queue and the bank need a signed-in «проверяющий» role and a roster on an attested isolated staging; none exists (19-VERIFICATION).
+// No baseline and no register row: the frame would only be an invented one.
+test("@phase20 promotion reviewer: queue and bank (D-18, D-20)", async () => {
+  test.skip(true, "BLOCKED (ENV): нет аттестованного staging проверяющего (19-VERIFICATION)");
+});
+
+// ---- D-39: class icons ----------------------------------------------------------------------------------------------------------------------
+// Fixed record: «МОРОК» (vir-d17) of the starting content; classes Транзитиум / Полиморф / Стабилар (one new class per axis). The frame is the crop of
+// the panel .classification-panel of its dossier in «База вирусов».
+test("@phase20 class icons: the classification panel of МОРОК (Транзитиум / Полиморф / Стабилар) (D-39)", async ({ page }, testInfo) => {
+  // The panel is taller than the screen of the phone project and an element capture is cut at the viewport (the taskbar would cover the last row):
+  // the viewport of the phone gets a taller screen for this crop only; the width, the scale and the layout of the panel stay those of the phone.
+  const viewport = page.viewportSize();
+  if (testInfo.project.name === "chromium-phone" && viewport) await page.setViewportSize({ width: viewport.width, height: 1400 });
+  const desktop = await openDesktopStill(page);
+  await desktop.openApp("База вирусов");
+  const archive = desktop.window("База вирусов");
+  await expect(archive.getByRole("status").filter({ hasText: /Загрузка/ })).toHaveCount(0);
+  await archive.locator(".virus-row").filter({ hasText: "МОРОК" }).first().click();
+  const panel = archive.locator(".classification-panel");
+  await expect(panel).toBeVisible();
+  for (const name of ["Транзитиум", "Полиморф", "Стабилар"]) {
+    await expect(panel.locator(".class-cell strong", { hasText: name }).locator("svg.class-badge")).toBeVisible();
+  }
+  await settle(archive);
+  await parkClock(page);
+  await expect(panel).toHaveScreenshot(snapshotName("class-icons", testInfo.project.name), visualPolicy(page, "phase20:class-icons"));
+});
