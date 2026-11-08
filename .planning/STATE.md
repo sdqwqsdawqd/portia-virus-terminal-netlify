@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-58-PLAN.md (owner accepted)
-last_updated: "2026-11-08T08:44:42.384Z"
+stopped_at: Completed PORTIA-20-12-PLAN.md (open blockers recorded)
+last_updated: "2026-11-08T09:40:21.757Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: c0b00f105eb39030ce8f8ea0c0b858ed865ccc42
+state_head: 4f280685dd3c8428e2aeb3a10b6e25bac865e538
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 129
-  completed_plans: 125
+  completed_plans: 126
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 31 of 47
+Plan: 32 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-08 — Phase PORTIA-20 execution resumed (wave continue)
 
@@ -157,6 +157,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P55 | 2h | 2 tasks | 5 files |
 | Phase PORTIA-20 P56 | about 3 h | 2 tasks | 6 files |
 | Phase PORTIA-20 P57 | about 2 h | 3 tasks | 6 files |
+| Phase PORTIA-20 P12 | multi-session | 3 tasks | 30 files |
 
 ## Accumulated Context
 
@@ -290,6 +291,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-56: band frame is 754:63 on PC and (screen-50):63 on a phone; the dialog compares against the drawn picture where the site caps a picture (known limit for 20-57)
 - [Phase PORTIA-20]: 20-57: the dialog Видимая часть keeps the Tab ring itself (keepFocusInside); native modal dialog hands focus to browser UI past the last stop. framing_fix_commit 98af387
 - [Phase PORTIA-20]: D-68: галереи и таблица кадров убраны; 20-58 принят владельцем общим вердиктом 2026-11-08 на 0c2a59d1d1a7; (в) окно «Видимая часть» в конструкторе шаблона — новый todo
+- [Phase PORTIA-20]: 20-12: replaced Phase 15 baselines carry class accepted-redesign/fixed-data and supersedes in phase20-baselines.json; phone-webkit stays (г), motion activity/offended BLOCKED (CAPTURE); STAB-REL-03 open
 
 ### Pending Todos
 
@@ -333,8 +335,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-08T08:44:41.676Z
-Stopped at: Completed PORTIA-20-58-PLAN.md (owner accepted)
+Last session: 2026-11-08T09:40:21.113Z
+Stopped at: Completed PORTIA-20-12-PLAN.md (open blockers recorded)
 Resume file: None
 
 ## Operator Next Step
