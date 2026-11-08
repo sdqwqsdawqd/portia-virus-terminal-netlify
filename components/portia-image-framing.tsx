@@ -94,6 +94,22 @@ function FramedPreview({ src, framing, fill, onSize }: { src: string; framing: I
   </span>;
 }
 
+/** Tab and Shift+Tab go round the five stops of the dialog (D-66, STAB-A11Y-01): past the last one the browser would hand the focus to its own interface (or leave it where it is),
+ *  so the dialog takes it to the first, and the other way round. The page behind a modal dialog is inert, so nothing outside can take the focus. */
+function keepFocusInside(event: React.KeyboardEvent<HTMLDialogElement>) {
+  const dialog = event.currentTarget;
+  const stops = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex="0"]'));
+  const first = stops[0];
+  const last = stops[stops.length - 1];
+  if (!first || !last) return;
+  const active = document.activeElement;
+  const inside = !!active && dialog.contains(active);
+  if (event.shiftKey ? !inside || active === first : !inside || active === last) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  }
+}
+
 type Drag = { pointerId: number; startX: number; startY: number; framing: ImageFraming; layout: StageLayout };
 
 function FramingDialog({ src, label, box, initial, natural, onSize, viewportWidth, onApply, onCancel }: {
@@ -192,7 +208,10 @@ function FramingDialog({ src, label, box, initial, natural, onSize, viewportWidt
     aria-labelledby={`${titleId} ${labelId}`}
     // Esc (and the back gesture of a phone) is «Отмена»: handled here, so that the shortcuts of the desktop behind the dialog do not hear it.
     onCancel={(event) => { event.preventDefault(); onCancel(); }}
-    onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onCancel(); } }}
+    onKeyDown={(event) => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onCancel(); }
+      else if (event.key === "Tab") keepFocusInside(event);
+    }}
   >
     <div>
       <div className="image-framing-dialog-head">
