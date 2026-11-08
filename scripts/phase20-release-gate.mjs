@@ -1623,6 +1623,220 @@ export function verifyLineage(deps) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// 20-15 Task 2: --verify-docs. The register of accepted debts (D-70), release notes, requirement statuses and the decision rows.
+
+export const REQUIREMENTS_MD = ".planning/REQUIREMENTS.md";
+export const ROADMAP_MD = ".planning/ROADMAP.md";
+export const RELEASE_NOTES_MD = `${PHASE_DIR}/20-RELEASE-NOTES.md`;
+export const PHASE18_VERIFICATION_MD = ".planning/phases/PORTIA-18-rabochiy-stol-okna-i-zhivye-animatsii/18-VERIFICATION.md";
+export const PHASE19_VERIFICATION_MD = ".planning/phases/PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media/19-VERIFICATION.md";
+/** The four statuses a row of «Принятые долги (D-70)» may have; none of them is PASS or Complete. */
+export const DEBT_STATUSES = Object.freeze(["Принятый долг (D-70)", "ОЖИДАЕТ ВЛАДЕЛЬЦА", "Отложено владельцем", "Вне D-70: решает владелец"]);
+/** Phase 20 requirements that only the physical acceptance closed (D-70 (3)): they always have a register row. */
+export const D70_MINIMUM_DEBTS = Object.freeze(["STAB-REL-05", "STAB-REL-06", "STAB-REL-07", "STAB-REL-08", "STAB-A11Y-01", "STAB-A11Y-02", "STAB-A11Y-03", "STAB-A11Y-04"]);
+export const DEBT_TRACE_STATUS = "Accepted debt (D-70)";
+export const DEBT_READING_MARK = "прочтение 20-CONTEXT.md D-70 (4)";
+export const DEBT_PRODUCTION_ROWS = Object.freeze(["D-36(б) production", "D-47 production", "20261106000000"]);
+export const DEBT_FRAMING_TODO = "todo 2026-11-08-template-builder-framing-dialog";
+export const DEBT_SECTION = "Принятые долги (D-70)";
+export const NOTES_D70_SECTION = "Приёмка владельцем без UAT (D-70)";
+export const NOTES_D70_FIRST_SENTENCE = "Пошаговая приёмка на физических ПК и телефоне не проводилась.";
+const DEVICE_SECTION = "Приёмка на устройствах: принятый риск владельца (D-70)";
+const VISUAL_RECONCILIATION_SECTION = "Визуальная приёмка (D-68)";
+const AGENT_PASS = /(?<!не\s)(?<!not\s)\b(?:PASS|Complete)\b/;
+
+/** Checkboxes and traceability rows of REQUIREMENTS.md: { checked: Map(id -> bool), trace: Map(id -> { phase, status, line }) }. */
+export function parseRequirements(markdown) {
+  const checked = new Map();
+  const trace = new Map();
+  for (const line of normalizeText(markdown ?? "").split("\n")) {
+    const box = /^- \[([ xX])\] \*\*(STAB-[A-Z0-9]+-\d+)\*\*/.exec(line);
+    if (box) { checked.set(box[2], box[1] !== " "); continue; }
+    const row = /^\|\s*(STAB-[A-Z0-9]+-\d+)\s*\|\s*Phase ([\d.]+)\s*\|\s*([^|]+?)\s*\|/.exec(line);
+    if (row) trace.set(row[1], { phase: row[2], status: row[3], line: line.trim() });
+  }
+  return { checked, trace };
+}
+
+/** The requirement IDs of the `**Requirements**:` line of the Phase 20 block of the roadmap. */
+export function roadmapPhaseIds(roadmap, phase = 20) {
+  const lines = normalizeText(roadmap ?? "").split("\n");
+  const start = lines.findIndex((line) => new RegExp(`^### Phase ${phase}:`).test(line));
+  if (start === -1) return [];
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => line.startsWith("### "));
+  const line = (end === -1 ? rest : rest.slice(0, end)).find((candidate) => candidate.startsWith("**Requirements**:"));
+  return line ? line.slice("**Requirements**:".length).split(",").map((id) => id.trim()).filter((id) => /^STAB-[A-Z0-9]+-\d+$/.test(id)) : [];
+}
+
+/** Number of `- truth:` items under a top-level key of a frontmatter. */
+function frontmatterItems(markdown, key) {
+  const front = normalizeText(markdown ?? "").match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
+  const lines = front.split("\n");
+  const start = lines.findIndex((line) => line.startsWith(`${key}:`));
+  if (start === -1) return 0;
+  let count = 0;
+  for (const line of lines.slice(start + 1)) {
+    if (/^[A-Za-z_]+:/.test(line)) break;
+    if (/^ {2}- truth:/.test(line)) count += 1;
+  }
+  return count;
+}
+
+/** The body of a `## <prefix>…` section (without the heading), or null. */
+function sectionBody(markdown, prefix) {
+  const lines = normalizeText(markdown ?? "").split("\n");
+  const start = lines.findIndex((line) => /^##\s/.test(line) && line.replace(/^##\s+/, "").trim().startsWith(prefix));
+  if (start === -1) return null;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^##\s/.test(line));
+  return (end === -1 ? rest : rest.slice(0, end)).join("\n");
+}
+
+/**
+ * --verify-docs: the register «Принятые долги (D-70)» of 20-RECONCILIATION.md against REQUIREMENTS.md, ROADMAP.md, 18/19-VERIFICATION.md and the protocol of
+ * the FRC; the final release notes; the sections for the device and visual acceptance; the STAB-VIS-03 / D-39 row. Returns the list of problems.
+ */
+export function verifyDocs(deps) {
+  const errors = [];
+  const short = (sha) => String(sha).slice(0, 12);
+  const reconciliation = readRelative(deps, RECONCILIATION_MD);
+  if (reconciliation === null) return ["20-RECONCILIATION.md не найден"];
+  const frc = frontField(reconciliation, "final_release_commit");
+  const planBase = frontField(reconciliation, "plan_base");
+  const requirementsText = readRelative(deps, REQUIREMENTS_MD);
+  const roadmapText = readRelative(deps, ROADMAP_MD);
+  const evidence = readRelative(deps, EVIDENCE_MD);
+  if (requirementsText === null) errors.push("REQUIREMENTS.md не найден");
+  if (evidence === null) errors.push("20-RELEASE-EVIDENCE.md не найден");
+  const requirements = parseRequirements(requirementsText);
+  const phase20 = roadmapPhaseIds(roadmapText);
+  if (phase20.length === 0) errors.push("ROADMAP.md: нет строки «**Requirements**» блока Phase 20");
+
+  // The register.
+  const table = sectionTable(reconciliation, DEBT_SECTION);
+  const rows = new Map();
+  if (!table) errors.push(`20-RECONCILIATION.md: нет раздела «${DEBT_SECTION}» (реестр принятых долгов)`);
+  else {
+    for (const row of table.rows) {
+      const id = stripTicks(row[0] ?? "");
+      if (id === "") continue;
+      rows.set(id, row);
+      const status = String(row[4] ?? "").trim();
+      if (!DEBT_STATUSES.includes(status)) errors.push(`реестр: ${id}: статус «${status || "(пусто)"}» вне допустимых (${DEBT_STATUSES.join("; ")})`);
+      if (AGENT_PASS.test(row.join(" "))) errors.push(`реестр: ${id}: строка содержит PASS или Complete (долг не доказательство)`);
+    }
+  }
+  const need = (id, message) => { if (!rows.has(id)) errors.push(message); };
+
+  for (const id of D70_MINIMUM_DEBTS) need(id, `реестр: ${id}: нет строки минимального набора D-70 (3)`);
+  for (const id of rows.keys()) {
+    const entry = requirements.trace.get(id);
+    if (!entry || entry.phase !== "20") continue;
+    if (requirements.checked.get(id) === true || entry.status === "Complete") errors.push(`${id}: требование реестра отмечено Complete или галочкой в REQUIREMENTS.md`);
+    else if (entry.status !== DEBT_TRACE_STATUS) errors.push(`${id}: трассировка Phase 20 должна быть «${DEBT_TRACE_STATUS}», сейчас «${entry.status}»`);
+  }
+  for (const id of phase20) {
+    const entry = requirements.trace.get(id);
+    if (entry?.status === DEBT_TRACE_STATUS) need(id, `реестр: ${id}: «${DEBT_TRACE_STATUS}» в трассировке без строки реестра`);
+  }
+  for (const [id, entry] of requirements.trace) {
+    if (entry.phase === "20" || entry.status === "Complete") continue;
+    const open = `реестр: ${id} (Phase ${entry.phase}): нет строки открытого требования`;
+    need(id, open);
+    const row = rows.get(id);
+    if (!row) continue;
+    const expected = entry.phase === "18" || entry.phase === "19" ? DEBT_STATUSES[0] : DEBT_STATUSES[3];
+    if (String(row[4] ?? "").trim() !== expected) errors.push(`реестр: ${id} (Phase ${entry.phase}): статус должен быть «${expected}»`);
+    if ((entry.phase === "18" || entry.phase === "19") && !String(row[3] ?? "").includes(DEBT_READING_MARK)) errors.push(`реестр: ${id}: основание без пометки «${DEBT_READING_MARK}» (слова варианта 2 — слова оркестратора)`);
+  }
+  for (const [phase, file] of [["18", PHASE18_VERIFICATION_MD], ["19", PHASE19_VERIFICATION_MD]]) {
+    const text = readRelative(deps, file);
+    if (text === null) { errors.push(`${path.posix.basename(file)} не найден`); continue; }
+    for (const [key, label] of [["gaps", "GAP"], ["behavior_unverified_items", "BU"]]) {
+      for (let index = 1; index <= frontmatterItems(text, key); index += 1) need(`${phase}-VERIF-${label}-${index}`, `реестр: нет строки ${phase}-VERIF-${label}-${index} (${key} ${path.posix.basename(file)})`);
+    }
+  }
+  need("CR-01", "реестр: нет строки CR-01 (Phase 19)");
+  need("19-BLOCKED-DATA", "реестр: нет строки 19-BLOCKED-DATA (ячейки BLOCKED (DATA) фазы 19)");
+  if (evidence !== null) {
+    for (const row of readGateRows(evidence, false).rows) if (row.status === "BLOCKED") need(row.id, `реестр: нет строки: BLOCKED-гейт ${row.id} без реестра`);
+  }
+  for (const id of DEBT_PRODUCTION_ROWS) {
+    const row = rows.get(id);
+    if (!row) { errors.push(`реестр: нет строки ${id} (production-миграция владельца)`); continue; }
+    if (String(row[4] ?? "").trim() !== "ОЖИДАЕТ ВЛАДЕЛЬЦА") errors.push(`реестр: ${id}: production-миграция — действие владельца, статус «ОЖИДАЕТ ВЛАДЕЛЬЦА» (даты применения владельцем нет), сейчас «${String(row[4] ?? "").trim()}»`);
+  }
+  const framing = [...rows.entries()].find(([id]) => id.startsWith(DEBT_FRAMING_TODO));
+  if (!framing) errors.push(`реестр: нет строки ${DEBT_FRAMING_TODO}`);
+  else if (String(framing[1][4] ?? "").trim() !== "Отложено владельцем") errors.push(`реестр: ${DEBT_FRAMING_TODO}: статус «Отложено владельцем»`);
+
+  // Phase 15, 18 and 19 rows of REQUIREMENTS.md stay as at plan_base (D-34).
+  if (/^[0-9a-f]{40}$/.test(planBase) && requirementsText !== null) {
+    const base = deps.git(["show", `${planBase}:${REQUIREMENTS_MD}`]);
+    if (base.status !== 0) errors.push(`REQUIREMENTS.md на plan_base ${short(planBase)} не прочитан`);
+    else {
+      const before = parseRequirements(base.stdout);
+      for (const id of new Set([...before.trace.keys(), ...requirements.trace.keys()])) {
+        const was = before.trace.get(id);
+        const now = requirements.trace.get(id);
+        const phase = (now ?? was)?.phase;
+        if (phase === "20") continue;
+        if (was?.line !== now?.line || before.checked.get(id) !== requirements.checked.get(id)) errors.push(`${id} (Phase ${phase}): строка REQUIREMENTS.md изменена относительно plan_base ${short(planBase)}`);
+      }
+    }
+  } else errors.push("plan_base в 20-RECONCILIATION.md отсутствует или не 40 hex");
+
+  // Release notes.
+  const notes = readRelative(deps, RELEASE_NOTES_MD);
+  if (notes === null) errors.push("20-RELEASE-NOTES.md не найден");
+  else {
+    const front = normalizeText(notes).match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
+    if (!/^status:\s*final\s*$/m.test(front)) errors.push("20-RELEASE-NOTES.md: нужен status: final");
+    if (frontField(notes, "release_commit") !== frc) errors.push(`20-RELEASE-NOTES.md: release_commit ${short(frontField(notes, "release_commit") || "нет")} не равен FRC ${short(frc)}`);
+    const body = sectionBody(notes, NOTES_D70_SECTION);
+    if (body === null) errors.push(`20-RELEASE-NOTES.md: нет раздела «${NOTES_D70_SECTION}»`);
+    else if (!body.trim().startsWith(NOTES_D70_FIRST_SENTENCE)) errors.push(`20-RELEASE-NOTES.md: первое предложение раздела не «${NOTES_D70_FIRST_SENTENCE}»`);
+    if (/^Вердикт (?:PC|phone):\s*PASS\b/m.test(normalizeText(notes))) errors.push("20-RELEASE-NOTES.md: вердикт устройства PASS в строке (приёмки не было)");
+  }
+
+  // The verdict lines and the device / visual sections of the reconciliation.
+  const stated = evidence === null ? undefined : normalizeText(evidence).match(/^Итог:\s*(\S+)/m)?.[1];
+  const release = releaseVerdict(stated, "D-70");
+  const written = readReconciliationVerdicts(reconciliation).release;
+  if (written !== undefined && VERDICT_RANK[written] !== undefined && VERDICT_RANK[written] > VERDICT_RANK[release]) errors.push(`Итог релиза: ${written} сильнее вычисленного ${release}`);
+
+  const uat = readRelative(deps, UAT_MD);
+  const words = normalizeText(uat ?? "").match(/^- Слова владельца \(дословно\): «(.+)»\s*$/m)?.[1];
+  const device = sectionBody(reconciliation, DEVICE_SECTION);
+  if (device === null) errors.push(`20-RECONCILIATION.md: нет раздела «${DEVICE_SECTION}»`);
+  else {
+    if (!words || !device.includes(`«${words}»`)) errors.push(`${DEVICE_SECTION}: слова владельца из 20-UAT.md не перенесены дословно`);
+    if (!device.includes(D70_VERDICT)) errors.push(`${DEVICE_SECTION}: нет итога «${D70_VERDICT}»`);
+    if (!device.includes("20-CONTEXT.md D-70")) errors.push(`${DEVICE_SECTION}: нет источника 20-CONTEXT.md D-70`);
+    if (!device.includes("PORTIA_REQUIRE_UAT=1: красный")) errors.push(`${DEVICE_SECTION}: нет строки «PORTIA_REQUIRE_UAT=1: красный»`);
+  }
+  const owner = readEffectiveOwnerVerdict(deps);
+  const visual = sectionBody(reconciliation, VISUAL_RECONCILIATION_SECTION);
+  if (visual === null) errors.push(`20-RECONCILIATION.md: нет раздела «${VISUAL_RECONCILIATION_SECTION}»`);
+  else if (!owner) errors.push(`${VISUAL_RECONCILIATION_SECTION}: 20-58-SUMMARY.md не прочитан`);
+  else {
+    const sourceText = readRelative(deps, `${PHASE_DIR}/${owner.source}`) ?? "";
+    const quote = normalizeText(sourceText).match(/^> (.+)$/m)?.[1];
+    if (!visual.includes(owner.commit)) errors.push(`${VISUAL_RECONCILIATION_SECTION}: нет owner_verdict_commit ${short(owner.commit)} действующего звена`);
+    if (!visual.includes(owner.source)) errors.push(`${VISUAL_RECONCILIATION_SECTION}: нет ссылки на ${owner.source}`);
+    if (!quote || !visual.includes(`«${quote}»`)) errors.push(`${VISUAL_RECONCILIATION_SECTION}: нет дословной цитаты владельца из ${owner.source}`);
+  }
+
+  // STAB-VIS-03 / D-39 and its sources.
+  const vis03 = normalizeText(reconciliation).split("\n").find((line) => /^\|\s*STAB-VIS-03 \/ D-39\s*\|/.test(line));
+  if (!vis03) errors.push("20-RECONCILIATION.md: нет строки STAB-VIS-03 / D-39");
+  else if (!vis03.includes("20-58-SUMMARY.md") || !vis03.includes("20-12")) errors.push("строка STAB-VIS-03 / D-39 без ссылки на 20-58-SUMMARY.md и 20-12");
+  for (const name of ["20-58-SUMMARY.md", "20-12-SUMMARY.md"]) if (readRelative(deps, `${PHASE_DIR}/${name}`) === null) errors.push(`${name}: источник строки STAB-VIS-03 / D-39 не найден`);
+  return errors;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Orchestration.
 
 // Offline server of a checkout (D-68). Synchronous on purpose: runGate is synchronous. The port is fixed (3100); a foreign listener is never taken over.
@@ -1916,6 +2130,7 @@ export function main(argv = process.argv.slice(2), overrides = {}) {
     if (mode === "--self-check") return selfCheck(deps);
     if (mode === "--verify-evidence") return verifyEvidenceMode(deps, argv);
     if (mode === "--verify-lineage") return verifyListMode(deps, verifyLineage, "lineage verified");
+    if (mode === "--verify-docs") return verifyListMode(deps, verifyDocs, "docs verified");
     if (mode === "--run") {
       const commit = option(argv, "--commit");
       if (!commit) {
@@ -1930,7 +2145,7 @@ export function main(argv = process.argv.slice(2), overrides = {}) {
       deps.out(`artifacts: ${run.artifactsDir}\n`);
       return run.verdict === "PASS" || run.verdict === "PASS-WITH-OWNER-WAIVERS" ? 0 : 1;
     }
-    deps.err("usage: node scripts/phase20-release-gate.mjs --plan | --self-check | --run --commit <sha> [--only id,id] [--npm-cli <path>] | --verify-evidence [--evidence <path>] | --verify-lineage\n");
+    deps.err("usage: node scripts/phase20-release-gate.mjs --plan | --self-check | --run --commit <sha> [--only id,id] [--npm-cli <path>] | --verify-evidence [--evidence <path>] | --verify-lineage | --verify-docs\n");
     return 2;
   } catch (error) {
     deps.err(`${error instanceof GateError ? error.message : `[PORTIA_RELEASE_GATE:unexpected] ${error instanceof Error ? error.message : "unknown"}`}\n`);
