@@ -6,17 +6,49 @@ tags: [D-69, G1, about:srcdoc, trace-snapshotter, STAB-REL-03, STAB-TMPL-01, STA
 requires:
   - phase: PORTIA-20
     provides: "20-13 rehearsal FAIL (D-69 gap closure), 20-58 owner verdict, 20-59 explicit npm"
-status: in-progress
-outcome: in-progress
+provides:
+  - "tests/e2e/fixtures/diagnostics.ts: sandboxedMeasureFrameScriptBlock (правило ожидаемого события кадра измерения PNG)"
+  - "lib/portia-template-builder.test.ts: охрана песочницы measureCardPage и порядка «политика до кадра»"
+  - "ui-contract-offline раннера: PASS 150/0/14 на 3e27b1e"
+affects: [20-61, 20-63]
+key-files:
+  modified:
+    - tests/e2e/fixtures/diagnostics.ts
+    - lib/e2e-diagnostics.test.ts
+    - lib/portia-template-builder.test.ts
+    - tests/e2e/specs/template-builder.spec.ts
+    - .planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/deferred-items.md
+key-decisions:
+  - "D-69 G1: причина события about:srcdoc — снимки DOM трассировки Playwright (флаг раннера --trace) в песочнице кадра measureCardPage; класс T, код продукта не менялся"
+  - "Правило ожидаемого события только в пяти тестах с PNG (expectFault), глобальный allowlist 11 строк; свойство безопасности проверяется отдельно, не через консоль"
+status: complete
+outcome: complete
 g1_class: T
 plan_head_before: 74fe13c91c22bd82fd3028d2e5b7e3091b1d168a
+plan_head_after: abdc4c4e3e9975a4b2f4f455e14ae6cd683dc794
+commits: 4
+actuals:
+  tokens: 36000
+  tasks: 3
+  commits: 4
 ---
 
 # Phase 20 Plan 60: причина красного ui-contract-offline (G1) Summary
 
+Событие `Blocked script execution in 'about:srcdoc'` порождал не продукт, а инструмент проверки: флаг раннера `--trace=retain-on-first-failure` включает снимки DOM трассировки Playwright, и их скрипт упирается в песочницу скрытого кадра `measureCardPage`. Событие ожидаемо только в пяти тестах, которые скачивают PNG; песочница кадра и чистота страницы закреплены отдельными проверками. Код продукта не менялся, эталоны (`tests/e2e/visual/__screenshots__`) не менялись, вердикт владельца не трогался.
+
 PLAN_BASE: 74fe13c91c22bd82fd3028d2e5b7e3091b1d168a
 
-Черновик после Task 1 (точка возобновления): причина установлена, исправления ещё нет. Код продукта не менялся и не будет менять (класс T).
+## Commits
+
+| Task | Commit | Subject |
+|------|--------|---------|
+| 1 | a6a77ae | docs: root cause of the about:srcdoc console event (G1) |
+| 2 RED | 7c06c4d | test: RED for the expected sandboxed measuring-frame event (файл не загружается: нет экспорта) |
+| 2 GREEN | 3e27b1e | test: expect the sandboxed measuring-frame event only where a PNG is made (G1) |
+| 2 docs | abdc4c4 | docs: close the ui-contract-offline entry of deferred-items (G1) |
+
+`commits: 4` измерено `git rev-list --count 74fe13c91c22..HEAD` на abdc4c4 (до коммита этого SUMMARY).
 
 ## Причина (G1)
 
@@ -88,4 +120,62 @@ PLAN_BASE: 74fe13c91c22bd82fd3028d2e5b7e3091b1d168a
 
 Тесты, создающие кадр измерения PNG (клики «Скачать PNG» в `tests/e2e/specs/template-builder.spec.ts`, фикстура `diagnostics`): строки 453, 481, 616, 679, 1265 (пять; в `accessibility.spec.ts` кнопки «Скачать PNG» нет, а тест D-61 PNG работает в собственном контексте `browser`, где диагностика фикстуры не подключена).
 
-Полученное состояние среды после Task 1: сервер остановлен по проверенному PID, порт 3100 — 0 слушателей, обе копии `portia-20-60-*` удалены (`git worktree list` без них), `tests/e2e/visual/__screenshots__` не менялся.
+Состояние среды после Task 1: сервер остановлен по проверенному PID, порт 3100 — 0 слушателей, обе копии `portia-20-60-*` удалены (`git worktree list` без них), `tests/e2e/visual/__screenshots__` не менялся.
+
+## Task 2: исправление в месте причины (ветка T)
+
+Код продукта (`app`, `components`, `public`, `lib` без `*.test.*`) не менялся: `git diff --name-only 0c2a59d1d1a7 HEAD -- app components public lib | grep -v '\.test\.'` пуст (в разности только `lib/e2e-diagnostics.test.ts`, `lib/e2e-visual-policy.test.ts`, `lib/phase15-visual-manifest.test.ts`, `lib/phase20-release-gate.test.ts`, `lib/portia-template-builder.test.ts`).
+
+Построитель страницы кадра = построитель скачанного HTML: `templateCardDocument`, `lib/portia-template-export.ts:355-365`, вызов `components/portia-template-builder.tsx:351`; `ensureClean(page, "html")` — строка 352, `measureCardPage(page)` — строка 355; тот же `page` уходит в файл HTML (строка 353). Новой проверки на странице кадра отдельным построителем не потребовалось.
+
+- RED (7c06c4d): три теста нового `describe` в `lib/e2e-diagnostics.test.ts` против ещё не существующего экспорта. Вывод: `SyntaxError: The requested module '../tests/e2e/fixtures/diagnostics.ts' does not provide an export named 'sandboxedMeasureFrameScriptBlock'`, файл не загружается, `not ok 1`.
+- GREEN (3e27b1e):
+  - `tests/e2e/fixtures/diagnostics.ts`: `export const sandboxedMeasureFrameScriptBlock: ExpectedFaultRule` — `kind: "console"`, `source: "browser:"`, текст — регулярное выражение от начала до конца на измеренное сообщение, `reason` называет measureCardPage и 20-60, комментарий в две строки (почему ожидаемо; чем компенсировано).
+  - `tests/e2e/specs/template-builder.spec.ts`: `diagnostics.expectFault(sandboxedMeasureFrameScriptBlock)` в начале пяти тестов с кликом «Скачать PNG»: D-55 PNG, «a local image and long text…», «an encoding failure…», «a card too long for PNG…», D-65 PC (в D-65 PC — после `test.skip`).
+  - Свойство безопасности: `expectNoExecutableContent(html)` (`templateExportViolations` пуст, нет `<script`, нет `<…on…=`, нет `javascript:`) в трёх тестах скачанного HTML: «D-55 the downloaded HTML is the archive card», «a local image and long text…» (HTML того же содержимого, что и PNG), «participant builds a text template…» (враждебное имя `<img onerror=…>` в экранированном виде). В `accessibility.spec.ts` кадра нет, файл не менялся.
+  - `lib/portia-template-builder.test.ts`: два теста. (1) песочница `measureCardPage` — ровно одно `setAttribute("sandbox", "allow-same-origin")`, ни одного другого разрешения, нет `.sandbox`, `srcdoc = page`, нет `.src =`/`contentWindow`/`eval`, кадр удаляется, в файле нет слова `allow-scripts`. (2) порядок «собрана — проверена закрытой политикой — измерена», тот же `page` идёт в HTML, `ensureClean` бросает при любом нарушении, единственный вызов `measureCardPage`.
+  - Мутационная проверка охранных тестов через `GSD_PROHIB_SUBJECT` (копии компонента в scratchpad): песочница `allow-same-origin allow-scripts` — тест 1 красный; убрана `ensureClean(page, "html")` — тест 2 красный; убран атрибут sandbox — тест 1 красный. Настоящий компонент — оба зелёные.
+- Не менялись: глобальный allowlist (тест «keeps the global allowlist at 11 rows» зелёный, плюс такая же проверка в новом `describe`), флаги раннера, `playwright.config.ts`, песочница, CSP, `tests/e2e/visual/__screenshots__`.
+
+### Проверки
+
+| Проверка | Результат |
+|----------|-----------|
+| `node --experimental-strip-types --test lib/e2e-diagnostics.test.ts lib/portia-template-builder.test.ts lib/portia-template-export.test.ts` | 50 tests, 50 pass, 0 fail |
+| `node --experimental-strip-types --test lib/*.test.ts` (основная папка, Node 22.13.1) | 1643 tests, 1640 pass, 0 fail, 3 skipped (до правки 20-59/20-13: 1615/1612) |
+| `tsc --noEmit` | exit 0 |
+| `eslint . --ignore-pattern dist --ignore-pattern .next` | exit 0, 0 errors, 17 warnings (как раньше) |
+| Раннер `--run --commit HEAD --only npm-ci,ui-contract-offline --npm-cli …` на 3e27b1e (`test-results/release-gate/3e27b1e2d544-20261108T133841857Z/`) | npm-ci PASS; ui-contract-offline PASS (offline D-68) 150 passed / 0 failed / 14 skipped (по проекту 14, каждый пропуск объяснён правилом 20-59); шаги 40/0/2, 15/0/5, 87/0/3, 8/0/4; было 139/11/14 |
+| Контроль с флагами 20-58 (F0 `--retries=0`), копия на HEAD, chromium-desktop + chromium-phone, `template-builder.spec.ts` + `accessibility.spec.ts` `-g "STAB-TMPL-01\|template builder"` | 40 passed, 0 failed, 2 skipped (число 20-58: 40/0/2) |
+
+Правило видно в протоколе: в результатах раннера вложение `portia-diagnostics-expected-faults` показывает совпадения (19 событий в 12 запусках зарегистрировавших правило тестов); в контроле без `--trace` событий нет, правило не срабатывает.
+
+Порт 3100 после каждого шага: 0 слушателей; копии `portia-20-60-*` и `portia-release-*` удалены; `git status --porcelain -- tests/e2e/visual/__screenshots__` пуст.
+
+## Task 3
+
+Task 3 не требуется: код продукта после 0c2a59d1d1a7 не менялся. Владельцу ничего не отправляется, `owner_verdict*` не писались, строка «Код продукта» репетиции остаётся «НЕ ИЗМЕНЁН».
+
+## Deviations from Plan
+
+**1. [Rule 3 - Blocking] Расширение матрицы подвариантами трассировки.** План предписывал клетки F0-F3 в двух копиях; к ним добавлены две клетки с временным конфигом `trace: {mode: retain-on-first-failure, snapshots: true|false}`, чтобы отделить снимки DOM от остальных частей трассировки. Конфиги жили только в копии и удалены с ней. Результат вошёл в раздел «Причина (G1)».
+
+**2. [Rule 3 - Blocking, среда] Ошибка пути при повторной копии.** При создании копии для контроля с флагами 20-58 я поставил `MSYS_NO_PATHCONV=1` на всю команду, и `git worktree add` создал копию по пути `C:/c/Users/User/AppData/Local/Temp/portia-20-60-verify`, а robocopy положил `node_modules` в правильный каталог. Копию по неверному пути убрал `git worktree remove --force` + `prune`, `node_modules`/`.next` по верному пути удалил `rm -rf` по полному пути, копию создал заново. Остались пустые каталоги `C:\c\Users\User\AppData\Local\Temp` (цепочка `C:\c`), созданные этой ошибкой: удаление `rmdir /c/c` заблокировано защитной проверкой Claude Code (подходит под «критический каталог»), я его не обходил. Удалить `C:\c` вручную безопасно (в нём нет файлов). На результаты это не влияет: сервер и прогон шли только из правильной копии.
+
+## Deferred Issues
+
+Нет новых. Остальные пункты D-69 (G2, G3, G6) в планах 20-61..20-63. Нерасследованное по этому плану: версии транзитивных пакетов двух копий не сравнивались, так как клетки F0/F3 совпали в обеих копиях.
+
+## Known Stubs
+
+None.
+
+## Threat Flags
+
+None. Новых сетевых путей, путей авторизации и доступа к файлам нет; правило ожидаемого события не расширяет доверие: оно принадлежит пяти тестам, точное по тексту и источнику, а исполняемое содержимое страницы проверяется отдельно (T-20-141, T-20-142 закрыты тестами выше; T-20-143 не применим: код продукта не менялся).
+
+## Self-Check: PASSED
+
+- Коммиты a6a77ae, 7c06c4d, 3e27b1e, abdc4c4 — предки HEAD.
+- `grep -c '^## Причина (G1)'` = 1; `export const sandboxedMeasureFrameScriptBlock` = 1; `expectFault(sandboxedMeasureFrameScriptBlock)` = 5; `status: closed (20-60)` = 1; `sandbox` в lib/portia-template-builder.test.ts не меньше 1.
+- Порт 3100 свободен; копий `portia-20-60-` нет; эталоны не менялись.
