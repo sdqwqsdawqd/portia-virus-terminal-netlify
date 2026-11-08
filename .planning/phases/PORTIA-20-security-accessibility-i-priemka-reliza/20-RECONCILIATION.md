@@ -25,7 +25,7 @@ plan_base: 3efb53d859098f1329138bc067b8ee88399ba41e
 
 D-15: не применяется — приёмки на устройствах нет (D-70), commit устройств нет, ветка «исправлен только phone-дефект» не нужна.
 
-После FRC менялись только `.planning/**`, `scripts/phase20-release-gate.mjs` и `lib/phase20-release-gate.test.ts` (режимы проверки этого плана) и `lib/phase20-release-notes.test.ts` (утверждение о реальных release notes: draft сменился на final; отклонение плана 20-15, только тест); это проверяет `--verify-reconciliation`.
+После FRC менялись только `.planning/**`, `scripts/phase20-release-gate.mjs` и `lib/phase20-release-gate.test.ts` (режимы проверки этого плана), `lib/phase20-release-notes.test.ts` (утверждение о реальных release notes: draft сменился на final) и `lib/phase20-uat.test.ts` (протокол теперь на FRC, а не на release candidate; отклонение плана 20-15, только тест); это проверяет `--verify-reconciliation`.
 
 ## Приёмка на устройствах: принятый риск владельца (D-70)
 
