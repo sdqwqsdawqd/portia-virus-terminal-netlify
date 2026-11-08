@@ -63,3 +63,64 @@ export async function parkClock(page: Page) {
   const elapsed = await page.evaluate(() => performance.now());
   await page.clock.pauseAt(new Date(Date.parse(deterministicContract.now) + elapsed + 1_000));
 }
+
+// D-69 (G3, 20-62): parkClock after the load leaves the spider a real-time dependent head start (its animation loop already ran 277-323 ms of the
+// install clock in three runs), so its legs and route differ between identical runs. Parking BEFORE the load fixes the start: the clock stands at
+// exactly 1000 ms, performance.now() at mount is the same in every run, and every frame of the loop comes only from runFor.
+// The page is empty here, so the load itself never moves the clock; the scene then steps with runFor until the desktop has mounted.
+export async function parkClockBeforeLoad(page: Page) {
+  const elapsed = await page.evaluate(() => performance.now());
+  if (elapsed > 500) throw new Error(`[PORTIA_MOTION_PARK_LATE] the install clock already ran ${Math.round(elapsed)} ms; the park would not start at the same moment`);
+  await page.clock.pauseAt(new Date(Date.parse(deterministicContract.now) + 1_000));
+}
+
+// D-69 (G3, 20-62): the new document runs 25-29 ms of real time before the parked state reaches it, and the fake animation frames fall on multiples of
+// 16 ms of performance.now(); with a head start of 28 ms or more the same 100 ms of runFor held one frame more (the spider legs differed by 0.02 degrees,
+// its body by 0.85 px). Stepping to the next multiple of 16 ms right after the load removes that phase, the same frames fall on the same moments in every run.
+export async function alignParkedClock(page: Page) {
+  const now = await page.evaluate(() => performance.now());
+  await page.clock.runFor(16 - (now % 16));
+}
+
+// D-69 (G3, 20-62): CSS animations and transitions run on the document timeline in real time, parkClock only stops timers; a frame taken at a random moment
+// of a transition differs between runs. This brings the finite ones in `scope` to their end and holds the endless ones at phase `phaseMs`; nothing is hidden.
+export async function settleAnimations(
+  page: Page,
+  scope: string | readonly string[],
+  options: { limitMs?: number; phaseMs?: number } = {},
+) {
+  const limitMs = options.limitMs ?? 5_000;
+  const selectors = typeof scope === "string" ? [scope] : [...scope];
+  const timeout = () => new Error(`[PORTIA_MOTION_SETTLE_TIMEOUT] animations in ${selectors.join(", ")} did not settle in ${limitMs} ms`);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(timeout()), limitMs);
+  });
+  const work = page.evaluate(
+    async ({ selectors: roots, phaseMs }) => {
+      const scopes = roots.map((selector) => document.querySelector(selector)).filter((root): root is Element => root !== null);
+      for (let round = 0; round < 8; round += 1) {
+        const live = scopes.flatMap((root) => root.getAnimations({ subtree: true }));
+        const unfinished = live.filter(
+          (animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime ?? Number.POSITIVE_INFINITY) && animation.playState !== "finished",
+        );
+        for (const animation of live) {
+          if (!Number.isFinite(animation.effect?.getComputedTiming().endTime ?? Number.POSITIVE_INFINITY)) {
+            animation.pause();
+            animation.currentTime = phaseMs;
+          }
+        }
+        if (unfinished.length === 0) return true;
+        await Promise.all(unfinished.map((animation) => animation.finished.catch(() => undefined)));
+      }
+      return false;
+    },
+    { selectors, phaseMs: options.phaseMs ?? 0 },
+  );
+  work.catch(() => undefined);
+  try {
+    if (!(await Promise.race([work, limit]))) throw timeout();
+  } finally {
+    clearTimeout(timer);
+  }
+}
