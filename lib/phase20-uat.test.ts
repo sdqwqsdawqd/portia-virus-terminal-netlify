@@ -924,3 +924,69 @@ describe("20-UAT D-70 owner waiver, not an acceptance (plan 20-14)", () => {
     assert.deepEqual(errorsOf(completeLedger(ledger), { requireComplete: true }), []);
   });
 });
+
+describe("20-UAT the committed ledger as 20-14 records it (D-70)", () => {
+  const phaseDir = path.join(root, ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza");
+  const readText = (file: string) => readFileSync(file, "utf8").replace(/\r\n/g, "\n");
+  const uat = parseUat(ledger);
+  const steps = [...uat.pc, ...uat.phone];
+  const prerequisite = (id: string) => uat.prerequisites.find((row) => row.id === id);
+
+  test("the committed ledger records the D-70 owner waiver", () => {
+    assert.equal(uat.verdicts.pc?.raw, D70_VERDICT);
+    assert.equal(uat.verdicts.phone?.raw, D70_VERDICT);
+    assert.equal(uat.frontmatter.status, "accepted-risk-d70");
+    assert.match(uat.frontmatter.release_candidate_commit ?? "", /^[0-9a-f]{40}$/);
+    assert.ok(uat.hasD70, "the D-70 section is missing");
+    assert.equal(steps.filter((step) => step.status === "PASS").length, 0, "no step may be PASS under D-70");
+    assert.equal(steps.filter((step) => step.status === "ОЖИДАЕТ").length, 0, "no step may stay ОЖИДАЕТ under D-70");
+    assert.deepEqual(validateUat(ledger, { commitExists: gitCommitExists }), []);
+  });
+
+  test("the release commit of the ledger is the release commit of the 20-63 protocol", () => {
+    const summary = readText(path.join(phaseDir, "20-63-SUMMARY.md"));
+    const release = summary.match(/^release_commit: ([0-9a-f]{40})$/m)?.[1];
+    assert.ok(release, "20-63-SUMMARY.md has no release_commit");
+    assert.equal(uat.frontmatter.release_candidate_commit, release);
+    assert.ok(uat.d70["Release commit"].startsWith(release));
+    const evidence = readText(path.join(phaseDir, "20-RELEASE-EVIDENCE.md"));
+    assert.ok(evidence.includes(`Commit: \`${release}\``), "20-RELEASE-EVIDENCE.md is not the protocol of this release commit");
+  });
+
+  test("a step is BLOCKED exactly when one of its prerequisites is BLOCKED, otherwise it was not checked", () => {
+    for (const step of steps) {
+      const dependencies = step.dependsOn.split(/\s*[,;]\s*/).filter((dep) => dep !== "" && dep !== "-");
+      const blocked = dependencies.map((dep) => prerequisite(dep)?.status ?? "").find((status) => status.startsWith("BLOCKED"));
+      if (blocked) assert.equal(step.status, blocked, `${step.id} must keep the BLOCKED kind of its prerequisite`);
+      else assert.equal(step.status, D70_STEP_STATUS, `${step.id} was not run and has no BLOCKED prerequisite`);
+    }
+  });
+
+  test("prerequisites follow the evidence: owner migrations are untouched, the release gate is not strengthened", () => {
+    assert.equal(prerequisite("OWNER-MIG-D36")?.status, "ОЖИДАЕТ ВЛАДЕЛЬЦА");
+    assert.equal(prerequisite("OWNER-MIG-NOTES")?.status, "ОЖИДАЕТ ВЛАДЕЛЬЦА");
+    assert.equal(prerequisite("STAGING-FREE")?.status, D70_STEP_STATUS);
+    assert.ok(["BLOCKED (ENV)", D70_STEP_STATUS].includes(prerequisite("REVIEWER-ROLE")?.status ?? ""));
+    const evidence = readText(path.join(phaseDir, "20-RELEASE-EVIDENCE.md"));
+    const outcome = evidence.match(/^## Итог\s+Итог: (\S+)/m)?.[1];
+    assert.ok(outcome, "20-RELEASE-EVIDENCE.md has no outcome line");
+    const expectedByOutcome: Record<string, string> = { PASS: "PASS", BLOCKED: "BLOCKED (ENV)", FAIL: "FAIL" };
+    assert.equal(prerequisite("RELEASE-GATE")?.status, expectedByOutcome[outcome], `RELEASE-GATE must repeat the protocol outcome ${outcome} without strengthening`);
+    for (const row of uat.prerequisites.filter((entry) => entry.status === "PASS")) {
+      assert.ok(["P19-GAP-20", "P19-GAP-22", "VISUAL-APPROVED"].includes(row.id), `${row.id} may not be PASS`);
+    }
+    if (prerequisite("VISUAL-APPROVED")?.status === "PASS") {
+      const owner = readText(path.join(phaseDir, "20-58-SUMMARY.md"));
+      assert.match(owner, /^owner_verdict: accepted$/m);
+      const commit = owner.match(/^owner_verdict_commit: ([0-9a-f]{40})$/m)?.[1];
+      const registry = readText(path.join(root, "tests/e2e/visual/phase20-baselines.json"));
+      assert.ok(commit && registry.includes(`"commit": "${commit}"`), "the baseline registry is not bound to the owner verdict commit");
+    }
+  });
+
+  test("the ledger never calls D-70 a physical acceptance", () => {
+    assert.ok(!ledger.includes(`${D70_VERDICT} (commit`));
+    assert.ok(/не PASS|не получает PASS/.test(uat.d70["Что это значит"] ?? ""));
+    assert.ok(steps.every((step) => empty(step.device) && empty(step.commit) && empty(step.date) && empty(step.screenshot)), "a step names a device, commit, date or screenshot");
+  });
+});
