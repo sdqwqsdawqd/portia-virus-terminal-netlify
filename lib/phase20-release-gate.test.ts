@@ -2530,7 +2530,7 @@ test("verifyReconciliation: deployed evidence is trusted metadata or an explicit
 });
 
 test("verifyReconciliation: after the FRC only .planning, the runner and its test may change; a git error is an error", () => {
-  assert.deepEqual(reconErrors({ changes: [".planning/ROADMAP.md", "scripts/phase20-release-gate.mjs", "lib/phase20-release-gate.test.ts"] }), []);
+  assert.deepEqual(reconErrors({ changes: [".planning/ROADMAP.md", "scripts/phase20-release-gate.mjs", "lib/phase20-release-gate.test.ts", "lib/phase20-release-notes.test.ts"] }), []);
   mentions(reconErrors({ changes: [".planning/STATE.md", "components/portia-desktop.tsx"] }), /после FRC.*components\/portia-desktop\.tsx/);
   mentions(reconErrors({ changes: ["lib/portia-content.ts"] }), /после FRC.*lib\/portia-content\.ts/);
   mentions(reconErrors({ changes: ["package-lock.json"] }), /после FRC.*package-lock\.json/);

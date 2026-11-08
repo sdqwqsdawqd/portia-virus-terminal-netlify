@@ -1850,7 +1850,8 @@ export const MIN_PLAN_FILES = 58;
 export const SELF_PLAN = 15;
 export const SELF_ROW_NOTE = "SUMMARY создаётся после гейта; проверяется --verify-independent";
 /** Paths that may change after the FRC: planning documents and the check modes of this plan. */
-export const POST_FRC_PATHS = Object.freeze([".planning/", "scripts/phase20-release-gate.mjs", "lib/phase20-release-gate.test.ts"]);
+// lib/phase20-release-notes.test.ts is a test of the real notes: finalizing the notes (draft -> final) changes its assertion, so it is the one more allowed path (deviation of 20-15, test only).
+export const POST_FRC_PATHS = Object.freeze([".planning/", "scripts/phase20-release-gate.mjs", "lib/phase20-release-gate.test.ts", "lib/phase20-release-notes.test.ts"]);
 const VERIFICATION_STATUSES = Object.freeze(["PASS", "FAIL", "BLOCKED", "Принятый долг (D-70)"]);
 
 /** Numbers of the 20-NN-PLAN.md files of the phase directory, ascending; the list and every count derive from the files. */
