@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-62-PLAN.md
-last_updated: "2026-11-08T18:05:59.205Z"
+stopped_at: Completed PORTIA-20-63-PLAN.md
+last_updated: "2026-11-08T18:27:42.096Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: dee25d563250b9b8f80333bea9de43bb7545d331
+state_head: 8eec771bd5e0075efcea73d6c499d3b0dfc4c10e
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 134
-  completed_plans: 131
+  completed_plans: 132
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 37 of 47
+Plan: 38 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-08 — Phase PORTIA-20 execution resumed (wave continue)
 
@@ -163,6 +163,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P60 | 35min | 3 tasks | 5 files |
 | Phase PORTIA-20 P61 | multi-session | 3 tasks | 4 files |
 | Phase 20 P62 | multi-session | 2 tasks | 7 files |
+| Phase PORTIA-20 P63 | 40min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -303,6 +304,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: D-69 G1 (20-60): the about:srcdoc console event comes from the Playwright trace snapshotter (--trace) in the sandboxed measureCardPage frame, not from the product; expected only in the 5 PNG tests, global allowlist stays 11 rows
 - [Phase PORTIA-20]: D-69 G2 (20-61): approved phone-webkit frame was taken while the closed Settings window still stood in the page flow (scrollbar 10 px, 30 px shift); removed by 7b31bdd (18-01) and 23c1c85 (quick 261104-m6g); same Playwright 1.64.1 and WebKit 27.2, so not environment; baseline replaced as accepted-redesign with supersedes ccf89983
 - [Phase 20]: D-69 G3 (20-62): motion scene nondeterminism had three causes (spider head start on a post-load parked clock, endless dew phase, finite Vivian transitions) plus an aborted /api/employees; fixed by parking before load, 16 ms grid alignment and settleAnimations (Animation objects only); policy unchanged; activity/offended/recovery replaced as deterministic-capture with supersedes
+- [Phase PORTIA-20]: D-69 G6: the rehearsal is repeated by one full run on f49aa00f2b98, verdict BLOCKED (environment lanes only, no FAIL of product, UI contract or baselines); the effective owner verdict is read by readEffectiveOwnerVerdict (chain owner_verdict_renews), baselines stay with 20-58
 
 ### Pending Todos
 
@@ -347,8 +349,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-08T18:05:58.657Z
-Stopped at: Completed PORTIA-20-62-PLAN.md
+Last session: 2026-11-08T18:27:41.526Z
+Stopped at: Completed PORTIA-20-63-PLAN.md
 Resume file: None
 
 ## Operator Next Step
