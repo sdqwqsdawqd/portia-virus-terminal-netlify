@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed 20-55-PLAN.md
-last_updated: "2026-11-07T23:01:22.200Z"
+stopped_at: Completed PORTIA-20-56-PLAN.md
+last_updated: "2026-11-08T02:29:52.723Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: 7f51705202c4c931da759b4012c37e3ded3b642b
+state_head: 3b4705b925d3b2ba37cc75c79988cd47fbce5d39
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 129
-  completed_plans: 122
+  completed_plans: 123
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 28 of 47
+Plan: 29 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-08 — Phase PORTIA-20 execution resumed (wave continue)
 
@@ -155,6 +155,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P53 | 100min | 3 tasks | 13 files |
 | Phase PORTIA-20 P54 | n/a | 3 tasks | 6 files |
 | Phase PORTIA-20 P55 | 2h | 2 tasks | 5 files |
+| Phase PORTIA-20 P56 | about 3 h | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -285,6 +286,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-53: блок «Видимая часть» во всех полях картинок редактора кроме фото сотрудника (b) и фото-блока страницы карточки; предпросмотр рисует рамку сайта сам (без импорта PortiaImage: граница конструктора шаблона); сброс кадра при смене адреса в обработчике и по метке загрузки; охрана D-64 вырезает атрибуты кадра только из строк <ImageEditorField
 - [Phase PORTIA-20]: 20-54: владелец 2026-11-08 принял 70 строк (колбы, паук, rebaseline, прочие, кнопка раздела в «Информации»), 16 строк на исправление: карточка шаблона (классификация как раньше, всегда две колонки) и выбор видимой части (предпросмотр с рамкой как баннер в Discord вместо ползунков); outcome stopped-for-fixes, 20-12 не запускается
 - [Phase PORTIA-20]: 20-55 D-65: template card classification is the archive's grid; two columns on a PC from 584px content width; values sized by cell width (12-15px), whole word under badge; template_fix_commit d1d7b0f177522a14303171621398ed12ecd7ded5
+- [Phase PORTIA-20]: 20-56: band frame is 754:63 on PC and (screen-50):63 on a phone; the dialog compares against the drawn picture where the site caps a picture (known limit for 20-57)
 
 ### Pending Todos
 
@@ -328,8 +330,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-07T23:01:21.631Z
-Stopped at: Completed 20-55-PLAN.md
+Last session: 2026-11-08T02:29:52.124Z
+Stopped at: Completed PORTIA-20-56-PLAN.md
 Resume file: None
 
 ## Operator Next Step
