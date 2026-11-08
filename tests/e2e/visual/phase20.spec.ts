@@ -1,6 +1,8 @@
 import { DesktopPage } from "../pages/desktop.page";
 import { parkClock } from "../fixtures/determinism";
 import { PromotionPage } from "../pages/promotion.page";
+import { EditorPage } from "../pages/editor.page";
+import { tabRegistry } from "../../../lib/editor-tabs.ts";
 import { deflateSync } from "node:zlib";
 import { expect, test } from "../fixtures/test";
 import { visualPolicy, type VisualState } from "../fixtures/visual-policy";
@@ -369,4 +371,130 @@ test("@phase20 template builder preview: a filled draft in the view «Предп
   await settle(promotion.window);
   await parkClock(page);
   await compare(page, "template-builder-preview", testInfo.project.name, "phase20:template-builder-preview");
+});
+
+// ---- D-62, D-66, D-67: the editor («+ ДОБАВИТЬ РАЗДЕЛ», the dialog «Видимая часть») and the site showing the chosen part -------------------------------
+// UI contract on substituted reads of GET /api/access and GET /api/content, not proof of roles or of saving: every write is aborted and the tracker above
+// fails the test on any. The pictures are tracked files of public/assets, not real photos: how a chosen part looks on the owner's real photos is the
+// owner's check (20-UAT EDITOR-FRAMING-01). Employee photos have no frame (variant b of 20-52).
+
+/** The two reads the desktop needs to mount the editor; a write to either path is aborted (and the tracker records it). */
+async function stubEditorReads(page: Page, content: unknown) {
+  await page.route("**/api/access", async (route) => {
+    if (route.request().method() !== "GET") return route.abort();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "cache-control": "no-store" },
+      body: JSON.stringify({ canEdit: true, canManageEditors: false, openTabs: tabRegistry.map((tab) => tab.id), tabsEnforced: false }),
+    });
+  });
+  await stubContent(page, content);
+}
+
+async function openEditorTab(page: Page, content: unknown, tabName: RegExp) {
+  await stubEditorReads(page, content);
+  await openDesktopStill(page);
+  const editor = new EditorPage(page);
+  await editor.openSettings();
+  await expect(editor.openEditor).toBeEnabled();
+  await editor.openEditor.click();
+  await expect(editor.editorNavigation()).toBeVisible();
+  await editor.editorNavigation().getByRole("button", { name: tabName }).click();
+}
+
+/** A slider of the dialog by the arrow keys (steps of 5). */
+async function stepKey(slider: Locator, from: number, to: number, keys: [string, string]) {
+  const steps = (to - from) / 5;
+  for (let step = 0; step < Math.abs(steps); step += 1) await slider.press(steps > 0 ? keys[0] : keys[1]);
+}
+
+const chosenFrame = { x: 30, y: 60, zoom: 150 };
+const framePicture = "/assets/portia-assistant.png";
+const framedVirus = (framing?: typeof chosenFrame) => ({ ...structuredClone(defaultPortiaContent.viruses[0]), id: "virus-frames", name: "Вирус для кадра", infectedImage: framePicture, ...(framing ? { infectedImageFraming: framing } : {}), mutations: [] });
+
+/** The block «Видимая часть» of a field: «Изменить» opens the dialog, «Масштаб» and «Положение картинки» (arrow keys) choose the frame; the dialog stays open. */
+async function chooseFrame(page: Page, group: Locator) {
+  await expect(group).toBeVisible();
+  await group.scrollIntoViewIfNeeded();
+  await expect(group.locator(".portia-image.is-loaded")).toBeVisible();
+  await group.getByRole("button", { name: "Изменить" }).click();
+  const dialog = page.getByRole("dialog", { name: /^Видимая часть/ });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".image-framing-window")).toBeVisible();
+  const zoom = dialog.getByRole("slider", { name: "Масштаб" });
+  await zoom.focus();
+  await stepKey(zoom, 100, chosenFrame.zoom, ["ArrowRight", "ArrowLeft"]);
+  await expect(zoom).toHaveValue(String(chosenFrame.zoom));
+  const position = dialog.getByRole("slider", { name: "Положение картинки" });
+  await position.focus();
+  await stepKey(position, 50, chosenFrame.x, ["ArrowRight", "ArrowLeft"]);
+  await stepKey(position, 50, chosenFrame.y, ["ArrowDown", "ArrowUp"]);
+  await expect(position).toHaveAttribute("aria-valuetext", `по горизонтали ${chosenFrame.x} %, по вертикали ${chosenFrame.y} %`);
+}
+
+test("@phase20 editor info add section: «Информация» with «+ ДОБАВИТЬ РАЗДЕЛ» above the section tabs (D-62; UI contract, substituted reads)", async ({ page }, testInfo) => {
+  trackWrites(page);
+  await openEditorTab(page, defaultPortiaContent, /^Информация/);
+  await expect(page.getByRole("button", { name: "+ ДОБАВИТЬ РАЗДЕЛ", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Разделы информации" })).toBeVisible();
+  await parkClock(page);
+  await compare(page, "editor-info-add-section", testInfo.project.name, "phase20:editor-info-add-section");
+});
+
+test("@phase20 editor framing guide: the dialog «Видимая часть» from a «Справочник» section photo (D-66, D-67; UI contract, substituted reads)", async ({ page }, testInfo) => {
+  trackWrites(page);
+  await openEditorTab(page, contentFixture({ guideSections: [{ id: "g-frames", title: "Раздел с фото", photo: framePicture, cards: [] }] }), /^Справочник/);
+  const toggle = page.locator(".editor-section-column > .nested-editor-card > .nested-editor-head .nested-editor-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+  const group = page.locator(".image-editor-field").filter({ hasText: "Фото раздела" }).getByRole("group", { name: "Видимая часть" });
+  await chooseFrame(page, group);
+  await parkClock(page);
+  await compare(page, "editor-framing-guide", testInfo.project.name, "phase20:editor-framing-guide");
+});
+
+test("@phase20 editor framing dossier: the dialog «Видимая часть» from the photo after infection (D-66, D-67; UI contract, substituted reads)", async ({ page }, testInfo) => {
+  trackWrites(page);
+  await openEditorTab(page, contentFixture({ viruses: [framedVirus()] }), /^База вирусов/);
+  await page.locator(".editor-record-list .editor-record-row button", { has: page.locator("strong") }).first().click();
+  await page.getByRole("navigation", { name: "Разделы досье" }).getByRole("button", { name: "Основное" }).click();
+  const group = page.locator(".image-editor-field").first().getByRole("group", { name: "Видимая часть" });
+  await chooseFrame(page, group);
+  await parkClock(page);
+  await compare(page, "editor-framing-dossier", testInfo.project.name, "phase20:editor-framing-dossier");
+});
+
+test("@phase20 guide framed: the «Справочник» window shows a section band and a card cover with the chosen part (D-66, D-67; UI contract, substituted read)", async ({ page }, testInfo) => {
+  trackWrites(page);
+  await stubContent(page, contentFixture({
+    guideSections: [{
+      id: "g-frames", title: "Раздел с кадром", photo: framePicture, photoFraming: chosenFrame,
+      cards: [
+        { id: "c-framed", title: "Обложка с кадром", cover: framePicture, coverFraming: chosenFrame, blocks: [] },
+        { id: "c-plain", title: "Обложка без кадра", cover: framePicture, blocks: [] },
+      ],
+    }],
+  }));
+  const desktop = await openDesktopStill(page);
+  await desktop.openApp("Справочник");
+  const guide = desktop.window("Справочник");
+  const head = guide.locator('.guide-section-head[aria-expanded="false"]');
+  if (await head.count()) await head.first().click();
+  await expect(guide.locator(".guide-tile")).toHaveCount(2);
+  await expect(guide.locator(".guide-section-band")).toHaveAttribute("data-framing", "true");
+  await settle(guide);
+  await parkClock(page);
+  await compare(page, "guide-framed", testInfo.project.name, "phase20:guide-framed");
+});
+
+test("@phase20 dossier framed: the dossier shows the chosen part of the photo after infection (D-66, D-67; UI contract, substituted read)", async ({ page }, testInfo) => {
+  trackWrites(page);
+  await stubContent(page, contentFixture({ viruses: [framedVirus(chosenFrame)] }));
+  const desktop = await openDesktopStill(page);
+  await desktop.openApp("База вирусов");
+  const media = desktop.window("База вирусов").locator(".record-view .subject-media").first();
+  await expect(media.locator(".portia-image")).toHaveAttribute("data-framing", "true");
+  await settle(desktop.window("База вирусов"));
+  await parkClock(page);
+  await compare(page, "dossier-framed", testInfo.project.name, "phase20:dossier-framed");
 });

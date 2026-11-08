@@ -31,6 +31,110 @@
       "reason": "Эталон принятого вида (20-58), анимации «Выключены» (паук стоит); запись vir-d17 стартового контента, три новых класса из девяти"
     },
     {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-dossier-framed--chromium-desktop.png",
+      "sha256": "a1d45ec93c88a27e5ca033d503e0d918c788f7c5d4cb14b245f571d8654ecaef",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Сайт: досье, фото после заражения с выбранной частью (ПК)",
+      "decisions": [
+        "D-62",
+        "D-66",
+        "D-67"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменённые чтения GET /api/access и GET /api/content — UI-контракт, не доказательство ролей и сохранения; картинка из public/assets, не настоящее фото"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-dossier-framed--chromium-phone.png",
+      "sha256": "3fbf90ac8b4fa06828882aab9d7ce258f4658a1a73ae671aae43d13e1d2b18bf",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Сайт: досье, фото после заражения с выбранной частью (телефон)",
+      "decisions": [
+        "D-62",
+        "D-66",
+        "D-67"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменённые чтения GET /api/access и GET /api/content — UI-контракт, не доказательство ролей и сохранения; картинка из public/assets, не настоящее фото"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-editor-framing-dossier--chromium-desktop.png",
+      "sha256": "d180ad2decd54a5ea725bde51a7d6b33d46c5dfd68eb5e117ff5252888a9a589",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Редактор «База вирусов»: окно «Видимая часть» у фото после заражения, кадр 30/60/150 (ПК)",
+      "decisions": [
+        "D-62",
+        "D-66",
+        "D-67"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменённые чтения GET /api/access и GET /api/content — UI-контракт, не доказательство ролей и сохранения; картинка из public/assets, не настоящее фото"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-editor-framing-dossier--chromium-phone.png",
+      "sha256": "3d51d55cd63df945ddbbeaea3d0d07acdcaf3cd4d7b1aa3cd9e5dc8f9c541924",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Редактор «База вирусов»: окно «Видимая часть» у фото после заражения, кадр 30/60/150 (телефон)",
+      "decisions": [
+        "D-62",
+        "D-66",
+        "D-67"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменённые чтения GET /api/access и GET /api/content — UI-контракт, не доказательство ролей и сохранения; картинка из public/assets, не настоящее фото"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-editor-framing-guide--chromium-desktop.png",
+      "sha256": "90b4bdab99b82e98c5b64a0d7edd18fc26bab3c79faff3b69332bbf07eebac87",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Редактор «Справочник»: окно «Видимая часть» у фото раздела, кадр 30/60/150 (ПК)",
+      "decisions": [
+        "D-62",
+        "D-66",
+        "D-67"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменённые чтения GET /api/access и GET /api/content — UI-контракт, не доказательство ролей и сохранения; картинка из public/assets, не настоящее фото"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-editor-framing-guide--chromium-phone.png",
+      "sha256": "b23b9fb47858408248385e9cb89e76bfdb2535a9416095c59cd6ea4e1f2ec519",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Редактор «Справочник»: окно «Видимая часть» у фото раздела, кадр 30/60/150 (телефон)",
+      "decisions": [
+        "D-62",
+        "D-66",
+        "D-67"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменённые чтения GET /api/access и GET /api/content — UI-контракт, не доказательство ролей и сохранения; картинка из public/assets, не настоящее фото"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-editor-info-add-section--chromium-desktop.png",
+      "sha256": "a35792f7f95ff8dcbfd056e11e2e981fa271768393a4c37104b5804ad392e085",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Редактор «Информация»: «+ ДОБАВИТЬ РАЗДЕЛ» над вкладками разделов (ПК)",
+      "decisions": [
+        "D-62",
+        "D-66",
+        "D-67"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменённые чтения GET /api/access и GET /api/content — UI-контракт, не доказательство ролей и сохранения; картинка из public/assets, не настоящее фото"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-editor-info-add-section--chromium-phone.png",
+      "sha256": "affd8e205f6a2c2654eb1277a1c447ae92b4ec109e5ae7ecafcc0daab017ec22",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Редактор «Информация»: «+ ДОБАВИТЬ РАЗДЕЛ» над вкладками разделов (телефон)",
+      "decisions": [
+        "D-62",
+        "D-66",
+        "D-67"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменённые чтения GET /api/access и GET /api/content — UI-контракт, не доказательство ролей и сохранения; картинка из public/assets, не настоящее фото"
+    },
+    {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-guide-microscope--chromium-desktop.png",
       "sha256": "5333f060565a124da5fd0f52def47a1dc05b660ca58b11a755d4dde19fa0ba30",
       "supersedes": null,
@@ -119,6 +223,32 @@
         "D-59"
       ],
       "reason": "Эталон принятого вида (20-58) на стартовом контенте; паук выключен, четыре сосуда"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-guide-framed--chromium-desktop.png",
+      "sha256": "95bd651269d6f015897e385e393751168bd54417b3afa8d15259d3f43f507f48",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Сайт: «Справочник», полоса раздела и плитка с выбранной частью (ПК)",
+      "decisions": [
+        "D-62",
+        "D-66",
+        "D-67"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменённые чтения GET /api/access и GET /api/content — UI-контракт, не доказательство ролей и сохранения; картинка из public/assets, не настоящее фото"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-guide-framed--chromium-phone.png",
+      "sha256": "fe2ec6e78b3ec65b8d3a9b8be037d9f0b6a26022e80a09945b8e8ee5796ccf30",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Сайт: «Справочник», полоса раздела и плитка с выбранной частью (телефон)",
+      "decisions": [
+        "D-62",
+        "D-66",
+        "D-67"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменённые чтения GET /api/access и GET /api/content — UI-контракт, не доказательство ролей и сохранения; картинка из public/assets, не настоящее фото"
     },
     {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-promotion-participant--chromium-desktop.png",
