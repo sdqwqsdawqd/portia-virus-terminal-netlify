@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import * as nodeFs from "node:fs";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -1284,6 +1285,256 @@ test("main --verify-evidence (D-68): an accepted verdict with changed product co
   assert.equal(code, 1);
   assert.match(err, /Код продукта: claims НЕ ИЗМЕНЁН/);
   rmSync(base, { recursive: true, force: true });
+});
+
+// --- 20-63 Task 1 (D-68, D-69): the effective owner verdict = the last valid link of the owner_verdict_renews chain ---------------------
+
+const COMMIT_B = "b".repeat(40);
+const COMMIT_C = "c".repeat(40);
+const COMMIT_FOREIGN = "f".repeat(40);
+
+type LinkOptions = { plan: number; verdict?: string; date?: string; commit?: string; renews?: string | null };
+
+function linkSummary({ plan, verdict = "accepted", date = "2026-11-09", commit = COMMIT_B, renews = OWNER_COMMIT }: LinkOptions) {
+  const lines = ["---", "phase: PORTIA-20", `plan: ${plan}`, "status: complete"];
+  if (verdict !== null) lines.push(`owner_verdict: ${verdict}`);
+  if (date !== null) lines.push(`owner_verdict_date: ${date}`);
+  if (commit !== null) lines.push(`owner_verdict_commit: ${commit}`);
+  if (renews !== null) lines.push(`owner_verdict_renews: ${renews}`);
+  lines.push("---", "", "# Summary", "");
+  return lines.join("\n");
+}
+
+/** Virtual phase directory plus a fake git: `known` commits exist, `ancestors` lists "older>newer" pairs. */
+function chainDeps(files: Record<string, string>, { known = [OWNER_COMMIT, COMMIT_B, COMMIT_C], ancestors = [`${OWNER_COMMIT}>${COMMIT_B}`, `${OWNER_COMMIT}>${COMMIT_C}`, `${COMMIT_B}>${COMMIT_C}`] }: { known?: string[]; ancestors?: string[] } = {}) {
+  const dir = path.join("virtual-root", gate.PHASE_DIR);
+  const all: Record<string, string> = { "20-58-SUMMARY.md": OWNER_SUMMARY(), ...files };
+  const calls: string[][] = [];
+  const fs = {
+    existsSync: (target: string) => path.basename(target) in all || target === dir,
+    readFileSync: (target: string) => {
+      const text = all[path.basename(target)];
+      if (text === undefined) throw new Error(`ENOENT ${target}`);
+      return text;
+    },
+    readdirSync: () => Object.keys(all).sort().reverse(),
+  };
+  const git = (args: string[]) => {
+    calls.push(args);
+    if (args[0] === "cat-file") return { status: known.some((sha) => args[2]?.startsWith(sha)) ? 0 : 128, stdout: "", stderr: "" };
+    if (args[0] === "merge-base" && args[1] === "--is-ancestor") return { status: ancestors.includes(`${args[2]}>${args[3]}`) ? 0 : 1, stdout: "", stderr: "" };
+    return { status: 0, stdout: "", stderr: "" };
+  };
+  return { deps: { root: "virtual-root", fs, git }, calls };
+}
+
+test("readEffectiveOwnerVerdict: without links the result is the 20-58 verdict, unchanged (the chain has nothing to add)", () => {
+  assert.equal(typeof gate.readEffectiveOwnerVerdict, "function");
+  const { deps } = chainDeps({});
+  const effective = gate.readEffectiveOwnerVerdict(deps);
+  assert.deepEqual({ verdict: effective.verdict, date: effective.date, commit: effective.commit }, gate.readOwnerVerdict(OWNER_SUMMARY()));
+  assert.equal(effective.source, "20-58-SUMMARY.md");
+  assert.equal(effective.chainError, "");
+  assert.equal(gate.ownerStatusText(effective), "ПРИНЯТО ВЛАДЕЛЬЦЕМ 2026-11-08");
+  const noBase = chainDeps({});
+  noBase.deps.fs.existsSync = () => false;
+  assert.equal(gate.readEffectiveOwnerVerdict(noBase.deps), null, "no 20-58 summary: nothing to read, never an invented verdict");
+});
+
+test("readEffectiveOwnerVerdict: a summary of plan 12 or 13 with owner_verdict fields is not a link; only plans after 58 are", () => {
+  const { deps } = chainDeps({ "20-12-SUMMARY.md": linkSummary({ plan: 12, renews: null, commit: OWNER_COMMIT, date: "2026-11-08" }), "20-60-SUMMARY.md": "---\nplan: 60\n---\n\nТекст про owner_verdict_renews в теле.\n" });
+  const effective = gate.readEffectiveOwnerVerdict(deps);
+  assert.equal(effective.source, "20-58-SUMMARY.md");
+  assert.equal(effective.chainError, "");
+});
+
+test("readEffectiveOwnerVerdict: one valid link (renews = 20-58 commit, descendant, date not earlier) becomes the effective verdict", () => {
+  const { deps, calls } = chainDeps({ "20-64-SUMMARY.md": linkSummary({ plan: 64 }) });
+  const effective = gate.readEffectiveOwnerVerdict(deps);
+  assert.equal(effective.verdict, "accepted");
+  assert.equal(effective.date, "2026-11-09");
+  assert.equal(effective.commit, COMMIT_B);
+  assert.equal(effective.source, "20-64-SUMMARY.md");
+  assert.equal(effective.chainError, "");
+  assert.equal(effective.baseCommit, OWNER_COMMIT, "the authority of the baselines stays with 20-58");
+  assert.equal(gate.ownerStatusText(effective), "ПРИНЯТО ВЛАДЕЛЬЦЕМ 2026-11-09");
+  assert.ok(calls.some((args) => args[0] === "merge-base" && args[1] === "--is-ancestor" && args[2] === OWNER_COMMIT && args[3] === COMMIT_B), "ancestry is checked through git merge-base --is-ancestor");
+  const rows = gate.visualAcceptanceRows({ owner: effective, baselines: { commit: OWNER_COMMIT, rows: 56 }, changed: [], releaseCommit: COMMIT });
+  assert.equal(rows[0].status, "ПРИНЯТО ВЛАДЕЛЬЦЕМ 2026-11-09");
+  assert.match(rows[0].evidence, /20-64-SUMMARY\.md/);
+  assert.match(rows[2].evidence, new RegExp(`git diff --name-only ${COMMIT_B.slice(0, 12)} `), "the product code is compared from the commit of the link");
+  assert.deepEqual(gate.applyVisualAcceptance("PASS", rows), { verdict: "PASS", reasons: [] });
+});
+
+test("readEffectiveOwnerVerdict: links are ordered by plan number, not by file listing; the last valid link wins", () => {
+  const { deps } = chainDeps({
+    "20-65-SUMMARY.md": linkSummary({ plan: 65, commit: COMMIT_C, renews: COMMIT_B, date: "2026-11-10", verdict: "accepted" }),
+    "20-64-SUMMARY.md": linkSummary({ plan: 64 }),
+  });
+  const effective = gate.readEffectiveOwnerVerdict(deps);
+  assert.equal(effective.source, "20-65-SUMMARY.md");
+  assert.equal(effective.commit, COMMIT_C);
+  assert.equal(effective.date, "2026-11-10");
+  assert.equal(effective.chainError, "");
+});
+
+test("readEffectiveOwnerVerdict: a link that renews a foreign commit breaks the chain: ОЖИДАЕТ ВЛАДЕЛЬЦА, the run is never above BLOCKED", () => {
+  const { deps } = chainDeps({ "20-64-SUMMARY.md": linkSummary({ plan: 64, renews: COMMIT_FOREIGN }) }, { known: [OWNER_COMMIT, COMMIT_B, COMMIT_FOREIGN] });
+  const effective = gate.readEffectiveOwnerVerdict(deps);
+  assert.match(effective.chainError, /^цепочка вердиктов нарушена: 20-64-SUMMARY\.md/);
+  assert.equal(effective.verdict, "");
+  assert.equal(gate.ownerStatusText(effective), "ОЖИДАЕТ ВЛАДЕЛЬЦА");
+  const rows = gate.visualAcceptanceRows({ owner: effective, baselines: { commit: OWNER_COMMIT, rows: 56 }, changed: [], releaseCommit: COMMIT });
+  assert.equal(rows[0].status, "ОЖИДАЕТ ВЛАДЕЛЬЦА");
+  assert.match(rows[0].evidence, /цепочка вердиктов нарушена: 20-64-SUMMARY\.md/);
+  assert.equal(gate.applyVisualAcceptance("PASS", rows).verdict, "BLOCKED");
+});
+
+test("readEffectiveOwnerVerdict: every other broken link is rejected the same way (no renews, not a descendant, no date, commit absent from the repository, earlier date, same commit)", () => {
+  const broken: [string, Record<string, string>, { known?: string[]; ancestors?: string[] }?][] = [
+    ["no owner_verdict_renews", { "20-64-SUMMARY.md": linkSummary({ plan: 64, renews: null }) }],
+    ["a commit that is not a descendant", { "20-64-SUMMARY.md": linkSummary({ plan: 64 }) }, { ancestors: [] }],
+    ["no date", { "20-64-SUMMARY.md": linkSummary({ plan: 64, date: "" }) }],
+    ["a malformed date", { "20-64-SUMMARY.md": linkSummary({ plan: 64, date: "9 ноября" }) }],
+    ["a commit that is not in the repository", { "20-64-SUMMARY.md": linkSummary({ plan: 64 }) }, { known: [OWNER_COMMIT] }],
+    ["a short commit", { "20-64-SUMMARY.md": linkSummary({ plan: 64, commit: "bbbbbbb" }) }],
+    ["a date earlier than the previous link", { "20-64-SUMMARY.md": linkSummary({ plan: 64, date: "2026-11-07" }) }],
+    ["the same commit as the previous link", { "20-64-SUMMARY.md": linkSummary({ plan: 64, commit: OWNER_COMMIT }) }],
+    ["an empty verdict", { "20-64-SUMMARY.md": linkSummary({ plan: 64, verdict: "" }) }],
+  ];
+  for (const [name, files, options] of broken) {
+    const { deps } = chainDeps(files, options);
+    const effective = gate.readEffectiveOwnerVerdict(deps);
+    assert.match(effective.chainError, /^цепочка вердиктов нарушена: 20-64-SUMMARY\.md/, name);
+    assert.equal(gate.ownerStatusText(effective), "ОЖИДАЕТ ВЛАДЕЛЬЦА", name);
+  }
+});
+
+test("readEffectiveOwnerVerdict: a valid link behind a broken one is not used; the chain stops at the first break", () => {
+  const { deps } = chainDeps({
+    "20-64-SUMMARY.md": linkSummary({ plan: 64, renews: COMMIT_FOREIGN }),
+    "20-65-SUMMARY.md": linkSummary({ plan: 65, commit: COMMIT_C, renews: OWNER_COMMIT, date: "2026-11-10" }),
+  });
+  const effective = gate.readEffectiveOwnerVerdict(deps);
+  assert.match(effective.chainError, /20-64-SUMMARY\.md/);
+  assert.equal(gate.ownerStatusText(effective), "ОЖИДАЕТ ВЛАДЕЛЬЦА");
+});
+
+test("readEffectiveOwnerVerdict: a link with fixes-requested is «ИСПРАВИТЬ (владелец)» and the run is FAIL", () => {
+  const { deps } = chainDeps({ "20-64-SUMMARY.md": linkSummary({ plan: 64, verdict: "fixes-requested" }) });
+  const effective = gate.readEffectiveOwnerVerdict(deps);
+  assert.equal(effective.chainError, "");
+  assert.equal(gate.ownerStatusText(effective), "ИСПРАВИТЬ (владелец) 2026-11-09");
+  const rows = gate.visualAcceptanceRows({ owner: effective, baselines: { commit: OWNER_COMMIT, rows: 56 }, changed: [], releaseCommit: COMMIT });
+  assert.equal(gate.applyVisualAcceptance("PASS", rows).verdict, "FAIL");
+});
+
+test("readEffectiveOwnerVerdict on a real git repository: descendant is accepted, a sibling branch commit is not", () => {
+  const repo = mkdtempSync(path.join(os.tmpdir(), "phase20-chain-test-"));
+  const run = (args: string[]) => {
+    const out = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+    assert.equal(out.status, 0, `${args.join(" ")}: ${out.stderr}`);
+    return out.stdout.trim();
+  };
+  const git = (args: string[]) => {
+    const out = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+    return { status: out.status, stdout: out.stdout ?? "", stderr: out.stderr ?? "" };
+  };
+  try {
+    run(["init", "-q", "-b", "trunk"]);
+    run(["config", "user.email", "chain@example.test"]);
+    run(["config", "user.name", "chain"]);
+    run(["config", "commit.gpgsign", "false"]);
+    writeFileSync(path.join(repo, "a.txt"), "a");
+    run(["add", "a.txt"]);
+    run(["commit", "-q", "-m", "a"]);
+    const baseSha = run(["rev-parse", "HEAD"]);
+    writeFileSync(path.join(repo, "b.txt"), "b");
+    run(["add", "b.txt"]);
+    run(["commit", "-q", "-m", "b"]);
+    const childSha = run(["rev-parse", "HEAD"]);
+    run(["checkout", "-q", "-b", "side", baseSha]);
+    writeFileSync(path.join(repo, "c.txt"), "c");
+    run(["add", "c.txt"]);
+    run(["commit", "-q", "-m", "c"]);
+    const sideSha = run(["rev-parse", "HEAD"]);
+    const phase = path.join(repo, gate.PHASE_DIR);
+    mkdirSync(phase, { recursive: true });
+    const base = OWNER_SUMMARY().replace(OWNER_COMMIT, baseSha);
+    writeFileSync(path.join(phase, "20-58-SUMMARY.md"), base);
+    writeFileSync(path.join(phase, "20-64-SUMMARY.md"), linkSummary({ plan: 64, commit: childSha, renews: baseSha }));
+    const good = gate.readEffectiveOwnerVerdict({ root: repo, fs: nodeFs, git });
+    assert.equal(good.chainError, "");
+    assert.equal(good.commit, childSha);
+    writeFileSync(path.join(phase, "20-64-SUMMARY.md"), linkSummary({ plan: 64, commit: sideSha, renews: childSha }));
+    assert.match(gate.readEffectiveOwnerVerdict({ root: repo, fs: nodeFs, git }).chainError, /цепочка вердиктов нарушена: 20-64-SUMMARY\.md/);
+    writeFileSync(path.join(phase, "20-64-SUMMARY.md"), linkSummary({ plan: 64, commit: sideSha, renews: baseSha }));
+    assert.equal(gate.readEffectiveOwnerVerdict({ root: repo, fs: nodeFs, git }).chainError, "", "a sibling commit that descends from the previous link commit is valid");
+    writeFileSync(path.join(phase, "20-64-SUMMARY.md"), linkSummary({ plan: 64, commit: baseSha, renews: childSha }));
+    assert.match(gate.readEffectiveOwnerVerdict({ root: repo, fs: nodeFs, git }).chainError, /цепочка вердиктов нарушена/, "an ancestor of the previous commit is not a descendant");
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+function evidenceRoot(summaries: Record<string, string>, evidence = goodEvidence()) {
+  const base = mkdtempSync(path.join(os.tmpdir(), "phase20-evidence-test-"));
+  mkdirSync(path.join(base, gate.PHASE_DIR), { recursive: true });
+  writeFileSync(path.join(base, gate.MATRIX_MD), CLEAN_MATRIX);
+  writeFileSync(path.join(base, gate.EVIDENCE_MD), evidence);
+  writeOwnerFiles(base);
+  for (const [name, text] of Object.entries(summaries)) writeFileSync(path.join(base, gate.PHASE_DIR, name), text);
+  return base;
+}
+
+test("main --verify-evidence (D-69): the verdict row is checked against the effective link and «НЕ ИЗМЕНЁН» is recomputed from the link commit", () => {
+  const evidence = gate.renderEvidence(fullRun({
+    visual: [
+      { id: "Общий вердикт", status: "ПРИНЯТО ВЛАДЕЛЬЦЕМ 2026-11-09", evidence: `owner_verdict: accepted; owner_verdict_date: 2026-11-09; owner_verdict_commit: ${COMMIT_B}; источник: 20-64-SUMMARY.md` },
+      { id: "Эталоны 20-12", status: "56 строк реестра", evidence: `phase20-baselines.json; коммит вердикта реестра: ${OWNER_COMMIT}` },
+      { id: "Код продукта", status: "НЕ ИЗМЕНЁН", evidence: `git diff --name-only ${COMMIT_B.slice(0, 12)} ${COMMIT.slice(0, 12)} -- app components public lib (без *.test.*)` },
+    ],
+  }));
+  const base = evidenceRoot({ "20-64-SUMMARY.md": linkSummary({ plan: 64 }) }, evidence);
+  const diffs: string[][] = [];
+  let err = "";
+  const git = (args: string[]) => {
+    if (args[0] === "diff") diffs.push(args);
+    return { status: 0, stdout: "", stderr: "" };
+  };
+  try {
+    const code = gate.main(["--verify-evidence"], { root: base, git, out: () => {}, err: (text: string) => { err += text; } });
+    assert.equal(code, 0, err);
+    assert.deepEqual(diffs[0]?.slice(0, 4), ["diff", "--name-only", COMMIT_B, COMMIT]);
+    // The same protocol without the link: 20-58 says 2026-11-08, so the date 2026-11-09 is rejected.
+    rmSync(path.join(base, gate.PHASE_DIR, "20-64-SUMMARY.md"));
+    err = "";
+    assert.equal(gate.main(["--verify-evidence"], { root: base, git, out: () => {}, err: (text: string) => { err += text; } }), 1);
+    assert.match(err, /date 2026-11-09 differs from owner_verdict_date 2026-11-08/);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("main --verify-evidence (D-69): a broken chain does not let the protocol claim «ПРИНЯТО ВЛАДЕЛЬЦЕМ»", () => {
+  const base = evidenceRoot({ "20-64-SUMMARY.md": linkSummary({ plan: 64, renews: COMMIT_FOREIGN }) });
+  let err = "";
+  const git = (args: string[]) => ({ status: 0, stdout: "", stderr: args[0] === "diff" ? "" : "" });
+  try {
+    const code = gate.main(["--verify-evidence"], { root: base, git, out: () => {}, err: (text: string) => { err += text; } });
+    assert.equal(code, 1);
+    assert.match(err, /цепочка вердиктов нарушена: 20-64-SUMMARY\.md/);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("the runner carries the chain by name and the agent never writes a link (D-68: only the owner's word; D-69: a new word for new product code)", () => {
+  const source = readFileSync(new URL("../scripts/phase20-release-gate.mjs", import.meta.url), "utf8");
+  assert.match(source, /export function readEffectiveOwnerVerdict/);
+  assert.match(source, /owner_verdict_renews/);
+  assert.match(source, /D-69: a change of the product code after the verdict needs a new word of the owner/);
+  assert.doesNotMatch(source, /writeFileSync\([^)]*SUMMARY/, "the runner reads summaries, it never writes them");
 });
 
 // --- 20-59 Task 1 (D-69, G5): the npm of a release run is explicit and recorded -----------------------------------------------------
