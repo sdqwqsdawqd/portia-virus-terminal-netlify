@@ -184,10 +184,10 @@ function pwReport(specs: { title: string; file?: string; tests: unknown[] }[], e
   };
 }
 
-test("GATES: the sixteen ids of 20-13 in order, each with a command", () => {
+test("GATES: the seventeen ids of 20-13 (D-68 adds ui-contract-offline) in order, each with a command", () => {
   assert.deepEqual(
     gate.GATES.map((entry: { id: string }) => entry.id),
-    ["node-version", "tree-clean", "npm-ci", "unit", "typecheck", "build", "lint", "audit-prod", "audit-evidence", "visual-manifest", "e2e-full", "visual-approved", "visual-phase20", "mutation-attest", "e2e-mutation", "staging-live"],
+    ["node-version", "tree-clean", "npm-ci", "unit", "typecheck", "build", "lint", "audit-prod", "audit-evidence", "visual-manifest", "e2e-full", "ui-contract-offline", "visual-approved", "visual-phase20", "mutation-attest", "e2e-mutation", "staging-live"],
   );
   for (const entry of gate.GATES) assert.ok(entry.command.length > 0, entry.id);
 });
@@ -215,6 +215,64 @@ test("GATES: commands follow 20-13 (npm.cmd ci, no bare --verify of the visual m
   assert.match(byId("visual-phase20").command, /tests\/e2e\/visual\/phase20\.spec\.ts/);
   assert.match(byId("e2e-mutation").command, /editor-layout\.spec\.ts/);
   assert.equal(byId("staging-live").command, "npm.cmd run test:staging-live");
+});
+
+const OFFLINE_GATES = ["ui-contract-offline", "visual-approved", "visual-phase20"];
+const CLI = "node node_modules/@playwright/test/cli.js test";
+
+test("GATES (D-68): the three offline gates call the Playwright CLI directly, never npm run, and carry the offline data mode", () => {
+  const byId = (id: string) => gate.GATES.find((entry: { id: string }) => entry.id === id);
+  for (const id of OFFLINE_GATES) {
+    const entry = byId(id);
+    assert.equal(entry.offline, true, id);
+    assert.ok(!entry.command.includes("npm"), `${id} must not go through npm`);
+    for (const step of entry.steps) {
+      assert.equal(step.file, "node", id);
+      assert.deepEqual(step.args.slice(0, 2), ["node_modules/@playwright/test/cli.js", "test"], id);
+      for (const flag of ["--retries=0", "--fail-on-flaky-tests"]) assert.ok(step.args.includes(flag), `${id} lacks ${flag}`);
+      if (id !== "ui-contract-offline") assert.ok(step.args.includes("--update-snapshots=none"), `${id} lacks --update-snapshots=none`);
+    }
+    assert.ok(entry.requires.files.some((file: { path: string }) => file.path === "tests/e2e/harness/offline-supabase.cjs"), `${id} needs the harness file`);
+    assert.equal(entry.requires.env, undefined, `${id} supplies its own public values`);
+  }
+  for (const id of ["e2e-full", "mutation-attest", "e2e-mutation", "staging-live", "unit"]) assert.ok(!byId(id).offline, id);
+  assert.equal(gate.dataModeOf("visual-phase20"), "offline D-68");
+  assert.equal(gate.dataModeOf("e2e-full"), "цель");
+  assert.equal(gate.dataModeOf("e2e-mutation"), "staging");
+  assert.equal(gate.dataModeOf("unit"), "-");
+});
+
+test("GATES (D-68): ui-contract-offline repeats the four functional checks of 20-58 with their projects", () => {
+  const entry = gate.GATES.find((item: { id: string }) => item.id === "ui-contract-offline");
+  assert.equal(entry.steps.length, 4);
+  const line = (index: number) => entry.steps[index].args.join(" ");
+  assert.match(line(0), /--project=chromium-desktop --project=chromium-phone/);
+  assert.match(line(0), /tests\/e2e\/specs\/template-builder\.spec\.ts/);
+  assert.match(line(0), /tests\/e2e\/specs\/accessibility\.spec\.ts/);
+  assert.ok(entry.steps[0].args.includes("STAB-TMPL-01|template builder"));
+  for (const project of ["chromium-desktop", "chromium-dpr125", "firefox-desktop", "chromium-phone", "webkit-phone"]) assert.match(line(1), new RegExp(`--project=${project}`));
+  assert.ok(entry.steps[1].args.includes("D-61|D-65"));
+  assert.match(line(2), /editor-ui-contract\.spec\.ts/);
+  assert.match(line(2), /image-framing\.spec\.ts/);
+  assert.match(line(2), /--project=chromium-desktop --project=chromium-phone/);
+  assert.match(line(3), /--project=firefox-desktop --project=webkit-phone/);
+  assert.ok(entry.steps[3].args.includes("D-66 touch|D-66 dialog|D-67 «Справочник» section photo"));
+  assert.ok(entry.command.includes(CLI), "the command is the direct Playwright CLI call");
+});
+
+test("GATES (D-68): the old visual frames run on two steps, the @phase20 frames on chromium-desktop and chromium-phone", () => {
+  const approved = gate.GATES.find((item: { id: string }) => item.id === "visual-approved");
+  assert.equal(approved.steps.length, 2);
+  const first = approved.steps[0].args.join(" ");
+  assert.match(first, /tests\/e2e\/visual/);
+  assert.match(first, /--project=chromium-desktop --project=chromium-dpr125/);
+  assert.match(first, /--grep-invert @phase20/);
+  const second = approved.steps[1].args.join(" ");
+  for (const project of ["chromium-phone", "webkit-phone", "firefox-desktop"]) assert.match(second, new RegExp(`--project=${project}`));
+  assert.match(second, /--grep-invert @phase20/);
+  const phase20 = gate.GATES.find((item: { id: string }) => item.id === "visual-phase20");
+  assert.match(phase20.steps[0].args.join(" "), /tests\/e2e\/visual\/phase20\.spec\.ts/);
+  assert.match(phase20.steps[0].args.join(" "), /--project=chromium-desktop --project=chromium-phone/);
 });
 
 test("classifyPlaywright: expected is PASS with counts", () => {
@@ -378,20 +436,46 @@ test("envPresence returns names and presence only; a secret value is never rende
 });
 
 // A scratch worktree and artifact directory for runGate; `exec` is faked, the filesystem is real.
-function harness(env: Record<string, string>, execImpl: (file: string, args: string[], worktree: string) => { status: number; stdout?: string; stderr?: string }) {
+const OFFLINE_VALUES = {
+  NEXT_PUBLIC_SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co",
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_dummy0123456789abcdefghijklmnop",
+  PORTIA_PROMOTION_DEVICE_SECRET: "dummy-device-secret-0123456789-abcdefghijklmnop",
+};
+// Names that must never reach an offline gate. Built from parts so this file never spells the privileged key name.
+const PRIVILEGED = ["SERVICE", "ROLE"].join("_");
+const PRIVILEGED_KEY = ["PORTIA_PROMO_LIVE", PRIVILEGED, "KEY"].join("_");
+type ServerStart = { worktree: string; env: Record<string, string>; buildEnv?: Record<string, string> };
+
+function harness(
+  env: Record<string, string>,
+  execImpl: (file: string, args: string[], worktree: string, runEnv: Record<string, string>) => { status: number; stdout?: string; stderr?: string },
+  server: { ok?: boolean; reason?: string; stopped?: boolean } = {},
+) {
   const base = mkdtempSync(path.join(os.tmpdir(), "phase20-gate-test-"));
   const worktree = path.join(base, "wt");
   const artifactsDir = path.join(base, "artifacts");
   mkdirSync(worktree);
   mkdirSync(artifactsDir);
-  const calls: { file: string; args: string[] }[] = [];
+  const calls: { file: string; args: string[]; env: Record<string, string> }[] = [];
+  const serverEvents: string[] = [];
+  const serverStarts: ServerStart[] = [];
   const deps = {
     fs: nodeFs,
     env,
-    exec: (file: string, args: string[]) => {
-      calls.push({ file, args });
-      const outcome = execImpl(file, args, worktree);
+    exec: (file: string, args: string[], options: { env: Record<string, string> }) => {
+      calls.push({ file, args, env: options.env });
+      const outcome = execImpl(file, args, worktree, options.env);
       return { status: outcome.status, stdout: outcome.stdout ?? "", stderr: outcome.stderr ?? "", error: null };
+    },
+    loadOfflineEnv: () => OFFLINE_VALUES,
+    startServer: (options: ServerStart) => {
+      serverEvents.push("start");
+      serverStarts.push(options);
+      return server.ok === false ? { ok: false, reason: server.reason ?? "no answer" } : { ok: true, pid: 4242 };
+    },
+    stopServer: () => {
+      serverEvents.push("stop");
+      return { stopped: server.stopped !== false, pid: 4242 };
     },
   };
   type GateOutcome = { id: string; status: string; detail?: string; reason?: string; [key: string]: unknown };
@@ -402,7 +486,11 @@ function harness(env: Record<string, string>, execImpl: (file: string, args: str
     results.push(outcome);
     return outcome;
   };
-  return { run, calls, worktree, artifactsDir, results, cleanup: () => rmSync(base, { recursive: true, force: true }) };
+  const addHarnessFile = () => {
+    mkdirSync(path.join(worktree, "tests", "e2e", "harness"), { recursive: true });
+    writeFileSync(path.join(worktree, "tests", "e2e", "harness", "offline-supabase.cjs"), "// harness\n");
+  };
+  return { run, calls, worktree, artifactsDir, results, serverEvents, serverStarts, addHarnessFile, cleanup: () => rmSync(base, { recursive: true, force: true }) };
 }
 
 const writeReport = (worktree: string, report: unknown) => {
@@ -534,24 +622,193 @@ test("runGate: missing environment variables are BLOCKED (ENV), reported by name
   blocked.cleanup();
 });
 
-test("runGate visual-phase20: without tests/e2e/visual/phase20.spec.ts the gate is BLOCKED (OWNER)", () => {
-  const absent = harness(PUBLIC_ENV, () => ({ status: 0 }));
+test("runGate visual-phase20: without tests/e2e/visual/phase20.spec.ts the gate is BLOCKED (OWNER) and nothing runs", () => {
+  const absent = harness({}, () => ({ status: 0 }));
+  absent.addHarnessFile();
   absent.results.push({ id: "npm-ci", status: "PASS" });
   const outcome = absent.run("visual-phase20");
   assert.equal(outcome.status, "BLOCKED");
   assert.equal(outcome.blockedKind, "OWNER");
   assert.match(outcome.reason, /нет одобренных эталонов 20-12/);
   assert.equal(absent.calls.length, 0);
+  assert.deepEqual(absent.serverEvents, [], "no server for a gate that cannot run");
   absent.cleanup();
-  const present = harness(PUBLIC_ENV, (_file, _args, worktree) => {
+  const present = harness({}, (_file, _args, worktree) => {
     writeReport(worktree, pwReport([{ title: "frame", tests: [pwTest("expected")] }]));
     return { status: 0 };
   });
+  present.addHarnessFile();
   mkdirSync(path.join(present.worktree, "tests", "e2e", "visual"), { recursive: true });
   writeFileSync(path.join(present.worktree, "tests", "e2e", "visual", "phase20.spec.ts"), "// spec\n");
   present.results.push({ id: "npm-ci", status: "PASS" });
-  assert.equal(present.run("visual-phase20").status, "PASS");
+  const passed = present.run("visual-phase20");
+  assert.equal(passed.status, "PASS");
+  assert.equal(passed.dataMode, "offline D-68");
   present.cleanup();
+});
+
+function offlineLane(env: Record<string, string>, report: unknown, exitCode = 0, server: { ok?: boolean; reason?: string; stopped?: boolean } = {}) {
+  const lane = harness(
+    env,
+    (_file, _args, worktree) => {
+      writeReport(worktree, report);
+      return { status: exitCode };
+    },
+    server,
+  );
+  lane.addHarnessFile();
+  lane.results.push({ id: "npm-ci", status: "PASS" });
+  return lane;
+}
+
+test("runGate offline (D-68): without the harness file in the checkout the gate is BLOCKED (ENV) and does not start", () => {
+  const lane = harness({}, () => ({ status: 0 }));
+  lane.results.push({ id: "npm-ci", status: "PASS" });
+  const outcome = lane.run("ui-contract-offline");
+  assert.equal(outcome.status, "BLOCKED");
+  assert.equal(outcome.blockedKind, "ENV");
+  assert.match(outcome.reason, /offline-supabase\.cjs/);
+  assert.equal(lane.calls.length, 0);
+  assert.deepEqual(lane.serverEvents, []);
+  lane.cleanup();
+});
+
+test("runGate offline (D-68): a server that does not answer is BLOCKED (ENV) and no Playwright step runs", () => {
+  const lane = offlineLane({}, pwReport([{ title: "t", tests: [pwTest("expected")] }]), 0, { ok: false, reason: "no answer on 127.0.0.1:3100 in 120 s" });
+  const outcome = lane.run("visual-approved");
+  assert.equal(outcome.status, "BLOCKED");
+  assert.equal(outcome.blockedKind, "ENV");
+  assert.match(outcome.reason, /127\.0\.0\.1:3100/);
+  assert.equal(lane.calls.length, 0);
+  assert.equal(outcome.dataMode, "offline D-68");
+  lane.cleanup();
+});
+
+test("runGate offline (D-68): the Playwright process gets the offline values only, the server gets the harness, both without real values", () => {
+  const real: Record<string, string> = {
+    NEXT_PUBLIC_SUPABASE_URL: "https://real-project.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "real-anon-value",
+    PORTIA_PROMOTION_DEVICE_SECRET: "real-device-secret",
+    PORTIA_E2E_TARGET_ID: "staging-1",
+    PORTIA_E2E_MUTATION_CONFIRM: "yes",
+    [PRIVILEGED_KEY]: "do-not-leak",
+    PORTIA_STAGING_DB_URL: "postgres://x",
+    NODE_OPTIONS: "--max-old-space-size=4096",
+    KEEP_ME: "kept",
+  };
+  const lane = offlineLane(real, pwReport([{ title: "t", tests: [pwTest("expected")] }]));
+  const outcome = lane.run("ui-contract-offline");
+  assert.equal(outcome.status, "PASS");
+  const stepEnv = lane.calls[0].env;
+  assert.equal(stepEnv.NEXT_PUBLIC_SUPABASE_URL, OFFLINE_VALUES.NEXT_PUBLIC_SUPABASE_URL);
+  assert.equal(stepEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, OFFLINE_VALUES.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+  assert.equal(stepEnv.PORTIA_PROMOTION_DEVICE_SECRET, OFFLINE_VALUES.PORTIA_PROMOTION_DEVICE_SECRET);
+  assert.equal(stepEnv.PORTIA_E2E_ALLOW_HTTP, "1");
+  assert.equal(stepEnv.PORTIA_E2E_BASE_URL, "http://127.0.0.1:3100");
+  assert.equal(stepEnv.KEEP_ME, "kept");
+  for (const name of ["NEXT_PUBLIC_SUPABASE_ANON_KEY", "PORTIA_E2E_TARGET_ID", "PORTIA_E2E_MUTATION_CONFIRM", PRIVILEGED_KEY, "PORTIA_STAGING_DB_URL", "NODE_OPTIONS", "PORTIA_E2E_OFFLINE_SUPABASE"]) {
+    assert.equal(stepEnv[name], undefined, `${name} must not reach the Playwright process`);
+  }
+  assert.doesNotMatch(JSON.stringify(stepEnv), /real-project|real-anon|real-device|do-not-leak/);
+  const server = lane.serverStarts[0];
+  assert.equal(server.env.PORTIA_E2E_OFFLINE_SUPABASE, "1");
+  assert.match(server.env.NODE_OPTIONS, /--require=.*tests[\\/]e2e[\\/]harness[\\/]offline-supabase\.cjs/);
+  assert.equal(server.env.NEXT_PUBLIC_SUPABASE_URL, OFFLINE_VALUES.NEXT_PUBLIC_SUPABASE_URL);
+  assert.equal(server.env.PORTIA_E2E_TARGET_ID, undefined);
+  assert.doesNotMatch(JSON.stringify(server.env), /real-project|real-anon|real-device|do-not-leak/);
+  lane.cleanup();
+});
+
+test("runGate offline (D-68): the server is started once and stopped after the gate, also when a step throws or fails", () => {
+  const ok = offlineLane({}, pwReport([{ title: "t", tests: [pwTest("expected")] }]));
+  ok.run("ui-contract-offline");
+  assert.deepEqual(ok.serverEvents, ["start", "stop"]);
+  assert.equal(ok.calls.length, 4, "four steps share one server");
+  ok.cleanup();
+  const failing = offlineLane({}, pwReport([{ title: "t", tests: [pwTest("unexpected")] }]), 1);
+  assert.equal(failing.run("visual-approved").status, "FAIL");
+  assert.deepEqual(failing.serverEvents, ["start", "stop"]);
+  failing.cleanup();
+  const throwing = harness({}, () => {
+    throw new Error("spawn exploded");
+  });
+  throwing.addHarnessFile();
+  throwing.results.push({ id: "npm-ci", status: "PASS" });
+  assert.throws(() => throwing.run("ui-contract-offline"), /spawn exploded/);
+  assert.deepEqual(throwing.serverEvents, ["start", "stop"], "stopped even when the step threw");
+  throwing.cleanup();
+});
+
+test("runGate offline (D-68): a server that cannot be stopped makes an otherwise green gate FAIL", () => {
+  const lane = offlineLane({}, pwReport([{ title: "t", tests: [pwTest("expected")] }]), 0, { stopped: false });
+  const outcome = lane.run("ui-contract-offline");
+  assert.equal(outcome.status, "FAIL");
+  assert.match(outcome.reason, /could not be stopped/);
+  lane.cleanup();
+});
+
+test("runGate offline (D-68): offline gates need npm ci first and are BLOCKED (DEP) without it", () => {
+  const lane = harness({}, () => ({ status: 0 }));
+  lane.addHarnessFile();
+  const outcome = lane.run("ui-contract-offline");
+  assert.equal(outcome.status, "BLOCKED");
+  assert.equal(outcome.blockedKind, "DEP");
+  assert.deepEqual(lane.serverEvents, []);
+  lane.cleanup();
+});
+
+test("offline environment helpers: names stripped by pattern, base URL fixed, harness only in the server env", () => {
+  const privilegedName = `SOME_${PRIVILEGED}_THING`;
+  const child = gate.offlineChildEnv({ PATH: "p", [privilegedName]: "x", PORTIA_STAGING_X: "y", NODE_OPTIONS: "n", NEXT_PUBLIC_SUPABASE_URL: "real" }, OFFLINE_VALUES);
+  assert.equal(child.PATH, "p");
+  assert.equal(child[privilegedName], undefined);
+  assert.equal(child.PORTIA_STAGING_X, undefined);
+  assert.equal(child.NODE_OPTIONS, undefined);
+  assert.equal(child.NEXT_PUBLIC_SUPABASE_URL, OFFLINE_VALUES.NEXT_PUBLIC_SUPABASE_URL);
+  const server = gate.offlineServerEnv(child, "/wt/tests/e2e/harness/offline-supabase.cjs");
+  assert.equal(server.NODE_OPTIONS, "--require=/wt/tests/e2e/harness/offline-supabase.cjs");
+  assert.equal(server.PORTIA_E2E_OFFLINE_SUPABASE, "1");
+  assert.equal(child.PORTIA_E2E_OFFLINE_SUPABASE, undefined);
+});
+
+test("classifyPlaywright (D-68): a skip by project condition is accepted only when the same test passed on another project", () => {
+  const report = pwReport([
+    { title: "two columns", tests: [pwTest("expected", { projectName: "chromium-desktop" }), pwTest("skipped", { projectName: "chromium-phone", annotations: [{ type: "skip", description: "The two-column PC layout" }] })] },
+  ]);
+  assert.equal(gate.classifyPlaywright(report).status, "SKIPPED", "by default every skip is SKIPPED");
+  const lenient = gate.classifyPlaywright(report, [], { projectSkips: true });
+  assert.equal(lenient.status, "PASS");
+  assert.equal(lenient.projectSkipped, 1);
+  assert.equal(lenient.counts.skipped, 1, "the skip is still counted");
+  const onlySkipped = gate.classifyPlaywright(
+    pwReport([
+      { title: "never ran", tests: [pwTest("skipped", { annotations: [{ type: "skip", description: "x" }] })] },
+      { title: "other", tests: [pwTest("expected")] },
+    ]),
+    [],
+    { projectSkips: true },
+  );
+  assert.equal(onlySkipped.status, "SKIPPED", "a test skipped everywhere is not covered");
+  const blocked = gate.classifyPlaywright(
+    pwReport([{ title: "data", tests: [pwTest("expected", { projectName: "chromium-desktop" }), pwTest("skipped", { projectName: "chromium-phone", annotations: [{ type: "skip", description: "BLOCKED (DATA): none" }] })] }]),
+    [],
+    { projectSkips: true },
+  );
+  assert.equal(blocked.status, "BLOCKED", "a BLOCKED skip is never excused as a project condition");
+});
+
+test("runGate offline (D-68): ui-contract-offline accepts project-condition skips, visual-approved does not", () => {
+  const report = pwReport([
+    { title: "two columns", tests: [pwTest("expected", { projectName: "chromium-desktop" }), pwTest("skipped", { projectName: "chromium-phone", annotations: [{ type: "skip", description: "PC layout" }] })] },
+  ]);
+  const ui = offlineLane({}, report);
+  const uiOutcome = ui.run("ui-contract-offline");
+  assert.equal(uiOutcome.status, "PASS");
+  assert.match(uiOutcome.reason, /project condition/);
+  ui.cleanup();
+  const visual = offlineLane({}, report);
+  assert.equal(visual.run("visual-approved").status, "SKIPPED");
+  visual.cleanup();
 });
 
 test("runGate Playwright: flaky or retried is FAIL even with exit 0; BLOCKED skips are BLOCKED; clean is PASS; the report is copied", () => {
@@ -610,14 +867,15 @@ test("runGate Playwright: the e2e gate with a waiver registry marks only an owne
   pending.cleanup();
 });
 
-test("main --plan prints all sixteen gate ids and runs nothing", () => {
+test("main --plan prints all seventeen gate ids and runs nothing", () => {
   let out = "";
   let executed = 0;
   const code = gate.main(["--plan"], { out: (text: string) => { out += text; }, exec: () => { executed += 1; return { status: 0 }; }, git: () => { executed += 1; return { status: 0 }; } });
   assert.equal(code, 0);
   assert.equal(executed, 0);
   for (const entry of gate.GATES) assert.ok(out.includes(entry.id), entry.id);
-  assert.match(out, /^16 gates/);
+  assert.match(out, /^17 gates/);
+  assert.match(out, /ui-contract-offline/);
 });
 
 test("main --run refuses PORTIA_E2E_TARGET_ENVIRONMENT=production before touching git", () => {
@@ -682,13 +940,22 @@ function fullRun(overrides: Record<string, unknown> = {}, gateStatus: (id: strin
     env: gate.envPresence(["NEXT_PUBLIC_SUPABASE_URL"], {}),
     d33: D33_FIXTURE,
     decisions: DECISION_FIXTURE,
+    visual: VISUAL_FIXTURE,
     verdict: "PASS",
     reasons: [],
     ...overrides,
   };
 }
 
-const depsOk = { commitExists: () => true, matrix: CLEAN_MATRIX };
+const OWNER_COMMIT = "0c2a59d1d1a7e805ccd48612cdb93ddf5ec7f1f1";
+const OWNER_SUMMARY = (verdict = "accepted", date = "2026-11-08") =>
+  `---\nphase: PORTIA-20\nplan: 58\nstatus: complete\nowner_verdict: ${verdict}\nowner_verdict_date: ${date}\nowner_verdict_commit: ${OWNER_COMMIT}\n---\n\n# Summary\n\n## Вердикт владельца (D-68)\n\n> а) да. принято\n`;
+const VISUAL_FIXTURE: Row[] = [
+  { id: "Общий вердикт", status: "ПРИНЯТО ВЛАДЕЛЬЦЕМ 2026-11-08", evidence: `owner_verdict: accepted; коммит ${OWNER_COMMIT}; цитата: «а) да. принято»` },
+  { id: "Эталоны 20-12", status: "56 строк реестра; BLOCKED: reviewer, motion", evidence: `phase20-baselines.json, коммит вердикта реестра: ${OWNER_COMMIT}` },
+  { id: "Код продукта", status: "НЕ ИЗМЕНЁН", evidence: `git diff --name-only ${OWNER_COMMIT} ${COMMIT} -- app components public lib: пусто` },
+];
+const depsOk = { commitExists: () => true, matrix: CLEAN_MATRIX, ownerSummary: OWNER_SUMMARY(), baselinesCommit: OWNER_COMMIT, productChanges: (): string[] => [] };
 const verify = (markdown: string, deps: Record<string, unknown> = depsOk): string[] => gate.verifyEvidence(markdown, deps);
 const goodEvidence = () => gate.renderEvidence(fullRun());
 const removeLine = (markdown: string, needle: string) => markdown.split("\n").filter((line) => !line.includes(needle)).join("\n");
@@ -774,13 +1041,13 @@ test("verifyEvidence: a waived FAIL allows only PASS-WITH-OWNER-WAIVERS", () => 
 });
 
 test("verifyEvidence: verdict PASS is refused while the matrix lists a high blocker", () => {
-  const errors = verify(goodEvidence(), { commitExists: () => true, matrix: BLOCKER_MATRIX });
+  const errors = verify(goodEvidence(), { ...depsOk, matrix: BLOCKER_MATRIX });
   mentions(errors, /unresolved high blocker\(s\) in the security matrix \(SEC20-99\)/);
   const waivers = gate.renderEvidence(fullRun({ verdict: "PASS-WITH-OWNER-WAIVERS" }, (id: string) => (id === "e2e-full" ? { status: "FAIL", waived: true, exitCode: 1 } : {})));
-  mentions(verify(waivers, { commitExists: () => true, matrix: BLOCKER_MATRIX }), /unresolved high blocker/);
+  mentions(verify(waivers, { ...depsOk, matrix: BLOCKER_MATRIX }), /unresolved high blocker/);
   const failVerdict = gate.renderEvidence(fullRun({ verdict: "FAIL" }, (id: string) => (id === "unit" ? { status: "FAIL", exitCode: 1 } : {})));
-  assert.deepEqual(verify(failVerdict, { commitExists: () => true, matrix: BLOCKER_MATRIX }), [], "a FAIL verdict is consistent with a blocker");
-  mentions(verify(goodEvidence(), { commitExists: () => true, matrix: null }), /«Блокеры релиза \(D-12\)» is unreadable/);
+  assert.deepEqual(verify(failVerdict, { ...depsOk, matrix: BLOCKER_MATRIX }), [], "a FAIL verdict is consistent with a blocker");
+  mentions(verify(goodEvidence(), { ...depsOk, matrix: null }), /«Блокеры релиза \(D-12\)» is unreadable/);
   assert.deepEqual(gate.matrixBlockers(CLEAN_MATRIX), []);
   assert.deepEqual(gate.matrixBlockers(BLOCKER_MATRIX), ["SEC20-99"]);
   assert.equal(gate.matrixBlockers("# no section"), null);
@@ -789,7 +1056,7 @@ test("verifyEvidence: verdict PASS is refused while the matrix lists a high bloc
 test("verifyEvidence: the commit must be a full 40-hex sha that exists", () => {
   mentions(verify(goodEvidence().replace(COMMIT, "0123456")), /commit is missing or not a full 40-hex sha/);
   mentions(verify(goodEvidence().replace(/^Commit:.*$/m, "")), /commit is missing/);
-  mentions(verify(goodEvidence(), { commitExists: () => false, matrix: CLEAN_MATRIX }), /does not exist in this repository/);
+  mentions(verify(goodEvidence(), { ...depsOk, commitExists: () => false }), /does not exist in this repository/);
 });
 
 test("verifyEvidence: a partial run, a missing gate row, a wrong Node and a missing verdict are rejected", () => {
@@ -800,6 +1067,12 @@ test("verifyEvidence: a partial run, a missing gate row, a wrong Node and a miss
   mentions(verify(goodEvidence().replace(/^Итог: .*$/m, "Итог: DONE")), /unknown \("DONE"\)/);
   assert.deepEqual(verify(""), ["evidence is empty"]);
 });
+
+function writeOwnerFiles(base: string, summary = OWNER_SUMMARY()) {
+  writeFileSync(path.join(base, gate.PHASE_DIR, "20-58-SUMMARY.md"), summary);
+  mkdirSync(path.join(base, "tests", "e2e", "visual"), { recursive: true });
+  writeFileSync(path.join(base, gate.BASELINES_JSON), JSON.stringify({ schema: "portia-phase20-baselines-v1", ownerVerdict: { commit: OWNER_COMMIT }, rows: [{}, {}] }));
+}
 
 test("main --verify-evidence: a missing protocol exits non-zero with «20-RELEASE-EVIDENCE.md not found»", () => {
   const base = mkdtempSync(path.join(os.tmpdir(), "phase20-evidence-test-"));
@@ -815,6 +1088,7 @@ test("main --verify-evidence: reads the protocol and the matrix, exits 0 for a v
   mkdirSync(path.join(base, gate.PHASE_DIR), { recursive: true });
   writeFileSync(path.join(base, gate.MATRIX_MD), CLEAN_MATRIX);
   writeFileSync(path.join(base, gate.EVIDENCE_MD), goodEvidence());
+  writeOwnerFiles(base);
   let out = "";
   let err = "";
   const deps = { root: base, git: () => ({ status: 0, stdout: "", stderr: "" }), out: (text: string) => { out += text; }, err: (text: string) => { err += text; } };
@@ -837,6 +1111,7 @@ test("main --verify-evidence: extra verifiers (20-15 lineage, docs, reconciliati
   mkdirSync(path.join(base, gate.PHASE_DIR), { recursive: true });
   writeFileSync(path.join(base, gate.MATRIX_MD), CLEAN_MATRIX);
   writeFileSync(path.join(base, gate.EVIDENCE_MD), goodEvidence());
+  writeOwnerFiles(base);
   let err = "";
   const code = gate.main(["--verify-evidence"], {
     root: base,
@@ -847,5 +1122,157 @@ test("main --verify-evidence: extra verifiers (20-15 lineage, docs, reconciliati
   });
   assert.equal(code, 1);
   assert.match(err, /lineage: example problem/);
+  rmSync(base, { recursive: true, force: true });
+});
+
+// --- D-68: data mode column and «Визуальная приёмка владельца (D-68)» -------------------------------------------------------
+
+const withVisual = (rows: Row[]) => gate.renderEvidence(fullRun({ visual: rows }));
+const visualRow = (id: string, patch: Partial<Row>): Row[] => VISUAL_FIXTURE.map((row) => (row.id === id ? { ...row, ...patch } : row));
+
+test("renderEvidence (D-68): the gate table has the «Данные» column; the three offline gates read «offline D-68»", () => {
+  const markdown = goodEvidence();
+  assert.match(markdown, /\| Gate \| Команда \| Exit \| Статус \| Passed\/Failed\/Skipped\/Flaky \| Артефакты \| Данные \|/);
+  for (const id of OFFLINE_GATES) assert.match(markdown, new RegExp(`^\\| ${id} \\|.*\\| offline D-68 \\|$`, "m"), id);
+  assert.match(markdown, /^\| e2e-mutation \|.*\| staging \|$/m);
+  assert.match(markdown, /^\| unit \|.*\| - \|$/m);
+  assert.match(markdown, /^## Визуальная приёмка владельца \(D-68\)$/m);
+});
+
+test("verifyEvidence (D-68): an offline gate row without «offline D-68» is rejected", () => {
+  for (const id of OFFLINE_GATES) {
+    const lines = goodEvidence().split("\n").map((line) => (line.startsWith(`| ${id} |`) ? line.replace(/\| offline D-68 \|$/, "| цель |") : line));
+    mentions(verify(lines.join("\n")), new RegExp(`${id}: offline gate row must carry the data mode «offline D-68»`));
+  }
+  const noColumn = goodEvidence().split("\n").map((line) => (line.startsWith("| visual-phase20 |") ? line.replace(/ \| offline D-68 \|$/, " |") : line));
+  mentions(verify(noColumn.join("\n")), /visual-phase20: offline gate row must carry the data mode/);
+});
+
+test("verifyEvidence (D-68): a protocol without the visual acceptance section, or without one of its rows, is rejected", () => {
+  mentions(verify(gate.renderEvidence(fullRun({ visual: undefined }))), /«Визуальная приёмка владельца \(D-68\)» is missing/);
+  for (const row of VISUAL_FIXTURE) {
+    mentions(verify(removeLine(goodEvidence(), `| ${row.id} |`)), new RegExp(`${row.id}: visual acceptance row is missing`));
+  }
+});
+
+test("verifyEvidence (D-68): PASS in the «Общий вердикт» row is an agent verdict and is rejected", () => {
+  mentions(verify(withVisual(visualRow("Общий вердикт", { status: "PASS" }))), /Общий вердикт: .*must not contain PASS/);
+  mentions(verify(withVisual(visualRow("Общий вердикт", { evidence: "принято, PASS агента" }))), /Общий вердикт: .*must not contain PASS/);
+  mentions(verify(withVisual(visualRow("Общий вердикт", { status: "принято" }))), /Общий вердикт: status must be/);
+});
+
+test("verifyEvidence (D-68): «ПРИНЯТО ВЛАДЕЛЬЦЕМ» needs owner_verdict: accepted and the same date in 20-58-SUMMARY.md", () => {
+  mentions(verify(goodEvidence(), { ...depsOk, ownerSummary: OWNER_SUMMARY("fixes-requested") }), /ПРИНЯТО ВЛАДЕЛЬЦЕМ, but 20-58-SUMMARY\.md has owner_verdict "fixes-requested"/);
+  mentions(verify(goodEvidence(), { ...depsOk, ownerSummary: OWNER_SUMMARY("accepted", "2026-11-09") }), /date 2026-11-08 differs from owner_verdict_date 2026-11-09/);
+  mentions(verify(goodEvidence(), { ...depsOk, ownerSummary: null }), /20-58-SUMMARY\.md is unreadable/);
+  mentions(verify(goodEvidence(), { ...depsOk, ownerSummary: "no frontmatter at all" }), /ПРИНЯТО ВЛАДЕЛЬЦЕМ, but 20-58-SUMMARY\.md has owner_verdict ""/);
+});
+
+test("verifyEvidence (D-68): the honest non-accepted verdicts are allowed and cap the run verdict below PASS", () => {
+  const waiting = visualRow("Общий вердикт", { status: "ОЖИДАЕТ ВЛАДЕЛЬЦА", evidence: "owner_verdict отсутствует" });
+  const blockedRun = (verdict: string) => gate.renderEvidence(fullRun({ verdict, visual: waiting }));
+  assert.deepEqual(verify(blockedRun("BLOCKED")), []);
+  mentions(verify(blockedRun("PASS")), /verdict PASS needs «Общий вердикт» = «ПРИНЯТО ВЛАДЕЛЬЦЕМ/);
+  const fix = visualRow("Общий вердикт", { status: "ИСПРАВИТЬ (владелец) 2026-11-08", evidence: "fixes-requested" });
+  assert.deepEqual(verify(gate.renderEvidence(fullRun({ verdict: "FAIL", visual: fix })), depsOk), []);
+  mentions(verify(gate.renderEvidence(fullRun({ verdict: "PASS", visual: fix }))), /verdict PASS needs «Общий вердикт»/);
+  mentions(verify(gate.renderEvidence(fullRun({ verdict: "PASS-WITH-OWNER-WAIVERS", visual: waiting }))), /needs «Общий вердикт»/);
+});
+
+test("verifyEvidence (D-68): «Эталоны 20-12» must name the verdict commit of 20-58-SUMMARY.md and of the register", () => {
+  const other = "1111111111111111111111111111111111111111";
+  mentions(verify(withVisual(visualRow("Эталоны 20-12", { evidence: `коммит вердикта реестра: ${other}` }))), /Эталоны 20-12: commit .* differs from owner_verdict_commit/);
+  mentions(verify(withVisual(visualRow("Эталоны 20-12", { evidence: "без коммита" }))), /Эталоны 20-12: no verdict commit/);
+  mentions(verify(goodEvidence(), { ...depsOk, baselinesCommit: other }), /register phase20-baselines\.json has ownerVerdict\.commit/);
+});
+
+test("verifyEvidence (D-68): «Код продукта» is НЕ ИЗМЕНЁН, ИЗМЕНЁН ПОСЛЕ ВЕРДИКТА: <файлы> or BLOCKED; the runner recomputes it", () => {
+  mentions(verify(withVisual(visualRow("Код продукта", { status: "всё хорошо" }))), /Код продукта: status must be/);
+  mentions(verify(goodEvidence(), { ...depsOk, productChanges: () => ["components/portia-desktop.tsx"] }), /Код продукта: claims НЕ ИЗМЕНЁН but .*components\/portia-desktop\.tsx/);
+  mentions(verify(goodEvidence(), { ...depsOk, productChanges: () => null }), /Код продукта: .* cannot be recomputed/);
+  const changed = visualRow("Код продукта", { status: "ИЗМЕНЁН ПОСЛЕ ВЕРДИКТА: components/portia-desktop.tsx" });
+  assert.deepEqual(verify(gate.renderEvidence(fullRun({ verdict: "FAIL", visual: changed })), { ...depsOk, productChanges: () => ["components/portia-desktop.tsx"] }), []);
+  mentions(verify(gate.renderEvidence(fullRun({ verdict: "PASS", visual: changed })), { ...depsOk, productChanges: () => ["components/portia-desktop.tsx"] }), /verdict PASS needs «Код продукта» = «НЕ ИЗМЕНЁН»/);
+  const blocked = visualRow("Код продукта", { status: "BLOCKED (ENV): git diff не выполнен" });
+  mentions(verify(gate.renderEvidence(fullRun({ verdict: "PASS", visual: blocked }))), /verdict PASS needs «Код продукта»/);
+});
+
+test("verifyEvidence (D-68): a PASS-class verdict needs ui-contract-offline, visual-approved, visual-phase20 and visual-manifest to be PASS, not a waived FAIL", () => {
+  for (const id of ["ui-contract-offline", "visual-approved", "visual-phase20", "visual-manifest"]) {
+    const waived = gate.renderEvidence(fullRun({ verdict: "PASS-WITH-OWNER-WAIVERS" }, (gateId: string) => (gateId === id ? { status: "FAIL", waived: true, exitCode: 1 } : {})));
+    mentions(verify(waived), new RegExp(`verdict PASS-WITH-OWNER-WAIVERS needs ${id} = PASS`));
+  }
+  const honest = gate.renderEvidence(fullRun({ verdict: "FAIL" }, (id: string) => (id === "visual-approved" ? { status: "FAIL", exitCode: 1 } : {})));
+  assert.deepEqual(verify(honest), [], "a red visual gate under a FAIL verdict is the honest record");
+});
+
+test("readOwnerVerdict and ownerStatusText map the frontmatter of 20-58-SUMMARY.md, never inventing an acceptance", () => {
+  const owner = gate.readOwnerVerdict(OWNER_SUMMARY());
+  assert.deepEqual(owner, { verdict: "accepted", date: "2026-11-08", commit: OWNER_COMMIT });
+  assert.equal(gate.ownerStatusText(owner), "ПРИНЯТО ВЛАДЕЛЬЦЕМ 2026-11-08");
+  assert.equal(gate.ownerStatusText(gate.readOwnerVerdict(OWNER_SUMMARY("fixes-requested"))), "ИСПРАВИТЬ (владелец) 2026-11-08");
+  assert.equal(gate.ownerStatusText(gate.readOwnerVerdict(OWNER_SUMMARY("ambiguous"))), "ОЖИДАЕТ ВЛАДЕЛЬЦА");
+  assert.equal(gate.ownerStatusText(gate.readOwnerVerdict("---\nplan: 58\n---\n")), "ОЖИДАЕТ ВЛАДЕЛЬЦА");
+  assert.equal(gate.ownerStatusText(gate.readOwnerVerdict(OWNER_SUMMARY("accepted", "")) ), "ОЖИДАЕТ ВЛАДЕЛЬЦА", "accepted without a date is not recorded as accepted");
+  assert.equal(gate.ownerStatusText(null), "ОЖИДАЕТ ВЛАДЕЛЬЦА");
+  assert.equal(gate.readOwnerVerdict("no frontmatter"), null);
+  assert.doesNotMatch(readFileSync(new URL("../scripts/phase20-release-gate.mjs", import.meta.url), "utf8"), /["'`]ПРИНЯТО ВЛАДЕЛЬЦЕМ["'`]\s*;/, "the status text is only built from a read verdict");
+});
+
+test("productCodeChanges lists non-test product files between the verdict commit and the release commit; a git error is null", () => {
+  const calls: string[][] = [];
+  const git = (args: string[]) => {
+    calls.push(args);
+    return { status: 0, stdout: "lib/x.test.ts\ncomponents/portia-desktop.tsx\nlib/y.ts\n", stderr: "" };
+  };
+  assert.deepEqual(gate.productCodeChanges({ git }, OWNER_COMMIT, COMMIT), ["components/portia-desktop.tsx", "lib/y.ts"]);
+  assert.deepEqual(calls[0], ["diff", "--name-only", OWNER_COMMIT, COMMIT, "--", "app", "components", "public", "lib"]);
+  assert.deepEqual(gate.productCodeChanges({ git: () => ({ status: 0, stdout: "lib/only.test.ts\n", stderr: "" }) }, OWNER_COMMIT, COMMIT), []);
+  assert.equal(gate.productCodeChanges({ git: () => ({ status: 128, stdout: "", stderr: "bad object" }) }, OWNER_COMMIT, COMMIT), null);
+  assert.equal(gate.productCodeChanges({ git }, "", COMMIT), null, "no verdict commit: nothing to compare");
+});
+
+test("visualAcceptanceRows and applyVisualAcceptance: a missing verdict, changed code or an unreadable diff keep the run below PASS", () => {
+  const accepted = gate.visualAcceptanceRows({ owner: gate.readOwnerVerdict(OWNER_SUMMARY()), baselines: { commit: OWNER_COMMIT, rows: 56 }, changed: [], releaseCommit: COMMIT });
+  assert.deepEqual(accepted.map((row: Row) => row.id), ["Общий вердикт", "Эталоны 20-12", "Код продукта"]);
+  assert.equal(accepted[0].status, "ПРИНЯТО ВЛАДЕЛЬЦЕМ 2026-11-08");
+  assert.match(accepted[1].status, /^56 строк реестра/);
+  assert.equal(accepted[2].status, "НЕ ИЗМЕНЁН");
+  assert.deepEqual(gate.applyVisualAcceptance("PASS", accepted), { verdict: "PASS", reasons: [] });
+  const waiting = gate.visualAcceptanceRows({ owner: null, baselines: null, changed: null, releaseCommit: COMMIT });
+  assert.equal(waiting[0].status, "ОЖИДАЕТ ВЛАДЕЛЬЦА");
+  assert.match(waiting[1].status, /^BLOCKED/);
+  assert.match(waiting[2].status, /^BLOCKED/);
+  assert.equal(gate.applyVisualAcceptance("PASS", waiting).verdict, "BLOCKED");
+  assert.equal(gate.applyVisualAcceptance("PASS-WITH-OWNER-WAIVERS", waiting).verdict, "BLOCKED");
+  const changed = gate.visualAcceptanceRows({ owner: gate.readOwnerVerdict(OWNER_SUMMARY()), baselines: { commit: OWNER_COMMIT, rows: 56 }, changed: ["lib/y.ts"], releaseCommit: COMMIT });
+  assert.equal(changed[2].status, "ИЗМЕНЁН ПОСЛЕ ВЕРДИКТА: lib/y.ts");
+  assert.equal(gate.applyVisualAcceptance("PASS", changed).verdict, "FAIL");
+  const fix = gate.visualAcceptanceRows({ owner: gate.readOwnerVerdict(OWNER_SUMMARY("fixes-requested")), baselines: { commit: OWNER_COMMIT, rows: 56 }, changed: [], releaseCommit: COMMIT });
+  assert.equal(gate.applyVisualAcceptance("PASS", fix).verdict, "FAIL");
+  assert.equal(gate.applyVisualAcceptance("FAIL", waiting).verdict, "FAIL", "a worse verdict stays");
+  assert.equal(gate.applyVisualAcceptance("BLOCKED", fix).verdict, "FAIL", "a fix request beats BLOCKED");
+});
+
+test("the runner never reads 20-VISUAL-APPROVAL.md and carries the harness, the section and the offline gate by name", () => {
+  const source = readFileSync(new URL("../scripts/phase20-release-gate.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /VISUAL-APPROVAL/);
+  assert.match(source, /offline-supabase/);
+  assert.match(source, /Визуальная приёмка владельца \(D-68\)/);
+  assert.match(source, /ui-contract-offline/);
+  assert.doesNotMatch(source, new RegExp(["service", "role"].join("_"), "i"), "the privileged key name is never spelled in the runner");
+});
+
+test("main --verify-evidence (D-68): an accepted verdict with changed product code is rejected through git", () => {
+  const base = mkdtempSync(path.join(os.tmpdir(), "phase20-evidence-test-"));
+  mkdirSync(path.join(base, gate.PHASE_DIR), { recursive: true });
+  writeFileSync(path.join(base, gate.MATRIX_MD), CLEAN_MATRIX);
+  writeFileSync(path.join(base, gate.EVIDENCE_MD), goodEvidence());
+  writeOwnerFiles(base);
+  let err = "";
+  const git = (args: string[]) => (args[0] === "diff" ? { status: 0, stdout: "components/portia-desktop.tsx\n", stderr: "" } : { status: 0, stdout: "", stderr: "" });
+  const code = gate.main(["--verify-evidence"], { root: base, git, out: () => {}, err: (text: string) => { err += text; } });
+  assert.equal(code, 1);
+  assert.match(err, /Код продукта: claims НЕ ИЗМЕНЁН/);
   rmSync(base, { recursive: true, force: true });
 });
