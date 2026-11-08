@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-63-PLAN.md
-last_updated: "2026-11-08T18:27:42.096Z"
+stopped_at: Completed PORTIA-20-14-PLAN.md
+last_updated: "2026-11-08T18:38:55.131Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: 8eec771bd5e0075efcea73d6c499d3b0dfc4c10e
+state_head: 483df1f1507ca3c6f27b321a08c2747428eae1f6
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 134
-  completed_plans: 132
+  completed_plans: 133
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 38 of 47
+Plan: 39 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-08 — Phase PORTIA-20 execution resumed (wave continue)
 
@@ -164,6 +164,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P61 | multi-session | 3 tasks | 4 files |
 | Phase 20 P62 | multi-session | 2 tasks | 7 files |
 | Phase PORTIA-20 P63 | 40min | 2 tasks | 4 files |
+| Phase PORTIA-20 P20-14 | about 10 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -305,6 +306,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: D-69 G2 (20-61): approved phone-webkit frame was taken while the closed Settings window still stood in the page flow (scrollbar 10 px, 30 px shift); removed by 7b31bdd (18-01) and 23c1c85 (quick 261104-m6g); same Playwright 1.64.1 and WebKit 27.2, so not environment; baseline replaced as accepted-redesign with supersedes ccf89983
 - [Phase 20]: D-69 G3 (20-62): motion scene nondeterminism had three causes (spider head start on a post-load parked clock, endless dew phase, finite Vivian transitions) plus an aborted /api/employees; fixed by parking before load, 16 ms grid alignment and settleAnimations (Animation objects only); policy unchanged; activity/offended/recovery replaced as deterministic-capture with supersedes
 - [Phase PORTIA-20]: D-69 G6: the rehearsal is repeated by one full run on f49aa00f2b98, verdict BLOCKED (environment lanes only, no FAIL of product, UI contract or baselines); the effective owner verdict is read by readEffectiveOwnerVerdict (chain owner_verdict_renews), baselines stay with 20-58
+- [Phase PORTIA-20]: 20-14 (D-70): UAT ledger records the owner's refusal of device acceptance in his words; verdicts are ПРИНЯТО ВЛАДЕЛЬЦЕМ БЕЗ UAT (D-70), never PASS; 80 steps not checked, MEDIA-01 and PROMO-03 stay BLOCKED on both devices; PORTIA_REQUIRE_UAT=1 stays red (not acceptance); STAB-REL-05..08 and STAB-A11Y-01..04 not marked complete (accepted debt, statuses by 20-15)
 
 ### Pending Todos
 
@@ -349,8 +351,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-08T18:27:41.526Z
-Stopped at: Completed PORTIA-20-63-PLAN.md
+Last session: 2026-11-08T18:38:54.570Z
+Stopped at: Completed PORTIA-20-14-PLAN.md
 Resume file: None
 
 ## Operator Next Step
