@@ -1837,6 +1837,179 @@ export function verifyDocs(deps) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// 20-15 Task 3: --verify-reconciliation and --verify-independent.
+
+export const RELEASE_SUMMARY_MD = `${PHASE_DIR}/20-RELEASE-SUMMARY.md`;
+export const RELEASE_VERIFICATION_MD = `${PHASE_DIR}/20-RELEASE-VERIFICATION.md`;
+export const DEPLOYED_EVIDENCE_MD = `${PHASE_DIR}/20-DEPLOYED-EVIDENCE.md`;
+export const CLASS_MIGRATION_EVIDENCE_MD = `${PHASE_DIR}/20-CLASS-MIGRATION-EVIDENCE.md`;
+export const EDITOR_NOTES_EVIDENCE_MD = `${PHASE_DIR}/20-EDITOR-NOTES-EVIDENCE.md`;
+/** Lower bound of 20-NN-PLAN.md files (20-01 ... 20-58): protects against an empty or truncated listing. The real count is read from the files. */
+export const MIN_PLAN_FILES = 58;
+export const SELF_PLAN = 15;
+export const SELF_ROW_NOTE = "SUMMARY создаётся после гейта; проверяется --verify-independent";
+/** Paths that may change after the FRC: planning documents and the check modes of this plan. */
+export const POST_FRC_PATHS = Object.freeze([".planning/", "scripts/phase20-release-gate.mjs", "lib/phase20-release-gate.test.ts"]);
+const VERIFICATION_STATUSES = Object.freeze(["PASS", "FAIL", "BLOCKED", "Принятый долг (D-70)"]);
+
+/** Numbers of the 20-NN-PLAN.md files of the phase directory, ascending; the list and every count derive from the files. */
+export function listPlans(deps) {
+  let names = [];
+  try { names = deps.fs.readdirSync(path.join(deps.root, PHASE_DIR)).map(String); } catch { names = []; }
+  return names.map((name) => Number(name.match(/^20-(\d+)-PLAN\.md$/)?.[1] ?? Number.NaN)).filter((plan) => Number.isInteger(plan)).sort((a, b) => a - b);
+}
+
+const planId = (plan) => `20-${String(plan).padStart(2, "0")}`;
+const COMMIT_TOKEN = /\b(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b/;
+
+/**
+ * --verify-reconciliation: lineage and docs checks, SUMMARY of every plan but 20-15, the crosswalk, release verification, deployed evidence,
+ * the «Итог релиза» line in three documents and the files changed after the FRC. Returns the list of problems.
+ */
+export function verifyReconciliation(deps) {
+  const errors = [...verifyLineage(deps), ...verifyDocs(deps)];
+  const reconciliation = readRelative(deps, RECONCILIATION_MD);
+  if (reconciliation === null) return errors;
+  const frc = frontField(reconciliation, "final_release_commit");
+  const short = (sha) => String(sha).slice(0, 12);
+  const plans = listPlans(deps);
+  if (plans.length < MIN_PLAN_FILES) errors.push(`перечислено меньше ${MIN_PLAN_FILES} файлов 20-NN-PLAN.md (${plans.length}): список пуст или усечён`);
+
+  const crosswalkText = readRelative(deps, RELEASE_SUMMARY_MD);
+  const crosswalk = new Map();
+  if (crosswalkText === null) errors.push("20-RELEASE-SUMMARY.md не найден");
+  else for (const line of normalizeText(crosswalkText).split("\n")) {
+    if (!line.trimStart().startsWith("|")) continue;
+    const row = cells(line);
+    if (/^20-\d+$/.test(row[0] ?? "")) crosswalk.set(row[0], row);
+  }
+
+  for (const plan of plans) {
+    const id = planId(plan);
+    const row = crosswalk.get(id);
+    if (crosswalkText !== null && !row) errors.push(`${id}: нет строки crosswalk в 20-RELEASE-SUMMARY.md`);
+    if (plan === SELF_PLAN) {
+      if (row && !row.join(" ").includes(SELF_ROW_NOTE)) errors.push(`${id}: строка crosswalk без пометки «${SELF_ROW_NOTE}»`);
+      continue;
+    }
+    const name = `${id}-SUMMARY.md`;
+    const text = readRelative(deps, `${PHASE_DIR}/${name}`);
+    if (text === null) { errors.push(`${name}: SUMMARY отсутствует`); continue; }
+    if (!/^status:\s*complete/m.test(normalizeText(text).match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "")) errors.push(`${name}: status не complete`);
+    if (!/^[0-9a-f]{7,40}$/.test(frontField(text, "plan_head_after")) && !COMMIT_TOKEN.test(text)) errors.push(`${name}: в SUMMARY нет commit`);
+    if (row && !String(row[1] ?? "").includes(name)) errors.push(`${id}: строка crosswalk не называет ${name}`);
+    if (row && !COMMIT_TOKEN.test(String(row[2] ?? ""))) errors.push(`${id}: в строке crosswalk нет commit`);
+    if (plan === 14 && row && !row.join(" ").includes(D70_VERDICT)) errors.push(`${id}: строка crosswalk не содержит «${D70_VERDICT}»`);
+  }
+
+  // Release verification: a row per Phase 20 ID, consistent with REQUIREMENTS.md.
+  const requirements = parseRequirements(readRelative(deps, REQUIREMENTS_MD));
+  const verificationText = readRelative(deps, RELEASE_VERIFICATION_MD);
+  if (verificationText === null) errors.push("20-RELEASE-VERIFICATION.md не найден");
+  else {
+    const byId = new Map();
+    for (const line of normalizeText(verificationText).split("\n")) {
+      if (!line.trimStart().startsWith("|")) continue;
+      const row = cells(line);
+      if (/^STAB-[A-Z0-9]+-\d+$/.test(row[0] ?? "")) byId.set(row[0], row);
+    }
+    for (const id of roadmapPhaseIds(readRelative(deps, ROADMAP_MD))) {
+      const row = byId.get(id);
+      if (!row) { errors.push(`${id}: нет строки в 20-RELEASE-VERIFICATION.md`); continue; }
+      const status = String(row[1] ?? "").trim();
+      const entry = requirements.trace.get(id);
+      if (!VERIFICATION_STATUSES.includes(status)) errors.push(`${id}: статус «${status}» в 20-RELEASE-VERIFICATION.md вне ${VERIFICATION_STATUSES.join(", ")}`);
+      else if (entry?.status === DEBT_TRACE_STATUS && status === "PASS") errors.push(`${id}: PASS у принятого долга в 20-RELEASE-VERIFICATION.md`);
+      else if (entry?.status === DEBT_TRACE_STATUS && status !== "Принятый долг (D-70)") errors.push(`${id}: статус «${status}» в 20-RELEASE-VERIFICATION.md расходится с REQUIREMENTS.md (${DEBT_TRACE_STATUS})`);
+      else if (entry?.status === "Complete" && status !== "PASS") errors.push(`${id}: статус «${status}» в 20-RELEASE-VERIFICATION.md расходится с REQUIREMENTS.md (Complete)`);
+      else if (status === "Принятый долг (D-70)" && entry?.status !== DEBT_TRACE_STATUS) errors.push(`${id}: «Принятый долг (D-70)» в 20-RELEASE-VERIFICATION.md расходится с REQUIREMENTS.md (${entry?.status ?? "нет строки"})`);
+      if (!String(row[3] ?? "").includes(frc)) errors.push(`${id}: в 20-RELEASE-VERIFICATION.md нет FRC ${short(frc)}`);
+      if (String(row[2] ?? "").trim() === "") errors.push(`${id}: в 20-RELEASE-VERIFICATION.md нет источника`);
+    }
+    if (!normalizeText(verificationText).includes(`Приёмка на устройствах: ${D70_VERDICT}`)) errors.push(`20-RELEASE-VERIFICATION.md: нет строки «Приёмка на устройствах: ${D70_VERDICT}»`);
+  }
+
+  // «Итог релиза» is one and the same in three documents and never PASS.
+  const expected = readReconciliationVerdicts(reconciliation).release;
+  for (const [label, text] of [["20-RELEASE-SUMMARY.md", crosswalkText], ["20-RELEASE-VERIFICATION.md", verificationText]]) {
+    if (text === null) continue;
+    const value = normalizeText(text).match(/^Итог релиза:[ \t]*(.+?)[ \t]*$/m)?.[1];
+    if (value === undefined) errors.push(`нет строки «Итог релиза:» в ${label}`);
+    else if (value === "PASS") errors.push(`Итог релиза: PASS в ${label} невозможен при принятом риске владельца (D-70)`);
+    else if (value !== expected) errors.push(`Итог релиза: ${value} в ${label} не равен 20-RECONCILIATION.md (${expected ?? "нет"})`);
+  }
+
+  // Deployed evidence: trusted metadata or an explicit BLOCKED.
+  const deployed = readRelative(deps, DEPLOYED_EVIDENCE_MD);
+  if (deployed === null) errors.push("20-DEPLOYED-EVIDENCE.md не найден");
+  else {
+    const body = normalizeText(deployed);
+    const hasDeploy = /^Deploy ID:\s*\S+/m.test(body);
+    const blocked = /^Статус:\s*BLOCKED\b/m.test(body);
+    if (hasDeploy) {
+      if (!/^Commit:\s*[0-9a-f]{7,40}\b/m.test(body) || !/^Источник:\s*\S/m.test(body)) errors.push("20-DEPLOYED-EVIDENCE.md: неподтверждённый deploy (нужны Commit и Источник доверенных метаданных)");
+    } else if (!blocked) errors.push("20-DEPLOYED-EVIDENCE.md: неподтверждённый deploy (нет метаданных и нет явного BLOCKED)");
+    if (blocked && /^Статус:\s*PASS\b/m.test(body)) errors.push("20-DEPLOYED-EVIDENCE.md: BLOCKED назван PASS");
+  }
+
+  for (const file of [UAT_MD, CLASS_MIGRATION_EVIDENCE_MD, EDITOR_NOTES_EVIDENCE_MD]) {
+    if (readRelative(deps, file) === null) errors.push(`${path.posix.basename(file)}: источник сверки не найден`);
+  }
+
+  // After the FRC only planning documents and the check modes of this plan change.
+  if (/^[0-9a-f]{40}$/.test(frc)) {
+    const diff = deps.git(["diff", "--name-only", frc, "HEAD"]);
+    if (diff.status !== 0) errors.push(`git diff FRC..HEAD не выполнен: изменения после ${short(frc)} неизвестны`);
+    else for (const file of String(diff.stdout ?? "").split("\n").map((line) => line.trim()).filter(Boolean)) {
+      if (!POST_FRC_PATHS.some((allowed) => (allowed.endsWith("/") ? file.startsWith(allowed) : file === allowed))) errors.push(`после FRC ${short(frc)} изменён файл вне разрешённых путей: ${file}`);
+    }
+  }
+  return errors;
+}
+
+/**
+ * --verify-independent: the post-verifier gate. 20-15-SUMMARY.md and 20-VERIFICATION.md exist, the summary of every plan of the phase exists,
+ * the FRC, the release verdict and the closure of 20-15-SUMMARY.md agree with the row of 20-15 and with 20-RECONCILIATION.md, and
+ * `requirements-completed` holds no register debt. Returns the list of problems.
+ */
+export function verifyIndependent(deps) {
+  const errors = [];
+  const short = (sha) => String(sha).slice(0, 12);
+  const reconciliation = readRelative(deps, RECONCILIATION_MD);
+  if (reconciliation === null) return ["20-RECONCILIATION.md не найден"];
+  const frc = frontField(reconciliation, "final_release_commit");
+  const verdicts = readReconciliationVerdicts(reconciliation);
+  for (const plan of listPlans(deps)) {
+    const name = `${planId(plan)}-SUMMARY.md`;
+    if (readRelative(deps, `${PHASE_DIR}/${name}`) === null) errors.push(`${name}: SUMMARY отсутствует`);
+  }
+  if (readRelative(deps, `${PHASE_DIR}/20-VERIFICATION.md`) === null) errors.push("20-VERIFICATION.md отсутствует (независимый verifier GSD не запускался)");
+  const summary = readRelative(deps, `${PHASE_DIR}/20-15-SUMMARY.md`);
+  if (summary === null) return [...errors, "20-15-SUMMARY.md отсутствует"];
+
+  if (frontField(summary, "final_release_commit") !== frc) errors.push(`final_release_commit 20-15-SUMMARY.md (${short(frontField(summary, "final_release_commit") || "нет")}) не равен 20-RECONCILIATION.md (${short(frc)})`);
+  if (frontField(summary, "release_verdict") !== verdicts.release) errors.push(`release_verdict 20-15-SUMMARY.md (${frontField(summary, "release_verdict") || "нет"}) не равен «Итог релиза» 20-RECONCILIATION.md (${verdicts.release ?? "нет"})`);
+  if (frontField(summary, "phase_closure") !== verdicts.closure) errors.push(`phase_closure 20-15-SUMMARY.md (${frontField(summary, "phase_closure") || "нет"}) не равен «Закрытие фазы» 20-RECONCILIATION.md (${verdicts.closure ?? "нет"})`);
+
+  const crosswalkText = readRelative(deps, RELEASE_SUMMARY_MD);
+  const row = normalizeText(crosswalkText ?? "").split("\n").filter((line) => line.trimStart().startsWith("|")).map(cells).find((candidate) => candidate[0] === planId(SELF_PLAN));
+  if (!row) errors.push("20-15: нет строки crosswalk в 20-RELEASE-SUMMARY.md");
+  else if (!String(row[4] ?? "").includes(frc)) errors.push(`20-15: строка crosswalk не называет FRC ${short(frc)}`);
+  const releaseLine = normalizeText(crosswalkText ?? "").match(/^Итог релиза:[ \t]*(.+?)[ \t]*$/m)?.[1];
+  if (releaseLine !== undefined && frontField(summary, "release_verdict") !== releaseLine) errors.push(`release_verdict 20-15-SUMMARY.md не равен «Итог релиза» 20-RELEASE-SUMMARY.md (${releaseLine})`);
+
+  const completed = frontField(summary, "requirements-completed").match(/STAB-[A-Z0-9]+-\d+/g) ?? [];
+  const debt = new Set();
+  const table = sectionTable(reconciliation, DEBT_SECTION);
+  for (const registered of table?.rows ?? []) debt.add(stripTicks(registered[0] ?? ""));
+  const requirements = parseRequirements(readRelative(deps, REQUIREMENTS_MD));
+  for (const id of completed) {
+    if (debt.has(id) || requirements.trace.get(id)?.status === DEBT_TRACE_STATUS) errors.push(`requirements-completed 20-15-SUMMARY.md содержит принятый долг ${id}`);
+  }
+  return errors;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Orchestration.
 
 // Offline server of a checkout (D-68). Synchronous on purpose: runGate is synchronous. The port is fixed (3100); a foreign listener is never taken over.
@@ -2131,6 +2304,8 @@ export function main(argv = process.argv.slice(2), overrides = {}) {
     if (mode === "--verify-evidence") return verifyEvidenceMode(deps, argv);
     if (mode === "--verify-lineage") return verifyListMode(deps, verifyLineage, "lineage verified");
     if (mode === "--verify-docs") return verifyListMode(deps, verifyDocs, "docs verified");
+    if (mode === "--verify-reconciliation") return verifyListMode(deps, verifyReconciliation, "reconciliation verified");
+    if (mode === "--verify-independent") return verifyListMode(deps, verifyIndependent, "independent verification passed");
     if (mode === "--run") {
       const commit = option(argv, "--commit");
       if (!commit) {
@@ -2145,7 +2320,7 @@ export function main(argv = process.argv.slice(2), overrides = {}) {
       deps.out(`artifacts: ${run.artifactsDir}\n`);
       return run.verdict === "PASS" || run.verdict === "PASS-WITH-OWNER-WAIVERS" ? 0 : 1;
     }
-    deps.err("usage: node scripts/phase20-release-gate.mjs --plan | --self-check | --run --commit <sha> [--only id,id] [--npm-cli <path>] | --verify-evidence [--evidence <path>] | --verify-lineage | --verify-docs\n");
+    deps.err("usage: node scripts/phase20-release-gate.mjs --plan | --self-check | --run --commit <sha> [--only id,id] [--npm-cli <path>] | --verify-evidence [--evidence <path>] | --verify-lineage | --verify-docs | --verify-reconciliation | --verify-independent\n");
     return 2;
   } catch (error) {
     deps.err(`${error instanceof GateError ? error.message : `[PORTIA_RELEASE_GATE:unexpected] ${error instanceof Error ? error.message : "unknown"}`}\n`);
