@@ -9,6 +9,14 @@ import { describe, test } from "node:test";
 
 const root = path.resolve(import.meta.dirname, "..");
 const uatPath = path.join(root, ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-UAT.md");
+const contextPath = path.join(root, ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-CONTEXT.md");
+
+// D-70 is the owner's refusal of the step-by-step device acceptance, not an acceptance: it is never PASS and PORTIA_REQUIRE_UAT=1 stays red.
+// The owner words are copied verbatim from 20-CONTEXT.md D-70 (2026-11-08); the ledger section must repeat them exactly.
+export const D70_STEP_STATUS = "НЕ ПРОВЕРЕНО (D-70)";
+export const D70_VERDICT = "ПРИНЯТО ВЛАДЕЛЬЦЕМ БЕЗ UAT (D-70)";
+export const D70_OWNER_WORDS = "Можно ли сразу перейти к след фазе? ведь меня все устраивает";
+export const d70WaivablePrerequisites = ["STAGING-FREE", "REVIEWER-ROLE"];
 
 export const stepStatuses = ["ОЖИДАЕТ", "PASS", "FAIL", "BLOCKED (ENV)", "BLOCKED (DATA)", "BLOCKED (OWNER)", "BLOCKED (DEVICE)"];
 
@@ -336,9 +344,101 @@ const duplicateRow = (text: string, table: Table, id: string) => {
 const stepDevice = { pc: "PC", phone: "phone" } as const;
 type Commits = { pc: string; phone: string };
 
+const D70_HEADING = "## D-70: принятие риска владельцем без UAT";
+const D70_FIXTURE_RELEASE = "f49aa00f2b9833f962fa3fa890117e98a4abf362";
+const D70_FIXTURE_DECISION = "03e890a0135ff20f02b4ab68fe39642fff84c39f";
+// Drops the D-70 section (up to the next `## ` heading or the end of the text).
+const removeD70Section = (text: string) => text.replace(/^## D-70\b[\s\S]*?(?=^## |(?![\s\S]))/m, "");
+
+// The real ledger with every step, verdict and the four evidence prerequisites back to ОЖИДАЕТ and no D-70 section: the baseline for "unfilled ledger" fixtures.
+function pendingLedger(text: string): string {
+  const pendingPrerequisites = ["STAGING-FREE", "REVIEWER-ROLE", "VISUAL-APPROVED", "RELEASE-GATE"];
+  let out = mapRows(removeD70Section(text), (section, cells) => {
+    if (section === "prereq") {
+      if (!pendingPrerequisites.includes(cells[0])) return undefined;
+      cells[3] = "ОЖИДАЕТ"; cells[4] = "-";
+      return cells;
+    }
+    cells[5] = "ОЖИДАЕТ"; cells[6] = "-"; cells[7] = "-"; cells[8] = "-"; cells[9] = "-"; cells[10] = "-";
+    return cells;
+  });
+  out = out.replace(/^status:.*$/m, "status: awaiting-owner");
+  out = out.replace(/^release_candidate_commit:.*$/m, "release_candidate_commit: ОЖИДАЕТ 20-13");
+  out = out.replace(/^Вердикт PC: .*$/m, "Вердикт PC: ОЖИДАЕТ");
+  out = out.replace(/^Вердикт phone: .*$/m, "Вердикт phone: ОЖИДАЕТ");
+  return out;
+}
+
+function d70Section(releaseCommit: string): string {
+  return [
+    D70_HEADING,
+    "",
+    "- Дата: 2026-11-08",
+    `- Слова владельца (дословно): «${D70_OWNER_WORDS}»`,
+    "- Ответ владельца на варианты (дословно): «2»",
+    "- Текст варианта 2, показанный владельцу (слова оркестратора, не владельца): «Сократить 20-14. Я записываю это как «принято владельцем без UAT», а не как PASS.»",
+    `- Запись решения: 20-CONTEXT.md D-70, commit ${D70_FIXTURE_DECISION}`,
+    `- Release commit: ${releaseCommit} (20-63-SUMMARY.md, 20-RELEASE-EVIDENCE.md)`,
+    `- Код продукта после записи D-70: НЕ ИЗМЕНЁН (git diff ${D70_FIXTURE_DECISION.slice(0, 12)}..${releaseCommit.slice(0, 12)} по app, components, public, lib без *.test.*)`,
+    "- Что это значит: шаги не проходились; ни один шаг и ни один вердикт не получает PASS; PORTIA_REQUIRE_UAT=1 остаётся красным",
+    "",
+  ].join("\n");
+}
+
+// Replaces the value of one `- Поле: значение` line of the D-70 section; the field is found by the start of its label.
+function setD70Field(text: string, labelStart: string, value: string): string {
+  let found = false;
+  const out = text.split(/\r?\n/).map((line) => {
+    if (found || !line.startsWith(`- ${labelStart}`)) return line;
+    found = true;
+    return `${line.slice(0, line.indexOf(":"))}: ${value}`;
+  });
+  assert.ok(found, `fixture D-70 field ${labelStart} not found`);
+  return out.join("\n");
+}
+
+const dropD70Field = (text: string, labelStart: string) => text.split(/\r?\n/).filter((line) => !line.startsWith(`- ${labelStart}`)).join("\n");
+
+type WaivedOptions = { releaseCommit?: string; reviewerRole?: "blocked" | "d70" };
+
+// A ledger as 20-14 records it: D-70 section, steps НЕ ПРОВЕРЕНО (D-70) or BLOCKED (when a prerequisite is BLOCKED), both verdicts D-70.
+function waivedLedger(text: string, options: WaivedOptions = {}): string {
+  const release = options.releaseCommit ?? D70_FIXTURE_RELEASE;
+  const reviewer = options.reviewerRole ?? "blocked";
+  let out = mapRows(pendingLedger(text), (section, cells) => {
+    if (section !== "prereq") return undefined;
+    if (cells[0] === "STAGING-FREE") {
+      cells[3] = D70_STEP_STATUS; cells[4] = "-"; cells[5] = "D-70: подтверждение владельца не запрашивалось; проверки с мутациями на staging не проводились";
+    } else if (cells[0] === "REVIEWER-ROLE") {
+      if (reviewer === "blocked") { cells[3] = "BLOCKED (ENV)"; cells[4] = "-"; cells[5] = "нет аттестованного staging проверяющего (20-RELEASE-EVIDENCE.md)"; }
+      else { cells[3] = D70_STEP_STATUS; cells[4] = "-"; cells[5] = "D-70: подтверждение владельца не запрашивалось; проверки с мутациями на staging не проводились"; }
+    } else if (cells[0] === "VISUAL-APPROVED") {
+      cells[3] = "PASS"; cells[4] = "2026-11-08"; cells[5] = "общий вердикт владельца на 0c2a59d1d1a7 (D-68)";
+    } else if (cells[0] === "RELEASE-GATE") {
+      cells[3] = "BLOCKED (ENV)"; cells[4] = "-"; cells[5] = "итог раннера BLOCKED: полосы среды без цели и staging";
+    } else return undefined;
+    return cells;
+  });
+  const prerequisiteStatus = new Map(parseUat(out).prerequisites.map((row) => [row.id, row.status]));
+  out = mapRows(out, (section, cells) => {
+    if (section === "prereq") return undefined;
+    const dependencies = cells[4].split(/\s*[,;]\s*/).filter((dep) => dep !== "" && dep !== "-");
+    const blocked = dependencies.map((dep) => ({ dep, status: prerequisiteStatus.get(dep) ?? "" })).find((entry) => entry.status.startsWith("BLOCKED"));
+    cells[6] = "-"; cells[7] = "-"; cells[8] = "-"; cells[10] = "-";
+    if (blocked) { cells[5] = blocked.status; cells[9] = `prerequisite ${blocked.dep} — ${blocked.status}; D-70: шаг не проходился`; }
+    else { cells[5] = D70_STEP_STATUS; cells[9] = "D-70: шаг не проходился, риск принят владельцем"; }
+    return cells;
+  });
+  out = out.replace(/^status:.*$/m, "status: accepted-risk-d70");
+  out = out.replace(/^release_candidate_commit:.*$/m, `release_candidate_commit: ${release}`);
+  out = out.replace(/^Вердикт PC: .*$/m, `Вердикт PC: ${D70_VERDICT}`);
+  out = out.replace(/^Вердикт phone: .*$/m, `Вердикт phone: ${D70_VERDICT}`);
+  return `${out.replace(/\s*$/, "")}\n\n${d70Section(release)}`;
+}
+
 // A fully filled, consistent ledger (every prerequisite satisfied, every step PASS, two PASS verdicts); the baseline for negative fixtures.
 function completeLedger(text: string, commits: Commits = { pc: "abcdef1", phone: "abcdef1" }): string {
-  let out = mapRows(text, (section, cells) => {
+  let out = mapRows(removeD70Section(text), (section, cells) => {
     if (section === "prereq") {
       cells[3] = cells[0].startsWith("OWNER-MIG-") ? "ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ" : "PASS";
       cells[4] = "2026-11-05";
@@ -385,7 +485,7 @@ describe("20-UAT ledger structure (fail-closed)", () => {
 
   test("a PASS with a commit that git does not know is rejected, and a known commit passes", () => {
     const withCommit = (commit: string) =>
-      editRow(ledger, "phone", "SPIDER-01", (cells) => { cells[5] = "PASS"; cells[6] = "phone"; cells[7] = commit; cells[8] = "2026-11-05"; });
+      editRow(pendingLedger(ledger), "phone", "SPIDER-01", (cells) => { cells[5] = "PASS"; cells[6] = "phone"; cells[7] = commit; cells[8] = "2026-11-05"; });
     assert.ok(errorsOf(withCommit("abcdef1"), { commitExists: noCommit }).some((error) => error.includes("does not exist")));
     // SPIDER-01 depends on VISUAL-APPROVED, which is still pending in the real ledger, so a lone PASS is rejected for that reason only.
     assert.deepEqual(errorsOf(withCommit("abcdef1")).filter((error) => !error.includes("depends on")), []);
@@ -539,7 +639,7 @@ describe("20-UAT honest statuses (T-20-41)", () => {
 
 describe("20-UAT strict mode PORTIA_REQUIRE_UAT=1 (20-14 Task 2 gate)", () => {
   test("the unfilled ledger is rejected: pending steps, prerequisites and verdicts", () => {
-    const errors = errorsOf(ledger, { requireComplete: true });
+    const errors = errorsOf(pendingLedger(ledger), { requireComplete: true });
     assert.ok(errors.length > 0);
     assert.ok(errors.some((error) => error.includes("REG-01 on PC: is still ОЖИДАЕТ")));
     assert.ok(errors.some((error) => error.includes("STAGING-FREE: is still ОЖИДАЕТ")));
@@ -599,5 +699,140 @@ describe("20-UAT strict mode PORTIA_REQUIRE_UAT=1 (20-14 Task 2 gate)", () => {
     const base = completeLedger(ledger);
     const broken = editRow(base, "prereq", "RELEASE-GATE", (cells) => { cells[3] = "BLOCKED (ENV)"; cells[4] = "-"; cells[5] = "20-13 не выполнен"; });
     assert.ok(errorsOf(broken, { requireComplete: true }).some((error) => error.includes("RELEASE-GATE must be PASS")));
+  });
+});
+
+describe("20-UAT D-70 owner waiver, not an acceptance (plan 20-14)", () => {
+  const waived = () => waivedLedger(ledger);
+  const unknownDecision = (commit: string) => !commit.startsWith("03e890a");
+  const setStep = (text: string, device: "pc" | "phone", id: string, cells5to10: string[]) =>
+    editRow(text, device, id, (cells) => { cells.splice(5, cells5to10.length, ...cells5to10); });
+
+  test("the D-70 constants are exported, the statuses are known, and the words match 20-CONTEXT.md D-70 verbatim", () => {
+    assert.equal(D70_STEP_STATUS, "НЕ ПРОВЕРЕНО (D-70)");
+    assert.equal(D70_VERDICT, "ПРИНЯТО ВЛАДЕЛЬЦЕМ БЕЗ UAT (D-70)");
+    assert.deepEqual(d70WaivablePrerequisites, ["STAGING-FREE", "REVIEWER-ROLE"]);
+    assert.ok(stepStatuses.includes(D70_STEP_STATUS));
+    assert.ok(prerequisiteStatuses.includes(D70_STEP_STATUS));
+    assert.ok(!stepStatuses.includes(D70_VERDICT), "the verdict is a verdict, not a step status");
+    const line = readFileSync(contextPath, "utf8").split(/\r?\n/).find((entry) => entry.startsWith("- **D-70:**"));
+    assert.ok(line, "20-CONTEXT.md has no D-70 line");
+    assert.ok(line.includes(`«${D70_OWNER_WORDS}»`), "D70_OWNER_WORDS is not the owner's sentence in 20-CONTEXT.md");
+  });
+
+  test("the waived fixture has the planned shape and is accepted in the default mode", () => {
+    const uat = parseUat(waived());
+    assert.equal(uat.verdicts.pc?.status, D70_VERDICT);
+    assert.equal(uat.verdicts.phone?.status, D70_VERDICT);
+    assert.ok([...uat.pc, ...uat.phone].every((step) => step.status !== "PASS" && step.status !== "ОЖИДАЕТ"));
+    assert.ok(uat.pc.some((step) => step.status === D70_STEP_STATUS));
+    assert.equal(uat.pc.find((step) => step.id === "PROMO-03")?.status, "BLOCKED (ENV)", "a BLOCKED prerequisite keeps its step BLOCKED");
+    assert.match(uat.phone.find((step) => step.id === "MEDIA-01")?.status ?? "", /^BLOCKED/);
+    assert.deepEqual(errorsOf(waived()), []);
+    assert.deepEqual(errorsOf(waivedLedger(ledger, { reviewerRole: "d70" })), []);
+  });
+
+  test("D-70 statuses and verdicts need the D-70 section", () => {
+    const errors = errorsOf(removeD70Section(waived()));
+    assert.ok(errors.some((error) => error.startsWith("INFO-PC-01 on PC:") && error.includes("D-70 section")), errors.join("\n"));
+    assert.ok(errors.some((error) => error.startsWith("STAGING-FREE:") && error.includes("D-70 section")));
+    assert.ok(errors.some((error) => error.startsWith("PC verdict") && error.includes("D-70 section")));
+    assert.ok(errors.some((error) => error.startsWith("phone verdict") && error.includes("D-70 section")));
+  });
+
+  test("a D-70 step carries no device, commit, date or screenshot, and names D-70 in the note", () => {
+    const base = waived();
+    const pcErrors = errorsOf(setStep(base, "pc", "INFO-PC-01", [D70_STEP_STATUS, "PC", "abcdef1", "2026-11-08", "D-70: шаг не проходился", "-"]));
+    assert.ok(pcErrors.some((error) => error.startsWith("INFO-PC-01 on PC:") && error.includes("must not name a tested commit")), pcErrors.join("\n"));
+    assert.ok(pcErrors.some((error) => error.startsWith("INFO-PC-01 on PC:") && error.includes("device")));
+    assert.ok(pcErrors.some((error) => error.startsWith("INFO-PC-01 on PC:") && error.includes("date")));
+    assert.ok(errorsOf(setStep(base, "phone", "INFO-PHONE-01", [D70_STEP_STATUS, "-", "-", "-", "D-70: шаг не проходился", "shots/x.png"])).some((error) => error.startsWith("INFO-PHONE-01 on phone:") && error.includes("screenshot")));
+    assert.ok(errorsOf(setStep(base, "phone", "INFO-PHONE-01", [D70_STEP_STATUS, "-", "-", "-", "пропущен", "-"])).some((error) => error.startsWith("INFO-PHONE-01 on phone:") && error.includes("note")));
+  });
+
+  test("a step whose prerequisite is BLOCKED stays BLOCKED and cannot become НЕ ПРОВЕРЕНО (D-70) (D-16)", () => {
+    const base = waived();
+    const masked = setStep(base, "pc", "PROMO-03", [D70_STEP_STATUS, "-", "-", "-", "D-70: шаг не проходился, риск принят владельцем", "-"]);
+    const errors = errorsOf(masked);
+    assert.ok(errors.some((error) => error.startsWith("PROMO-03 on PC:") && error.includes("stays BLOCKED") && error.includes("REVIEWER-ROLE")), errors.join("\n"));
+    const media = setStep(base, "phone", "MEDIA-01", [D70_STEP_STATUS, "-", "-", "-", "D-70: шаг не проходился, риск принят владельцем", "-"]);
+    assert.ok(errorsOf(media).some((error) => error.startsWith("MEDIA-01 on phone:") && error.includes("stays BLOCKED") && error.includes("P19-GAP-15")));
+  });
+
+  test("a D-70 prerequisite status is only for STAGING-FREE and REVIEWER-ROLE", () => {
+    const base = waived();
+    for (const id of ["OWNER-MIG-D36", "OWNER-MIG-NOTES", "P19-GAP-16", "P19-GAP-20", "VISUAL-APPROVED", "RELEASE-GATE"]) {
+      const broken = editRow(base, "prereq", id, (cells) => { cells[3] = D70_STEP_STATUS; cells[4] = "-"; cells[5] = "D-70: подтверждение не запрашивалось"; });
+      assert.ok(errorsOf(broken).some((error) => error.startsWith(`${id}: ${D70_STEP_STATUS} is only for`)), id);
+    }
+    for (const id of d70WaivablePrerequisites) {
+      const ok = editRow(base, "prereq", id, (cells) => { cells[3] = D70_STEP_STATUS; cells[4] = "-"; cells[5] = "D-70: подтверждение не запрашивалось"; });
+      assert.ok(!errorsOf(ok).some((error) => error.startsWith(`${id}:`)), id);
+    }
+    const dated = editRow(base, "prereq", "STAGING-FREE", (cells) => { cells[4] = "2026-11-08"; });
+    assert.ok(errorsOf(dated).some((error) => error.startsWith("STAGING-FREE:") && error.includes("date")));
+  });
+
+  test("OWNER-MIG rows stay ОЖИДАЕТ ВЛАДЕЛЬЦА next to the D-70 waiver", () => {
+    const uat = parseUat(waived());
+    for (const id of ["OWNER-MIG-D36", "OWNER-MIG-NOTES"]) assert.equal(uat.prerequisites.find((row) => row.id === id)?.status, "ОЖИДАЕТ ВЛАДЕЛЬЦА", id);
+  });
+
+  test("a D-70 verdict carries no commit and cannot stand next to a PASS or ОЖИДАЕТ step", () => {
+    const base = waived();
+    assert.ok(errorsOf(withVerdict(base, "PC", `${D70_VERDICT} (commit abcdef1)`)).some((error) => error.startsWith("PC verdict") && error.includes("must not carry a commit")));
+    assert.ok(errorsOf(withVerdict(base, "phone", `${D70_VERDICT} (commit xyz)`)).some((error) => error.startsWith("phone verdict") && error.includes("must not carry a commit")));
+    const withPass = setStep(base, "pc", "TMPL-01", ["PASS", "PC", "abcdef1", "2026-11-08", "проверено", "-"]);
+    assert.ok(errorsOf(withPass).some((error) => error === `PC verdict is ${D70_VERDICT} but TMPL-01 is PASS`));
+    const withPending = setStep(base, "phone", "TMPL-01", ["ОЖИДАЕТ", "-", "-", "-", "-", "-"]);
+    assert.ok(errorsOf(withPending).some((error) => error === `phone verdict is ${D70_VERDICT} but TMPL-01 is ОЖИДАЕТ`));
+  });
+
+  test("a PASS or FAIL device verdict next to the D-70 section is rejected", () => {
+    const base = waived();
+    assert.ok(errorsOf(withVerdict(base, "PC", "PASS (commit abcdef1)")).some((error) => error.startsWith("PC verdict is PASS") && error.includes("D-70")));
+    assert.ok(errorsOf(withVerdict(base, "phone", "FAIL (commit abcdef1)")).some((error) => error.startsWith("phone verdict is FAIL") && error.includes("D-70")));
+  });
+
+  test("the D-70 section is checked field by field", () => {
+    const base = waived();
+    const has = (text: string, ...needles: string[]) =>
+      errorsOf(text).some((error) => error.startsWith("D-70:") && needles.every((needle) => error.includes(needle)));
+    assert.ok(has(setD70Field(base, "Дата", "8 ноября"), "Дата", "ISO date"));
+    assert.ok(has(dropD70Field(base, "Дата"), "Дата", "missing"));
+    assert.ok(has(setD70Field(base, "Слова владельца", "«Можно перейти к следующей фазе, меня всё устраивает»"), "Слова владельца", "verbatim"));
+    assert.ok(has(setD70Field(base, "Слова владельца", `«${D70_OWNER_WORDS.toLowerCase()}»`), "Слова владельца", "verbatim"));
+    assert.ok(has(setD70Field(base, "Ответ владельца", "«3»"), "Ответ владельца", "«2»"));
+    assert.ok(has(setD70Field(base, "Ответ владельца", "-"), "Ответ владельца", "«2»"));
+    assert.ok(has(setD70Field(base, "Текст варианта 2", "-"), "Текст варианта 2", "empty"));
+    assert.ok(has(setD70Field(base, "Запись решения", "20-CONTEXT.md D-70, commit без номера"), "Запись решения", "40-hex"));
+    assert.ok(has(setD70Field(base, "Release commit", "последний (20-63-SUMMARY.md)"), "Release commit", "40-hex"));
+    assert.ok(has(setD70Field(base, "Код продукта", "ИЗМЕНЁН ПОСЛЕ ВЕРДИКТА: components/portia-desktop.tsx"), "Код продукта", "НЕ ИЗМЕНЁН"));
+    assert.ok(has(dropD70Field(base, "Код продукта"), "Код продукта", "missing"));
+    // The untouched section yields nothing at all.
+    assert.deepEqual(errorsOf(base), []);
+  });
+
+  test("the D-70 decision commit and the release commit must exist, and the release commit is the one in the frontmatter", () => {
+    const base = waived();
+    const decision = errorsOf(base, { commitExists: unknownDecision });
+    assert.ok(decision.some((error) => error.startsWith("D-70:") && error.includes("decision commit") && error.includes("does not exist")), decision.join("\n"));
+    const release = errorsOf(base, { commitExists: (commit) => !commit.startsWith("f49aa00") });
+    assert.ok(release.some((error) => error.startsWith("D-70:") && error.includes("Release commit") && error.includes("does not exist")), release.join("\n"));
+    const other = base.replace(/^release_candidate_commit:.*$/m, `release_candidate_commit: ${D70_FIXTURE_DECISION}`);
+    assert.ok(errorsOf(other).some((error) => error.startsWith("D-70:") && error.includes("is not release_candidate_commit")));
+    const pending = base.replace(/^release_candidate_commit:.*$/m, "release_candidate_commit: ОЖИДАЕТ 20-13");
+    assert.ok(errorsOf(pending).some((error) => error.startsWith("D-70:") && error.includes("is not release_candidate_commit")));
+  });
+
+  test("PORTIA_REQUIRE_UAT=1 rejects every D-70 step, prerequisite and verdict as not acceptance", () => {
+    const errors = errorsOf(waived(), { requireComplete: true });
+    for (const prefix of ["INFO-PC-01 on PC:", "SPIDER-02 on phone:", "STAGING-FREE:", "PC verdict", "phone verdict"]) {
+      assert.ok(errors.some((error) => error.startsWith(prefix) && error.includes("not acceptance")), `${prefix} is not rejected as not acceptance\n${errors.join("\n")}`);
+    }
+    const reviewer = errorsOf(waivedLedger(ledger, { reviewerRole: "d70" }), { requireComplete: true });
+    assert.ok(reviewer.some((error) => error.startsWith("REVIEWER-ROLE:") && error.includes("not acceptance")));
+    // The filled fixture without a D-70 section is still accepted in the strict mode.
+    assert.deepEqual(errorsOf(completeLedger(ledger), { requireComplete: true }), []);
   });
 });
