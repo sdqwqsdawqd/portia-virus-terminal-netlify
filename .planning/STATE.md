@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-14-PLAN.md
-last_updated: "2026-11-08T18:38:55.131Z"
+stopped_at: Completed PORTIA-20-15-PLAN.md (ожидает независимый 20-VERIFICATION.md и --verify-independent)
+last_updated: "2026-11-08T19:16:27.118Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: 483df1f1507ca3c6f27b321a08c2747428eae1f6
+state_head: 284e504422d310c5448b448ba3676e596291eb12
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 134
-  completed_plans: 133
+  completed_plans: 134
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 39 of 47
+Plan: 40 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-08 — Phase PORTIA-20 execution resumed (wave continue)
 
@@ -165,6 +165,7 @@ Progress: [█████░░░░░] 50%
 | Phase 20 P62 | multi-session | 2 tasks | 7 files |
 | Phase PORTIA-20 P63 | 40min | 2 tasks | 4 files |
 | Phase PORTIA-20 P20-14 | about 10 min | 2 tasks | 3 files |
+| Phase PORTIA-20 P15 | 45min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -307,6 +308,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 20]: D-69 G3 (20-62): motion scene nondeterminism had three causes (spider head start on a post-load parked clock, endless dew phase, finite Vivian transitions) plus an aborted /api/employees; fixed by parking before load, 16 ms grid alignment and settleAnimations (Animation objects only); policy unchanged; activity/offended/recovery replaced as deterministic-capture with supersedes
 - [Phase PORTIA-20]: D-69 G6: the rehearsal is repeated by one full run on f49aa00f2b98, verdict BLOCKED (environment lanes only, no FAIL of product, UI contract or baselines); the effective owner verdict is read by readEffectiveOwnerVerdict (chain owner_verdict_renews), baselines stay with 20-58
 - [Phase PORTIA-20]: 20-14 (D-70): UAT ledger records the owner's refusal of device acceptance in his words; verdicts are ПРИНЯТО ВЛАДЕЛЬЦЕМ БЕЗ UAT (D-70), never PASS; 80 steps not checked, MEDIA-01 and PROMO-03 stay BLOCKED on both devices; PORTIA_REQUIRE_UAT=1 stays red (not acceptance); STAB-REL-05..08 and STAB-A11Y-01..04 not marked complete (accepted debt, statuses by 20-15)
+- [Phase PORTIA-20]: 20-15: итог релиза под D-70 — худший из итога раннера и PASS-WITH-OWNER-WAIVERS (на FRC a05a6019e867 — BLOCKED); закрытие фазы «С ПРИНЯТЫМИ ДОЛГАМИ (D-70)» — допуск закрытия, не PASS
+- [Phase PORTIA-20]: 20-15: 21 требование Phase 20 без доказательства на FRC записано Accepted debt (D-70) без галочки; открытые пункты Phase 18/19 — принятые долги по прочтению 20-CONTEXT.md D-70 (4); requirements.mark-complete не запускался
 
 ### Pending Todos
 
@@ -351,8 +354,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-08T18:38:54.570Z
-Stopped at: Completed PORTIA-20-14-PLAN.md
+Last session: 2026-11-08T19:16:26.543Z
+Stopped at: Completed PORTIA-20-15-PLAN.md (ожидает независимый 20-VERIFICATION.md и --verify-independent)
 Resume file: None
 
 ## Operator Next Step
