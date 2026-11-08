@@ -9,6 +9,72 @@
   "data": "offline-заглушка tests/e2e/harness/offline-supabase.cjs: пустой portia_content -> стартовый контент сайта, выдуманные публичные значения OFFLINE_ENV; production-сборка во временной копии, next start на 127.0.0.1:3100, Node 22.13.1, chromium-desktop 1440x900 DPR 1 и chromium-phone (Pixel 7); сцены с подменёнными чтениями кандидатных спеков — UI-контракт, не доказательство ролей, сохранения или живого источника данных; captureCommit — коммит, с которого собрана production-сборка (код продукта равен ownerVerdict.commit)",
   "rows": [
     {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-guide-microscope--chromium-desktop.png",
+      "sha256": "17a3184d5ff2276c2b8c26506fe3eaefed83b07198f4526a464114bb848d8d42",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "«Справочник»: пустое состояние, микроскоп (ПК); подменённое чтение GET /api/content",
+      "decisions": [
+        "D-21"
+      ],
+      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-guide-microscope--chromium-phone.png",
+      "sha256": "39900137df9c4bcfd31448823e2e1b51329bdd2a5b5b9257c727c7b9f044bba8",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "«Справочник»: пустое состояние, микроскоп (телефон); подменённое чтение GET /api/content",
+      "decisions": [
+        "D-21"
+      ],
+      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-info-flask--chromium-desktop.png",
+      "sha256": "689f0525d96f9d3ff908e11014982b39abb6650c5866843db9872ba5ed8ef365",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "«Информация»: пустое состояние, колба (ПК); подменённое чтение GET /api/content",
+      "decisions": [
+        "D-21"
+      ],
+      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-info-flask--chromium-phone.png",
+      "sha256": "1d5d1281c4116cbd56fbee190f7f94392c111842037accd66bec4a162a466bde",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "«Информация»: пустое состояние, колба (телефон); подменённое чтение GET /api/content",
+      "decisions": [
+        "D-21"
+      ],
+      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-news-flask--chromium-desktop.png",
+      "sha256": "a5d48221abc83f900a8ea40298c58cb57b742fa5e5b33442feb850c1a97349c1",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "«Сводка» → «Новости»: «Новостей пока нет», колба (ПК); подменённое чтение GET /api/content",
+      "decisions": [
+        "D-21"
+      ],
+      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-empty-art-news-flask--chromium-phone.png",
+      "sha256": "6965e2122b2365c8105623ba98b271a14e1a758428b6e7d83dde7a5544808a2a",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "«Сводка» → «Новости»: «Новостей пока нет», колба (телефон); подменённое чтение GET /api/content",
+      "decisions": [
+        "D-21"
+      ],
+      "reason": "Эталон принятого вида (20-58); пустое состояние — фикстура чтения, UI-контракт"
+    },
+    {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-flasks--chromium-desktop.png",
       "sha256": "d358400c49ad4d184914caaa51ecca3b085cefae4d9e1e93ba74dc75a3cc6c47",
       "supersedes": null,
