@@ -17,8 +17,9 @@ export const D70_STEP_STATUS = "НЕ ПРОВЕРЕНО (D-70)";
 export const D70_VERDICT = "ПРИНЯТО ВЛАДЕЛЬЦЕМ БЕЗ UAT (D-70)";
 export const D70_OWNER_WORDS = "Можно ли сразу перейти к след фазе? ведь меня все устраивает";
 export const d70WaivablePrerequisites = ["STAGING-FREE", "REVIEWER-ROLE"];
+export const D70_HEADING = "## D-70: принятие риска владельцем без UAT";
 
-export const stepStatuses = ["ОЖИДАЕТ", "PASS", "FAIL", "BLOCKED (ENV)", "BLOCKED (DATA)", "BLOCKED (OWNER)", "BLOCKED (DEVICE)"];
+export const stepStatuses = ["ОЖИДАЕТ", "PASS", "FAIL", "BLOCKED (ENV)", "BLOCKED (DATA)", "BLOCKED (OWNER)", "BLOCKED (DEVICE)", D70_STEP_STATUS];
 
 export const prerequisiteStatuses = [...stepStatuses, "ОЖИДАЕТ ВЛАДЕЛЬЦА", "ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ"];
 
@@ -56,10 +57,12 @@ export type Uat = {
   phone: Step[];
   verdicts: { pc: Verdict | null; phone: Verdict | null };
   d15: Record<string, string>;
+  hasD70: boolean;
+  d70: Record<string, string>;
   problems: string[];
 };
 
-export type Section = "prereq" | "pc" | "phone" | "verdicts" | "d15" | "other";
+export type Section = "prereq" | "pc" | "phone" | "verdicts" | "d15" | "d70" | "other";
 
 export function sectionOf(heading: string): Section {
   if (/^## Prerequisites\b/.test(heading)) return "prereq";
@@ -67,6 +70,7 @@ export function sectionOf(heading: string): Section {
   if (/^## Чек-лист phone\b/.test(heading)) return "phone";
   if (/^## Вердикты(\s|$)/.test(heading)) return "verdicts";
   if (/^## D-15\b/.test(heading)) return "d15";
+  if (/^## D-70\b/.test(heading)) return "d70";
   return "other";
 }
 
@@ -85,7 +89,7 @@ export function parseUat(text: string): Uat {
   const lines = text.split(/\r?\n/);
   const uat: Uat = {
     frontmatter: {}, headingLine: { pc: -1, phone: -1 }, prerequisites: [], pc: [], phone: [],
-    verdicts: { pc: null, phone: null }, d15: {}, problems: [],
+    verdicts: { pc: null, phone: null }, d15: {}, hasD70: false, d70: {}, problems: [],
   };
   let index = 0;
   if (lines[0] === "---") {
@@ -102,6 +106,7 @@ export function parseUat(text: string): Uat {
     if (line.startsWith("## ")) {
       section = sectionOf(line);
       if (section === "pc" || section === "phone") uat.headingLine[section] = index;
+      if (section === "d70") uat.hasD70 = true;
       continue;
     }
     if (section === "verdicts") {
@@ -109,9 +114,9 @@ export function parseUat(text: string): Uat {
       if (verdict) uat.verdicts[verdict[1] === "PC" ? "pc" : "phone"] = parseVerdict(verdict[2].trim());
       continue;
     }
-    if (section === "d15") {
+    if (section === "d15" || section === "d70") {
       const field = line.match(/^- ([^:]+):\s*(.*)$/);
-      if (field) uat.d15[field[1].trim()] = field[2].trim();
+      if (field) uat[section][field[1].trim()] = field[2].trim();
       continue;
     }
     if (!line.startsWith("|")) continue;
@@ -143,6 +148,9 @@ const sameCommit = (a: string, b: string) => hexCommit.test(a) && hexCommit.test
 const isBlocked = (status: string) => status.startsWith("BLOCKED");
 const prerequisiteSatisfied = (status: string) => status === "PASS" || status === "ПРИМЕНЕНО ВЛАДЕЛЬЦЕМ";
 
+const hexCommit40 = /\b[0-9a-f]{40}\b/;
+const namesD70 = (note: string) => note.includes("D-70");
+
 function validatePrerequisites(uat: Uat, complete: boolean, errors: string[]): Map<string, Prerequisite> {
   const byId = new Map<string, Prerequisite>();
   for (const row of uat.prerequisites) {
@@ -166,6 +174,14 @@ function validatePrerequisites(uat: Uat, complete: boolean, errors: string[]): M
     }
     if (isBlocked(row.status) && empty(row.note)) errors.push(`${row.id}: BLOCKED needs a reason`);
     if (row.status === "FAIL" && empty(row.note)) errors.push(`${row.id}: FAIL needs a note`);
+    if (row.status === D70_STEP_STATUS) {
+      // D-70 (5): evidence rows and owner migrations are not cancelled by the owner's refusal of the step-by-step acceptance.
+      if (!d70WaivablePrerequisites.includes(row.id)) errors.push(`${row.id}: ${D70_STEP_STATUS} is only for ${d70WaivablePrerequisites.join(" and ")} (D-70 (5))`);
+      if (!uat.hasD70) errors.push(`${row.id}: ${D70_STEP_STATUS} needs the D-70 section ("${D70_HEADING}")`);
+      if (!empty(row.date)) errors.push(`${row.id}: ${D70_STEP_STATUS} must have no date`);
+      if (!namesD70(row.note)) errors.push(`${row.id}: ${D70_STEP_STATUS} needs a note that names D-70`);
+      if (complete) errors.push(`${row.id}: ${D70_STEP_STATUS} is not acceptance (PORTIA_REQUIRE_UAT=1 needs a real PASS)`);
+    }
     if (complete) {
       if (row.status === "ОЖИДАЕТ") errors.push(`${row.id}: is still ОЖИДАЕТ`);
       if (row.status === "ОЖИДАЕТ ВЛАДЕЛЬЦА" && !ownerMigration) errors.push(`${row.id}: is still ОЖИДАЕТ ВЛАДЕЛЬЦА`);
@@ -194,6 +210,20 @@ function validateSteps(
     for (const dep of dependencies) if (!prerequisites.has(dep)) errors.push(`${where}: unknown prerequisite ${dep}`);
     if (!stepStatuses.includes(step.status)) { errors.push(`${where}: unknown status "${step.status}"`); continue; }
 
+    if (step.status === D70_STEP_STATUS) {
+      if (!uat.hasD70) errors.push(`${where}: ${D70_STEP_STATUS} needs the D-70 section ("${D70_HEADING}")`);
+      if (!empty(step.commit)) errors.push(`${where}: ${D70_STEP_STATUS} must not name a tested commit (the step was not run)`);
+      if (!empty(step.device)) errors.push(`${where}: ${D70_STEP_STATUS} must have no device`);
+      if (!empty(step.date)) errors.push(`${where}: ${D70_STEP_STATUS} must have no date`);
+      if (!empty(step.screenshot)) errors.push(`${where}: ${D70_STEP_STATUS} must have no screenshot`);
+      if (!namesD70(step.note)) errors.push(`${where}: ${D70_STEP_STATUS} needs a note that names D-70`);
+      for (const dep of dependencies) {
+        const prerequisite = prerequisites.get(dep);
+        if (prerequisite && isBlocked(prerequisite.status)) errors.push(`${where}: ${D70_STEP_STATUS} but prerequisite ${dep} is ${prerequisite.status}: the step stays BLOCKED (D-16)`);
+      }
+      if (complete) errors.push(`${where}: ${D70_STEP_STATUS} is not acceptance (PORTIA_REQUIRE_UAT=1 needs a real PASS)`);
+      continue;
+    }
     if (step.status === "ОЖИДАЕТ" && complete) errors.push(`${where}: is still ОЖИДАЕТ`);
     if (isBlocked(step.status) && empty(step.note)) errors.push(`${where}: BLOCKED needs a reason`);
     if (step.status === "FAIL") {
@@ -224,6 +254,18 @@ function validateVerdicts(uat: Uat, commitExists: (commit: string) => boolean, c
       if (complete) errors.push(`${label} verdict is still ОЖИДАЕТ`);
       continue;
     }
+    if (verdict.status === D70_VERDICT) {
+      if (!uat.hasD70) errors.push(`${label} verdict ${D70_VERDICT} needs the D-70 section ("${D70_HEADING}")`);
+      if (/\(commit /.test(verdict.raw)) errors.push(`${label} verdict ${D70_VERDICT} must not carry a commit (no device was accepted)`);
+      for (const step of uat[device]) {
+        if (step.status === "PASS" || step.status === "ОЖИДАЕТ") errors.push(`${label} verdict is ${D70_VERDICT} but ${step.id} is ${step.status}`);
+      }
+      if (complete) errors.push(`${label} verdict ${D70_VERDICT} is not acceptance (PORTIA_REQUIRE_UAT=1 needs PASS)`);
+      continue;
+    }
+    if (uat.hasD70 && (verdict.status === "PASS" || verdict.status === "FAIL")) {
+      errors.push(`${label} verdict is ${verdict.status} next to the D-70 section: the owner's waiver and a device verdict exclude each other`);
+    }
     if ((verdict.status !== "PASS" && verdict.status !== "FAIL") || !hexCommit.test(verdict.commit)) {
       errors.push(`${label} verdict needs "PASS (commit <hex>)" or "FAIL (commit <hex>)", got "${verdict.raw}"`);
       continue;
@@ -248,6 +290,52 @@ function validateVerdicts(uat: Uat, commitExists: (commit: string) => boolean, c
   }
 }
 
+const d70Field = (d70: Record<string, string>, labelStart: string) => {
+  const key = Object.keys(d70).find((name) => name.startsWith(labelStart));
+  return key === undefined ? undefined : d70[key];
+};
+const stripQuotes = (value: string) => value.replace(/[«»"'\s]/g, "");
+
+// The D-70 section is the only place with the owner's words; it is checked whenever it exists.
+function validateD70(uat: Uat, commitExists: (commit: string) => boolean, errors: string[]) {
+  if (!uat.hasD70) return;
+  const need = (labelStart: string): string | null => {
+    const value = d70Field(uat.d70, labelStart);
+    if (value === undefined) { errors.push(`D-70: field "${labelStart}" is missing`); return null; }
+    return value;
+  };
+  const date = need("Дата");
+  if (date !== null && !isoDate.test(date)) errors.push(`D-70: "Дата" must be an ISO date, got "${date}"`);
+  const words = need("Слова владельца");
+  if (words !== null && !words.includes(D70_OWNER_WORDS)) errors.push('D-70: "Слова владельца" must contain the owner words verbatim (20-CONTEXT.md D-70)');
+  const answer = need("Ответ владельца");
+  if (answer !== null && stripQuotes(answer) !== "2") errors.push(`D-70: "Ответ владельца" must be «2», got "${answer}"`);
+  const variant = need("Текст варианта 2");
+  if (variant !== null && stripQuotes(variant).replace(/^-$/, "") === "") errors.push('D-70: "Текст варианта 2" is empty');
+  const decision = need("Запись решения");
+  if (decision !== null) {
+    const commit = decision.match(hexCommit40)?.[0];
+    if (!commit) errors.push('D-70: "Запись решения" needs the 40-hex commit of the decision record');
+    else if (!commitExists(commit)) errors.push(`D-70: decision commit ${commit} does not exist`);
+  }
+  const release = need("Release commit");
+  if (release !== null) {
+    const commit = release.match(hexCommit40)?.[0];
+    if (!commit) errors.push('D-70: "Release commit" needs a 40-hex commit');
+    else {
+      if (!commitExists(commit)) errors.push(`D-70: Release commit ${commit} does not exist`);
+      const frontmatter = uat.frontmatter.release_candidate_commit ?? "";
+      if (!hexCommit.test(frontmatter) || !sameCommit(commit, frontmatter)) {
+        errors.push(`D-70: Release commit ${commit} is not release_candidate_commit "${frontmatter}"`);
+      }
+    }
+  }
+  const product = need("Код продукта после записи");
+  if (product !== null && !product.startsWith("НЕ ИЗМЕНЁН")) {
+    errors.push('D-70: "Код продукта после записи D-70" must start with НЕ ИЗМЕНЁН (the owner words do not cover changed product code)');
+  }
+}
+
 export function validateUat(text: string, options: UatOptions = {}): string[] {
   const errors: string[] = [];
   const uat = parseUat(text);
@@ -268,6 +356,7 @@ export function validateUat(text: string, options: UatOptions = {}): string[] {
   validateSteps(uat, "pc", prerequisites, complete, commitExists, errors);
   validateSteps(uat, "phone", prerequisites, complete, commitExists, errors);
   validateVerdicts(uat, commitExists, complete, errors);
+  validateD70(uat, commitExists, errors);
 
   if (complete) {
     const release = uat.frontmatter.release_candidate_commit ?? "";
@@ -344,7 +433,6 @@ const duplicateRow = (text: string, table: Table, id: string) => {
 const stepDevice = { pc: "PC", phone: "phone" } as const;
 type Commits = { pc: string; phone: string };
 
-const D70_HEADING = "## D-70: принятие риска владельцем без UAT";
 const D70_FIXTURE_RELEASE = "f49aa00f2b9833f962fa3fa890117e98a4abf362";
 const D70_FIXTURE_DECISION = "03e890a0135ff20f02b4ab68fe39642fff84c39f";
 // Drops the D-70 section (up to the next `## ` heading or the end of the text).
