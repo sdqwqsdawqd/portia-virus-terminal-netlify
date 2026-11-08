@@ -50,3 +50,11 @@
 - axe `color-contrast` (serious): `small.formatted-text-field-hint` «Текст и GIF можно сочетать.» (3,53:1, #56716b на #0a1412, 10 px) во вкладке «Информация»; `small[title]` — подпись строки списка («ИЗОБРАЖЕНИЕ», код вируса, например «VIR-Δ17», 3,25:1, #627a75 на #0a2c27, 11 px) во вкладках «Корзина» и «База вирусов». Правка — цвета в `app/portia.css`, нужен выбор владельца или плана.
   → `tests/e2e/specs/editor-ui-contract.spec.ts` (`knownBeforeD63`) терпит ровно эти узлы по разметке узла, не по правилу; всё внутри блока «Видимая часть» (`.image-framing`) сканируется без допусков и чисто.
   status: open
+
+## Найдено при выполнении 20-13 (релизная репетиция на c11adf6)
+
+- Гейты `visual-approved` и `e2e-full` считают пропуск по условию проекта (`test.skip(project !== ...)`) как SKIPPED (в репетиции visual-approved: 54 пропуска), поэтому не смогут стать PASS даже при совпадении всех кадров. `ui-contract-offline` принимает такие пропуски по правилу «тест прошёл на другом проекте» (`projectSkips`); для визуальных гейтов и `strictSkips` правило не распространено, чтобы не менять раннер после репетиции на одном commit.
+  → `scripts/phase20-release-gate.mjs`, `classifyPlaywright(..., { projectSkips })`; решение нужно до 20-14/20-15.
+  status: open
+- `ui-contract-offline` красный на release commit (9 + 2 упавших template-builder: непредусмотренное консольное событие `Blocked script execution in 'about:srcdoc'`), хотя 20-58 на H6 давал 0 упавших; воспроизведено повторным прогоном, причина расхождения не установлена.
+  status: open
