@@ -29,3 +29,7 @@ reference: .planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/re
 - Перетаскивание должно иметь клавиатурную альтернативу и доступные имена (STAB-A11Y).
 - Формат данных `ImageFraming` (x, y, zoom) и серверная нормализация 20-51 сохраняются.
 - Решение D-63 (у фото сотрудников выбора нет, вариант «b») не меняется.
+
+## Ход
+
+- 2026-11-08: окно выбора сделано в 20-56/20-57 (коммиты 2bbdafb, 98af387), ждёт вердикта владельца в 20-58 (кадры editor-image-framing-*, guide-framed, dossier-framed; EDITOR-FRAMING-01 на PC и телефоне).

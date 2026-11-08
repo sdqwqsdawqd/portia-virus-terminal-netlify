@@ -6,8 +6,9 @@ import { EditorPage } from "../pages/editor.page";
 import { expect, test } from "../fixtures/test";
 import { captureCandidate } from "./support";
 
-// Phase 20-53 (D-62, D-63): candidate frames for the owner's gallery (20-54): the editor with the «Информация» add-section bar on top, the block
-// «Видимая часть» under a «Справочник» section photo and under the photo after infection, and the site showing a chosen part of a picture.
+// Phase 20-53, 20-57 (D-62, D-63, D-66, D-67): candidate frames for the owner's gallery (20-54, 20-58): the editor with the «Информация» add-section bar on top, the dialog
+// «Видимая часть» opened from the block under a «Справочник» section photo and under the photo after infection (D-66: the whole picture dimmed, a light frame of the
+// place on the site — the band of a section in a window of the usual size, or the picture as it lies — D-67), and the site showing the same part of a picture.
 // Candidates only: every frame goes under visual-candidates/.runs, nothing here touches tests/e2e/visual/__screenshots__.
 //
 // UI-контракт на подменённых чтениях GET /api/access, GET /api/content (и GET /api/employees при «a»): не доказательство ролей; записи нет — трекер
@@ -74,12 +75,10 @@ async function openEditorTab(page: Page, content: unknown, tabName: RegExp) {
   await editor.editorNavigation().getByRole("button", { name: tabName }).click();
 }
 
-async function setSlider(group: Locator, name: string, from: number, to: number) {
-  const slider = group.getByRole("slider", { name });
-  await slider.focus();
+/** A slider of the dialog by the arrow keys (steps of 5): «Масштаб» is an input range (value), «Положение картинки» holds two values read from aria-valuetext. */
+async function stepKey(slider: Locator, from: number, to: number, keys: [string, string]) {
   const steps = (to - from) / 5;
-  for (let step = 0; step < Math.abs(steps); step += 1) await slider.press(steps > 0 ? "ArrowRight" : "ArrowLeft");
-  await expect(slider).toHaveValue(String(to));
+  for (let step = 0; step < Math.abs(steps); step += 1) await slider.press(steps > 0 ? keys[0] : keys[1]);
 }
 
 const frame = { x: 30, y: 60, zoom: 150 };
@@ -87,14 +86,24 @@ const picture = "/assets/portia-assistant.png";
 const fixture = (patch: Record<string, unknown>) => ({ ...structuredClone(defaultPortiaContent), ...patch });
 const framedVirus = (framing?: typeof frame) => ({ ...structuredClone(defaultPortiaContent.viruses[0]), id: "virus-frames", name: "Вирус для кадра", infectedImage: picture, ...(framing ? { infectedImageFraming: framing } : {}), mutations: [] });
 
-/** The block «Видимая часть» of a field and the two choices on it, brought into view for the frame. */
-async function chooseFrame(group: Locator) {
+/** The block «Видимая часть» of a field: «Изменить» opens the dialog, «Масштаб» and «Положение картинки» (arrow keys) choose the frame; the dialog stays open for the frame. */
+async function chooseFrame(page: Page, group: Locator) {
   await expect(group).toBeVisible();
-  await setSlider(group, "По горизонтали", 50, frame.x);
-  await setSlider(group, "По вертикали", 50, frame.y);
-  await setSlider(group, "Масштаб", 100, frame.zoom);
   await group.scrollIntoViewIfNeeded();
   await expect(group.locator(".portia-image.is-loaded")).toBeVisible();
+  await group.getByRole("button", { name: "Изменить" }).click();
+  const dialog = page.getByRole("dialog", { name: /^Видимая часть/ });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".image-framing-window")).toBeVisible();
+  const zoom = dialog.getByRole("slider", { name: "Масштаб" });
+  await zoom.focus();
+  await stepKey(zoom, 100, frame.zoom, ["ArrowRight", "ArrowLeft"]);
+  await expect(zoom).toHaveValue(String(frame.zoom));
+  const position = dialog.getByRole("slider", { name: "Положение картинки" });
+  await position.focus();
+  await stepKey(position, 50, frame.x, ["ArrowRight", "ArrowLeft"]);
+  await stepKey(position, 50, frame.y, ["ArrowDown", "ArrowUp"]);
+  await expect(position).toHaveAttribute("aria-valuetext", `по горизонтали ${frame.x} %, по вертикали ${frame.y} %`);
 }
 
 test("[STAB-EDIT-02] editor-info-add-section: «Информация» with the «+ ДОБАВИТЬ РАЗДЕЛ» bar above the section tabs (UI contract, substituted reads)", async ({ page, browser, determinism }, testInfo) => {
@@ -109,30 +118,30 @@ test("[STAB-EDIT-02] editor-info-add-section: «Информация» with the 
   });
 });
 
-test("[STAB-REL-08] editor-image-framing-guide: «Справочник», the block «Видимая часть» under the section photo (UI contract, substituted reads)", async ({ page, browser, determinism }, testInfo) => {
+test("[STAB-REL-08] editor-image-framing-guide: «Справочник», the dialog «Видимая часть» opened from the section photo (D-66, D-67; UI contract, substituted reads)", async ({ page, browser, determinism }, testInfo) => {
   trackWrites(page);
   await openEditorTab(page, fixture({ guideSections: [{ id: "g-frames", title: "Раздел с фото", photo: picture, cards: [] }] }), /^Справочник/);
   const toggle = page.locator(".editor-section-column > .nested-editor-card > .nested-editor-head .nested-editor-toggle");
   if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
   const group = page.locator(".image-editor-field").filter({ hasText: "Фото раздела" }).getByRole("group", { name: "Видимая часть" });
-  await chooseFrame(group);
+  await chooseFrame(page, group);
   await captureCandidate({ page, browser, determinism, testInfo }, {
     id: "editor-image-framing-guide", requirement: "STAB-BASE-03", surface: surfaceEditor, actor,
-    state: `D-63 / STAB-REL-08 ${contract}: вкладка «Справочник», фото раздела с блоком «Видимая часть» (предпросмотр полосы раздела, три ползунка, «Сбросить»), выбрано 30 / 60 / 150 %; картинка из public/assets, не настоящее фото`,
+    state: `D-66 / D-67 / STAB-REL-08 ${contract}: вкладка «Справочник», окно «Видимая часть»: вся картинка затемнена, светлая рамка — полоса раздела «Справочника» в окне обычного размера, кадр 30 / 60 / 150 % (положение стрелками, «Масштаб»); в рамке полосы сайт показывает то же; картинка из public/assets, не настоящее фото`,
     intendedSnapshot: snapshot("editor-image-framing-guide", testInfo.project.name),
   });
 });
 
-test("[STAB-REL-08] editor-image-framing-dossier: «База вирусов», the block «Видимая часть» under the photo after infection (UI contract, substituted reads)", async ({ page, browser, determinism }, testInfo) => {
+test("[STAB-REL-08] editor-image-framing-dossier: «База вирусов», the dialog «Видимая часть» opened from the photo after infection (D-66, D-67; UI contract, substituted reads)", async ({ page, browser, determinism }, testInfo) => {
   trackWrites(page);
   await openEditorTab(page, fixture({ viruses: [framedVirus()] }), /^База вирусов/);
   await page.locator(".editor-record-list .editor-record-row button", { has: page.locator("strong") }).first().click();
   await page.getByRole("navigation", { name: "Разделы досье" }).getByRole("button", { name: "Основное" }).click();
   const group = page.locator(".image-editor-field").first().getByRole("group", { name: "Видимая часть" });
-  await chooseFrame(group);
+  await chooseFrame(page, group);
   await captureCandidate({ page, browser, determinism, testInfo }, {
     id: "editor-image-framing-dossier", requirement: "STAB-BASE-03", surface: surfaceEditor, actor,
-    state: `D-63 / STAB-REL-08 ${contract}: вкладка «База вирусов», «Основное», фото после заражения с блоком «Видимая часть» (картинка как на странице досье), выбрано 30 / 60 / 150 %; картинка из public/assets, не настоящее фото`,
+    state: `D-66 / D-67 / STAB-REL-08 ${contract}: вкладка «База вирусов», «Основное», окно «Видимая часть»: вся картинка затемнена, светлая рамка — картинка целиком (как на странице досье), кадр 30 / 60 / 150 %; картинка из public/assets, не настоящее фото`,
     intendedSnapshot: snapshot("editor-image-framing-dossier", testInfo.project.name),
   });
 });
@@ -158,7 +167,7 @@ test("[STAB-REL-08] guide-framed: the «Справочник» window shows a se
   await expect(guide.locator(".guide-section-band")).toHaveAttribute("data-framing", "true");
   await captureCandidate({ page, browser, determinism, testInfo }, {
     id: "guide-framed", requirement: "STAB-BASE-03", surface: surfaceSite, actor,
-    state: `D-63 / STAB-REL-08 ${contract}: окно «Справочник», полоса раздела и плитка с кадром 30 / 60 / 150 %, рядом плитка той же картинки без кадра; картинка из public/assets, не настоящее фото`,
+    state: `D-66 / D-67 / STAB-REL-08 ${contract}: окно «Справочник», полоса раздела и плитка с тем же кадром 30 / 60 / 150 %, что в окне выбора, рядом плитка той же картинки без кадра; картинка из public/assets, не настоящее фото`,
     intendedSnapshot: snapshot("guide-framed", testInfo.project.name),
   });
 });
@@ -173,7 +182,7 @@ test("[STAB-REL-08] dossier-framed: the dossier shows the chosen part of the pho
   await expect(media.locator(".portia-image")).toHaveAttribute("data-framing", "true");
   await captureCandidate({ page, browser, determinism, testInfo }, {
     id: "dossier-framed", requirement: "STAB-BASE-03", surface: surfaceSite, actor,
-    state: `D-63 / STAB-REL-08 ${contract}: досье вируса, фото после заражения с кадром 30 / 60 / 150 %; картинка из public/assets, не настоящее фото`,
+    state: `D-66 / D-67 / STAB-REL-08 ${contract}: досье вируса, фото после заражения с тем же кадром 30 / 60 / 150 %, что в окне выбора; картинка из public/assets, не настоящее фото`,
     intendedSnapshot: snapshot("dossier-framed", testInfo.project.name),
   });
 });
