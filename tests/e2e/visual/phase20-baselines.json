@@ -9,6 +9,20 @@
   "data": "offline-заглушка tests/e2e/harness/offline-supabase.cjs: пустой portia_content -> стартовый контент сайта, выдуманные публичные значения OFFLINE_ENV; production-сборка во временной копии, next start на 127.0.0.1:3100, Node 22.13.1, chromium-desktop 1440x900 DPR 1 и chromium-phone (Pixel 7); сцены с подменёнными чтениями кандидатных спеков — UI-контракт, не доказательство ролей, сохранения или живого источника данных; captureCommit — коммит, с которого собрана production-сборка (код продукта равен ownerVerdict.commit)",
   "rows": [
     {
+      "snapshot": "tests/e2e/visual/__screenshots__/application-broadcasts--chromium-desktop.png",
+      "sha256": "7381890291257e9639d7342ac6e84e18442ea1fd628f318253b9ccdde6461e7d",
+      "supersedes": "b314d6be9b42d6b5d5695eea45bd9207db964ad3daa7843a60710d8f2041bdf5",
+      "class": "accepted-redesign",
+      "surface": "application-broadcasts--chromium-desktop",
+      "decisions": [
+        "D-21",
+        "D-56",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Сводка: колба пустого состояния D-21 и подписи D-56 (заголовок окна, подсказка); паук нового вида D-50/D-53. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
       "snapshot": "tests/e2e/visual/__screenshots__/application-guide--chromium-desktop.png",
       "sha256": "a31261181b611677682a2492665445f0d70486d2f8fbb5aa5489526c92204dec",
       "supersedes": "bbe2e065e67d55ca2842c49c92aa5aa17bda0dae9f20317407a4277bb64ca83a",
