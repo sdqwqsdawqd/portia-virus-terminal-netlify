@@ -2250,3 +2250,175 @@ test("the runner states in a comment that D-70 is an accepted risk, not an accep
   const source = readFileSync(path.resolve("scripts", "phase20-release-gate.mjs"), "utf8");
   assert.match(source, /D-70 is an accepted risk of the owner, not an acceptance/);
 });
+
+// --- 20-15 Task 2 (D-70 (3)-(5), D-34, D-68): --verify-docs, the register of accepted debts, release notes and requirement statuses --------------
+
+const DEBT20 = ["STAB-REL-05", "STAB-REL-06", "STAB-REL-07", "STAB-REL-08", "STAB-A11Y-01", "STAB-A11Y-02", "STAB-A11Y-03", "STAB-A11Y-04"];
+const DEBT_STATUS = "Принятый долг (D-70)";
+const BASIS_V2 = "«Открытые пункты Phase 18 и 19 с staging тоже уйдут как принятые долги» (слова оркестратора, выбранные владельцем «2»); прочтение 20-CONTEXT.md D-70 (4)";
+const V18 = ".planning/phases/PORTIA-18-rabochiy-stol-okna-i-zhivye-animatsii/18-VERIFICATION.md";
+const V19 = ".planning/phases/PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media/19-VERIFICATION.md";
+const REQ_MD = ".planning/REQUIREMENTS.md";
+const ROADMAP_MD = ".planning/ROADMAP.md";
+const NOTES_MD = `${gate.PHASE_DIR}/20-RELEASE-NOTES.md`;
+const OWNER_QUOTE = "а) да. принято";
+
+const verificationText = (phase: number, gaps: number, unverified = 0) =>
+  ["---", `phase: PORTIA-${phase}`, "status: gaps_found", "gaps:", ...Array.from({ length: gaps }, (_, i) => `  - truth: "gap ${i + 1}"\n    status: failed`),
+    "deferred: []", ...(unverified > 0 ? ["behavior_unverified_items:", ...Array.from({ length: unverified }, (_, i) => `  - truth: "unverified ${i + 1}"\n    test: "t"`)] : []), "coincidental_reliance_items: []", "---", "", "# Verification", ""].join("\n");
+
+const requirementsText = (o: { phase18?: string; complete20?: string[]; checked20?: string[] } = {}) => {
+  const { phase18 = "Pending", complete20 = ["STAB-SEC-06"], checked20 = ["STAB-SEC-06"] } = o;
+  const ids20 = [...DEBT20, "STAB-SEC-06"];
+  const rows20 = ids20.map((id) => `| ${id} | Phase 20 | ${complete20.includes(id) ? "Complete" : "Accepted debt (D-70)"} |`);
+  return [
+    "# Requirements", "",
+    "- [ ] **STAB-BASE-02**: x", "- [ ] **STAB-DESK-02**: x", "- [x] **STAB-PROM-03**: x", "- [ ] **STAB-PROM-15**: x",
+    ...ids20.map((id) => `- [${checked20.includes(id) ? "x" : " "}] **${id}**: x`), "",
+    "## Traceability", "", "| Requirement | Phase | Status |", "|---|---|---|",
+    "| STAB-BASE-02 | Phase 15 | Pending |", `| STAB-DESK-02 | Phase 18 | ${phase18} |`, "| STAB-PROM-03 | Phase 19 | Complete |", "| STAB-PROM-15 | Phase 19 | Pending |", ...rows20, "",
+  ].join("\n");
+};
+
+type RegRow = [string, string, string, string, string];
+const registryRows = (): RegRow[] => [
+  ...DEBT20.map((id): RegRow => [id, "20-UAT.md", "шаги не проходились", "D-70 (3)", DEBT_STATUS]),
+  ["STAB-DESK-02", "18-VERIFICATION.md", "открыт", BASIS_V2, DEBT_STATUS],
+  ["STAB-PROM-15", "19-VERIFICATION.md", "открыт", BASIS_V2, DEBT_STATUS],
+  ["18-VERIF-GAP-1", "18-VERIFICATION.md", "gap", BASIS_V2, DEBT_STATUS],
+  ["19-VERIF-GAP-1", "19-VERIFICATION.md", "gap", BASIS_V2, DEBT_STATUS],
+  ["CR-01", "19-VERIFICATION.md", "таймер медиа", BASIS_V2, DEBT_STATUS],
+  ["19-BLOCKED-DATA", "19-VERIFICATION.md", "ячейки BLOCKED (DATA)", BASIS_V2, DEBT_STATUS],
+  ["e2e-full", "20-RELEASE-EVIDENCE.md", "нет цели", "полоса среды D-70", DEBT_STATUS],
+  ["D-36(б) production", "20-CLASS-MIGRATION-EVIDENCE.md", "не применена", "D-70 (5)", "ОЖИДАЕТ ВЛАДЕЛЬЦА"],
+  ["D-47 production", "20-EDITOR-NOTES-EVIDENCE.md", "не применена", "D-70 (5)", "ОЖИДАЕТ ВЛАДЕЛЬЦА"],
+  ["20261106000000", "supabase/migrations", "не применена", "D-70 (5)", "ОЖИДАЕТ ВЛАДЕЛЬЦА"],
+  ["todo 2026-11-08-template-builder-framing-dialog", "todos/pending", "отложено", "D-69", "Отложено владельцем"],
+  ["STAB-BASE-02", "REQUIREMENTS.md", "Phase 15", "решает владелец", "Вне D-70: решает владелец"],
+];
+const registryText = (rows: RegRow[]) => ["## Принятые долги (D-70)", "", "| ID | Источник | Почему открыто | Основание | Статус |", "|---|---|---|---|---|", ...rows.map((row) => `| ${row.join(" | ")} |`), ""].join("\n");
+
+const reconciliationDocs = (o: { rows?: RegRow[]; release?: string; vis03?: string | null; device?: string; visual?: string } = {}) => {
+  const { rows = registryRows(), release = "BLOCKED", vis03 = "| STAB-VIS-03 / D-39 | 20-58-SUMMARY.md; 20-12-SUMMARY.md; phase20-empty-art-*; phase20-class-icons | два рисунка и 9 иконок (D-48) |", device = `Дата: 2026-11-08. Слова владельца: «${D70_WORDS}». Ответ «2». ${D70_LEDGER_VERDICT}. Источник: 20-CONTEXT.md D-70. PORTIA_REQUIRE_UAT=1: красный.`, visual = `owner_verdict_commit: ${OWNER_COMMIT}; источник: 20-58-SUMMARY.md; «${OWNER_QUOTE}»` } = o;
+  return [
+    "---", "phase: PORTIA-20", `final_release_commit: ${FRC_COMMIT}`, `release_candidate_commit: ${RC_COMMIT}`, `plan_base: ${"1".repeat(40)}`, "---", "", "# 20-RECONCILIATION", "",
+    "## Приёмка на устройствах: принятый риск владельца (D-70)", "", device, "",
+    "## Визуальная приёмка (D-68)", "", visual, "",
+    "## Решения", "", "| Решение | Источник | Итог |", "|---|---|---|", ...(vis03 === null ? [] : [vis03]), "",
+    "## Итог релиза", "", "Итог раннера на FRC: BLOCKED", `Итог релиза: ${release}`, "Закрытие фазы: С ПРИНЯТЫМИ ДОЛГАМИ (D-70)", "",
+    registryText(rows),
+  ].join("\n");
+};
+
+const notesText = (o: { sentence?: string; status?: string; commit?: string; extra?: string } = {}) => {
+  const { sentence = "Пошаговая приёмка на физических ПК и телефоне не проводилась.", status = "final", commit = FRC_COMMIT, extra = "" } = o;
+  return ["---", `status: ${status}`, `release_commit: ${commit}`, "---", "", "# Release notes", "", "## Приёмка владельцем без UAT (D-70)", "", `${sentence} Слова владельца: «${D70_WORDS}». ${D70_LEDGER_VERDICT}. Итог релиза: BLOCKED. ${extra}`, "", "## Не доказано", ""].join("\n");
+};
+
+function docsRepo(o: { files?: Record<string, string | null>; baseRequirements?: string } = {}) {
+  const dir = gate.PHASE_DIR;
+  const base = lineageRepo({
+    files: {
+      [`${dir}/20-RELEASE-EVIDENCE.md`]: lineageEvidence("BLOCKED", ["e2e-full"]),
+      [`${dir}/20-RECONCILIATION.md`]: reconciliationDocs(),
+      [`${dir}/20-12-SUMMARY.md`]: "---\nplan: 12\n---\n",
+      [`${dir}/20-58-SUMMARY.md`]: `${OWNER_SUMMARY()}\n> ${OWNER_QUOTE}\n`,
+      [NOTES_MD]: notesText(),
+      [REQ_MD]: requirementsText(),
+      [ROADMAP_MD]: `### Phase 20: x\n\n**Requirements**: ${[...DEBT20, "STAB-SEC-06"].join(", ")}\n`,
+      [V18]: verificationText(18, 1),
+      [V19]: verificationText(19, 1),
+      ...(o.files ?? {}),
+    },
+  });
+  const baseText = o.baseRequirements ?? requirementsText();
+  const git = (args: string[]) => (args[0] === "show" ? { status: 0, stdout: baseText, stderr: "" } : base.deps.git(args));
+  return { ...base.deps, git };
+}
+const docsErrors = (o: Parameters<typeof docsRepo>[0] = {}) => gate.verifyDocs(docsRepo(o));
+const withRows = (mutate: (rows: RegRow[]) => RegRow[]) => ({ files: { [`${gate.PHASE_DIR}/20-RECONCILIATION.md`]: reconciliationDocs({ rows: mutate(registryRows()) }) } });
+
+test("verifyDocs (D-70): a consistent register, release notes, requirement statuses and STAB-VIS-03 row have no errors", () => {
+  assert.deepEqual(docsErrors(), []);
+});
+
+test("verifyDocs: a register row of Phase 20 marked Complete, or checked, is rejected; Accepted debt is required in the traceability", () => {
+  mentions(docsErrors({ files: { [REQ_MD]: requirementsText({ complete20: ["STAB-SEC-06", "STAB-REL-05"] }) } }), /STAB-REL-05.*Complete/);
+  mentions(docsErrors({ files: { [REQ_MD]: requirementsText({ checked20: ["STAB-SEC-06", "STAB-A11Y-03"] }) } }), /STAB-A11Y-03.*(Complete|галочк)/);
+  mentions(docsErrors({ files: { [REQ_MD]: requirementsText().replace("| STAB-REL-06 | Phase 20 | Accepted debt (D-70) |", "| STAB-REL-06 | Phase 20 | Pending |") } }), /STAB-REL-06.*Accepted debt \(D-70\)/);
+});
+
+test("verifyDocs: every ID of the D-70 (3) minimum needs a register row; so does each open requirement of Phases 15, 18 and 19", () => {
+  for (const id of DEBT20) mentions(docsErrors(withRows((rows) => rows.filter((row) => row[0] !== id))), new RegExp(`${id}.*(минимального набора|нет строки)`));
+  mentions(docsErrors(withRows((rows) => rows.filter((row) => row[0] !== "STAB-DESK-02"))), /STAB-DESK-02.*Phase 18/);
+  mentions(docsErrors(withRows((rows) => rows.filter((row) => row[0] !== "STAB-PROM-15"))), /STAB-PROM-15.*Phase 19/);
+  mentions(docsErrors(withRows((rows) => rows.filter((row) => row[0] !== "STAB-BASE-02"))), /STAB-BASE-02.*Phase 15/);
+});
+
+test("verifyDocs: each gap and behavior_unverified item of 18/19-VERIFICATION, CR-01 and each BLOCKED gate of the protocol needs a row", () => {
+  mentions(docsErrors(withRows((rows) => rows.filter((row) => row[0] !== "18-VERIF-GAP-1"))), /18-VERIF-GAP-1/);
+  mentions(docsErrors(withRows((rows) => rows.filter((row) => row[0] !== "19-VERIF-GAP-1"))), /19-VERIF-GAP-1/);
+  mentions(docsErrors(withRows((rows) => rows.filter((row) => row[0] !== "CR-01"))), /CR-01/);
+  mentions(docsErrors(withRows((rows) => rows.filter((row) => row[0] !== "e2e-full"))), /BLOCKED-гейт e2e-full/);
+  mentions(docsErrors({ files: { [V18]: verificationText(18, 1, 2) } }), /18-VERIF-BU-1/);
+  mentions(docsErrors({ files: { [V19]: verificationText(19, 3) } }), /19-VERIF-GAP-3/);
+});
+
+test("verifyDocs: a register status outside the four allowed, or a row with PASS or Complete, is rejected; Phase 18/19 rows carry the reading mark", () => {
+  mentions(docsErrors(withRows((rows) => rows.map((row) => (row[0] === "STAB-REL-05" ? [row[0], row[1], row[2], row[3], "Принято"] as RegRow : row)))), /STAB-REL-05.*статус/);
+  mentions(docsErrors(withRows((rows) => rows.map((row) => (row[0] === "STAB-REL-05" ? [row[0], row[1], "всё PASS", row[3], row[4]] as RegRow : row)))), /STAB-REL-05.*PASS/);
+  mentions(docsErrors(withRows((rows) => rows.map((row) => (row[0] === "CR-01" ? [row[0], row[1], row[2], row[3], "Complete"] as RegRow : row)))), /CR-01/);
+  assert.deepEqual(docsErrors(withRows((rows) => rows.map((row) => (row[0] === "STAB-REL-05" ? [row[0], row[1], "не PASS, не Complete", row[3], row[4]] as RegRow : row)))), [], "a negated mention is allowed");
+  mentions(docsErrors(withRows((rows) => rows.map((row) => (row[0] === "STAB-DESK-02" ? [row[0], row[1], row[2], "staging", row[4]] as RegRow : row)))), /STAB-DESK-02.*прочтение 20-CONTEXT\.md D-70 \(4\)/);
+});
+
+test("verifyDocs: production migrations and the deferred todo keep their owner statuses; an agent PASS or a wrong status is rejected", () => {
+  for (const id of ["D-36(б) production", "D-47 production", "20261106000000"]) {
+    mentions(docsErrors(withRows((rows) => rows.map((row) => (row[0] === id ? [row[0], row[1], row[2], row[3], DEBT_STATUS] as RegRow : row)))), new RegExp(`${id.replace(/[().]/g, "\\$&")}.*ОЖИДАЕТ ВЛАДЕЛЬЦА`));
+    mentions(docsErrors(withRows((rows) => rows.filter((row) => row[0] !== id))), new RegExp(`${id.replace(/[().]/g, "\\$&")}`));
+  }
+  mentions(docsErrors(withRows((rows) => rows.map((row) => (row[0] === "D-47 production" ? [row[0], row[1], "PASS агента", row[3], row[4]] as RegRow : row)))), /D-47 production.*PASS/);
+  mentions(docsErrors(withRows((rows) => rows.filter((row) => !row[0].startsWith("todo 2026-11-08-template-builder-framing-dialog")))), /template-builder-framing-dialog/);
+});
+
+test("verifyDocs: Phase 15, 18 and 19 traceability rows must not change against plan_base", () => {
+  mentions(docsErrors({ files: { [REQ_MD]: requirementsText({ phase18: "Complete" }) } }), /STAB-DESK-02.*Phase 18.*plan_base/);
+  mentions(docsErrors({ files: { [REQ_MD]: requirementsText().replace("| STAB-PROM-15 | Phase 19 | Pending |", "| STAB-PROM-15 | Phase 19 | Complete |") } }), /STAB-PROM-15.*plan_base/);
+  mentions(docsErrors({ files: { [REQ_MD]: requirementsText().replace("| STAB-BASE-02 | Phase 15 | Pending |", "| STAB-BASE-02 | Phase 15 | Complete |") } }), /STAB-BASE-02.*plan_base/);
+});
+
+test("verifyDocs: release notes need status final, the FRC, the D-70 section with its first sentence, and no PASS device verdict line", () => {
+  mentions(docsErrors({ files: { [NOTES_MD]: notesText({ status: "draft" }) } }), /status: final/);
+  mentions(docsErrors({ files: { [NOTES_MD]: notesText({ commit: RC_COMMIT }) } }), /release_commit.*FRC/);
+  mentions(docsErrors({ files: { [NOTES_MD]: notesText().replace("## Приёмка владельцем без UAT (D-70)", "## Приёмка") } }), /нет раздела «Приёмка владельцем без UAT \(D-70\)»/);
+  mentions(docsErrors({ files: { [NOTES_MD]: notesText({ sentence: "Приёмка проведена." }) } }), /первое предложение/);
+  mentions(docsErrors({ files: { [NOTES_MD]: notesText({ extra: "\n\nВердикт PC: PASS" }) } }), /вердикт устройства.*PASS/);
+  mentions(docsErrors({ files: { [NOTES_MD]: null } }), /20-RELEASE-NOTES\.md/);
+});
+
+test("verifyDocs: «Итог релиза» stronger than releaseVerdict is rejected; the device and visual sections carry the verbatim sources", () => {
+  mentions(docsErrors({ files: { [`${gate.PHASE_DIR}/20-RECONCILIATION.md`]: reconciliationDocs({ release: "PASS" }) } }), /Итог релиза: PASS/);
+  mentions(docsErrors({ files: { [`${gate.PHASE_DIR}/20-RECONCILIATION.md`]: reconciliationDocs({ device: "Приёмка не проводилась." }) } }), /Приёмка на устройствах.*слова владельца/);
+  mentions(docsErrors({ files: { [`${gate.PHASE_DIR}/20-RECONCILIATION.md`]: reconciliationDocs({ device: `«${D70_WORDS}». ${D70_LEDGER_VERDICT}. Источник: 20-CONTEXT.md D-70.` }) } }), /PORTIA_REQUIRE_UAT=1/);
+  mentions(docsErrors({ files: { [`${gate.PHASE_DIR}/20-RECONCILIATION.md`]: reconciliationDocs({ visual: "принято" }) } }), /Визуальная приёмка \(D-68\)/);
+});
+
+test("verifyDocs: the STAB-VIS-03 / D-39 row needs 20-58-SUMMARY.md and 20-12, and both sources must exist", () => {
+  mentions(docsErrors({ files: { [`${gate.PHASE_DIR}/20-RECONCILIATION.md`]: reconciliationDocs({ vis03: null }) } }), /STAB-VIS-03 \/ D-39/);
+  mentions(docsErrors({ files: { [`${gate.PHASE_DIR}/20-RECONCILIATION.md`]: reconciliationDocs({ vis03: "| STAB-VIS-03 / D-39 | эталоны | x |" }) } }), /STAB-VIS-03 \/ D-39.*20-58-SUMMARY\.md/);
+  mentions(docsErrors({ files: { [`${gate.PHASE_DIR}/20-12-SUMMARY.md`]: null } }), /20-12-SUMMARY\.md/);
+  mentions(docsErrors({ files: { [`${gate.PHASE_DIR}/20-58-SUMMARY.md`]: null } }), /20-58-SUMMARY\.md/);
+});
+
+test("main --verify-docs: exit 0 for consistent documents, 1 with reasons otherwise; the usage line names the mode", () => {
+  let out = "";
+  let err = "";
+  const io = { out: (text: string) => { out += text; }, err: (text: string) => { err += text; } };
+  assert.equal(gate.main(["--verify-docs"], { ...docsRepo(), ...io }), 0, err);
+  assert.match(out, /docs verified/);
+  assert.equal(gate.main(["--verify-docs"], { ...docsRepo({ files: { [NOTES_MD]: notesText({ status: "draft" }) } }), ...io }), 1);
+  assert.match(err, /PORTIA_RELEASE_GATE:verify-failed.*status: final/);
+  err = "";
+  gate.main(["--bogus"], { ...docsRepo(), ...io });
+  assert.match(err, /--verify-docs/);
+});
