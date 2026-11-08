@@ -167,6 +167,118 @@
         "D-53"
       ],
       "reason": "Эталон принятого вида (20-58) на стартовом контенте; tracer 20-12"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-template-builder-main--chromium-desktop.png",
+      "sha256": "f03f07340c8ff2584f626a934d8e6d5c9ac7eb2395623596fca5b96c4cf2cc35",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Конструктор шаблона: вкладка «Основное», пустой черновик (ПК)",
+      "decisions": [
+        "D-52",
+        "D-55",
+        "D-61",
+        "D-65"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменено одно чтение статуса участника — UI-контракт, не доказательство ролей"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-template-builder-main--chromium-phone.png",
+      "sha256": "a9547218d3987585f6d4e39e70029853f85a470fc7c679176b5a26b61c060ff3",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Конструктор шаблона: вкладка «Основное», пустой черновик (телефон)",
+      "decisions": [
+        "D-52",
+        "D-55",
+        "D-61",
+        "D-65"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменено одно чтение статуса участника — UI-контракт, не доказательство ролей"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-template-builder-mutations--chromium-desktop.png",
+      "sha256": "ada47a936b687f2313705a110f369b104e3603f67c6dc4be383ff996f9f9b392",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Конструктор шаблона: «Мутации», одна мутация, сгенерированный PNG (ПК)",
+      "decisions": [
+        "D-52",
+        "D-55",
+        "D-61",
+        "D-65"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменено одно чтение статуса участника — UI-контракт, не доказательство ролей"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-template-builder-mutations--chromium-phone.png",
+      "sha256": "c2e12770437a956bae097fedc640946ec705bb7ae40ff68a46b8cb53002cc137",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Конструктор шаблона: «Мутации», одна мутация, сгенерированный PNG (телефон)",
+      "decisions": [
+        "D-52",
+        "D-55",
+        "D-61",
+        "D-65"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменено одно чтение статуса участника — UI-контракт, не доказательство ролей"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-template-builder-preview--chromium-desktop.png",
+      "sha256": "b229a1c65332159cf7ecf61c257580fc2297472e98d4221023ae4b4bc3ed91ed",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Конструктор шаблона: вид «Предпросмотр» заполненного черновика (ПК)",
+      "decisions": [
+        "D-52",
+        "D-55",
+        "D-61",
+        "D-65"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменено одно чтение статуса участника — UI-контракт, не доказательство ролей"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-template-builder-preview--chromium-phone.png",
+      "sha256": "c246a9dfaeab6db0de1eb85c7b295757b6f79b0ecad72424b5db299e90ef8c6d",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Конструктор шаблона: вид «Предпросмотр» заполненного черновика (телефон)",
+      "decisions": [
+        "D-52",
+        "D-55",
+        "D-61",
+        "D-65"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменено одно чтение статуса участника — UI-контракт, не доказательство ролей"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-template-builder-text--chromium-desktop.png",
+      "sha256": "5344d2f568dadf280e3abcc9b151407bb04baf83bdf5776c8b3a59f8bd59860f",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Конструктор шаблона: «Описание», слово оформлено, панель «ОФОРМЛЕНИЕ» (ПК)",
+      "decisions": [
+        "D-52",
+        "D-55",
+        "D-61",
+        "D-65"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменено одно чтение статуса участника — UI-контракт, не доказательство ролей"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-template-builder-text--chromium-phone.png",
+      "sha256": "0b7433d5bf905706665a2bf9a306e23d54ccc5c4f22c224a8c3f4607c428b328",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Конструктор шаблона: «Описание», слово оформлено, панель «ОФОРМЛЕНИЕ» (телефон)",
+      "decisions": [
+        "D-52",
+        "D-55",
+        "D-61",
+        "D-65"
+      ],
+      "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменено одно чтение статуса участника — UI-контракт, не доказательство ролей"
     }
   ]
 }

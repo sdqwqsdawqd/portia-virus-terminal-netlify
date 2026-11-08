@@ -1,6 +1,7 @@
 import { DesktopPage } from "../pages/desktop.page";
 import { parkClock } from "../fixtures/determinism";
 import { PromotionPage } from "../pages/promotion.page";
+import { deflateSync } from "node:zlib";
 import { expect, test } from "../fixtures/test";
 import { visualPolicy, type VisualState } from "../fixtures/visual-policy";
 import type { Locator, Page, Request } from "@playwright/test";
@@ -183,4 +184,189 @@ test("@phase20 class icons: the classification panel of МОРОК (Транзи
   await settle(archive);
   await parkClock(page);
   await expect(panel).toHaveScreenshot(snapshotName("class-icons", testInfo.project.name), visualPolicy(page, "phase20:class-icons"));
+});
+
+// ---- D-52, D-55, D-61, D-65: the template builder in «Повышение» -------------------------------------------------------------------------
+// UI contract, not a role proof: ONE answer is substituted, GET /api/promotion/status?nickname=, so the local builder can be reached without a
+// participant on a staging. The frames show only the local builder (no server write, no upload: the tracker above fails the test on any).
+const builderNickname = "portia_e2e_template";
+const participantStatus = {
+  nickname: builderNickname,
+  promotionRecord: { currentTitle: { id: "academic", label: "Академик" }, nextTitle: { id: "intern", label: "Стажёр" } },
+  currentTitle: { id: "academic", label: "Академик" },
+  nextTitle: { id: "intern", label: "Стажёр" },
+  ordinary: {
+    eligibility: { status: "eligible", targetTitleId: null },
+    active: {
+      status: "assigned",
+      targetTitleId: null,
+      attemptId: undefined,
+      tasks: [
+        { id: "task-1", text: "Создать шаблон досье вируса по образцу «Базы вирусов».", sortOrder: 1 },
+        { id: "task-2", text: "Описать порядок работы в лаборатории.", sortOrder: 2 },
+      ],
+    },
+  },
+  qualification: { eligibility: { status: "not-listed" }, active: null },
+  results: [],
+};
+
+const crcTable = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+function crc32(bytes: Buffer) {
+  let c = 0xffffffff;
+  for (const byte of bytes) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function pngChunk(type: string, data: Buffer) {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([length, body, crc]);
+}
+/** A deterministic, decodable two-band PNG generated here, so the frames need no fixture file and repeat byte for byte. */
+function bandPng(width: number, height: number, top: [number, number, number], bottom: [number, number, number]) {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  const rows = Array.from({ length: height }, (_, y) => {
+    const [r, g, b] = y < height / 2 ? top : bottom;
+    return Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: width }, () => [r, g, b]).flat())]);
+  });
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", header),
+    pngChunk("IDAT", deflateSync(Buffer.concat(rows))),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+const infectedPng = bandPng(240, 140, [38, 92, 84], [196, 160, 64]);
+const mutationPng = bandPng(180, 100, [120, 36, 52], [40, 56, 120]);
+
+async function openBuilder(page: Page) {
+  trackWrites(page);
+  await page.route("**/api/promotion/status**", async (route) => {
+    if (new URL(route.request().url()).searchParams.has("nickname")) {
+      await route.fulfill({ status: 200, contentType: "application/json", headers: { "cache-control": "no-store" }, body: JSON.stringify(participantStatus) });
+      return;
+    }
+    await route.fallback();
+  });
+  await openDesktopStill(page);
+  const promotion = new PromotionPage(page);
+  await promotion.open();
+  await promotion.nickname.fill(builderNickname);
+  await promotion.checkNickname.click();
+  await expect(promotion.heading(builderNickname)).toBeVisible();
+  await promotion.window.getByRole("button", { name: "Создать шаблон" }).click();
+  const builder = promotion.window.locator(".template-builder");
+  await expect(builder.getByRole("heading", { name: "Шаблон досье", level: 1 })).toBeVisible();
+  await settle(promotion.window);
+  return { promotion, builder };
+}
+
+async function openBuilderTab(builder: Locator, name: "Основное" | "Описание" | "Мутации") {
+  await builder.getByRole("navigation", { name: "Разделы досье" }).getByRole("button", { name, exact: true }).click();
+}
+
+const builderName = (builder: Locator) => builder.getByLabel("Название", { exact: true });
+const builderText = (builder: Locator, name: string) => builder.getByRole("textbox", { name, exact: true });
+
+/** Types `${word} и далее`, selects the first word and applies a ready style; the panel stays open unless asked to close. */
+async function styleFirstWord(page: Page, builder: Locator, field: Locator, word: string, preset: "Заголовок" | "Важно", closePanel: boolean) {
+  await field.fill(`${word} и далее`);
+  await field.press("Home");
+  for (let step = 0; step < word.length; step += 1) await page.keyboard.press("Shift+ArrowRight");
+  const launch = builder.getByRole("button", { name: /^Оформление .+: панель оформления текста$/ });
+  await expect(launch).toBeEnabled();
+  await launch.click();
+  const panel = page.getByRole("region", { name: /^Форматирование:/ });
+  await expect(panel).toBeVisible();
+  const expand = panel.getByRole("button", { name: "Развернуть панель оформления" });
+  if (await expand.isVisible()) await expand.click();
+  const style = panel.getByRole("group", { name: "Готовые стили" }).getByRole("button", { name: preset, exact: true });
+  await style.click();
+  await expect(style).toHaveAttribute("aria-pressed", "true");
+  if (closePanel) {
+    await panel.getByRole("button", { name: "Закрыть панель оформления" }).click();
+    await expect(panel).toHaveCount(0);
+  }
+}
+
+test("@phase20 template builder main: tab «Основное», empty draft (D-52; UI contract, one substituted read)", async ({ page }, testInfo) => {
+  const { promotion, builder } = await openBuilder(page);
+  await expect(builder.getByRole("navigation", { name: "Разделы досье" }).getByRole("button")).toHaveText(["Основное", "Описание", "Мутации"]);
+  await expect(builder.getByRole("heading", { name: "Основные данные" })).toBeVisible();
+  await expect(builder.getByRole("heading", { name: "Классификация" })).toBeVisible();
+  await expect(builderName(builder)).toHaveValue("");
+  await settle(promotion.window);
+  await parkClock(page);
+  await compare(page, "template-builder-main", testInfo.project.name, "phase20:template-builder-main");
+});
+
+test("@phase20 template builder text: tab «Описание», one word styled, the panel «ОФОРМЛЕНИЕ» open (D-52, D-61; UI contract, one substituted read)", async ({ page }, testInfo) => {
+  const { promotion, builder } = await openBuilder(page);
+  await openBuilderTab(builder, "Описание");
+  await builderText(builder, "Физиологические характеристики").fill("Колония живёт в сыром подвале и не любит свет.");
+  await builderText(builder, "Здоровье").fill("120 единиц");
+  await styleFirstWord(page, builder, builderText(builder, "Внешние характеристики"), "Бугристая", "Заголовок", false);
+  await expect(builder.getByRole("heading", { name: "Характеристики PPU" })).toBeVisible();
+  await settle(promotion.window);
+  await parkClock(page);
+  await compare(page, "template-builder-text", testInfo.project.name, "phase20:template-builder-text");
+});
+
+test("@phase20 template builder mutations: tab «Мутации», one mutation with a styled description and a generated PNG (D-52, D-61; UI contract, one substituted read)", async ({ page }, testInfo) => {
+  const { promotion, builder } = await openBuilder(page);
+  await openBuilderTab(builder, "Мутации");
+  await builder.getByRole("button", { name: "+ ДОБАВИТЬ МУТАЦИЮ" }).click();
+  await expect(builder.getByText("МУТАЦИЯ 01")).toBeVisible();
+  await builderName(builder).fill("Светобоязнь");
+  await styleFirstWord(page, builder, builderText(builder, "Описание"), "Реагирует", "Важно", true);
+  await builder.locator("[data-testid=template-image-input]").setInputFiles({ name: "mutation.png", mimeType: "image/png", buffer: mutationPng });
+  await expect(builder.getByRole("img", { name: "Предпросмотр: Изображение мутации" })).toBeVisible();
+  await settle(promotion.window);
+  await parkClock(page);
+  await compare(page, "template-builder-mutations", testInfo.project.name, "phase20:template-builder-mutations");
+});
+
+test("@phase20 template builder preview: a filled draft in the view «Предпросмотр» (D-55, D-65; UI contract, one substituted read)", async ({ page }, testInfo) => {
+  const { promotion, builder } = await openBuilder(page);
+  await builderName(builder).fill("Подвальная плесень");
+  await builder.getByLabel("Код", { exact: true }).fill("PM-07");
+  await builder.getByLabel("Статус", { exact: true }).fill("Изучается");
+  await builder.locator("[data-testid=template-image-input]").setInputFiles({ name: "infected.png", mimeType: "image/png", buffer: infectedPng });
+  const selects = builder.locator("section.editor-group", { has: page.getByRole("heading", { name: "Классификация" }) }).locator("select");
+  await selects.nth(0).selectOption("Апейрон");
+  await selects.nth(1).selectOption("Тезей");
+
+  await openBuilderTab(builder, "Описание");
+  await styleFirstWord(page, builder, builderText(builder, "Внешние характеристики"), "Бугристая", "Заголовок", true);
+  await builderText(builder, "Физиологические характеристики").fill("Колония живёт в сыром подвале и не любит свет.");
+  await builderText(builder, "Здоровье").fill("120 единиц");
+  await builderText(builder, "Скорость").fill("Медленная");
+
+  await openBuilderTab(builder, "Мутации");
+  await builder.getByRole("button", { name: "+ ДОБАВИТЬ МУТАЦИЮ" }).click();
+  await builderName(builder).fill("Светобоязнь");
+  await styleFirstWord(page, builder, builderText(builder, "Описание"), "Реагирует", "Важно", true);
+  await builder.locator("[data-testid=template-image-input]").setInputFiles({ name: "mutation.png", mimeType: "image/png", buffer: mutationPng });
+
+  // The view «Предпросмотр»: the archive card over the whole width of the window; on a PC the window keeps its normal size (D-65).
+  await builder.getByRole("group", { name: "Вид", exact: true }).getByRole("button", { name: "Предпросмотр", exact: true }).click();
+  const preview = builder.getByLabel("Предпросмотр шаблона");
+  await expect(preview.getByRole("img", { name: "Фото после заражения" })).toBeVisible();
+  await expect(preview.locator(".section-kicker")).toHaveCount(5);
+  await expect(preview.locator(".mutation-index")).toHaveText("M-01");
+  await expect(preview.locator(".class-cell svg.class-badge").first()).toBeVisible();
+  await preview.evaluate((node) => node.scrollIntoView({ block: "start", inline: "nearest" }));
+  await settle(promotion.window);
+  await parkClock(page);
+  await compare(page, "template-builder-preview", testInfo.project.name, "phase20:template-builder-preview");
 });
