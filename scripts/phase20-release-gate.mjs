@@ -1113,6 +1113,61 @@ export function readOwnerVerdict(markdown) {
 }
 
 const OWNER_WAITING = "ОЖИДАЕТ ВЛАДЕЛЬЦА";
+const OWNER_SUMMARY_NAME = path.posix.basename(OWNER_SUMMARY_MD);
+
+/**
+ * The effective owner verdict: the last valid link of the chain that starts at 20-58-SUMMARY.md and continues with the summaries of
+ * later plans of this phase that carry `owner_verdict_renews`. Returns { verdict, date, commit, source, chainError, baseCommit } or
+ * null when 20-58-SUMMARY.md cannot be read. Without links the result is the 20-58 verdict, so nothing changes until an owner renews it.
+ * D-68: a view is accepted only by the word of the owner, this function reads it and never writes it.
+ * D-69: a change of the product code after the verdict needs a new word of the owner; the orchestrator records it as a link, the agent does not.
+ * deps = { fs: { existsSync, readFileSync, readdirSync }, git(args), root }; `root` overrides deps.root (the worktree of a release commit).
+ */
+export function readEffectiveOwnerVerdict(deps, root = deps.root) {
+  const readText = (relative) => {
+    try {
+      const target = path.join(root, relative);
+      return deps.fs.existsSync(target) ? String(deps.fs.readFileSync(target, "utf8")) : null;
+    } catch { return null; }
+  };
+  const baseText = readText(OWNER_SUMMARY_MD);
+  const base = baseText === null ? null : readOwnerVerdict(baseText);
+  if (!base) return null;
+  let current = { ...base, source: OWNER_SUMMARY_NAME, chainError: "", baseCommit: base.commit };
+
+  let names = [];
+  try { names = deps.fs.readdirSync(path.join(root, PHASE_DIR)).map(String); } catch { names = []; }
+  const links = names
+    .map((name) => ({ name, plan: Number(name.match(/^20-(\d+)-SUMMARY\.md$/)?.[1] ?? Number.NaN) }))
+    .filter((entry) => Number.isInteger(entry.plan) && entry.plan > 58)
+    .sort((a, b) => a.plan - b.plan);
+
+  for (const { name } of links) {
+    const text = readText(`${PHASE_DIR}/${name}`);
+    const front = text === null ? null : normalizeText(text).match(/^---\n([\s\S]*?)\n---/)?.[1] ?? null;
+    if (front === null || !/^owner_verdict(?:_date|_commit|_renews)?:/m.test(front)) continue; // not a link: a summary without owner fields
+    const read = (field) => front.match(new RegExp(`^${field}:[ \\t]*(.*?)[ \\t]*$`, "m"))?.[1]?.replace(/^["']|["']$/g, "") ?? "";
+    const link = { verdict: read("owner_verdict"), date: read("owner_verdict_date"), commit: read("owner_verdict_commit"), renews: read("owner_verdict_renews") };
+    const problem = (() => {
+      if (!link.renews) return "нет owner_verdict_renews";
+      if (!link.verdict) return "нет owner_verdict";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(link.date)) return "нет даты ГГГГ-ММ-ДД";
+      if (!/^[0-9a-f]{40}$/.test(link.commit)) return "owner_verdict_commit не 40 hex";
+      if (link.renews !== current.commit) return `owner_verdict_renews ${link.renews.slice(0, 12)} не равен коммиту предыдущего звена ${String(current.commit).slice(0, 12)}`;
+      if (link.commit === current.commit) return "коммит звена совпадает с коммитом предыдущего звена";
+      if (current.date && link.date < current.date) return `дата ${link.date} раньше даты предыдущего звена ${current.date}`;
+      if (deps.git(["cat-file", "-e", `${link.commit}^{commit}`]).status !== 0) return `коммита ${link.commit.slice(0, 12)} нет в репозитории`;
+      if (deps.git(["merge-base", "--is-ancestor", current.commit, link.commit]).status !== 0) return `коммит ${link.commit.slice(0, 12)} не потомок коммита предыдущего звена`;
+      return "";
+    })();
+    if (problem) {
+      // The chain stops at the first break: later links are not used and the verdict is the one that waits for the owner.
+      return { verdict: "", date: "", commit: current.commit, source: current.source, chainError: `цепочка вердиктов нарушена: ${name}: ${problem}`, baseCommit: base.commit };
+    }
+    current = { verdict: link.verdict, date: link.date, commit: link.commit, source: name, chainError: "", baseCommit: base.commit };
+  }
+  return current;
+}
 
 /** The status text of the «Общий вердикт» row. It is built only from a verdict that was read; the agent decides nothing. */
 export function ownerStatusText(owner) {
@@ -1140,7 +1195,9 @@ export function visualAcceptanceRows({ owner, baselines, changed, releaseCommit 
     {
       id: "Общий вердикт",
       status: ownerStatusText(owner),
-      evidence: owner ? `owner_verdict: ${owner.verdict || "нет"}; owner_verdict_date: ${owner.date || "-"}; owner_verdict_commit: ${ownerCommit || "-"}; источник: 20-58-SUMMARY.md` : "20-58-SUMMARY.md не прочитан",
+      evidence: owner
+        ? `owner_verdict: ${owner.verdict || "нет"}; owner_verdict_date: ${owner.date || "-"}; owner_verdict_commit: ${ownerCommit || "-"}; источник: ${owner.source ?? OWNER_SUMMARY_NAME}${owner.chainError ? `; ${owner.chainError}` : ""}`
+        : `${OWNER_SUMMARY_NAME} не прочитан`,
     },
     {
       id: "Эталоны 20-12",
@@ -1179,8 +1236,8 @@ function computeVisualRows(deps, created) {
   let owner = null;
   let baselines = null;
   try {
-    const summaryPath = path.join(created.path, OWNER_SUMMARY_MD);
-    if (deps.fs.existsSync(summaryPath)) owner = readOwnerVerdict(deps.fs.readFileSync(summaryPath, "utf8"));
+    // The chain is read from the worktree of the release commit (commit-bound), the git checks run against the shared repository.
+    owner = readEffectiveOwnerVerdict(deps, created.path);
   } catch { owner = null; }
   try {
     const registerPath = path.join(created.path, BASELINES_JSON);
@@ -1205,7 +1262,12 @@ function verifyVisualSection(text, deps, info) {
   for (const id of VISUAL_ROWS) if (!row(id)) errors.push(`${id}: visual acceptance row is missing`);
 
   const hasSummary = typeof deps.ownerSummary === "string" && deps.ownerSummary.trim() !== "";
-  const owner = hasSummary ? readOwnerVerdict(deps.ownerSummary) ?? { verdict: "", date: "", commit: "" } : null;
+  const baseOwner = hasSummary ? readOwnerVerdict(deps.ownerSummary) ?? { verdict: "", date: "", commit: "" } : null;
+  // D-69: the verdict and the product code follow the effective link of the chain; the baselines stay with 20-58.
+  const owner = deps.effectiveOwner !== undefined ? deps.effectiveOwner : baseOwner;
+  const ownerSource = owner?.source ?? OWNER_SUMMARY_NAME;
+  const chainNote = owner?.chainError ? ` (${owner.chainError})` : "";
+  const registerAuthority = baseOwner?.commit ?? owner?.baseCommit ?? owner?.commit ?? "";
   let verdictOk = false;
   let codeOk = false;
 
@@ -1215,9 +1277,9 @@ function verifyVisualSection(text, deps, info) {
     if (verdictRow.some((cell) => /(?<!не\s)(?<!not\s)\bPASS\b/i.test(cell))) errors.push("Общий вердикт: an owner verdict row must not contain PASS (it is the owner's word, never an agent result)");
     const accepted = status.match(/^ПРИНЯТО ВЛАДЕЛЬЦЕМ (\d{4}-\d{2}-\d{2})/);
     if (accepted) {
-      if (!owner) errors.push("Общий вердикт: row says ПРИНЯТО ВЛАДЕЛЬЦЕМ, but 20-58-SUMMARY.md is unreadable");
-      else if (owner.verdict !== "accepted") errors.push(`Общий вердикт: row says ПРИНЯТО ВЛАДЕЛЬЦЕМ, but 20-58-SUMMARY.md has owner_verdict "${owner.verdict}"`);
-      else if (owner.date !== accepted[1]) errors.push(`Общий вердикт: date ${accepted[1]} differs from owner_verdict_date ${owner.date || "(none)"} in 20-58-SUMMARY.md`);
+      if (!owner) errors.push(`Общий вердикт: row says ПРИНЯТО ВЛАДЕЛЬЦЕМ, but ${OWNER_SUMMARY_NAME} is unreadable`);
+      else if (owner.verdict !== "accepted") errors.push(`Общий вердикт: row says ПРИНЯТО ВЛАДЕЛЬЦЕМ, but ${ownerSource} has owner_verdict "${owner.verdict}"${chainNote}`);
+      else if (owner.date !== accepted[1]) errors.push(`Общий вердикт: date ${accepted[1]} differs from owner_verdict_date ${owner.date || "(none)"} in ${ownerSource}`);
       else verdictOk = true;
     } else if (!/^ИСПРАВИТЬ \(владелец\) \d{4}-\d{2}-\d{2}/.test(status) && !/^ОЖИДАЕТ ВЛАДЕЛЬЦА/.test(status)) {
       errors.push(`Общий вердикт: status must be ${OWNER_STATUS_FORMS}, got "${status || "(empty)"}"`);
@@ -1229,12 +1291,12 @@ function verifyVisualSection(text, deps, info) {
     const hits = registerRow.join(" ").match(/\b[0-9a-f]{40}\b/g);
     if (!hits) errors.push("Эталоны 20-12: no verdict commit (40 hex) in the row");
     else {
-      const ownerCommit = owner?.commit ?? "";
+      const ownerCommit = registerAuthority;
       for (const hit of new Set(hits)) if (ownerCommit && hit !== ownerCommit) errors.push(`Эталоны 20-12: commit ${hit.slice(0, 12)} differs from owner_verdict_commit ${ownerCommit.slice(0, 12)} of 20-58-SUMMARY.md`);
     }
     if (deps.baselinesCommit !== undefined) {
       if (!deps.baselinesCommit) errors.push(`Эталоны 20-12: register ${BASELINES_JSON} is unreadable or has no ownerVerdict.commit`);
-      else if (owner?.commit && deps.baselinesCommit !== owner.commit) errors.push(`Эталоны 20-12: register ${BASELINES_JSON} has ownerVerdict.commit ${deps.baselinesCommit.slice(0, 12)} but 20-58-SUMMARY.md has owner_verdict_commit ${owner.commit.slice(0, 12)}`);
+      else if (registerAuthority && deps.baselinesCommit !== registerAuthority) errors.push(`Эталоны 20-12: register ${BASELINES_JSON} has ownerVerdict.commit ${deps.baselinesCommit.slice(0, 12)} but 20-58-SUMMARY.md has owner_verdict_commit ${registerAuthority.slice(0, 12)}`);
     }
   }
 
@@ -1257,7 +1319,7 @@ function verifyVisualSection(text, deps, info) {
   }
 
   if (info.stated?.startsWith("PASS")) {
-    if (!verdictOk) errors.push(`verdict ${info.stated} needs «Общий вердикт» = «ПРИНЯТО ВЛАДЕЛЬЦЕМ ГГГГ-ММ-ДД» matching 20-58-SUMMARY.md`);
+    if (!verdictOk) errors.push(`verdict ${info.stated} needs «Общий вердикт» = «ПРИНЯТО ВЛАДЕЛЬЦЕМ ГГГГ-ММ-ДД» matching ${ownerSource}${chainNote}`);
     if (!codeOk) errors.push(`verdict ${info.stated} needs «Код продукта» = «НЕ ИЗМЕНЁН»`);
     for (const id of VISUAL_GATES) {
       const gateRow = info.gateRows.find((candidate) => candidate.id === id);
@@ -1616,6 +1678,7 @@ function verifyEvidenceMode(deps, argv) {
   const errors = verifyEvidence(deps.fs.readFileSync(evidencePath, "utf8"), {
     matrix: deps.fs.existsSync(matrixPath) ? deps.fs.readFileSync(matrixPath, "utf8") : null,
     ownerSummary: deps.fs.existsSync(summaryPath) ? deps.fs.readFileSync(summaryPath, "utf8") : null,
+    effectiveOwner: readEffectiveOwnerVerdict(deps),
     baselinesCommit,
     productChanges: (from, to) => productCodeChanges(deps, from, to),
     commitExists: (sha) => deps.git(["cat-file", "-e", `${sha}^{commit}`]).status === 0,
