@@ -148,6 +148,7 @@ export const GATES = Object.freeze([
     dataMode: "цель",
     counts: "playwright",
     strictSkips: true,
+    projectSkips: true,
     envMarkers: true,
     requires: { gates: NEEDS_INSTALL, env: PUBLIC_ENV },
   }),
@@ -177,6 +178,7 @@ export const GATES = Object.freeze([
     ],
     counts: "playwright",
     strictSkips: true,
+    projectSkips: true,
     requires: { gates: NEEDS_INSTALL, files: OFFLINE_FILES },
   }),
   defineGate({
@@ -187,6 +189,7 @@ export const GATES = Object.freeze([
     steps: [offlineStep(["--project=chromium-desktop", "--project=chromium-phone", "tests/e2e/visual/phase20.spec.ts"], "visual-phase20-1", { snapshots: true })],
     counts: "playwright",
     strictSkips: true,
+    projectSkips: true,
     requires: {
       gates: NEEDS_INSTALL,
       files: [{ path: "tests/e2e/visual/phase20.spec.ts", kind: "OWNER", reason: "нет одобренных эталонов 20-12" }, ...OFFLINE_FILES],
@@ -337,6 +340,274 @@ function* walkSpecs(suites, inheritedFile = "") {
   }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// D-69 (G4): a skip by a project condition. The rule works on the level of the gate run (visual-approved has two steps) and the condition
+// must be proven by the spec source: a skip by data (`test.skip(!before, ...)`) can carry a text that names a project and still not be one.
+
+export const SPEC_ROOT = "tests/e2e";
+
+/** Same-length copy of `source` with comments and the inside of strings and template text blanked; the code of `${...}` stays. */
+function maskSource(source) {
+  const out = source.split("");
+  const blank = (from, to) => {
+    for (let i = from; i < to && i < out.length; i += 1) if (out[i] !== "\n" && out[i] !== "\r") out[i] = " ";
+  };
+  const quoted = (start) => {
+    let i = start + 1;
+    while (i < source.length && source[i] !== source[start] && source[i] !== "\n") i += source[i] === "\\" ? 2 : 1;
+    blank(start + 1, i);
+    return source[i] === source[start] ? i + 1 : i;
+  };
+  const template = (start) => {
+    let i = start + 1;
+    while (i < source.length && source[i] !== "`") {
+      if (source[i] === "\\") { blank(i, i + 2); i += 2; continue; }
+      if (source[i] === "$" && source[i + 1] === "{") { i = code(i + 2, true); continue; }
+      blank(i, i + 1);
+      i += 1;
+    }
+    return i + 1;
+  };
+  const code = (start, untilBrace) => {
+    let i = start;
+    let depth = 0;
+    while (i < source.length) {
+      const c = source[i];
+      const next = source[i + 1];
+      if (c === "/" && next === "/") { let end = source.indexOf("\n", i); if (end === -1) end = source.length; blank(i, end); i = end; continue; }
+      if (c === "/" && next === "*") { let end = source.indexOf("*/", i + 2); end = end === -1 ? source.length : end + 2; blank(i, end); i = end; continue; }
+      if (c === '"' || c === "'") { i = quoted(i); continue; }
+      if (c === "`") { i = template(i); continue; }
+      if (untilBrace) {
+        if (c === "{") depth += 1;
+        else if (c === "}") { if (depth === 0) return i + 1; depth -= 1; }
+      }
+      i += 1;
+    }
+    return i;
+  };
+  code(0, false);
+  return out.join("");
+}
+
+/** Tokens of a condition: strings as `{ str }`, names as `{ id }`, the rest as literal text; null for anything outside the closed alphabet. */
+function tokenizeCondition(text) {
+  const tokens = [];
+  let i = 0;
+  while (i < text.length) {
+    const rest = text.slice(i);
+    if (/^\s/.test(rest)) { i += 1; continue; }
+    const operator = rest.match(/^(===|!==|==|!=|&&|\|\||[!().])/);
+    if (operator) { tokens.push(operator[1]); i += operator[1].length; continue; }
+    const string = rest.match(/^"([^"\\\n]*)"|^'([^'\\\n]*)'/);
+    if (string) { tokens.push({ str: string[1] ?? string[2] }); i += string[0].length; continue; }
+    const name = rest.match(/^[A-Za-z_$][\w$]*/);
+    if (name) { tokens.push({ id: name[0] }); i += name[0].length; continue; }
+    return null;
+  }
+  return tokens;
+}
+
+const STRING_LITERAL = `(?:"[^"\\\\\\n]*"|'[^'\\\\\\n]*')`;
+const LIST_LITERAL = new RegExp(`^(?:new\\s+Set\\s*\\(\\s*)?\\[\\s*(?:${STRING_LITERAL}(?:\\s*,\\s*${STRING_LITERAL})*\\s*,?\\s*)?\\]\\s*\\)?(?:\\s+as\\s+const)?$`);
+
+/** The text of an expression from `start` to the first `;` outside brackets (masked source); null when there is none within reach. */
+function expressionEnd(masked, start) {
+  let depth = 0;
+  for (let i = start; i < masked.length && i < start + 600; i += 1) {
+    const c = masked[i];
+    if ("([{".includes(c)) depth += 1;
+    else if (")]}".includes(c)) depth -= 1;
+    else if (c === ";" && depth === 0) return i;
+  }
+  return null;
+}
+
+/** Names the file defines that a project condition may use: parameterless arrow functions, lists of plain strings, and the fixtures. */
+function projectDefinitions(source, masked) {
+  const functions = new Map();
+  const lists = new Set();
+  for (const match of masked.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*\(\s*\)\s*=>\s*/g)) {
+    const start = match.index + match[0].length;
+    const end = expressionEnd(masked, start);
+    if (end !== null) functions.set(match[1], source.slice(start, end));
+  }
+  for (const match of masked.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*/g)) {
+    const start = match.index + match[0].length;
+    const end = expressionEnd(masked, start);
+    if (end !== null && LIST_LITERAL.test(source.slice(start, end).trim())) lists.add(match[1]);
+  }
+  const fixtures = new Set(["isMobile", "hasTouch"].filter((name) => !new RegExp(`\\b(?:const|let|var)\\s+${name}\\b|\\b(?:const|let|var)\\s*\\{[^}]*\\b${name}\\b`).test(masked)));
+  return { functions, lists, fixtures };
+}
+
+/** True when the whole condition is built only from the closed list of project signs (see projectConditionSkips). */
+function isProjectCondition(text, definitions, depth = 0) {
+  const tokens = tokenizeCondition(text);
+  if (!tokens || tokens.length === 0) return false;
+  let pos = 0;
+  const at = (offset = 0) => tokens[pos + offset];
+  const isId = (name, offset = 0) => at(offset)?.id === name;
+  const isStr = (offset = 0) => typeof at(offset)?.str === "string";
+  const nameRef = () => {
+    if (isId("testInfo") && at(1) === "." && isId("project", 2) && at(3) === "." && isId("name", 4)) { pos += 5; return true; }
+    if (isId("test") && at(1) === "." && isId("info", 2) && at(3) === "(" && at(4) === ")" && at(5) === "." && isId("project", 6) && at(7) === "." && isId("name", 8)) { pos += 9; return true; }
+    return false;
+  };
+  const atom = () => {
+    if (nameRef()) {
+      if (["===", "!==", "==", "!="].includes(at()) && isStr(1)) { pos += 2; return true; }
+      if (at() === "." && ["endsWith", "startsWith", "includes"].includes(at(1)?.id) && at(2) === "(" && isStr(3) && at(4) === ")") { pos += 5; return true; }
+      return false;
+    }
+    const name = at()?.id;
+    if (!name) return false;
+    if (at(1) === "(" && at(2) === ")") {
+      pos += 3;
+      const body = definitions.functions.get(name);
+      return body !== undefined && depth < 4 && isProjectCondition(body, definitions, depth + 1);
+    }
+    if (at(1) === "." && ["has", "includes"].includes(at(2)?.id) && at(3) === "(") {
+      pos += 4;
+      if (!nameRef() || at() !== ")") return false;
+      pos += 1;
+      return definitions.lists.has(name);
+    }
+    if (at(1) === undefined || ["&&", "||", ")"].includes(at(1))) {
+      pos += 1;
+      return definitions.fixtures.has(name);
+    }
+    return false;
+  };
+  const unary = () => {
+    if (at() === "!") { pos += 1; return unary(); }
+    if (at() === "(") { pos += 1; if (!or() || at() !== ")") return false; pos += 1; return true; }
+    return atom();
+  };
+  const and = () => { if (!unary()) return false; while (at() === "&&") { pos += 1; if (!unary()) return false; } return true; };
+  const or = () => { if (!and()) return false; while (at() === "||") { pos += 1; if (!and()) return false; } return true; };
+  return or() && pos === tokens.length;
+}
+
+/** The text of a literal reason: a quoted string or a template (kept with its `${...}`); null for anything else. */
+function reasonTemplate(argument) {
+  const quoted = argument.match(/^"((?:[^"\\\n]|\\.)*)"$/) ?? argument.match(/^'((?:[^'\\\n]|\\.)*)'$/);
+  if (quoted) return quoted[1].replace(/\\(.)/g, "$1");
+  const template = argument.match(/^`([\s\S]*)`$/);
+  return template ? template[1] : null;
+}
+
+/**
+ * The reasons of the `test.skip(<condition>, <reason>)` calls of a spec whose condition is built only from project signs:
+ * `testInfo.project.name` / `test.info().project.name` compared with a string (=== !== == !=) or with `.endsWith` / `.startsWith` / `.includes`
+ * of a string, `isMobile`, `hasTouch` (the Playwright fixtures), a parameterless arrow function of the same file with such a body,
+ * `.has` / `.includes` of the project name on a constant of the same file made of plain strings, joined by `!`, `&&`, `||` and brackets.
+ * A reason is returned as written; `${...}` marks a substitution. Anything else (data, `true`, unknown names) proves nothing.
+ */
+export function projectConditionSkips(sourceText) {
+  const source = String(sourceText ?? "");
+  const masked = maskSource(source);
+  const definitions = projectDefinitions(source, masked);
+  const reasons = [];
+  for (const match of masked.matchAll(/(?<![\w$.])test\.skip\s*\(/g)) {
+    const open = match.index + match[0].length;
+    const args = [];
+    let depth = 0;
+    let from = open;
+    let closed = false;
+    let i = open;
+    for (; i < masked.length; i += 1) {
+      const c = masked[i];
+      if ("([{".includes(c)) depth += 1;
+      else if (")]}".includes(c)) {
+        if (depth === 0) { closed = c === ")"; break; }
+        depth -= 1;
+      } else if (c === "," && depth === 0) { args.push(source.slice(from, i).trim()); from = i + 1; }
+    }
+    if (!closed) continue;
+    const last = source.slice(from, i).trim();
+    if (last !== "") args.push(last);
+    if (args.length !== 2) continue;
+    const reason = reasonTemplate(args[1]);
+    if (reason !== null && isProjectCondition(args[0], definitions)) reasons.push(reason);
+  }
+  return reasons;
+}
+
+/** True when `description` is the text of the proven `template` (a `${...}` stands for any text; a bare substitution proves nothing). */
+export function reasonMatches(template, description) {
+  let pattern = "";
+  let literal = false;
+  for (let i = 0; i < template.length; i += 1) {
+    if (template[i] === "$" && template[i + 1] === "{") {
+      let depth = 1;
+      i += 2;
+      while (i < template.length && depth > 0) {
+        if (template[i] === "{") depth += 1;
+        else if (template[i] === "}") depth -= 1;
+        i += 1;
+      }
+      i -= 1;
+      pattern += "[\\s\\S]+";
+    } else {
+      if (/\S/.test(template[i])) literal = true;
+      pattern += template[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+  }
+  return literal && new RegExp(`^${pattern}$`).test(String(description ?? ""));
+}
+
+/** Tests that passed without a retry: `file|title` to the set of projects. Flaky, retried and every other status are not in it. */
+export function passedTests(report) {
+  const passed = new Map();
+  for (const { spec, file } of walkSpecs(report?.suites)) {
+    for (const test of spec.tests ?? []) {
+      const retried = (Array.isArray(test.results) ? test.results : []).some((result) => Number(result?.retry ?? 0) > 0);
+      if (test.status !== "expected" || retried) continue;
+      const key = `${file}|${spec.title}`;
+      if (!passed.has(key)) passed.set(key, new Set());
+      passed.get(key).add(test.projectName ?? "");
+    }
+  }
+  return passed;
+}
+
+/** The union of the passes of several reports (the steps of one gate run). */
+export function mergePassed(maps) {
+  const merged = new Map();
+  for (const map of maps) for (const [key, projects] of map) merged.set(key, new Set([...(merged.get(key) ?? []), ...projects]));
+  return merged;
+}
+
+/** File to proven reasons for every spec that has a skipped, non-BLOCKED test in any of the reports. `readSource(file)` returns text or null. */
+export function projectSkipProofs(reports, readSource) {
+  const files = new Set();
+  for (const report of reports) {
+    for (const { spec, file } of walkSpecs(report?.suites)) {
+      for (const test of spec.tests ?? []) {
+        if (test.status === "skipped" && !(test.annotations ?? []).some((annotation) => BLOCKED_ANNOTATION.test(String(annotation?.description ?? "")))) files.add(file);
+      }
+    }
+  }
+  const proofs = new Map();
+  for (const file of files) {
+    let text = null;
+    try { text = readSource(file); } catch { text = null; }
+    if (typeof text === "string") proofs.set(file, projectConditionSkips(text));
+  }
+  return proofs;
+}
+
+/** A skip by project: the annotation text is the reason of a proven call in this file, and the test passed on ANOTHER project without a retry. */
+function skippedByProject({ passed, proofs, file, title, project, annotations }) {
+  const others = passed.get(`${file}|${title}`);
+  if (!others || ![...others].some((other) => other !== project)) return false;
+  const reasons = proofs?.get(file);
+  if (!reasons || reasons.length === 0) return false;
+  const texts = (annotations ?? []).filter((annotation) => annotation?.type === "skip").map((annotation) => String(annotation?.description ?? ""));
+  return texts.length > 0 && texts.every((text) => reasons.some((reason) => reasonMatches(reason, text)));
+}
+
 /**
  * Classifies a Playwright JSON report. Flaky and any retry are FAIL, `unexpected` is FAIL, a skip annotated BLOCKED is BLOCKED,
  * any other skip is SKIPPED, an empty report is FAIL. A failing test is "waived" only by a registry row of class `waiver`
@@ -352,16 +623,10 @@ export function classifyPlaywright(report, waivers = [], options = {}) {
   const reasons = [];
   if (Array.isArray(report.errors) && report.errors.length > 0) reasons.push(`report has ${report.errors.length} global error(s)`);
 
-  // D-68 (ui-contract-offline): a skip by a project condition is accepted only when the same test passed on another project.
-  const passedElsewhere = new Set();
-  if (options.projectSkips) {
-    for (const { spec, file } of walkSpecs(report.suites)) {
-      for (const test of spec.tests ?? []) {
-        const retried = (Array.isArray(test.results) ? test.results : []).some((result) => Number(result?.retry ?? 0) > 0);
-        if (test.status === "expected" && !retried) passedElsewhere.add(`${file}|${spec.title}`);
-      }
-    }
-  }
+  // D-69 (G4), extends the 20-13 rule: a skip by a project condition is accepted when the spec source proves the condition (options.skipProofs)
+  // and the same test passed without a retry on ANOTHER project anywhere in the gate run (options.passed; by default this report only).
+  // Gate level because visual-approved has two steps; source proof because a skip by data can carry a text that names a project.
+  const passed = options.projectSkips ? options.passed ?? passedTests(report) : null;
 
   for (const { spec, file } of walkSpecs(report.suites)) {
     for (const test of spec.tests ?? []) {
@@ -382,7 +647,7 @@ export function classifyPlaywright(report, waivers = [], options = {}) {
         if (blocking.length > 0) {
           counts.blocked += 1;
           for (const text of blocking) blockedKinds.add(text.match(BLOCKED_KIND)?.[1]?.trim() ?? "");
-        } else if (options.projectSkips && passedElsewhere.has(`${file}|${spec.title}`)) {
+        } else if (passed && skippedByProject({ passed, proofs: options.skipProofs, file, title: spec.title, project, annotations: test.annotations })) {
           projectSkipped += 1;
         }
       } else if (test.status === "expected") {
@@ -524,7 +789,31 @@ const clip = (text, length = 300) => {
   return flat.length > length ? `${flat.slice(0, length)}...` : flat;
 };
 
-function evaluateStep(gate, step, run, context) {
+/** Reads (and copies into the artifacts) the report a Playwright step just wrote; the next step overwrites it. */
+function readPlaywrightReport(gate, context, stepNumber) {
+  const resultsFile = path.join(context.worktree, PLAYWRIGHT_RESULTS);
+  if (!context.deps.fs.existsSync(resultsFile)) return { report: null, problem: "Playwright wrote no results.json" };
+  try {
+    const text = context.deps.fs.readFileSync(resultsFile, "utf8");
+    context.deps.fs.writeFileSync(path.join(context.artifactsDir, `${gate.id}-${stepNumber}-results.json`), text);
+    return { report: JSON.parse(text), problem: "" };
+  } catch {
+    return { report: null, problem: "Playwright results.json is not valid JSON" };
+  }
+}
+
+/** Passes and proven reasons over ALL steps of a gate that has the project-skip rule; `{}` for every other gate. */
+function gateWideSkipEvidence(gate, executed, context) {
+  if (!gate.projectSkips) return {};
+  const reports = executed.map((item) => item.prepared?.report).filter(Boolean);
+  const readSource = (file) => {
+    const target = path.join(context.worktree, SPEC_ROOT, String(file).replace(/\\/g, "/"));
+    return context.deps.fs.existsSync(target) ? context.deps.fs.readFileSync(target, "utf8") : null;
+  };
+  return { passed: mergePassed(reports.map(passedTests)), skipProofs: projectSkipProofs(reports, readSource) };
+}
+
+function evaluateStep(gate, step, run, context, prepared = null) {
   const output = `${run.stdout ?? ""}\n${run.stderr ?? ""}`;
   const code = run.status;
   const base = { status: "PASS", reason: "", detail: "", counts: null, blockedKind: "", waived: false, waivedBy: [], first: null };
@@ -534,25 +823,15 @@ function evaluateStep(gate, step, run, context) {
     if (gate.network && NETWORK_FAILURE.test(output)) return { ...base, status: "BLOCKED", blockedKind: "ENV", reason: "network unavailable" };
   }
   if (step.playwright) {
-    const resultsFile = path.join(context.worktree, PLAYWRIGHT_RESULTS);
-    let report = null;
-    let problem = "";
-    if (!context.deps.fs.existsSync(resultsFile)) problem = "Playwright wrote no results.json";
-    else {
-      try {
-        const text = context.deps.fs.readFileSync(resultsFile, "utf8");
-        context.deps.fs.writeFileSync(path.join(context.artifactsDir, `${gate.id}-${context.stepNumber}-results.json`), text);
-        report = JSON.parse(text);
-      } catch { problem = "Playwright results.json is not valid JSON"; }
-    }
+    const { report, problem } = prepared ?? readPlaywrightReport(gate, context, context.stepNumber);
     if (!report) return { ...base, status: "FAIL", reason: problem };
-    const classified = classifyPlaywright(report, context.waivers ?? [], { projectSkips: Boolean(gate.projectSkips) });
+    const classified = classifyPlaywright(report, context.waivers ?? [], { projectSkips: Boolean(gate.projectSkips), passed: context.passed, skipProofs: context.skipProofs });
     let status = classified.status;
     let reason = classified.reasons.join("; ");
     if (status === "FAIL" && !reason) reason = `${classified.counts.failed} failed, ${classified.counts.flaky} flaky/retried; first: ${classified.first}`;
     if (status === "BLOCKED") reason = `${classified.counts.blocked} test(s) skipped as BLOCKED`;
     if (status === "SKIPPED") reason = `${classified.counts.skipped} test(s) skipped without BLOCKED`;
-    if (status === "PASS" && classified.projectSkipped > 0) reason = `${classified.projectSkipped} skip(s) by project condition; each such test passed on another project`;
+    if (status === "PASS" && classified.projectSkipped > 0) reason = `${classified.projectSkipped} skip(s) by project condition; each such test passed on another project in this gate run`;
     let waived = classified.waived;
     if (code !== 0 && status === "PASS") { status = "FAIL"; reason = `exit code ${code} although the report shows no failure`; waived = false; }
     else if (code !== 0 && status !== "FAIL") { status = "FAIL"; reason = `exit code ${code}; ${reason}`; waived = false; }
@@ -561,6 +840,7 @@ function evaluateStep(gate, step, run, context) {
       status,
       reason,
       counts: classified.counts,
+      projectSkipped: classified.projectSkipped,
       blockedKind: status === "BLOCKED" ? classified.blockedKinds.join("/") : "",
       waived,
       waivedBy: waived ? [...new Set(classified.failures.map((failure) => failure.waiver))] : [],
@@ -628,7 +908,9 @@ export function runGate(gate, context) {
     offline = { env: childEnv, server };
   }
 
-  const evaluated = [];
+  // Every step is run (and its report read) first; the steps are classified afterwards, together, so that a skip in one step can be
+  // explained by a pass in another step of the same gate run (D-69, G4).
+  const executed = [];
   let stopProblem = "";
   try {
     gate.steps.forEach((step, index) => {
@@ -644,8 +926,7 @@ export function runGate(gate, context) {
         result.artifacts.push(`${gate.id}-${stepNumber}-results.json`);
         result.artifacts.push(`${step.outputName ?? `${gate.id}-${stepNumber}`}/`);
       }
-      const verdict = evaluateStep(gate, step, run, { ...context, stepNumber });
-      evaluated.push({ ...verdict, exit: run.status });
+      executed.push({ step, stepNumber, run, prepared: step.playwright && !run.error ? readPlaywrightReport(gate, context, stepNumber) : null });
     });
   } finally {
     if (offline) {
@@ -653,6 +934,8 @@ export function runGate(gate, context) {
       if (!stopped?.stopped) stopProblem = `the offline server (pid ${offline.server.pid ?? "?"}) could not be stopped`;
     }
   }
+  const skipEvidence = gateWideSkipEvidence(gate, executed, context);
+  const evaluated = executed.map((item) => ({ ...evaluateStep(gate, item.step, item.run, { ...context, ...skipEvidence, stepNumber: item.stepNumber }, item.prepared), exit: item.run.status }));
 
   let worst = evaluated[0];
   for (const step of evaluated) if (PRIORITY[step.status] > PRIORITY[worst.status]) worst = step;
@@ -666,6 +949,7 @@ export function runGate(gate, context) {
   if (withCounts.length > 0) {
     result.counts = withCounts.reduce((sum, step) => ({ passed: sum.passed + step.counts.passed, failed: sum.failed + step.counts.failed, flaky: sum.flaky + step.counts.flaky, skipped: sum.skipped + step.counts.skipped, blocked: sum.blocked + step.counts.blocked }), { passed: 0, failed: 0, flaky: 0, skipped: 0, blocked: 0 });
   }
+  result.projectSkipped = evaluated.reduce((sum, step) => sum + (step.projectSkipped ?? 0), 0);
   const failing = evaluated.filter((step) => step.status === "FAIL");
   result.waived = failing.length > 0 && failing.every((step) => step.waived);
   result.waivedBy = [...new Set(failing.flatMap((step) => step.waivedBy))];
@@ -696,7 +980,8 @@ function npmLine(npm) {
   return `npm: неизвестно (${source})${error ? `: ${error}` : ""}`;
 }
 
-const renderCounts = (counts) => (counts ? `${counts.passed}/${counts.failed}/${counts.skipped}/${counts.flaky}` : "-");
+/** `passed/failed/skipped/flaky`, plus ` (по проекту N)` when N skips are explained by a project condition (D-69, G4). */
+const renderCounts = (counts, projectSkipped = 0) => (counts ? `${counts.passed}/${counts.failed}/${counts.skipped}/${counts.flaky}${projectSkipped > 0 ? ` (по проекту ${projectSkipped})` : ""}` : "-");
 
 /**
  * Markdown for a run: header, gate table, environment names, verdict. `run.d33` / `run.decisions` (rows of the 20-13 protocol)
@@ -719,7 +1004,7 @@ export function renderEvidence(run) {
     "|---|---|---|---|---|---|---|",
   ];
   for (const result of run.results) {
-    lines.push(`| ${result.id} | \`${tableCell(result.command)}\` | ${result.exitCode ?? "-"} | ${tableCell(renderStatus(result))} | ${renderCounts(result.counts)} | ${tableCell((result.artifacts ?? []).join(", ") || "-")} | ${tableCell(result.dataMode ?? dataModeOf(result.id))} |`);
+    lines.push(`| ${result.id} | \`${tableCell(result.command)}\` | ${result.exitCode ?? "-"} | ${tableCell(renderStatus(result))} | ${renderCounts(result.counts, result.projectSkipped)} | ${tableCell((result.artifacts ?? []).join(", ") || "-")} | ${tableCell(result.dataMode ?? dataModeOf(result.id))} |`);
   }
   const notes = run.results.filter((result) => result.reason);
   if (notes.length > 0) {
@@ -747,9 +1032,10 @@ export function renderEvidence(run) {
 
 const statusToken = (cell) => String(cell ?? "").trim().match(/^(PASS|FAIL|BLOCKED|SKIPPED)\b/)?.[1] ?? null;
 
+/** `10/0/3/0` or `10/0/3/0 (по проекту 3)`; the older form without the suffix reads as zero skips by project. */
 function parseCounts(cell) {
-  const match = String(cell ?? "").trim().match(/^(\d+)\/(\d+)\/(\d+)\/(\d+)$/);
-  return match ? { passed: Number(match[1]), failed: Number(match[2]), skipped: Number(match[3]), flaky: Number(match[4]) } : null;
+  const match = String(cell ?? "").trim().match(/^(\d+)\/(\d+)\/(\d+)\/(\d+)(?:\s+\(по проекту (\d+)\))?$/);
+  return match ? { passed: Number(match[1]), failed: Number(match[2]), skipped: Number(match[3]), flaky: Number(match[4]), projectSkipped: Number(match[5] ?? 0) } : null;
 }
 
 /** Rows of the `## Гейты` table as results; `errors` lists every violation. */
@@ -770,6 +1056,10 @@ function readGateRows(markdown, requireAll) {
     const counts = parseCounts(cellsOfRow[4]);
     if (!status) { errors.push(`${id}: unknown status "${cellsOfRow[3] ?? ""}"`); continue; }
     const waived = status === "FAIL" && /waived/i.test(cellsOfRow[3] ?? "");
+    if (counts && counts.projectSkipped > 0) {
+      if (!gate.projectSkips) errors.push(`${id}: counts carry «по проекту ${counts.projectSkipped}» but the gate has no project-skip rule (D-69), every skip counts`);
+      else if (counts.projectSkipped > counts.skipped) errors.push(`${id}: «по проекту ${counts.projectSkipped}» is larger than the skipped count ${counts.skipped}`);
+    }
     if (status === "PASS") {
       if (exit !== "0") errors.push(`${id}: PASS row has exit "${exit}", expected 0`);
       if (gate.counts) {
@@ -778,7 +1068,8 @@ function readGateRows(markdown, requireAll) {
           if (counts.passed === 0) errors.push(`${id}: PASS row has 0 passed tests`);
           if (counts.failed > 0) errors.push(`${id}: PASS row has ${counts.failed} failed test(s)`);
           if (counts.flaky > 0) errors.push(`${id}: PASS row has ${counts.flaky} flaky/retried test(s)`);
-          if (gate.strictSkips && counts.skipped > 0) errors.push(`${id}: PASS row has ${counts.skipped} skipped test(s), a skip is not a pass`);
+          const unexplained = counts.skipped - (gate.projectSkips ? counts.projectSkipped : 0);
+          if (gate.strictSkips && unexplained > 0) errors.push(`${id}: PASS row has ${unexplained} skipped test(s), a skip is not a pass`);
         }
       }
     }

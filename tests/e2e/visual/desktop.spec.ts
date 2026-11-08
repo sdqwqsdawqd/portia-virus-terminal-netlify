@@ -54,16 +54,18 @@ test("[STAB-BASE-03] approved desktop and window shell", async ({ page }, testIn
   await compareApprovedScreenshot(page, "desktop:search-minimized", `window-search-minimized--${testInfo.project.name}.png`);
 });
 
+// D-69 (G4): the skip below depends on the project name only, so the release runner can prove it from this source.
+const declaredDeviceProjects = ["chromium-dpr125", "chromium-phone", "webkit-phone"];
+
 test("[STAB-BASE-03] approved declared device project", async ({ page }, testInfo) => {
+  test.skip(!declaredDeviceProjects.includes(testInfo.project.name), `No device-specific approved row is declared for ${testInfo.project.name}.`);
   const target = {
     "chromium-dpr125": ["desktop-dpr125", "desktop:dpr125"],
     "chromium-phone": ["phone-chromium", "desktop:phone-chromium"],
     "webkit-phone": ["phone-webkit", "desktop:phone-webkit"],
   }[testInfo.project.name] as readonly [string, VisualState] | undefined;
-  if (!target) {
-    test.skip(true, `No device-specific approved row is declared for ${testInfo.project.name}.`);
-    return;
-  }
+  // Unreachable after the skip above: it narrows the type for the compiler.
+  if (!target) throw new Error(`No device-specific approved row is declared for ${testInfo.project.name}.`);
 
   await staticDesktop(page);
   await compareApprovedScreenshot(page, target[1], `${target[0]}--${testInfo.project.name}.png`);

@@ -771,44 +771,50 @@ test("offline environment helpers: names stripped by pattern, base URL fixed, ha
   assert.equal(child.PORTIA_E2E_OFFLINE_SUPABASE, undefined);
 });
 
-test("classifyPlaywright (D-68): a skip by project condition is accepted only when the same test passed on another project", () => {
+test("classifyPlaywright (D-68, extended by D-69): a skip by project condition is accepted only with the source proof and a pass on another project", () => {
+  const reason = "The two-column PC layout";
+  const proven = { projectSkips: true, skipProofs: new Map([["x.spec.ts", [reason]]]) };
   const report = pwReport([
-    { title: "two columns", tests: [pwTest("expected", { projectName: "chromium-desktop" }), pwTest("skipped", { projectName: "chromium-phone", annotations: [{ type: "skip", description: "The two-column PC layout" }] })] },
+    { title: "two columns", tests: [pwTest("expected", { projectName: "chromium-desktop" }), pwTest("skipped", { projectName: "chromium-phone", annotations: [{ type: "skip", description: reason }] })] },
   ]);
   assert.equal(gate.classifyPlaywright(report).status, "SKIPPED", "by default every skip is SKIPPED");
-  const lenient = gate.classifyPlaywright(report, [], { projectSkips: true });
+  assert.equal(gate.classifyPlaywright(report, [], { projectSkips: true }).status, "SKIPPED", "the rule without a proof from the source explains nothing");
+  const lenient = gate.classifyPlaywright(report, [], proven);
   assert.equal(lenient.status, "PASS");
   assert.equal(lenient.projectSkipped, 1);
   assert.equal(lenient.counts.skipped, 1, "the skip is still counted");
   const onlySkipped = gate.classifyPlaywright(
     pwReport([
-      { title: "never ran", tests: [pwTest("skipped", { annotations: [{ type: "skip", description: "x" }] })] },
+      { title: "never ran", tests: [pwTest("skipped", { annotations: [{ type: "skip", description: reason }] })] },
       { title: "other", tests: [pwTest("expected")] },
     ]),
     [],
-    { projectSkips: true },
+    proven,
   );
   assert.equal(onlySkipped.status, "SKIPPED", "a test skipped everywhere is not covered");
   const blocked = gate.classifyPlaywright(
     pwReport([{ title: "data", tests: [pwTest("expected", { projectName: "chromium-desktop" }), pwTest("skipped", { projectName: "chromium-phone", annotations: [{ type: "skip", description: "BLOCKED (DATA): none" }] })] }]),
     [],
-    { projectSkips: true },
+    { projectSkips: true, skipProofs: new Map([["x.spec.ts", ["BLOCKED (DATA): none"]]]) },
   );
   assert.equal(blocked.status, "BLOCKED", "a BLOCKED skip is never excused as a project condition");
 });
 
-test("runGate offline (D-68): ui-contract-offline accepts project-condition skips, visual-approved does not", () => {
+test("runGate offline (D-68): ui-contract-offline accepts project-condition skips proven by the source, a gate without the rule does not", () => {
+  const source = ['test.beforeEach(({}, testInfo) => {', '  test.skip(testInfo.project.name.endsWith("-phone"), "PC layout");', "});"].join("\n");
   const report = pwReport([
     { title: "two columns", tests: [pwTest("expected", { projectName: "chromium-desktop" }), pwTest("skipped", { projectName: "chromium-phone", annotations: [{ type: "skip", description: "PC layout" }] })] },
   ]);
   const ui = offlineLane({}, report);
+  mkdirSync(path.join(ui.worktree, "tests", "e2e"), { recursive: true });
+  writeFileSync(path.join(ui.worktree, "tests", "e2e", "x.spec.ts"), source);
   const uiOutcome = ui.run("ui-contract-offline");
   assert.equal(uiOutcome.status, "PASS");
   assert.match(uiOutcome.reason, /project condition/);
   ui.cleanup();
-  const visual = offlineLane({}, report);
-  assert.equal(visual.run("visual-approved").status, "SKIPPED");
-  visual.cleanup();
+  const noSource = offlineLane({}, report);
+  assert.equal(noSource.run("ui-contract-offline").status, "SKIPPED", "without the spec source the condition is not proven");
+  noSource.cleanup();
 });
 
 test("runGate Playwright: flaky or retried is FAIL even with exit 0; BLOCKED skips are BLOCKED; clean is PASS; the report is copied", () => {
@@ -1604,16 +1610,9 @@ test("runGate (D-69 G4): visual-approved over two steps — the three skips of s
   const lane = stepLane({}, [stepOne(), stepTwo()], { [motionFile]: MOTION_SOURCE });
   const outcome = lane.run("visual-approved");
   assert.equal(outcome.status, "PASS", String(outcome.reason));
-  assert.equal(outcome.projectSkipped, 3);
-  assert.deepEqual(outcome.counts, { passed: 7, failed: 0, flaky: 0, skipped: 4, blocked: 0 }, "step 1 skips one more test for dpr125 and that one is explained as well");
-  lane.cleanup();
-});
-
-test("runGate (D-69 G4): visual-approved — the counted skips are all explained (4 of 4) and the reason says why", () => {
-  const lane = stepLane({}, [stepOne(), stepTwo()], { [motionFile]: MOTION_SOURCE });
-  const outcome = lane.run("visual-approved");
-  assert.equal(outcome.projectSkipped, 4);
-  assert.match(outcome.reason, /4 skip\(s\) by project condition; each such test passed on another project in this gate run/);
+  assert.equal(outcome.projectSkipped, 4, "one skip of step 1 (dpr125) and three of step 2");
+  assert.deepEqual(outcome.counts, { passed: 6, failed: 0, flaky: 0, skipped: 4, blocked: 0 });
+  assert.match(outcome.reason, /3 skip\(s\) by project condition; each such test passed on another project in this gate run/);
   lane.cleanup();
 });
 
