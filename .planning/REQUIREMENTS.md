@@ -85,38 +85,38 @@
 - [ ] **STAB-MEDIA-04**: Immutable UUID media кэшируется повторно без скачивания, новый upload получает новый URL, content revision invalidation не ломает media cache.
 - [x] **STAB-MEDIA-05**: Broken, slow или blocked external media сохраняет читаемый текст/caption и стабильный layout без app crash или infinite spinner.
 - [ ] **STAB-MEDIA-06**: До оптимизации записаны воспроизводимые owner PC/phone traces; после изменений interaction, drag, wallpaper и app-open не хуже утверждённого baseline и проходят согласованные budgets.
-- [ ] **STAB-MEDIA-07**: Внешние media hosts инвентаризированы; CSP проходит report-only до enforcement, approved images/YouTube продолжают работать, rejected host показывает fallback. (Pending — gap closure 20-31: нулевой report-only отчёт для YouTube-блоков, GIF-хостов и аватаров Roblox — BLOCKED (DATA); CR-01 Phase 19 открыт; физическая проверка D-05 на PC и phone (20-14) не проведена.)
+- [ ] **STAB-MEDIA-07**: Внешние media hosts инвентаризированы; CSP проходит report-only до enforcement, approved images/YouTube продолжают работать, rejected host показывает fallback. (Pending — gap closure 20-31: нулевой report-only отчёт для YouTube-блоков, GIF-хостов и аватаров Roblox — BLOCKED (DATA); CR-01 Phase 19 открыт; физическая проверка D-05 на PC и phone (20-14) не проведена.) (Принятый долг D-70: MEDIA-01 BLOCKED (DATA), D-05 на устройствах не проведена; см. 20-RECONCILIATION.md)
 
 ## Accessibility и security
 
-- [ ] **STAB-A11Y-01**: PC controls имеют name/role/state, видимый focus, корректный trap/restore в dialogs и keyboard alternative для действия, доступного только drag. (Pending — gap closure 20-31: живой trap/restore квалификации — BLOCKED (ENV), пройден только контракт UI на заглушке (20-28); ролевые поверхности и ручки редактора — BLOCKED (ENV); физический PC (20-14) не проведён.)
-- [ ] **STAB-A11Y-02**: Phone actions доступны touch без hover, не перекрываются keyboard/sticky bars, имеют практичную tap area и не создают page-level horizontal overflow.
-- [ ] **STAB-A11Y-03**: Русские labels, success/error/disabled reason понятны и объявляются; нет пустых, шуточных, удвоенных или непереведённых technical labels; alt соответствует назначению изображения. (Pending — gap closure 20-31: экранный диктор не проверен (A11Y-SR-01; без устройства — BLOCKED (DEVICE)); medium-контраст в «Архиве», «Глобальном поиске» и «Корзине» — FAIL до вердикта владельца D-10.)
-- [ ] **STAB-A11Y-04**: Итоговая motion-настройка применяется ко всем поверхностям; off/reduced прекращает looping movement, но сохраняет content и feedback.
+- [ ] **STAB-A11Y-01**: PC controls имеют name/role/state, видимый focus, корректный trap/restore в dialogs и keyboard alternative для действия, доступного только drag. (Pending — gap closure 20-31: живой trap/restore квалификации — BLOCKED (ENV), пройден только контракт UI на заглушке (20-28); ролевые поверхности и ручки редактора — BLOCKED (ENV); физический PC (20-14) не проведён.) (Принятый долг D-70: живой trap/restore и физический PC не проверялись; см. 20-RECONCILIATION.md)
+- [ ] **STAB-A11Y-02**: Phone actions доступны touch без hover, не перекрываются keyboard/sticky bars, имеют практичную tap area и не создают page-level horizontal overflow. (Принятый долг D-70: касание на телефоне не проверялось; см. 20-RECONCILIATION.md)
+- [ ] **STAB-A11Y-03**: Русские labels, success/error/disabled reason понятны и объявляются; нет пустых, шуточных, удвоенных или непереведённых technical labels; alt соответствует назначению изображения. (Pending — gap closure 20-31: экранный диктор не проверен (A11Y-SR-01; без устройства — BLOCKED (DEVICE)); medium-контраст в «Архиве», «Глобальном поиске» и «Корзине» — FAIL до вердикта владельца D-10.) (Принятый долг D-70: экранный диктор и контраст D-10 не проверены; см. 20-RECONCILIATION.md)
+- [ ] **STAB-A11Y-04**: Итоговая motion-настройка применяется ко всем поверхностям; off/reduced прекращает looping movement, но сохраняет content и feedback. (Принятый долг D-70: режимы анимации на устройствах не проверялись; см. 20-RECONCILIATION.md)
 - [x] **STAB-SEC-01**: Anon, authenticated, editor, reviewer и owner видят и изменяют только разрешённые данные; запрещённые UI/API/table/RPC действия fail-closed, revoke действует без rebuild.
 - [x] **STAB-SEC-02**: Participant network/UI не получает answer keys, future questions, internal notes, bank payload и reviewer identity; sensitive responses используют no-store.
-- [ ] **STAB-SEC-03**: CSP, frame, nosniff, referrer, permissions, COOP и HSTS присутствуют, не ломая approved charter/sheet/video; CSP ужесточается только через report-only.
+- [ ] **STAB-SEC-03**: CSP, frame, nosniff, referrer, permissions, COOP и HSTS присутствуют, не ломая approved charter/sheet/video; CSP ужесточается только через report-only. (Принятый долг D-70: enforcement CSP ждёт физической проверки D-05; см. 20-RECONCILIATION.md)
 - [x] **STAB-SEC-04**: Staging и production schema fingerprints, functions, grants и RLS соответствуют canonical migrations; ручной production step имеет записанный postflight. (Complete: staging golden == U == final; production после owner-run миграций == golden по правилу A, единственное отличие — платформенная `rls_auto_enable()`, см. `evidence/16-PRODUCTION-POSTFLIGHT.md`.)
 - [x] **STAB-SEC-05**: Глубокий GSD code review и локальная security matrix покрывают auth/API/RLS/headers/CSP/uploads/secrets/dependencies; high findings исправлены или явно приняты, production dependency audit чист, dev findings имеют disposition, lockfile меняется отдельно. (матрица обновлена в 20-26 на b88669f; выполнение RPC и RLS под Postgres в матрице не повторялось — статическое чтение и receipts Phase 16.)
-- [ ] **STAB-SEC-06**: Release notes честно фиксируют, что device binding не hardware attestation, initial mode spoofable, и перечисляют остальные accepted risks/waivers без расширения риска. (черновик 20-RELEASE-NOTES.md — 20-31; финал — 20-15)
+- [x] **STAB-SEC-06**: Release notes честно фиксируют, что device binding не hardware attestation, initial mode spoofable, и перечисляют остальные accepted risks/waivers без расширения риска. (финал 20-RELEASE-NOTES.md — 20-15: status final, release_commit — итоговый commit; проверено --verify-docs)
 
 ## Release readiness
 
-- [ ] **STAB-REL-01**: На release commit проходят tests, typecheck, production build, full lint и production dependency audit; skipped live test допустим только вместе с успешным staging-run.
-- [ ] **STAB-REL-02**: Playwright-suite проходит с documented setup на clean checkout, не мутирует production, не маскирует flaky retry и сохраняет artifacts.
-- [ ] **STAB-REL-03**: На release commit проходят утверждённые visual baselines, axe, keyboard journeys и zero-unexpected-console policy.
+- [ ] **STAB-REL-01**: На release commit проходят tests, typecheck, production build, full lint и production dependency audit; skipped live test допустим только вместе с успешным staging-run. (Принятый долг D-70: staging-live BLOCKED (ENV), 9 пропусков unit без успешного staging-run; см. 20-RECONCILIATION.md)
+- [ ] **STAB-REL-02**: Playwright-suite проходит с documented setup на clean checkout, не мутирует production, не маскирует flaky retry и сохраняет artifacts. (Принятый долг D-70: e2e-full и e2e-mutation BLOCKED (ENV); см. 20-RECONCILIATION.md)
+- [ ] **STAB-REL-03**: На release commit проходят утверждённые visual baselines, axe, keyboard journeys и zero-unexpected-console policy. (Принятый долг D-70: visual-phase20 (пара Promotion проверяющего) и e2e-full BLOCKED (ENV); см. 20-RECONCILIATION.md)
 - [x] **STAB-REL-04**: Fresh isolated Supabase строится canonical migrations; role/RLS/RPC и concurrent claim/admission/CAS/cleanup tests проходят на disposable fixtures. (Доказано: `evidence/16-FINGERPRINT-CALIBRATION.md`, `16-UPGRADE-LADDER.md`, `16-LIVE-RUN.md`, receipts `receipt-roles*.json`, `receipt-concurrency*.json`, `receipt-playwright.json`, residual 0.)
-- [ ] **STAB-REL-05**: Owner принимает Promotion на PC/phone с временными данными и без destructive production testing.
-- [ ] **STAB-REL-06**: Owner после clean reload принимает window bounds, spider lifecycle/gait/palette, shortcut handoff, Vivian accent, qualification lock, search coverage и bounded editor layout на PC/phone.
-- [ ] **STAB-REL-07**: Roadmap, requirements, summaries, verification и deployed evidence описывают итоговый release commit/state; UAT фиксирует проверенный commit для каждого устройства. После исправления только phone-дефекта допускается сохранить прежний PC-вердикт с его commit, повторить полную phone UAT на новом commit и повторить технические gates на итоговом release commit; объём изменения и причина сохранения PC-вердикта документированы. Carried risks перечислены, blocked verification не помечен complete.
-- [ ] **STAB-REL-08**: Финальный review подтверждает целостность PORTIA OS после согласованной в Phase 20 визуальной переработки; новый font или motion-язык требуют отдельного owner approval, а новые SVG-рисунки и визуал паука/фона проходят владельческое одобрение до принятия baseline.
+- [ ] **STAB-REL-05**: Owner принимает Promotion на PC/phone с временными данными и без destructive production testing. (Принятый долг D-70: PROMO-01..05 не проходились, staging и проверяющий BLOCKED; см. 20-RECONCILIATION.md)
+- [ ] **STAB-REL-06**: Owner после clean reload принимает window bounds, spider lifecycle/gait/palette, shortcut handoff, Vivian accent, qualification lock, search coverage и bounded editor layout на PC/phone. (Принятый долг D-70: шаги PC и phone не проходились; см. 20-RECONCILIATION.md)
+- [ ] **STAB-REL-07**: Roadmap, requirements, summaries, verification и deployed evidence описывают итоговый release commit/state; UAT фиксирует проверенный commit для каждого устройства. После исправления только phone-дефекта допускается сохранить прежний PC-вердикт с его commit, повторить полную phone UAT на новом commit и повторить технические gates на итоговом release commit; объём изменения и причина сохранения PC-вердикта документированы. Carried risks перечислены, blocked verification не помечен complete. (Принятый долг D-70: UAT без commit устройств, deployed evidence BLOCKED; см. 20-RECONCILIATION.md)
+- [ ] **STAB-REL-08**: Финальный review подтверждает целостность PORTIA OS после согласованной в Phase 20 визуальной переработки; новый font или motion-язык требуют отдельного owner approval, а новые SVG-рисунки и визуал паука/фона проходят владельческое одобрение до принятия baseline. (Принятый долг D-70: EDITOR-FRAMING-01 не проходился; финальный review — проверка агента; см. 20-RECONCILIATION.md)
 
 ## Визуальная переработка Phase 20
 
-- [ ] **STAB-VIS-01**: Детали паука и паутины полностью перерисованы в тёмной палитре PORTIA OS по утверждённому владельцем визуальному контракту; движение, режимы full/reduced/off, читаемость и производительность проверены на PC/phone. Формат графического ресурса определяется при проектировании.
-- [ ] **STAB-VIS-02**: К существующим выбираемым фонам добавлен фон с колбами на лабораторном штативе: колбы бурлят независимо и несинхронно, жидкость переливается по яркости, видны пузырьки. На PC/phone проверены сохранение выбора, читаемость окон и контента, контраст, full/reduced/off и скорость; существующие фоны сохранены.
-- [ ] **STAB-VIS-03**: Перерисованы два SVG-рисунка пустых состояний — колба, используемая в «Информации» и состоянии «Новостей пока нет», и микроскоп в «Справочнике», — а также 9 иконок классов «Разум», «Поведение» и «Вид / внешность» (D-39, уточнено решением D-48). Остальные SVG-иконки и иллюстрации не меняются; новые варианты и visual baselines утверждены владельцем.
-- [ ] **STAB-VIS-04**: Структура экранов вкладки «Повышение» в редакторе и внутреннего приложения «Повышение» сохранена, но оформление и удобство использования на PC/phone переработаны без потери participant/reviewer flow, прав, состояний сохранения и безопасных ошибок; итог принят владельцем.
+- [ ] **STAB-VIS-01**: Детали паука и паутины полностью перерисованы в тёмной палитре PORTIA OS по утверждённому владельцем визуальному контракту; движение, режимы full/reduced/off, читаемость и производительность проверены на PC/phone. Формат графического ресурса определяется при проектировании. (Принятый долг D-70: вид на устройствах не принимался, общий вердикт D-68 принят; см. 20-RECONCILIATION.md)
+- [ ] **STAB-VIS-02**: К существующим выбираемым фонам добавлен фон с колбами на лабораторном штативе: колбы бурлят независимо и несинхронно, жидкость переливается по яркости, видны пузырьки. На PC/phone проверены сохранение выбора, читаемость окон и контента, контраст, full/reduced/off и скорость; существующие фоны сохранены. (Принятый долг D-70: вид на устройствах не принимался, общий вердикт D-68 принят; см. 20-RECONCILIATION.md)
+- [ ] **STAB-VIS-03**: Перерисованы два SVG-рисунка пустых состояний — колба, используемая в «Информации» и состоянии «Новостей пока нет», и микроскоп в «Справочнике», — а также 9 иконок классов «Разум», «Поведение» и «Вид / внешность» (D-39, уточнено решением D-48). Остальные SVG-иконки и иллюстрации не меняются; новые варианты и visual baselines утверждены владельцем. (Принятый долг D-70: вид на устройствах не принимался, общий вердикт D-68 принят; см. 20-RECONCILIATION.md)
+- [ ] **STAB-VIS-04**: Структура экранов вкладки «Повышение» в редакторе и внутреннего приложения «Повышение» сохранена, но оформление и удобство использования на PC/phone переработаны без потери participant/reviewer flow, прав, состояний сохранения и безопасных ошибок; итог принят владельцем. (Принятый долг D-70: «Повышение» на устройствах не принималось, проверяющий BLOCKED; см. 20-RECONCILIATION.md)
 - [x] **STAB-TMPL-01**: Внутри приложения «Повышение» кнопка «Создать шаблон» открывает отдельный редактор карточки досье вируса для текста и локальных изображений; готовую работу можно скачать на устройство как самодостаточные PNG или HTML для передачи проверяющему вне сайта. Создание, изображения и экспорт не записываются в Supabase database/storage, `/api/uploads` и реальные записи архива; ошибки экспорта сохраняют черновик в текущем сеансе.
 
 ## Классы вирусов и редактор Phase 20
@@ -125,10 +125,10 @@
 - [x] **STAB-CLASS-02**: Записи со старыми названиями показываются, ищутся и редактируются как новые, при следующем сохранении записывается новое; неизвестные значения не теряются, а проверка закрытых вкладок не даёт ложного отказа (D-36а).
 - [x] **STAB-CLASS-03**: Forward-only SQL-миграция переписывает старые названия в сохранённых записях; она проверена offline и агентом `supabase-rls-reviewer`, применяется только на изолированном staging после решения владельца; production применяет владелец сам, и статус применения записан честно, без PASS от агента (D-36б).
 - [x] **STAB-CLASS-04**: Раздел «Классификация» стартового контента «Информации» содержит тексты владельца дословно, с ударениями, под сохранённым заголовком «ДОПОЛНИТЕЛЬНАЯ ЛИНЕЙКА»; уже отредактированная «Информация» в базе молча не перезаписывается (D-38, D-49).
-- [ ] **STAB-EDIT-01**: Во вкладке «Информация» редактора разделы идут колонками сверху вниз, не больше 5 в колонке, без пустой правой части окна; на phone — одна колонка без горизонтального overflow (D-40).
-- [ ] **STAB-EDIT-02**: Во вкладках «Справочник», «Сводка» и «Рекомендации» кнопка «+ ДОБАВИТЬ РАЗДЕЛ» закреплена сверху; раздел создаётся с заголовком и заметкой, внутри создаются подразделы, раскладка плотная; новая форма данных читает прежний контент без потерь и не меняет публичный контракт сайта (D-41).
-- [ ] **STAB-EDIT-03**: Порядок разделов и карточек и перетаскивание (указатель и ArrowUp/ArrowDown) работают в новых раскладках, включая перенос через границу колонки, одним шагом отмены (D-42).
-- [ ] **STAB-EDIT-04**: Заметки разделов редактора хранятся отдельно от публичного контента и не попадают в `/api/content`, публично читаемую таблицу контента и данные посетителей; читает и меняет их только редактор с доступом к соответствующей вкладке (D-47).
+- [ ] **STAB-EDIT-01**: Во вкладке «Информация» редактора разделы идут колонками сверху вниз, не больше 5 в колонке, без пустой правой части окна; на phone — одна колонка без горизонтального overflow (D-40). (Принятый долг D-70: EDITOR-01 не проходился, e2e-mutation BLOCKED; см. 20-RECONCILIATION.md)
+- [ ] **STAB-EDIT-02**: Во вкладках «Справочник», «Сводка» и «Рекомендации» кнопка «+ ДОБАВИТЬ РАЗДЕЛ» закреплена сверху; раздел создаётся с заголовком и заметкой, внутри создаются подразделы, раскладка плотная; новая форма данных читает прежний контент без потерь и не меняет публичный контракт сайта (D-41). (Принятый долг D-70: EDITOR-02 и EDITOR-INFO-ADD-01 не проходились, e2e-mutation BLOCKED; см. 20-RECONCILIATION.md)
+- [ ] **STAB-EDIT-03**: Порядок разделов и карточек и перетаскивание (указатель и ArrowUp/ArrowDown) работают в новых раскладках, включая перенос через границу колонки, одним шагом отмены (D-42). (Принятый долг D-70: EDITOR-03 не проходился, e2e-mutation BLOCKED; см. 20-RECONCILIATION.md)
+- [ ] **STAB-EDIT-04**: Заметки разделов редактора хранятся отдельно от публичного контента и не попадают в `/api/content`, публично читаемую таблицу контента и данные посетителей; читает и меняет их только редактор с доступом к соответствующей вкладке (D-47). (Принятый долг D-70: EDITOR-04 не проходился; заметки убраны из продукта (20-33); см. 20-RECONCILIATION.md)
 
 ## Out of Scope
 
@@ -204,29 +204,29 @@
 | STAB-MEDIA-04 | Phase 19 | Pending |
 | STAB-MEDIA-05 | Phase 19 | Complete |
 | STAB-MEDIA-06 | Phase 18 | Pending |
-| STAB-MEDIA-07 | Phase 20 | Pending |
-| STAB-A11Y-01 | Phase 20 | Pending |
-| STAB-A11Y-02 | Phase 20 | Pending |
-| STAB-A11Y-03 | Phase 20 | Pending |
-| STAB-A11Y-04 | Phase 20 | Pending |
+| STAB-MEDIA-07 | Phase 20 | Accepted debt (D-70) |
+| STAB-A11Y-01 | Phase 20 | Accepted debt (D-70) |
+| STAB-A11Y-02 | Phase 20 | Accepted debt (D-70) |
+| STAB-A11Y-03 | Phase 20 | Accepted debt (D-70) |
+| STAB-A11Y-04 | Phase 20 | Accepted debt (D-70) |
 | STAB-SEC-01 | Phase 16 | Complete |
 | STAB-SEC-02 | Phase 20 | Complete |
-| STAB-SEC-03 | Phase 20 | Pending |
+| STAB-SEC-03 | Phase 20 | Accepted debt (D-70) |
 | STAB-SEC-04 | Phase 16 | Complete |
 | STAB-SEC-05 | Phase 20 | Complete |
-| STAB-SEC-06 | Phase 20 | Pending |
-| STAB-REL-01 | Phase 20 | Pending |
-| STAB-REL-02 | Phase 20 | Pending |
-| STAB-REL-03 | Phase 20 | Pending |
+| STAB-SEC-06 | Phase 20 | Complete |
+| STAB-REL-01 | Phase 20 | Accepted debt (D-70) |
+| STAB-REL-02 | Phase 20 | Accepted debt (D-70) |
+| STAB-REL-03 | Phase 20 | Accepted debt (D-70) |
 | STAB-REL-04 | Phase 16 | Complete |
-| STAB-REL-05 | Phase 20 | Pending |
-| STAB-REL-06 | Phase 20 | Pending |
-| STAB-REL-07 | Phase 20 | Pending |
-| STAB-REL-08 | Phase 20 | Pending |
-| STAB-VIS-01 | Phase 20 | Pending |
-| STAB-VIS-02 | Phase 20 | Pending |
-| STAB-VIS-03 | Phase 20 | Pending |
-| STAB-VIS-04 | Phase 20 | Pending |
+| STAB-REL-05 | Phase 20 | Accepted debt (D-70) |
+| STAB-REL-06 | Phase 20 | Accepted debt (D-70) |
+| STAB-REL-07 | Phase 20 | Accepted debt (D-70) |
+| STAB-REL-08 | Phase 20 | Accepted debt (D-70) |
+| STAB-VIS-01 | Phase 20 | Accepted debt (D-70) |
+| STAB-VIS-02 | Phase 20 | Accepted debt (D-70) |
+| STAB-VIS-03 | Phase 20 | Accepted debt (D-70) |
+| STAB-VIS-04 | Phase 20 | Accepted debt (D-70) |
 | STAB-TMPL-01 | Phase 20 | Complete |
 | STAB-SEARCH-05 | Phase 20 | Complete |
 | STAB-SEARCH-06 | Phase 20 | Complete |
@@ -235,10 +235,10 @@
 | STAB-CLASS-02 | Phase 20 | Complete |
 | STAB-CLASS-03 | Phase 20 | Complete |
 | STAB-CLASS-04 | Phase 20 | Complete |
-| STAB-EDIT-01 | Phase 20 | Pending |
-| STAB-EDIT-02 | Phase 20 | Pending |
-| STAB-EDIT-03 | Phase 20 | Pending |
-| STAB-EDIT-04 | Phase 20 | Pending |
+| STAB-EDIT-01 | Phase 20 | Accepted debt (D-70) |
+| STAB-EDIT-02 | Phase 20 | Accepted debt (D-70) |
+| STAB-EDIT-03 | Phase 20 | Accepted debt (D-70) |
+| STAB-EDIT-04 | Phase 20 | Accepted debt (D-70) |
 
 ---
-*Last updated: 2026-11-04 — gap closure 20-31: A11Y-01/03, MEDIA-07 → Pending (prior: after owner decisions D-46..D-49 added Phase 20 requirements, 92/92 uniquely mapped)*
+*Last updated: 2026-11-09 — plan 20-15: Phase 20 по доказательствам на итоговом release commit a05a6019e867; требования, которые закрывала только приёмка на устройствах или живое доказательство на staging и ролях, — Accepted debt (D-70) без галочки (prior: 2026-11-04 gap closure 20-31)*
