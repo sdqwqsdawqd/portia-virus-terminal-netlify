@@ -65,6 +65,62 @@ describe("Phase 15 visual policy", () => {
     assert.equal(pkg.devDependencies["@playwright/test"], "1.64.1");
   });
 
+  // D-69 (G3, 20-62): the motion scene is made repeatable by controlling time and Animation objects in the scene, never by the policy.
+  describe("motion scene determinism (D-69, G3)", () => {
+    const motionStates = visualPolicyStates.filter((state) => state.startsWith("motion:"));
+    const sceneSource = readFileSync(new URL("../tests/e2e/visual/motion.spec.ts", import.meta.url), "utf8");
+    const determinismSource = readFileSync(new URL("../tests/e2e/fixtures/determinism.ts", import.meta.url), "utf8");
+    const helperBody = /export async function settleAnimations[\s\S]*?\r?\n\}\r?\n/u.exec(determinismSource)?.[0] ?? "";
+
+    test("the motion policy is pinned: animations allow, 2300 px, threshold 0.3, no mask", () => {
+      assert.deepEqual(motionStates, [
+        "motion:web-rest",
+        "motion:vivian-idle",
+        "motion:vivian-activity",
+        "motion:vivian-offended",
+        "motion:vivian-recovery",
+      ]);
+      for (const state of motionStates) {
+        const policy = visualPolicy(fakePage, state);
+        assert.equal(policy.animations, "allow", state);
+        assert.equal(policy.maxDiffPixels, 2_300, state);
+        assert.equal(policy.threshold, 0.3, state);
+        assert.equal(policy.mask, undefined, state);
+        assert.equal(policy.maskColor, undefined, state);
+      }
+    });
+
+    test("the scene settles animations before every comparison, in source order", () => {
+      assert.match(sceneSource, /import \{[^}]*\bsettleAnimations\b[^}]*\} from "\.\.\/fixtures\/determinism"/u);
+      let from = 0;
+      for (const state of motionStates) {
+        const call = `compare("${state}")`;
+        const at = sceneSource.indexOf(call, from);
+        assert.ok(at > from, `${call} is missing or out of order`);
+        assert.ok(sceneSource.slice(from, at).includes("settleAnimations("), `settleAnimations( must run before ${call}`);
+        from = at + call.length;
+      }
+    });
+
+    test("the scene does not hide, mask or disable what the frames prove", () => {
+      assert.doesNotMatch(sceneSource, /animations:\s*"disabled"|addStyleTag|\bmask\b|maxDiffPixels|threshold/u);
+      assert.doesNotMatch(sceneSource, /toBeHidden|\.hide\(|visibility|display:\s*none/u);
+    });
+
+    test("settleAnimations exists and acts only on Animation objects", () => {
+      assert.ok(helperBody.length > 0, "export async function settleAnimations is missing in determinism.ts");
+      assert.match(helperBody, /PORTIA_MOTION_SETTLE_TIMEOUT/u);
+      assert.match(helperBody, /getAnimations/u);
+      assert.match(helperBody, /\.finished\b/u);
+      assert.match(helperBody, /\.pause\(\)/u);
+      assert.match(helperBody, /currentTime/u);
+      assert.doesNotMatch(
+        helperBody,
+        /\.style\b|setAttribute|removeAttribute|classList|\.hidden\b|visibility|display\s*[:=]|addStyleTag|innerHTML|textContent|\.remove\(|\.cancel\(|playbackRate/u,
+      );
+    });
+  });
+
   test("only employees, table and charter mask regions", () => {
     assert.deepEqual(maskSelectors("application:employees"), [".personnel-app"]);
     assert.deepEqual(maskSelectors("application:table"), ["iframe"]);
