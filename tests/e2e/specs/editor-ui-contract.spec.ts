@@ -320,7 +320,7 @@ function expectAbortedSave(diagnostics: DiagnosticLedger) {
   diagnostics.expectFault({ kind: "console", source: /^browser:\/api\//, text: /Failed to load resource: net::ERR_FAILED/, reason: "the browser mirrors the aborted own /api request to its console" });
 }
 
-/** What a picture shows: computed object-position and transform, the INLINE transform-origin (the computed one is in pixels and follows the box, the style is the percent pair), and the ratios of the frame and of the picture. */
+/** What a picture shows: computed object-position and transform, the INLINE transform-origin (the computed one is in pixels and follows the box, the style is the percent pair; Firefox writes it with a third "0px", dropped here), and the ratios of the frame and of the picture. */
 async function pictureState(frame: Locator) {
   // A picture below the fold is lazy: WebKit loads it only once it is in view.
   await frame.scrollIntoViewIfNeeded();
@@ -328,7 +328,7 @@ async function pictureState(frame: Locator) {
   await expect(img).toBeVisible();
   const state = await img.evaluate((element: HTMLImageElement) => {
     const computed = getComputedStyle(element);
-    return { objectPosition: computed.objectPosition, transform: computed.transform, transformOrigin: element.style.transformOrigin };
+    return { objectPosition: computed.objectPosition, transform: computed.transform, transformOrigin: element.style.transformOrigin.replace(/ 0px$/, "") };
   });
   const frameBox = await box(frame);
   const imgBox = await box(img);
