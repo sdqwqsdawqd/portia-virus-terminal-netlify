@@ -370,27 +370,119 @@ function promoteApproved() {
   process.stdout.write(`Promoted ${approved.length} owner-approved snapshots without transformation.\n`);
 }
 
+const phase20RegisterPath = path.resolve(workspace, "tests/e2e/visual/phase20-baselines.json");
+const phase20RegisterSchema = "portia-phase20-baselines-v1";
+const phase20VerdictSource = ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-58-SUMMARY.md";
+const phase20SnapshotDir = "tests/e2e/visual/__screenshots__/";
+
+function frontmatterValue(text, key) {
+  const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1];
+  if (block === undefined) return undefined;
+  const line = block.split(/\r?\n/).find((entry) => entry.startsWith(`${key}:`));
+  return line === undefined ? undefined : line.slice(key.length + 1).trim();
+}
+
+// D-68: the Phase 20 baselines do not pass through 15-VISUAL-APPROVAL.md. Their bytes are tied to the owner's overall verdict in 20-58-SUMMARY.md
+// (owner_verdict: accepted on the commit named there) and to the register tests/e2e/visual/phase20-baselines.json, so --verify-promotion can tell
+// a Phase 20 baseline, or a Phase 15 baseline replaced on purpose, from a stray PNG. The function is pure: it gets the parsed Phase 15 approvals,
+// the parsed register, the text of 20-58-SUMMARY.md and the SHA-256 of every file on disk (a Map from the workspace-relative path; a missing file is absent),
+// and returns the list of { code, detail } problems (empty means the register is accepted).
+export function validatePhase20Register({ approvedRows, register, summaryText, fileHashes }) {
+  const problems = [];
+  const add = (code, detail = "") => problems.push({ code, detail });
+  if (
+    !register
+    || register.schema !== phase20RegisterSchema
+    || !Array.isArray(register.rows)
+    || register.ownerVerdict?.source !== phase20VerdictSource
+  ) {
+    add("PORTIA_PHASE20_REGISTER_INVALID", "schema, rows or verdict source");
+    return problems;
+  }
+  const verdict = frontmatterValue(summaryText ?? "", "owner_verdict");
+  const verdictCommit = frontmatterValue(summaryText ?? "", "owner_verdict_commit");
+  if (verdict !== "accepted" || !/^[0-9a-f]{40}$/.test(verdictCommit ?? "") || verdictCommit !== register.ownerVerdict.commit) {
+    add("PORTIA_PHASE20_OWNER_VERDICT_MISSING", `owner_verdict=${verdict ?? "missing"} commit=${verdictCommit ?? "missing"}`);
+  }
+  const approvedByPath = new Map(approvedRows.map((row) => [row.intendedSnapshot, row.hash]));
+  const seen = new Set();
+  for (const row of register.rows) {
+    const snapshot = row?.snapshot;
+    if (typeof snapshot !== "string" || !/^[a-f0-9]{64}$/.test(row.sha256 ?? "")) {
+      add("PORTIA_PHASE20_REGISTER_INVALID", `row ${String(snapshot)}`);
+      continue;
+    }
+    if (!snapshot.startsWith(phase20SnapshotDir) || !snapshot.endsWith(".png") || path.posix.normalize(snapshot) !== snapshot) {
+      add("PORTIA_PHASE20_DESTINATION_INVALID", snapshot);
+      continue;
+    }
+    if (seen.has(snapshot)) {
+      add("PORTIA_PHASE20_DUPLICATE", snapshot);
+      continue;
+    }
+    seen.add(snapshot);
+    if (fileHashes.get(snapshot) !== row.sha256) add("PORTIA_PHASE20_SNAPSHOT_HASH_MISMATCH", snapshot);
+    const approvedHash = approvedByPath.get(snapshot);
+    if (approvedHash !== undefined ? row.supersedes !== approvedHash : row.supersedes !== null) {
+      add("PORTIA_PHASE20_SUPERSEDE_INVALID", snapshot);
+    }
+  }
+  return problems;
+}
+
+function readPhase20Register() {
+  if (!existsSync(phase20RegisterPath)) return undefined;
+  try {
+    return JSON.parse(readFileSync(phase20RegisterPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 function verifyPromotion() {
   verifyAuthority();
   const rows = approvalRows();
   const approved = validateApprovalRows(rows);
   const approvedByDestination = new Map(approved.map((row) => [path.resolve(workspace, row.intendedSnapshot), row]));
+  // Without the register everything below is the Phase 15 behaviour; with it, listed paths take the register's bytes.
+  const registered = new Map();
+  const register = readPhase20Register();
+  if (register !== undefined) {
+    const fileHashes = new Map();
+    for (const row of Array.isArray(register?.rows) ? register.rows : []) {
+      const destination = typeof row?.snapshot === "string" ? path.resolve(workspace, row.snapshot) : "";
+      if (destination && existsSync(destination) && statSync(destination).isFile()) fileHashes.set(row.snapshot, sha256(destination));
+    }
+    const summaryFile = path.resolve(workspace, phase20VerdictSource);
+    const problems = validatePhase20Register({
+      approvedRows: approved,
+      register,
+      summaryText: existsSync(summaryFile) ? readFileSync(summaryFile, "utf8") : "",
+      fileHashes,
+    });
+    if (problems.length) {
+      throw new Error(problems.map((problem) => `[${problem.code}]${problem.detail ? ` ${problem.detail}` : ""}`).join("\n"));
+    }
+    for (const row of register.rows) registered.set(path.resolve(workspace, row.snapshot), row.sha256);
+  }
   for (const row of approved) {
     const destination = path.resolve(workspace, row.intendedSnapshot);
     if (!destination.startsWith(`${snapshotRoot}${path.sep}`)) fail("PORTIA_PROMOTION_DESTINATION_REFUSED", destination);
+    if (registered.has(destination)) continue;
     if (!existsSync(destination) || !statSync(destination).isFile()) fail("PORTIA_APPROVED_SNAPSHOT_MISSING", row.intendedSnapshot);
     if (sha256(destination) !== row.hash) fail("PORTIA_APPROVED_SNAPSHOT_HASH_MISMATCH", row.intendedSnapshot);
   }
   const trackedSnapshots = snapshotFiles(snapshotRoot).filter((file) => file.toLowerCase().endsWith(".png"));
   for (const snapshot of trackedSnapshots) {
-    const approval = approvedByDestination.get(snapshot);
-    if (!approval) fail("PORTIA_UNAPPROVED_SNAPSHOT_PRESENT", path.relative(workspace, snapshot));
-    if (sha256(snapshot) !== approval.hash) fail("PORTIA_UNAPPROVED_SNAPSHOT_HASH", path.relative(workspace, snapshot));
+    const expectedHash = registered.get(snapshot) ?? approvedByDestination.get(snapshot)?.hash;
+    if (expectedHash === undefined) fail("PORTIA_UNAPPROVED_SNAPSHOT_PRESENT", path.relative(workspace, snapshot));
+    if (sha256(snapshot) !== expectedHash) fail("PORTIA_UNAPPROVED_SNAPSHOT_HASH", path.relative(workspace, snapshot));
   }
-  if (trackedSnapshots.length !== approved.length) {
-    fail("PORTIA_PROMOTION_COUNT_MISMATCH", `${trackedSnapshots.length}/${approved.length}`);
+  const expectedCount = new Set([...approvedByDestination.keys(), ...registered.keys()]).size;
+  if (trackedSnapshots.length !== expectedCount) {
+    fail("PORTIA_PROMOTION_COUNT_MISMATCH", `${trackedSnapshots.length}/${expectedCount}`);
   }
-  process.stdout.write(`Verified ${approved.length} exact owner-approved snapshot bytes; ${rows.length - approved.length} non-approved rows excluded.\n`);
+  process.stdout.write(`Verified ${expectedCount} exact owner-approved snapshot bytes; ${rows.length - approved.length} non-approved rows excluded.\n`);
 }
 
 function collectRows({ enforceInventory = false, candidateSetId, allowIndex = false } = {}) {
