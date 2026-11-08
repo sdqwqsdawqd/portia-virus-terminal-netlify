@@ -2,7 +2,9 @@
 phase: PORTIA-20-security-accessibility-i-priemka-reliza
 plan: 11
 artifact: visual-approval-ledger
-status: owner-verdict-recorded
+status: retired-by-D-68
+retired: 2026-11-08
+retired_by: D-68 (20-58)
 generated: 2026-11-04
 candidates_commit: a6e2918b2afb0539f468cfa5ac802d349cae0ffb
 candidates_set: phase20-refresh-a6e2918b2afb
@@ -10,6 +12,8 @@ project_root: C:/Users/User/code/portia-site
 ---
 
 # 20-VISUAL-APPROVAL: пакет владельческого решения по визуальным кандидатам
+
+Выведено из процесса решением владельца D-68 (2026-11-08): построчная таблица кадров, SHA256 и галереи review.html больше не ворота приёмки и релиза. Документ сохранён как история вердиктов владельца до 2026-11-08 — на его разделы 7, 15 и 16 ссылаются D-53..D-67 в 20-CONTEXT.md, поэтому он не удаляется. Новые строки, раунды и hash не добавляются; тест таблицы удалён в 20-58. Вид сайта принимается общим вердиктом владельца (20-58-SUMMARY.md); эталоны снимков снимает 20-12 после «принято».
 
 Статус пакета: **пересъёмка 20-54 на a6e2918b2afb (набор phase20-refresh-a6e2918b2afb) вердикт владельца 2026-11-08 записан (раздел 16). 143 строки: 82 «принято» (12 побайтно те же кадры и 70 по словам владельца «Да, остальное принято»: 16 `spider-*`, 12 `flasks-*`, 23 `rebaseline-*`, 17 прочих изменившихся и `editor-info-add-section:pc/phone`), 16 «исправить» (8 `template-builder-*` и 8 строк кадра картинок `editor-image-framing-guide`, `editor-image-framing-dossier`, `guide-framed`, `dossier-framed` на pc и phone), 0 ОЖИДАЕТ, 45 BLOCKED. План 20-54 остановлен для исправлений (`outcome: stopped-for-fixes`): строгий прогон с PORTIA_REQUIRE_APPROVAL=1 красный только на 16 строках «исправить», 20-12 не запускается. Ответы владельца на вопросы раздела 7 записаны с датой 2026-11-08; q-template-framing без ответа. 13 строк раунда 14 (12 `flasks-*` и `template-builder-preview:pc`, отклонённые 2026-11-07) показаны новыми байтами после исправлений 20-48 и 20-49. Ни одна строка не отмечена «принято» без слов владельца. 20-12 не запускается.** Baseline не менялся.
 
