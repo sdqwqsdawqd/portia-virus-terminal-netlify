@@ -8,6 +8,7 @@ import { PromotionPage } from "../pages/promotion.page";
 import { templateExportViolations } from "../../../lib/portia-template-export.ts";
 import { classificationOptions, defaultPortiaContent } from "../../../lib/portia-content.ts";
 import { deterministicContract } from "../fixtures/determinism";
+import { sandboxedMeasureFrameScriptBlock } from "../fixtures/diagnostics";
 import { expect, test } from "../fixtures/test";
 
 // UI-contract lane (STAB-TMPL-01, D-52). The participant READ status is stubbed so the builder entry can be reached without
@@ -70,6 +71,18 @@ function trackWrites(page: Page) {
     if ((own || supabase) && (!readOnly || url.pathname.startsWith("/api/uploads"))) writes.push(`${request.method()} ${url.pathname}`);
   });
   return writes;
+}
+
+/**
+ * 20-60 (G1, T-20-141): the hidden frame the PNG is measured in is built from the very page that is downloaded as the HTML file (checked by the
+ * closed policy first). The console event of that frame under --trace is expected (sandboxedMeasureFrameScriptBlock); this is the property it must
+ * never hide: nothing in the file can run - no script, no event handler, no javascript: address.
+ */
+function expectNoExecutableContent(html: string) {
+  expect(templateExportViolations(html)).toEqual([]);
+  expect(html).not.toMatch(/<script/i);
+  expect(html).not.toMatch(/<[^>]*\son[a-z]+\s*=/i);
+  expect(html).not.toMatch(/javascript:/i);
 }
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
@@ -424,6 +437,7 @@ test("[STAB-TMPL-01] D-55 the downloaded HTML is the archive card", async ({ pag
   expect(html).toContain("default-src 'none'; style-src 'unsafe-inline'; img-src data:");
   expect(html).not.toContain("ЗАПИСИ УЧЁНЫХ");
   expect(templateExportViolations(html)).toEqual([]);
+  expectNoExecutableContent(html);
   const style = /<style>([\s\S]*?)<\/style>/.exec(html)?.[1] ?? "";
   expect(style.length).toBeGreaterThan(2000);
   expect(templateExportViolations(style)).toEqual([]);
@@ -450,7 +464,8 @@ test("[STAB-TMPL-01] D-55 the downloaded HTML is the archive card", async ({ pag
 
 // D-55 (20-44): the PNG is the raster of the same card (SVG with a foreignObject drawn on a canvas): at least 1060 CSS px wide, with the pixels
 // of the chosen level's colour. Runs on a PC and on a phone, where the card is still laid out at the file's width.
-test("[STAB-TMPL-01] D-55 the downloaded PNG is the archive card", async ({ page }, testInfo) => {
+test("[STAB-TMPL-01] D-55 the downloaded PNG is the archive card", async ({ page, diagnostics }, testInfo) => {
+  diagnostics.expectFault(sandboxedMeasureFrameScriptBlock);
   const writes = trackWrites(page);
   const { builder } = await openBuilder(page);
   await nameField(builder).fill("Вирус из растра");
@@ -478,7 +493,8 @@ test("[STAB-TMPL-01] D-55 the downloaded PNG is the archive card", async ({ page
   expect(writes).toEqual([]);
 });
 
-test("[STAB-TMPL-01] a local image and long text reach the preview, the offline HTML and the PNG without any server write", async ({ page, browser }, testInfo) => {
+test("[STAB-TMPL-01] a local image and long text reach the preview, the offline HTML and the PNG without any server write", async ({ page, browser, diagnostics }, testInfo) => {
+  diagnostics.expectFault(sandboxedMeasureFrameScriptBlock);
   const writes = trackWrites(page);
   const { builder } = await openBuilder(page);
   const longText = Array.from({ length: 90 }, (_, index) => `строка-${index} описание описание описание`).join("\n");
@@ -504,6 +520,7 @@ test("[STAB-TMPL-01] a local image and long text reach the preview, the offline 
   expect(html).toMatch(/<img [^>]*src="data:image\/png;base64,/);
   expect(html).not.toMatch(/(?:src|href)=["']?(?:https?:)?\/\//i);
   expect(html).not.toMatch(/<script|<link|url\(/i);
+  expectNoExecutableContent(html);
   expect(html).toContain("строка-89 описание");
 
   const offline = await browser.newContext({ offline: true, locale: "ru-RU" });
@@ -613,7 +630,8 @@ test("[STAB-TMPL-01] an unsupported, corrupt, oversized or unreadable image is r
   expect(writes).toEqual([]);
 });
 
-test("[STAB-TMPL-01] an encoding failure keeps the draft, shows a status and retries the same format", async ({ page }) => {
+test("[STAB-TMPL-01] an encoding failure keeps the draft, shows a status and retries the same format", async ({ page, diagnostics }) => {
+  diagnostics.expectFault(sandboxedMeasureFrameScriptBlock);
   const writes = trackWrites(page);
   await page.addInitScript(() => {
     const flags = window as unknown as { __pngMode?: "null" | "throw" | "context" | "decode" };
@@ -676,7 +694,8 @@ test("[STAB-TMPL-01] an encoding failure keeps the draft, shows a status and ret
   expect(writes).toEqual([]);
 });
 
-test("[STAB-TMPL-01] a card too long for PNG is refused with an HTML alternative that keeps every line", async ({ page }, testInfo) => {
+test("[STAB-TMPL-01] a card too long for PNG is refused with an HTML alternative that keeps every line", async ({ page, diagnostics }, testInfo) => {
+  diagnostics.expectFault(sandboxedMeasureFrameScriptBlock);
   const writes = trackWrites(page);
   const { builder } = await openBuilder(page);
   const downloads: string[] = [];
@@ -869,6 +888,7 @@ test("[STAB-TMPL-01] participant builds a text template, downloads it and opens 
   const savedPath = testInfo.outputPath("shablon-dosye.html");
   await file.saveAs(savedPath);
   const html = await readFile(savedPath, "utf8");
+  expectNoExecutableContent(html);
   expect(html).not.toMatch(/<script/i);
   expect(html).not.toMatch(/<img/i);
   expect(html).toContain("&lt;img src=x onerror=&quot;window.__pwned=1&quot;&gt;");
@@ -1262,8 +1282,9 @@ async function dragWindowEdge(page: Page, window: Locator, edge: "e" | "w", by: 
   await page.mouse.up();
 }
 
-test("[STAB-TMPL-01] D-65 the card is laid out like the archive's record: photo left, three classes, the method of spread, three classes", async ({ page, browser, isMobile }, testInfo) => {
+test("[STAB-TMPL-01] D-65 the card is laid out like the archive's record: photo left, three classes, the method of spread, three classes", async ({ page, browser, isMobile, diagnostics }, testInfo) => {
   test.skip(isMobile, "The two-column PC layout; the phone is the next test.");
+  diagnostics.expectFault(sandboxedMeasureFrameScriptBlock);
   const writes = trackWrites(page);
   const { promotion, builder } = await openBuilder(page);
   await nameField(builder).fill("Раскладка как в базе");

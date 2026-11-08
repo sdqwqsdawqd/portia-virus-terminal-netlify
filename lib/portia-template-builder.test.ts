@@ -390,6 +390,42 @@ test("D-55 (20-37): the builder checks the closed policy before every download a
   expectMatch(body, /templateExportError/, "a violation ends in the export error, not in a file");
 });
 
+/* ---------------------------------------------------------------- 20-60 (G1, T-20-142): the hidden frame the PNG is measured in */
+
+/** The body of measureCardPage, from its signature to the closing brace at the start of a line. */
+function measureCardPageBody(code: string) {
+  const start = code.indexOf("async function measureCardPage(");
+  assert.ok(start >= 0, "measureCardPage exists");
+  const end = code.indexOf("\n}\n", start);
+  assert.ok(end > start, "measureCardPage ends");
+  return code.slice(start, end);
+}
+
+test("20-60 (G1): the measuring frame is sandboxed with exactly allow-same-origin and holds no permission to run a script", () => {
+  const code = stripComments(subjectSource());
+  const body = measureCardPageBody(code);
+  const sandboxes = [...body.matchAll(/setAttribute\(\s*["']sandbox["']\s*,\s*["']([^"']*)["']\s*\)/g)].map((match) => match[1]);
+  assert.deepEqual(sandboxes, ["allow-same-origin"], "one sandbox attribute, the single value allow-same-origin");
+  expectNoMatch(body, /allow-(?:scripts|top-navigation|popups|forms|modals|downloads|pointer-lock|presentation|orientation-lock)/, "no other permission in the frame");
+  expectNoMatch(body, /\.sandbox\b/, "the sandbox is set only by the attribute above");
+  expectMatch(body, /frame\.srcdoc\s*=\s*page\b/, "the frame shows the page as srcdoc, not an address");
+  expectNoMatch(body, /\.src\s*=|\.contentWindow|\.eval\b|new Function|document\.write/, "the frame is read, never driven or given code");
+  expectMatch(body, /frame\.remove\(\)/, "the frame is removed afterwards");
+  assert.equal(code.split("allow-scripts").length - 1, 0, "the builder never names allow-scripts");
+});
+
+test("20-60 (G1): the page of the measuring frame is the downloaded page and passes the closed policy before the frame exists", () => {
+  const code = stripComments(subjectSource());
+  const body = code.slice(code.indexOf("const runExport"), code.indexOf("const dismissConfirm"));
+  const built = body.indexOf("const page = templateCardDocument(");
+  const checked = body.indexOf('ensureClean(page, "html")');
+  const measured = body.indexOf("measureCardPage(page)");
+  assert.ok(built >= 0 && checked > built && measured > checked, "built, then checked, then measured");
+  expectMatch(body, /let content: string \| Blob = page;/, "the HTML file is the same page");
+  expectMatch(body, /const ensureClean = \(text: string, mode: "html" \| "svg"\) => \{\s*if \(templateExportViolations\(text, mode\)\.length > 0\) throw new Error\(templateExportError\);/, "ensureClean throws on any violation");
+  assert.equal(body.split("measureCardPage(").length - 1, 1, "the only caller passes that page");
+});
+
 /* ---------------------------------------------------------------- guard self-check */
 
 test("the guards recognise a violating source (guard self-check)", () => {

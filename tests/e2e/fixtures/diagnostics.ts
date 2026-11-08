@@ -87,6 +87,15 @@ export type ExpectedFaultRule = Readonly<{
   reason: string;
 }>;
 
+// 20-60 (G1, T-20-141): with --trace the Playwright snapshotter runs its own script in every frame, also in the hidden measureCardPage frame that the
+// product isolates with sandbox="allow-same-origin"; Chromium refuses it with this text. The sandbox is pinned by lib/portia-template-builder.test.ts and the file by templateExportViolations.
+export const sandboxedMeasureFrameScriptBlock: ExpectedFaultRule = {
+  kind: "console",
+  source: "browser:",
+  text: /^Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set\.$/,
+  reason: "the trace snapshotter of Playwright is refused inside the script-less sandboxed frame of measureCardPage while the test makes a PNG (20-60, G1)",
+};
+
 const neverExpected: readonly DiagnosticKind[] = ["csp", "pageerror", "hydration"];
 
 function ruleMatches(rule: ExpectedFaultRule, entry: DiagnosticEntry) {
