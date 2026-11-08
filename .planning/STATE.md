@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-61-PLAN.md
-last_updated: "2026-11-08T17:13:22.045Z"
+stopped_at: Completed PORTIA-20-62-PLAN.md
+last_updated: "2026-11-08T18:05:59.205Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: b58051c1d6298c53770b2e8d045c6597302a8b17
+state_head: dee25d563250b9b8f80333bea9de43bb7545d331
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 134
-  completed_plans: 130
+  completed_plans: 131
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 36 of 47
+Plan: 37 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-08 — Phase PORTIA-20 execution resumed (wave continue)
 
@@ -162,6 +162,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P59 | about 1h30m | 2 tasks | 4 files |
 | Phase PORTIA-20 P60 | 35min | 3 tasks | 5 files |
 | Phase PORTIA-20 P61 | multi-session | 3 tasks | 4 files |
+| Phase 20 P62 | multi-session | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -301,6 +302,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: D-69 (20-59): skip by project counts only when the spec source proves a project-only condition and the same test passed without retry on another project in the same gate run; data skips and BLOCKED never count; live lanes stay strict
 - [Phase PORTIA-20]: D-69 G1 (20-60): the about:srcdoc console event comes from the Playwright trace snapshotter (--trace) in the sandboxed measureCardPage frame, not from the product; expected only in the 5 PNG tests, global allowlist stays 11 rows
 - [Phase PORTIA-20]: D-69 G2 (20-61): approved phone-webkit frame was taken while the closed Settings window still stood in the page flow (scrollbar 10 px, 30 px shift); removed by 7b31bdd (18-01) and 23c1c85 (quick 261104-m6g); same Playwright 1.64.1 and WebKit 27.2, so not environment; baseline replaced as accepted-redesign with supersedes ccf89983
+- [Phase 20]: D-69 G3 (20-62): motion scene nondeterminism had three causes (spider head start on a post-load parked clock, endless dew phase, finite Vivian transitions) plus an aborted /api/employees; fixed by parking before load, 16 ms grid alignment and settleAnimations (Animation objects only); policy unchanged; activity/offended/recovery replaced as deterministic-capture with supersedes
 
 ### Pending Todos
 
@@ -345,8 +347,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-08T17:13:21.458Z
-Stopped at: Completed PORTIA-20-61-PLAN.md
+Last session: 2026-11-08T18:05:58.657Z
+Stopped at: Completed PORTIA-20-62-PLAN.md
 Resume file: None
 
 ## Operator Next Step
