@@ -4,7 +4,7 @@ title: Выбор видимой части картинки — предпро�
 area: editor-media
 phase: 20
 severity: high
-status: pending
+status: resolved
 files:
   - components/portia-image-framing.tsx
   - components/portia-editor-dossier.tsx
@@ -33,3 +33,5 @@ reference: .planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/re
 ## Ход
 
 - 2026-11-08: окно выбора сделано в 20-56/20-57 (коммиты 2bbdafb, 98af387), ждёт вердикта владельца в 20-58 (кадры editor-image-framing-*, guide-framed, dossier-framed; EDITOR-FRAMING-01 на PC и телефоне).
+
+Принято владельцем 2026-11-08 общим вердиктом (D-68, 20-58): «а) чтобы шаблон был почти индетичен как дата базы вирусов, Б) да В)да. принято»

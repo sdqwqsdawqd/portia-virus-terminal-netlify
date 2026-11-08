@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-57-PLAN.md
-last_updated: "2026-11-08T02:58:37.441Z"
+stopped_at: Completed PORTIA-20-58-PLAN.md (owner accepted)
+last_updated: "2026-11-08T08:44:42.384Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: 83ba50b3f6438a332fcc7090b23e1688587b0e9a
+state_head: c0b00f105eb39030ce8f8ea0c0b858ed865ccc42
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 129
-  completed_plans: 124
+  completed_plans: 125
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 30 of 47
+Plan: 31 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-08 — Phase PORTIA-20 execution resumed (wave continue)
 
@@ -289,6 +289,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-55 D-65: template card classification is the archive's grid; two columns on a PC from 584px content width; values sized by cell width (12-15px), whole word under badge; template_fix_commit d1d7b0f177522a14303171621398ed12ecd7ded5
 - [Phase PORTIA-20]: 20-56: band frame is 754:63 on PC and (screen-50):63 on a phone; the dialog compares against the drawn picture where the site caps a picture (known limit for 20-57)
 - [Phase PORTIA-20]: 20-57: the dialog Видимая часть keeps the Tab ring itself (keepFocusInside); native modal dialog hands focus to browser UI past the last stop. framing_fix_commit 98af387
+- [Phase PORTIA-20]: D-68: галереи и таблица кадров убраны; 20-58 принят владельцем общим вердиктом 2026-11-08 на 0c2a59d1d1a7; (в) окно «Видимая часть» в конструкторе шаблона — новый todo
 
 ### Pending Todos
 
@@ -332,8 +333,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-08T02:58:36.896Z
-Stopped at: Completed PORTIA-20-57-PLAN.md
+Last session: 2026-11-08T08:44:41.676Z
+Stopped at: Completed PORTIA-20-58-PLAN.md (owner accepted)
 Resume file: None
 
 ## Operator Next Step
