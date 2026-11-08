@@ -9,6 +9,30 @@
   "data": "offline-заглушка tests/e2e/harness/offline-supabase.cjs: пустой portia_content -> стартовый контент сайта, выдуманные публичные значения OFFLINE_ENV; production-сборка во временной копии, next start на 127.0.0.1:3100, Node 22.13.1, chromium-desktop 1440x900 DPR 1 и chromium-phone (Pixel 7); сцены с подменёнными чтениями кандидатных спеков — UI-контракт, не доказательство ролей, сохранения или живого источника данных; captureCommit — коммит, с которого собрана production-сборка (код продукта равен ownerVerdict.commit)",
   "rows": [
     {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-flasks--chromium-desktop.png",
+      "sha256": "d358400c49ad4d184914caaa51ecca3b085cefae4d9e1e93ba74dc75a3cc6c47",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Фон «Лабораторные колбы», анимации «Выключены»: законченный неподвижный кадр (ПК)",
+      "decisions": [
+        "D-54",
+        "D-59"
+      ],
+      "reason": "Эталон принятого вида (20-58) на стартовом контенте; паук выключен, часы на полке"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-flasks--chromium-phone.png",
+      "sha256": "c65391a2ee9d735d0bfeb2c577d8bb0348b120256e58a4dbb614ec54b7ff9942",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Фон «Лабораторные колбы», анимации «Выключены»: законченный неподвижный кадр (телефон)",
+      "decisions": [
+        "D-54",
+        "D-59"
+      ],
+      "reason": "Эталон принятого вида (20-58) на стартовом контенте; паук выключен, четыре сосуда"
+    },
+    {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-spider--chromium-desktop.png",
       "sha256": "687b12f122c69396ed054910a0ec3ac2d8651076ca50cbf313d9c642238e348d",
       "supersedes": null,

@@ -46,3 +46,19 @@ test("@phase20 spider at rest (D-45, D-53): animations «Выключены», n
   await expect(desktop.spider).toHaveCSS("opacity", "1");
   await compare(page, "spider", testInfo.project.name, "phase20:spider");
 });
+
+// D-54, D-59: the «Лабораторные колбы» wallpaper with animations «Выключены»: the finished frame (liquid at its drawn opacity 0.85, bubbles at their
+// places, boards and waves finished), nothing moves. The spider is switched off so the frame is the wallpaper alone.
+test("@phase20 flasks, animations «Выключены»: finished still frame (D-54, D-59)", async ({ page }, testInfo) => {
+  await openStill(page, { wallpaper: "flasks", spider: "off", motion: "off" });
+  await page.clock.runFor(3_000);
+  const wallpaper = page.locator(".wallpaper-flasks");
+  await expect(wallpaper).toBeAttached();
+  expect(await page.evaluate(() => document.documentElement.dataset.motion), "motion is off").toBe("off");
+  expect(await page.evaluate(() => document.documentElement.dataset.wallpaper), "the flasks wallpaper is chosen").toBe("flasks");
+  expect(
+    await page.evaluate(() => document.getAnimations().filter((animation) => ((animation.effect as KeyframeEffect | null)?.target as Element | null)?.closest(".wallpaper-flasks")).length),
+    "no running animation in the flask art",
+  ).toBe(0);
+  await compare(page, "flasks", testInfo.project.name, "phase20:flasks");
+});
