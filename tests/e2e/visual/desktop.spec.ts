@@ -6,7 +6,14 @@ import {
   type VisualState,
 } from "../fixtures/visual-policy";
 
+// 20-12 (D-68, class (в) nondeterminism): the spider walks on a running clock until motion is switched off, and then it stands where it happened to be,
+// so the frame moved between two runs (1100-4800 px). Motion is seeded off before the load: the spider stands at its resting place, the scene still
+// chooses «Выключены» through the settings window, and the spider is still in the frame (the subject is not hidden).
 async function staticDesktop(page: Parameters<typeof visualPolicy>[0]) {
+  await page.addInitScript(
+    (value) => window.localStorage.setItem("portia-desktop-settings-v1", JSON.stringify(value)),
+    { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "off", spider: "on", customAccent: "" },
+  );
   const desktop = new DesktopPage(page);
   await desktop.goto();
   await desktop.openApp("Настройки");

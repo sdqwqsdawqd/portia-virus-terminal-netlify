@@ -1,4 +1,5 @@
 import { DesktopPage } from "../pages/desktop.page";
+import { parkClock } from "../fixtures/determinism";
 import { expect, test } from "../fixtures/test";
 import { compareApprovedScreenshot, type VisualState } from "../fixtures/visual-policy";
 import type { Page } from "@playwright/test";
@@ -21,8 +22,12 @@ async function advanceUntil(
 }
 
 test("[STAB-BASE-03] approved web and Vivian motion states", async ({ page }, testInfo) => {
+  // 20-12 (D-68, class (в) nondeterminism): the fake clock runs at real speed after install(), so the spider route moved with the wall time between
+  // two runs. The clock is parked once the desktop mounted: from here every timer fires only through runFor, the frames repeat. runFor costs real time.
+  test.slow();
   const desktop = new DesktopPage(page);
   await desktop.goto();
+  await parkClock(page);
   const compare = (id: Extract<VisualState, `motion:${string}`>) =>
     compareApprovedScreenshot(
       page,
