@@ -5,16 +5,16 @@ milestone_name: «Стабилизация PORTIA OS»
 current_phase: 20
 current_phase_name: Security, accessibility и приёмка релиза
 status: executing
-stopped_at: Completed PORTIA-20-12-PLAN.md (open blockers recorded)
-last_updated: "2026-11-08T09:40:21.757Z"
+stopped_at: Completed PORTIA-20-13-PLAN.md (rehearsal verdict FAIL)
+last_updated: "2026-11-08T12:04:36.524Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: 4f280685dd3c8428e2aeb3a10b6e25bac865e538
+state_head: 46d9704aeadc850b821d8194f15a2f23abcb39c0
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 129
-  completed_plans: 126
+  completed_plans: 127
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 ## Current Position
 
 Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 32 of 47
+Plan: 33 of 47
 Status: Executing Phase PORTIA-20
 Last activity: 2026-11-08 — Phase PORTIA-20 execution resumed (wave continue)
 
@@ -158,6 +158,7 @@ Progress: [█████░░░░░] 50%
 | Phase PORTIA-20 P56 | about 3 h | 2 tasks | 6 files |
 | Phase PORTIA-20 P57 | about 2 h | 3 tasks | 6 files |
 | Phase PORTIA-20 P12 | multi-session | 3 tasks | 30 files |
+| Phase PORTIA-20 P13 | multi-session | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -292,6 +293,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-57: the dialog Видимая часть keeps the Tab ring itself (keepFocusInside); native modal dialog hands focus to browser UI past the last stop. framing_fix_commit 98af387
 - [Phase PORTIA-20]: D-68: галереи и таблица кадров убраны; 20-58 принят владельцем общим вердиктом 2026-11-08 на 0c2a59d1d1a7; (в) окно «Видимая часть» в конструкторе шаблона — новый todo
 - [Phase PORTIA-20]: 20-12: replaced Phase 15 baselines carry class accepted-redesign/fixed-data and supersedes in phase20-baselines.json; phone-webkit stays (г), motion activity/offended BLOCKED (CAPTURE); STAB-REL-03 open
+- [Phase PORTIA-20]: 20-13: release rehearsal on c11adf6 gave verdict FAIL (ui-contract-offline red, visual-approved red, visual-phase20/e2e/mutation BLOCKED); offline gates run by the runner under the offline harness; open 20-12 blockers recorded as FAIL/BLOCKED; STAB-REL-01..03 stay open
 
 ### Pending Todos
 
@@ -308,7 +310,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 19] STAB-PROM-15 stays open: live acceptance on isolated staging (steps 1-9, 11, PC and phone) is debt for 19-14 / Phase 20; owner steps 2-8 mutated production, review of those changes is the owner's decision. 19-07 teardown of run mvz5fqgv_c40b449b is permitted by the owner's acceptance.
 - [Phase 20] register_attempt RPC is granted to anon but has no caller - decide revoke or confirm purpose in the security review.
 - 20-23: live proof of Сводка/Рекомендации sections is BLOCKED (ENV) (no safe staging target) and the notes steps BLOCKED (OWNER) (portia_editor_notes not applied); STAB-EDIT-02/03/04, STAB-A11Y-01/02, STAB-REL-06 stay open
-- [Phase 20] Clean checkout: lib/phase16-guard-boundary.test.ts imports untracked .claude/hooks/guard.mjs, so unit (1 fail) and tsc (TS2307) fail outside the owner's tree; decision needed before 20-13 Task 2
+- [Phase 20] Resolved (807ab9f): the guard-boundary test skips as BLOCKED (ENV) when .claude/hooks/guard.mjs is absent; clean-checkout unit and typecheck were PASS in the 20-13 rehearsal.
+- [Phase 20] 20-13 rehearsal on c11adf6 = FAIL: ui-contract-offline red (srcdoc console event, cause unexplained), visual-approved red (webkit-phone 58293 px, motion vivian), visual-phase20 and e2e/mutation BLOCKED (ENV); STAB-REL-01..03 stay open; see deferred-items.md
 - Phase 20: new gap cycle for D-53..D-57 (spider gait and rim, flasks animation, template builder as real card, short hints, editor format button) must run and be recaptured before 20-12; 20-12 must not run
 
 ### Quick Tasks Completed
@@ -335,8 +338,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-08T09:40:21.113Z
-Stopped at: Completed PORTIA-20-12-PLAN.md (open blockers recorded)
+Last session: 2026-11-08T12:04:35.942Z
+Stopped at: Completed PORTIA-20-13-PLAN.md (rehearsal verdict FAIL)
 Resume file: None
 
 ## Operator Next Step
