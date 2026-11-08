@@ -1,11 +1,11 @@
 # 20-RELEASE-EVIDENCE: прогон релизного гейта
 
-Commit: `f49aa00f2b9833f962fa3fa890117e98a4abf362`
+Commit: `a05a6019e867a39a42e2d33b9e4f176d281bc659`
 Node: v22.13.1
 npm: 11.19.0 (--npm-cli C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js)
 Режим: full
-Начало: 2026-11-08T18:15:24.942Z
-Каталог артефактов: `test-results/release-gate/f49aa00f2b98-20261108T181524984Z`
+Начало: 2026-11-08T18:47:22.729Z
+Каталог артефактов: `test-results/release-gate/a05a6019e867-20261108T184722771Z`
 
 ## Гейты
 
@@ -14,7 +14,7 @@ npm: 11.19.0 (--npm-cli C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js)
 | node-version | `node --version` | 0 | PASS | - | node-version-1.log | - |
 | tree-clean | `git status --porcelain` | 0 | PASS | - | tree-clean-1.log | - |
 | npm-ci | `node C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js ci` | 0 | PASS | - | npm-ci-1.log | - |
-| unit | `node C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js test` | 0 | PASS | 1650/0/9/0 | unit-1.log | - |
+| unit | `node C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js test` | 0 | PASS | 1683/0/9/0 | unit-1.log | - |
 | typecheck | `node C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js exec tsc -- --noEmit` | 0 | PASS | - | typecheck-1.log | - |
 | build | `node C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js run build` | 0 | PASS | - | build-1.log | - |
 | lint | `node C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js run lint` | 0 | PASS | - | lint-1.log | - |
@@ -59,10 +59,10 @@ npm: 11.19.0 (--npm-cli C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js)
 | D-36(б) production | ОЖИДАЕТ ВЛАДЕЛЬЦА | миграция 20261104000000 на production не применялась; действие владельца, дата не заполнена |
 | D-47 staging | BLOCKED (OWNER): функция удалена в 20-33 | заметки, маршрут /api/content/notes, спека editor-notes.spec.ts и lib/editor-notes.test.ts удалены в 20-33 (ddbf427, 59b107c); исторический результат 2026-11-05 (20/20 на staging, 20-EDITOR-NOTES-EVIDENCE.md) относится к удалённому коду; миграция удаления 20261106000000 на staging не применена |
 | D-47 production | ОЖИДАЕТ ВЛАДЕЛЬЦА | на production не применены ни 20261104000100 (хранилище заметок), ни 20261106000000 (его удаление); решение и применение за владельцем, вместе или не применять вовсе |
-| T-20-31 | PASS | lib/editor-outline.test.ts: 40 тестов, 40 pass, 0 fail (раздел «tab permissions (T-20-31)»: права ключей broadcastSections и searchRecommendationSections); перепроверено в основной папке на release commit f49aa00f2b98 (Node 22.13.1, `node --experimental-strip-types --test lib/editor-outline.test.ts`); входит и в гейт unit на чистой копии (1659 tests, 1650 pass, 0 fail, 9 skipped) |
-| D-43/D-44/D-37 | PASS (unit-тесты) / BLOCKED (ENV) (e2e) | unit: lib/portia-desktop.test.ts, search-index, search-recommendations, virus-classes, portia-content-normalize - 165 тестов, 165 pass, 0 fail (перепроверено в основной папке на f49aa00f2b98); tests/e2e/specs/search-global-keys.spec.ts идёт в гейте e2e-full, который BLOCKED (ENV): нет цели с публичными значениями и данными |
+| T-20-31 | PASS | lib/editor-outline.test.ts: 40 тестов, 40 pass, 0 fail (раздел «tab permissions (T-20-31)»: права ключей broadcastSections и searchRecommendationSections); перепроверено в основной папке на FRC a05a6019e867 (Node 22.13.1, `node --experimental-strip-types --test lib/editor-outline.test.ts`); входит и в гейт unit на чистой копии (1692 tests, 1683 pass, 0 fail, 9 skipped) |
+| D-43/D-44/D-37 | PASS (unit-тесты) / BLOCKED (ENV) (e2e) | unit: lib/portia-desktop.test.ts, search-index, search-recommendations, virus-classes, portia-content-normalize - 165 тестов, 165 pass, 0 fail (перепроверено в основной папке на FRC a05a6019e867); tests/e2e/specs/search-global-keys.spec.ts идёт в гейте e2e-full, который BLOCKED (ENV): нет цели с публичными значениями и данными |
 | D-40..D-42 | BLOCKED (ENV) | tests/e2e/specs/editor-layout.spec.ts идёт в mutation lane (гейт e2e-mutation), нужен аттестованный isolated staging; mutation-attest BLOCKED (ENV) |
-| D-39/D-45 | PASS (offline D-68; гейт visual-phase20 в целом BLOCKED (ENV)) | кадры «class icons» и «spider at rest» в @phase20 пройдены на chromium-desktop и chromium-phone (visual-phase20 на f49aa00f2b98: 32 пройдено из 34, 2 пропуска - reviewer BLOCKED (ENV)); фиксированные данные 20-12, не доказательство реальных данных |
+| D-39/D-45 | PASS (offline D-68; гейт visual-phase20 в целом BLOCKED (ENV)) | кадры «class icons» и «spider at rest» в @phase20 пройдены на chromium-desktop и chromium-phone (visual-phase20 на a05a6019e867: 32 пройдено из 34, 2 пропуска - reviewer BLOCKED (ENV)); фиксированные данные 20-12, не доказательство реальных данных |
 
 ## Визуальная приёмка владельца (D-68)
 
@@ -70,7 +70,7 @@ npm: 11.19.0 (--npm-cli C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js)
 |---|---|---|
 | Общий вердикт | ПРИНЯТО ВЛАДЕЛЬЦЕМ 2026-11-08 | owner_verdict: accepted; owner_verdict_date: 2026-11-08; owner_verdict_commit: 0c2a59d1d1a7e805ccd48612cdb93ddf5ec7f1f1; источник: 20-58-SUMMARY.md; дословно (20-58-SUMMARY.md): «а) чтобы шаблон был почти индетичен как дата базы вирусов, Б) да В)да. принято» |
 | Эталоны 20-12 | 60 строк реестра | tests/e2e/visual/phase20-baselines.json; коммит вердикта реестра: 0c2a59d1d1a7e805ccd48612cdb93ddf5ec7f1f1 |
-| Код продукта | НЕ ИЗМЕНЁН | git diff --name-only 0c2a59d1d1a7 f49aa00f2b98 -- app components public lib (без *.test.*) |
+| Код продукта | НЕ ИЗМЕНЁН | git diff --name-only 0c2a59d1d1a7 a05a6019e867 -- app components public lib (без *.test.*) |
 
 ## Окружение (только имена)
 
@@ -102,7 +102,7 @@ npm: 11.19.0 (--npm-cli C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js)
 
 ## Закрытие пунктов репетиции 20-13 (D-69)
 
-Повтор репетиции 20-13 на новом release commit после планов 20-59..20-62 (D-69, G6). Прежний протокол на c11adf6 (итог FAIL) остаётся в истории git (коммит 46d9704).
+Повтор репетиции 20-13 после планов 20-59..20-62 выполнен в 20-63 на release candidate `f49aa00f2b98` (BLOCKED) и повторён в 20-15 полным прогоном на итоговом release commit FRC `a05a6019e867a39a42e2d33b9e4f176d281bc659`. Протоколы 20-13 (c11adf6, итог FAIL, коммит 46d9704) и 20-63 (f49aa00f2b98, итог BLOCKED) остаются в истории git.
 
 | Пункт | План | Коммиты | Доказательство | Итог в этом прогоне |
 |---|---|---|---|---|
@@ -112,11 +112,11 @@ npm: 11.19.0 (--npm-cli C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js)
 | G4: пропуск по условию проекта в визуальных гейтах и e2e-full | 20-59 | 094aec2 (RED), 85c2484 (GREEN), 3babecd (deferred-items) | единое правило уровня гейта: условие доказано исходником спека и тот же тест прошёл на другом проекте того же прогона; пропуск по данным и BLOCKED не засчитываются | ui-contract-offline (по проекту 14) и visual-approved (по проекту 54) PASS; счётчики с суффиксом «(по проекту N)» |
 | G5: npm прогона явный и записанный | 20-59 | ed665e2 (RED), 5944ed5 (GREEN) | флаг `--npm-cli`, строка `npm:` в протоколе и receipt.json, `--verify-evidence` отвергает протокол без неё | строка `npm: 11.19.0 (--npm-cli C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js)`; npm-ci PASS |
 
-Код продукта после вердикта владельца 0c2a59d1d1a7 не менялся (20-60, 20-61 и 20-62 изменили только тесты, фикстуры, эталоны и раннер); «Код продукта» в таблице выше посчитан раннером. Действующий вердикт владельца раннер читает функцией `readEffectiveOwnerVerdict` (цепочка `owner_verdict_renews`, коммиты 87a6a6c, 5b9cce4, f49aa00); звеньев нет, поэтому результат равен 20-58-SUMMARY.md.
+Код продукта после вердикта владельца 0c2a59d1d1a7 не менялся (20-60, 20-61, 20-62, 20-63, 20-14 и 20-15 изменили только тесты, фикстуры, эталоны, раннер и документы); «Код продукта» в таблице выше посчитан раннером от 0c2a59d1d1a7 до FRC. Действующий вердикт владельца раннер читает функцией `readEffectiveOwnerVerdict` (цепочка `owner_verdict_renews`); звеньев нет, поэтому результат равен 20-58-SUMMARY.md.
 
 ## Открытые блокеры
 
-Итог BLOCKED, а не PASS: полосы среды не имеют цели. FAIL продукта, UI-контракта и эталонов в этом прогоне нет.
+Итог BLOCKED, а не PASS: полосы среды не имеют цели. FAIL продукта, UI-контракта и эталонов в этом прогоне нет. Каждая BLOCKED-полоса внесена в реестр принятых долгов (D-70) в 20-RECONCILIATION.md; принятие риска владельцем (D-70) не превращает BLOCKED в PASS.
 
 | Блокер | Строка гейта | Статус |
 |---|---|---|
@@ -127,17 +127,18 @@ npm: 11.19.0 (--npm-cli C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js)
 | решения владельца D-36(б) production и D-47 production: миграции на production не применялись | таблица «Решения D-35..D-45» | ОЖИДАЕТ ВЛАДЕЛЬЦА |
 | записи a11y редактора 20-46, 20-50, 20-53 в deferred-items.md (status: open): не вызваны этим планом, не гейт этого прогона | deferred-items.md | открыты, без изменений |
 
-Физическая приёмка PC и телефона (20-14) этим протоколом не засчитывается и не заменяется: её исход (в том числе принятие риска владельцем по D-70) записывается в 20-14 и не является результатом гейтов. Базовые кадры не заменялись, политика допусков не менялась.
+Физическая приёмка PC и телефона (20-14) этим протоколом не засчитывается и не заменяется: по D-70 владелец принял риск без пошаговой проверки (вердикт «ПРИНЯТО ВЛАДЕЛЬЦЕМ БЕЗ UAT (D-70)», не PASS, 20-UAT.md); это не результат гейтов. Базовые кадры не заменялись, политика допусков не менялась.
 
 ## Запуск и среда
 
-- Release candidate: `f49aa00f2b9833f962fa3fa890117e98a4abf362` (HEAD после коммитов Task 1: RED `87a6a6c`, GREEN `5b9cce4`, исправление типов теста цепочки `f49aa00`). Первый кандидат `5b9cce4` отвергнут: быстрый прогон шести гейтов (артефакты `5b9cce438b14-20261108T181153338Z`) дал typecheck FAIL (TS2531 в тесте цепочки), это не доказательство релиза; быстрый прогон шести гейтов на `f49aa00f2b98` (артефакты `f49aa00f2b98-20261108T181407602Z`) — PASS.
-- Запуск полного прогона из основной папки: `node --experimental-strip-types scripts/phase20-release-gate.mjs --run --commit f49aa00f2b9833f962fa3fa890117e98a4abf362 --npm-cli "C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js"`, временная копия `portia-release-f49aa00f2b98-20261108T181524984Z` создана и удалена раннером (`git worktree list` без неё), прогон 2026-11-08 18:15:24Z - 18:23:37Z, один полный прогон, повторов нет. Артефакты: `test-results/release-gate/f49aa00f2b98-20261108T181524984Z/`.
+- Итоговый release commit (FRC): `a05a6019e867a39a42e2d33b9e4f176d281bc659` — GREEN-коммит `--verify-lineage` плана 20-15 (код продукта не менялся с 0c2a59d1d1a7). Release candidate: `f49aa00f2b9833f962fa3fa890117e98a4abf362` (20-63, итог BLOCKED). Файлы после FRC меняются только в `.planning/**`, `scripts/phase20-release-gate.mjs` и `lib/phase20-release-gate.test.ts`; это проверяет `--verify-reconciliation`.
+- Запуск полного прогона из основной папки: `node --experimental-strip-types scripts/phase20-release-gate.mjs --run --commit a05a6019e867a39a42e2d33b9e4f176d281bc659 --npm-cli "C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js"`, временная копия `portia-release-a05a6019e867-20261108T184722771Z` создана и удалена раннером (`git worktree list` без неё, порт 3100 свободен), прогон 2026-11-08T18:47:22.729Z - 2026-11-08T18:55:26.697Z, один полный прогон, повторов нет. Артефакты: `test-results/release-gate/a05a6019e867-20261108T184722771Z/`.
 - Node раннера и всех гейтов: 22.13.1 (`%TEMP%\portia-node-v22.13.1\node-v22.13.1-win-x64`).
 - npm: `11.19.0`, из установки Node 24.21.0 по умолчанию на машине (`C:/Program Files/nodejs/node_modules/npm`); он принадлежит другой установке Node и исполняется Node раннера 22.13.1 через `--npm-cli` (допустим: `engines.node` npm 11.19.0 = `^20.17.0 || >=22.9.0`). Причина: встроенный npm 10.9.2 переносного Node 22.13.1 не выполняет `npm ci` (`MODULE_NOT_FOUND`, `node-gyp/bin/node-gyp.js`, каталог `node_modules/npm/node_modules/node-gyp/bin` пуст — неполная распаковка, неисправность среды; см. 20-59 и deferred-items.md). Переносной Node не чинился. Это среда, не код проекта.
-- Офлайн-гейты (`ui-contract-offline`, `visual-approved`, `visual-phase20`): production-сборка копии и `next start` на 127.0.0.1:3100 под `tests/e2e/harness/offline-supabase.cjs` с выдуманными значениями `OFFLINE_ENV`, Playwright CLI копии напрямую, `--retries=0 --fail-on-flaky-tests --update-snapshots=none` (визуальные). Из окружения процессов убраны переменные mutation, staging, привилегированные и реальные публичные имена; в протокол попадают только имена. Сервер каждого гейта остановлен раннером по PID, порт 3100 после прогона свободен. Режим данных «offline D-68» — UI-контракт и эталоны на стартовом контенте, не доказательство реальных данных, ролей или сохранения.
+- Офлайн-гейты (`ui-contract-offline`, `visual-approved`, `visual-phase20`): production-сборка копии и `next start` на 127.0.0.1:3100 под `tests/e2e/harness/offline-supabase.cjs` с выдуманными значениями `OFFLINE_ENV`, Playwright CLI копии напрямую, `--retries=0 --fail-on-flaky-tests --update-snapshots=none` (визуальные). Из окружения процессов убраны переменные mutation, staging, привилегированные и реальные публичные имена; в протокол попадают только имена. Сервер каждого гейта остановлен раннером по PID. Режим данных «offline D-68» — UI-контракт и эталоны на стартовом контенте, не доказательство реальных данных, ролей или сохранения.
 - Гейты `e2e-full`, `mutation-attest`, `e2e-mutation`, `staging-live` не запускались: нет цели с публичными значениями и нет аттестованного isolated staging (BLOCKED (ENV)); под заглушку они не переводились.
-- Production не затрагивался, файлы окружения `.env*` не читались, Supabase не вызывался, `tests/e2e/visual/__screenshots__` и политика допусков не менялись; реестр эталонов `phase20-baselines.json` на этом commit: 60 строк (56 в 20-13, плюс замены 20-61 и 20-62).
+- Production не затрагивался, файлы окружения `.env*` не читались, Supabase не вызывался, `tests/e2e/visual/__screenshots__` и политика допусков не менялись; реестр эталонов `phase20-baselines.json` на этом commit: 60 строк.
+- Проверки основной папки на FRC (Node 22.13.1, `node --experimental-strip-types --test`, без сборки и сервера): `lib/editor-outline.test.ts` — 40 тестов, 40 pass; пять файлов D-43/D-44/D-37 — 165 тестов, 165 pass.
 
 ## Безопасность и зависимости
 
