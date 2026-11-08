@@ -1409,6 +1409,220 @@ export function verifyEvidence(markdown, deps = {}) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// 20-15: lineage RC -> FRC, release verdict and phase closure under D-70.
+// D-70 is an accepted risk of the owner, not an acceptance: no step and no device verdict becomes PASS because of it.
+// The release verdict is never stronger than PASS-WITH-OWNER-WAIVERS and never stronger than the gates.
+
+export const UAT_MD = `${PHASE_DIR}/20-UAT.md`;
+export const CONTEXT_MD = `${PHASE_DIR}/20-CONTEXT.md`;
+export const RECONCILIATION_MD = `${PHASE_DIR}/20-RECONCILIATION.md`;
+export const RELEASE_REHEARSAL_SUMMARY_MD = `${PHASE_DIR}/20-63-SUMMARY.md`;
+export const D70_VERDICT = "ПРИНЯТО ВЛАДЕЛЬЦЕМ БЕЗ UAT (D-70)";
+/** Environment lanes whose BLOCKED status the owner accepted as debt under D-70; a BLOCKED gate outside this list blocks the closure. */
+export const D70_DEBT_LANES = Object.freeze(["e2e-full", "mutation-attest", "e2e-mutation", "staging-live", "visual-phase20"]);
+export const CLOSURE_WITH_DEBTS = "С ПРИНЯТЫМИ ДОЛГАМИ (D-70)";
+const CLOSURE_BLOCKED = "ЗАБЛОКИРОВАНО";
+
+const isD70 = (ownerAcceptance) => ownerAcceptance === "D-70" || ownerAcceptance === D70_VERDICT;
+
+/**
+ * The release verdict: the worst of the runner verdict and (under D-70) PASS-WITH-OWNER-WAIVERS. An unknown verdict is FAIL.
+ * @param {any} runnerVerdict
+ * @param {string | null} [ownerAcceptance]
+ */
+export function releaseVerdict(runnerVerdict, ownerAcceptance = null) {
+  const known = VERDICTS.includes(runnerVerdict) ? runnerVerdict : "FAIL";
+  if (!isD70(ownerAcceptance)) return known;
+  return VERDICT_RANK[known] <= VERDICT_RANK["PASS-WITH-OWNER-WAIVERS"] ? known : "PASS-WITH-OWNER-WAIVERS";
+}
+
+/**
+ * The closing line of the phase. «С ПРИНЯТЫМИ ДОЛГАМИ (D-70)» only without an unwaived FAIL gate, without a high, with an accepted effective
+ * owner verdict, a correct D-70 ledger, a release verdict that is not PASS/FAIL, and with every BLOCKED gate among D70_DEBT_LANES.
+ * results = [{ id, status, waived? }], owner = effective owner verdict or null, high = ids of matrix blockers, ledgerErrors = D-70 ledger errors.
+ * @param {{ results?: any[], verdict?: any, high?: string[], owner?: any, ledgerErrors?: string[] }} [input]
+ */
+export function phaseClosure({ results = [], verdict, high = [], owner = null, ledgerErrors = [] } = {}) {
+  const reasons = [];
+  const failed = results.filter((row) => row.status === "FAIL" && !row.waived).map((row) => row.id);
+  if (failed.length > 0) reasons.push(`FAIL-гейт без принятого waiver: ${failed.join(", ")}`);
+  const outside = results.filter((row) => row.status === "BLOCKED" && !D70_DEBT_LANES.includes(row.id)).map((row) => row.id);
+  if (outside.length > 0) reasons.push(`BLOCKED-гейт вне полос D-70: ${outside.join(", ")}`);
+  const skipped = results.filter((row) => row.status === "SKIPPED").map((row) => row.id);
+  if (skipped.length > 0) reasons.push(`SKIPPED-гейт: ${skipped.join(", ")}`);
+  if (high.length > 0) reasons.push(`неразрешённый high (D-12): ${high.join(", ")}`);
+  if (!owner || owner.verdict !== "accepted" || owner.chainError) reasons.push("действующий вердикт владельца не accepted (D-68)");
+  if (ledgerErrors.length > 0) reasons.push(`журнал D-70 неверен: ${ledgerErrors[0]}`);
+  if (verdict === "PASS") reasons.push("итог релиза PASS невозможен при принятом риске D-70");
+  else if (verdict === "FAIL" || !VERDICTS.includes(verdict)) reasons.push(`итог релиза ${verdict ?? "не определён"}`);
+  return reasons.length === 0 ? CLOSURE_WITH_DEBTS : `${CLOSURE_BLOCKED}: ${reasons.join("; ")}`;
+}
+
+const readRelative = (deps, relative) => {
+  try {
+    const target = path.join(deps.root, relative);
+    return deps.fs.existsSync(target) ? String(deps.fs.readFileSync(target, "utf8")) : null;
+  } catch { return null; }
+};
+
+const frontField = (markdown, name) =>
+  normalizeText(markdown ?? "").match(/^---\n([\s\S]*?)\n---/)?.[1]?.match(new RegExp(`^${name}:[ \\t]*(.*?)[ \\t]*$`, "m"))?.[1]?.replace(/^["']|["']$/g, "") ?? "";
+
+/**
+ * Problems of the D-70 journal in 20-UAT.md. Returns { errors, recordCommit, candidate }.
+ * The owner's words must repeat the line of D-70 in 20-CONTEXT.md; no step is PASS, no device verdict is PASS/FAIL or carries a commit.
+ */
+export function verifyD70Ledger(uat, context) {
+  const errors = [];
+  const text = normalizeText(uat ?? "");
+  if (text.trim() === "") return { errors: ["20-UAT.md не прочитан"], recordCommit: "", candidate: "" };
+  const candidate = frontField(text, "release_candidate_commit");
+  if (!/^[0-9a-f]{40}$/.test(candidate)) errors.push("release_candidate_commit в начале файла не 40 hex");
+
+  const lines = text.split("\n");
+  const start = lines.findIndex((line) => /^##\s+D-70:/.test(line));
+  let recordCommit = "";
+  if (start === -1) errors.push("нет раздела «D-70: принятие риска владельцем без UAT»");
+  else {
+    const rest = lines.slice(start + 1);
+    const end = rest.findIndex((line) => /^##\s/.test(line));
+    const section = (end === -1 ? rest : rest.slice(0, end)).join("\n");
+    const words = section.match(/^- Слова владельца \(дословно\): «(.+)»\s*$/m)?.[1];
+    if (!words) errors.push("слова владельца не записаны дословно в разделе D-70");
+    else if (!normalizeText(context ?? "").includes(`«${words}»`)) errors.push("слова владельца не совпадают со строкой D-70 в 20-CONTEXT.md (перефразированы)");
+    const answer = section.match(/^- Ответ владельца на варианты \(дословно\): «(.+)»\s*$/m)?.[1];
+    if (answer !== "2") errors.push(`ответ владельца на варианты должен быть «2», записано «${answer ?? ""}»`);
+    recordCommit = section.match(/^- Запись решения: .*?\bcommit ([0-9a-f]{40})\b/m)?.[1] ?? "";
+    if (!recordCommit) errors.push("запись решения D-70 без commit (40 hex)");
+    const release = section.match(/^- Release commit: ([0-9a-f]{40})\b/m)?.[1] ?? "";
+    if (release && candidate && release !== candidate) errors.push(`Release commit раздела D-70 (${release.slice(0, 12)}) не равен release_candidate_commit (${candidate.slice(0, 12)})`);
+  }
+
+  for (const device of ["PC", "phone"]) {
+    const verdict = text.match(new RegExp(`^Вердикт ${device}:[ \\t]*(.*?)[ \\t]*$`, "m"))?.[1];
+    if (verdict === undefined) errors.push(`нет строки «Вердикт ${device}:»`);
+    else if (verdict !== D70_VERDICT) errors.push(`вердикт ${device} «${verdict}» не равен «${D70_VERDICT}»: под D-70 нет ни PASS, ни FAIL, ни commit устройства (D-15 не применяется)`);
+  }
+
+  for (const [title, label] of [["Чек-лист PC", "PC"], ["Чек-лист phone", "phone"]]) {
+    const table = sectionTable(text, title);
+    if (!table) { errors.push(`нет таблицы «${title}»`); continue; }
+    const statusAt = table.header.indexOf("Статус");
+    const commitAt = table.header.indexOf("Commit");
+    if (statusAt === -1 || commitAt === -1) { errors.push(`таблица «${title}» без колонок «Статус» и «Commit»`); continue; }
+    for (const row of table.rows) {
+      const id = stripTicks(row[0] ?? "");
+      const status = String(row[statusAt] ?? "").trim();
+      const commit = String(row[commitAt] ?? "").trim();
+      if (/^PASS\b/.test(status)) errors.push(`шаг ${id} (${label}): статус PASS при D-70 (шаги не проходились)`);
+      if (commit !== "-" && commit !== "") errors.push(`шаг ${id} (${label}): commit «${commit}» при D-70 (commit устройства нет)`);
+    }
+  }
+  return { errors, recordCommit, candidate };
+}
+
+/** The deps of verifyEvidence, read from the repository (shared by --verify-evidence and the 20-15 modes). */
+function evidenceDeps(deps) {
+  const matrixPath = path.join(deps.root, MATRIX_MD);
+  const summaryPath = path.join(deps.root, OWNER_SUMMARY_MD);
+  const registerPath = path.join(deps.root, BASELINES_JSON);
+  let baselinesCommit = null;
+  try {
+    if (deps.fs.existsSync(registerPath)) baselinesCommit = String(JSON.parse(deps.fs.readFileSync(registerPath, "utf8"))?.ownerVerdict?.commit ?? "") || null;
+  } catch { baselinesCommit = null; }
+  return {
+    matrix: deps.fs.existsSync(matrixPath) ? deps.fs.readFileSync(matrixPath, "utf8") : null,
+    ownerSummary: deps.fs.existsSync(summaryPath) ? deps.fs.readFileSync(summaryPath, "utf8") : null,
+    effectiveOwner: readEffectiveOwnerVerdict(deps),
+    baselinesCommit,
+    productChanges: (from, to) => productCodeChanges(deps, from, to),
+    commitExists: (sha) => deps.git(["cat-file", "-e", `${sha}^{commit}`]).status === 0,
+  };
+}
+
+/** The three verdict lines of 20-RECONCILIATION.md: { runner, release, closure } (undefined when absent). */
+export function readReconciliationVerdicts(markdown) {
+  const text = normalizeText(markdown ?? "");
+  const line = (label) => text.match(new RegExp(`^${label}:[ \\t]*(.+?)[ \\t]*$`, "m"))?.[1];
+  return { runner: line("Итог раннера на FRC"), release: line("Итог релиза"), closure: line("Закрытие фазы") };
+}
+
+/**
+ * --verify-lineage: RC -> FRC, the D-70 journal, the effective owner verdict, unchanged product code, the protocol of the FRC and the
+ * verdict lines of 20-RECONCILIATION.md. Returns the list of problems. A git failure is a problem, never «unchanged».
+ */
+export function verifyLineage(deps) {
+  const errors = [];
+  const reconciliation = readRelative(deps, RECONCILIATION_MD);
+  if (reconciliation === null) return ["20-RECONCILIATION.md не найден"];
+  const frc = frontField(reconciliation, "final_release_commit");
+  if (!/^[0-9a-f]{40}$/.test(frc)) return ["final_release_commit в 20-RECONCILIATION.md отсутствует или не 40 hex"];
+  const short = (sha) => String(sha).slice(0, 12);
+
+  const evidence = readRelative(deps, EVIDENCE_MD);
+  let stated;
+  let gateRows = [];
+  if (evidence === null) errors.push("20-RELEASE-EVIDENCE.md не найден");
+  else {
+    const protocolCommit = normalizeText(evidence).match(/^Commit:\s*`?([0-9A-Za-z]+)`?\s*$/m)?.[1];
+    if (protocolCommit !== frc) errors.push(`протокол: Commit ${short(protocolCommit ?? "нет")} не равен final_release_commit ${short(frc)}`);
+    errors.push(...verifyEvidence(evidence, evidenceDeps(deps)).map((error) => `протокол: ${error}`));
+    stated = normalizeText(evidence).match(/^Итог:\s*(\S+)/m)?.[1];
+    gateRows = readGateRows(evidence, false).rows;
+  }
+
+  const uat = readRelative(deps, UAT_MD);
+  const context = readRelative(deps, CONTEXT_MD);
+  const ledger = verifyD70Ledger(uat, context);
+  errors.push(...ledger.errors.map((error) => `20-UAT.md: ${error}`));
+
+  const rehearsal = readRelative(deps, RELEASE_REHEARSAL_SUMMARY_MD);
+  const candidate = frontField(rehearsal, "release_commit");
+  if (!/^[0-9a-f]{40}$/.test(candidate)) errors.push("release_commit в 20-63-SUMMARY.md отсутствует или не 40 hex");
+  else {
+    if (ledger.candidate && ledger.candidate !== candidate) errors.push(`release_candidate_commit 20-UAT.md (${short(ledger.candidate)}) не равен release_commit 20-63-SUMMARY.md (${short(candidate)})`);
+    const reconciled = frontField(reconciliation, "release_candidate_commit");
+    if (reconciled !== candidate) errors.push(`release_candidate_commit 20-RECONCILIATION.md (${short(reconciled || "нет")}) не равен release_commit 20-63-SUMMARY.md (${short(candidate)})`);
+    if (deps.git(["merge-base", "--is-ancestor", candidate, frc]).status !== 0) errors.push(`release_candidate_commit ${short(candidate)} не предок FRC ${short(frc)}`);
+  }
+
+  const owner = readEffectiveOwnerVerdict(deps);
+  if (!owner) errors.push("20-58-SUMMARY.md не прочитан: действующий вердикт владельца неизвестен");
+  else {
+    if (owner.chainError) errors.push(owner.chainError);
+    else if (owner.verdict !== "accepted") errors.push(`вердикт владельца (D-68) не accepted: "${owner.verdict || "нет"}" (${owner.source})`);
+  }
+  const evidenceSide = evidenceDeps(deps);
+  if (!evidenceSide.baselinesCommit) errors.push(`реестр ${BASELINES_JSON} не прочитан или без ownerVerdict.commit`);
+  else if (owner?.baseCommit && evidenceSide.baselinesCommit !== owner.baseCommit) errors.push(`реестр ${BASELINES_JSON}: ownerVerdict.commit ${short(evidenceSide.baselinesCommit)} не равен owner_verdict_commit 20-58-SUMMARY.md ${short(owner.baseCommit)}`);
+
+  const unchanged = (from, label) => {
+    if (!from) return;
+    const changed = productCodeChanges(deps, from, frc);
+    if (changed === null) errors.push(`git diff не выполнен (${label} ${short(from)}..FRC ${short(frc)}): изменения кода продукта неизвестны`);
+    else if (changed.length > 0) errors.push(`код продукта изменён после ${label} (${short(from)}): ${changed.join(", ")}`);
+  };
+  unchanged(ledger.recordCommit, "записи D-70");
+  if (owner?.commit) unchanged(owner.commit, "действующего вердикта");
+
+  const blockers = matrixBlockers(readRelative(deps, MATRIX_MD));
+  if (blockers === null) errors.push("20-SECURITY-MATRIX.md: раздел «Блокеры релиза (D-12)» не прочитан");
+  else if (blockers.length > 0) errors.push(`неразрешённый high в матрице безопасности: ${blockers.join(", ")}`);
+
+  const verdicts = readReconciliationVerdicts(reconciliation);
+  const release = releaseVerdict(stated, "D-70");
+  const closure = phaseClosure({ results: gateRows, verdict: release, high: blockers ?? [], owner, ledgerErrors: ledger.errors });
+  if (verdicts.runner === undefined) errors.push("20-RECONCILIATION.md: нет строки «Итог раннера на FRC:»");
+  else if (verdicts.runner !== stated) errors.push(`Итог раннера на FRC: ${verdicts.runner} не равен итогу протокола ${stated ?? "(нет)"}`);
+  if (verdicts.release === undefined) errors.push("20-RECONCILIATION.md: нет строки «Итог релиза:»");
+  else if (verdicts.release === "PASS") errors.push("Итог релиза: PASS невозможен при принятом риске владельца (D-70): не сильнее PASS-WITH-OWNER-WAIVERS");
+  else if (verdicts.release !== release) errors.push(`Итог релиза: ${verdicts.release} не равен вычисленному ${release}`);
+  if (verdicts.closure === undefined) errors.push("20-RECONCILIATION.md: нет строки «Закрытие фазы:»");
+  else if (verdicts.closure !== closure) errors.push(`Закрытие фазы: ${verdicts.closure} не равно вычисленному: ${closure}`);
+  return errors;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Orchestration.
 
 // Offline server of a checkout (D-68). Synchronous on purpose: runGate is synchronous. The port is fixed (3100); a foreign listener is never taken over.
@@ -1668,21 +1882,7 @@ function verifyEvidenceMode(deps, argv) {
     deps.err("20-RELEASE-EVIDENCE.md not found\n");
     return 1;
   }
-  const matrixPath = path.join(deps.root, MATRIX_MD);
-  const summaryPath = path.join(deps.root, OWNER_SUMMARY_MD);
-  const registerPath = path.join(deps.root, BASELINES_JSON);
-  let baselinesCommit = null;
-  try {
-    if (deps.fs.existsSync(registerPath)) baselinesCommit = String(JSON.parse(deps.fs.readFileSync(registerPath, "utf8"))?.ownerVerdict?.commit ?? "") || null;
-  } catch { baselinesCommit = null; }
-  const errors = verifyEvidence(deps.fs.readFileSync(evidencePath, "utf8"), {
-    matrix: deps.fs.existsSync(matrixPath) ? deps.fs.readFileSync(matrixPath, "utf8") : null,
-    ownerSummary: deps.fs.existsSync(summaryPath) ? deps.fs.readFileSync(summaryPath, "utf8") : null,
-    effectiveOwner: readEffectiveOwnerVerdict(deps),
-    baselinesCommit,
-    productChanges: (from, to) => productCodeChanges(deps, from, to),
-    commitExists: (sha) => deps.git(["cat-file", "-e", `${sha}^{commit}`]).status === 0,
-  });
+  const errors = verifyEvidence(deps.fs.readFileSync(evidencePath, "utf8"), evidenceDeps(deps));
   // Extension point (20-15): --verify-lineage, --verify-docs and --verify-reconciliation attach here without touching the checks above.
   for (const extra of deps.extraEvidenceVerifiers ?? []) errors.push(...extra(deps));
   if (errors.length > 0) {
@@ -1690,6 +1890,17 @@ function verifyEvidenceMode(deps, argv) {
     return 1;
   }
   deps.out("release evidence verified\n");
+  return 0;
+}
+
+/** Runs a list-returning verifier of the 20-15 modes: exit 0 and a line when the list is empty, exit 1 and the reasons otherwise. */
+function verifyListMode(deps, verifier, okLine) {
+  const errors = verifier(deps);
+  if (errors.length > 0) {
+    deps.err(`${errors.map((error) => `[PORTIA_RELEASE_GATE:verify-failed] ${error}`).join("\n")}\n`);
+    return 1;
+  }
+  deps.out(`${okLine}\n`);
   return 0;
 }
 
@@ -1704,6 +1915,7 @@ export function main(argv = process.argv.slice(2), overrides = {}) {
     if (mode === "--plan") return printPlan(deps);
     if (mode === "--self-check") return selfCheck(deps);
     if (mode === "--verify-evidence") return verifyEvidenceMode(deps, argv);
+    if (mode === "--verify-lineage") return verifyListMode(deps, verifyLineage, "lineage verified");
     if (mode === "--run") {
       const commit = option(argv, "--commit");
       if (!commit) {
@@ -1718,7 +1930,7 @@ export function main(argv = process.argv.slice(2), overrides = {}) {
       deps.out(`artifacts: ${run.artifactsDir}\n`);
       return run.verdict === "PASS" || run.verdict === "PASS-WITH-OWNER-WAIVERS" ? 0 : 1;
     }
-    deps.err("usage: node scripts/phase20-release-gate.mjs --plan | --self-check | --run --commit <sha> [--only id,id] [--npm-cli <path>] | --verify-evidence [--evidence <path>]\n");
+    deps.err("usage: node scripts/phase20-release-gate.mjs --plan | --self-check | --run --commit <sha> [--only id,id] [--npm-cli <path>] | --verify-evidence [--evidence <path>] | --verify-lineage\n");
     return 2;
   } catch (error) {
     deps.err(`${error instanceof GateError ? error.message : `[PORTIA_RELEASE_GATE:unexpected] ${error instanceof Error ? error.message : "unknown"}`}\n`);
