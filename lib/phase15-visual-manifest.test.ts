@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,6 +13,7 @@ import {
   validateCandidateRows,
   validateUiMapRows,
   assertCandidateIndexMatches,
+  validatePhase20Register,
 } from "../scripts/phase15-visual-manifest.mjs";
 
 const base = {
@@ -333,5 +335,208 @@ describe("Phase 15 approval coverage", () => {
       [verdict(), historical],
       (row) => row === historical,
     ));
+  });
+});
+
+describe("Phase 20 baseline register (D-68)", () => {
+  const dir = "tests/e2e/visual/__screenshots__";
+  const verdictCommit = "c".repeat(40);
+  const approvedHash = "a".repeat(64);
+  const approvedRows = [
+    { verdict: "APPROVED", hash: approvedHash, intendedSnapshot: `${dir}/desktop-clean--chromium-desktop.png`, reason: "—" },
+  ];
+  const summary = (verdict = "accepted", commit = verdictCommit) =>
+    `---\nplan: 58\nowner_verdict: ${verdict}\nowner_verdict_date: 2026-11-08\nowner_verdict_commit: ${commit}\n---\n# 20-58\n`;
+  const newRow = (overrides = {}) => ({
+    snapshot: `${dir}/phase20-spider--chromium-desktop.png`,
+    sha256: "b".repeat(64),
+    supersedes: null,
+    class: "phase20",
+    surface: "spider at rest",
+    decisions: ["D-45"],
+    reason: "baseline on the accepted code",
+    ...overrides,
+  });
+  const replacedRow = (overrides = {}) => newRow({
+    snapshot: `${dir}/desktop-clean--chromium-desktop.png`,
+    sha256: "d".repeat(64),
+    supersedes: approvedHash,
+    class: "accepted-redesign",
+    ...overrides,
+  });
+  const register = (rows: unknown[] = [newRow(), replacedRow()], overrides = {}) => ({
+    schema: "portia-phase20-baselines-v1",
+    decision: "D-68",
+    ownerVerdict: { source: ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-58-SUMMARY.md", commit: verdictCommit },
+    captureCommit: "e".repeat(40),
+    data: "offline stub",
+    rows,
+    ...overrides,
+  });
+  type Row = { snapshot: string; sha256: string };
+  const hashesFor = (rows: Row[]) => new Map(rows.map((row) => [row.snapshot, row.sha256]));
+  const check = (parts: { register?: unknown; summaryText?: string; fileHashes?: Map<string, string> } = {}) => {
+    const reg = (parts.register ?? register()) as { rows?: Row[] };
+    return validatePhase20Register({
+      approvedRows,
+      register: reg,
+      summaryText: parts.summaryText ?? summary(),
+      fileHashes: parts.fileHashes ?? hashesFor(Array.isArray(reg.rows) ? reg.rows : []),
+    }).map((entry: { code: string }) => entry.code);
+  };
+
+  test("accepts a new Phase 20 snapshot and an exactly superseded Phase 15 snapshot", () => {
+    assert.deepEqual(check(), []);
+  });
+
+  test("a verdict that is not accepted, missing or for another commit gives PORTIA_PHASE20_OWNER_VERDICT_MISSING", () => {
+    for (const text of [summary("fixes-requested"), summary("ambiguous"), "---\nplan: 58\n---\n", summary("accepted", "f".repeat(40))]) {
+      assert.ok(check({ summaryText: text }).includes("PORTIA_PHASE20_OWNER_VERDICT_MISSING"), text);
+    }
+  });
+
+  test("a different file hash or a missing file gives PORTIA_PHASE20_SNAPSHOT_HASH_MISMATCH", () => {
+    const rows = [newRow(), replacedRow()] as Row[];
+    const wrong = hashesFor(rows);
+    wrong.set(rows[0].snapshot, "0".repeat(64));
+    assert.deepEqual(check({ register: register(rows), fileHashes: wrong }), ["PORTIA_PHASE20_SNAPSHOT_HASH_MISMATCH"]);
+    const missing = hashesFor(rows);
+    missing.delete(rows[1].snapshot);
+    assert.deepEqual(check({ register: register(rows), fileHashes: missing }), ["PORTIA_PHASE20_SNAPSHOT_HASH_MISMATCH"]);
+  });
+
+  test("an approved Phase 15 path without a matching supersedes, or supersedes on a foreign path, gives PORTIA_PHASE20_SUPERSEDE_INVALID", () => {
+    for (const rows of [
+      [replacedRow({ supersedes: null })],
+      [replacedRow({ supersedes: "9".repeat(64) })],
+      [newRow({ supersedes: approvedHash })],
+    ]) {
+      assert.deepEqual(check({ register: register(rows) }), ["PORTIA_PHASE20_SUPERSEDE_INVALID"]);
+    }
+  });
+
+  test("a path outside the screenshots folder gives PORTIA_PHASE20_DESTINATION_INVALID", () => {
+    for (const snapshot of ["tests/e2e/visual/phase20-x--chromium-desktop.png", `${dir}/../x.png`, `${dir}/phase20-x.jpg`, "C:/abs/phase20-x.png"]) {
+      assert.ok(check({ register: register([newRow({ snapshot })]) }).includes("PORTIA_PHASE20_DESTINATION_INVALID"), snapshot);
+    }
+  });
+
+  test("two rows with one path give PORTIA_PHASE20_DUPLICATE", () => {
+    assert.ok(check({ register: register([newRow(), newRow()]) }).includes("PORTIA_PHASE20_DUPLICATE"));
+  });
+
+  test("an unknown schema, no rows or a foreign verdict source give PORTIA_PHASE20_REGISTER_INVALID", () => {
+    assert.deepEqual(check({ register: register([newRow()], { schema: "other-v1" }) }), ["PORTIA_PHASE20_REGISTER_INVALID"]);
+    assert.deepEqual(check({ register: register([], { rows: undefined }) }), ["PORTIA_PHASE20_REGISTER_INVALID"]);
+    assert.deepEqual(check({ register: register([newRow()], { ownerVerdict: { source: "20-VISUAL-APPROVAL.md", commit: verdictCommit } }) }), ["PORTIA_PHASE20_REGISTER_INVALID"]);
+  });
+});
+
+describe("Phase 20 baseline register through --verify-promotion (disposable fixtures)", () => {
+  const script = path.resolve("scripts/phase15-visual-manifest.mjs");
+  const evidenceDir = ".planning/phases/PORTIA-15-baseline/evidence";
+  const names = ["15-VISUAL-APPROVAL.md", "15-LOCAL-UI-CONTRACT.md", "15-FRAME-TEST-MAP.md", "15-STABLE-ROW-INVENTORY.json", "15-CANDIDATE-INDEX.json"];
+  const summaryPath = ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-58-SUMMARY.md";
+  const commit = "c".repeat(40);
+  const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+  const spiderPath = "tests/e2e/visual/__screenshots__/phase20-spider--chromium-desktop.png";
+  const plainRow = { surface: "s", decisions: ["D-45"], reason: "r" };
+
+  // The fixture owns its snapshot bytes: the approval hashes are rewritten to the fixture bytes, so the test does not depend on the real PNGs.
+  function fixture(extra: (dir: string, approved: Map<string, string>) => void = () => undefined, verdict = "accepted") {
+    const dir = mkdtempSync(path.join(tmpdir(), "portia-phase20-register-"));
+    const git = (...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: dir });
+    git("init", "-q");
+    git("commit", "-q", "--allow-empty", "-m", "fixture");
+    mkdirSync(path.join(dir, evidenceDir), { recursive: true });
+    const approved = new Map<string, string>();
+    for (const name of names) {
+      let text = readFileSync(path.resolve(evidenceDir, name), "utf8");
+      if (name === "15-VISUAL-APPROVAL.md") {
+        text = text.split(/\r?\n/).map((line) => {
+          if (!/^\| \*\*APPROVED\*\* \|/.test(line)) return line;
+          const columns = line.split("|").map((column) => column.trim());
+          const oldHash = columns[5].match(/[a-f0-9]{64}/)![0];
+          const snapshot = columns[7].match(/`([^`]+)`/)![1];
+          const bytes = Buffer.from(`fixture bytes of ${snapshot}`);
+          mkdirSync(path.dirname(path.join(dir, snapshot)), { recursive: true });
+          writeFileSync(path.join(dir, snapshot), bytes);
+          approved.set(snapshot, sha(bytes));
+          return line.replaceAll(oldHash, sha(bytes));
+        }).join("\n");
+      }
+      writeFileSync(path.join(dir, evidenceDir, name), text);
+    }
+    mkdirSync(path.dirname(path.join(dir, summaryPath)), { recursive: true });
+    writeFileSync(path.join(dir, summaryPath), `---\nowner_verdict: ${verdict}\nowner_verdict_commit: ${commit}\n---\n`);
+    extra(dir, approved);
+    return dir;
+  }
+
+  function run(dir: string) {
+    const result = spawnSync(process.execPath, [script, "--verify-promotion"], { cwd: dir, encoding: "utf8" });
+    rmSync(dir, { recursive: true, force: true });
+    return `${result.status}:${result.stderr}${result.stdout}`;
+  }
+
+  const writeRegister = (dir: string, rows: unknown[]) => writeFileSync(
+    path.join(dir, "tests/e2e/visual/phase20-baselines.json"),
+    `${JSON.stringify({
+      schema: "portia-phase20-baselines-v1",
+      decision: "D-68",
+      ownerVerdict: { source: summaryPath, commit },
+      captureCommit: "e".repeat(40),
+      data: "offline stub",
+      rows,
+    }, null, 2)}\n`,
+  );
+  const addPng = (dir: string, name: string, bytes: Buffer) => {
+    writeFileSync(path.join(dir, "tests/e2e/visual/__screenshots__", name), bytes);
+    return sha(bytes);
+  };
+
+  test("without a register the output and the rules are the Phase 15 ones", () => {
+    const out = run(fixture());
+    assert.match(out, /^0:/);
+    assert.match(out, /Verified 33 exact owner-approved snapshot bytes; 18 non-approved rows excluded\./);
+  });
+
+  test("without a register an extra PNG is still PORTIA_UNAPPROVED_SNAPSHOT_PRESENT", () => {
+    const out = run(fixture((dir) => addPng(dir, "phase20-spider--chromium-desktop.png", Buffer.from("x"))));
+    assert.match(out, /^1:/);
+    assert.match(out, /PORTIA_UNAPPROVED_SNAPSHOT_PRESENT/);
+  });
+
+  test("a register accepts a new Phase 20 PNG and an exactly superseded Phase 15 PNG", () => {
+    const out = run(fixture((dir, approved) => {
+      const [replacedPath, replacedHash] = [...approved][0];
+      const newHash = addPng(dir, "phase20-spider--chromium-desktop.png", Buffer.from("spider"));
+      const replacementHash = addPng(dir, path.basename(replacedPath), Buffer.from("replacement"));
+      writeRegister(dir, [
+        { snapshot: spiderPath, sha256: newHash, supersedes: null, class: "phase20", ...plainRow },
+        { snapshot: replacedPath, sha256: replacementHash, supersedes: replacedHash, class: "accepted-redesign", ...plainRow },
+      ]);
+    }));
+    assert.match(out, /^0:/);
+    assert.match(out, /Verified 34 exact owner-approved snapshot bytes/);
+  });
+
+  test("a register with a verdict that is not accepted is PORTIA_PHASE20_OWNER_VERDICT_MISSING", () => {
+    const out = run(fixture((dir) => {
+      const newHash = addPng(dir, "phase20-spider--chromium-desktop.png", Buffer.from("spider"));
+      writeRegister(dir, [{ snapshot: spiderPath, sha256: newHash, supersedes: null, class: "phase20", ...plainRow }]);
+    }, "ambiguous"));
+    assert.match(out, /^1:/);
+    assert.match(out, /PORTIA_PHASE20_OWNER_VERDICT_MISSING/);
+  });
+
+  test("a stray PNG that the register does not list is PORTIA_UNAPPROVED_SNAPSHOT_PRESENT", () => {
+    const out = run(fixture((dir) => {
+      const newHash = addPng(dir, "phase20-spider--chromium-desktop.png", Buffer.from("spider"));
+      addPng(dir, "phase20-stray--chromium-desktop.png", Buffer.from("stray"));
+      writeRegister(dir, [{ snapshot: spiderPath, sha256: newHash, supersedes: null, class: "phase20", ...plainRow }]);
+    }));
+    assert.match(out, /^1:/);
+    assert.match(out, /PORTIA_UNAPPROVED_SNAPSHOT_PRESENT/);
   });
 });
