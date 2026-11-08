@@ -1822,7 +1822,8 @@ export function verifyDocs(deps) {
   else if (!owner) errors.push(`${VISUAL_RECONCILIATION_SECTION}: 20-58-SUMMARY.md не прочитан`);
   else {
     const sourceText = readRelative(deps, `${PHASE_DIR}/${owner.source}`) ?? "";
-    const quote = normalizeText(sourceText).match(/^> (.+)$/m)?.[1];
+    const verdictBody = sectionBody(sourceText, "Вердикт владельца") ?? sourceText; // the owner's words, not the change list shown to him
+    const quote = verdictBody.match(/^> (.+)$/m)?.[1];
     if (!visual.includes(owner.commit)) errors.push(`${VISUAL_RECONCILIATION_SECTION}: нет owner_verdict_commit ${short(owner.commit)} действующего звена`);
     if (!visual.includes(owner.source)) errors.push(`${VISUAL_RECONCILIATION_SECTION}: нет ссылки на ${owner.source}`);
     if (!quote || !visual.includes(`«${quote}»`)) errors.push(`${VISUAL_RECONCILIATION_SECTION}: нет дословной цитаты владельца из ${owner.source}`);

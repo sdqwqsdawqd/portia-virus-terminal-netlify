@@ -2587,3 +2587,10 @@ test("main --verify-reconciliation and --verify-independent: exit codes and usag
   gate.main(["--bogus"], { ...reconRepo(), ...io });
   assert.match(err, /--verify-reconciliation \| --verify-independent/);
 });
+
+test("verifyDocs: the owner quote is read from the «Вердикт владельца» section, not from the change list shown to the owner", () => {
+  const withList = `${OWNER_SUMMARY().replace("## Вердикт владельца (D-68)", "## Список изменений, показанный владельцу (D-68)\n\n> Код сайта тот же.\n\n## Вердикт владельца (D-68)")}`;
+  assert.deepEqual(docsErrors({ files: { [`${gate.PHASE_DIR}/20-58-SUMMARY.md`]: withList } }), []);
+  const quotedList = reconciliationDocs({ visual: `owner_verdict_commit: ${OWNER_COMMIT}; источник: 20-58-SUMMARY.md; «Код сайта тот же.»` });
+  mentions(docsErrors({ files: { [`${gate.PHASE_DIR}/20-58-SUMMARY.md`]: withList, [`${gate.PHASE_DIR}/20-RECONCILIATION.md`]: quotedList } }), /дословной цитаты владельца/);
+});
