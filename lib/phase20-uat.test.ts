@@ -949,8 +949,12 @@ describe("20-UAT the committed ledger as 20-14 records it (D-70)", () => {
     assert.ok(release, "20-63-SUMMARY.md has no release_commit");
     assert.equal(uat.frontmatter.release_candidate_commit, release);
     assert.ok(uat.d70["Release commit"].startsWith(release));
+    // 20-15: the protocol on file is the full run on the final release commit (FRC) of 20-RECONCILIATION.md; the candidate of the ledger stays its ancestor.
     const evidence = readText(path.join(phaseDir, "20-RELEASE-EVIDENCE.md"));
-    assert.ok(evidence.includes(`Commit: \`${release}\``), "20-RELEASE-EVIDENCE.md is not the protocol of this release commit");
+    let finalCommit: string | undefined;
+    try { finalCommit = readText(path.join(phaseDir, "20-RECONCILIATION.md")).match(/^final_release_commit: ([0-9a-f]{40})$/m)?.[1]; } catch { finalCommit = undefined; }
+    const protocolCommit = finalCommit ?? release;
+    assert.ok(evidence.includes(`Commit: \`${protocolCommit}\``), "20-RELEASE-EVIDENCE.md is not the protocol of the final release commit");
   });
 
   test("a step is BLOCKED exactly when one of its prerequisites is BLOCKED, otherwise it was not checked", () => {
