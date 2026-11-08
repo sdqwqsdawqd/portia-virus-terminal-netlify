@@ -919,6 +919,8 @@ const DECISION_FIXTURE: Row[] = [
   { id: "D-39/D-45", status: "BLOCKED (OWNER)" },
 ];
 
+const NPM_SOURCE = "--npm-cli C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js";
+
 function fullRun(overrides: Record<string, unknown> = {}, gateStatus: (id: string) => Record<string, unknown> = () => ({})) {
   const results = gate.GATES.map((entry: { id: string; command: string; counts?: string }) => ({
     id: entry.id,
@@ -941,6 +943,7 @@ function fullRun(overrides: Record<string, unknown> = {}, gateStatus: (id: strin
     d33: D33_FIXTURE,
     decisions: DECISION_FIXTURE,
     visual: VISUAL_FIXTURE,
+    npm: { version: "11.19.0", source: NPM_SOURCE },
     verdict: "PASS",
     reasons: [],
     ...overrides,
@@ -1275,4 +1278,149 @@ test("main --verify-evidence (D-68): an accepted verdict with changed product co
   assert.equal(code, 1);
   assert.match(err, /Код продукта: claims НЕ ИЗМЕНЁН/);
   rmSync(base, { recursive: true, force: true });
+});
+
+// --- 20-59 Task 1 (D-69, G5): the npm of a release run is explicit and recorded -----------------------------------------------------
+
+const RELEASE_SHA = "0123456789abcdef0123456789abcdef01234567";
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+type NpmRunOptions = { argv: string[]; npmVersionStatus?: number; npmVersionOut?: string };
+
+/** `main --run` over faked git and exec on a scratch root: the npm-related calls and the written artifacts are returned. */
+function npmRun({ argv, npmVersionStatus = 0, npmVersionOut = "11.19.0\n" }: NpmRunOptions) {
+  const root = mkdtempSync(path.join(os.tmpdir(), "phase20-npm-test-"));
+  const calls: { file: string; args: string[] }[] = [];
+  const gitCalls: string[][] = [];
+  let out = "";
+  let err = "";
+  const deps = {
+    root,
+    fs: nodeFs,
+    env: {},
+    tmpdir: os.tmpdir(),
+    stamp: () => "20261108T000000000Z",
+    now: () => "2026-11-08T00:00:00.000Z",
+    git: (args: string[]) => {
+      gitCalls.push(args);
+      return { status: 0, stdout: args[0] === "rev-parse" ? `${RELEASE_SHA}\n` : "", stderr: "" };
+    },
+    exec: (file: string, args: string[]) => {
+      calls.push({ file, args });
+      const viaCli = file !== "npm.cmd" && file !== "node" && file !== "git";
+      const npmArgs = file === "npm.cmd" ? args : viaCli ? args.slice(1) : null;
+      if (file === "node" && args[0] === "--version") return { status: 0, stdout: "v22.13.1\n", stderr: "", error: null };
+      if (npmArgs && npmArgs[0] === "--version") return { status: npmVersionStatus, stdout: npmVersionStatus === 0 ? npmVersionOut : "", stderr: npmVersionStatus === 0 ? "" : "boom", error: null };
+      if (npmArgs && npmArgs[0] === "test") return { status: 0, stdout: nodeTestOutput(10, 0, 0), stderr: "", error: null };
+      return { status: 0, stdout: "", stderr: "", error: null };
+    },
+    out: (text: string) => { out += text; },
+    err: (text: string) => { err += text; },
+  };
+  const code = gate.main(["--run", "--commit", "HEAD", "--only", "node-version,npm-ci,unit", ...argv], deps);
+  const artifacts = path.join(root, "test-results", "release-gate", "0123456789ab-20261108T000000000Z");
+  const read = (name: string) => (existsSync(path.join(artifacts, name)) ? readFileSync(path.join(artifacts, name), "utf8") : "");
+  return { code, calls, gitCalls, out: () => out, err: () => err, receipt: () => (read("receipt.json") ? JSON.parse(read("receipt.json")) : null), gatesMd: () => read("gates.md"), cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+function fakeNpmCli(name = "npm-cli.js") {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "phase20-npm-cli-"));
+  const file = path.join(dir, name);
+  writeFileSync(file, "// fake npm-cli\n");
+  return { file, normalized: path.resolve(file).replace(/\\/g, "/"), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+test("--npm-cli (D-69 G5): every npm step runs as `<node of the runner> <npm-cli.js> <args>`, node and git steps stay untouched", () => {
+  const cli = fakeNpmCli();
+  const run = npmRun({ argv: ["--npm-cli", cli.file] });
+  assert.equal(run.code, 0, run.err());
+  const npmCalls = run.calls.filter((call) => call.file !== "node" && call.file !== "git");
+  assert.deepEqual(npmCalls.map((call) => call.args.slice(1).join(" ")), ["--version", "ci", "test"]);
+  for (const call of npmCalls) {
+    assert.equal(call.file, process.execPath, "the Node of the runner, no npm.cmd and no shell");
+    assert.equal(path.resolve(call.args[0]), path.resolve(cli.file));
+  }
+  assert.ok(run.calls.some((call) => call.file === "node" && call.args[0] === "--version"));
+  assert.ok(!run.calls.some((call) => call.file === "npm.cmd"));
+  run.cleanup();
+  cli.cleanup();
+});
+
+test("--npm-cli (D-69 G5): the receipt and the protocol carry `npm: <x.y.z> (--npm-cli <path>)` and the real invocation in the command column", () => {
+  const cli = fakeNpmCli();
+  const run = npmRun({ argv: ["--npm-cli", cli.file] });
+  assert.deepEqual(run.receipt().npm, { version: "11.19.0", source: `--npm-cli ${cli.normalized}` });
+  const markdown = run.gatesMd();
+  assert.match(markdown, new RegExp(`^Node: v22\\.13\\.1\\nnpm: 11\\.19\\.0 \\(--npm-cli ${escapeRegExp(cli.normalized)}\\)$`, "m"));
+  assert.match(markdown, new RegExp(`^\\| npm-ci \\| \`node ${escapeRegExp(cli.normalized)} ci\``, "m"));
+  assert.doesNotMatch(markdown, /npm\.cmd/);
+  run.cleanup();
+  cli.cleanup();
+});
+
+test("--npm-cli (D-69 G5): a missing path or a file that is not npm-cli.js is refused before any worktree exists", () => {
+  const other = fakeNpmCli("other.js");
+  for (const bad of [path.join(os.tmpdir(), "no-such-dir-20-59", "npm-cli.js"), other.file, os.tmpdir()]) {
+    const run = npmRun({ argv: ["--npm-cli", bad] });
+    assert.equal(run.code, 1, bad);
+    assert.match(run.err(), /npm-cli-invalid/, bad);
+    assert.equal(run.gitCalls.length, 0, `no git call, so no worktree: ${bad}`);
+    assert.equal(run.calls.length, 0);
+    run.cleanup();
+  }
+  const noValue = npmRun({ argv: ["--npm-cli"] });
+  assert.equal(noValue.code, 1);
+  assert.match(noValue.err(), /npm-cli-invalid/);
+  assert.equal(noValue.gitCalls.length, 0);
+  noValue.cleanup();
+  other.cleanup();
+});
+
+test("without --npm-cli the behaviour is as before: npm.cmd from PATH, and the protocol says so", () => {
+  const run = npmRun({ argv: [] });
+  assert.equal(run.code, 0, run.err());
+  assert.deepEqual(run.calls.filter((call) => call.file === "npm.cmd").map((call) => call.args.join(" ")), ["--version", "ci", "test"]);
+  assert.deepEqual(run.receipt().npm, { version: "11.19.0", source: "PATH npm.cmd" });
+  assert.match(run.gatesMd(), /^npm: 11\.19\.0 \(PATH npm\.cmd\)$/m);
+  assert.match(run.gatesMd(), /^\| npm-ci \| `npm\.cmd ci`/m);
+  run.cleanup();
+});
+
+test("npm version is measured once before the first npm gate; an unmeasurable npm is recorded as unknown and the npm gates still run", () => {
+  const run = npmRun({ argv: [], npmVersionStatus: 1 });
+  const npmCalls = run.calls.filter((call) => call.file === "npm.cmd").map((call) => call.args.join(" "));
+  assert.deepEqual(npmCalls, ["--version", "ci", "test"], "one probe, then the gates");
+  const npm = run.receipt().npm;
+  assert.equal(npm.version, null);
+  assert.equal(npm.source, "PATH npm.cmd");
+  assert.match(npm.error, /boom|exit 1/);
+  assert.match(run.gatesMd(), /^npm: неизвестно \(PATH npm\.cmd\): /m);
+  run.cleanup();
+});
+
+test("renderEvidence writes the npm line right after Node; without run.npm no line is written", () => {
+  const lines = gate.renderEvidence(fullRun()).split("\n");
+  const nodeIndex = lines.findIndex((line) => line.startsWith("Node: "));
+  assert.equal(lines[nodeIndex + 1], `npm: 11.19.0 (${NPM_SOURCE})`);
+  assert.equal(gate.renderEvidence(fullRun({ npm: { version: null, source: "PATH npm.cmd", error: "exit 1" } })).split("\n")[nodeIndex + 1], "npm: неизвестно (PATH npm.cmd): exit 1");
+  assert.doesNotMatch(gate.renderEvidence(fullRun({ npm: undefined })), /^npm:/m);
+});
+
+test("verifyEvidence (D-69 G5): the npm line is required; `неизвестно` is refused under a PASS-class verdict; a version with its source passes", () => {
+  mentions(verify(removeLine(goodEvidence(), "npm: ")), /npm line is missing/);
+  const unknown = gate.renderEvidence(fullRun({ npm: { version: null, source: "PATH npm.cmd", error: "exit 1" } }));
+  mentions(verify(unknown), /npm line says the version is unknown/);
+  const waivers = gate.renderEvidence(fullRun({ verdict: "PASS-WITH-OWNER-WAIVERS", npm: { version: null, source: "PATH npm.cmd", error: "exit 1" } }, (id: string) => (id === "e2e-full" ? { status: "FAIL", waived: true, exitCode: 1 } : {})));
+  mentions(verify(waivers), /npm line says the version is unknown/);
+  const honest = gate.renderEvidence(fullRun({ verdict: "BLOCKED", npm: { version: null, source: "PATH npm.cmd", error: "exit 1" } }, (id: string) => (id === "e2e-mutation" ? { status: "BLOCKED", blockedKind: "ENV", exitCode: null, counts: null } : {})));
+  assert.deepEqual(verify(honest), [], "an unknown npm does not forge a verdict above BLOCKED");
+  assert.deepEqual(verify(goodEvidence().replace(/^npm: .*$/m, "npm: 10.9.2 (PATH npm.cmd)")), []);
+  mentions(verify(goodEvidence().replace(/^npm: .*$/m, "npm: whatever")), /npm line is malformed/);
+  mentions(verify(goodEvidence().replace(/^npm: .*$/m, "npm: 11.19.0 ()")), /npm line is malformed/);
+});
+
+test("main usage line names --npm-cli", () => {
+  let err = "";
+  assert.equal(gate.main(["--run"], { env: {}, git: () => ({ status: 0, stdout: "", stderr: "" }), err: (text: string) => { err += text; } }), 2);
+  assert.match(err, /--npm-cli <path>/);
 });
