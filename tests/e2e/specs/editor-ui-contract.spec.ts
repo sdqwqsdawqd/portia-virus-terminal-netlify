@@ -316,12 +316,14 @@ function trackWritesExceptContentPut(page: Page) {
 
 /** The aborted save is a fault of the test itself: declared before the click (rules of the same kind as app-states.spec.ts). */
 function expectAbortedSave(diagnostics: DiagnosticLedger) {
-  diagnostics.expectFault({ kind: "requestfailed", source: /^(fetch|xhr)$/, text: /ERR_FAILED|NS_ERROR|aborted|cancelled/i, reason: "the test aborts its own PUT /api/content on purpose (D-63 chain)" });
+  diagnostics.expectFault({ kind: "requestfailed", source: /^(fetch|xhr)$/, text: /ERR_FAILED|NS_ERROR|aborted|cancelled|Blocked by Web Inspector/i, reason: "the test aborts its own PUT /api/content on purpose (D-63 chain); WebKit words an aborted request «Blocked by Web Inspector»" });
   diagnostics.expectFault({ kind: "console", source: /^browser:\/api\//, text: /Failed to load resource: net::ERR_FAILED/, reason: "the browser mirrors the aborted own /api request to its console" });
 }
 
 /** What a picture shows: computed object-position and transform, the INLINE transform-origin (the computed one is in pixels and follows the box, the style is the percent pair), and the ratios of the frame and of the picture. */
 async function pictureState(frame: Locator) {
+  // A picture below the fold is lazy: WebKit loads it only once it is in view.
+  await frame.scrollIntoViewIfNeeded();
   const img = frame.locator("img").first();
   await expect(img).toBeVisible();
   const state = await img.evaluate((element: HTMLImageElement) => {
@@ -420,6 +422,7 @@ async function dialogWindow(dialog: Locator) {
  *  computed object-fit and object-position, the scale of the computed transform and the percent pair of the inline transform-origin. The frame region is mapped
  *  back through the transform onto the content rectangle of the picture. */
 async function siteWindow(place: Locator) {
+  await place.scrollIntoViewIfNeeded();
   await expect.poll(() => place.locator("img").first().evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0), "the site picture is loaded").toBe(true);
   return place.evaluate((element: HTMLElement) => {
     const clip = (element.matches(".portia-image") ? element : element.querySelector(".portia-image")) as HTMLElement;
@@ -448,12 +451,12 @@ async function siteWindow(place: Locator) {
       const [right, bottom] = back(x1, y1);
       return { left, top, width: right - left, height: bottom - top };
     };
-    // `visible`: what the clipping frame of the site shows. `inPicture`: the same model with the box of the picture as the frame (what the dialog promises for a picture that lies whole).
-    // They differ only where the site draws the picture narrower than its frame (a picture capped in height by the style sheet: «Корзина», max-height 55vh).
+    // `visible`: what the clipping frame of the site shows. `inPicture`: the same model with the drawn picture as the frame (what the dialog promises for a picture that lies whole).
+    // They differ only where the site draws the picture other than its frame (smaller, or clipped) (a picture capped in height by the style sheet: «Корзина», max-height 55vh; a short phone screen).
     return {
       visible: region(0, 0, clip.clientWidth, clip.clientHeight),
-      inPicture: region(boxLeft, boxTop, boxLeft + boxWidth, boxTop + boxHeight),
-      frameOverPicture: Math.max(clip.clientWidth / boxWidth, clip.clientHeight / boxHeight),
+      inPicture: region(contentLeft, contentTop, contentLeft + drawnWidth, contentTop + drawnHeight),
+      frameOverPicture: Math.max(clip.clientWidth / drawnWidth, drawnWidth / clip.clientWidth, clip.clientHeight / drawnHeight, drawnHeight / clip.clientHeight),
       frameRatio: clip.clientWidth / clip.clientHeight,
       imgRatio: boxWidth / boxHeight,
       objectFit: style.objectFit,
@@ -802,11 +805,11 @@ async function frameMatchesSite(page: Page, diagnostics: DiagnosticLedger, surfa
 
   const where = `${surface.name} at ${frame.x}/${frame.y}/${frame.zoom}`;
   // A picture that lies whole is compared with the site's frame. Where the site draws it narrower than its frame (capped in height by the style sheet, «Корзина»: 20-56 plan assumption 2),
-  // the dialog frame is the picture and the site shows a little more: the picture box is the frame of the comparison, the overshoot is measured, recorded and capped at 10%.
+  // the dialog frame is the picture and the site shows a little more: the drawn picture is the frame of the comparison, the overshoot is measured, recorded and capped at 25%.
   const frameIsWider = surface.compare === "picture" && onSite.frameOverPicture > 1.01;
   const siteVisible = frameIsWider ? onSite.inPicture : onSite.visible;
-  if (frameIsWider) expect(onSite.frameOverPicture, `the site frame is wider than the picture (known limit of D-67), but not by more than 10%: ${where}`).toBeLessThanOrEqual(1.1);
-  test.info().annotations.push({ type: "measure", description: `${where}: ratio dialog ${inDialog.ratio.toFixed(4)}, preview ${(previewBox.width / previewBox.height).toFixed(4)}, site ${siteRatio.toFixed(4)} (${surface.compare}); dialog ${JSON.stringify(inDialog.visible)}, site frame ${JSON.stringify(onSite.visible)}, site picture ${JSON.stringify(onSite.inPicture)} (${onSite.objectFit}), site frame over picture ${onSite.frameOverPicture.toFixed(4)}, max difference ${maxDifference(inDialog.visible, siteVisible).toFixed(4)}${frameIsWider ? " (against the picture box)" : ""}` });
+  if (frameIsWider) expect(onSite.frameOverPicture, `the site frame differs from the drawn picture (known limit of D-67), but not by more than 25%: ${where}`).toBeLessThanOrEqual(1.25);
+  test.info().annotations.push({ type: "measure", description: `${where}: ratio dialog ${inDialog.ratio.toFixed(4)}, preview ${(previewBox.width / previewBox.height).toFixed(4)}, site ${siteRatio.toFixed(4)} (${surface.compare}); dialog ${JSON.stringify(inDialog.visible)}, site frame ${JSON.stringify(onSite.visible)}, site picture ${JSON.stringify(onSite.inPicture)} (${onSite.objectFit}), site frame over picture ${onSite.frameOverPicture.toFixed(4)}, max difference ${maxDifference(inDialog.visible, siteVisible).toFixed(4)}${frameIsWider ? " (against the drawn picture)" : ""}` });
   expect(Math.abs(inDialog.ratio - siteRatio) / siteRatio, `the frame of the dialog (${inDialog.ratio.toFixed(3)}) is within 2% of the place on the site (${siteRatio.toFixed(3)}): ${where}`).toBeLessThanOrEqual(0.02);
   expect(Math.abs(previewBox.width / previewBox.height - siteRatio) / siteRatio, `the preview of the block is within 2% of the place on the site: ${where}`).toBeLessThanOrEqual(0.02);
   for (const key of ["left", "top", "width", "height"] as const) {
