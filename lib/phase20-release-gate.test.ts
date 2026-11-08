@@ -1424,3 +1424,317 @@ test("main usage line names --npm-cli", () => {
   assert.equal(gate.main(["--run"], { env: {}, git: () => ({ status: 0, stdout: "", stderr: "" }), err: (text: string) => { err += text; } }), 2);
   assert.match(err, /--npm-cli <path>/);
 });
+
+// --- 20-59 Task 2 (D-69, G4): one gate-level rule for skips by a project condition -------------------------------------------------------------
+
+const PROJECT_SKIP_SOURCE = [
+  'import { test } from "@playwright/test";',
+  'const lanes = new Set(["chromium-desktop", "chromium-phone"]);',
+  'const declared = ["chromium-dpr125", "webkit-phone"] as const;',
+  'const isPhone = () => test.info().project.name.endsWith("-phone");',
+  "// test.skip(true, \"a comment is not a call\");",
+  "test.beforeEach(({}, testInfo) => {",
+  '  test.skip(testInfo.project.name !== "chromium-desktop", "Pixel authority is pinned to chromium-desktop.");',
+  "});",
+  "test.beforeEach(({}, testInfo) => {",
+  '  test.skip(!lanes.has(testInfo.project.name), "Baselines are taken on two lanes.");',
+  "});",
+  'test("a", async ({ page }, testInfo) => {',
+  "  test.skip(isPhone(), `${testInfo.project.name}: the phone grid has no drag, so there is nothing to replace.`);",
+  '  test.skip(!declared.includes(testInfo.project.name), "No row is declared for this device.");',
+  '  test.skip(testInfo.project.name.startsWith("firefox") || (isPhone() && !testInfo.project.name.includes("webkit")), "Mixed project tags.");',
+  '  const text = "test.skip(true, \\"a string is not a call\\")";',
+  "});",
+  'test("b", async ({ page, isMobile }) => {',
+  '  test.skip(!isMobile, "The phone layout; the PC is the previous test.");',
+  '  test.skip(test.info().project.name === "webkit-phone", "webkit-phone has no hover.");',
+  "});",
+].join("\n");
+
+const PROJECT_SKIP_REASONS = [
+  "Pixel authority is pinned to chromium-desktop.",
+  "Baselines are taken on two lanes.",
+  "${testInfo.project.name}: the phone grid has no drag, so there is nothing to replace.",
+  "No row is declared for this device.",
+  "Mixed project tags.",
+  "The phone layout; the PC is the previous test.",
+  "webkit-phone has no hover.",
+];
+
+test("projectConditionSkips (D-69 G4): the closed list of project-only conditions yields the reasons of those calls", () => {
+  assert.deepEqual(gate.projectConditionSkips(PROJECT_SKIP_SOURCE), PROJECT_SKIP_REASONS);
+});
+
+test("projectConditionSkips (D-69 G4): a condition with data, an unconditional skip, an unknown name or a shadowed fixture proves nothing", () => {
+  const reasons = (...lines: string[]) => gate.projectConditionSkips(lines.join("\n"));
+  assert.deepEqual(reasons("test.skip(!before, `no height was measured on the project ${testInfo.project.name}`);"), [], "the text names the project, the condition is data");
+  assert.deepEqual(reasons('test.skip(true, "BLOCKED (ENV): nothing to run");'), []);
+  assert.deepEqual(reasons('test.skip(count === 0, "BLOCKED (DATA): no records");'), []);
+  assert.deepEqual(reasons('test.skip(testInfo.project.name !== "a" && data, "mixed with data");'), []);
+  assert.deepEqual(reasons('test.skip(isPhone() || count === 0, "phone or data");', 'const isPhone = () => test.info().project.name.endsWith("-phone");'), []);
+  assert.deepEqual(reasons('test.skip(unknownFn(), "no definition in this file");'), []);
+  assert.deepEqual(reasons('const isPhone = () => window.innerWidth < 500;', 'test.skip(isPhone(), "width, not a project");'), []);
+  assert.deepEqual(reasons('const isPhone = () => test.info().project.name.endsWith(suffix);', 'test.skip(isPhone(), "suffix is a variable");'), []);
+  assert.deepEqual(reasons('const isMobile = await page.evaluate(() => matchMedia("(max-width: 600px)").matches);', 'test.skip(isMobile, "measured, not a fixture");'), []);
+  assert.deepEqual(reasons("const lanes = new Set(items);", 'test.skip(!lanes.has(testInfo.project.name), "items are not literals");'), []);
+  assert.deepEqual(reasons('const lanes = new Set(["a", `${x}`]);', 'test.skip(!lanes.has(testInfo.project.name), "one item is computed");'), []);
+  assert.deepEqual(reasons('test.skip(testInfo.project.name.endsWith(suffix), "variable argument");'), []);
+  assert.deepEqual(reasons('test.skip(testInfo.project.name !== other, "variable operand");'), []);
+  assert.deepEqual(reasons('test.skip(testInfo.project.name !== "a" ? true : data, "ternary");'), []);
+  assert.deepEqual(reasons('test.skip(testInfo.project.name !== "a");'), [], "a skip without a reason has no text to compare");
+  assert.deepEqual(reasons('test.skip(testInfo.project.name !== "a", reasonText);'), [], "the reason must be a literal");
+});
+
+const reasonOf = (project: string, description: string, extra: Record<string, unknown> = {}) =>
+  pwTest("skipped", { projectName: project, annotations: [{ type: "skip", description }], ...extra });
+const spec = "visual/x.spec.ts";
+const proofs = (...reasons: string[]) => new Map([[spec, reasons]]);
+
+test("classifyPlaywright (D-69 G4): a skip is by project only with the reason proven by the source and a clean pass on another project", () => {
+  const pass = pwTest("expected", { projectName: "chromium-desktop" });
+  const report = pwReport([{ title: "frame", file: spec, tests: [pass, reasonOf("chromium-phone", "Pixel authority is pinned to chromium-desktop.")] }]);
+  const accepted = gate.classifyPlaywright(report, [], { projectSkips: true, skipProofs: proofs("Pixel authority is pinned to chromium-desktop.") });
+  assert.equal(accepted.status, "PASS");
+  assert.equal(accepted.projectSkipped, 1);
+  assert.equal(accepted.counts.skipped, 1, "the skip is still counted");
+  const noProofs = gate.classifyPlaywright(report, [], { projectSkips: true });
+  assert.equal(noProofs.status, "SKIPPED", "without a proof from the source nothing is explained");
+  const otherText = gate.classifyPlaywright(report, [], { projectSkips: true, skipProofs: proofs("Another reason.") });
+  assert.equal(otherText.status, "SKIPPED", "the annotation text must equal a proven reason");
+  const otherFile = gate.classifyPlaywright(report, [], { projectSkips: true, skipProofs: new Map([["visual/y.spec.ts", ["Pixel authority is pinned to chromium-desktop."]]]) });
+  assert.equal(otherFile.status, "SKIPPED");
+  const off = gate.classifyPlaywright(report, [], { skipProofs: proofs("Pixel authority is pinned to chromium-desktop.") });
+  assert.equal(off.status, "SKIPPED", "a gate without projectSkips counts every skip as SKIPPED");
+});
+
+test("classifyPlaywright (D-69 G4): a template reason matches its substituted text; a bare substitution proves nothing", () => {
+  const report = pwReport([{ title: "frame", file: spec, tests: [pwTest("expected", { projectName: "chromium-desktop" }), reasonOf("chromium-phone", "chromium-phone: the phone grid has no drag.")] }]);
+  assert.equal(gate.classifyPlaywright(report, [], { projectSkips: true, skipProofs: proofs("${testInfo.project.name}: the phone grid has no drag.") }).status, "PASS");
+  assert.equal(gate.classifyPlaywright(report, [], { projectSkips: true, skipProofs: proofs("${anything}") }).status, "SKIPPED");
+});
+
+test("classifyPlaywright (D-69 G4): пропуск по данным не засчитывается, even when the same test passed on another project and the text names the project", () => {
+  const dataSource = "test.skip(!before, `no height of the block was measured on the project ${testInfo.project.name}`);";
+  const proven = gate.projectConditionSkips(dataSource);
+  assert.deepEqual(proven, []);
+  const report = pwReport([
+    {
+      title: "the closed block is compact",
+      file: spec,
+      tests: [pwTest("expected", { projectName: "chromium-desktop" }), reasonOf("firefox-desktop", "no height of the block was measured on the project firefox-desktop")],
+    },
+  ]);
+  const classified = gate.classifyPlaywright(report, [], { projectSkips: true, skipProofs: new Map([[spec, proven]]) });
+  assert.equal(classified.status, "SKIPPED");
+  assert.equal(classified.projectSkipped, 0);
+});
+
+test("classifyPlaywright (D-69 G4): a test skipped everywhere, a pass on the same project only, a BLOCKED skip and a retry-pass explain nothing", () => {
+  const options = { projectSkips: true, skipProofs: proofs("Not here.") };
+  const everywhere = pwReport([{ title: "never ran", file: spec, tests: [reasonOf("chromium-phone", "Not here."), reasonOf("webkit-phone", "Not here.")] }, { title: "other", file: spec, tests: [pwTest("expected")] }]);
+  assert.equal(gate.classifyPlaywright(everywhere, [], options).status, "SKIPPED");
+  const sameProject = pwReport([{ title: "t", file: spec, tests: [pwTest("expected", { projectName: "chromium-phone" }), reasonOf("chromium-phone", "Not here.")] }]);
+  assert.equal(gate.classifyPlaywright(sameProject, [], options).status, "SKIPPED", "a pass on the project that skipped is not another project");
+  const blocked = pwReport([{ title: "t", file: spec, tests: [pwTest("expected", { projectName: "chromium-desktop" }), reasonOf("chromium-phone", "BLOCKED (DATA): none")] }]);
+  assert.equal(gate.classifyPlaywright(blocked, [], { projectSkips: true, skipProofs: proofs("BLOCKED (DATA): none") }).status, "BLOCKED");
+  const retried = pwReport([
+    {
+      title: "t",
+      file: spec,
+      tests: [pwTest("expected", { projectName: "chromium-desktop", results: [{ status: "failed", retry: 0 }, { status: "passed", retry: 1 }] }), reasonOf("chromium-phone", "Not here.")],
+    },
+  ]);
+  const retriedResult = gate.classifyPlaywright(retried, [], options);
+  assert.equal(retriedResult.status, "FAIL", "the retry itself is a failure");
+  assert.equal(retriedResult.projectSkipped, 0, "and it is no ground for the skip");
+  const flaky = pwReport([{ title: "t", file: spec, tests: [pwTest("flaky", { projectName: "chromium-desktop" }), reasonOf("chromium-phone", "Not here.")] }]);
+  assert.equal(gate.classifyPlaywright(flaky, [], options).projectSkipped, 0);
+});
+
+test("classifyPlaywright (D-69 G4): passes of the whole gate run come in from outside, so a second step can rely on the first", () => {
+  const first = pwReport([{ title: "frame", file: spec, tests: [pwTest("expected", { projectName: "chromium-desktop" })] }]);
+  const second = pwReport([{ title: "frame", file: spec, tests: [reasonOf("chromium-phone", "Pixel authority.")] }]);
+  const alone = gate.classifyPlaywright(second, [], { projectSkips: true, skipProofs: proofs("Pixel authority.") });
+  assert.equal(alone.status, "SKIPPED", "inside one report the test has no pass");
+  const passed = gate.passedTests(first);
+  assert.ok(passed instanceof Map);
+  const together = gate.classifyPlaywright(second, [], { projectSkips: true, skipProofs: proofs("Pixel authority."), passed });
+  assert.equal(together.status, "PASS");
+  assert.equal(together.projectSkipped, 1);
+});
+
+const MOTION_SOURCE = [
+  'import { test } from "@playwright/test";',
+  "test.beforeEach(({}, testInfo) => {",
+  '  test.skip(testInfo.project.name !== "chromium-desktop", "Phase 15 pixel authority is pinned to chromium-desktop.");',
+  "});",
+].join("\n");
+const MOTION_REASON = "Phase 15 pixel authority is pinned to chromium-desktop.";
+const motionFile = "visual/motion.spec.ts";
+const stepOne = () =>
+  pwReport([
+    { title: "[STAB-BASE-03] motion frame", file: motionFile, tests: [pwTest("expected", { projectName: "chromium-desktop" }), reasonOf("chromium-dpr125", MOTION_REASON)] },
+    { title: "[STAB-BASE-03] shell", file: "visual/desktop.spec.ts", tests: [pwTest("expected", { projectName: "chromium-desktop" }), pwTest("expected", { projectName: "chromium-dpr125" })] },
+  ]);
+const stepTwo = () =>
+  pwReport([
+    { title: "[STAB-BASE-03] motion frame", file: motionFile, tests: ["chromium-phone", "webkit-phone", "firefox-desktop"].map((project) => reasonOf(project, MOTION_REASON)) },
+    { title: "[STAB-BASE-03] shell", file: "visual/desktop.spec.ts", tests: ["chromium-phone", "webkit-phone", "firefox-desktop"].map((project) => pwTest("expected", { projectName: project })) },
+  ]);
+
+/** A lane whose k-th Playwright step writes reports[k]; `sources` are written under tests/e2e of the throwaway checkout. */
+function stepLane(env: Record<string, string>, reports: unknown[], sources: Record<string, string> = {}) {
+  let call = 0;
+  const lane = harness(env, (_file, _args, worktree) => {
+    writeReport(worktree, reports[Math.min(call, reports.length - 1)]);
+    call += 1;
+    return { status: 0 };
+  });
+  lane.addHarnessFile();
+  lane.results.push({ id: "npm-ci", status: "PASS" });
+  for (const [file, text] of Object.entries(sources)) {
+    const full = path.join(lane.worktree, "tests", "e2e", file);
+    mkdirSync(path.dirname(full), { recursive: true });
+    writeFileSync(full, text);
+  }
+  return lane;
+}
+
+test("runGate (D-69 G4): visual-approved over two steps — the three skips of step 2 are explained by the pass of step 1 and the source", () => {
+  const lane = stepLane({}, [stepOne(), stepTwo()], { [motionFile]: MOTION_SOURCE });
+  const outcome = lane.run("visual-approved");
+  assert.equal(outcome.status, "PASS", String(outcome.reason));
+  assert.equal(outcome.projectSkipped, 3);
+  assert.deepEqual(outcome.counts, { passed: 7, failed: 0, flaky: 0, skipped: 4, blocked: 0 }, "step 1 skips one more test for dpr125 and that one is explained as well");
+  lane.cleanup();
+});
+
+test("runGate (D-69 G4): visual-approved — the counted skips are all explained (4 of 4) and the reason says why", () => {
+  const lane = stepLane({}, [stepOne(), stepTwo()], { [motionFile]: MOTION_SOURCE });
+  const outcome = lane.run("visual-approved");
+  assert.equal(outcome.projectSkipped, 4);
+  assert.match(outcome.reason, /4 skip\(s\) by project condition; each such test passed on another project in this gate run/);
+  lane.cleanup();
+});
+
+test("runGate (D-69 G4): visual-approved stays SKIPPED when the source does not prove the condition, the file is absent, or the test never passed", () => {
+  const data = stepLane({}, [stepOne(), stepTwo()], { [motionFile]: `test.skip(!before, "${MOTION_REASON}");` });
+  assert.equal(data.run("visual-approved").status, "SKIPPED", "a skip by data with an equal text");
+  data.cleanup();
+  const absent = stepLane({}, [stepOne(), stepTwo()]);
+  assert.equal(absent.run("visual-approved").status, "SKIPPED", "no spec source in the checkout");
+  absent.cleanup();
+  const onlySkips = stepLane({}, [stepTwo(), stepTwo()], { [motionFile]: MOTION_SOURCE });
+  const outcome = onlySkips.run("visual-approved");
+  assert.equal(outcome.status, "SKIPPED", "skipped in every step and passed nowhere");
+  onlySkips.cleanup();
+});
+
+test("runGate (D-69 G4): a retry-pass on the other project is FAIL and the skip stays unexplained", () => {
+  const retried = pwReport([
+    {
+      title: "[STAB-BASE-03] motion frame",
+      file: motionFile,
+      tests: [pwTest("expected", { projectName: "chromium-desktop", results: [{ status: "failed", retry: 0 }, { status: "passed", retry: 1 }] }), reasonOf("chromium-dpr125", MOTION_REASON)],
+    },
+  ]);
+  const lane = stepLane({}, [retried, stepTwo()], { [motionFile]: MOTION_SOURCE });
+  const outcome = lane.run("visual-approved");
+  assert.equal(outcome.status, "FAIL");
+  assert.equal(outcome.projectSkipped, 0);
+  lane.cleanup();
+});
+
+test("runGate (D-69 G4): a pass in the report of ANOTHER gate does not explain a skip", () => {
+  const lane = stepLane({}, [stepOne(), stepTwo()], { [motionFile]: MOTION_SOURCE });
+  lane.run("ui-contract-offline");
+  const reportOnlySkips = pwReport([{ title: "[STAB-BASE-03] motion frame", file: motionFile, tests: [reasonOf("chromium-phone", MOTION_REASON), pwTest("expected", { projectName: "chromium-phone", title: "x" })] }]);
+  lane.cleanup();
+  const isolated = stepLane({}, [reportOnlySkips], { [motionFile]: MOTION_SOURCE });
+  isolated.results.push({ id: "ui-contract-offline", status: "PASS", projectSkipped: 0 });
+  const outcome = isolated.run("visual-approved");
+  assert.equal(outcome.status, "SKIPPED");
+  isolated.cleanup();
+});
+
+test("runGate (D-69 G4): the rule applies to visual-phase20 and e2e-full, not to the live lanes e2e-mutation and staging-live", () => {
+  const byId = (id: string) => gate.GATES.find((entry: { id: string }) => entry.id === id);
+  assert.deepEqual(
+    gate.GATES.filter((entry: { projectSkips?: boolean }) => entry.projectSkips).map((entry: { id: string }) => entry.id),
+    ["e2e-full", "ui-contract-offline", "visual-approved", "visual-phase20"],
+  );
+  assert.ok(byId("visual-approved").strictSkips && byId("visual-phase20").strictSkips && byId("e2e-full").strictSkips, "strict stays");
+  assert.ok(!byId("e2e-mutation").projectSkips && !byId("staging-live").projectSkips);
+
+  const phase20Source = ['const lanes = new Set(["chromium-desktop", "chromium-phone"]);', "test.beforeEach(({}, testInfo) => {", '  test.skip(!lanes.has(testInfo.project.name), "Phase 20 baselines are taken on two lanes.");', "});"].join("\n");
+  const phase20Report = pwReport([
+    { title: "frame @phase20", file: "visual/phase20.spec.ts", tests: [pwTest("expected", { projectName: "chromium-desktop" }), pwTest("expected", { projectName: "chromium-phone" }), reasonOf("firefox-desktop", "Phase 20 baselines are taken on two lanes.")] },
+  ]);
+  const phase20 = stepLane({}, [phase20Report], { "visual/phase20.spec.ts": phase20Source });
+  const phase20Outcome = phase20.run("visual-phase20");
+  assert.equal(phase20Outcome.status, "PASS", String(phase20Outcome.reason));
+  assert.equal(phase20Outcome.projectSkipped, 1);
+  phase20.cleanup();
+
+  const e2eSource = ["test.beforeEach(({}, testInfo) => {", '  test.skip(testInfo.project.name.endsWith("-phone"), "Phone projects have no cascading windows.");', "});"].join("\n");
+  const e2eReport = pwReport([
+    { title: "windows", file: "specs/window-reopen.spec.ts", tests: [pwTest("expected", { projectName: "chromium-desktop" }), reasonOf("chromium-phone", "Phone projects have no cascading windows.")] },
+  ]);
+  const full = stepLane(PUBLIC_ENV, [e2eReport], { "specs/window-reopen.spec.ts": e2eSource });
+  const fullOutcome = full.run("e2e-full");
+  assert.equal(fullOutcome.status, "PASS", String(fullOutcome.reason));
+  assert.equal(fullOutcome.projectSkipped, 1);
+  full.cleanup();
+
+  const live = stepLane({ ...PUBLIC_ENV, ...MUTATION_ENV }, [e2eReport], { "specs/window-reopen.spec.ts": e2eSource });
+  live.results.push({ id: "mutation-attest", status: "PASS" });
+  const liveOutcome = live.run("e2e-mutation");
+  assert.equal(liveOutcome.status, "SKIPPED", "a skipped live test is evidence only with an attested staging run");
+  assert.equal(liveOutcome.projectSkipped ?? 0, 0);
+  live.cleanup();
+});
+
+test("runGate (D-69 G4): ui-contract-offline explains the skip of step 4 by the pass of step 3", () => {
+  const source = ["test.beforeEach(({}, testInfo) => {", '  test.skip(testInfo.project.name === "webkit-phone", "No hover on webkit-phone.");', "});"].join("\n");
+  const file = "specs/editor-ui-contract.spec.ts";
+  const passing = pwReport([{ title: "D-66 touch", file, tests: [pwTest("expected", { projectName: "chromium-phone" })] }]);
+  const skipping = pwReport([{ title: "D-66 touch", file, tests: [reasonOf("webkit-phone", "No hover on webkit-phone.")] }]);
+  const lane = stepLane({}, [passing, passing, passing, skipping], { [file]: source });
+  const outcome = lane.run("ui-contract-offline");
+  assert.equal(outcome.status, "PASS", String(outcome.reason));
+  assert.equal(outcome.projectSkipped, 1);
+  lane.cleanup();
+});
+
+test("the real spec files: the pixel-authority skips are proven, the data skip of editor-ui-contract is not, desktop.spec skips by project name", () => {
+  const read = (relative: string) => readFileSync(new URL(`../tests/e2e/${relative}`, import.meta.url), "utf8");
+  for (const file of ["visual/motion.spec.ts", "visual/promotion.spec.ts", "visual/apps.spec.ts", "visual/editor.spec.ts"]) {
+    assert.deepEqual(gate.projectConditionSkips(read(file)), ["Phase 15 pixel authority is pinned to chromium-desktop."], file);
+  }
+  assert.deepEqual(gate.projectConditionSkips(read("visual/phase20.spec.ts")), ["Phase 20 baselines are taken on chromium-desktop and chromium-phone."]);
+  const desktop = read("visual/desktop.spec.ts");
+  assert.match(desktop, /includes\(testInfo\.project\.name\)/);
+  assert.deepEqual(gate.projectConditionSkips(desktop), ["No device-specific approved row is declared for ${testInfo.project.name}."]);
+  const editor = gate.projectConditionSkips(read("specs/editor-ui-contract.spec.ts"));
+  assert.ok(!editor.some((reason: string) => /no height of the block/.test(reason)), "the data skip at editor-ui-contract is not a project skip");
+  assert.ok(editor.includes("a finger exists on the phone projects only; the mouse is checked on chromium-desktop"));
+  assert.ok(gate.projectConditionSkips(read("specs/template-builder.spec.ts")).includes("The phone layout; the PC is the previous test."));
+  assert.ok(gate.projectConditionSkips(read("specs/accessibility.spec.ts")).some((reason: string) => reason.startsWith("${testInfo.project.name}: PC trap")));
+});
+
+test("counts cell (D-69 G4): `(по проекту N)` is written, read back, and checked by --verify-evidence", () => {
+  const withSkips = (id: string, projectSkipped: number, skipped = projectSkipped) => (entry: string) =>
+    entry === id ? { counts: { passed: 10, failed: 0, skipped, flaky: 0, blocked: 0 }, projectSkipped } : {};
+  const good = gate.renderEvidence(fullRun({}, withSkips("visual-approved", 3)));
+  assert.match(good, /^\| visual-approved \|.*\| 10\/0\/3\/0 \(по проекту 3\) \|/m);
+  assert.deepEqual(verify(good), [], "all skips of a strict gate explained by the number");
+  assert.doesNotMatch(gate.renderEvidence(fullRun({}, withSkips("visual-approved", 0, 0))), /по проекту/);
+  const partly = gate.renderEvidence(fullRun({}, withSkips("visual-approved", 3, 4)));
+  mentions(verify(partly), /visual-approved: PASS row has 1 skipped test\(s\), a skip is not a pass/);
+  const live = gate.renderEvidence(fullRun({}, withSkips("e2e-mutation", 2)));
+  mentions(verify(live), /e2e-mutation: .*по проекту.*no project-skip rule/);
+  const over = gate.renderEvidence(fullRun({}, withSkips("e2e-full", 3, 2)));
+  mentions(verify(over), /e2e-full: .*по проекту 3.* larger than the skipped count 2/);
+  const e2e = gate.renderEvidence(fullRun({}, withSkips("e2e-full", 2)));
+  assert.deepEqual(verify(e2e), []);
+});
