@@ -932,3 +932,213 @@ test.describe("[STAB-A11Y-02] D-66 the closed block «Видимая часть�
     });
   }
 });
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// [STAB-A11Y-01/02] D-66 (20-57): the picture is dragged under the frame of the dialog by a mouse (PC) and by a finger (phones); the dragging has the keyboard
+// alternative of 20-56 (the arrows of «Положение картинки»). Same UI contract as above: only reads are substituted, the one write tolerated is the intercepted PUT.
+// The finger: Playwright's touchscreen has only tap. On chromium the touches are real touch events through CDP (Input.dispatchTouchEvent); on WebKit
+// (no CDP) the same stream is PointerEvents with pointerType "touch" through dispatchEvent. The method used is written to the annotations of every run.
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+
+const stageOf = (dialog: Locator) => dialog.locator(".image-framing-stage");
+
+/** The value of «Положение картинки» as numbers (read from aria-valuetext, the way a screen reader reads it). A drag fed by dispatched events ends before React has painted the last
+ *  move: the value is read once it stops changing (two equal reads, 100 ms apart). */
+async function readPosition(dialog: Locator) {
+  const read = async () => {
+    const text = (await positionOf(dialog).getAttribute("aria-valuetext")) ?? "";
+    const found = /по горизонтали (\d+) %, по вертикали (\d+) %/.exec(text);
+    expect(found, `aria-valuetext of the position «${text}»`).not.toBeNull();
+    return { x: Number(found![1]), y: Number(found![2]) };
+  };
+  let previous = await read();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await dialog.page().waitForTimeout(100);
+    const next = await read();
+    if (next.x === previous.x && next.y === previous.y) return next;
+    previous = next;
+  }
+  return previous;
+}
+
+const clampPercent = (value: number) => Math.min(100, Math.max(0, Math.round(value)));
+
+/** The picture moves with the pointer, so the visible part goes the other way: by the rectangles of the frame and of the picture in the dialog (not by lib/image-framing-crop.ts). */
+function positionAfterDrag(start: { x: number; y: number }, delta: { dx: number; dy: number }, rects: { frame: Rect; image: Rect }) {
+  const spanX = rects.image.width - rects.frame.width;
+  const spanY = rects.image.height - rects.frame.height;
+  expect(spanX, "the picture is wider than the frame at this zoom").toBeGreaterThan(0);
+  expect(spanY, "the picture is higher than the frame at this zoom").toBeGreaterThan(0);
+  return { x: clampPercent(start.x - (delta.dx / spanX) * 100), y: clampPercent(start.y - (delta.dy / spanY) * 100) };
+}
+
+function expectPositionNear(actual: { x: number; y: number }, expected: { x: number; y: number }, what: string) {
+  expect(Math.abs(actual.x - expected.x), `${what}: x ${actual.x} against ${expected.x} (±1)`).toBeLessThanOrEqual(1);
+  expect(Math.abs(actual.y - expected.y), `${what}: y ${actual.y} against ${expected.y} (±1)`).toBeLessThanOrEqual(1);
+}
+
+/** The scroll offsets of the page and of every scrolling ancestor of the element: a drag on the stage must not scroll any of them. */
+async function scrollOffsets(anchor: Locator) {
+  return anchor.evaluate((element) => {
+    const offsets: number[] = [window.scrollX, window.scrollY];
+    for (let node: Element | null = element; node; node = node.parentElement) offsets.push(node.scrollLeft, node.scrollTop);
+    return offsets;
+  });
+}
+
+type Finger = { method: string; down: (x: number, y: number) => Promise<void>; move: (x: number, y: number) => Promise<void>; up: () => Promise<void>; cancel: () => Promise<void> };
+
+/** A finger on the stage. chromium: CDP touch events (real touches, the browser makes the pointer events); WebKit: PointerEvent with pointerType "touch" (isPrimary, one pointerId). */
+async function fingerOn(page: Page, stage: Locator): Promise<Finger> {
+  if (test.info().project.name !== "webkit-phone") {
+    const session = await page.context().newCDPSession(page);
+    const send = (type: "touchStart" | "touchMove" | "touchEnd" | "touchCancel", touchPoints: { x: number; y: number; id: number }[]) => session.send("Input.dispatchTouchEvent", { type, touchPoints }).then(() => undefined);
+    return {
+      method: "CDP Input.dispatchTouchEvent (touchStart / touchMove / touchEnd / touchCancel)",
+      down: (x, y) => send("touchStart", [{ x, y, id: 1 }]),
+      move: (x, y) => send("touchMove", [{ x, y, id: 1 }]),
+      up: () => send("touchEnd", []),
+      cancel: () => send("touchCancel", []),
+    };
+  }
+  const pointer = (type: string, x: number, y: number, buttons: number) => stage.dispatchEvent(type, { pointerId: 7, pointerType: "touch", isPrimary: true, button: 0, buttons, clientX: x, clientY: y, width: 1, height: 1, pressure: buttons ? 0.5 : 0 });
+  let last = { x: 0, y: 0 };
+  return {
+    method: 'PointerEvent pointerType "touch" through locator.dispatchEvent (pointerdown / pointermove / pointerup / pointercancel)',
+    down: async (x, y) => { last = { x, y }; await pointer("pointerdown", x, y, 1); },
+    move: async (x, y) => { last = { x, y }; await pointer("pointermove", x, y, 1); },
+    up: () => pointer("pointerup", last.x, last.y, 0),
+    cancel: () => pointer("pointercancel", last.x, last.y, 0),
+  };
+}
+
+/** Editor on the band of a «Справочник» section: the dialog is open at 160 % (the picture leaves the frame on both axes). */
+async function openForDragging(page: Page, diagnostics: DiagnosticLedger) {
+  const surface = guideSectionSurface;
+  const writes = trackWritesExceptContentPut(page);
+  const puts: PutBody[] = [];
+  expectAbortedSave(diagnostics);
+  // The test leaves the editor for the site (a second load); WebKit reports a read in flight as a cancelled load.
+  diagnostics.expectFault({ kind: "requestfailed", source: "fetch", text: /Load request cancelled|cancelled|aborted/i, reason: "the test leaves the page of the editor for the site while a read is in flight (WebKit reports the cancelled load)" });
+  await openEditorTab(page, surface.tab, { content: surface.content, puts });
+  await surface.prepare(page);
+  const group = groupOf(surface, page);
+  await expect(group).toBeVisible();
+  const dialog = await openFraming(page, group);
+  await setZoom(dialog, 160);
+  const stageBox = await box(stageOf(dialog));
+  return { surface, writes, puts, group, dialog, stageBox };
+}
+
+/** «Применить» → save → the intercepted PUT → the site fed with that body shows the same part of the picture as the dialog did (0.015 of the picture). */
+async function applyAndCompareWithSite(page: Page, ctx: Awaited<ReturnType<typeof openForDragging>>, chosen: { x: number; y: number }, shown: Fractions) {
+  const { surface, puts, dialog } = ctx;
+  await applyFraming(dialog);
+  await save(page);
+  await expect.poll(() => puts.length, "the save reached the intercepted PUT").toBe(1);
+  expect(surface.holder(puts[0].content)?.[surface.frameKey], "the body of the PUT holds the dragged frame").toEqual({ ...chosen, zoom: 160 });
+  await page.unroute("**/api/content**");
+  await stubContent(page, puts[0].content, puts[0].revision + 1);
+  await page.addInitScript(() => window.localStorage.clear());
+  const onSite = await siteWindow(await surface.site(page));
+  test.info().annotations.push({ type: "measure", description: `dialog ${JSON.stringify(shown)}, site ${JSON.stringify(onSite.visible)}, max difference ${maxDifference(shown, onSite.visible).toFixed(4)}` });
+  for (const key of ["left", "top", "width", "height"] as const) {
+    expect(Math.abs(shown[key] - onSite.visible[key]), `${key} of the part: dialog ${shown[key].toFixed(4)} against site ${onSite.visible[key].toFixed(4)}`).toBeLessThanOrEqual(0.015);
+  }
+  expect(ctx.writes, "no write but the intercepted PUT").toEqual([]);
+}
+
+/** After the drag ended, no stray move of any pointer changes the position: nothing is left holding the pointer. */
+async function expectNoHangingDrag(page: Page, dialog: Locator, held: { x: number; y: number }) {
+  await page.evaluate(() => { for (let pointerId = 0; pointerId < 20; pointerId += 1) window.dispatchEvent(new PointerEvent("pointermove", { pointerId, clientX: 5, clientY: 5, bubbles: true })); });
+  expectPositionNear(await readPosition(dialog), held, "a stray move after the drag ended");
+}
+
+test.describe("[STAB-A11Y-02] D-66 touch and mouse drag the picture under the frame", () => {
+  test("[STAB-A11Y-02] D-66 touch: a finger drags the picture under the frame", async ({ page, diagnostics }, testInfo) => {
+    test.skip(!isPhone(), "a finger exists on the phone projects only; the mouse is checked on chromium-desktop");
+    const ctx = await openForDragging(page, diagnostics);
+    const { dialog, group, stageBox } = ctx;
+    const stage = stageOf(dialog);
+    await expect(stage, "the stage takes the touches itself").toHaveCSS("touch-action", "none");
+    const startRects = await dialogWindow(dialog);
+    const start = await readPosition(dialog);
+    const scrolled = await scrollOffsets(group);
+    const from = { x: stageBox.x + stageBox.width / 2, y: stageBox.y + stageBox.height / 2 };
+    const finger = await fingerOn(page, stage);
+    testInfo.annotations.push({ type: "touch", description: `${testInfo.project.name}: ${finger.method}` });
+
+    await finger.down(from.x, from.y);
+    await finger.move(from.x + 20, from.y + 10);
+    await finger.move(from.x + 40, from.y + 20);
+    await finger.up();
+    const moved = await readPosition(dialog);
+    expectPositionNear(moved, positionAfterDrag(start, { dx: 40, dy: 20 }, startRects), "a finger moved right 40 px and down 20 px");
+    expect(moved.x, "the picture went right, the visible part left").toBeLessThan(start.x);
+    expect(moved.y, "the picture went down, the visible part up").toBeLessThan(start.y);
+    expect(await scrollOffsets(group), "neither the page nor the window of the editor scrolled").toEqual(scrolled);
+    await expect(dialog, "the drag leaves the dialog open").toBeVisible();
+
+    // A touch the system takes away (pointercancel) ends the drag where it was and leaves the dialog open.
+    await finger.down(from.x, from.y);
+    await finger.move(from.x - 10, from.y - 10);
+    await finger.cancel();
+    await expect(dialog).toBeVisible();
+    const held = await readPosition(dialog);
+    await expectNoHangingDrag(page, dialog, held);
+    expect(await scrollOffsets(group), "the cancelled touch scrolled nothing either").toEqual(scrolled);
+
+    const part = (await dialogWindow(dialog)).visible;
+    await applyAndCompareWithSite(page, ctx, held, part);
+  });
+
+  test("[STAB-A11Y-01] D-66 mouse: dragging moves the part, a drag released outside keeps the dialog", async ({ page, diagnostics }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", "the mouse is checked on chromium-desktop; the phones are checked with a finger");
+    const ctx = await openForDragging(page, diagnostics);
+    const { dialog, stageBox } = ctx;
+    const startRects = await dialogWindow(dialog);
+    const start = await readPosition(dialog);
+    const centre = { x: stageBox.x + stageBox.width / 2, y: stageBox.y + stageBox.height / 2 };
+
+    await page.mouse.move(centre.x, centre.y);
+    await page.mouse.down();
+    await page.mouse.move(centre.x + 20, centre.y + 10, { steps: 4 });
+    await page.mouse.move(centre.x + 40, centre.y + 20, { steps: 4 });
+    await page.mouse.up();
+    const moved = await readPosition(dialog);
+    expectPositionNear(moved, positionAfterDrag(start, { dx: 40, dy: 20 }, startRects), "the mouse moved right 40 px and down 20 px");
+    expect(moved.x, "the picture went right, the visible part left").toBeLessThan(start.x);
+    expect(moved.y, "the picture went down, the visible part up").toBeLessThan(start.y);
+
+    // A drag released outside the stage and outside the dialog: the window of the browser carries the drag, the dialog stays open, the frame is the last move's.
+    const dialogBox = await box(dialog);
+    const second = await dialogWindow(dialog);
+    const grab = { x: stageBox.x + 10, y: centre.y };
+    const outside = { x: dialogBox.x - 30, y: centre.y + 15 };
+    expect(outside.x, "there is room left of the dialog").toBeGreaterThan(2);
+    await page.mouse.move(grab.x, grab.y);
+    await page.mouse.down();
+    await page.mouse.move((grab.x + outside.x) / 2, (grab.y + outside.y) / 2, { steps: 4 });
+    await page.mouse.move(outside.x, outside.y, { steps: 4 });
+    await page.mouse.up();
+    await expect(dialog, "a drag released outside the window keeps the dialog open").toBeVisible();
+    const released = await readPosition(dialog);
+    expectPositionNear(released, positionAfterDrag(moved, { dx: outside.x - grab.x, dy: outside.y - grab.y }, second), "the drag released outside the dialog keeps the frame of its last move");
+    expect(released.x, "dragged left past the stage, the visible part moved right").toBeGreaterThan(moved.x);
+    await page.mouse.move(centre.x, centre.y);
+    await page.mouse.move(centre.x + 30, centre.y + 30, { steps: 3 });
+    expectPositionNear(await readPosition(dialog), released, "a mouse move over the stage with the button up");
+    await expectNoHangingDrag(page, dialog, released);
+
+    // And one released over the head of the dialog (outside the stage, inside the window).
+    const head = await box(dialog.locator(".image-framing-dialog-head"));
+    await page.mouse.move(centre.x, centre.y);
+    await page.mouse.down();
+    await page.mouse.move(centre.x, head.y + head.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await expect(dialog, "a drag released over the head of the dialog keeps it open").toBeVisible();
+
+    const finalPosition = await readPosition(dialog);
+    await applyAndCompareWithSite(page, ctx, finalPosition, (await dialogWindow(dialog)).visible);
+  });
+});
