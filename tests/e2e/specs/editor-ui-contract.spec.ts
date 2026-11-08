@@ -905,17 +905,24 @@ test.describe("[STAB-A11Y-02] D-66 the closed block «Видимая часть�
   };
   const axeSurfaces: [string, Surface][] = [["Справочник", guideSectionSurface], ["База вирусов", virusPhotoSurface], ["Информация", infoPhotoSurface], ["Корзина", recycleFileSurface]];
   for (const [tabName, surface] of axeSurfaces) {
-    test(`[STAB-A11Y-02] D-63 axe finds nothing critical or serious in the block «Видимая часть» of the «${tabName}» tab`, async ({ page }, testInfo) => {
+    test(`[STAB-A11Y-02] D-66 axe finds nothing critical or serious in the block and the dialog «Видимая часть» of the «${tabName}» tab`, async ({ page }, testInfo) => {
       const writes = trackWritesExceptContentPut(page);
       await openEditorTab(page, surface.tab, { content: surface.content });
       await surface.prepare(page);
-      await expect(groupOf(surface, page)).toBeVisible();
+      const group = groupOf(surface, page);
+      await expect(group).toBeVisible();
       const describe = (violation: AxeViolation) => `${violation.id}:${violation.impact} @ ${violation.nodes.slice(0, 3).map((node) => `${node.target.join(" ")} ${node.html.slice(0, 160)} ${node.failureSummary?.replace(/\s+/g, " ").slice(0, 200) ?? ""}`).join(" | ")}`;
       const blockingOf = (violations: AxeViolation[]) => violations.filter((violation) => violation.impact === "critical" || violation.impact === "serious");
 
-      // The block itself: no tolerance at all.
+      // The block itself and the open dialog: no tolerance at all.
+      await expect(group.locator(".portia-image.is-loaded"), "the preview is loaded").toBeVisible();
       const own = await new AxeBuilder({ page }).include(".image-framing").analyze();
       expect(blockingOf(own.violations).map(describe), "critical or serious axe violations in the block «Видимая часть»").toEqual([]);
+      const dialog = await openFraming(page, group);
+      const inDialog = await new AxeBuilder({ page }).include(".image-framing-dialog").analyze();
+      expect(blockingOf(inDialog.violations).map(describe), "critical or serious axe violations in the dialog «Видимая часть»").toEqual([]);
+      await dialog.getByRole("button", { name: "Отмена" }).click();
+      await expect(dialog).toBeHidden();
 
       // The whole tab: the findings measured before D-62/D-63 are tolerated node by node (knownBeforeD62), nothing else.
       const results = await new AxeBuilder({ page }).analyze();
@@ -1140,5 +1147,160 @@ test.describe("[STAB-A11Y-02] D-66 touch and mouse drag the picture under the fr
 
     const finalPosition = await readPosition(dialog);
     await applyAndCompareWithSite(page, ctx, finalPosition, (await dialogWindow(dialog)).visible);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// [STAB-A11Y-01/02/03] D-66 (20-57): names, values and focus of the dialog «Видимая часть», a phone, the motion setting «Выключены».
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+
+/** What holds the focus: the accessible name or text of the active element, and whether it is inside the dialog. */
+async function focusState(dialog: Locator) {
+  return dialog.evaluate((element) => {
+    const active = document.activeElement;
+    const inside = !!active && element.contains(active);
+    const name = active ? (active.getAttribute("aria-label") ?? active.textContent?.trim() ?? active.tagName) : "nothing";
+    return { inside, name: active && active !== document.body ? name : "the page body" };
+  });
+}
+
+const dialogRing = ["Положение картинки", "Масштаб", "Сбросить", "Отмена", "Применить"];
+
+test.describe("[STAB-A11Y-01] D-66 the dialog «Видимая часть»: names, values, focus, Tab, Esc", () => {
+  test("[STAB-A11Y-01] D-66 dialog: names, values, focus, Tab inside, Esc and «Отмена» keep the draft", async ({ page }) => {
+    const surface = guideSectionSurface;
+    const writes = trackWritesExceptContentPut(page);
+    const editor = await openEditorTab(page, surface.tab, { content: surface.content });
+    await surface.prepare(page);
+    const group = groupOf(surface, page);
+    await expect(group).toBeVisible();
+    await expect(group.locator(".portia-image.is-loaded"), "the preview is loaded").toBeVisible();
+    const change = group.getByRole("button", { name: "Изменить" });
+    await expect(change, "«Изменить» announces a dialog").toHaveAttribute("aria-haspopup", "dialog");
+    const label = ((await group.locator(".sr-only").first().textContent()) ?? "").trim();
+    expect(label, "the label of the field is there for the name of the dialog").not.toBe("");
+    const preview = async () => (await pictureState(group.locator(".portia-image").first())).objectPosition;
+    const before = await preview();
+
+    const dialog = await openFraming(page, group);
+    await expect(dialog, "the dialog is named «Видимая часть» and the label of its field").toHaveAccessibleName(`Видимая часть ${label}`);
+    await expect(group, "the closed block has the same name").toHaveAccessibleName(`Видимая часть ${label}`);
+    await expect(positionOf(dialog), "the focus is on «Положение картинки» when the dialog opens").toBeFocused();
+    await expect(positionOf(dialog)).toHaveAttribute("aria-valuetext", positionText({ x: 50, y: 50 }));
+    const zoom = zoomOf(dialog);
+    await expect(zoom).toHaveAttribute("min", "100");
+    await expect(zoom).toHaveAttribute("max", "300");
+    await expect(zoom).toHaveAttribute("step", "5");
+    await expect(zoom).toHaveAttribute("aria-valuetext", "100 %");
+    await setZoom(dialog, 120);
+    await expect(zoom, "the value text follows the zoom").toHaveAttribute("aria-valuetext", "120 %");
+    await setZoom(dialog, 100);
+
+    // Tab and Shift+Tab go round inside the dialog: five stops in the order of the dialog, never the page behind it.
+    await positionOf(dialog).focus();
+    const forward = [(await focusState(dialog)).name];
+    for (let press = 0; press < 10; press += 1) {
+      await page.keyboard.press("Tab");
+      const state = await focusState(dialog);
+      expect(state.inside, `Tab ${press + 1}: the focus is inside the dialog (it is on «${state.name}»)`).toBe(true);
+      forward.push(state.name);
+    }
+    expect(forward.slice(0, 5), "the order of Tab from «Положение картинки»").toEqual(dialogRing);
+    expect(forward.slice(5, 10), "after «Применить» the focus goes round").toEqual(dialogRing);
+    const backward: string[] = [];
+    for (let press = 0; press < 10; press += 1) {
+      await page.keyboard.press("Shift+Tab");
+      const state = await focusState(dialog);
+      expect(state.inside, `Shift+Tab ${press + 1}: the focus is inside the dialog (it is on «${state.name}»)`).toBe(true);
+      backward.push(state.name);
+    }
+    expect(backward.slice(0, 5), "the order of Shift+Tab from «Положение картинки»").toEqual([...dialogRing].reverse());
+    test.info().annotations.push({ type: "tab", description: `${test.info().project.name}: Tab ${forward.join(" > ")}; Shift+Tab ${backward.join(" > ")}` });
+
+    // A draft that is not applied: Esc, then «Отмена», both leave the preview as it was, the window of the editor open, and the focus on «Изменить».
+    for (const close of ["Escape", "Отмена"]) {
+      const open = close === "Escape" ? dialog : await openFraming(page, group);
+      await setZoom(open, 160);
+      await movePart(open, { x: 30, y: 60 });
+      if (close === "Escape") await positionOf(open).press("Escape");
+      else await open.getByRole("button", { name: "Отмена" }).click();
+      await expect(open, `${close} closes the dialog`).toBeHidden();
+      await expect(editor.editorNavigation(), `${close} leaves the window of the editor open`).toBeVisible();
+      await expect(change, `${close} gives the focus back to «Изменить»`).toBeFocused();
+      expect(await preview(), `${close}: the preview is as before`).toBe(before);
+      await expect(page.locator(".editor-save-chip"), `${close} leaves the draft unchanged`).toHaveCount(0);
+    }
+    const again = await openFraming(page, group);
+    await expect(positionOf(again), "a dialog opened again starts from the stored frame").toHaveAttribute("aria-valuetext", positionText({ x: 50, y: 50 }));
+    await expect(zoomOf(again)).toHaveValue("100");
+    await again.getByRole("button", { name: "Применить" }).click();
+    await expect(again).toBeHidden();
+    await expect(change, "«Применить» gives the focus back to «Изменить» too").toBeFocused();
+    expect(writes, "the UI contract never writes").toEqual([]);
+  });
+
+  test("[STAB-A11Y-02] D-66 dialog on a phone: inside the screen, 44 px targets, no overflow", async ({ page }, testInfo) => {
+    test.skip(!isPhone(), "the phone layout is checked on the phone projects");
+    const surface = guideSectionSurface;
+    const writes = trackWritesExceptContentPut(page);
+    await openEditorTab(page, surface.tab, { content: surface.content });
+    await surface.prepare(page);
+    const group = groupOf(surface, page);
+    await expect(group).toBeVisible();
+    await expect(group.locator(".portia-image.is-loaded"), "the preview is loaded").toBeVisible();
+    const field = surface.field(page);
+    const closed = await box(group);
+    expect(overlaps(closed, await box(field.getByRole("textbox").first())), "the closed block over the address field").toBe(false);
+    expect(overlaps(closed, await box(field.locator(".editor-dropzone"))), "the closed block over the upload zone").toBe(false);
+    const change = await box(group.getByRole("button", { name: "Изменить" }));
+
+    const dialog = await openFraming(page, group);
+    const viewport = page.viewportSize()!;
+    const dialogBox = await box(dialog);
+    expect(dialogBox.x, "the dialog is inside the screen (left)").toBeGreaterThanOrEqual(0);
+    expect(dialogBox.y, "the dialog is inside the screen (top)").toBeGreaterThanOrEqual(0);
+    expect(dialogBox.x + dialogBox.width, "the dialog is inside the screen (right)").toBeLessThanOrEqual(viewport.width);
+    expect(dialogBox.y + dialogBox.height, "the dialog is inside the screen (bottom)").toBeLessThanOrEqual(viewport.height);
+    const overflow = await dialog.evaluate((element) => ({ page: document.documentElement.scrollWidth - document.documentElement.clientWidth, dialog: element.scrollWidth - element.clientWidth }));
+    expect(overflow.page, "no horizontal scroll of the page").toBeLessThanOrEqual(0);
+    expect(overflow.dialog, "no horizontal scroll of the dialog").toBeLessThanOrEqual(0);
+    const targets: Record<string, Rect> = {
+      "«Изменить»": change,
+      "«Масштаб»": await box(zoomOf(dialog)),
+      "«Сбросить»": await box(dialog.getByRole("button", { name: "Сбросить" })),
+      "«Отмена»": await box(dialog.getByRole("button", { name: "Отмена" })),
+      "«Применить»": await box(dialog.getByRole("button", { name: "Применить" })),
+    };
+    const stage = await box(stageOf(dialog));
+    testInfo.annotations.push({ type: "measure", description: `${testInfo.project.name} ${viewport.width}x${viewport.height}: dialog ${dialogBox.width.toFixed(1)}x${dialogBox.height.toFixed(1)} at ${dialogBox.x.toFixed(1)},${dialogBox.y.toFixed(1)}; stage ${stage.width.toFixed(1)}x${stage.height.toFixed(1)}; ${Object.entries(targets).map(([name, rect]) => `${name} ${rect.width.toFixed(1)}x${rect.height.toFixed(1)}`).join(", ")}` });
+    for (const [name, rect] of Object.entries(targets)) {
+      expect(rect.width, `${name} is at least 44 px wide`).toBeGreaterThanOrEqual(44);
+      expect(rect.height, `${name} is at least 44 px high`).toBeGreaterThanOrEqual(44);
+    }
+    expect(stage.width, "the stage is at least 280 px wide").toBeGreaterThanOrEqual(280);
+    await dialog.getByRole("button", { name: "Отмена" }).click();
+    await expect(dialog).toBeHidden();
+    expect(writes, "the UI contract never writes").toEqual([]);
+  });
+
+  test("[STAB-A11Y-03] D-66 motion off: no animation runs in the dialog when the animations are «Выключены»", async ({ page }) => {
+    const surface = guideSectionSurface;
+    const writes = trackWritesExceptContentPut(page);
+    await page.addInitScript(() => window.localStorage.setItem("portia-desktop-settings-v1", JSON.stringify({ motion: "off" })));
+    await openEditorTab(page, surface.tab, { content: surface.content });
+    await expect(page.locator("html"), "the animations are off").toHaveAttribute("data-motion", "off");
+    await surface.prepare(page);
+    const group = groupOf(surface, page);
+    await expect(group).toBeVisible();
+    const dialog = await openFraming(page, group);
+    await setZoom(dialog, 160);
+    const running = await dialog.evaluate((element) => ({
+      animations: (element as HTMLElement).getAnimations({ subtree: true }).length,
+      timed: [element, ...element.querySelectorAll("*")].filter((node) => { const style = getComputedStyle(node); return style.animationDuration.split(",").some((value) => parseFloat(value) > 0) || style.transitionDuration.split(",").some((value) => parseFloat(value) > 0); }).length,
+    }));
+    expect(running.animations, "no running animation or transition in the dialog").toBe(0);
+    expect(running.timed, "no element of the dialog has an animation or transition duration").toBe(0);
+    await dialog.getByRole("button", { name: "Отмена" }).click();
+    expect(writes, "the UI contract never writes").toEqual([]);
   });
 });
