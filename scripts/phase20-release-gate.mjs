@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 // Phase 20 release gate runner (20-30, prepares 20-13). Fail-closed: a gate is PASS only with proof.
 //   --plan                              prints the gate catalogue, runs nothing;
 //   --self-check                        clean worktree of HEAD -> node-version + tree-clean -> receipt -> evidence table -> worktree removed;
-//   --run --commit <sha> [--only a,b]   runs the gates in a clean temporary git worktree of that commit;
+//   --run --commit <sha> [--only a,b] [--npm-cli <path>]   runs the gates in a clean temporary git worktree of that commit;
 //   --verify-evidence [--evidence <p>]  fail-closed check of 20-RELEASE-EVIDENCE.md (written by 20-13 Task 2).
 // D-68 (20-13): visual acceptance is the owner's overall verdict from 20-58-SUMMARY.md plus the 20-12 baselines on fixed data. The three
 // offline gates (ui-contract-offline, visual-approved, visual-phase20) start the production server of the checkout under
@@ -95,15 +95,26 @@ const offlineStep = (extra, outputName, { snapshots = false } = {}) => ({
 const OFFLINE_FILES = [{ path: OFFLINE_HARNESS, kind: "ENV", reason: "нет обвязки офлайн-режима D-68" }];
 const nodeStep = (...args) => ({ file: "node", args });
 
-function displayStep(gateId, step, index) {
-  const parts = [step.file, ...step.args];
+const NPM_FILE = "npm.cmd";
+export const NPM_PATH_SOURCE = "PATH npm.cmd";
+const isNpmStep = (step) => step.file === NPM_FILE;
+
+// D-69 (G5): the npm of a release run must be explicit and recorded; a PATH wrapper outside the repository is not reproducible.
+// With `--npm-cli <npm-cli.js>` an npm step is `<Node of the runner> <npm-cli.js> <args>` (no shell, no PATH); without it `npm.cmd` from PATH.
+function invocation(file, args, npmCli) {
+  return file === NPM_FILE && npmCli ? { file: process.execPath, args: [npmCli, ...args] } : { file, args };
+}
+
+function displayStep(gateId, step, index, npmCli = null) {
+  const parts = isNpmStep(step) && npmCli ? ["node", npmCli, ...step.args] : [step.file, ...step.args];
   if (step.playwright) parts.push("--output", `<артефакты>/${step.outputName ?? `${gateId}-${index + 1}`}`);
   return parts.join(" ");
 }
 
+const commandOf = (gate, npmCli = null) => gate.steps.map((step, index) => displayStep(gate.id, step, index, npmCli)).join(" ; ");
+
 function defineGate(definition) {
-  const command = definition.steps.map((step, index) => displayStep(definition.id, step, index)).join(" ; ");
-  return Object.freeze({ requires: {}, ...definition, command });
+  return Object.freeze({ requires: {}, ...definition, command: commandOf(definition) });
 }
 
 const NEEDS_INSTALL = ["npm-ci"];
@@ -585,7 +596,8 @@ function evaluateStep(gate, step, run, context) {
  */
 export function runGate(gate, context) {
   const { deps, worktree, artifactsDir, results } = context;
-  const result = { id: gate.id, title: gate.title, command: gate.command, dataMode: dataModeOf(gate.id), status: "PASS", blockedKind: "", exitCode: null, reason: "", counts: null, artifacts: [], waived: false, waivedBy: [], first: null, detail: "" };
+  const { npmCli = null } = context;
+  const result = { id: gate.id, title: gate.title, command: npmCli ? commandOf(gate, npmCli) : gate.command, dataMode: dataModeOf(gate.id), status: "PASS", blockedKind: "", exitCode: null, reason: "", counts: null, artifacts: [], waived: false, waivedBy: [], first: null, detail: "" };
   const blocked = (kind, reason) => ({ ...result, status: "BLOCKED", blockedKind: kind, reason });
 
   for (const file of gate.requires.files ?? []) {
@@ -623,9 +635,10 @@ export function runGate(gate, context) {
       const stepNumber = index + 1;
       const args = step.playwright ? [...step.args, "--output", path.join(artifactsDir, step.outputName ?? `${gate.id}-${stepNumber}`)] : step.args;
       if (step.playwright) deps.fs.rmSync(path.join(worktree, PLAYWRIGHT_RESULTS), { force: true });
-      const run = deps.exec(step.file, args, { cwd: worktree, env: offline ? offline.env : deps.env, timeoutMs: step.playwright ? 90 * 60_000 : 30 * 60_000 });
+      const call = invocation(step.file, args, npmCli);
+      const run = deps.exec(call.file, call.args, { cwd: worktree, env: offline ? offline.env : deps.env, timeoutMs: step.playwright ? 90 * 60_000 : 30 * 60_000 });
       const logName = `${gate.id}-${stepNumber}.log`;
-      deps.fs.writeFileSync(path.join(artifactsDir, logName), `$ ${displayStep(gate.id, step, index)}\n# exit ${run.status}\n${run.stdout ?? ""}\n${run.stderr ?? ""}\n`);
+      deps.fs.writeFileSync(path.join(artifactsDir, logName), `$ ${displayStep(gate.id, step, index, npmCli)}\n# exit ${run.status}\n${run.stdout ?? ""}\n${run.stderr ?? ""}\n`);
       result.artifacts.push(logName);
       if (step.playwright) {
         result.artifacts.push(`${gate.id}-${stepNumber}-results.json`);
@@ -675,6 +688,14 @@ export function renderStatus(result) {
   return result.status;
 }
 
+/** `npm: <x.y.z> (<source>)`, or `npm: неизвестно (<source>): <error>` when the version could not be measured. */
+function npmLine(npm) {
+  const source = tableCell(npm.source ?? NPM_PATH_SOURCE);
+  if (npm.version) return `npm: ${npm.version} (${source})`;
+  const error = String(npm.error ?? "").replace(/\s+/g, " ").trim();
+  return `npm: неизвестно (${source})${error ? `: ${error}` : ""}`;
+}
+
 const renderCounts = (counts) => (counts ? `${counts.passed}/${counts.failed}/${counts.skipped}/${counts.flaky}` : "-");
 
 /**
@@ -687,6 +708,7 @@ export function renderEvidence(run) {
     "",
     `Commit: \`${run.commit}\``,
     `Node: ${run.node}`,
+    ...(run.npm ? [npmLine(run.npm)] : []),
     `Режим: ${run.partial ? `partial (${(run.only ?? []).join(", ")})` : "full"}`,
     `Начало: ${run.startedAt}`,
     `Каталог артефактов: \`${run.artifactsDir}\``,
@@ -969,6 +991,14 @@ export function verifyEvidence(markdown, deps = {}) {
   if (!commit || !/^[0-9a-f]{40}$/.test(commit)) errors.push("commit is missing or not a full 40-hex sha");
   else if (typeof deps.commitExists === "function" && !deps.commitExists(commit)) errors.push(`commit ${commit.slice(0, 12)} does not exist in this repository`);
   if (!/^Node:\s*v22\.13\.\d+\s*$/m.test(text)) errors.push("Node line is missing or is not 22.13.x");
+  // D-69 (G5): the npm that ran the gates is part of the evidence.
+  const npmValue = text.match(/^npm:[ \t]*(.*?)[ \t]*$/m)?.[1];
+  const npmSource = "(?:--npm-cli \\S.*|PATH npm\\.cmd)";
+  let npmUnknown = false;
+  if (npmValue === undefined) errors.push("npm line is missing: the npm that ran the gates must be recorded as «npm: <x.y.z> (<source>)» (D-69)");
+  else if (new RegExp(`^\\d+\\.\\d+\\.\\d+ \\(${npmSource}\\)$`).test(npmValue)) npmUnknown = false;
+  else if (new RegExp(`^неизвестно \\(${npmSource}\\)(?:: .*)?$`).test(npmValue)) npmUnknown = true;
+  else errors.push(`npm line is malformed ("${npmValue}"): expected «npm: <x.y.z> (--npm-cli <path>)» or «npm: <x.y.z> (PATH npm.cmd)»`);
   const mode = text.match(/^Режим:\s*(\S+)/m)?.[1];
   if (mode !== "full") errors.push(`run mode is "${mode ?? "missing"}": only a full run (every gate) is release evidence`);
 
@@ -1009,6 +1039,7 @@ export function verifyEvidence(markdown, deps = {}) {
   errors.push(...verifyVisualSection(text, deps, { stated: stated && VERDICTS.includes(stated) ? stated : undefined, gateRows: gates.rows }).errors);
   if (!stated || !VERDICTS.includes(stated)) errors.push(`verdict line «Итог:» is missing or unknown ("${stated ?? ""}")`);
   else {
+    if (npmUnknown && stated.startsWith("PASS")) errors.push(`npm line says the version is unknown: verdict ${stated} needs a measured npm version`);
     const rows = gates.rows;
     if (rows.length > 0) {
       const computed = aggregate(rows.map((row) => ({ id: row.id, status: row.status, waived: row.waived }))).verdict;
@@ -1137,10 +1168,40 @@ function defaultDeps() {
   };
 }
 
+/** The absolute, slash-normalised path of an existing `npm-cli.js`; anything else is refused before a worktree is created. */
+function validateNpmCli(value, deps) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (raw === "") throw new GateError("npm-cli-invalid", "--npm-cli needs the path of npm-cli.js");
+  const resolved = path.resolve(raw);
+  if (path.basename(resolved).toLowerCase() !== "npm-cli.js") throw new GateError("npm-cli-invalid", `${raw} is not an npm-cli.js file`);
+  let isFile = false;
+  try { isFile = deps.fs.existsSync(resolved) && deps.fs.statSync(resolved).isFile(); } catch { isFile = false; }
+  if (!isFile) throw new GateError("npm-cli-invalid", `${raw} does not exist or is not a file`);
+  return resolved.replace(/\\/g, "/");
+}
+
+/** `<npm> --version` once in the worktree, by the same invocation the gates use. An unmeasurable npm is recorded, not hidden. */
+function measureNpm(deps, worktree, npmCli, needed) {
+  const source = npmCli ? `--npm-cli ${npmCli}` : NPM_PATH_SOURCE;
+  if (!needed) return { version: null, source, error: "no npm gate in this run" };
+  const call = invocation(NPM_FILE, ["--version"], npmCli);
+  let run;
+  try {
+    run = deps.exec(call.file, call.args, { cwd: worktree, env: deps.env, timeoutMs: 120_000 });
+  } catch (error) {
+    return { version: null, source, error: clip(error?.message ?? error) };
+  }
+  if (run.error) return { version: null, source, error: `could not run: ${clip(run.error.message ?? run.error)}` };
+  const version = String(run.stdout ?? "").trim();
+  if (run.status !== 0) return { version: null, source, error: `exit ${run.status}: ${clip(`${run.stderr ?? ""} ${run.stdout ?? ""}`)}` };
+  if (!/^\d+\.\d+\.\d+$/.test(version)) return { version: null, source, error: `unexpected output of --version: ${clip(version)}` };
+  return { version, source };
+}
+
 /**
  * One run of the chosen gates in a temporary clean worktree of `commit`.
  * @param {any} deps
- * @param {{ commit: string, only?: string[] | null }} options
+ * @param {{ commit: string, only?: string[] | null, npmCli?: string | null }} options
  * @returns {any}
  */
 export function runRelease(deps, options) {
@@ -1148,6 +1209,7 @@ export function runRelease(deps, options) {
   const only = options.only && options.only.length > 0 ? options.only : null;
   if (only) for (const id of only) if (!GATE_BY_ID.has(id)) throw new GateError("unknown-gate", id);
   if (typeof options.commit !== "string" || options.commit === "" || /^-|\s/.test(options.commit)) throw new GateError("bad-commit", "pass a sha or ref after --commit");
+  const npmCli = options.npmCli === undefined || options.npmCli === null ? null : validateNpmCli(options.npmCli, deps);
   const selected = GATES.filter((gate) => !only || only.includes(gate.id));
   const startedAt = deps.now();
 
@@ -1168,7 +1230,8 @@ export function runRelease(deps, options) {
       waivers = deps.fs.existsSync(waiverFile) ? readWaivers(deps.fs.readFileSync(waiverFile, "utf8")) : null;
     }
     const results = [];
-    for (const gate of selected) results.push(runGate(gate, { deps, worktree: created.path, artifactsDir, results, waivers }));
+    const npm = measureNpm(deps, created.path, npmCli, selected.some((gate) => gate.steps.some(isNpmStep)));
+    for (const gate of selected) results.push(runGate(gate, { deps, worktree: created.path, artifactsDir, results, waivers, npmCli }));
 
     const treeClean = results.find((result) => result.id === "tree-clean");
     if (treeClean && treeClean.status === "PASS" && selected.some((gate) => gate.id !== "node-version" && gate.id !== "tree-clean")) {
@@ -1192,6 +1255,7 @@ export function runRelease(deps, options) {
       schema: SCHEMA,
       commit: created.commit,
       node: nodeVersion,
+      npm,
       startedAt,
       finishedAt: deps.now(),
       partial: Boolean(only),
@@ -1289,17 +1353,18 @@ export function main(argv = process.argv.slice(2), overrides = {}) {
     if (mode === "--run") {
       const commit = option(argv, "--commit");
       if (!commit) {
-        deps.err("usage: node scripts/phase20-release-gate.mjs --run --commit <sha> [--only id,id]\n");
+        deps.err("usage: node scripts/phase20-release-gate.mjs --run --commit <sha> [--only id,id] [--npm-cli <path>]\n");
         return 2;
       }
       const only = option(argv, "--only")?.split(",").map((id) => id.trim()).filter(Boolean) ?? null;
-      const run = runRelease(deps, { commit, only });
+      const npmCli = argv.includes("--npm-cli") ? option(argv, "--npm-cli") ?? "" : undefined;
+      const run = runRelease(deps, { commit, only, npmCli });
       deps.out(`${run.partial ? "partial " : ""}run ${run.commit.slice(0, 12)}: ${run.verdict}\n`);
       for (const result of run.results) deps.out(`  ${result.id}\t${renderStatus(result)}\texit ${result.exitCode ?? "-"}\t${result.reason}\n`);
       deps.out(`artifacts: ${run.artifactsDir}\n`);
       return run.verdict === "PASS" || run.verdict === "PASS-WITH-OWNER-WAIVERS" ? 0 : 1;
     }
-    deps.err("usage: node scripts/phase20-release-gate.mjs --plan | --self-check | --run --commit <sha> [--only id,id] | --verify-evidence [--evidence <path>]\n");
+    deps.err("usage: node scripts/phase20-release-gate.mjs --plan | --self-check | --run --commit <sha> [--only id,id] [--npm-cli <path>] | --verify-evidence [--evidence <path>]\n");
     return 2;
   } catch (error) {
     deps.err(`${error instanceof GateError ? error.message : `[PORTIA_RELEASE_GATE:unexpected] ${error instanceof Error ? error.message : "unknown"}`}\n`);
