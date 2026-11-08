@@ -147,12 +147,58 @@ export const rejectedIdsRound14 = [
   "template-builder-preview:pc",
 ];
 
+// 20-58: rows the owner rejected on 2026-11-08 on the 20-54 recapture whose bytes the fixes of 20-55 (template card D-65) and 20-56/20-57
+// (window «Видимая часть» D-66, D-67) must change: the editor frames of the image framing (the sliders are gone) and the template card in the window of
+// the normal size. The other 11 rejected rows may keep their bytes (see reaskedIdsRound16).
+export const rejectedIdsRound16 = [
+  ...["editor-image-framing-guide", "editor-image-framing-dossier"].flatMap((base) => devices.map((device) => `${base}:${device}`)),
+  "template-builder-preview:pc",
+];
+
+// 20-58: rejected on 2026-11-08 whose frame the fixes need not change (no card in the frame, the site shows the same frame, the phone card was already the
+// archive's). They are shown again; the same bytes can be accepted only by a re-ask that leaves a visible trace (reaskedRoundProblems).
+export const reaskedIdsRound16 = [
+  ...["template-builder-main", "template-builder-text", "template-builder-mutations", "guide-framed", "dossier-framed"].flatMap((base) => devices.map((device) => `${base}:${device}`)),
+  "template-builder-preview:phone",
+];
+
 const rejectedRounds = {
   11:{ heading: /^## 11\. [^\r\n]+\r?\n/m, ids: rejectedIds },
   12: { heading: /^## 12\. [^\r\n]+\r?\n/m, ids: rejectedIdsRound12 },
   13: { heading: /^## 13\. [^\r\n]+\r?\n/m, ids: rejectedIdsRound13 },
   14: { heading: /^## 14\. [^\r\n]+\r?\n/m, ids: rejectedIdsRound14 },
+  16: { heading: /^## 16\. [^\r\n]+\r?\n/m, ids: rejectedIdsRound16 },
 } as const;
+
+export const reaskRejectedOn = "2026-11-08";
+export const reaskMarker = "повторный вопрос 20-58";
+
+// Section 16, second table «Строка | Отклонённый hash | Просьба владельца | Почему байты могут не измениться»: every row of reaskedIdsRound16 has an entry.
+// A row whose candidate sha256 equals the rejected one may be accepted only with a date not earlier than the rejection and the marker «повторный вопрос 20-58»
+// in its note (the owner's verbatim answer follows the marker). Pending and «исправить» rows with the same bytes are fine; new bytes follow the ordinary rules.
+export function reaskedRoundProblems(text: string, rows: LedgerRow[]): string[] {
+  const section = text.split(rejectedRounds[16].heading)[1]?.split(/^## /m)[0] ?? "";
+  const rejected = new Map<string, string>();
+  const errors: string[] = [];
+  for (const line of section.split(/\r?\n/)) {
+    if (!line.startsWith("|")) continue;
+    const cells = line.slice(1, line.endsWith("|") ? -1 : undefined).split("|").map((cell) => cell.trim().replace(/^`|`$/g, ""));
+    if (cells.length !== 4 || !reaskedIdsRound16.includes(cells[0])) continue;
+    if (rejected.has(cells[0])) errors.push(`${cells[0]}: duplicate re-asked frame`);
+    rejected.set(cells[0], cells[1]);
+  }
+  for (const id of reaskedIdsRound16) {
+    const sha = rejected.get(id);
+    if (sha === undefined) { errors.push(`${id}: re-asked frame is missing from section 16`); continue; }
+    if (!/^[0-9a-f]{64}$/.test(sha)) { errors.push(`${id}: re-asked rejected sha256 is malformed`); continue; }
+    const row = rows.find((candidate) => candidate.id === id);
+    if (!row || row.candidateSha !== sha || row.verdict !== "принято") continue;
+    if (!isoDate.test(row.date) || row.date < reaskRejectedOn || !row.note.includes(reaskMarker)) {
+      errors.push(`${id}: the frame rejected on ${reaskRejectedOn} is accepted without the re-ask of 20-58`);
+    }
+  }
+  return errors;
+}
 
 // Section 11 (20-33, 2026-11-05); the signature is kept for the existing tests.
 export function rejectedFixProblems(text: string, rows: LedgerRow[], captureCommit: string | undefined, git?: GitRunner): string[] {
@@ -252,6 +298,8 @@ export function validateLedger(text: string, options: Options = {}): string[] {
   errors.push(...rejectedRoundProblems(text, rows, candidatesCommit, 12, options.git));
   errors.push(...rejectedRoundProblems(text, rows, candidatesCommit, 13, options.git));
   errors.push(...rejectedRoundProblems(text, rows, candidatesCommit, 14, options.git));
+  errors.push(...rejectedRoundProblems(text, rows, candidatesCommit, 16, options.git));
+  errors.push(...reaskedRoundProblems(text, rows));
   if (options.requireSetMembership) errors.push(...candidateMembershipProblems(rows, frontmatter.candidates_set));
   if (options.requireApproval && options.changedSince && /^[0-9a-f]{40}$/.test(candidatesCommit ?? "")) {
     errors.push(...staleCandidateProblems(candidatesCommit, { changedSince: options.changedSince }));
@@ -580,6 +628,170 @@ describe("20-54 recapture guard", () => {
   });
 });
 
+describe("20-58 recapture guard", () => {
+  const rejected = rejectedIdsRound16;
+  const reasked = reaskedIdsRound16;
+  // template_fix_commit (20-55, app/portia.css), framing_fix_commit (20-57, components/portia-image-framing.tsx).
+  const templateFix = "d1d7b0f177522a14303171621398ed12ecd7ded5";
+  const framingFix = "98af38704317b5ec3059c0d81867d4983bd03670";
+  const fixFor = (id: string) => id.startsWith("editor-image-framing-") ? framingFix : templateFix;
+  const heading = "\n## 16. Вердикт владельца 2026-11-08 по пересъёмке 20-54 (D-59..D-63)\n\nТекст раздела.\n";
+  const header = "\nРаунд 16: отклонённые кадры и коммиты исправления (20-55, 20-57, 20-58)\n\n| Строка | Отклонённый hash | Просьба владельца | Коммит исправления |\n| --- | --- | --- | --- |\n";
+  const reaskHeader = "\nРаунд 16: строки, показанные заново (тот же кадр можно принять только повторным вопросом 20-58)\n\n| Строка | Отклонённый hash | Просьба владельца | Почему байты могут не измениться |\n| --- | --- | --- | --- |\n";
+  const table = (ids: string[], hash = "d".repeat(64)) => `${header}${ids.map((id) => `| ${id} | ${hash} | исправить: тест | ${fixFor(id)} |`).join("\n")}\n`;
+  const reaskTable = (ids: string[], hash = "c".repeat(64)) => `${reaskHeader}${ids.map((id) => `| ${id} | ${hash} | исправить: тест | в кадре нет карточки |`).join("\n")}\n`;
+  const before16 = ledger.split(/^## 16\./m)[0];
+  const withSection = (ids = rejected, hash?: string, reaskIds = reasked, reaskHash?: string) => `${before16}${heading}${table(ids, hash)}${reaskTable(reaskIds, reaskHash)}`;
+  const capture = "346316129101a934c26f9305e6aeb03f75b5f458";
+  const rows = parseLedger(ledger).rows;
+  // The row `id` with the given cells, as a fixture row (the verdict cells decide the re-ask rule).
+  const row = (id: string, sha: string, verdict: string, date: string, note = ""): LedgerRow => ({
+    id, surface: "", state: "", device: "", status: "CANDIDATE", candidate: "x.png", candidateSha: sha, old: "-", oldSha: "-", note, verdict, date, approvedHash: sha === "-" ? "-" : sha,
+  });
+
+  test("round 16 lists 5 rejected frames: four image-framing frames of the editor and the template preview on a PC", () => {
+    assert.equal(rejected.length, 5);
+    assert.equal(new Set(rejected).size, 5);
+    assert.deepEqual([...rejected].sort(), ["editor-image-framing-dossier:pc", "editor-image-framing-dossier:phone", "editor-image-framing-guide:pc", "editor-image-framing-guide:phone", "template-builder-preview:pc"]);
+    assert.ok(rejectedRoundProblems(before16, rows, capture, 16).some((error) => error.includes("section 16: rejected frames and fix commits are missing")));
+    assert.deepEqual(rejectedRoundProblems(withSection(), rows, capture, 16), []);
+    assert.equal((ledger.match(/^## 16\. /gm) ?? []).length, 1);
+  });
+
+  test("the real ledger has the five rejected frames in section 16 with their fix commits", () => {
+    assert.deepEqual(rejectedRoundProblems(ledger, rows, ledgerFrontmatter(ledger).candidates_commit, 16), []);
+    const section = ledger.split(/^## 16\. [^\n]+\n/m)[1]?.split(/^## /m)[0] ?? "";
+    for (const id of rejected) {
+      const line = section.split(/\r?\n/).find((candidate) => candidate.startsWith(`| ${id} |`));
+      assert.ok(line, `${id} is in the real section 16`);
+      assert.ok(line.trim().endsWith(`| ${fixFor(id)} |`), `${id} names ${fixFor(id)}`);
+    }
+  });
+
+  test("a section 16 with a heading and no table names every one of the five rows", () => {
+    const errors = rejectedRoundProblems(`${before16}${heading}`, rows, capture, 16);
+    assert.deepEqual(errors, rejected.map((id) => `${id}: rejected frame is missing from section 16`));
+  });
+
+  test("a row missing from the round 16 table is an error; the 11 re-asked rows are not required there", () => {
+    for (const id of rejected) {
+      assert.ok(rejectedRoundProblems(withSection(rejected.filter((candidate) => candidate !== id)), rows, capture, 16).some((error) => error === `${id}: rejected frame is missing from section 16`), id);
+    }
+    for (const id of ["template-builder-preview:phone", "template-builder-main:pc", "guide-framed:phone", "dossier-framed:pc"]) {
+      assert.ok(!rejected.includes(id), id);
+      assert.deepEqual(rejectedRoundProblems(withSection(), rows, capture, 16).filter((error) => error.startsWith(id)), []);
+    }
+  });
+
+  test("the rejected bytes cannot be presented again (a candidate with the rejected sha256 fails)", () => {
+    for (const id of rejected) {
+      const same = rows.find((candidate) => candidate.id === id)!;
+      const errors = rejectedRoundProblems(withSection(rejected, same.candidateSha), rows, capture, 16);
+      assert.ok(errors.some((error) => error === `${id}: re-presents the rejected frame`), id);
+    }
+    assert.ok(rejectedRoundProblems(withSection(rejected, "xyz"), rows, capture, 16).some((error) => error.includes("rejected sha256 is malformed")));
+  });
+
+  test("fix commit: malformed, unverifiable, captured before the fix, git not runnable all fail closed", () => {
+    const fixture = withSection();
+    assert.deepEqual(rejectedRoundProblems(fixture, rows, capture, 16, () => ({ status: 0 })), []);
+    assert.ok(rejectedRoundProblems(fixture, rows, capture, 16, () => ({ status: 1 })).some((error) => error.includes("could not be verified")));
+    assert.ok(rejectedRoundProblems(fixture, rows, capture, 16, () => ({ status: 128 })).some((error) => error.includes("could not be verified")));
+    assert.ok(rejectedRoundProblems(fixture, rows, capture, 16, (args) => ({ status: args[0] === "merge-base" ? 1 : 0 })).some((error) => error.includes("captured before the fix")));
+    assert.ok(rejectedRoundProblems(fixture, rows, capture, 16, (args) => ({ status: args[0] === "merge-base" ? null : 0, error: "spawn git ENOENT" })).some((error) => error.includes("captured before the fix")));
+    assert.ok(rejectedRoundProblems(fixture, rows, capture, 16, () => ({ status: null, error: "spawn git ENOENT" })).some((error) => error.includes("could not be verified")));
+    for (const fix of [framingFix, templateFix]) {
+      assert.ok(rejectedRoundProblems(fixture.replaceAll(fix, "abc123"), rows, capture, 16).some((error) => error.includes("fix commit is not a full 40-hex hash")), fix);
+    }
+  });
+
+  test("each family names its own fix commit: image framing 20-57, template preview 20-55", () => {
+    assert.equal(fixFor("editor-image-framing-guide:pc"), framingFix);
+    assert.equal(fixFor("template-builder-preview:pc"), templateFix);
+    assert.notEqual(framingFix, templateFix);
+  });
+
+  test("the real candidate frames come from the code after the fixes (captured after every fix commit)", () => {
+    const commit = ledgerFrontmatter(ledger).candidates_commit;
+    for (const fix of [framingFix, templateFix]) {
+      const result = realGit(["merge-base", "--is-ancestor", fix, commit]);
+      assert.equal(result.status, 0, `${fix} is an ancestor of candidates_commit`);
+    }
+  });
+
+  test("rounds 11-14 keep working: validateLedger runs rounds 11, 12, 13, 14 and 16", () => {
+    const fixture = withSection(rejected.slice(1));
+    assert.ok(validateLedger(fixture).some((error) => error === `${rejected[0]}: rejected frame is missing from section 16`));
+    assert.ok(validateLedger(before16).some((error) => error.includes("section 16: rejected frames and fix commits are missing")));
+    assert.ok(!validateLedger(fixture).some((error) => error.includes("section 11") || error.includes("section 12") || error.includes("section 13") || error.includes("section 14")));
+    for (const round of [11, 12, 13, 14]) {
+      assert.ok(validateLedger(ledger.split(new RegExp(`^## ${round}\\.`, "m"))[0]).some((error) => error.includes(`section ${round}: rejected frames and fix commits are missing`)), `round ${round}`);
+    }
+  });
+
+  test("re-ask: 11 unique rows, none of them in round 16", () => {
+    assert.equal(reasked.length, 11);
+    assert.equal(new Set(reasked).size, 11);
+    assert.ok(reasked.every((id) => !rejected.includes(id)));
+    assert.ok(reasked.includes("template-builder-preview:phone"));
+    assert.equal(reasked.filter((id) => id.startsWith("template-builder-") && !id.startsWith("template-builder-preview")).length, 6);
+  });
+
+  test("re-ask: without the second table every one of the 11 rows is an error, in the ordinary and the strict run", () => {
+    const errors = reaskedRoundProblems(`${before16}${heading}${table(rejected)}`, rows);
+    assert.deepEqual(errors, reasked.map((id) => `${id}: re-asked frame is missing from section 16`));
+    assert.deepEqual(reaskedRoundProblems(before16, rows), reasked.map((id) => `${id}: re-asked frame is missing from section 16`));
+    const text = `${before16}${heading}${table(rejected)}`;
+    for (const requireApproval of [false, true]) {
+      const all = validateLedger(text, { requireApproval });
+      for (const id of reasked) assert.ok(all.includes(`${id}: re-asked frame is missing from section 16`), `${id} ${requireApproval}`);
+    }
+  });
+
+  test("re-ask: a malformed rejected hash and a duplicate are errors; the complete table gives none", () => {
+    assert.deepEqual(reaskedRoundProblems(withSection(rejected, undefined, reasked, "c".repeat(64)), rows), []);
+    assert.ok(reaskedRoundProblems(withSection(rejected, undefined, reasked, "xyz"), rows).some((error) => error.includes("re-asked rejected sha256 is malformed")));
+    assert.ok(reaskedRoundProblems(withSection(rejected, undefined, [...reasked, reasked[0]]), rows).some((error) => error === `${reasked[0]}: duplicate re-asked frame`));
+    assert.ok(reaskedRoundProblems(withSection(rejected, undefined, reasked.slice(1)), rows).some((error) => error === `${reasked[0]}: re-asked frame is missing from section 16`));
+  });
+
+  test("re-ask: the rejected bytes shown again may be pending or «исправить», but «принято» needs a date from 2026-11-08 and the marker", () => {
+    const id = "template-builder-main:pc";
+    const same = "b".repeat(64);
+    const text = withSection(rejected, undefined, reasked, same);
+    const accepted = "the frame rejected on 2026-11-08 is accepted without the re-ask of 20-58";
+    const marked = `Показан заново. ${reaskMarker}: «Да, принято» (дословно)`;
+    assert.deepEqual(reaskedRoundProblems(text, [row(id, same, "ОЖИДАЕТ", "-")]), []);
+    assert.deepEqual(reaskedRoundProblems(text, [row(id, same, "исправить: тест", "2026-11-09")]), []);
+    assert.deepEqual(reaskedRoundProblems(text, [row(id, same, "принято", "2026-11-09", marked)]), []);
+    assert.deepEqual(reaskedRoundProblems(text, [row(id, same, "принято", "2026-11-08", marked)]), []);
+    assert.deepEqual(reaskedRoundProblems(text, [row(id, same, "принято", "2026-11-09", "Показан заново без пометки")]), [`${id}: ${accepted}`]);
+    assert.deepEqual(reaskedRoundProblems(text, [row(id, same, "принято", "2026-11-07", marked)]), [`${id}: ${accepted}`]);
+    assert.deepEqual(reaskedRoundProblems(text, [row(id, same, "принято", "-", marked)]), [`${id}: ${accepted}`]);
+    assert.deepEqual(reaskedRoundProblems(text, [row(id, same, "принято", "2026-11-05", "")]), [`${id}: ${accepted}`]);
+  });
+
+  test("re-ask: new bytes follow the ordinary rules, the re-ask rule does not fire", () => {
+    const id = "guide-framed:phone";
+    const text = withSection(rejected, undefined, reasked, "b".repeat(64));
+    assert.deepEqual(reaskedRoundProblems(text, [row(id, "a".repeat(64), "принято", "2026-11-05")]), []);
+    assert.deepEqual(reaskedRoundProblems(text, [row(id, "a".repeat(64), "ОЖИДАЕТ", "-")]), []);
+    assert.deepEqual(reaskedRoundProblems(text, []), []);
+  });
+
+  test("re-ask: validateLedger reports the unmarked acceptance in the ordinary and the strict run", () => {
+    const id = "dossier-framed:phone";
+    const real = rows.find((candidate) => candidate.id === id)!;
+    const text = withSection(rejected, undefined, reasked).replace(new RegExp(`^\\| ${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\| c{64} \\|`, "m"), `| ${id} | ${real.candidateSha} |`);
+    const approved = editRow(text, id, (cells) => { cells[10] = "принято"; cells[11] = "2026-11-09"; cells[12] = cells[6]; });
+    for (const requireApproval of [false, true]) {
+      assert.ok(validateLedger(approved, { requireApproval }).some((error) => error === `${id}: the frame rejected on 2026-11-08 is accepted without the re-ask of 20-58`), String(requireApproval));
+    }
+    const marked = editRow(approved, id, (cells) => { cells[9] = `${cells[9]} ${reaskMarker}: «Да»`; });
+    assert.ok(!validateLedger(marked).some((error) => error.includes("without the re-ask of 20-58")));
+  });
+});
+
 describe("20-VISUAL-APPROVAL ledger structure (fail-closed)", () => {
   test("the committed ledger is structurally complete", () => {
     const errors = validateLedger(ledger, { fileSha, git: realGit });
@@ -698,7 +910,12 @@ describe("20-VISUAL-APPROVAL ledger structure (fail-closed)", () => {
       .map((line) => {
         if (!line.startsWith("| ")) return line;
         const cells = line.slice(1, -1).split("|").map((cell) => cell.trim());
-        if (cells.length === 13 && cells[4] === "CANDIDATE") { cells[10] = "принято"; cells[11] = "2026-11-05"; cells[12] = cells[6]; return `| ${cells.join(" | ")} |`; }
+        if (cells.length === 13 && cells[4] === "CANDIDATE") {
+          cells[10] = "принято"; cells[11] = "2026-11-05"; cells[12] = cells[6];
+          // 20-58: a frame rejected on 2026-11-08 and shown again with the same bytes is accepted only by the re-ask (date from 2026-11-08, marker in the note).
+          if (reaskedIdsRound16.includes(cells[0])) { cells[11] = "2026-11-09"; cells[9] = `${cells[9]} ${reaskMarker}: «тест»`; }
+          return `| ${cells.join(" | ")} |`;
+        }
         if (cells.length === 5 && cells[0].startsWith("q-")) { cells[3] = "решено"; cells[4] = "2026-11-05"; return `| ${cells.join(" | ")} |`; }
         return line;
       })
