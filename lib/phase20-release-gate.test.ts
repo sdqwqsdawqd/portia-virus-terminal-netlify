@@ -1328,10 +1328,17 @@ function chainDeps(files: Record<string, string>, { known = [OWNER_COMMIT, COMMI
   return { deps: { root: "virtual-root", fs, git }, calls };
 }
 
+/** The effective verdict of the chain, asserted to be readable (null only when 20-58-SUMMARY.md is missing). */
+function effectiveOf(deps: unknown) {
+  const effective = gate.readEffectiveOwnerVerdict(deps);
+  assert.ok(effective, "20-58-SUMMARY.md must be readable");
+  return effective;
+}
+
 test("readEffectiveOwnerVerdict: without links the result is the 20-58 verdict, unchanged (the chain has nothing to add)", () => {
   assert.equal(typeof gate.readEffectiveOwnerVerdict, "function");
   const { deps } = chainDeps({});
-  const effective = gate.readEffectiveOwnerVerdict(deps);
+  const effective = effectiveOf(deps);
   assert.deepEqual({ verdict: effective.verdict, date: effective.date, commit: effective.commit }, gate.readOwnerVerdict(OWNER_SUMMARY()));
   assert.equal(effective.source, "20-58-SUMMARY.md");
   assert.equal(effective.chainError, "");
@@ -1343,14 +1350,14 @@ test("readEffectiveOwnerVerdict: without links the result is the 20-58 verdict, 
 
 test("readEffectiveOwnerVerdict: a summary of plan 12 or 13 with owner_verdict fields is not a link; only plans after 58 are", () => {
   const { deps } = chainDeps({ "20-12-SUMMARY.md": linkSummary({ plan: 12, renews: null, commit: OWNER_COMMIT, date: "2026-11-08" }), "20-60-SUMMARY.md": "---\nplan: 60\n---\n\nТекст про owner_verdict_renews в теле.\n" });
-  const effective = gate.readEffectiveOwnerVerdict(deps);
+  const effective = effectiveOf(deps);
   assert.equal(effective.source, "20-58-SUMMARY.md");
   assert.equal(effective.chainError, "");
 });
 
 test("readEffectiveOwnerVerdict: one valid link (renews = 20-58 commit, descendant, date not earlier) becomes the effective verdict", () => {
   const { deps, calls } = chainDeps({ "20-64-SUMMARY.md": linkSummary({ plan: 64 }) });
-  const effective = gate.readEffectiveOwnerVerdict(deps);
+  const effective = effectiveOf(deps);
   assert.equal(effective.verdict, "accepted");
   assert.equal(effective.date, "2026-11-09");
   assert.equal(effective.commit, COMMIT_B);
@@ -1371,7 +1378,7 @@ test("readEffectiveOwnerVerdict: links are ordered by plan number, not by file l
     "20-65-SUMMARY.md": linkSummary({ plan: 65, commit: COMMIT_C, renews: COMMIT_B, date: "2026-11-10", verdict: "accepted" }),
     "20-64-SUMMARY.md": linkSummary({ plan: 64 }),
   });
-  const effective = gate.readEffectiveOwnerVerdict(deps);
+  const effective = effectiveOf(deps);
   assert.equal(effective.source, "20-65-SUMMARY.md");
   assert.equal(effective.commit, COMMIT_C);
   assert.equal(effective.date, "2026-11-10");
@@ -1380,7 +1387,7 @@ test("readEffectiveOwnerVerdict: links are ordered by plan number, not by file l
 
 test("readEffectiveOwnerVerdict: a link that renews a foreign commit breaks the chain: ОЖИДАЕТ ВЛАДЕЛЬЦА, the run is never above BLOCKED", () => {
   const { deps } = chainDeps({ "20-64-SUMMARY.md": linkSummary({ plan: 64, renews: COMMIT_FOREIGN }) }, { known: [OWNER_COMMIT, COMMIT_B, COMMIT_FOREIGN] });
-  const effective = gate.readEffectiveOwnerVerdict(deps);
+  const effective = effectiveOf(deps);
   assert.match(effective.chainError, /^цепочка вердиктов нарушена: 20-64-SUMMARY\.md/);
   assert.equal(effective.verdict, "");
   assert.equal(gate.ownerStatusText(effective), "ОЖИДАЕТ ВЛАДЕЛЬЦА");
@@ -1404,7 +1411,7 @@ test("readEffectiveOwnerVerdict: every other broken link is rejected the same wa
   ];
   for (const [name, files, options] of broken) {
     const { deps } = chainDeps(files, options);
-    const effective = gate.readEffectiveOwnerVerdict(deps);
+    const effective = effectiveOf(deps);
     assert.match(effective.chainError, /^цепочка вердиктов нарушена: 20-64-SUMMARY\.md/, name);
     assert.equal(gate.ownerStatusText(effective), "ОЖИДАЕТ ВЛАДЕЛЬЦА", name);
   }
@@ -1415,14 +1422,14 @@ test("readEffectiveOwnerVerdict: a valid link behind a broken one is not used; t
     "20-64-SUMMARY.md": linkSummary({ plan: 64, renews: COMMIT_FOREIGN }),
     "20-65-SUMMARY.md": linkSummary({ plan: 65, commit: COMMIT_C, renews: OWNER_COMMIT, date: "2026-11-10" }),
   });
-  const effective = gate.readEffectiveOwnerVerdict(deps);
+  const effective = effectiveOf(deps);
   assert.match(effective.chainError, /20-64-SUMMARY\.md/);
   assert.equal(gate.ownerStatusText(effective), "ОЖИДАЕТ ВЛАДЕЛЬЦА");
 });
 
 test("readEffectiveOwnerVerdict: a link with fixes-requested is «ИСПРАВИТЬ (владелец)» and the run is FAIL", () => {
   const { deps } = chainDeps({ "20-64-SUMMARY.md": linkSummary({ plan: 64, verdict: "fixes-requested" }) });
-  const effective = gate.readEffectiveOwnerVerdict(deps);
+  const effective = effectiveOf(deps);
   assert.equal(effective.chainError, "");
   assert.equal(gate.ownerStatusText(effective), "ИСПРАВИТЬ (владелец) 2026-11-09");
   const rows = gate.visualAcceptanceRows({ owner: effective, baselines: { commit: OWNER_COMMIT, rows: 56 }, changed: [], releaseCommit: COMMIT });
@@ -1463,15 +1470,15 @@ test("readEffectiveOwnerVerdict on a real git repository: descendant is accepted
     const base = OWNER_SUMMARY().replace(OWNER_COMMIT, baseSha);
     writeFileSync(path.join(phase, "20-58-SUMMARY.md"), base);
     writeFileSync(path.join(phase, "20-64-SUMMARY.md"), linkSummary({ plan: 64, commit: childSha, renews: baseSha }));
-    const good = gate.readEffectiveOwnerVerdict({ root: repo, fs: nodeFs, git });
+    const good = effectiveOf({ root: repo, fs: nodeFs, git });
     assert.equal(good.chainError, "");
     assert.equal(good.commit, childSha);
     writeFileSync(path.join(phase, "20-64-SUMMARY.md"), linkSummary({ plan: 64, commit: sideSha, renews: childSha }));
-    assert.match(gate.readEffectiveOwnerVerdict({ root: repo, fs: nodeFs, git }).chainError, /цепочка вердиктов нарушена: 20-64-SUMMARY\.md/);
+    assert.match(effectiveOf({ root: repo, fs: nodeFs, git }).chainError, /цепочка вердиктов нарушена: 20-64-SUMMARY\.md/);
     writeFileSync(path.join(phase, "20-64-SUMMARY.md"), linkSummary({ plan: 64, commit: sideSha, renews: baseSha }));
-    assert.equal(gate.readEffectiveOwnerVerdict({ root: repo, fs: nodeFs, git }).chainError, "", "a sibling commit that descends from the previous link commit is valid");
+    assert.equal(effectiveOf({ root: repo, fs: nodeFs, git }).chainError, "", "a sibling commit that descends from the previous link commit is valid");
     writeFileSync(path.join(phase, "20-64-SUMMARY.md"), linkSummary({ plan: 64, commit: baseSha, renews: childSha }));
-    assert.match(gate.readEffectiveOwnerVerdict({ root: repo, fs: nodeFs, git }).chainError, /цепочка вердиктов нарушена/, "an ancestor of the previous commit is not a descendant");
+    assert.match(effectiveOf({ root: repo, fs: nodeFs, git }).chainError, /цепочка вердиктов нарушена/, "an ancestor of the previous commit is not a descendant");
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }
