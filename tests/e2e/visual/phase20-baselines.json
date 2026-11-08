@@ -9,6 +9,240 @@
   "data": "offline-заглушка tests/e2e/harness/offline-supabase.cjs: пустой portia_content -> стартовый контент сайта, выдуманные публичные значения OFFLINE_ENV; production-сборка во временной копии, next start на 127.0.0.1:3100, Node 22.13.1, chromium-desktop 1440x900 DPR 1 и chromium-phone (Pixel 7); сцены с подменёнными чтениями кандидатных спеков — UI-контракт, не доказательство ролей, сохранения или живого источника данных; captureCommit — коммит, с которого собрана production-сборка (код продукта равен ownerVerdict.commit)",
   "rows": [
     {
+      "snapshot": "tests/e2e/visual/__screenshots__/application-guide--chromium-desktop.png",
+      "sha256": "a31261181b611677682a2492665445f0d70486d2f8fbb5aa5489526c92204dec",
+      "supersedes": "bbe2e065e67d55ca2842c49c92aa5aa17bda0dae9f20317407a4277bb64ca83a",
+      "class": "accepted-redesign",
+      "surface": "application-guide--chromium-desktop",
+      "decisions": [
+        "D-21",
+        "D-56",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Справочник: микроскоп пустого состояния D-21, подписи D-56; паук нового вида D-50/D-53. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/application-information--chromium-desktop.png",
+      "sha256": "e0d7021601cf450232557d6e5fddda824d4abe8cb1df4f5be76a1aff7ce8d65e",
+      "supersedes": "2c95613f64296a671ff781ae87d1eb6c32811b1a514aeb70082ef69f862181a5",
+      "class": "fixed-data",
+      "surface": "application-information--chromium-desktop",
+      "decisions": [
+        "D-56",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Информация: те же окно и разметка, но стартовый контент сайта вместо живых данных Phase 15 («Что такое вирусы?» вместо «Вирус»); подписи D-56, паук нового вида. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/application-search--chromium-desktop.png",
+      "sha256": "8d46c6d349153b620763f6c274b47730994840fcc7ba58bb81f45775c7e96d4a",
+      "supersedes": "7fdcaf5d14c1d8be15f834d7bd5a7a3d2f8f7ae70720c8717474dca4c0deeb63",
+      "class": "accepted-redesign",
+      "surface": "application-search--chromium-desktop",
+      "decisions": [
+        "D-56",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Глобальный поиск: подписи D-56 (заголовок, подсказки), размер и положение окна на принятом коде, паук нового вида. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/application-settings--chromium-desktop.png",
+      "sha256": "56e5b02d31438714db7e3cc6e0aa351af1722cad51cc42315eb19b97405d18d1",
+      "supersedes": "005bc62cbc1160040ad8a62ecbc532171c0e46f09ac3f2ea66a777c1060a9e61",
+      "class": "accepted-redesign",
+      "surface": "application-settings--chromium-desktop",
+      "decisions": [
+        "D-56",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Настройки: подписи D-56, размер окна на принятом коде, паук нового вида. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/application-trash--chromium-desktop.png",
+      "sha256": "f022c02111392d54530c0fdf6690f26f71fb1a0f79312aa2f103ba4c4a1b4d85",
+      "supersedes": "1465c070f626396724239817801f35812c999e6aa3b7f95b1eccc1b90ede8619",
+      "class": "fixed-data",
+      "surface": "application-trash--chromium-desktop",
+      "decisions": [
+        "D-56",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Корзина: стартовый контент (три файла вирусов) вместо данных Phase 15; подписи D-56, паук нового вида. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/application-virus-archive--chromium-desktop.png",
+      "sha256": "9a24671b774dac49266b90f9f65422be59141e67374cf9a16d4df7e69bdf39f0",
+      "supersedes": "83582e367f1d9eaa274a9610c5225667b896e73be2ad0f01b7152274b6169226",
+      "class": "fixed-data",
+      "surface": "application-virus-archive--chromium-desktop",
+      "decisions": [
+        "D-56",
+        "D-39",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "База вирусов: стартовый контент (МОРОК, АРХАИЯ, КАЛЛИСТО) вместо «НОВЫЙ ВИРУС» Phase 15; подписи D-56, паук нового вида. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/desktop-clean--chromium-desktop.png",
+      "sha256": "f8c78ec2d573aa29992a7fa8d00d3fe05a32d14a580ab4aa7bdb470abaeaea8a",
+      "supersedes": "3b10ee74ca67423b452afb17290fe54525b1f7c36f7890573895b1755d42d72b",
+      "class": "accepted-redesign",
+      "surface": "desktop-clean--chromium-desktop",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/desktop-clean--chromium-dpr125.png",
+      "sha256": "45d9baf717c2697b0ca78a62d89849e735ceda0ff581cdc8f880a860c3a2595b",
+      "supersedes": "392929a3b606fe9a278a84f11ffc850c995a457f50ae2196f0aa5ccc51f36c02",
+      "class": "accepted-redesign",
+      "surface": "desktop-clean--chromium-dpr125",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/desktop-clean--chromium-phone.png",
+      "sha256": "bc75eb8ce785ed81809eb9ee2b0b3675c06cdea523af43cc00418938336fe822",
+      "supersedes": "ad428349748fb41068cc5210493407e24ea77c0387e0374fa1194da6f2181c02",
+      "class": "accepted-redesign",
+      "surface": "desktop-clean--chromium-phone",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/desktop-clean--firefox-desktop.png",
+      "sha256": "2aaa3ed1c5cf745538635cac10631430a4d0f1a0668e0f4247200a03c72b7360",
+      "supersedes": "27122e44710feee6c694b3be50ecba151b86eb7e2849e0bd25846e0a5d0ef664",
+      "class": "accepted-redesign",
+      "surface": "desktop-clean--firefox-desktop",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/desktop-dpr125--chromium-dpr125.png",
+      "sha256": "45d9baf717c2697b0ca78a62d89849e735ceda0ff581cdc8f880a860c3a2595b",
+      "supersedes": "d38c7043ecd15abef2bb3196ac457e7581ea498a9d247cd4a53ce586afb1383b",
+      "class": "accepted-redesign",
+      "surface": "desktop-dpr125--chromium-dpr125",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/desktop-start-open--chromium-desktop.png",
+      "sha256": "dd08d85d07fc52ba90dd2237ff47e005888c677e8728bca203db297e24faee16",
+      "supersedes": "c0b524e77b351ef695377b767a40720b98cf71ccc79da76552fcdb3a92b799a3",
+      "class": "accepted-redesign",
+      "surface": "desktop-start-open--chromium-desktop",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Меню «PORTIA OS» (Start): Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/desktop-start-open--chromium-dpr125.png",
+      "sha256": "22642b1dd9c286c0195bcffa45af2bc2ad231be4a6cfa8278b46f5f9af9d6b78",
+      "supersedes": "0e1cae7fbc20e7080f653f1bc5a20e0747be5d4a682ff659650f7ba9dc2aa2c7",
+      "class": "accepted-redesign",
+      "surface": "desktop-start-open--chromium-dpr125",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Меню «PORTIA OS» (Start): Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/desktop-start-open--chromium-phone.png",
+      "sha256": "e4807a79d0e1f289b365d5770cc1129ea4d7b7c2ae5659817913b90bfb97a82f",
+      "supersedes": "2f01992b92484100635276a90dcb7032d54323d6d6db1d77ef25f20d8115e129",
+      "class": "accepted-redesign",
+      "surface": "desktop-start-open--chromium-phone",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Меню «PORTIA OS» (Start): Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/desktop-start-open--firefox-desktop.png",
+      "sha256": "15242cea3e2d99cbb6756ebb6d0fb545e6d51158347aa3501293ebc412f22dfc",
+      "supersedes": "8670df147c9e3cfb439f63bb21ebe1d39c1daa3581e28d73b76369eb5e3219b4",
+      "class": "accepted-redesign",
+      "surface": "desktop-start-open--firefox-desktop",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Меню «PORTIA OS» (Start): Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/desktop-start-open--webkit-phone.png",
+      "sha256": "32c0fc939e37c8c71e5b10ec834682eab229001c7e934e64d83952b24dbf0863",
+      "supersedes": "c48f035e6ae751de1558f1dc6541dc4d6cb0c14cb98c860ce6257d2f9355948e",
+      "class": "accepted-redesign",
+      "surface": "desktop-start-open--webkit-phone",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Меню «PORTIA OS» (Start): Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/editor-signed-out-login--chromium-desktop.png",
+      "sha256": "b3a9423b8c3e640694f374b185aa7dab422f435d0de957d5b73eef791404e708",
+      "supersedes": "bc02c956de7f45838f82e1434a2550d5495146359aa0e02922b1568556463f3e",
+      "class": "accepted-redesign",
+      "surface": "editor-signed-out-login--chromium-desktop",
+      "decisions": [
+        "D-56"
+      ],
+      "reason": "Страница «Вход»: короткая подсказка D-56 («Доступ выдаёт владелец сайта.» без первой строки). Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/editor-visitor-denied--chromium-desktop.png",
+      "sha256": "5fb49c0d985ded333d8e107d742dd36b1dc8aaf2e0d7453988f59f775a3a222d",
+      "supersedes": "3f118d1816303a095453c0ac0d3b624e872afd868762b35e5969f1d0b19d0101",
+      "class": "accepted-redesign",
+      "surface": "editor-visitor-denied--chromium-desktop",
+      "decisions": [
+        "D-56",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Настройки без входа: подписи D-56, размер окна, паук нового вида. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
       "snapshot": "tests/e2e/visual/__screenshots__/phase20-class-icons--chromium-desktop.png",
       "sha256": "a8951ac2f65ffbbb74f6901ab52885de0dbcbe9f6ba817133d6889e46026fb03",
       "supersedes": null,
@@ -409,6 +643,71 @@
         "D-65"
       ],
       "reason": "Эталон принятого вида (20-58), анимации «Выключены»; подменено одно чтение статуса участника — UI-контракт, не доказательство ролей"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phone-chromium--chromium-phone.png",
+      "sha256": "bc75eb8ce785ed81809eb9ee2b0b3675c06cdea523af43cc00418938336fe822",
+      "supersedes": "2e4945364dac6a944c925cf966dbd451861148601230fd5ef8979244dd8d4f20",
+      "class": "accepted-redesign",
+      "surface": "phone-chromium--chromium-phone",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/promotion-participant-lookup--chromium-desktop.png",
+      "sha256": "d8bb1689e8cc85d47295973bdba856ce8b964aacf4154ff355c7e8dd2290fc51",
+      "supersedes": "bfe7bba30de45c11c4abb57a9585387e3212e0c7aedab0977dbd8c6346509508",
+      "class": "accepted-redesign",
+      "surface": "promotion-participant-lookup--chromium-desktop",
+      "decisions": [
+        "D-18",
+        "D-20",
+        "D-56"
+      ],
+      "reason": "«Повышение», проверка участника: переработанное оформление окна D-18/D-20, подписи D-56, паук нового вида. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/window-search-maximized--firefox-desktop.png",
+      "sha256": "dd55ce35703b178e31b0939f1c06d0a9e7b842b77c2cb3a5b2fedb322675e97f",
+      "supersedes": "1c1c8c700b388aab1d045633a1aa61e4c5e648c691bcebcf66c9eb1473e90a1c",
+      "class": "accepted-redesign",
+      "surface": "window-search-maximized--firefox-desktop",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Окно «Глобальный поиск» (Firefox): подписи D-56 и вид окна на принятом коде; Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/window-search-minimized--firefox-desktop.png",
+      "sha256": "6518c67ceb8d2dfc549ec2d292a876f66004adc2d633e29cacafa45f572ec15f",
+      "supersedes": "d5513ffd650954cb8f7b4dd2eb6f7b0abbdd88e847d0f364e2f230619c5e5f8c",
+      "class": "accepted-redesign",
+      "surface": "window-search-minimized--firefox-desktop",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Окно «Глобальный поиск» (Firefox): подписи D-56 и вид окна на принятом коде; Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/window-search-restored--firefox-desktop.png",
+      "sha256": "beb1a18462dcb68ce92f0bff528d1b9314347ab0e6a8da4a787f55bbaada9f72",
+      "supersedes": "3242f0969b6ec36fb2fc1a1f62c27a7f2a49655cff79cc8d5cc2d3075469c17c",
+      "class": "accepted-redesign",
+      "surface": "window-search-restored--firefox-desktop",
+      "decisions": [
+        "D-45",
+        "D-50",
+        "D-53"
+      ],
+      "reason": "Окно «Глобальный поиск» (Firefox): подписи D-56 и вид окна на принятом коде; Оболочка рабочего стола: паук нового вида стоит на месте покоя (D-45, D-50, D-53); сцена стабилизирована (класс (в)): движение выключено до загрузки, раньше паук стоял там, где его застало выключение, и кадр менялся между двумя прогонами на 1100-4800 px. Решение 20-58: принят весь вид сайта на коде 0c2a59d1d1a7; эталон снят на стартовом контенте (offline-заглушка)."
     }
   ]
 }
