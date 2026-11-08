@@ -1995,3 +1995,258 @@ test("counts cell (D-69 G4): `(по проекту N)` is written, read back, an
   const e2e = gate.renderEvidence(fullRun({}, withSkips("e2e-full", 2)));
   assert.deepEqual(verify(e2e), []);
 });
+
+// --- 20-15 Task 1 (D-70, D-68, D-12): lineage RC -> FRC, release verdict and phase closure ------------------------------------------
+
+const D70_COMMIT = "03e890a0135ff20f02b4ab68fe39642fff84c39f";
+const RC_COMMIT = "f49aa00f2b9833f962fa3fa890117e98a4abf362";
+const FRC_COMMIT = "9".repeat(40);
+const D70_WORDS = "Можно ли сразу перейти к след фазе? ведь меня все устраивает";
+const D70_LEDGER_VERDICT = "ПРИНЯТО ВЛАДЕЛЬЦЕМ БЕЗ UAT (D-70)";
+const D70_CONTEXT = `# 20-CONTEXT\n\n- **D-70:** Физическая приёмка 20-14 заменяется принятием риска владельцем. Дословно (2026-11-08): «${D70_WORDS}». Оркестратор предложил три варианта; владелец ответил «2».\n`;
+
+type UatOptions = { pc?: string; phone?: string; step?: string; stepCommit?: string; section?: boolean; words?: string; rc?: string; record?: string; answer?: string };
+
+function uatText(o: UatOptions = {}) {
+  const { pc = D70_LEDGER_VERDICT, phone = D70_LEDGER_VERDICT, step = "НЕ ПРОВЕРЕНО (D-70)", stepCommit = "-", section = true, words = D70_WORDS, rc = RC_COMMIT, record = D70_COMMIT, answer = "2" } = o;
+  const head = "| ID | Шаг | Ожидаемый результат | Требования | Зависит от | Статус | Устройство | Commit | Дата | Заметка | Скриншот |\n|----|----|----|----|----|----|----|----|----|----|----|";
+  const lines = [
+    "---", "phase: PORTIA-20", "artifact: uat-ledger", "status: accepted-risk-d70", `release_candidate_commit: ${rc}`, "---", "",
+    "# 20-UAT", "", "## Prerequisites", "",
+    "| ID | Что | Источник | Статус | Дата | Примечание |", "|----|----|----|----|----|----|",
+    "| P19-GAP-20 | gap | 19-20-SUMMARY.md | PASS | 2026-11-04 | prerequisite, не приёмка |", "",
+    "## Чек-лист PC", "", head, `| INFO-PC-01 | шаг | ожидание | STAB-APP-04 | - | ${step} | - | ${stepCommit} | - | n | - |`, "",
+    "## Чек-лист phone", "", head, `| INFO-PHONE-01 | шаг | ожидание | STAB-APP-04 | - | ${step} | - | ${stepCommit} | - | n | - |`, "",
+    "## Вердикты", "", `Вердикт PC: ${pc}`, `Вердикт phone: ${phone}`, "",
+  ];
+  if (section) {
+    lines.push("## D-70: принятие риска владельцем без UAT", "", "- Дата: 2026-11-08", `- Слова владельца (дословно): «${words}»`, `- Ответ владельца на варианты (дословно): «${answer}»`,
+      `- Запись решения: 20-CONTEXT.md D-70, commit ${record}`, `- Release commit: ${rc} (20-63-SUMMARY.md, 20-RELEASE-EVIDENCE.md)`, "");
+  }
+  return lines.join("\n");
+}
+
+const BLOCKED_LANE = (lanes: string[]) => (id: string) => (lanes.includes(id) ? { status: "BLOCKED", blockedKind: "ENV", exitCode: null, counts: null, reason: "no target" } : {});
+const LINEAGE_VISUAL: Row[] = [
+  { id: "Общий вердикт", status: "ПРИНЯТО ВЛАДЕЛЬЦЕМ 2026-11-08", evidence: `owner_verdict: accepted; owner_verdict_date: 2026-11-08; owner_verdict_commit: ${OWNER_COMMIT}; источник: 20-58-SUMMARY.md` },
+  { id: "Эталоны 20-12", status: "60 строк реестра", evidence: `phase20-baselines.json; коммит вердикта реестра: ${OWNER_COMMIT}` },
+  { id: "Код продукта", status: "НЕ ИЗМЕНЁН", evidence: `git diff --name-only ${OWNER_COMMIT.slice(0, 12)} ${FRC_COMMIT.slice(0, 12)}` },
+];
+const lineageEvidence = (verdict = "PASS", lanes: string[] = [], commit = FRC_COMMIT) =>
+  gate.renderEvidence(fullRun({ commit, verdict, visual: LINEAGE_VISUAL }, BLOCKED_LANE(lanes)));
+const reconciliationText = (o: { runner?: string | null; release?: string | null; closure?: string | null; frc?: string; rc?: string } = {}) => {
+  const { runner = "PASS", release = "PASS-WITH-OWNER-WAIVERS", closure = "С ПРИНЯТЫМИ ДОЛГАМИ (D-70)", frc = FRC_COMMIT, rc = RC_COMMIT } = o;
+  return ["---", "phase: PORTIA-20", `final_release_commit: ${frc}`, `release_candidate_commit: ${rc}`, `plan_base: ${"1".repeat(40)}`, "---", "", "# 20-RECONCILIATION", "",
+    ...(runner === null ? [] : [`Итог раннера на FRC: ${runner}`]), ...(release === null ? [] : [`Итог релиза: ${release}`]), ...(closure === null ? [] : [`Закрытие фазы: ${closure}`]), ""].join("\n");
+};
+
+type LineageOptions = {
+  files?: Record<string, string | null>;
+  changes?: Record<string, string[] | null>;
+  unknown?: string[];
+  notAncestors?: string[];
+};
+
+function lineageRepo(o: LineageOptions = {}) {
+  const dir = gate.PHASE_DIR;
+  const files: Record<string, string | null> = {
+    [`${dir}/20-UAT.md`]: uatText(),
+    [`${dir}/20-CONTEXT.md`]: D70_CONTEXT,
+    [`${dir}/20-63-SUMMARY.md`]: `---\nplan: 63\nrelease_commit: ${RC_COMMIT}\nverdict: BLOCKED\n---\n`,
+    [`${dir}/20-58-SUMMARY.md`]: OWNER_SUMMARY(),
+    [`${dir}/20-SECURITY-MATRIX.md`]: CLEAN_MATRIX,
+    [`${dir}/20-RELEASE-EVIDENCE.md`]: lineageEvidence(),
+    [`${dir}/20-RECONCILIATION.md`]: reconciliationText(),
+    [gate.BASELINES_JSON]: JSON.stringify({ ownerVerdict: { commit: OWNER_COMMIT }, rows: [{}, {}] }),
+    ...(o.files ?? {}),
+  };
+  const rel = (target: string) => path.relative("virtual-root", target).split(path.sep).join("/");
+  const live = () => Object.entries(files).filter(([, text]) => text !== null);
+  const fs = {
+    existsSync: (target: string) => files[rel(target)] != null || rel(target) === dir,
+    readFileSync: (target: string) => {
+      const text = files[rel(target)];
+      if (text == null) throw new Error(`ENOENT ${target}`);
+      return text;
+    },
+    readdirSync: (target: string) => live().filter(([name]) => path.posix.dirname(name) === rel(target)).map(([name]) => path.posix.basename(name)),
+  };
+  const known = [OWNER_COMMIT, RC_COMMIT, FRC_COMMIT, D70_COMMIT].filter((sha) => !(o.unknown ?? []).includes(sha));
+  const git = (args: string[]) => {
+    if (args[0] === "cat-file") return { status: known.some((sha) => args[2]?.startsWith(sha)) ? 0 : 128, stdout: "", stderr: "" };
+    if (args[0] === "merge-base") return { status: (o.notAncestors ?? []).includes(`${args[2]}>${args[3]}`) ? 1 : 0, stdout: "", stderr: "" };
+    if (args[0] === "diff") {
+      const changed = (o.changes ?? {})[`${args[2]}>${args[3]}`];
+      if (changed === null) return { status: 128, stdout: "", stderr: "fatal: bad revision" };
+      return { status: 0, stdout: (changed ?? []).join("\n"), stderr: "" };
+    }
+    return { status: 0, stdout: "", stderr: "" };
+  };
+  return { deps: { root: "virtual-root", fs, git } };
+}
+
+const lineageErrors = (o: LineageOptions = {}): string[] => gate.verifyLineage(lineageRepo(o).deps);
+const D = gate.PHASE_DIR;
+
+test("D-70 constants: the owner verdict word and the closed list of environment lanes that may stay BLOCKED", () => {
+  assert.equal(gate.D70_VERDICT, D70_LEDGER_VERDICT);
+  assert.deepEqual([...gate.D70_DEBT_LANES].sort(), ["e2e-full", "e2e-mutation", "mutation-attest", "staging-live", "visual-phase20"]);
+});
+
+test("releaseVerdict (D-70): the worst of the runner verdict and PASS-WITH-OWNER-WAIVERS; PASS is impossible, an unknown verdict is FAIL", () => {
+  assert.equal(gate.releaseVerdict("PASS", "D-70"), "PASS-WITH-OWNER-WAIVERS");
+  assert.equal(gate.releaseVerdict("PASS-WITH-OWNER-WAIVERS", "D-70"), "PASS-WITH-OWNER-WAIVERS");
+  assert.equal(gate.releaseVerdict("BLOCKED", "D-70"), "BLOCKED");
+  assert.equal(gate.releaseVerdict("FAIL", "D-70"), "FAIL");
+  assert.equal(gate.releaseVerdict("GREEN", "D-70"), "FAIL");
+  assert.equal(gate.releaseVerdict(undefined, "D-70"), "FAIL");
+  assert.equal(gate.releaseVerdict("PASS", D70_LEDGER_VERDICT), "PASS-WITH-OWNER-WAIVERS");
+  assert.equal(gate.releaseVerdict("PASS", null), "PASS", "without the D-70 acceptance the runner verdict stands");
+  assert.equal(gate.releaseVerdict("nonsense", null), "FAIL");
+});
+
+const closureInput = (patch: Record<string, unknown> = {}) => ({
+  results: gate.GATES.map((entry: { id: string }) => ({ id: entry.id, status: "PASS" })),
+  verdict: "PASS-WITH-OWNER-WAIVERS",
+  high: [] as string[],
+  owner: { verdict: "accepted", date: "2026-11-08", chainError: "" },
+  ledgerErrors: [] as string[],
+  ...patch,
+});
+const withBlocked = (ids: string[], status = "BLOCKED") => gate.GATES.map((entry: { id: string }) => ({ id: entry.id, status: ids.includes(entry.id) ? status : "PASS" }));
+
+test("phaseClosure (D-70): closes with accepted debts only when every BLOCKED gate is an environment lane of D-70", () => {
+  assert.equal(gate.phaseClosure(closureInput()), "С ПРИНЯТЫМИ ДОЛГАМИ (D-70)");
+  const lanes = ["e2e-full", "mutation-attest", "e2e-mutation", "staging-live", "visual-phase20"];
+  assert.equal(gate.phaseClosure(closureInput({ results: withBlocked(lanes), verdict: "BLOCKED" })), "С ПРИНЯТЫМИ ДОЛГАМИ (D-70)");
+});
+
+test("phaseClosure (D-70): a BLOCKED gate outside the lanes, a FAIL, a high, a refused verdict or a broken ledger is ЗАБЛОКИРОВАНО with the reasons", () => {
+  const blockedAudit = gate.phaseClosure(closureInput({ results: withBlocked(["audit-prod"]), verdict: "BLOCKED" }));
+  assert.match(blockedAudit, /^ЗАБЛОКИРОВАНО/);
+  assert.match(blockedAudit, /audit-prod/);
+  assert.match(gate.phaseClosure(closureInput({ results: withBlocked(["unit"], "FAIL"), verdict: "FAIL" })), /^ЗАБЛОКИРОВАНО.*unit/);
+  assert.match(gate.phaseClosure(closureInput({ high: ["SEC20-99"] })), /^ЗАБЛОКИРОВАНО.*SEC20-99/);
+  assert.match(gate.phaseClosure(closureInput({ owner: { verdict: "fixes-requested", date: "2026-11-09", chainError: "" } })), /^ЗАБЛОКИРОВАНО.*вердикт/);
+  assert.match(gate.phaseClosure(closureInput({ owner: null })), /^ЗАБЛОКИРОВАНО/);
+  assert.match(gate.phaseClosure(closureInput({ owner: { verdict: "", date: "", chainError: "цепочка вердиктов нарушена" } })), /^ЗАБЛОКИРОВАНО/);
+  assert.match(gate.phaseClosure(closureInput({ ledgerErrors: ["D-70: нет раздела"] })), /^ЗАБЛОКИРОВАНО.*журнал/);
+  assert.match(gate.phaseClosure(closureInput({ verdict: "PASS" })), /^ЗАБЛОКИРОВАНО/, "the release verdict PASS is impossible under D-70");
+  assert.match(gate.phaseClosure(closureInput({ verdict: "FAIL" })), /^ЗАБЛОКИРОВАНО/);
+  const waived = gate.GATES.map((entry: { id: string }) => ({ id: entry.id, status: entry.id === "e2e-full" ? "FAIL" : "PASS", waived: entry.id === "e2e-full" }));
+  assert.equal(gate.phaseClosure(closureInput({ results: waived })), "С ПРИНЯТЫМИ ДОЛГАМИ (D-70)", "a FAIL with an accepted owner waiver does not block");
+});
+
+test("verifyLineage (D-70): a consistent ledger, registry, protocol and unchanged product code pass, with PASS and with BLOCKED lanes", () => {
+  assert.deepEqual(lineageErrors(), []);
+  const lanes = ["e2e-full", "mutation-attest", "e2e-mutation", "staging-live", "visual-phase20"];
+  const blocked = lineageErrors({ files: {
+    [`${D}/20-RELEASE-EVIDENCE.md`]: lineageEvidence("BLOCKED", lanes),
+    [`${D}/20-RECONCILIATION.md`]: reconciliationText({ runner: "BLOCKED", release: "BLOCKED" }),
+  } });
+  assert.deepEqual(blocked, []);
+});
+
+test("verifyLineage: no protocol, a protocol of another commit or an unreadable reconciliation is rejected", () => {
+  mentions(lineageErrors({ files: { [`${D}/20-RELEASE-EVIDENCE.md`]: null } }), /20-RELEASE-EVIDENCE\.md/);
+  mentions(lineageErrors({ files: { [`${D}/20-RELEASE-EVIDENCE.md`]: lineageEvidence("PASS", [], RC_COMMIT) } }), /Commit .* не равен final_release_commit/);
+  mentions(lineageErrors({ files: { [`${D}/20-RECONCILIATION.md`]: null } }), /20-RECONCILIATION\.md/);
+  mentions(lineageErrors({ files: { [`${D}/20-RECONCILIATION.md`]: reconciliationText({ frc: "nothex" }) } }), /final_release_commit/);
+});
+
+test("verifyLineage: product code changed after the D-70 record, or after the effective verdict, is rejected; a git error is an error, not «unchanged»", () => {
+  mentions(lineageErrors({ changes: { [`${D70_COMMIT}>${FRC_COMMIT}`]: ["components/portia-desktop.tsx"] } }), /после записи D-70.*portia-desktop/);
+  mentions(lineageErrors({ changes: { [`${OWNER_COMMIT}>${FRC_COMMIT}`]: ["lib/portia-content.ts"] } }), /после действующего вердикта.*portia-content/);
+  mentions(lineageErrors({ changes: { [`${D70_COMMIT}>${FRC_COMMIT}`]: null } }), /git diff не выполнен/);
+  mentions(lineageErrors({ changes: { [`${OWNER_COMMIT}>${FRC_COMMIT}`]: null } }), /git diff не выполнен/);
+  assert.deepEqual(lineageErrors({ changes: { [`${D70_COMMIT}>${FRC_COMMIT}`]: [] } }), []);
+});
+
+test("verifyLineage: the D-70 ledger must hold the owner's words, no PASS step, no device verdict with a commit (D-15 does not apply)", () => {
+  mentions(lineageErrors({ files: { [`${D}/20-UAT.md`]: uatText({ section: false }) } }), /нет раздела «D-70/);
+  mentions(lineageErrors({ files: { [`${D}/20-UAT.md`]: uatText({ words: "Можно сразу к следующей фазе, меня всё устраивает" }) } }), /слова владельца.*20-CONTEXT\.md/);
+  mentions(lineageErrors({ files: { [`${D}/20-UAT.md`]: uatText({ step: "PASS" }) } }), /шаг INFO-PC-01.*PASS/);
+  mentions(lineageErrors({ files: { [`${D}/20-UAT.md`]: uatText({ pc: `PASS (commit ${FRC_COMMIT.slice(0, 12)})` }) } }), /вердикт PC/);
+  mentions(lineageErrors({ files: { [`${D}/20-UAT.md`]: uatText({ phone: `FAIL (commit ${FRC_COMMIT.slice(0, 12)})` }) } }), /вердикт phone/);
+  mentions(lineageErrors({ files: { [`${D}/20-UAT.md`]: uatText({ stepCommit: FRC_COMMIT.slice(0, 12) }) } }), /commit/);
+  mentions(lineageErrors({ files: { [`${D}/20-UAT.md`]: uatText({ answer: "1" }) } }), /ответ владельца/);
+  mentions(lineageErrors({ files: { [`${D}/20-UAT.md`]: uatText({ record: "nothex" }) } }), /запись решения/);
+});
+
+test("verifyLineage: release_candidate_commit equals the release commit of 20-63 and is an ancestor of the FRC", () => {
+  mentions(lineageErrors({ files: { [`${D}/20-UAT.md`]: uatText({ rc: FRC_COMMIT }) } }), /release_candidate_commit.*20-63-SUMMARY\.md/);
+  mentions(lineageErrors({ notAncestors: [`${RC_COMMIT}>${FRC_COMMIT}`] }), /release_candidate_commit.*не предок/);
+  mentions(lineageErrors({ files: { [`${D}/20-RECONCILIATION.md`]: reconciliationText({ rc: OWNER_COMMIT }) } }), /release_candidate_commit/);
+});
+
+test("verifyLineage: the effective owner verdict must be accepted with an intact chain; the register must stand on the 20-58 commit", () => {
+  mentions(lineageErrors({ files: { [`${D}/20-58-SUMMARY.md`]: OWNER_SUMMARY("fixes-requested") } }), /вердикт владельца.*fixes-requested/);
+  mentions(lineageErrors({ files: { [`${D}/20-60-SUMMARY.md`]: linkSummary({ plan: 60, renews: COMMIT_FOREIGN }) } }), /цепочка вердиктов нарушена/);
+  mentions(lineageErrors({ files: { [gate.BASELINES_JSON]: JSON.stringify({ ownerVerdict: { commit: COMMIT_B }, rows: [{}] }) } }), /реестр.*ownerVerdict\.commit/);
+  mentions(lineageErrors({ files: { [gate.BASELINES_JSON]: null } }), /реестр/);
+});
+
+test("verifyLineage: one valid link moves the product-code check to the link commit; the check stays commit-bound", () => {
+  const link = { [`${D}/20-60-SUMMARY.md`]: linkSummary({ plan: 60, commit: COMMIT_B, renews: OWNER_COMMIT }) };
+  const visual = LINEAGE_VISUAL.map((row) => {
+    if (row.id === "Общий вердикт") return { ...row, status: "ПРИНЯТО ВЛАДЕЛЬЦЕМ 2026-11-09", evidence: `owner_verdict: accepted; owner_verdict_date: 2026-11-09; owner_verdict_commit: ${COMMIT_B}; источник: 20-60-SUMMARY.md` };
+    if (row.id === "Код продукта") return { ...row, evidence: `git diff ${COMMIT_B.slice(0, 12)}` };
+    return row;
+  });
+  const evidence = gate.renderEvidence(fullRun({ commit: FRC_COMMIT, visual }));
+  const files = { ...link, [`${D}/20-RELEASE-EVIDENCE.md`]: evidence };
+  const withB = (o: LineageOptions) => {
+    const deps = lineageRepo({ files, ...o }).deps;
+    return { ...deps, git: (args: string[]) => (args[0] === "cat-file" && args[2]?.startsWith(COMMIT_B) ? { status: 0, stdout: "", stderr: "" } : deps.git(args)) };
+  };
+  assert.deepEqual(gate.verifyLineage(withB({})), []);
+  mentions(gate.verifyLineage(withB({ changes: { [`${COMMIT_B}>${FRC_COMMIT}`]: ["app/page.tsx"] } })), /после действующего вердикта.*app\/page\.tsx/);
+});
+
+test("verifyLineage: a high blocker of the matrix, a protocol verdict above its gate table and the base protocol errors are rejected", () => {
+  mentions(lineageErrors({ files: { [`${D}/20-SECURITY-MATRIX.md`]: BLOCKER_MATRIX } }), /неразрешённый high.*SEC20-99/);
+  const stronger = lineageEvidence("PASS", []).replace(/(\| e2e-full \|[^\n]*?\| 0 \| )PASS( \|)/, "$1BLOCKED$2");
+  mentions(lineageErrors({ files: { [`${D}/20-RELEASE-EVIDENCE.md`]: stronger } }), /протокол:.*stronger than the gate table/);
+  mentions(lineageErrors({ files: { [`${D}/20-RELEASE-EVIDENCE.md`]: removeLine(lineageEvidence(), "| lint |") } }), /протокол:.*lint/);
+});
+
+test("verifyLineage (T-20-153): «Итог релиза» is required, equals releaseVerdict and is never PASS; «Итог раннера» equals the protocol", () => {
+  mentions(lineageErrors({ files: { [`${D}/20-RECONCILIATION.md`]: reconciliationText({ release: "PASS" }) } }), /Итог релиза: PASS/);
+  mentions(lineageErrors({ files: { [`${D}/20-RECONCILIATION.md`]: reconciliationText({ release: null }) } }), /Итог релиза/);
+  mentions(lineageErrors({ files: { [`${D}/20-RECONCILIATION.md`]: reconciliationText({ release: "BLOCKED" }) } }), /Итог релиза: BLOCKED.*PASS-WITH-OWNER-WAIVERS/);
+  mentions(lineageErrors({ files: { [`${D}/20-RECONCILIATION.md`]: reconciliationText({ runner: "BLOCKED" }) } }), /Итог раннера/);
+  mentions(lineageErrors({ files: { [`${D}/20-RECONCILIATION.md`]: reconciliationText({ runner: null }) } }), /Итог раннера/);
+});
+
+test("verifyLineage (T-20-155): «Закрытие фазы» is required and equals phaseClosure", () => {
+  mentions(lineageErrors({ files: { [`${D}/20-RECONCILIATION.md`]: reconciliationText({ closure: null }) } }), /Закрытие фазы/);
+  mentions(lineageErrors({ files: { [`${D}/20-RECONCILIATION.md`]: reconciliationText({ closure: "ЗАКРЫТА" }) } }), /Закрытие фазы/);
+  const blockedAudit = lineageEvidence("BLOCKED", ["audit-prod"]);
+  mentions(lineageErrors({ files: {
+    [`${D}/20-RELEASE-EVIDENCE.md`]: blockedAudit,
+    [`${D}/20-RECONCILIATION.md`]: reconciliationText({ runner: "BLOCKED", release: "BLOCKED" }),
+  } }), /Закрытие фазы: С ПРИНЯТЫМИ ДОЛГАМИ.*ЗАБЛОКИРОВАНО/);
+  assert.deepEqual(lineageErrors({ files: {
+    [`${D}/20-RELEASE-EVIDENCE.md`]: blockedAudit,
+    [`${D}/20-RECONCILIATION.md`]: reconciliationText({ runner: "BLOCKED", release: "BLOCKED", closure: "ЗАБЛОКИРОВАНО: BLOCKED-гейт вне полос D-70: audit-prod" }),
+  } }), [], "the honest closing line is accepted when it equals the computed one");
+});
+
+test("main --verify-lineage: exits 0 for the consistent repository and 1 with the reasons otherwise; the usage line names the mode", () => {
+  let out = "";
+  let err = "";
+  const io = { out: (text: string) => { out += text; }, err: (text: string) => { err += text; } };
+  assert.equal(gate.main(["--verify-lineage"], { ...lineageRepo().deps, ...io }), 0, err);
+  assert.match(out, /lineage verified/);
+  err = "";
+  assert.equal(gate.main(["--verify-lineage"], { ...lineageRepo({ changes: { [`${D70_COMMIT}>${FRC_COMMIT}`]: ["lib/x.ts"] } }).deps, ...io }), 1);
+  assert.match(err, /PORTIA_RELEASE_GATE:verify-failed.*после записи D-70/);
+  err = "";
+  gate.main(["--bogus"], { ...lineageRepo().deps, ...io });
+  assert.match(err, /--verify-lineage/);
+});
+
+test("the runner states in a comment that D-70 is an accepted risk, not an acceptance", () => {
+  const source = readFileSync(path.resolve("scripts", "phase20-release-gate.mjs"), "utf8");
+  assert.match(source, /D-70 is an accepted risk of the owner, not an acceptance/);
+});
