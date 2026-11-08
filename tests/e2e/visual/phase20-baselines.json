@@ -1,0 +1,36 @@
+{
+  "schema": "portia-phase20-baselines-v1",
+  "decision": "D-68",
+  "ownerVerdict": {
+    "source": ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-58-SUMMARY.md",
+    "commit": "0c2a59d1d1a7e805ccd48612cdb93ddf5ec7f1f1"
+  },
+  "captureCommit": "eeb0a580d8fc792cfe00a3ca338355250caf2cdd",
+  "data": "offline-заглушка tests/e2e/harness/offline-supabase.cjs: пустой portia_content -> стартовый контент сайта, выдуманные публичные значения OFFLINE_ENV; production-сборка во временной копии, next start на 127.0.0.1:3100, Node 22.13.1, chromium-desktop 1440x900 DPR 1 и chromium-phone (Pixel 7); сцены с подменёнными чтениями кандидатных спеков — UI-контракт, не доказательство ролей, сохранения или живого источника данных; captureCommit — коммит, с которого собрана production-сборка (код продукта равен ownerVerdict.commit)",
+  "rows": [
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-spider--chromium-desktop.png",
+      "sha256": "687b12f122c69396ed054910a0ec3ac2d8651076ca50cbf313d9c642238e348d",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Паук в покое на фоне «Паутина», анимации «Выключены» (ПК)",
+      "decisions": [
+        "D-45",
+        "D-53"
+      ],
+      "reason": "Эталон принятого вида (20-58) на стартовом контенте; tracer 20-12"
+    },
+    {
+      "snapshot": "tests/e2e/visual/__screenshots__/phase20-spider--chromium-phone.png",
+      "sha256": "af6754364f1832d6f1d7e374e7e80726f2a04b3e5ab49b8f20f03d6ac4cce22f",
+      "supersedes": null,
+      "class": "phase20",
+      "surface": "Паук в покое на фоне «Паутина», анимации «Выключены» (телефон)",
+      "decisions": [
+        "D-45",
+        "D-53"
+      ],
+      "reason": "Эталон принятого вида (20-58) на стартовом контенте; tracer 20-12"
+    }
+  ]
+}
