@@ -1,6 +1,8 @@
 // Typed wrappers over the portia_access_* RPCs (Phase 21). Fail closed: any error or unknown reply throws.
 // A SupabaseClient satisfies AccessRpcClient. No other module imports this file in Phase 21 (Phase 23 adds the route).
 
+import { isAccessLevel, type AccessLevel, type AccessOrigin } from "./access-levels.ts";
+
 export type AccessRpcClient = {
   rpc(
     fn: string,
@@ -23,18 +25,16 @@ export class AccessStoreError extends Error {
   }
 }
 
-export type AccessOriginValue = "sheet" | "outside";
-
 export type SubmitResult = { code: "created" | "pending" | "approved" | "device-busy" | "unavailable" | "invalid" };
 
 export type AccessState =
   | { state: "none" }
   | { state: "pending"; nickname: string }
-  | { state: "approved"; nickname: string; level: number }
+  | { state: "approved"; nickname: string; level: AccessLevel }
   | { state: "rejected" | "revoked"; nickname: string; retryAt: string | null };
 
 export type DecideResult =
-  | { code: "approved"; personId: string; level: number }
+  | { code: "approved"; personId: string; level: AccessLevel }
   | { code: "rejected" }
   | { code: "already-decided"; status: string }
   | { code: "not-found" };
@@ -56,7 +56,7 @@ async function call(client: AccessRpcClient, fn: string, args: Record<string, un
 
 export async function submitAccessRequest(
   client: AccessRpcClient,
-  input: { nickname: string; origin: AccessOriginValue; tokenHash: string; ipBucket: string },
+  input: { nickname: string; origin: AccessOrigin; tokenHash: string; ipBucket: string },
 ): Promise<SubmitResult> {
   const data = await call(client, accessRpc.submit, {
     p_nickname: input.nickname,
@@ -77,7 +77,7 @@ export async function resolveAccess(client: AccessRpcClient, tokenHash: string):
   if (state === "pending") return { state: "pending", nickname };
   if (state === "approved") {
     const level = data.level;
-    if (typeof level !== "number" || !Number.isInteger(level) || level < 1 || level > 5) throw unexpected();
+    if (!isAccessLevel(level)) throw unexpected();
     return { state: "approved", nickname, level };
   }
   if (state === "rejected" || state === "revoked") {
@@ -90,7 +90,7 @@ export async function resolveAccess(client: AccessRpcClient, tokenHash: string):
 
 export async function decideAccessRequest(
   client: AccessRpcClient,
-  input: { requestId: string; decision: "approve" | "reject"; level?: number },
+  input: { requestId: string; decision: "approve" | "reject"; level?: AccessLevel },
 ): Promise<DecideResult> {
   const data = await call(client, accessRpc.decide, {
     p_request_id: input.requestId,
@@ -100,7 +100,7 @@ export async function decideAccessRequest(
   switch (data.code) {
     case "approved": {
       const { personId, level } = data;
-      if (typeof personId !== "string" || typeof level !== "number" || !Number.isInteger(level) || level < 1 || level > 5) throw unexpected();
+      if (typeof personId !== "string" || !isAccessLevel(level)) throw unexpected();
       return { code: "approved", personId, level };
     }
     case "rejected":
