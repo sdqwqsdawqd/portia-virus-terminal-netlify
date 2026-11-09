@@ -123,14 +123,37 @@ export async function decideAccessRequest(
   }
 }
 
-// RED stubs (21-03 task 1): replaced by the real wrappers in the GREEN commit.
 export async function setAccessLevel(
-  _client: AccessRpcClient,
-  _input: { personId: string; level: AccessLevel; expectedLevel: AccessLevel },
+  client: AccessRpcClient,
+  input: { personId: string; level: AccessLevel; expectedLevel: AccessLevel },
 ): Promise<SetLevelResult> {
-  throw new Error("not implemented");
+  const data = await call(client, accessRpc.setLevel, {
+    p_person_id: input.personId,
+    p_level: input.level,
+    p_expected_level: input.expectedLevel,
+  });
+  switch (data.code) {
+    case "updated":
+    case "unchanged":
+    case "stale":
+      if (!isAccessLevel(data.level)) throw unexpected();
+      return { code: data.code, level: data.level };
+    case "not-found":
+    case "not-active":
+      return { code: data.code };
+    default:
+      throw unexpected();
+  }
 }
 
-export async function revokeAccess(_client: AccessRpcClient, _input: { personId: string }): Promise<RevokeResult> {
-  throw new Error("not implemented");
+export async function revokeAccess(client: AccessRpcClient, input: { personId: string }): Promise<RevokeResult> {
+  const data = await call(client, accessRpc.revoke, { p_person_id: input.personId });
+  switch (data.code) {
+    case "revoked":
+    case "already-revoked":
+    case "not-found":
+      return { code: data.code };
+    default:
+      throw unexpected();
+  }
 }

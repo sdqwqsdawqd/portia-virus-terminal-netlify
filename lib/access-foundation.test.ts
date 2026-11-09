@@ -217,7 +217,17 @@ test("SQL contract: every access function pins search_path and revokes before it
   const names = [...sql.matchAll(/create or replace function public\.(portia_access_\w+)\(/g)].map((match) => match[1]);
   assert.deepEqual(
     [...names].sort(),
-    ["portia_access_caller_level", "portia_access_decide", "portia_access_nickname_key", "portia_access_resolve", "portia_access_submit_request"],
+    [
+      "portia_access_caller_level",
+      "portia_access_decide",
+      "portia_access_journal_append_only",
+      "portia_access_nickname_key",
+      "portia_access_resolve",
+      "portia_access_revoke",
+      "portia_access_set_level",
+      "portia_access_submit_request",
+      "portia_access_target_guard",
+    ],
   );
   for (const name of names) {
     const { header, start } = functionParts(name);

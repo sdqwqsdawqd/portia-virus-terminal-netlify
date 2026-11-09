@@ -238,6 +238,43 @@ revoke all on function public.portia_access_resolve(text) from public, anon, aut
 grant execute on function public.portia_access_resolve(text) to anon, authenticated;
 grant execute on function public.portia_access_resolve(text) to service_role;
 
+-- h2. Who may not be decided about (D-02 / USR-05). Called only from the definer functions below, which run as the
+-- owner role, so this helper is not security definer and no API role can execute it.
+-- "Self" is defined by account link: the request was filed by the caller's account, or the person is linked to the
+-- caller's account, or the nick key equals such a person. A nickname filed from a signed-out browser carries no link and
+-- cannot be recognised as the caller's own: accepted residual risk, mitigated by the journal and by revocation; the
+-- owner acknowledges it in plan 21-07. Rows linked to the owner's confirmed-email account are owner-protected.
+create or replace function public.portia_access_target_guard(p_nickname_key text, p_requested_by uuid)
+returns void
+language plpgsql
+stable
+set search_path = ''
+as $$
+begin
+  if p_requested_by is not null and p_requested_by = auth.uid() then
+    raise exception 'self-decision';
+  end if;
+  if exists (
+    select 1 from public.portia_access_people p
+    where p.nickname_key = p_nickname_key and p.account_id is not null and p.account_id = auth.uid()
+  ) then
+    raise exception 'self-decision';
+  end if;
+  if not public.portia_is_owner() and exists (
+    select 1 from auth.users u
+    where lower(u.email) = public.portia_owner_email()
+      and (
+        u.id = p_requested_by
+        or u.id in (select p.account_id from public.portia_access_people p where p.nickname_key = p_nickname_key)
+      )
+  ) then
+    raise exception 'owner-protected';
+  end if;
+end; $$;
+
+revoke all on function public.portia_access_target_guard(text, uuid) from public, anon, authenticated;
+grant execute on function public.portia_access_target_guard(text, uuid) to service_role;
+
 -- i. An editor decides a pending request (D-02 conditional transition, D-04 / D-09 defaults, D-07 journal).
 create or replace function public.portia_access_decide(p_request_id uuid, p_decision text, p_level smallint default null)
 returns jsonb
@@ -272,6 +309,8 @@ begin
     return jsonb_build_object('code', 'already-decided', 'status', req.status);
   end if;
 
+  perform public.portia_access_target_guard(req.nickname_key, req.requested_by);
+
   if p_decision = 'reject' then
     update public.portia_access_requests
       set status = 'rejected', decided_at = now(), decided_by = auth.uid()
@@ -299,6 +338,7 @@ begin
   else
     new_level := coalesce(p_level, case when req.origin = 'sheet' then 2 else 1 end)::smallint;
     if new_level not between 1 and 5 then raise exception 'invalid-level'; end if;
+    if new_level > caller_level then raise exception 'level-above-own'; end if;
     if not person_exists then
       insert into public.portia_access_people (nickname, nickname_key, origin, level, status, account_id, approved_by, updated_by)
       values (req.nickname, req.nickname_key, req.origin, new_level, 'active', account_for_person, auth.uid(), auth.uid())
@@ -330,3 +370,110 @@ end; $$;
 revoke all on function public.portia_access_decide(uuid, text, smallint) from public, anon, authenticated;
 grant execute on function public.portia_access_decide(uuid, text, smallint) to authenticated;
 grant execute on function public.portia_access_decide(uuid, text, smallint) to service_role;
+
+-- j. An editor changes the level of an active person (D-02 optimistic: the caller sends the level it saw).
+create or replace function public.portia_access_set_level(p_person_id uuid, p_level smallint, p_expected_level smallint)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  caller_level smallint;
+  person public.portia_access_people%rowtype;
+begin
+  if not public.portia_can_edit_tab('users') then raise exception 'forbidden'; end if;
+  caller_level := public.portia_access_caller_level();
+  if caller_level is null then raise exception 'forbidden'; end if;
+
+  select * into person from public.portia_access_people where id = p_person_id;
+  if not found then return jsonb_build_object('code', 'not-found'); end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('access:nickname:' || person.nickname_key, 0));
+  select * into person from public.portia_access_people where id = p_person_id for update;
+  if not found then return jsonb_build_object('code', 'not-found'); end if;
+  if person.status <> 'active' then return jsonb_build_object('code', 'not-active'); end if;
+
+  perform public.portia_access_target_guard(person.nickname_key, null);
+
+  if p_level is null or p_level not between 1 and 5 then raise exception 'invalid-level'; end if;
+  if p_level > caller_level then raise exception 'level-above-own'; end if;
+
+  if p_expected_level is distinct from person.level then
+    return jsonb_build_object('code', 'stale', 'level', person.level);
+  end if;
+  if p_level = person.level then
+    return jsonb_build_object('code', 'unchanged', 'level', person.level);
+  end if;
+
+  update public.portia_access_people
+    set level = p_level, updated_at = now(), updated_by = auth.uid()
+    where id = person.id;
+  insert into public.portia_access_journal (event_type, actor_id, nickname_key, person_id, details)
+  values ('level-change', auth.uid(), person.nickname_key, person.id, jsonb_build_object('from', person.level, 'to', p_level));
+  return jsonb_build_object('code', 'updated', 'level', p_level);
+end; $$;
+
+revoke all on function public.portia_access_set_level(uuid, smallint, smallint) from public, anon, authenticated;
+grant execute on function public.portia_access_set_level(uuid, smallint, smallint) to authenticated;
+grant execute on function public.portia_access_set_level(uuid, smallint, smallint) to service_role;
+
+-- k. An editor revokes a person: the person and all of their approved device requests end together (D-02). The decided_at
+-- of the revoked requests starts the 1-hour pause (D-06). Pending requests of the same nick stay for an editor to decide.
+create or replace function public.portia_access_revoke(p_person_id uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  caller_level smallint;
+  person public.portia_access_people%rowtype;
+begin
+  if not public.portia_can_edit_tab('users') then raise exception 'forbidden'; end if;
+  caller_level := public.portia_access_caller_level();
+  if caller_level is null then raise exception 'forbidden'; end if;
+
+  select * into person from public.portia_access_people where id = p_person_id;
+  if not found then return jsonb_build_object('code', 'not-found'); end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('access:nickname:' || person.nickname_key, 0));
+  select * into person from public.portia_access_people where id = p_person_id for update;
+  if not found then return jsonb_build_object('code', 'not-found'); end if;
+  if person.status = 'revoked' then return jsonb_build_object('code', 'already-revoked'); end if;
+
+  perform public.portia_access_target_guard(person.nickname_key, null);
+
+  update public.portia_access_people
+    set status = 'revoked', updated_at = now(), updated_by = auth.uid()
+    where id = person.id;
+  update public.portia_access_requests
+    set status = 'revoked', decided_at = now(), decided_by = auth.uid()
+    where person_id = person.id and status = 'approved';
+  insert into public.portia_access_journal (event_type, actor_id, nickname_key, person_id, details)
+  values ('revoke', auth.uid(), person.nickname_key, person.id, jsonb_build_object('level', person.level));
+  return jsonb_build_object('code', 'revoked');
+end; $$;
+
+revoke all on function public.portia_access_revoke(uuid) from public, anon, authenticated;
+grant execute on function public.portia_access_revoke(uuid) to authenticated;
+grant execute on function public.portia_access_revoke(uuid) to service_role;
+
+-- l. The journal is append-only (D-07): history is kept forever. Per-run staging cleanup cannot delete journal rows; the
+-- teardown (supabase/teardown/portia_teardown.sql) drops portia_* tables and functions dynamically and needs no change.
+create or replace function public.portia_access_journal_append_only()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  raise exception 'journal-append-only';
+end; $$;
+
+revoke all on function public.portia_access_journal_append_only() from public, anon, authenticated;
+grant execute on function public.portia_access_journal_append_only() to service_role;
+
+drop trigger if exists portia_access_journal_append_only on public.portia_access_journal;
+create trigger portia_access_journal_append_only before update or delete on public.portia_access_journal for each row execute function public.portia_access_journal_append_only();
