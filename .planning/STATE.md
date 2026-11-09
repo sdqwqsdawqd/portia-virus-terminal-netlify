@@ -3,13 +3,13 @@ gsd_state_version: "1.0"
 milestone: v1.4
 milestone_name: Доступ и единый стиль
 current_phase: 22
-current_phase_name: "Вкладка «Пользователи» и каркас токенов стиля"
+current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
 status: ready_to_plan
-stopped_at: Phase 21 closed as owner-accepted risk (D-72)
-last_updated: "2026-11-09T08:02:57.828Z"
+stopped_at: Phase PORTIA-22 context gathered
+last_updated: "2026-11-09T15:47:03.105Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase PORTIA-21 closed as owner-accepted risk (D-72), not PASS
-state_head: a1cd491d8196a37ce51f72538410cfdccbaed24f
+state_head: 42e432baa34e0df8d66431252854c43a4bf6a841
 progress:
   total_phases: 7
   completed_phases: 1
@@ -252,9 +252,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-09T05:13:44.138Z
-Stopped at: Phase 21 context gathered
-Resume file: .planning/phases/PORTIA-21-fundament-dostupa-lyudi-zayavki-pravila-i-zhurnal/21-CONTEXT.md
+Last session: 2026-11-09T15:47:02.994Z
+Stopped at: Phase PORTIA-22 context gathered
+Resume file: .planning/phases/PORTIA-22-vkladka-polzovateli-i-karkas-tokenov-stilya/22-CONTEXT.md
 
 ## Operator Next Steps
 
