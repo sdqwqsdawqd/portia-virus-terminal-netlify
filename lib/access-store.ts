@@ -14,6 +14,8 @@ export const accessRpc = {
   submit: "portia_access_submit_request",
   resolve: "portia_access_resolve",
   decide: "portia_access_decide",
+  setLevel: "portia_access_set_level",
+  revoke: "portia_access_revoke",
 } as const;
 
 export class AccessStoreError extends Error {
@@ -38,6 +40,12 @@ export type DecideResult =
   | { code: "rejected" }
   | { code: "already-decided"; status: string }
   | { code: "not-found" };
+
+export type SetLevelResult =
+  | { code: "updated" | "unchanged" | "stale"; level: AccessLevel }
+  | { code: "not-found" | "not-active" };
+
+export type RevokeResult = { code: "revoked" | "already-revoked" | "not-found" };
 
 const submitCodes = ["created", "pending", "approved", "device-busy", "unavailable", "invalid"] as const;
 
@@ -113,4 +121,16 @@ export async function decideAccessRequest(
     default:
       throw unexpected();
   }
+}
+
+// RED stubs (21-03 task 1): replaced by the real wrappers in the GREEN commit.
+export async function setAccessLevel(
+  _client: AccessRpcClient,
+  _input: { personId: string; level: AccessLevel; expectedLevel: AccessLevel },
+): Promise<SetLevelResult> {
+  throw new Error("not implemented");
+}
+
+export async function revokeAccess(_client: AccessRpcClient, _input: { personId: string }): Promise<RevokeResult> {
+  throw new Error("not implemented");
 }
