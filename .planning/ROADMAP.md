@@ -53,7 +53,27 @@ v1.4 «Доступ и единый стиль» делает две вещи. �
   5. `portia_promo_register_attempt` недоступна анониму и обычному пользователю напрямую (отзыв в миграции фазы; fingerprint и expected-authz обновлены в том же коммите; контракты «Повышения» зелёные), а `next` и `eslint-config-next` закреплены точно на 16.4.5 отдельным коммитом, сборка и тесты зелёные. [SEC-06, SEC-08]
 **Constraints**: ревью `supabase-rls-reviewer` обязательно (новые таблицы, RPC, права, отзыв `register_attempt`); новая миграция нумеруется после трёх неприменённых — `20261104000000`, `20261104000100`, `20261106000000` — и порядок применения записан явно (эти три, затем новая); применение на production делает владелец, не агент. Вместе с каждым новым объектом обновляются fingerprint JSON, `expected-authz.json`, офлайн-стенд Supabase, `portia-sql.test.ts` и явные права `service_role`. Перед подъёмом `next` перечитать список исправлений Netlify от 2026-11-03.
 **Acceptance gate**: Postgres/RLS, роли и staging остаются BLOCKED; пункты 2–5 не записываются как PASS на Postgres без прогона на изолированном staging.
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+**Wave 1**
+- [ ] 21-01-PLAN.md — tracer: nickname rule (TS+SQL), access token digest, request -> decision -> own state RPCs, levels 1–5 (ACC-04, LVL-01)
+- [ ] 21-02-PLAN.md — SEC-08: advisory re-read, owner legitimacy check, exact pin next / eslint-config-next 16.4.5 in a standalone commit
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 21-03-PLAN.md — DB-enforced decision rules, set level, revoke, append-only journal, 1-hour pause and daily caps (USR-05, D-02, D-06, D-07)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 21-04-PLAN.md — owner-only closure flag default OFF (ACC-09) and expected-authz parity across all migrations
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 21-05-PLAN.md — golden fingerprint parity and register_attempt revoke with authz/fingerprint in one commit (SEC-06)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 21-06-PLAN.md — supabase-rls-reviewer review with fix-and-rereview loop to zero blocking findings
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 21-07-PLAN.md — frozen migration, apply record (owner-run order, BLOCKED), Phase 21 security matrix, full local check, owner checkpoint
 
 ### Phase 22: Вкладка «Пользователи» и каркас токенов стиля
 
