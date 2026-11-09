@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { isLocalMediaPath } from "./media-url.ts";
 
 const apply = readFileSync(new URL("../supabase/phase12_apply.sql", import.meta.url), "utf8");
@@ -144,4 +144,36 @@ test("setup keeps the content and storage policies on portia_can_edit()", () => 
   for (const name of ["Editors can create PORTIA content", "Editors can update PORTIA content", "Editors can upload PORTIA media"]) {
     assert.match(policyBlock(setup, name), /portia_can_edit\(\)/, name);
   }
+});
+
+// Every deployable migration (21-04, T-21-22): the search_path rule and the revoke-before-grant order for new functions.
+const migrationsUrl = new URL("../supabase/migrations/", import.meta.url);
+const baselineMigration = "20261101000000_portia_baseline.sql";
+const migrationTexts = readdirSync(migrationsUrl)
+  .filter((name) => name.endsWith(".sql"))
+  .sort()
+  .map((name) => [name, readFileSync(new URL(name, migrationsUrl), "utf8").replace(/\r\n/g, "\n")] as const);
+
+test("no migration lets a function resolve objects through the writable public search path", () => {
+  assert.ok(migrationTexts.length >= 7, `only ${migrationTexts.length} migration files`);
+  for (const [name, text] of migrationTexts) {
+    assert.doesNotMatch(text, /set\s+search_path\s*(=|to)\s*public\b/i, `${name}: set search_path = public`);
+  }
+});
+
+test("every function created after the baseline is revoked from public, anon and authenticated before any grant", () => {
+  let checked = 0;
+  for (const [name, text] of migrationTexts) {
+    if (name === baselineMigration) continue;
+    for (const match of text.matchAll(/^create or replace function public\.(\w+)\(/gm)) {
+      const fn = match[1];
+      const revoke = text.indexOf(`revoke all on function public.${fn}(`, match.index);
+      assert.ok(revoke > match.index, `${name}: ${fn} has no revoke all after its definition`);
+      assert.match(text.slice(revoke, text.indexOf(";", revoke)), /from public, anon, authenticated$/, `${name}: ${fn} revoke must cover public, anon, authenticated`);
+      const firstGrant = text.indexOf(`grant execute on function public.${fn}(`, match.index);
+      assert.ok(firstGrant < 0 || revoke < firstGrant, `${name}: ${fn} is granted before it is revoked`);
+      checked += 1;
+    }
+  }
+  assert.ok(checked >= 12, `only ${checked} post-baseline functions were checked`);
 });

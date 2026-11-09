@@ -194,7 +194,7 @@ function registerLiveSuite(live: StagingLiveTarget) {
 
     const inertKey = (table: TableSpec) => (table.pk_kind === "bigint" ? 0 : table.pk_kind === "uuid" ? inertUuid : `${env().run.prefix}-inert`);
     function keyOf(table: TableSpec, role: string): string | number {
-      if (table.name.startsWith("portia_promo_")) return inertKey(table);
+      if (table.name.startsWith("portia_promo_") || table.name.startsWith("portia_access_")) return inertKey(table);
       if (table.target) return env().run.emailOf(table.target);
       return String(fill(table.seed, role)?.[table.pk]);
     }
