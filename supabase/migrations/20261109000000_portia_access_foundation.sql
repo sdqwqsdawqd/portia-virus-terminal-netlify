@@ -8,6 +8,10 @@
 -- Request cleanup policy (Phase 21): no automatic deletion and no new scheduled job. Stale pending requests wait for an
 -- editor's decision (Phase 22 queue) and the 200-pending cap bounds that queue; journal rows are never deleted.
 --
+-- Site-closure flag (ACC-09, D-05, D-08): row 'main' of portia_access_settings. It is OFF after apply; turning it ON on
+-- production is an owner step in Phase 25. Toggles are not journaled (D-07, owner choice 2б); the row keeps the last
+-- change (updated_at, updated_by).
+--
 -- Not applied anywhere by the agent. Apply order: 20261104000000_portia_rename_virus_classes.sql,
 -- 20261104000100_portia_editor_notes.sql, 20261106000000_portia_drop_editor_notes.sql, then this file.
 -- Postgres/RLS execution is BLOCKED until an isolated staging run; production is applied by the owner only.
@@ -551,3 +555,65 @@ end; $$;
 revoke all on function public.portia_access_clear_cooldown(text) from public, anon, authenticated;
 grant execute on function public.portia_access_clear_cooldown(text) to authenticated;
 grant execute on function public.portia_access_clear_cooldown(text) to service_role;
+
+-- n. Site-closure flag (ACC-09, D-05, D-08): one row 'main', OFF after apply. Only the owner changes it. The row keeps
+-- the last change (updated_at, updated_by); toggles are not journaled (D-07, owner choice 2б). Nothing reads the flag in
+-- Phase 21 and submit never does, so requests are collected whether it is OFF or ON.
+create table if not exists public.portia_access_settings (
+  id text primary key,
+  closure_enabled boolean not null default false,
+  updated_at timestamptz not null default now(),
+  updated_by uuid null,
+  constraint portia_access_settings_id_check check (id = 'main')
+);
+
+alter table public.portia_access_settings enable row level security;
+
+revoke all on table public.portia_access_settings from public, anon, authenticated;
+grant all on table public.portia_access_settings to service_role;
+
+-- Re-running never flips an existing value.
+insert into public.portia_access_settings (id, closure_enabled) values ('main', false)
+  on conflict (id) do nothing;
+
+-- The open/closed state is observable by any visitor anyway, so anon and authenticated may read this one boolean.
+create or replace function public.portia_access_closure_enabled()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce((select s.closure_enabled from public.portia_access_settings s where s.id = 'main'), false);
+$$;
+
+revoke all on function public.portia_access_closure_enabled() from public, anon, authenticated;
+grant execute on function public.portia_access_closure_enabled() to anon, authenticated;
+grant execute on function public.portia_access_closure_enabled() to service_role;
+
+-- Only the owner flips the flag. Turning it ON on production is an owner step in Phase 25.
+create or replace function public.portia_access_set_closure(p_enabled boolean)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  stored_enabled boolean;
+  stored_at timestamptz;
+begin
+  if not public.portia_is_owner() then raise exception 'owner-required'; end if;
+  if p_enabled is null then return jsonb_build_object('code', 'invalid'); end if;
+
+  insert into public.portia_access_settings (id, closure_enabled, updated_at, updated_by)
+  values ('main', p_enabled, now(), auth.uid())
+  on conflict (id) do update
+    set closure_enabled = excluded.closure_enabled, updated_at = now(), updated_by = auth.uid()
+  returning closure_enabled, updated_at into stored_enabled, stored_at;
+  return jsonb_build_object('code', 'updated', 'enabled', stored_enabled, 'updatedAt', stored_at);
+end; $$;
+
+revoke all on function public.portia_access_set_closure(boolean) from public, anon, authenticated;
+grant execute on function public.portia_access_set_closure(boolean) to authenticated;
+grant execute on function public.portia_access_set_closure(boolean) to service_role;

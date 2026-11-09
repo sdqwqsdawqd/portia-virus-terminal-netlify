@@ -91,7 +91,7 @@ test("T-21-19 / D-05 set_closure: owner-only first statement, null is invalid, u
   assert.ok(body.indexOf("p_enabled is null") > body.indexOf("owner-required"), "the owner check comes before everything else");
   assert.match(body, /p_enabled is null[\s\S]*?'code', 'invalid'/);
   assert.match(body, /insert into public\.portia_access_settings/);
-  assert.match(body, /on conflict \(id\) do update set/);
+  assert.match(body, /on conflict \(id\) do update\s+set/);
   assert.match(body, /closure_enabled = (excluded\.closure_enabled|p_enabled)/);
   assert.match(body, /updated_at = now\(\)/);
   assert.match(body, /updated_by = auth\.uid\(\)/);

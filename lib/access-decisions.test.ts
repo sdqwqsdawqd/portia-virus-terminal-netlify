@@ -151,7 +151,7 @@ test("D-07 the journal cannot be updated or deleted: BEFORE UPDATE OR DELETE tri
   assert.ok(!/create\s+policy/i.test(sql) && sql.includes("revoke all on table public.portia_access_journal from public, anon, authenticated;"));
 });
 
-test("USR-05 grants: set_level and revoke reach authenticated, never anon; anon keeps only submit and resolve", () => {
+test("USR-05 grants: set_level and revoke reach authenticated, never anon; anon keeps only submit, resolve and the closure read", () => {
   for (const name of ["portia_access_set_level", "portia_access_revoke"]) {
     const roles = grantedRoles(name);
     assert.ok(roles.has("authenticated"), `${name}: authenticated`);
@@ -165,7 +165,7 @@ test("USR-05 grants: set_level and revoke reach authenticated, never anon; anon 
     .filter((match) => match[2].split(",").map((role) => role.trim()).includes("anon"))
     .map((match) => match[1])
     .sort();
-  assert.deepEqual(anonFunctions, ["portia_access_resolve", "portia_access_submit_request"]);
+  assert.deepEqual(anonFunctions, ["portia_access_closure_enabled", "portia_access_resolve", "portia_access_submit_request"]);
 });
 
 test("D-09 re-approval after revocation starts at the type default, not at the old level", () => {

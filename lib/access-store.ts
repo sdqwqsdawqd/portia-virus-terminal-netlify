@@ -191,13 +191,26 @@ export async function clearAccessCooldown(client: AccessRpcClient, input: { nick
 
 export type SetClosureResult = { code: "updated"; enabled: boolean; updatedAt: string } | { code: "invalid" };
 
+// The reply is a bare boolean (not a record), so this one does not go through call().
 export async function isClosureEnabled(client: AccessRpcClient): Promise<boolean> {
-  void client;
-  throw new Error("not implemented");
+  const { data, error } = await client.rpc(accessRpc.closureEnabled, {});
+  if (error) throw new AccessStoreError(error.message);
+  if (typeof data !== "boolean") throw unexpected();
+  return data;
 }
 
+// Owner only: a non-owner makes the database raise "owner-required", which surfaces as AccessStoreError.
 export async function setClosure(client: AccessRpcClient, input: { enabled: boolean }): Promise<SetClosureResult> {
-  void client;
-  void input;
-  throw new Error("not implemented");
+  const data = await call(client, accessRpc.setClosure, { p_enabled: input.enabled });
+  switch (data.code) {
+    case "updated": {
+      const { enabled, updatedAt } = data;
+      if (typeof enabled !== "boolean" || typeof updatedAt !== "string") throw unexpected();
+      return { code: "updated", enabled, updatedAt };
+    }
+    case "invalid":
+      return { code: "invalid" };
+    default:
+      throw unexpected();
+  }
 }
