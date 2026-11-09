@@ -1,486 +1,260 @@
-# Architecture Research: PORTIA OS v1.3 Stabilization
+# Architecture Research: v1.4 «Доступ и единый стиль»
 
-**Project:** PORTIA OS
-**Milestone:** v1.3 «Стабилизация PORTIA OS»
-**Domain:** stabilization of an existing Russian Next.js 16 / React 19 / Supabase / Netlify desktop-style application
-**Researched:** 2026-10-30
-**Overall confidence:** HIGH for repository structure and sequencing; MEDIUM for final visual/performance thresholds until the owner approves the Figma and Playwright baselines
+**Domain:** access gating + design system on an existing Next.js 16 / Supabase / Netlify "desktop OS" site
+**Researched:** 2026-11-09
+**Confidence:** HIGH on integration points (read from code), MEDIUM on Netlify billing/Supabase storage behaviour (flagged inline, verify on staging)
+**Scope:** only the four new feature groups. Existing architecture: `.planning/codebase/ARCHITECTURE.md`.
 
-## Scope and Decision
+## Decisions at a glance
 
-This milestone should not redesign PORTIA OS or reimplement validated product behavior. The right architecture is a **modular monolith with explicit seams**, not a new application, state framework, design system, or service fleet.
+| # | Decision | Why |
+|---|----------|-----|
+| D1 | Visitor identity = **opaque HttpOnly cookie `portia_access` + HMAC digest in DB**, not Supabase Auth | Reuses the proven promotion device-token pattern (`lib/portia-device-binding.ts`); no Supabase dashboard change; visitors never get a Supabase session; keeps `authenticated` role = editors only |
+| D2 | `/api/content` and `/api/employees` become **per-viewer, `no-store`**; the CDN cache and tag purge stop being the read path | A shared cache cannot be keyed by anything the client can forge; per-level CDN variants are unsafe (see 3.3) |
+| D3 | Level filtering = **server-side redaction in TypeScript** (`redactContentForLevel`), required level stored **inside the content JSON** | Rides the existing PUT/revision/undo/tab-refusal machinery; redaction is a pure, canary-testable function |
+| D4 | **Close direct anon reads** of `portia_content`, `portia_employee_profiles`, `portia_manual_employees`; reads go through token-gated `SECURITY DEFINER` RPCs (visitors) or editor-only policies | Today the publishable key in the bundle reads these tables directly (`using (true)`); an API-level gate alone is bypassable |
+| D5 | Two new tables: **`portia_access_people`** (identity + level) and **`portia_access_requests`** (one row per device/request); all writes via RPCs with an audit table | "Level per person" must not drift across devices; matches the promotion RPC style |
+| D6 | New editor tab **`users`** = one line in `tabRegistry` (kind `regular`, open to all by default) + `/api/users` route | Existing per-editor chips (owner "Доступ") can close it per editor with zero extra code |
+| D7 | Promotion takes the nickname **from the approved identity on the server**; the nick form is removed; promo device binding stays as is | Smallest diff to a 17-plan, heavily tested subsystem |
+| D8 | Design system = **tokens file at current values first, then primitives that emit the existing class names, then per-surface migration**; do not reorganise `portia.css` | Cascade order in `portia.css` is load-bearing; deploy is local-only so interim inconsistency never ships |
+| D9 | Build order: **access data layer -> Users tab -> visitor gate -> levels/content gating -> design restyle**; primitives skeleton lands with the Users tab | Gating cannot be enforced before someone can approve; restyle waits on owner variant choice and runs last, with physical UAT |
 
-Preserve the current rendered DOM, CSS class names, Russian copy, storage keys, API response shapes, Supabase workflow semantics, and visual identity while responsibilities are extracted behind compatible interfaces. Every refactor increment must be behavior-neutral until a separately approved stabilization task intentionally changes behavior.
+## 1. Facts in the current code that drive the design
 
-The key architectural rule is:
+- **Anon reads the DB directly.** Baseline migration: `portia_content`, `portia_employee_profiles`, `portia_manual_employees` have `select ... to anon, authenticated using (true)`. The publishable key is `NEXT_PUBLIC_*`, so redacting in `app/api/content/route.ts` alone protects nothing.
+- **`GET /api/content`** uses `createPublicSupabaseClient()` (no cookies), returns `publicCacheHeaders(contentCacheTag, 300)` (`s-maxage=300, durable, stale-while-revalidate=86400`); `PUT` purges the tag. `/api/employees` GET is the same with `employeesCacheTag` (600 s) and does sheet + Roblox lookups per cache miss.
+- **Bundle contains `defaultPortiaContent`** (`app/page.tsx` passes it as `initialContent`) and hard-coded embed URLs for «Таблица» (Google Sheets `htmlview`) and «Устав» (`github.io/S.E-Portia`) in `components/portia-desktop.tsx` lines 40-41.
+- **Device caches:** `portia-content-last-success-v1` and `portia-employees-last-success-v1` (localStorage) seed the UI before any fetch; stamped only with the Supabase URL (`lib/device-cache.ts`).
+- **Revision dedupe:** `acceptFetchedContent` (`lib/content-sync.ts`) drops any answer whose revision is not newer. One global revision + per-viewer payloads would make a level change invisible to the client.
+- **Search** (`lib/search-index.ts`) is a pure client-side function over whatever content/employees the client holds; it has no data access of its own. Server redaction therefore protects search for free. The caller already filters `apps` by what the visitor may open (D-07).
+- **`ScientistLog.lockedLevel` already exists** (default 3; UI hard-codes viewer level «II» and `isOpen = lockedLevel <= 2` in `components/portia-desktop-dossier.tsx`; editor offers II-IV). The locked log's text is currently shipped to every client. This is the seed of the new level model: same scale, real viewer level.
+- **`formattedText`** is a top-level map keyed `virus:<id>:*`, `info:<id>:body`, `info-block:<id>:text`, `guide-block:<id>:text`, ... holding rich text separately from the item. It is the easiest leak path for redaction.
+- **Promotion** already has a "restore" path: `GET /api/promotion/status` without `nickname` resolves the bound nickname from the device cookie (`portia_promo_resolve_device`). `register_attempt` is granted to `anon, authenticated` (baseline line 1597) but is only needed inside `submit_request` (definer).
+- **Editor tab model:** `lib/editor-tabs.ts` `tabRegistry` + `portia_editors.closed_tabs/granted_tabs`; `getEditorAccess` returns `openTabs`; `/api/access` (editor capabilities, polled by editors) — **do not reuse this name** for visitor routes.
+- **Proxy** (`proxy.ts`) excludes `/api/content` and `/api/employees` because cached GETs must never carry `Set-Cookie`. That reason disappears with `no-store`.
+- **Parity machinery:** any new table/RPC must be reflected in `supabase/fingerprint/expected/portia.fingerprint.json`, `tests/e2e/fixtures/data/expected-authz.json` (`lib/phase16-expected-authz.test.ts`), explicit `service_role` grants (migration `20261101000100` only covers objects that existed then), the offline Supabase harness `tests/e2e/harness/offline-supabase.cjs`, and `portia-canonical-parity.test.ts`.
 
-> No structural change is accepted from unit tests alone. It must retain the approved Playwright behavior and visual baseline, and database-sensitive changes must also pass the isolated Supabase staging gate.
+## 2. Target architecture
 
-## Evidence: Implemented vs Proven
-
-| Area | Already implemented and should be preserved | Unproven or unresolved for v1.3 |
-|---|---|---|
-| Desktop | Twelve applications, draggable/resizable/maximizable windows, taskbar ordering, shortcut persistence, settings, polling, assistant, wallpapers, spider, mobile layout | No committed Playwright suite; no approved visual/motion baseline; physical DPR 1.25 and phone acceptance incomplete |
-| Editor | Revisioned content history, undo/redo, optimistic save, access projection, unsaved-close guard, formatter, employee editor, owner access manager | `portia-editor.tsx` remains 3,033 lines; most tab bodies and shared controls are coupled to one closure; no browser regression gate |
-| Promotion UI | Public participant component and dedicated reviewer components already exist; ordinary and qualification flows are visibly separate | Full owner PC/phone UAT, authenticated reviewer browser proof, bank CRUD proof, and final live workflow acceptance are missing |
-| Promotion server | Public and reviewer route groups, sheet parser, policy modules, device binding, typed command parsing, atomic RPC design, RLS-denied direct tables | Mutating concurrency/RLS run has not passed on an isolated project; deployed RPC signatures and latest helper hardening are not authoritatively reconciled |
-| SQL | `portia_setup.sql`, Phase 12 apply/rollback script, Phase 14 owner apply script, static normalization/security tests | The repository snapshot and what was manually applied can drift; latest SQL hardening is not proven deployed; there is no immutable migration history directory |
-| Media | Authenticated upload, 4 MB cap, declared MIME plus magic-byte check, UUID object paths, immutable one-year cache, eager active media and lazy background media | Arbitrary HTTPS media remains allowed by CSP; dimensions/pixel cost and GIF cost are not bounded; repeated media rendering/fallback logic is not centralized |
-| Release | 584 deterministic tests in the latest audit, successful typecheck/build/lint, clean production dependency audit, security headers | No automated browser/a11y/visual gate, no managed Codex Security result, five dev audit findings, no staging-to-release rehearsal |
-
-The v1.2 requirement checkboxes demonstrate implementation intent and deterministic coverage, not release proof. v1.3 should close evidence gaps rather than reopen the 49 Promotion requirements as greenfield design.
-
-## Recommended Architecture
-
-```text
-                         Verification plane
-      GSD contracts -> Figma contract -> Playwright -> Security -> UAT
-                                |
-                                v
+```
 Browser
-  PortiaDesktop (composition root only)
-    ├─ desktop shell
-    │   ├─ app registry (metadata and capabilities)
-    │   ├─ window manager (pure transitions + lifecycle hook)
-    │   ├─ window chrome / taskbar / shortcuts
-    │   └─ settings and persistence adapters
-    ├─ public app modules
-    │   ├─ archive / employees / search / info / guide
-    │   ├─ broadcasts / trash / settings / embedded documents
-    │   └─ Promotion participant app (already separate)
-    ├─ motion modules
-    │   ├─ wallpaper + spider (already separate)
-    │   └─ assistant / shortcut / window motion contracts
-    └─ PortiaEditor (editor composition root)
-        ├─ editor session (history, revision, permission projection, save/close)
-        ├─ tab registry and tab feature modules
-        ├─ rich-text subsystem
-        ├─ employee and access modules
-        └─ Promotion reviewer module (already separate)
+ app/page.tsx (still static, no cookie read on the server)
+  └─ PortiaRoot            NEW  client wrapper; boot animation, then viewer state
+      ├─ AccessGate        NEW  nick form / pending / rejected / revoked  (wallpaper only, no content)
+      └─ PortiaDesktop     MOD  mounted only when viewer is approved or editor; gets {viewer}
+            ├─ windows      MOD  filter by level; stubs for locked scientist logs
+            ├─ PortiaEditor MOD  new "users" tab -> UsersPanel (NEW); level field in item editors
+            └─ PortiaPromotion MOD  no nick form; identity from server
 
-Next.js route handlers (transport boundary)
-  ├─ public content/employees/media
-  └─ Promotion status/requests/test/reviewer/banks
-          |
-          v
-Domain services and typed RPC adapter
-  ├─ roster/sheet reader (read-only authority)
-  ├─ promotion policy/projection/device binding
-  └─ reviewer and bank commands
-          |
-          v
-Supabase
-  immutable migrations -> seed fixtures -> staging -> production
-  RLS + atomic security-definer RPCs are the workflow write boundary
+Route handlers (app/api)
+ /api/visitor    NEW  GET state | POST request | DELETE sign-out          (cookie portia_access)
+ /api/users      NEW  editor-only: GET list | POST decide | PATCH level | DELETE revoke
+ /api/content    MOD  GET per viewer, no-store, redacted;  PUT unchanged (+level normalisation)
+ /api/employees  MOD  GET per viewer, no-store, server-memoised roster
+ /api/promotion/{status,requests,test} MOD  require approved viewer; nickname from identity
+ lib/viewer.ts   NEW  resolveViewer(): editor session -> {kind:"editor"} | cookie -> RPC -> {kind:"visitor",level,...} | none
+
+Supabase (Postgres)
+ tables  NEW  portia_access_people, portia_access_requests, portia_access_audit_events
+ RPCs    NEW  portia_access_submit / _resolve / portia_content_for_visitor / portia_employee_data_for_visitor (anon, token-gated)
+              portia_access_list / _decide / _set_level / _revoke (authenticated, portia_can_edit_tab('users'))
+ RLS     MOD  portia_content, employee_profiles, manual_employees: drop anon select; editor-only select
+ grants  MOD  revoke anon/authenticated execute on portia_promo_register_attempt
 ```
 
-### Architectural invariants
+## 3. (a) Visitor identity, `/api/content`, CDN, search
 
-1. `PortiaDesktop` remains the composition root, but does not own application implementations or window transition algorithms.
-2. The app registry describes applications; it does not become a service locator or hold mutable React state.
-3. The window manager owns window lifecycle only. Content, Promotion, editor history, and employee data remain outside it.
-4. `PortiaEditor` owns one revisioned `PortiaContent` session. Employee and Promotion writes remain independent sessions and must not be folded into that revision.
-5. Route handlers parse HTTP and map errors. Database transitions and concurrency guarantees remain in RPCs; browser state is never authoritative.
-6. Supabase production is never a test fixture. Mutating proof runs only against the dedicated staging project.
-7. Screenshot baselines are approval artifacts. They are updated deliberately, never automatically as a side effect of implementation.
+### 3.1 Identity and session
+- `POST /api/visitor {nickname, fromSheet}` validates the nick (same regex family as `robloxNickname` in `lib/portia-employees.ts`), computes `nicknameKey`, mints a 32-byte token, stores only `HMAC(secret, "access:"+token)` and sets cookie `portia_access` (`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1y`). Secret: reuse `PORTIA_PROMOTION_DEVICE_SECRET` with the distinct `access:` prefix (no new owner env step; domain-separated). Export `keyedDigest` from `lib/portia-device-binding.ts` or put the new helpers in `lib/access-session.ts`.
+- `fromSheet` is a claim only. The route also checks the sheet roster (`loadPromotionAccessRoster`) and stores `sheet_check = listed | not-listed | unknown`. A sheet outage records `unknown`; it never blocks the request and **never auto-approves**.
+- `GET /api/visitor` -> `{state: none|pending|approved|rejected|revoked, nickname?, level?}`, `no-store`. The pending screen polls it (10 s, visible tab only, like `contentSyncMs`).
+- Editors: a Supabase session with `getEditorAccess().canEdit` is treated as full access (level 5, unredacted) and skips the nick gate; they log in through `/owner-login` (public, shows no content). An editor who wants Promotion as a participant also holds an `portia_access` identity; resolution order is editor-session first for content, access cookie for Promotion.
+- One chokepoint, `resolveViewer(request)` (`lib/viewer.ts`): only attempts the Supabase path when an `sb-*-auth-token` cookie exists (same test as `lib/supabase/proxy.ts`), otherwise one RPC. Every GET route uses it. Add a unit test that scans `app/api/**/route.ts` and fails if a GET handler (other than `/api/visitor`, `/api/access`) does not call it, in the style of the existing `lib/security-matrix.test.ts`.
 
-## Desktop Decomposition
+### 3.2 `/api/content` after the change
+1. `viewer = await resolveViewer(request)`; `none|pending|rejected|revoked` -> `401 {code:"access-required", state}` with `noStoreHeaders`.
+2. Visitor: one RPC `portia_content_for_visitor(p_token_hash)` returns `{state, level, nicknameKey, payload, revision, updated_at}`; route runs `normalizePortiaContent` then `redactContentForLevel(content, level)`.
+3. Editor: direct select with the editor's session (new policy `select to authenticated using (portia_can_edit())`), no redaction.
+4. Response adds `viewer: {kind, level}`. PUT is unchanged except that `normalizePortiaContent` must preserve/clamp the new `level` fields (items are rebuilt field by field in places; unknown keys are not guaranteed to survive).
 
-### Target boundaries
+Client (`components/portia-desktop.tsx` `fetchContent`): treat `401 access-required` as a gate trigger, **not** a sync failure (`failureFromResponse` would otherwise show the stale banner and keep cached content). Extend `acceptFetchedContent` so a changed `viewer.level` or identity resets `knownRevision` (same revision, different payload must be accepted). Stamp both localStorage caches with `viewKey = nicknameKey:level` (extend `stampCacheSource`/`cacheMatchesSource` in `lib/device-cache.ts`) and **delete both caches on any transition to non-approved**. `PortiaDesktop` must not mount, and must not read those caches, before `/api/visitor` says approved (or an editor session exists).
 
-| Module | Responsibility | Must not own |
+### 3.3 Cache and CDN
+- Gated responses: `Cache-Control: no-store` and `Netlify-CDN-Cache-Control: no-store` (`noStoreHeaders`), `force-dynamic` stays. Netlify dynamic responses are not cached without an opt-in header (docs), so no-store is belt and braces.
+- **Do not** vary the CDN cache on a level/role cookie (`Netlify-Vary: cookie=...`): the CDN cannot verify it, so anyone setting `level=5` would be served the level-5 copy. Varying on the unforgeable token cookie is safe but gives ~0 hit rate and delays revocation, so it is not worth it.
+- `purgeCacheTag(contentCacheTag)` after PUT becomes redundant (keep it for one release; it also clears stale pre-gate copies). `contentCacheTag` / `employeesCacheTag` can be retired once the gate is enforced.
+- **Rollout trap:** the old public response was stored `durable` with `stale-while-revalidate=86400`. After deploying the gated routes, purge both tags once, or the CDN keeps serving the open copy to everyone. Put this in the rollout checklist.
+- **Cost trap (MEDIUM):** the CDN used to absorb the 10 s content poll and the 5 min employee poll. Now each visible tab is a function invocation plus one RPC. Mitigations: visitors poll at 30-60 s (editors keep 10 s); memoise the expensive, viewer-independent half of `loadEmployees` (sheet CSV + Roblox lookups) in module memory with a 10 min TTL, and gate on every request (cold lambdas just recompute; Netlify Blobs is out of scope). Measure invocations on staging before choosing the interval.
+
+### 3.4 Redaction rules (`lib/content-redact.ts`, NEW, pure)
+Required level lives in the JSON: `level?: 1..5` on `Virus`, `InfoSection`, `InfoSubsection`, `GuideSection`, `GuideCard`; `appLevels?: { charter?: 1..5 }` for «Устав». **Missing = 1** (existing content stays visible to every approved person). Scientist logs keep `lockedLevel` (optional, same 1-5 scale, editor dropdown widened from II-IV).
+
+| Part of `PortiaContent` | Rule for viewer level L |
+|---|---|
+| `viruses[]` | omit if `level > L` |
+| `viruses[].scientistLogs[]` | keep a stub `{id,title,scientist,lockedLevel}` if `lockedLevel > L` (UI already renders locked rows); drop `content`, `richContent` |
+| `infoSections[]`, `subsections[]`, `guideSections[]`, `cards[]` | omit; effective level = max(section, child); omitted parent removes children |
+| `recycledViruses[]`, `recycleFiles[]` (kind `virus`) | inherit the virus level; text/image files level 1 |
+| `formattedText` | **allowlist by key prefix**: drop every `virus:<id>:*`, `info:*`, `info-block:*`, `guide-block:*` key whose owner was omitted; unknown prefixes are dropped (fail closed) |
+| `broadcasts`, assistant fields, `searchRecommendations` | visible to every approved viewer |
+
+- Omit, not "locked placeholder", is the default: it is fail-closed and search/lists need no change. A teaser row for locked items (title + lock) is a later owner-decided option because the title itself can be sensitive.
+- Test with **canary strings**: build a fixture where every leveled item and every rich-text key carries a unique marker; assert no marker above level L appears in `JSON.stringify(redacted)` for L = 1..5.
+- The function is pure and secret-free, so the editor can reuse it for a "preview as level N" control (cheap differentiator).
+- «Устав»/«Таблица» embeds: the iframe URLs are public by themselves (github.io page, Google Sheet). Level-gating the **window** is UI-level; hiding the URL needs it moved from the bundle into the server response (optional hardening). The owner must know the sheet and the Pages site stay reachable by URL unless unshared. Same for the open `portia-media` bucket: with omission, locked-item image URLs are never delivered; removing the broad `select` policy on `storage.objects` should close listing while public URLs keep working (**LOW-MEDIUM, official docs say a broad SELECT policy permits listing; public-GET-without-policy not confirmed, test on staging**).
+
+### 3.5 Search
+No change to `buildSearchIndex`/`matchSearch`. Required: (1) content and employees arrive already redacted, (2) the `apps` list passed to the index excludes apps whose level exceeds the viewer's (`appLevels.charter`), (3) caches cleared on view change so a downgraded user cannot search stale local copies. Add a `search-index` test over the redacted canary fixture.
+
+## 4. (b) Database model, RLS, RPCs, editor tab
+
+Forward-only migrations (baseline is frozen), timestamped after `20261106000000`. Production is owner-run; this repo work targets an isolated staging only.
+
+```
+portia_access_people
+  id uuid pk, nickname text, nickname_key text unique (= lower(trim)), level smallint 1..5 default 1,
+  origin text ('sheet'|'outside'), status text ('active'|'blocked'),
+  created_at, approved_at, approved_by uuid -> auth.users, level_changed_at, level_changed_by uuid, updated_at
+
+portia_access_requests          -- one row per device/request; an approved row IS a session
+  id uuid pk, person_id uuid null -> people, nickname, nickname_key, claimed_from_sheet bool,
+  sheet_check text ('listed'|'not-listed'|'unknown'), token_hash text unique, ip_bucket text,
+  status text ('pending'|'approved'|'rejected'|'revoked'), created_at, decided_at, decided_by uuid,
+  decision_note text, last_seen_at (updated at most every ~10 min, never per poll)
+
+portia_access_audit_events      -- append-only, like portia_promo_audit_events
+  id bigint identity, actor_id uuid, event_type text, nickname_key text, details jsonb, created_at
+```
+- Both main tables and the audit table: RLS on, `revoke all from public, anon, authenticated` (promotion pattern); no direct table grants; PostgREST never touches them.
+- Second device for an already-approved nick is a **new pending request**, never auto-attached (otherwise typing someone's nick grants access). Approving it attaches the device to the existing person.
+- One person, one level; devices inherit it. Level change/revoke/block take effect on the visitor's next poll because nothing is cached.
+
+| RPC (`security definer`, `set search_path = ''`) | Caller | Gate |
 |---|---|---|
-| `desktop/app-registry.ts` | Stable app IDs, labels, PORTIA paths, icons, default/minimum geometry, shortcut defaults, search visibility, mount policy | Window state, content, browser storage, React nodes with app-specific props |
-| `desktop/window-state.ts` | Pure state and transitions: open, focus, begin/finish close, begin/finish minimize, maximize, geometry, lock | Timers, DOM reads, pointer events, content/editor rules |
-| `desktop/use-window-manager.ts` | Exit timers, z-order allocation/renormalization, qualification lock orchestration, resize refit | App rendering, content fetching, visual markup |
-| `desktop/portia-window.tsx` | Existing title bar, controls, drag/resize pointer handling, imperative painting during pointer move | Global window collection or app-specific behavior |
-| `desktop/shortcuts.tsx` | Shortcut rendering, drag/drop, semantic hover contract | App content or window transitions beyond `open(appId, origin)` |
-| `desktop/taskbar.tsx` | Ordering, focus/minimize requests, bounce presentation | Window reducer implementation |
-| `desktop/persistence.ts` | Versioned parsing/writing of settings, shortcut positions, taskbar order | React rendering and default registry definitions |
-| `desktop/data/*` hooks | Content polling/save, access, employees, notifications | Window geometry and app markup |
-| `apps/*` | One public application view per module | Global desktop state; receive explicit view models and commands |
+| `portia_access_submit(nickname, nickname_key, claimed, sheet_check, token_hash, ip_bucket)` | anon via route | DB-side caps (global pending max, per-nick max, per-ip-bucket) independent of what the caller passes |
+| `portia_access_resolve(token_hash)` | anon via route | valid HMAC digest only |
+| `portia_content_for_visitor(token_hash)` | anon via route | approved + active person; returns payload for TS redaction |
+| `portia_employee_data_for_visitor(token_hash)` | anon via route | same; returns profiles + manual rows |
+| `portia_access_list()` | authenticated | `portia_can_edit_tab('users')`; people + requests, pending first |
+| `portia_access_decide(request_id, decision, level, sheet_listed)` | authenticated | tab `users`; default level 2 if the **editor route's** fresh sheet check says listed, else 1; never trust stored `sheet_check` |
+| `portia_access_set_level(person_id, level, expected_level)` | authenticated | tab `users`; optimistic via `expected_level` |
+| `portia_access_revoke(request_id \| person_id)`, block toggle | authenticated | tab `users` |
+| `portia_access_cleanup()` | pg_cron | purge rejected/stale pending (same job style as `portia-promo-cleanup`) |
 
-The current `appMeta`, `initialWindows`, `defaultShortcutLayout`, `windowMinimums`, preferred sizes, and `globalSearchAppIds` are fragments of one registry and should be consolidated. Keep application rendering in a separate typed `AppRenderer` switch because each app has different dependencies; forcing heterogeneous app props into registry metadata would create hidden coupling.
+Notes:
+- The anon-callable RPCs are only unreachable-without-secret for `resolve`/`*_for_visitor` (attacker cannot compute a valid digest). `submit` is reachable directly with the public key (same as `portia_promo_submit_request` today), hence the DB-side caps.
+- `portia_content` / employee tables: replace the three `Public can read` policies with `select to authenticated using (portia_can_edit())` (employees: `portia_can_edit_tab('employees')` is not needed for read); `revoke select ... from anon`. `portia_editor_is_approved` (anon, needed for sign-up) is untouched.
+- **Expand/contract order:** migration 1 adds tables/RPCs (additive, old code still works) -> deploy code that reads via RPC/session -> purge CDN tags -> migration 2 revokes anon table reads and anon `register_attempt`. Never ship migration 2 before the code, never the reverse for the gate. Rollback = re-grant.
+- Editor tab: `tabRegistry` gets `{ id: "users", label: "Пользователи", kind: "regular" }`; `PortiaEditor` renders `UsersPanel` for `tab === "users"` (sibling of the `promo` and `access` branches around lines 1626-1628). `UsersPanel` talks only to `/api/users` (routes, not supabase-js in the browser, matching `/api/editors`); the route does `getEditorAccess` -> `openTabs.includes("users")` -> RPC. Add `/api/users` to the `proxy.ts` matcher. Optional: include `pendingRequests` in `/api/access` for editors with the tab open to badge the tab.
+- Escalation note: a restricted editor (some content tabs closed) can still grant a visitor level 5. Accepted: it is audited, and the owner can close the `users` tab per editor with the existing chips.
+- Shared normaliser: `nicknameKey` is a private function in `lib/portia-employees.ts` (`trim().toLocaleLowerCase("en-US")`); SQL uses `lower(trim(...))`. Export one function, use it in access, promotion and employees, and add a parity test against the SQL expression.
 
-### Window manager design
+## 5. (c) Promotion mapping
 
-Use a pure reducer or pure transition functions with events such as:
+| Today | After |
+|---|---|
+| `PromotionIdentityGate` asks for a nick; `GET /api/promotion/status?nickname=` and `POST /api/promotion/requests {nickname}` trust the client | Routes call `resolveViewer`; **client-sent nickname is ignored**; `nicknameKey` comes from the approved person |
+| Sheet access roster check (`findPromotionAccessEntry`) | Unchanged (a "not in table" person gets the existing `not-listed` 404 and a friendly screen) |
+| Device cookie `portia_promo_device` -> `portia_promo_device_bindings` (`bind`/`resolve`/`deny`), `PORTIA_PROMOTION_DEVICE_SECRET` | **Unchanged.** Same secret, new `access:` digest prefix for the new cookie. Merging the two cookies is a possible later cleanup, not v1.4 |
+| UI "restore" path (`status` without nickname) | Becomes the only path: `PortiaPromotion` auto-loads status on mount, `PromotionIdentityGate` is deleted |
 
-```typescript
-type WindowEvent =
-  | { type: "open"; app: AppId; origin?: OpenOrigin; geometry?: WindowGeometry }
-  | { type: "focus"; app: AppId; z: number }
-  | { type: "exit-start"; app: AppId; kind: "close" | "minimize" }
-  | { type: "exit-finish"; app: AppId; kind: "close" | "minimize" }
-  | { type: "toggle-maximize"; app: AppId }
-  | { type: "geometry"; app: AppId; geometry: WindowGeometry }
-  | { type: "lock-promotion"; locked: boolean; z?: number };
+- Existing promo bindings were made under open nick entry; a binding whose `nickname_key` differs from the later-approved nick yields `device-denied`. Reviewer `device-reset` already handles this; note it in the rollout.
+- `test/`, `reviewer/`, `banks/` routes: add the approved-viewer requirement to `test/` (participant path); reviewer/banks stay editor-grant based.
+- Revoking anon `portia_promo_register_attempt`: forward migration `revoke execute ... from anon, authenticated`; update fingerprint and `expected-authz.json`; confirm `submit_request` (definer) still passes (staging proof; Postgres execution is BLOCKED until a phase proves it).
+
+## 6. (d) Design system
+
+**Current state (measured):** `app/portia.css` 2456 lines of dense one-line rules, global, order-sensitive (comments such as "after X so it wins the cascade"); Tailwind is imported but unused for components; 15 distinct `border-radius` values (7px x31, 4px x17, 10px x12, 6px, 3px, 5px, 8px, 9px, 2px, 14px, 19px...); button classes `primary-control` / `secondary-control` / `danger-control` / `promotion-action`; two editor tab strips (`editor-tabs`, `dossier-tabs`); tokens exist for colour/fonts (`--bg --panel --line --teal --paper --ink ...`, accent via `--accent-hue`/`--accent-chroma`, written by `lib/accent-custom.ts`/`accent-boot.ts` — **names must not change**).
+
+**Placement**
 ```
-
-Do not move pointer-by-pointer geometry into React state. The existing `AppWindow` deliberately paints `left/top/width/height` directly while dragging and commits once at the end; retain that performance boundary. Keep the 900 px mobile cutoff, symmetric workspace bounds, qualification modal lock, editor unsaved-close handshake, reduced-motion exit timing, and icon/taskbar transform origins as contract tests.
-
-Normalize z-indices when they approach the formatter layer instead of retaining the current acknowledged “about 930 switches” ceiling. This can be added only after the reducer parity suite is green.
-
-### Safe extraction sequence for `portia-desktop.tsx`
-
-1. **Freeze contracts first.** Capture public desktop, every app window, min/max/minimized states, desktop/phone layout, motion modes, settings persistence, console baseline, and keyboard names.
-2. **Move declarations without changing behavior.** Extract `AppId`, metadata, geometry defaults/minimums, storage codecs, and existing pure helpers. Keep old imports and exact values.
-3. **Extract leaf views one at a time.** Start with embedded documents, settings, broadcasts, search, and info; then archive/employees/trash. `GuideApp`, wallpaper/spider, and Promotion are already separate and should stay separate.
-4. **Extract window chrome.** Move `AppWindow` unchanged, retaining its DOM and CSS classes. Verify drag on all eight edges, min/max/restore, mobile, and qualification lock.
-5. **Introduce pure window transitions behind the existing handler API.** Keep `openApp`, `closeApp`, `minimizeApp`, `focusApp`, and `toggleMaximize` as compatibility adapters until parity passes.
-6. **Extract taskbar, shortcuts, and persistence.** Migrate one persisted key at a time; continue reading current versioned keys. Do not reset user layouts during refactor.
-7. **Extract content/access/employee hooks last.** Their race protection (`knownRevision`, `savesStarted`, edit counters, cached fallbacks) is subtle and should move only after shell behavior is stable.
-8. **Reduce `PortiaDesktop` to composition.** It wires hooks, renderer, window manager, notifications, and motion surfaces; it should no longer contain application bodies.
-
-Each numbered step is independently revertible. Do not combine a view extraction, CSS cleanup, and behavior fix in one increment.
-
-## Editor Decomposition
-
-### Preserve existing useful seams
-
-The editor already has the correct foundations in `lib/`: history reducer, change classification, access-aware tab registry, content limits, item mutations, formatting logic, and tests. Keep these modules as the domain layer. Promotion is already mounted as a separate trusted tab and must not be pulled back into the main editor file.
-
-### Target boundaries
-
-| Module | Responsibility | Notes |
-|---|---|---|
-| `editor/use-editor-session.ts` | `PortiaContent` history, revision synchronization, dirty sections, save/discard/undo/redo, permission projection, close handshake | Extract after tab props are explicit; keep employee dirty state separate |
-| `editor/editor-shell.tsx` | Tab strip, current tab, save chip/popover, global dialogs, formatter portal | No tab-specific form markup |
-| `editor/editor-commands.ts` | Typed mutation/selection/formatter command interface passed to tab modules | Avoid a broad mutable context |
-| `editor/primitives/*` | Field, group, collapsible card, order handle, table rows, image field, confirmation dialog, empty/loading states | Preserve class names and accessibility names |
-| `editor/rich-text/*` | Formatted field, selection capture/restore, formatter panel, batch application | High-risk subsystem; move intact before internal cleanup |
-| `editor/tabs/*` | Viruses, information, guide, broadcasts, recycle, search, assistant | One module per existing registry tab |
-| `editor/employees/*` | Existing independent employee profile editor | It has its own dirty/save lifecycle |
-| `editor/access/*` | Owner access manager | Owner-only and independent of content revision |
-| `portia-promotion-editor*` | Existing Promotion reviewer workspace | Keep existing split; stabilize rather than recombine |
-
-### Safe extraction sequence for `portia-editor.tsx`
-
-1. Extract presentation primitives with exact markup/classes and add component-level Playwright coverage.
-2. Move already self-contained `EmployeeProfilesEditor` and `EditorAccessManager` into feature modules without changing their fetch/save lifecycles.
-3. Move the simplest content tabs first: search, assistant, broadcasts.
-4. Move information and guide next; retain ID-based mutations and formatted-text cleanup from `lib/editor-items.ts`.
-5. Move virus and recycle tabs last because they share selection, formatted keys, restore/delete behavior, and cross-section permission semantics.
-6. Move the rich-text subsystem intact. Only after parity, consider smaller internal hooks for selection, panel placement, and batch formatting.
-7. Extract `useEditorSession` after all consumers use a typed command interface. This exposes the true shell boundary and avoids a temporary “god context.”
-8. Split CSS only after DOM parity. First colocate comments/ownership, then move rules without changing selector specificity or order.
-
-Do not merge employee, Promotion, and content dirty state into one reducer. The current independent persistence models are intentional: content uses a single revisioned row, employees use profile endpoints, and Promotion uses transactional RPCs.
-
-## App Registry and Shared UI Primitives
-
-### Registry recommendation
-
-Use one authoritative metadata registry and one explicit renderer:
-
-```typescript
-type AppDefinition = {
-  id: AppId;
-  label: string;
-  path: string;
-  icon: PortiaIconName;
-  shortcut?: { id: DesktopShortcutId; defaultPosition: ShortcutPosition };
-  window: { preferred: Size; minimum: Size; className: string };
-  search: boolean;
-  mount: "while-open" | "persistent";
-};
+app/styles/tokens.css       NEW  radius/space/type/border scale + semantic aliases (--radius-control, --space-2 ...) pointing at existing vars; first version = CURRENT values
+app/styles/primitives.css   NEW  rules for ui/* primitives; imported BEFORE portia.css so legacy still wins until its rule is deleted
+components/ui/              NEW  Button, TabStrip, Field, Chip/Badge, Panel/Dialog shell, WindowChrome parts
+app/portia.css              MOD in place, never reorganised or split (moving rules changes cascade)
+app/layout.tsx              MOD  two extra imports
 ```
-
-`editor` may remain without a desktop shortcut. Promotion should use persistent mounting while minimized if its qualification/heartbeat contract requires it; closing during an active qualification remains blocked by the existing lock. The registry should encode the mount decision, not infer it from labels or JSX order.
-
-### Shared primitives recommendation
-
-Create PORTIA-specific primitives, not generic design-system abstractions:
-
-- `PortiaWindow`, `PortiaDialog`, `PortiaButton`, `PortiaField`, `PortiaTabs`, `PortiaEmptyState`, `PortiaLoadingState`, `PortiaMedia`.
-- Keep semantic variants small: primary, secondary, danger; light/dark document surface; compact/standard controls.
-- Preserve current CSS custom properties, accent behavior, fonts, and class hooks. Figma defines variants and motion states; React components enforce structure and accessibility.
-- Do not wrap every `<div>` or create a universal schema-driven form. Extract only repeated contracts with at least two real consumers.
-
-The Figma contract is the source for approved appearance and motion intent; the code registry is the source for application identity and geometry; Playwright screenshots are the rendered regression evidence. None should silently generate or overwrite the others.
-
-## Promotion API, RPC, Staging, and Canonical SQL
-
-### Keep the current trust boundaries
-
-The current shape is sound and should be retained:
-
-- Public `status`, `requests`, and qualification `test` routes use the anonymous Supabase client and return safe projections with `no-store`.
-- Reviewer and bank routes use the cookie-aware server client and require the trusted `promo` grant.
-- Google Sheet ranges remain read-only authorities for membership/current title/date.
-- Direct access to Promotion tables remains revoked; public and reviewer mutations go through explicit RPCs.
-- Concurrency-sensitive actions remain atomic in Postgres: first binding/admission, one active request, claim, preview confirmation, answer compare-and-set, lease expiry, close/history pruning.
-- The service-role key exists only in isolated test orchestration. It must never enter the Next.js runtime or browser bundle.
-
-### Tighten module boundaries without redesigning the workflow
-
-Route handlers should contain only request parsing, auth/client selection, service invocation, and HTTP mapping. Introduce a typed `PromotionRpc` adapter around RPC names and response decoders so `reviewer/route.ts` and `banks/route.ts` no longer dispatch raw string tuples. Keep eligibility/projection/device/sheet logic in current domain modules.
-
-Use explicit service methods:
-
-```text
-participant: status, submitRequest, startTest, heartbeat, answer, fail
-reviewer: state, claim, release, reject, approveAssignment, grade, finalize
-banks: state, preview, confirm, saveConfiguration, saveItem
-owner: resetDevice, deleteRequest
-```
-
-This is an adapter around existing RPC behavior, not a second state machine in TypeScript.
-
-### Canonical SQL decision
-
-Adopt `supabase/migrations/` as the only deployable history.
-
-1. Capture the current accepted schema as a baseline migration for new environments.
-2. Reconcile the existing production project to that baseline once and record migration history.
-3. Preserve `phase12_apply.sql` and `phase14_apply.sql` as historical/manual evidence; stop editing them after reconciliation.
-4. Make every subsequent database change a new timestamped, forward-only migration.
-5. Treat `portia_setup.sql` as a generated/current-schema snapshot for review or disaster recovery, not as a repeatedly edited production deployment script.
-6. Run a drift check that rebuilds an empty local database from migrations and compares required tables/functions/grants/policies to the snapshot and RPC inventory.
-
-The present static test that normalizes Phase 14 function/table definitions across two mutable SQL files is useful, but it cannot prove what a remote project actually ran. Immutable migration history plus `supabase migration list` and live RPC/RLS tests closes that gap.
-
-Use expand/contract for RPC changes: deploy a new compatible function/signature first, deploy the application adapter second, verify staging, then revoke/drop the old signature in a later migration. Rollback is a compensating migration or application rollback to the still-present old RPC, never an automatic destructive down script.
-
-### Staging boundary
-
-Use one long-lived Supabase staging project with its own URL, anon key, service-role secret, Auth users, storage bucket, and synthetic data. It must contain no production user/content copy.
-
-- Build it from migrations, then seed deterministic synthetic owner, promo reviewer, non-promo editor, participant workflows, banks, and media.
-- Add a dedicated staging copy of the roster sheet. Configure only its sheet ID server-side and validate it against the expected Google Sheets URL shape; production keeps the current sheet ID.
-- Prefix every dynamic fixture with a run ID, as the existing live test already does, and delete it in teardown.
-- Run the role matrix: anon, authenticated without editor access, regular editor without `promo`, promo reviewer, owner, service role.
-- Run concurrent claim, concurrent first admission/device binding, answer CAS/idempotency, immutable mode, deadline/lease expiry, stale preview, RLS direct-table denial, cleanup/history cap, and media authorization.
-- Run once from a fresh database and once as an upgrade from the reconciled baseline.
-
-The existing `test:promotion-live` guard and fixture cleanup are the correct starting point. The mutating mode becomes a blocking staging gate, while `READ_ONLY_PREFLIGHT` remains an inventory check and must not be reported as concurrency/RLS proof.
-
-## Playwright Architecture
-
-### Recommended layout
-
-```text
-playwright.config.ts
-tests/e2e/
-  auth.setup.ts
-  fixtures/
-    portia-test.ts          # composed fixtures and expectations
-    roles.ts                # owner/reviewer/no-promo contexts
-    staging.ts              # run-scoped DB/media fixtures
-    diagnostics.ts          # console, page errors, failed requests
-  pages/
-    desktop.page.ts
-    window.page.ts
-    editor.page.ts
-    promotion.page.ts
-    promotion-reviewer.page.ts
-  specs/
-    desktop-shell.spec.ts
-    editor.spec.ts
-    promotion-participant.spec.ts
-    promotion-reviewer.spec.ts
-    apps.spec.ts
-    accessibility.spec.ts
-    media.spec.ts
-  visual/
-    desktop.visual.spec.ts
-    editor.visual.spec.ts
-    promotion.visual.spec.ts
-```
-
-Page objects should model user surfaces, not mirror source files. `DesktopPage` opens apps and queries taskbar/shortcut/window state; `WindowPage` manipulates one named window; `EditorPage` selects tabs and owns save/dirty assertions; Promotion participant and reviewer objects remain separate.
-
-Prefer role, label, text, and stable application IDs. Add `data-testid` only where PORTIA’s repeated icon/window markup has no unambiguous accessible locator. Do not use long CSS selectors tied to extraction paths.
-
-### Fixtures and projects
-
-- Use Playwright `test.extend` fixtures so setup/teardown is explicit and isolated.
-- Use a setup project and ignored `storageState` files for owner/reviewer/no-promo roles. Never commit auth state.
-- Use separate browser contexts when one test needs participant and reviewer concurrently.
-- Add an automatic diagnostics fixture that fails on `pageerror`, unexpected console errors, unhandled failed API responses, and hydration errors.
-- Use a worker-scoped staging seed only for immutable shared reference data; mutable workflow rows are test-scoped and run-ID-prefixed.
-- Run behavioral smoke on Chromium, Firefox, and WebKit; keep the authoritative pixel baseline on one pinned Chromium/OS/font environment.
-- Required viewports: desktop 1440×900, owner PC simulation at DPR 1.25, and a representative phone viewport. Physical PC/phone UAT remains a separate release gate.
-- Capture trace on first retry and screenshot/video on failure. Retries diagnose flakiness; a test that only passes on retry is not release-ready.
-
-### Visual baseline policy
-
-Use three layers of visual evidence:
-
-1. **Current-state reference:** captured before refactoring and approved as “preserve.”
-2. **Figma contract:** canonical variants, dimensions, states, and motion timings for windows, shortcuts, assistant, wallpaper/spider, and application shells.
-3. **Rendered Playwright baseline:** committed screenshots of deterministic states in the pinned environment.
-
-For still screenshots, force a known accent/wallpaper/content fixture, fixed clock/date, loaded fonts/media, and `data-motion="reduce"`; use Playwright screenshot styles or masks for unavoidable external/dynamic regions. Do not baseline live Google/YouTube iframe pixels.
-
-Static screenshot assertions disable animations by default, so they do not prove motion. Motion gets a separate contract suite:
-
-- assert full/reduced/off mode selection;
-- assert start/end transform origin and settled state for open/close/minimize/shortcut handoff;
-- seed randomness in tests by overriding `crypto.getRandomValues` before page load for spider routes;
-- assert no frame-loop writes while hidden/off/settled where the implementation promises that;
-- retain traces/video and owner approval for qualitative spider, web, assistant, and shortcut motion.
-
-Never update snapshots automatically in the release command. A changed baseline requires a named design-contract change and owner approval.
-
-## Media Pipeline
-
-### Current boundary to retain
-
-Uploads already enforce authenticated editor access, a 4 MB limit, MIME/signature agreement, UUID object names, public URLs, and immutable caching. Preserve this as the ingestion gate.
-
-### Target pipeline
-
-```text
-Editor upload
-  -> access policy for the edited area
-  -> byte/type/signature/size validation
-  -> dimension + pixel/frame budget validation
-  -> optional static derivative/thumbnail generation
-  -> immutable object path
-  -> canonical media descriptor
-  -> PortiaMedia renderer (priority/lazy/fallback/aspect ratio)
-```
-
-Centralize repeated `EmployeeImage`, `LoadingMedia`, `GuidePhoto`, and editor preview behavior behind a PORTIA-specific media component while keeping placement-specific dimensions. The component decides eager versus lazy loading, decode state, fallback, dimensions/aspect ratio, and approved source policy; it must not impose one crop on dossiers, mutations, guides, employees, and recycle files.
-
-Migration should be additive:
-
-1. Inventory all stored media URLs and classify local Supabase, approved external, missing, GIF, and oversized.
-2. Introduce the shared renderer with the existing string URL contract and migrate one surface at a time.
-3. Add upload metadata/derivatives for new files without rewriting old content.
-4. Backfill or re-upload existing external media only after owner review.
-5. Tighten `img-src`/`media-src` from broad `https:` to self, Supabase storage, and an explicit allowlist or same-origin proxy only after the inventory is clean.
-
-Do not tighten CSP first; that would turn unresolved external URLs into broken content. Conversely, do not treat the current broad HTTPS policy as final release hardening.
-
-Media release evidence should include no layout shift from known images, bounded bytes on phone, active-image priority only, lazy background collections, broken-media fallback, GIF behavior, storage authorization/listing policy, and cache headers for immutable UUID paths.
-
-## Migration and Rollback Strategy
-
-### Branch-by-abstraction rules
-
-- Add the new module behind the current public interface.
-- Route one consumer through it.
-- Run deterministic, browser, visual, a11y, and console gates.
-- Keep the old implementation until the new path is proven.
-- Remove dead code in a later, separately reviewable increment.
-
-### Rollback-friendly increments
-
-| Change | Increment | Rollback |
-|---|---|---|
-| App registry | Add metadata registry, then consume metadata one field at a time | Restore old constants; no stored data changes |
-| Window manager | Add pure transitions under existing handler names | Switch adapters back; retain old state shape until final cleanup |
-| Desktop apps | Extract one leaf view with identical props/DOM | Re-inline that one view |
-| Editor tabs | Extract one tab while keeping shared session in parent | Restore one import/body; history/data unchanged |
-| Shared primitives | Migrate one repeated control family at a time | Return individual call sites to old markup |
-| RPC contract | Add compatible new RPC/signature before app switch | Roll back app while old RPC remains granted |
-| SQL | New immutable forward migration with assertions | Compensating migration; no destructive automated down migration |
-| Media | Shared renderer accepts existing URLs before metadata is required | Revert individual surface; old URLs remain valid |
-| Visual change | Separate commit tied to Figma contract and new baseline | Revert visual commit and baseline together |
-
-Never combine schema migration, route rewrite, component extraction, and visual redesign in one plan. That would recreate the v1.2 mixed-scope verification failure.
-
-## Release Gates
-
-| Gate | Required evidence | Blocks |
-|---|---|---|
-| G0 — Baseline integrity | Dirty-file disposition, exact commit, current deterministic checks, current public/auth screenshots, browser console ledger | Any implementation work |
-| G1 — Contract | Requirement trace, Figma UI/motion approval, threat/security delta, migration/rollback plan | Phase implementation |
-| G2 — Deterministic | Unit/API/SQL contract tests, typecheck, lint, production build, production dependency audit | Browser verification |
-| G3 — Browser | Playwright behavior on desktop/phone, role fixtures, console/network clean, accessibility scan, committed visual comparison | Phase acceptance |
-| G4 — Live staging | Fresh migrations + seed, migration list, mutating Promotion RLS/concurrency suite, authenticated reviewer E2E, cleanup | Promotion acceptance and release |
-| G5 — Security | Codex Security diff per phase; final managed deep scan; CSP/header/storage review; no unexplained production vulnerabilities | Release candidate |
-| G6 — Owner UAT | Physical PC including DPR 1.25 drag/motion and authenticated reviewer; physical phone participant/editor flows; signed visual verdict | Release candidate |
-| G7 — Release rehearsal | Staging deploy, backup/restore plan, migration expand/contract check, performance budgets, full gate rerun from clean checkout | Production approval |
-| G8 — Production verification | Approved migration application, safe smoke checks, headers/assets/CDN verification, no console errors, evidence ledger closed | Milestone completion |
-
-Accessibility should run as both automated scanning and task-focused keyboard checks. Automated scans do not replace focus order, drag alternatives, dialog focus return, mobile navigation, or the owner’s visual judgment.
-
-## Compact Phase-Order Guidance
-
-1. **Evidence and design contract** — reconcile the working tree; install/configure the project Playwright suite; capture current desktop/editor/Promotion references; approve Figma UI/motion states.
-2. **Canonical Supabase staging** — introduce immutable migrations, dedicated staging and synthetic seeds; reconcile Phase 12/14 helpers; pass the mutating RLS/RPC/concurrency suite.
-3. **Desktop shell decomposition** — registry, window state/hook, window chrome, leaf apps, taskbar/shortcuts/persistence, then data hooks; zero intentional visual change.
-4. **Editor decomposition** — primitives, employee/access modules, tab modules, rich text, then session shell; zero intentional visual change.
-5. **Desktop motion stabilization** — implement only approved Figma deltas for windows, shortcuts, assistant, wallpaper, spider, and web; collect deterministic checks plus owner motion evidence.
-6. **Promotion proof** — close database/API findings, reviewer/bank UX, participant PC/phone paths, live browser workflow, cleanup, and owner acceptance after shell/editor boundaries are stable.
-7. **Remaining apps and media** — common empty/loading/error/list limits, mobile navigation, search contracts, centralized media rendering, performance and CSP allowlist migration.
-8. **Release verification** — full Codex Security, dependencies, a11y, console, visual, performance, staging rehearsal, physical UAT, production migration/smoke, and GSD ledger closure.
-
-### Ordering rationale
-
-- Baselines and Figma contracts must precede refactors or visual stabilization; otherwise “no regression” has no reference.
-- Staging and canonical migrations must precede Promotion acceptance; read-only RPC inventory is not proof.
-- Desktop/editor decomposition must precede final motion and Promotion UAT, or later structural work would invalidate acceptance.
-- Promotion must be proven before broad per-app/media cleanup because it carries the highest unclosed data/security risk.
-- CSP tightening follows media inventory/migration, not the reverse.
-- Final security and release gates run after all code, SQL, visual, and media changes, from a clean checkout.
-
-## Patterns to Avoid
-
-### Replacing the monolith with a global context monolith
-
-Moving every desktop/editor value into one context would keep coupling and increase rerenders. Prefer a small window manager, explicit app view models, typed editor commands, and independent data hooks.
-
-### Registry-driven business logic
-
-The registry may describe geometry and capabilities, but must not hide permission checks, Promotion state transitions, or editor save rules in metadata callbacks.
-
-### TypeScript state machine duplicating Postgres
-
-Client/domain code may validate commands and decode projections. It must not become a second authority for atomic workflow transitions already enforced by RPCs.
-
-### Snapshot approval by threshold inflation
-
-Do not raise pixel tolerances or mask whole windows to make a refactor pass. Stabilize dynamic inputs and investigate the diff.
-
-### Editing historical SQL in place
-
-Changing `phase14_apply.sql` after it has been manually run makes the repository look correct while remote state remains unknown. New changes require new migrations.
-
-### CSP tightening before media migration
-
-Blocking all external HTTPS media before inventory/backfill would create silent product regressions.
-
-## Confidence Assessment
-
-| Area | Confidence | Basis |
-|---|---|---|
-| Desktop/editor decomposition | HIGH | Direct inspection of 2,317-line desktop, 3,033-line editor, existing pure modules, current component seams, and forensic/audit evidence |
-| App registry/window manager | HIGH | Current metadata/geometry/search/shortcut definitions are visibly duplicated in one file; extraction preserves established behavior |
-| Promotion boundaries | HIGH | Direct inspection of routes, domain modules, RPC SQL, live-test harness, and v1.2 implementation record |
-| Canonical migrations/staging | HIGH | Repository drift evidence plus current Supabase migration/environment guidance |
-| Playwright fixtures/page objects | HIGH | Current repository has no suite; recommendation follows official fixture, auth, POM, project, and screenshot patterns |
-| Visual/motion thresholds | MEDIUM | Architecture is clear, but reference images/timings require Figma and owner approval |
-| Media transformation details | MEDIUM | Current ingestion/render paths are clear; exact derivative formats and budgets require asset inventory and phase-specific measurement |
+- Primitives first emit the **existing class names** (`<Button variant="secondary">` -> `className="secondary-control"`): DOM/CSS identical, the same technique as v1.3's byte-for-byte decomposition (`phase17-move-parity`).
+- New UI (AccessGate, UsersPanel) is the pilot consumer from day one.
+- Window chrome (close cross in the corner, maximized windows) -> `components/portia-desktop-window.tsx`; class icons -> `components/portia-icons.tsx`; phone «Информация» button -> `lib/info-phone-nav.ts` + its component; template-builder «Видимая часть» window -> `components/portia-template-builder.tsx`. Tab formats: replace `nav.editor-tabs` (portia-editor.tsx ~1175) and `dossier-tabs` (~1449) and the apps' tab bars with one `TabStrip`.
+
+**Migration order (no big bang):**
+1. Tokens at current values -> existing visual baselines must pass unchanged (zero-diff proof).
+2. Primitives with identical output (zero-diff again).
+3. Owner picks the variant. Variants are **token sets rendered through the existing candidate lane** (`npm run test:e2e:candidates`, `tests/e2e/visual-candidates`), not a runtime switch; the winner is baked into `tokens.css`, losers deleted.
+4. Surface by surface, one plan each, smallest first: AccessGate + UsersPanel (already new) -> editor shell/tab strips -> window chrome + desktop -> apps (Информация, Справочник, Сводка, Сотрудники) -> «Повышение». Per surface: replace literal radii/colours with tokens, delete the superseded legacy rule, regenerate only that surface's baselines.
+5. Ratchet test (like `lib/editor-field-look.test.ts`): count of literal `border-radius: Npx` and raw hex in `portia.css` may only go down; target <= 4 radius tokens.
+- Deploy is local-only (PROJECT.md), so interim visual inconsistency never reaches users; a scope-flag (`data-ui="v2"`) would double the CSS and is not needed.
+- Visual evidence: per the owner's 2026-11-08 decision there are no galleries or per-hash ledger; use Playwright screenshots in `tests/e2e/visual/{desktop,apps,editor,promotion,motion}.spec.ts` (1:1 with surfaces), never `--verify` of the visual manifest (CLAUDE.md), report changes as text. Axe findings and the 521-900 px shortcut layout ride in the same per-surface plans; `accessibility.spec.ts` is the gate.
+- Do not use Tailwind utilities for the system; keep hand-written CSS on tokens (optionally mirror tokens in `@theme` later).
+
+## 7. (e) Suggested build order and phase boundaries
+
+| Phase (v1.4) | Contents | Depends on | Notes |
+|---|---|---|---|
+| **A. Access foundation** | migration 1 (tables, RPCs, audit, cron cleanup), `lib/access-levels.ts`, `lib/access-session.ts`, shared `nicknameKey`, `lib/viewer.ts`, fingerprint/authz/harness updates, explicit `service_role` grants, RLS review via `supabase-rls-reviewer` | none | Postgres/RLS execution is BLOCKED until proven on isolated staging (project rule); unit tests + offline harness first |
+| **B. Users tab + primitives skeleton** | `users` in `tabRegistry`, `/api/users`, `UsersPanel` (list, approve/reject, level, revoke), `components/ui` + `tokens.css` at current values, proxy matcher | A | Editors can approve requests seeded on staging; first consumer of primitives; parity with zero visual diff elsewhere |
+| **C. Visitor gate + Promotion identity** | `PortiaRoot`, `AccessGate`, `/api/visitor`, boot-screen text (fake «УРОВЕНЬ II» line removed), sign-out/change nick, Promotion routes + UI use identity, gate behind an `ACCESS_ENFORCED`-style switch defaulting off until D | A (B for approving) | Test with approve-all; cache clearing on transitions |
+| **D. Levels + content gating** | `level` fields in types/normalise/limits, editor level controls (virus, info, guide, charter, scientist logs widened to 1-5), `content-redact.ts` + canary tests, `/api/content` & `/api/employees` per viewer, client `viewer`/dedupe/cache-stamp changes, search app filter, CDN purge, **migration 2 (contract)**, `register_attempt` revoke | A, B, C | Highest risk: leak paths (`formattedText`, recycle, logs), rollout order, poll cost |
+| **E. Unified style** | owner variant choice (collect early, in parallel with A-D), per-surface migration, window chrome, tabs, class icons, 521-900 px shortcuts, axe, phone «Информация», «Видимая часть», Promotion/desktop regression set, owner PC + phone acceptance | B (primitives); independent of A-D logically | Runs last so baselines change once and UAT covers the finished UI; the regression set for «Повышение» should be written **before** C changes the Promotion UI |
+
+Why not design first: it delays the security value and blocks on the owner's variant choice; why not gate before the Users tab: nobody could approve anyone. Phases B and C can overlap after A. Nothing is enforced for real visitors until A-D are all in and migration 2 is applied (owner-run).
+
+## 8. New vs modified
+
+| Item | Status |
+|---|---|
+| `components/portia-root.tsx` (PortiaRoot), `components/access-gate.tsx`, `components/users-panel.tsx`, `components/ui/*` | NEW |
+| `app/api/visitor/route.ts`, `app/api/users/route.ts` | NEW |
+| `lib/viewer.ts`, `lib/access-session.ts`, `lib/access-levels.ts`, `lib/content-redact.ts`, shared `lib/nickname.ts` | NEW |
+| `app/styles/tokens.css`, `app/styles/primitives.css` | NEW |
+| `supabase/migrations/*_portia_access.sql`, `*_portia_access_contract.sql` | NEW |
+| `app/page.tsx` (render `PortiaRoot`), `app/layout.tsx` (CSS imports) | MOD (small) |
+| `components/portia-desktop.tsx` (`fetchContent`, `fetchAccess`, boot lines, cache keys, level-aware lists, search app filter), `portia-desktop-dossier.tsx` (real viewer level for logs), `portia-desktop-window.tsx` | MOD |
+| `components/portia-editor.tsx` (`users` branch, tab strips), `portia-editor-dossier.tsx` (log levels 1-5), item editors (level field) | MOD |
+| `components/portia-promotion.tsx` (remove `PromotionIdentityGate`, auto status) | MOD |
+| `app/api/content/route.ts`, `app/api/employees/route.ts`, `app/api/promotion/{status,requests,test}/route.ts`, `proxy.ts` | MOD |
+| `lib/portia-content.ts` (types), `portia-content-normalize.ts`, `content-limits.ts`, `editor-tabs.ts`, `content-sync.ts`, `device-cache.ts`, `portia-employees.ts` (reader abstraction: token-RPC vs editor client; export `nicknameKey`), `portia-promotion-api.ts`, `portia-device-binding.ts` (export digest helper), `portia-cdn.ts` | MOD |
+| `lib/search-index.ts` | **UNCHANGED** (+ tests) |
+| `lib/editor-access.ts`, `/api/access`, `/api/editors`, `EditorAccessManager` | UNCHANGED (chips list the new tab automatically via `tabRegistry`) |
+| Tests/fixtures: `tests/e2e/harness/offline-supabase.cjs`, `fixtures/actors.ts` (visitor actors by level), `expected-authz.json`, fingerprint JSON, `visitor.spec.ts`, `roles.spec.ts`, `staging-authz.spec.ts`, promotion specs | MOD |
+| `app/portia.css`, `portia-promotion-editor.css` | MOD in place, incrementally |
+
+## 9. Anti-patterns to avoid
+
+- **Gating only in the route.** The anon key reads the tables; close RLS or the gate is decorative.
+- **CDN cache keyed by a client-set role/level cookie.** Forgeable; leaks the highest level.
+- **Per-item `if (level >= x)` in React components.** Content must arrive already redacted; the UI only renders what it got. Filtering client-side leaves data in memory, devtools and localStorage.
+- **Trusting client-sent nickname or `sheet_check`.** Derive identity from the cookie and re-check the sheet at decision time.
+- **Auto-approving sheet nicks.** Anyone can type a sheet nick.
+- **Storing levels in a separate table keyed to content ids.** Breaks undo/history, revision CAS, and tab refusal; JSON field keeps one source of truth.
+- **Restyling by editing `portia.css` globally.** Cascade order is load-bearing; migrate rule by rule with a baseline per surface.
+- **Adding a fifth parallel per-app record for a new app/gate** (see codebase anti-patterns); this milestone adds no new `AppId`.
+
+## 10. Scaling (realistic)
+
+| Concern | ~30 people (today) | ~300 | ~3000 |
+|---|---|---|---|
+| Content GET | per-viewer function + 1 RPC at 30-60 s poll: fine | measure invocations/month; widen poll or add `If-None-Match` revision short-circuit in the RPC | per-level memoised redacted payload in lambda memory keyed by (revision, level) |
+| Users list | single `portia_access_list()` | paginate pending/people | search + pagination |
+| Approval queue abuse | DB caps | tighten buckets / add captcha-free proof-of-work | consider Supabase anon auth + captcha |
+
+## 11. Open questions for the owner / later phase research
+
+- Names and meaning of levels 3-5 (only 1 observer and 2 employee are defined); labels needed in `lib/access-levels.ts` and the editor.
+- Default level for existing content (recommended 1 = everyone approved sees it) and whether locked items should show a teaser row.
+- Whether editors with a closed content tab may grant levels above their own.
+- Unsharing the Google Sheet and the github.io charter (otherwise they stay public by URL).
+- Poll interval for visitors and Netlify invocation budget (Phase D research flag).
+- Supabase storage: does dropping the broad `select` policy close listing without breaking public URLs (Phase D, verify on staging).
 
 ## Sources
 
-### Project evidence
-
-- `.planning/PROJECT.md`
-- `.planning/forensics/report-20261029-192309.md`
-- `.planning/milestones/v1.2-INCOMPLETE-ROADMAP.md`
-- `.planning/milestones/v1.2-INCOMPLETE-REQUIREMENTS.md`
-- `.planning/audits/2026-10-29-full-site-audit.md`
-- `components/portia-desktop.tsx`, `components/portia-editor.tsx`, `components/portia-promotion*.tsx`
-- `lib/editor-*.ts`, `lib/portia-promotion*.ts`, `lib/portia-qualification.ts`, `lib/portia-device-binding.ts`
-- `app/api/promotion/*/route.ts`, `app/api/uploads/route.ts`, `lib/media-url.ts`, `lib/image-upload.ts`
-- `supabase/portia_setup.sql`, `supabase/phase12_apply.sql`, `supabase/phase14_apply.sql`
-- `package.json`, `next.config.ts`, `.impeccable/surfaces/components-portia-desktop-tsx.md`
-
-### Current official guidance
-
-- [Playwright fixtures](https://playwright.dev/docs/test-fixtures) — isolated, composable setup/teardown and custom page-object fixtures (HIGH confidence)
-- [Playwright authentication](https://playwright.dev/docs/auth) — setup projects, ignored storage state, and multiple-role contexts (HIGH confidence)
-- [Playwright page object models](https://playwright.dev/docs/pom) — user-surface abstractions over locators and actions (HIGH confidence)
-- [Playwright visual comparisons](https://playwright.dev/docs/test-snapshots) and [screenshot assertions](https://playwright.dev/docs/api/class-pageassertions) — deterministic baselines and animation handling (HIGH confidence)
-- [Supabase managing environments](https://supabase.com/docs/guides/deployment/managing-environments) — local/staging/production flow with versioned migrations (HIGH confidence)
-- [Supabase database migrations](https://supabase.com/docs/guides/local-development/database-migrations) — migration files as versioned schema history (HIGH confidence)
-- [Supabase seeding](https://supabase.com/docs/guides/local-development/seeding-your-database) — reproducible test data after migrations (HIGH confidence)
-- [Supabase deployment and branching](https://supabase.com/docs/guides/deployment) — separate staging/preview environments and migration validation (HIGH confidence)
+- Code read: `app/api/{content,employees,editors,promotion/*}/route.ts`, `lib/{editor-access,editor-tabs,portia-cdn,portia-promotion-api,portia-device-binding,search-index,portia-employees,device-cache}.ts`, `proxy.ts`, `lib/supabase/{server,proxy}.ts`, `supabase/migrations/20261101000000_portia_baseline.sql`, `20261101000100_portia_explicit_grants.sql`, `components/portia-desktop*.tsx`, `components/portia-editor.tsx`, `app/portia.css`, `.planning/PROJECT.md`, `.planning/codebase/ARCHITECTURE.md` (HIGH)
+- Netlify caching docs: https://docs.netlify.com/build/caching/caching-overview and https://www.netlify.com/knowledge-base/how-to-control-cdn-caching-on-netlify/ (MEDIUM: dynamic responses uncached by default; avoid varying on whole Cookie; per-user `private` semantics not confirmed)
+- Supabase storage access control: https://supabase.com/docs/guides/storage/security/access-control (MEDIUM: broad SELECT policy permits listing; public-GET behaviour needs staging verification)
+- Context7 was unavailable (connection closed) during this run; no library-doc claims beyond the above are made.
 
 ---
-*Architecture research for roadmap creation; no product code was modified.*
+*Architecture research for: PORTIA OS v1.4 access gating and unified design system*
+*Researched: 2026-11-09*

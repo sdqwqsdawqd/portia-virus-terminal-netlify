@@ -1,348 +1,347 @@
-# Domain Pitfalls: стабилизация PORTIA OS v1.3
+# Pitfalls Research
+
+**Domain:** Adding nick-based access gate + levels 1-5 + «Пользователи» tab + unified design system to an existing public Next.js 16 / Supabase (anon + authenticated only, no service role) / Netlify CDN site (PORTIA OS)
+**Milestone:** v1.4 «Доступ и единый стиль»
+**Researched:** 2026-11-09
+**Confidence:** HIGH for codebase-derived findings (read from source: `app/api/content/route.ts`, `lib/portia-cdn.ts`, `proxy.ts`, `next.config.ts`, baseline migration, `lib/editor-tabs.ts`, `lib/portia-device-binding.ts`, Promotion API). MEDIUM for platform behaviour (Supabase storage listing, Netlify durable/Vary) — Context7 was unavailable; confirmed only via web search, re-check on a deployed preview.
+
+## Vocabulary used below (suggested phases, roadmap may rename)
+
+| Id | Suggested phase |
+|----|-----------------|
+| P0 | Housekeeping: move tests/gates off `.planning/` paths (v1.3 carry-over), decide visual-baseline policy |
+| PA | Access schema + RLS migration (people, requests, levels, audit) + `register_attempt` revoke + rls-reviewer |
+| PB | Server gate: visitor session, content projection by level, CDN/cache behaviour |
+| PC | Boot screen: nick entry + request UX (PC and phone) |
+| PD | «Пользователи» tab: approve/reject/level rules |
+| PE | Levels on content items (База вирусов, Справочник, Информация, Устав) |
+| PF | Promotion integration + regression set (todo 2026-10-28) |
+| PG | Design system (tokens -> surfaces) |
+| PH | Rollout (gate flip), acceptance on isolated staging, owner PC/phone check |
+
+Recommended order: P0 -> PA -> PD (admin tab, gate still OFF) -> PB -> PC -> PE -> PF -> flip gate -> PG (can run in parallel with PE/PF if tokens-first) -> PH.
+
+---
+
+## Critical Pitfalls
+
+### 1. Gating only in Next.js while PostgREST stays open to anon (content leak via the database itself)
+
+**What goes wrong:** The app route `/api/content` is gated, but `portia_content`, `portia_employee_profiles`, `portia_manual_employees` still have `grant select ... to anon` + policy `using (true)` (baseline migration lines 245-252, 273-280, 312-319). Anyone with the project URL + publishable key (public by design; the URL is visible in every `portia-media` image URL) reads the full payload via `/rest/v1/portia_content?select=*` and never meets the nick screen.
+**Why it happens:** The server has no service role (hard rule), so every public read currently runs as `anon` and the table is open. Gating "in the route" feels sufficient.
+**Consequences:** Anti-espionage goal fails completely; unnoticed because the UI works.
+**How to avoid:** In PA: revoke anon `select` on the three tables and drop the `using (true)` anon policies; give `authenticated` editors a `portia_can_edit()` read policy. Serve visitors through a `security definer` RPC `portia_read_content(p_token_hash)` that returns the payload only for an approved, unrevoked token (anon may call it, but token hash is an HMAC secret). Add the new objects to `supabase/fingerprint/expected/portia.fingerprint.json`, `tests/e2e/fixtures/data/expected-authz.json`, `lib/phase16-expected-authz.test.ts`, `lib/portia-sql.test.ts`.
+**Warning signs:** Any table with `to anon` in the expected-authz matrix other than intentionally public ones; `curl` of `/rest/v1/portia_content` with the publishable key returns 200 + rows (test this on isolated staging only).
+**Phase:** PA (schema) + PB (reads), verified in PH on staging.
+
+### 2. CDN serves gated content to everyone (and old public copies survive the rollout)
+
+**What goes wrong:** `lib/portia-cdn.ts::publicCacheHeaders` sends `s-maxage=300, stale-while-revalidate=86400, durable` with tag `portia-content` / `portia-employees`. If the gated response keeps these headers, the first approved user's payload is served to the unapproved. Even if headers are fixed, the previously cached public copy can be served for up to 5 min (+24 h stale-while-revalidate) after deploy.
+**Why it happens:** "Identical for every visitor" comment in `app/api/content/route.ts` stays true by habit; per-level projections make it false. Same URL, different body per cookie = classic cache poisoning.
+**Consequences:** Cross-user leak, hard to reproduce locally (`netlify dev` does not emulate the CDN).
+**How to avoid:** Gated endpoints return `noStoreHeaders` (both `Cache-Control` and `Netlify-CDN-Cache-Control: no-store`). At this scale (a few dozen users) do not try `Netlify-Vary: cookie=` — correctness over hit rate. In the gate-flip step call `purgeCacheTag` for both tags and assert from an anonymous client that `/api/content` and `/api/employees` return 401/403 with no `Cache-Status: hit`. Never let gated routes emit `Set-Cookie` through a cached path (`proxy.ts` comment already says GETs "must never carry Set-Cookie"; keep new routes either out of the matcher or `no-store`).
+**Warning signs:** `Netlify-Cache-Tag` header present on any gated response; a 200 for anon right after flip; the same body hash for two different cookies.
+**Phase:** PB; purge + anon assertion in PH.
+
+### 3. Static page, bundle, HTML and localStorage still carry content
+
+**What goes wrong:** `app/page.tsx` is a static prerender of `<PortiaDesktop initialContent={defaultPortiaContent}/>`: the whole default content is in the HTML and JS chunks for everyone. The client also seeds state from `localStorage["portia-content-last-success-v1"]` and `portia-employees-last-success-v1` before fetching (ARCHITECTURE.md), and the Google Sheet id + GitHub Pages URL are constants in `components/portia-desktop.tsx:40-41`.
+**Why it happens:** Resilience features (last-good cache, bundled defaults for "Supabase not configured") were built for a public site.
+**Consequences:** An unapproved visitor sees defaults in View Source/DevTools; a revoked or shared-device user sees cached content before the gate resolves; a user switching nick on one browser sees the previous person's content.
+**How to avoid:** (a) Confirm with the owner that `defaultPortiaContent` is placeholder-only (it contains sample viruses МОРОК/АРАХНА — if any is real lore, strip it); keep `/` a static shell that contains zero real data. (b) Render the gate first; construct `PortiaDesktop` only after `/api/visitor` says approved (no flash). (c) Key the localStorage caches by approved identity + level, and wipe them on gate/deny/logout/revoke. (d) Move Sheet/Устав URLs into the gated payload (see #6). (e) Do not make `/` dynamic just to read cookies — it would put a personalised page behind a CDN that may cache it.
+**Warning signs:** `grep` of `.next/static` for real virus codes/names; first paint shows desktop icons for a cookie-less client; content visible with JS disabled.
+**Phase:** PB (+PC for gate-first render).
+
+### 4. "Hide in the UI only" — API returns everything, filtered by the client
+
+**What goes wrong:** The codebase already has the anti-pattern: `ScientistLog.lockedLevel` (II available / III, IV "заблокирована") is a display flag; the log text travels to every client (`components/portia-desktop-dossier.tsx:29`). Repeating it for levels 1-5 leaks every locked record to anyone with DevTools.
+**Why it happens:** Filtering in the renderer is the cheapest change; payload is one big JSON blob (`viruses`, `recycledViruses`, `recycleFiles`, `infoSections`, `guideSections`, `broadcasts`, `formattedText`, `searchRecommendations`).
+**Consequences:** Levels are decorative. Second-order leaks: `recycledViruses`/`recycleFiles` (Корзина holds deleted records), `formattedText` keyed by item id (`virus:<id>:external` survives after the virus is dropped), `searchRecommendations` and assistant phrases that name hidden items, search index built from unfiltered content.
+**How to avoid:** One pure function `projectContentForLevel(content, level)` in `lib/`, applied server-side in the route (and unit-tested with `node --test`): removes items above level from every array **and** the keyed `formattedText`/trash/recommendation entries that reference them. Test by property: for each level 1..5, `JSON.stringify(projection)` contains none of the ids/strings of items above that level. Search index and assistant are built only from the projected content. Decide scientist-log semantics once: legacy `lockedLevel` 2/3/4 keep their meaning as a per-record optional restriction mapped onto the new 1-5 scale, not a second competing system.
+**Warning signs:** A level-1 `fetch('/api/content')` response diff vs level-5 shows only differing flags; search finds hidden records.
+**Phase:** PB (projection), PE (per-item level field + editor UI).
+
+### 5. Editor round-trip destroys hidden records
+
+**What goes wrong:** If the editor loads a projected (filtered) payload and "СОХРАНИТЬ" PUTs it back, items above the editor's level are deleted from `portia_content`. `PUT /api/content` only checks revision and closed tabs (`contentRefusal`), not "did the body come from a filtered view". Filtered and full views share one `revision` number.
+**Why it happens:** Editors are also people with a level; the same GET feeds desktop and editor.
+**Consequences:** Silent data loss of high-level records; revision conflict check passes.
+**How to avoid:** Define that any `canEdit` account (tab-restricted or not) gets the full payload from an editor-only path; the visitor projection never feeds the editor. In `PUT`, reject bodies that miss ids present in the stored row unless they are in the trash/delete flow (server-side diff already exists in `editor-changes`), or merge by id. Add a test: save from a level-2 editor does not remove level-5 items.
+**Warning signs:** Item counts drop after an editor save; v1.1 lesson "клиент объединяет ответ только с неизменёнными полями" re-appears.
+**Phase:** PB/PE.
+
+### 6. Embedded documents (Таблица, Устав) cannot be gated by an iframe
+
+**What goes wrong:** «Таблица» is a link-shared Google Sheet (`.../htmlview?widget=true`) and the server also reads it as public CSV (`gviz/tq?tqx=out:csv`, `lib/portia-employees.ts:154`, `lib/portia-promotion-sheet.ts:10`); «Устав» is public GitHub Pages (`https://sdqwqsdawqd.github.io/S.E-Portia/`). The URLs are in the client bundle and in git history. A level on these apps hides the window, not the document.
+**Why it happens:** Cross-origin iframes are outside the app's control; CSP `frame-src` only restricts what the site embeds, not who opens the URL.
+**Consequences:** "Level 4 Устав" is only courtesy; anyone who saw the repo or bundle opens it. The roster in the sheet is also public, which matters for #9.
+**How to avoid:** Decide explicitly in PE and write it down as a Known Limitation: either (a) external docs are display-gated only (remove URLs from the bundle, serve them in the gated payload, keep sheet/Pages unlisted), or (b) move Устав content into `portia_content` (real gating) — larger scope, owner decision. Do not claim level enforcement on iframes in any requirement or acceptance text. If the sheet must stay private-ish, change its Google sharing; the server CSV fetch would then break (test Promotion roster first).
+**Warning signs:** Requirement text says "Устав доступен только с уровня N" with no mechanism; URL still present in `components/portia-desktop.tsx`.
+**Phase:** PE (decision), PB (URL moved out of bundle).
+
+### 7. Public storage bucket: images of hidden records stay reachable and enumerable
+
+**What goes wrong:** `portia-media` is `public: true`, uploads are cached `31536000`, and `storage.objects` has `Public can read PORTIA media` for `anon` (baseline lines 1647-1651). Anon can **list** every object name (listing needs a select policy; public GET by URL does not — MEDIUM, verify) and fetch images of records they are not allowed to see. Image URLs are also embedded in the payload and immutable for a year at CDN/browser.
+**Why it happens:** Media was designed as public (accepted risk IN-10-storage).
+**Consequences:** Level-gated infection photos/mutation screenshots leak by enumeration; a revoked user who kept the URL keeps access forever.
+**How to avoid:** Minimum for v1.4: drop the anon select policy (closes enumeration; known-UUID URLs still work) and document "media is unlisted-by-UUID, not access-controlled". Stronger option (only if owner wants real gating of images): private bucket + short-lived signed URLs minted in the projection step (breaks the 1-year cache and the media pipeline — call it out as a separate decision). Never put a restricted record's image URL into a lower-level projection.
+**Warning signs:** `storage.objects` anon policy still in the fingerprint; projection leaves `image` fields of removed items in `formattedText`/trash.
+**Phase:** PA (policy), PE (decision on signed URLs).
+
+### 8. SECURITY DEFINER RPCs callable by the whole internet (the `register_attempt` lesson, repeated)
+
+**What goes wrong:** With no service role, every visitor flow (request access, check status, read content) must be an RPC executable by `anon`. A definer function that is sloppy about `search_path`, caller checks, or return shape becomes a public API. Precedent: `portia_promo_register_attempt` is `grant ... to anon, authenticated` (baseline line 1597) with no caller; the baseline revokes from `public` on line 1573 and then re-grants — a copy-paste revoke/grant sandwich. `portia_editor_is_approved(email)` is an anon-callable oracle on editor emails.
+**Why it happens:** PostgreSQL grants `EXECUTE` to `PUBLIC` on new functions by default; people grant "to anon, authenticated" to make the first test pass.
+**Consequences:** Forged approvals, level escalation, bucket poisoning (anyone can lock out any `p_bucket_key`), enumeration of who is approved.
+**How to avoid:** Per function: `set search_path = ''`, fully schema-qualified body, first statement `revoke all ... from public, anon, authenticated`, then grant only the minimum. Admin functions (approve/reject/set level/revoke) are `authenticated` only and check `portia_can_edit_tab('users')` **inside the body**; tables are RPC-only (`revoke insert,update,delete` from `authenticated`). Visitor functions take only the token hash and return a minimal, uniform shape. Revoke `register_attempt` from **anon and authenticated** (and keep `public` revoked); confirm `portia_promo_submit_request` (definer) calls the bucket logic inline (it does) so nothing breaks; update fingerprint + expected-authz in the same commit. Run `supabase-rls-reviewer` (project rule); apply only to the isolated staging; production migrations are owner-run and three older ones (`20261104000000`, `...0100`, `20261106000000`) are still unapplied — number the new migration after them and state the apply order.
+**Warning signs:** A new function absent from `expected-authz.json`; `anon` in a function grant list that is not a visitor flow; `phase16-fingerprint` mismatch.
+**Phase:** PA (and PF for the revoke).
+
+### 9. Nickname impersonation and squatting
+
+**What goes wrong:** The visitor is anonymous; identity = a typed string. The staff roster ("из таблицы") is public in the Google Sheet, so anyone can claim a real member's nick. Conversely an attacker can request a real member's nick first (nick-bound), blocking the real person.
+**Why it happens:** Approval by a human looks like authentication, but the approver sees only text.
+**Consequences:** An outsider approved as Level 2 staff; real member locked out; Promotion run under someone else's name.
+**How to avoid:** (a) Restrict nick charset to Roblox's (`^[A-Za-z0-9_]{3,20}$`, matching `portia_manual_employees` 3-20) — kills homoglyph/zero-width tricks. (b) One canonical key, defined once: `lower(btrim(nick))` in SQL and the same function in TS (today SQL `lower(trim())` vs JS `toLocaleLowerCase("en-US")` could diverge for non-ASCII; the charset rule removes the gap) with a UNIQUE index on the key. (c) Level 2 is granted **at approval** (human click), never auto on request even if the nick is in the sheet; show approvers the claim kind, sheet match and Roblox profile link (Roblox lookup already exists). (d) Owner-level "release nick/reset device" action (Promotion already has `portia_promo_reset_device` owner-only — mirror it). (e) Two devices per person must be allowed (PC + phone): do **not** copy Promotion's strict one-device-per-nick binding; model a person with N device tokens, each approved or auto-linked by an editor.
+**Warning signs:** Sheet-nick request shows "auto-approved"; the same nick differing only by case produces two rows; a real member reports "ник занят".
+**Phase:** PA (key + unique), PD (approver evidence/reset), PC (validation).
+
+### 10. Enumeration and spam of the request endpoint
+
+**What goes wrong:** Status/duplicate responses reveal "this nick exists / is approved / is rejected"; the endpoint is anonymous and unauthenticated, so scripted POSTs fill the requests table and the editors' queue.
+**Why it happens:** Helpful error messages; Promotion's `active-request` code already reveals existence.
+**Consequences:** Editors drown in junk; a roster of members is harvested; DB growth.
+**How to avoid:** Status is returned only for the caller's own device token; submit answers with one neutral code for "already exists/pending/approved" (UX copy: "Заявка принята или уже есть — ждите решения"). Rate limit in the DB with the existing bucket pattern (coarse /24 IP bucket + nick bucket via `portia_promo_attempt_buckets`-style table) but **separate bucket namespace** from Promotion (shared buckets lock people out of Promotion). Cap pending requests globally and per device; cap body size; extend the `pg_cron` cleanup (`portia-promo-cleanup`) to expire rejected/old requests. Beware coarse /24 and mobile CGNAT: a 5/15/60-minute escalation on the first failure punishes innocent users sharing an IP; define "failure" narrowly (invalid format, duplicate spam), not "pending".
+**Warning signs:** Pending count grows overnight; response bodies or timings differ between known and unknown nick.
+**Phase:** PA (tables/buckets/cron), PB (neutral responses), PC (copy).
 
-**Domain:** стабилизация существующего Next.js 16 + React 19 + Supabase + Netlify-приложения без смены визуальной идентичности
-**Researched:** 2026-10-29
-**Overall confidence:** HIGH для репозиторных рисков; MEDIUM для рекомендуемого разбиения будущих фаз
+### 11. Approval/revocation not enforced on the next request (stale approval)
 
-## Исходная позиция
+**What goes wrong:** Approval is baked into a signed cookie or cached client state and stays valid after revoke or level downgrade. The existing client is deliberately resilient: `/api/access` returns 503 on blips and "the desktop keeps its last state on a non-OK answer"; `/api/content` is polled every ~10 s. If a 401/403 is treated like a 503, a revoked user keeps the open window and the cache.
+**Why it happens:** Resilience code written for outages; cookies are cheaper than a DB lookup.
+**Consequences:** Revoked/downgraded people keep seeing content until they reload — or forever from localStorage.
+**How to avoid:** Cookie holds only an opaque device token; every gated request resolves token -> person -> status -> level in the DB (one RPC; cost is trivial at this scale). Separate explicit denial (401/403 with `code: "access-revoked"`) from transient failure (5xx/network): denial clears caches, unmounts the desktop, shows the gate; transient keeps last state. A level downgrade must close windows showing now-hidden records (re-project, drop stale window state/search results). Test with a deterministic fake: approve -> read -> revoke -> next poll returns gate.
+**Warning signs:** Revoke in the Users tab and the other browser still updates for >1 poll interval; denial handled by the same branch as 503.
+**Phase:** PB.
+
+### 12. Editors approve themselves, grant above their own level, or lock out the owner
 
-PORTIA OS не нужно проектировать заново. Рабочий стол, окна, приложения, редактор, роли, ревизии, Supabase/RLS-функции, CDN-кэш, мобильная компоновка и большая часть «Повышения» уже реализованы. В v1.3 требуется сохранить эти подтверждённые возможности и закрыть разрыв между «код существует» и «поведение доказано в реальном браузере, на изолированной базе и принято владельцем».
-
-Главная ловушка — считать зелёные статические проверки равными готовности релиза. На 2026-10-29 `npm test` даёт 583 успешных теста из 584, TypeScript, build, lint и production dependency audit проходят, однако единственный live-тест пропущен, отдельный Supabase staging не прогнан, SQL после последних изменений не подтверждён как развёрнутый, Playwright-suite и утверждённые visual baselines отсутствуют, а итоговая PC/phone UAT владельца не завершена. Поэтому отметки `[x]` в архивных требованиях v1.2 означают реализованное/сопоставленное поведение, но не заменяют недостающие доказательства Phase 14.
-
-## Границы исследования
-
-### Сохранять как уже реализованное
-
-- Текущий художественный образ PORTIA OS: тёмно-бирюзовая система, акценты, кириллические шрифты, PNG-паук, паутина, Вивьян, существующие окна и приложения.
-- Уже принятые продуктовые решения: «РЕВИЗИЯ N», отсутствие desktop-виджета «Сводка», ровно 34 места сотрудников, ручное решение проверяющего, внешняя передача доказательств, ограниченная история результатов.
-- Реализованные серверные свойства «Повышения»: отдельные потоки заданий и квалификаций, серверные сроки, атомарные RPC/claim/CAS-механизмы, закрытые ответы, trusted-вкладка `promo`, HttpOnly browser token и rate limiting. Их не переписывать до live-проверки; сначала доказать фактический deployed contract.
-- Принятые ограничения: browser/device binding — защита от злоупотреблений, а не аппаратная аттестация; cross-origin iframe не передаёт Ctrl+wheel родителю; отдельные ранее принятые риски доступа остаются вне v1.3, пока требования явно не изменены.
-
-### Не расширять v1.3 без нового решения владельца
-
-- Не добавлять общую новую «систему приложений» как продуктовый редизайн. Допустим только внутренний app registry/контракт, необходимый для декомпозиции и тестирования без изменения UX.
-- Не возвращать запрещённые или отклонённые идеи: desktop-«Сводку», SVG-паука, общую расстановку ярлыков, Netlify Blobs, автоматический проходной процент, показ конкретных ошибок теста, загрузку доказательств на сайт.
-- Не превращать CSP, dependency cleanup или архитектурную декомпозицию в скрытый framework migration, дизайн-редизайн или массовое обновление пакетов.
-- Не считать UA, Client Hints, cookie или fingerprint доказательством физического устройства или личности.
-
-## Критические pitfalls
-
-### 1. Стабилизационная фаза снова превращается во «всё сразу»
-
-**Что идёт не так:** в одну фазу попадают Promotion, окна, ярлыки, spider motion, помощник, поиск, загрузки, CSP, SQL и зависимости. Изменения влияют друг на друга, а владелец не может принять результат одним понятным checkpoint.
-
-**Почему это реально здесь:** Phase 14 начиналась как «Повышение», но накопила desktop motion, shortcuts, assistant colour, global search, upload caching, CSP и SQL hardening. Последние 20 коммитов многократно меняли одни и те же CSS/desktop/wallpaper/spider-файлы.
-
-**Последствия:** повторный patch loop, размытая причинность регрессий, слишком широкая UAT, GSD summaries отстают от кода, «почти готово» не закрывается.
-
-**Ранние признаки:**
-
-- план одновременно затрагивает базу, глобальный CSS, motion и бизнес-процесс;
-- исправление в одной области добавляется в текущую фазу только потому, что «мы уже рядом»;
-- acceptance checklist растёт после начала реализации;
-- один owner-review должен оценить десятки несвязанных сценариев.
-
-**Предотвращение:** после Phase 14 разделить recovery/baseline, design contract, staging/SQL, architecture seams, desktop motion, Promotion proof, app/editor/media stabilization и release verification. Каждая фаза должна иметь собственный запрет на соседние категории изменений и отдельный доказательный пакет.
-
-### 2. Архив v1.2 или подтверждённая история перезаписывается как будто это текущий план
-
-**Что идёт не так:** `v1.2-INCOMPLETE-*` и `v1.2-incomplete-phases/` редактируются для отражения v1.3, либо старые research/summary-артефакты заменяются новыми без архивной границы. Теряется честная запись о том, что было реализовано, но не доказано.
-
-**Последствия:** невозможно отличить прежние обещания от новых требований; статусы 49/49 выглядят как финальная приёмка; roadmap может повторно объявить незакрытые гарантии закрытыми.
-
-**Ранние признаки:**
-
-- diff меняет файлы с `INCOMPLETE` или каталог `v1.2-incomplete-*` во время v1.3;
-- старый requirement ID переопределяется вместо нового carried-forward requirement;
-- новый summary ссылается на прошлую UAT как на пройденную, хотя ledger имел 0 полностью принятых сценариев.
-
-**Предотвращение:** архивы сделать read-only по процессу; v1.3 получает новые IDs и явные ссылки `carried from Phase 14`. Разрешить только исправление фактической архивной опечатки отдельным owner-approved планом. Перед каждой фазой проверять, что write-set не содержит `.planning/milestones/v1.2-*` и архивных phase directories.
-
-### 3. Зелёные unit/build/lint проверки создают ложную уверенность
-
-**Что идёт не так:** deterministic tests подтверждают функции и статические контракты, но не доказывают браузерную интеграцию, race conditions, реальные RLS/grants, применённый SQL, DPR 1.25 drag, touch navigation или owner-accepted aesthetics.
-
-**Доказательство:** 583/584 тестов проходят, но live test пропущен; forensic report прямо фиксирует отсутствие isolated mutating Supabase run, authenticated reviewer proof и owner PC/phone UAT. Playwright пока является доступным инструментом/навыком, а не committed project suite.
-
-**Ранние признаки:**
-
-- фаза закрывается списком `npm test`, `tsc`, `build`, `lint` без trace/screenshots/live ledger;
-- skipped live test не считается блокером;
-- мок Supabase используется как доказательство RLS или concurrency;
-- «console clean» проверено только на одной публичной странице.
-
-**Предотвращение:** установить evidence matrix по слоям: deterministic → API contract → live staging → Playwright role/device flows → visual/a11y/console → owner UAT. Каждый requirement указывает минимально допустимый слой доказательства; server concurrency и RLS не могут закрываться mock-тестом, motion quality — unit-тестом, mobile UX — desktop viewport-only тестом.
-
-### 4. Visual regression фиксирует неутверждённый дефект как истину
-
-**Что идёт не так:** первые автоматически снятые screenshots принимаются как baseline без владельца. После этого visual tests защищают случайный spider pose, чрезмерную яркость Вивьян, дефект handoff ярлыка или неверную геометрию окна.
-
-**Почему это реально здесь:** ранние версии motion неоднократно отклонялись владельцем; последние исправления front legs, random spider start, assistant brightness и shortcut completion ещё не образуют утверждённый design/motion contract.
-
-**Ранние признаки:**
-
-- baseline-коммит создан до Figma/owner sign-off;
-- обновление snapshots делается массовым флагом после каждого CSS diff;
-- нет таблицы state/viewport/accent/motion-mode;
-- анимированные screenshots отличаются между запусками или маскируют главный объект.
-
-**Предотвращение:** сначала Figma UI/motion contract и owner approval, затем deterministic capture states. Для motion использовать утверждённые key states/geometry и отдельные поведенческие проверки, а не случайный кадр. Snapshot update должен быть самостоятельным reviewable change с причиной для каждого файла; непроверенные snapshots маркировать `candidate`, не release baseline.
-
-### 5. Browser suite становится flaky и перестаёт быть release gate
-
-**Что идёт не так:** тесты зависят от реальной анимации, 10-секундного polling, Google Sheet/Roblox/network, случайного spider start, текущих данных базы, shared user state и arbitrary sleeps. Ретраи скрывают дефект вместо диагностики.
-
-**Ранние признаки:**
-
-- `waitForTimeout` используется вместо наблюдаемого состояния;
-- один и тот же тест проходит только со второго/третьего retry;
-- тесты меняют одну общую учётную запись/запрос параллельно;
-- snapshot снимается во время перехода или после непредсказуемого network idle;
-- локальный Chromium зелёный, phone/touch или другой browser project красный.
-
-**Предотвращение:** фиксированные clock/random seed/data fixtures; animation-off или explicit test clock для функциональных тестов; отдельный motion project с управляемой временной шкалой; уникальный namespace на worker; API-created staging fixtures; ожидание DOM/RPC-состояний; trace/video/console/network artifacts на первом падении; retries не меняют итоговый статус гейта. Внешние Google/Roblox вызовы тестировать contract fixtures отдельно от малого числа явно помеченных live smoke checks.
-
-### 6. Mutating fixtures попадают в production Supabase
-
-**Что идёт не так:** live RLS/concurrency проверка запускается против production URL/service role и создаёт/забирает/закрывает реальные запросы, удаляет payload, расходует rate limits или меняет browser binding пользователя.
-
-**Последствия:** повреждение рабочих очередей и истории, утечка банков вопросов, ложные уведомления, необратимая cleanup-транзакция.
-
-**Ранние признаки:**
-
-- staging и production используют одинаковый project ref;
-- service-role secret доступен обычному Playwright web process;
-- fixture nickname совпадает с реальным участником из `Portia!A61:E85`;
-- teardown — best effort, а не проверяемая часть run;
-- нет environment guard, уникального test prefix и deny-check production host.
-
-**Предотвращение:** отдельный Supabase staging project с отдельными keys, storage и auth users; fail-closed guard по exact project ref; fixtures только с уникальным run ID и synthetic authoritative-sheet fixture; service role используется только setup/teardown process, никогда browser context; teardown проверяет отсутствие остатков, но не заменяет TTL cleanup. Production допускает только read-only smoke после отдельного разрешения владельца.
-
-### 7. Репозиторный SQL, staging SQL и production SQL расходятся
-
-**Что идёт не так:** код ожидает новые RPC/signatures/grants/search paths, но владелец применил более ранний setup-файл. Или ручной SQL в dashboard не отражён канонической миграцией.
-
-**Доказательство:** commit `cc48ec8` изменил `portia_setup.sql` и `phase12_apply.sql` после более раннего owner run; owner-run Phase 14 file не содержит эти helper redefinitions. Аудит отдельно предупреждает, что усиления начнут действовать только после применения актуального SQL.
-
-**Ранние признаки:**
-
-- API fallback обходит отсутствующую RPC;
-- function inventory/signature на staging не совпадает с manifest;
-- setup и incremental migration определяют одну функцию по-разному;
-- SQL считается «готовым», потому что файл изменён в Git;
-- owner rollout не имеет checksum/version evidence.
-
-**Предотвращение:** выбрать один канонический migration chain; генерировать/хранить schema contract manifest (functions, arguments, security definer, search_path, grants, RLS policies); применять сначала к пустому staging, затем к staging upgrade path; сравнивать live inventory с manifest. Production rollout — отдельный owner gate с preflight, backup/rollback note, exact migration checksum и post-deploy probes.
-
-### 8. Декомпозиция giant components незаметно становится переписыванием поведения
-
-**Что идёт не так:** `portia-desktop.tsx` (2,317 строк) и `portia-editor.tsx` (3,033 строки) делят по визуальным блокам, одновременно меняя state ownership, effects, z-index, pointer handling, persistence, role checks и responsive CSS.
-
-**Последствия:** окна теряют размеры/фокус, unsaved edits стираются при переключении, mobile panel ломается, boot/motion запускаются повторно, права trusted-вкладок просачиваются в client-only logic.
-
-**Ранние признаки:**
-
-- refactor plan обещает «заодно упростить UX»;
-- большой diff одновременно перемещает JSX, меняет CSS и бизнес-условия;
-- extracted component получает копии state/effects вместо явного interface;
-- старые selectors/test IDs исчезают до parity suite;
-- «ничего не изменилось» подтверждается только build/test.
-
-**Предотвращение:** до refactor создать characterization suite и component-boundary map; выделять сначала pure helpers/types, затем один домен за план; сохранять DOM semantics, CSS classes, app IDs, persisted keys и API shape. Для каждого extraction — before/after Playwright parity на desktop+phone и visual diff по утверждённому baseline. Новые UI-примитивы вводить через один pilot consumer, не массовой заменой.
-
-### 9. Motion механически «правильный», но визуально плохой или дорогой
-
-**Что идёт не так:** тесты подтверждают наличие transform/keyframes, но движение остаётся топорным, ярким, мерцающим, физически неверным или нагружает main thread. В противоположную сторону, агрессивная оптимизация убирает характер PORTIA OS.
-
-**Репозиторный контекст:** gel wallpaper уже пришлось переносить на отдельный transform/composite layer из-за перерисовки SVG; spider gait и assistant brightness неоднократно исправлялись по owner feedback. Настройка `html[data-motion]` имеет системный/вкл/выкл режимы и должна сохраняться.
-
-**Ранние признаки:**
-
-- FPS/profile не снимается на длинной desktop-сессии;
-- паук телепортируется или стартует одинаково/неестественно;
-- точки паутины остаются при скрытом пауке;
-- `prefers-reduced-motion` или `data-motion="off"` всё ещё оставляет движение;
-- visual test проходит при frozen frame, но owner отклоняет динамику;
-- анимация меняет layout/top-left вместо transform/opacity без необходимости.
-
-**Предотвращение:** Figma motion contract должен фиксировать траектории, длительности, easing, opacity/brightness, handoff states и off/reduced behavior. Проверять на реальном ПК, DPR 1.25, нескольких размерах окон и после длительной работы. Использовать compositor-friendly свойства, ограничивать одновременно активные эффекты, профилировать long tasks/paint/layout; качество движения принимает владелец, performance принимает измеримый budget.
-
-### 10. Device binding и desktop anti-cheat описываются сильнее, чем обеспечивают браузеры
-
-**Что идёт не так:** HttpOnly token + device signal + rate limit называют «привязкой к устройству» или защитой от обхода. На деле cookie можно очистить, профиль клонировать, а целевой атакующий может менять client signals.
-
-**Ранние признаки:** требования используют слова «невозможно обойти», «физическое устройство», «гарантирует один компьютер»;
-QA не проверяет cookie reset/profile clone/VPN как residual-risk scenarios;
-public copy обещает безопасность, которой сервер не может доказать.
-
-**Предотвращение:** формулировать контракт как abuse resistance/browser-session binding. Сервер остаётся authoritative для lease, deadlines, CAS, attempts и rate limits; device signal — только один вход риска. Документировать recovery/false-positive path и не превращать fingerprint в идентификатор личности.
-
-### 11. UA spoofing ломает границу desktop/mobile квалификации
-
-**Что идёт не так:** initial mode определяется `sec-ch-ua-mobile`/User-Agent, затем сервер его замораживает. Пользователь может начать попытку с подменённым mobile UA и избежать desktop focus/visibility rule либо получить неверный UX на гибридном устройстве.
-
-**Последствия:** QUAL-08/QUAL-09 выглядят как security boundary, хотя это policy based on spoofable input.
-
-**Ранние признаки:** mobile mode выдаёт дополнительные права или ослабляет серверную целостность; Playwright проверяет только штатные device descriptors; требования называют классификацию достоверной.
-
-**Предотвращение:** не использовать UA mode для доступа к ответам, банкам, reviewer API или серверным срокам. Считать focus-loss rule сдерживающей UX-политикой, не защитой от мотивированного обхода. Добавить spoof matrix (desktop viewport + mobile UA, mobile viewport + desktop UA, touch laptop); сервер должен сохранять целостность во всех комбинациях, а документация — явно фиксировать residual risk.
-
-### 12. CSP tightening ломает boot theme, Next runtime или внешние медиа
-
-**Что идёт не так:** `unsafe-inline` удаляют одним шагом, не инвентаризировав theme boot, Next scripts/styles и внешние изображения. Или nonce добавлен в один слой, но не проходит через SSR/cache/CDN.
-
-**Ранние признаки:** flash of wrong theme, hydration errors, CSP console violations, пропавшие внешние изображения, policy различается local/Netlify, report-only показывает новые blocked origins после каждой навигации.
-
-**Предотвращение:** CSP — отдельная миграция: inventory → report-only telemetry → nonce/hash propagation for boot script → media proxy/allowlist decision → enforce. Проверить public, owner/editor auth, embedded documents, uploads, every app/media state и Netlify headers. Не смешивать с giant-component refactor или dependency sweep. Broad `https:` media нельзя просто удалить до решения для уже существующих content URLs.
-
-### 13. Mobile регрессии скрыты desktop-first baseline
-
-**Что идёт не так:** desktop windows, hover, pointer drag и symmetric geometry проходят, а на телефоне ломаются modal/fullscreen layout, touch targets, keyboard/viewport, scroll locking, editor panel и qualification navigation.
-
-**Репозиторный контекст:** аудит говорит, что текущая mobile layout рабочая; значит v1.3 должна сохранить её. В редакторе уже есть повторяющиеся `(max-width: 900px)` правила и принятый риск их переделки.
-
-**Ранние признаки:** mobile проверяется только viewport resize в desktop browser; нет touch/soft-keyboard сценариев; изменения global CSS или window primitives не имеют phone diff; fixed element перекрывает действие; появляется horizontal overflow.
-
-**Предотвращение:** mobile — отдельная acceptance lane, а не побочный viewport. Минимум: narrow touch project, portrait screenshots, keyboard/open-input checks, scroll/overflow assertions, app/editor navigation, Promotion participant flow. Повторяющиеся media queries не «чистить» без baseline и конкретной regression requirement.
-
-### 14. Пользовательские dirty files поглощаются чужой задачей
-
-**Что идёт не так:** modified `package.json`, `package-lock.json`, planning lock/HANDOFF и untracked quick/UI artifacts принимаются за часть новой фазы, форматируются, удаляются или коммитятся вместе с ней.
-
-**Доказательство:** forensic report фиксирует неуправляемые изменения package/planning files; `motion` добавлен, хотя product code его ещё не использует. Аудит рекомендует dependency/lockfile update отдельной задачей.
-
-**Ранние признаки:** phase plan не содержит preflight inventory; lockfile меняется после unrelated install; cleanup удаляет untracked artifacts; summary не указывает provenance существующих изменений.
-
-**Предотвращение:** в recovery phase составить ownership ledger: preserve/adopt/archive/ignore, без reset/checkout/delete. Каждый план задаёт allowed write-set; pre/post diff проверяет, что пользовательские файлы не изменены. Dependency task начинается только после явного решения по текущим package edits и использует отдельный review.
-
-### 15. GSD-артефакты снова расходятся с кодом и доказательствами
-
-**Что идёт не так:** implementation commits существуют, но summaries/verification/state не закрыты; требования показывают complete, хотя proof blocked. Автоматический validator дополнительно даёт ложный missing-directory warning из-за project-code-prefixed phase path.
-
-**Доказательство:** отсутствуют `14-14-SUMMARY.md` и `14-19-SUMMARY.md`, verification остаётся `preflight_blocked`, UAT ledger не принят, при этом v1.2 requirements показывают 49/49 complete.
-
-**Ранние признаки:** plan отмечен выполненным без summary; summary ссылается на будущую UAT; `STATE.md`, ROADMAP и verification дают разные counts; false-positive validator warning либо игнорируется весь, либо ошибочно трактуется как потеря данных.
-
-**Предотвращение:** gate closure должен атомарно обновлять requirement traceability, plan summary, phase verification, UAT ledger и state. Статусы разделить на `implemented`, `automated-proof`, `live-proof`, `owner-accepted`. Validator anomaly зафиксировать как known tooling exception с ручной проверкой exact path; не отключать остальные consistency checks. Ни одна фаза не считается закрытой при missing summary или unresolved high-severity evidence item.
-
-## Умеренные pitfalls
-
-### 16. Promotion переписывают вместо доказательства deployed workflow
-
-**Что идёт не так:** из-за blocked Phase 14 команда снова меняет API/UI, хотя основная проблема — отсутствующие staging fixtures, reviewer auth и owner UAT.
-
-**Предотвращение:** первая Promotion-фаза v1.3 должна быть proof/remediation-only: inventory deployed RPC, run concurrency/RLS matrix, execute participant/reviewer flows, исправлять только воспроизведённые несоответствия. Сохранить разделение qualification → отдельный task request и ручное решение reviewer.
-
-### 17. Media performance оптимизируют ценой корректности или CSP
-
-**Что идёт не так:** eager preload всех коллекций возвращает memory/network pressure; proxy/allowlist ломает legacy external images; dynamic `<img>` механически заменяется без сохранения aspect/fallback/cache semantics.
-
-**Предотвращение:** измерять representative archive/reference/promotion media sets; оставить preload только активному изображению, background collections — lazy; тестировать signature validation, fallback, cache headers и CSP вместе. Намеренные lint warnings не исправлять без доказанной пользы.
-
-### 18. Security scan или dependency cleanup принимается за автоматическое исправление
-
-**Что идёт не так:** недоступный Deep Security Scan повторяют без изменения permission profile или заменяют массовым `audit fix --force`; dev findings смешиваются с clean production audit.
-
-**Предотвращение:** scan readiness — отдельный gate; если среда не позволяет запуск, это честный blocker, а не повод заявить clean. Dev dependency findings triage отдельно, pin exact versions, review lockfile diff, rerun production/browser suite. Не обновлять Next/React/toolchain внутри CSP или UI-фазы.
-
-### 19. Shared primitives выравнивают приложения, стирая нужные различия
-
-**Что идёт не так:** единые empty/loading/error/list primitives вводятся массово и ломают специфические роли, limits, WYSIWYG area fonts или Promotion privacy.
-
-**Предотвращение:** сначала контракт состояний и один pilot app; app-specific authorization/data policy остаётся вне visual primitive. Shared component не должен принимать raw privileged payload и не должен определять role access.
-
-## Незначительные, но накопительные pitfalls
-
-### 20. Нестабильные screenshots из-за шрифтов, locale, timezone и scrollbar
-
-**Что идёт не так:** кириллические шрифты не успевают загрузиться, даты/время отличаются, scrollbar меняет ширину.
-
-**Предотвращение:** ждать `document.fonts.ready`, фиксировать locale/timezone/clock, одинаковые browser binaries/DPR, стабилизировать scrollbar и data seed.
-
-### 21. Console gate шумит и его начинают игнорировать
-
-**Что идёт не так:** ожидаемые third-party/network warnings смешиваются с hydration/CSP/runtime errors.
-
-**Предотвращение:** короткий versioned allowlist с owner/reason/expiry; любой новый console error, pageerror, failed critical request или CSP violation блокирует gate.
-
-### 22. Accepted limitations случайно превращаются в regression tickets
-
-**Что идёт не так:** cross-origin Ctrl+wheel, профильные публичные поля или принятый server-only content restriction повторно открываются без нового решения, отнимая scope у стабилизации.
-
-**Предотвращение:** requirements должны ссылаться на Known Limitations/accepted risks. Изменение риска требует отдельного owner decision и threat/design research, а не попутного fix.
-
-## Зависимости между рисками
-
-```text
-Dirty-file reconciliation + immutable archives
-  → trustworthy v1.3 requirements/GSD ledger
-  → deterministic browser baseline
-  → owner-approved Figma visual/motion contract
-  → safe architecture decomposition and desktop motion work
-
-Isolated Supabase staging
-  → canonical SQL migration proof
-  → live RLS/RPC/concurrency evidence
-  → Promotion remediation
-  → owner PC/phone UAT
-
-CSP inventory + media URL policy
-  → report-only migration
-  → enforceable CSP
-  → final release gate
-```
-
-Нельзя менять порядок так, чтобы refactor или motion происходили до baseline/contract, Production SQL — до staging proof, а release UAT — до Promotion live remediation. Playwright infrastructure зависит от безопасных staging fixtures; visual regression зависит от owner-approved baselines; final security verification зависит от завершённого CSP и точного deployed SQL.
-
-## Предупреждения и prevention gates по рекомендуемым фазам
-
-Номера ниже — рекомендуемое продолжение после Phase 14; SUMMARY/roadmap может укрупнить названия, но не должен смешивать независимые gates.
-
-| Фаза | Основной риск | Предупреждающие признаки | Обязательный prevention/exit gate |
-|---|---|---|---|
-| **15. Recovery и доказательный baseline** | Архивы/dirty files перезаписаны; статические тесты приняты за E2E; GSD drift | write-set включает v1.2 archives; package lock меняется; missing summaries игнорируются | Ownership ledger; immutable archive rule; новые v1.3 IDs; committed Playwright skeleton; evidence matrix; current behavior captured without product redesign |
-| **16. Figma UI/motion contract** | Неутверждённые screenshots становятся baseline; scope превращается в redesign | mass snapshot approval; нет state matrix; owner review только по статичным кадрам | Owner-approved desktop/phone states, accents, window geometry, spider/web/Vivian motion and off/reduced modes; only then promoted visual baselines |
-| **17. Supabase staging и canonical SQL** | Production fixtures; SQL drift; overclaim device binding/UA | production ref доступен test runner; RPC inventory differs; UA mode treated as auth | Isolated project; fail-closed environment guard; role/RLS/grant/function manifest; fresh+upgrade migration runs; concurrency/CAS/lease tests; residual-risk wording approved |
-| **18. Architecture decomposition** | Giant component rewrite and mobile regressions | behavior/CSS changes mixed with extraction; selectors/persisted keys change | Characterization parity first; one domain per plan; same DOM/API/storage contracts; desktop+phone visual/behavior parity; no redesign |
-| **19. Desktop reliability и motion** | Механически passing, но visually rejected/janky animation | random frames; long tasks; off mode still moves; repeat owner patch loop | Contract-based motion checks, controlled timeline, DPR 1.25 physical-PC review, performance budget, reduced/off proof, owner sign-off |
-| **20. Promotion live proof** | Повторная реализация вместо проверки; unsafe fixtures; UA/device claims | mocks cited as RLS proof; shared accounts; skipped reviewer/auth flow | Full anon/auth/editor/owner and direct-API matrix on staging; parallel claim/bind/answer/lease tests; bank CRUD/preview; participant+reviewer Playwright; only reproduced defects remediated |
-| **21. Apps/editor/media/mobile stabilization** | Shared primitives erase app semantics; media/CSP conflict; phone regressions | global CSS sweep; all `<img>` replaced; only desktop screenshots | Pilot-first primitives; per-app state/limit/access contracts; WYSIWYG and unsaved-edit proof; media budgets/cache/fallback; physical or faithful phone UAT |
-| **22. Security, CSP и release verification** | One-shot CSP breakage; dependency churn; artifact drift; premature release | CSP violations ignored; `audit fix --force`; requirements complete before owner UAT | Report-only→enforce evidence; security diff/deep scan or explicit environment blocker; clean production audit plus dev triage; deployed SQL checksum; full browser/a11y/console/perf suite; owner PC/phone acceptance; all GSD artifacts reconciled |
-
-## Минимальная phase gate matrix
-
-| Изменение | Unit/API | Playwright | Visual | Live staging | Owner UAT | Security/a11y/perf |
-|---|---:|---:|---:|---:|---:|---:|
-| Planning/recovery only | — | baseline inventory | baseline inventory | — | approve scope/baseline candidates | artifact consistency |
-| SQL/RLS/RPC | required | role flows | only affected UI | **required** | rollout approval | grants/RLS/search_path/concurrency |
-| Giant-component extraction | required | **required** | **required** | affected flows | parity spot-check | console/a11y, bundle/runtime regression |
-| Motion/desktop | helper tests | **required** | **owner-approved baseline** | — | **required on physical PC** | frame/paint/long-task + reduced motion |
-| Promotion | required | **required** | desktop+phone | **required** | **required** | privacy, direct API, timers, race conditions |
-| CSP/media | required | all app/media/auth states | affected media states | staging headers | smoke approval | **required report-only/enforce evidence** |
-| Release | all green | all green, no hidden retry pass | approved diffs only | deployed contract green | PC+phone accepted | security/a11y/perf/console green |
-
-## Roadmap rules derived from the pitfalls
-
-1. **Implemented is not proven.** Carry Phase 14 behavior forward as implementation evidence, not as a blank-slate feature request and not as release acceptance.
-2. **Every phase has an exclusion list.** A database phase cannot absorb motion; a refactor phase cannot redesign; a motion phase cannot update dependencies.
-3. **Baselines require authority.** Automated screenshots become release baselines only after owner approval against the Figma contract.
-4. **Production is not a test fixture.** All mutating proof runs on isolated Supabase staging; production gets owner-controlled rollout and read-only/post-deploy probes.
-5. **Browser signals are hints.** UA/device/focus mechanisms may reduce abuse but never authorize data or justify hardware-attestation claims.
-6. **Refactor by seam, verify by parity.** No large extraction closes without before/after desktop and phone evidence.
-7. **GSD evidence is part of the deliverable.** Missing summaries, stale traceability or blocked verification prevent phase closure even when code exists.
-
-## Evidence sources
-
-- `.planning/PROJECT.md` — validated capabilities, active v1.3 goals, exclusions, accepted limitations, current branches and product decisions. **Confidence: HIGH.**
-- `.planning/forensics/report-20261029-192309.md` — dirty files, component sizes, missing live proof/UAT, SQL drift, UA/device residual risk, absent Playwright suite, repeated patch loop and artifact drift. **Confidence: HIGH.**
-- `.planning/milestones/v1.2-INCOMPLETE-ROADMAP.md` — Phase 14 scope, success criteria and incomplete plan closure. **Confidence: HIGH.**
-- `.planning/milestones/v1.2-INCOMPLETE-REQUIREMENTS.md` — implemented Promotion contract, future requirements and explicit exclusions. Status marks are treated as implementation/traceability evidence, not independent release proof. **Confidence: HIGH with stated qualification.**
-- `.planning/audits/2026-10-29-full-site-audit.md` — current automated results, confirmed security/performance strengths and remaining staging/CSP/dependency/SQL/architecture risks. **Confidence: HIGH.**
-
-## What might still be missed
-
-- The exact Playwright project/browser matrix, performance thresholds and Figma deliverable format are not defined in the supplied artifacts; they need phase-specific planning, not invention in this research file.
-- No live Supabase schema inventory or staging credentials were available in the evidence, so current deployed RPC/policy parity remains deliberately unclaimed.
-- Physical-device behavior beyond the recorded owner feedback remains unproven; emulated mobile coverage must not be reported as final phone acceptance.
-- Deep Security Scan has no findings because it never started under the prior permission profile. Absence of findings is not evidence of absence.
+**What goes wrong:** «Пользователи» is open to **all** editors by default (tab kind `regular`, open unless in `closed_tabs`). Without rules, an editor approves their own request, grants level 5 to a friend or themselves, revokes/downgrades the owner or another editor, or two editors race on the same request. Any editor can also write `portia_content` directly in Supabase (known limitation D-11) — if item levels live in the payload, an editor can lower a level without touching the Users tab.
+**Why it happens:** `portia_can_edit()` is the only check on most policies; "equal editors" is mistaken for "equal power".
+**Consequences:** Level model meaningless; privilege escalation; no accountability.
+**How to avoid:** Enforce in the definer RPC, not the route: caller must not be the target (no self-approve/self-level; different editor required); `new_level <= caller_level`; target's current level must be `< caller_level` (owner exempt via `portia_is_owner()`); editors are mapped to a level (decide: editors = 5 or an explicit level on their person row) and the owner can never be modified by editors; conditional state transitions (`update ... where status='pending'`) plus an advisory lock to survive concurrent clicks; every change appended to an audit table (actor, target, old/new, time). Keep per-item level definitions out of the freely-writable payload if they must be trustworthy (separate owner/definer-guarded table), or write down that editors can bypass it (extend D-11) — decide in PA. Add `users` to `tabRegistry` as `regular` and add a staging test for a `closed_tabs` editor.
+**Warning signs:** Users tab can edit the row of the viewer; no audit table in the migration; `grant update on ... to authenticated` on people tables.
+**Phase:** PA (rules in SQL), PD (UI/route), PE (where item levels are stored).
+
+### 13. Rollout lockout and chicken-and-egg
+
+**What goes wrong:** On the day the gate goes live every existing visitor (members, the 34 sheet staff, current Promotion users) is locked out and nobody is pre-approved; the only approvers are editors, who must first discover that `/owner-login` still works from behind the gate. Existing editors on a new browser hit the gate too. Existing `portia_promo_device_bindings` look like identities but are not approvals.
+**Why it happens:** Feature ships as one switch.
+**Consequences:** Site effectively down for the community; panic bypass added.
+**How to avoid:** Ship in two steps: (1) schema + Users tab + request form with the gate **off** (a feature flag/`portia_settings` row owned by the owner), (2) let people submit, approve the known community (offer a bulk "approve all sheet staff as level 2" owner action — knowing #9 — and the owner's own row), then flip. Authenticated editors (confirmed email, `portia_can_edit`) bypass the nick gate; the gate always shows a visible «Вход для редакторов» link; `/owner-login`, `/api/access`, auth callbacks stay outside the gate. Pre-fill the nick from the existing Promotion binding but require a fresh request.
+**Warning signs:** No flag in the plan; acceptance only tested with an empty database.
+**Phase:** PH (flip), PD/PA (flag, bulk approve).
+
+### 14. Breaking the Promotion flow (two identity stores)
+
+**What goes wrong:** Promotion today takes a nick typed in the app, checks the sheet roster (`findPromotionAccessEntry`) and binds it to the `portia_promo_device` cookie. Requirement: Promotion "берёт ник из одобренной заявки". If the client still sends `nickname` and the server trusts it, an approved person can run Promotion for someone else; if the server ignores it, existing in-flight requests keyed by `nickname_key` and bound devices break. "Не из таблицы" users are not in the roster and will get a confusing "not found".
+**Why it happens:** Two cookies, two tables, same word "ник".
+**Consequences:** Impersonation inside Promotion; orphaned requests; regression in a flow whose live proof is already BLOCKED.
+**How to avoid:** Resolve the nick **server-side** from the visitor session and ignore/validate any client nickname against it; keep the promo device cookie and bindings untouched in v1.4 (link, do not merge); keep `nickname_key` normalization identical to the access key (#9); explicit UI message for approved-but-not-in-sheet. Write the regression set first (the 2026-10-28 todo): submit -> status -> test -> reviewer queue, with unit/contract tests (live proof stays BLOCKED, never PASS). Do the `register_attempt` revoke in this phase's migration with the Promotion contract tests green.
+**Warning signs:** `components/portia-promotion.tsx:418` still posts a free-text nickname; promo tests only mocked at `portia-promotion-api` level.
+**Phase:** PF.
+
+### 15. Visual restyle as a big bang
+
+**What goes wrong:** `app/portia.css` is one monolith with 23 `max-width` media queries, accent system (`--accent-hue`, `data-accent`, PNG filter recolouring, "Свой" neutral-grey rule D-23), wallpapers, spider, assistant. Restyling "all at once" breaks windows, editor mobile panel, template export, and the owner then judges a moving target (phase 20 reached 63 plans in verdict loops).
+**Why it happens:** "Unified style" sounds like one task; variants/choices invite endless iteration.
+**Consequences:** Regressions spread across apps; cannot bisect; milestone overruns.
+**How to avoid:** Tokens first with **current values** (no pixel change, assert by computed-style spot checks), then migrate surface by surface (windows chrome/close button, buttons/plaques/radius, editor tabs, apps). Offer owner **one** round of 2-3 variants as plain text/screenshots, record the choice as a D-xx with the owner's words, then freeze. Cap verdict cycles per surface (1 re-do). Do not rebuild review galleries or the per-hash ledger (owner dropped them 2026-11-08); report changes as text. Keep class names that other systems depend on (next pitfall).
+**Warning signs:** A plan titled "restyle everything"; token PR that changes rendered colours; third round of variants.
+**Phase:** PG.
+
+### 16. Visual-baseline and test-path churn
+
+**What goes wrong:** 33 owner-approved snapshot bytes plus `scripts/phase15-visual-manifest.mjs --verify-promotion` and many tests read `.planning/` paths (24 hits in 9 `lib/*.test.ts`; `phase20-release-gate`, `phase15-visual-manifest`). Any restyle changes every PNG; the gate (which also assumes anonymous visitors see the desktop) makes every visitor e2e spec land on the gate; running `--verify` in default mode rewrites signed evidence markdown.
+**Why it happens:** Evidence infrastructure from v1.3 is still wired in; v1.3 archive move (first step noted in MILESTONES.md) not done.
+**Consequences:** `npm test` red for reasons unrelated to the change; temptation to force baselines or fake PASS.
+**How to avoid:** P0 first: repoint tests/gates to `milestones/v1.3-*` archive copies or fixtures. Decide the baseline policy before PG: baselines regenerate once, from current code, after the owner's overall «принято»; never run `--verify`. Add an "approved visitor" actor/fixture to e2e (cookie or stubbed `/api/visitor`) and update `tests/e2e/fixtures/data/public-content.json` usage; privileged and staging lanes stay BLOCKED, not PASS.
+**Warning signs:** Plans touching `20-*` evidence docs; e2e specs failing at "desktop not found".
+**Phase:** P0, PG, PH.
+
+### 17. Template export and CSS-class coupling
+
+**What goes wrong:** `lib/portia-template-export.ts` copies site CSS into exported templates by a whitelist of class names (`cardClasses`: `record-view`, `class-badge`, `level-1..3`, `mutation-card`, ...). Renaming classes in the restyle silently produces unstyled exports; `level-1/2/3` also collide in meaning with access levels 1-5 (grep noise, wrong selector edits).
+**How to avoid:** Keep these class names stable during PG or update whitelist + export test in the same change; name access-level styling differently (`access-level-*`). Run the template builder/export tests in PG's definition of done ("Видимая часть" window is in scope of v1.4 too).
+**Phase:** PG (and the «Видимая часть» item).
+
+### 18. Contrast, accents and mobile regressions in the design system
+
+**What goes wrong:** Open axe findings carried from v1.3: `.eyebrow` 4.28:1, `small.formatted-text-field-hint` 3.53:1, `small[title]` 3.25:1, `.nested-editor-toggle` label mismatch. New tokens that look fine on the default teal fail on amber, red, or the custom/neutral accent; "fixing" by brightening everything changes the identity. Shortcuts at 521-900px (WR-01/02) are still open; the nick input on phones triggers iOS zoom (<16 px font) and keyboard covering; the Users tab (tables) and tab-format unification touch the already fragile editor mobile panel (repeated `(max-width: 900px)` query, 05-WR-05).
+**How to avoid:** Contrast tokens are checked per accent (ice/amber/red/custom incl. grey) with axe in the Playwright matrix (five projects); fix the four known findings by token, not per-selector patches. Gate/boot and Users UI built mobile-first: inputs >=16 px, 44 px targets, `autocomplete="off"`/`nickname` semantics, visible focus, errors in `role="alert"`, `lang="ru"` copy. Add 375/414/768/900 widths to the checks for new surfaces; fold WR-01/02 into the window/shortcut restyle step. Physical PC+phone check is a small written checklist (the 80-step UAT must not return), owner-run at the end.
+**Warning signs:** axe violation count rises in any accent; layout checked only at 1440 px.
+**Phase:** PG, PC, PD.
+
+---
+
+## Moderate Pitfalls
+
+### 19. Boot animation vs gate ordering
+**What goes wrong:** Boot plays once per session (`sessionStorage`, `html[data-boot="seen"]` set before first paint) and the nick screen lives "on the boot screen". Gate shown only on the first load of a session, or content mounting behind the animation.
+**Prevention:** Gate is a state of the app, not a boot step: `seen` boot must not skip the gate; decision comes from the visitor endpoint, not the animation. **Phase:** PC.
+
+### 20. Naming collisions (`access`, `level`, «Доступ»)
+**What goes wrong:** `/api/access` + `getEditorAccess` = editor rights; an owner-only «Доступ» editor panel exists; `lockedLevel` = scientist-log display lock; `level-1..3` = CSS classes. New visitor access invites overloading `/api/access` and mixing editor `canEdit` with visitor approval.
+**Prevention:** New namespace (`/api/visitor`, `portia_visitor_*`, `access_level`), glossary in the phase CONTEXT, keep `/api/access` for editors unchanged. **Phase:** PA/PB.
+
+### 21. Normalizer drops or mis-defaults the new field
+**What goes wrong:** `normalizePortiaContent` repairs/removes unknown shapes and `contentRefusal` fails closed on unclassified keys (`unclassifiedTextKeys`): a new per-item `minLevel` is stripped on save, or restricted editors get 400 "Некорректная структура данных". A missing level silently defaulting to "visible" (or to 5, hiding everything).
+**Prevention:** Add the field to normalizer, `editor-changes` section classification and tests; explicit rule: *missing* (legacy) = documented default (e.g. 1), *invalid/garbage* = most restrictive (fail closed). Migration of existing items is a no-op by design. **Phase:** PE.
+
+### 22. Leaking via metadata, indexing and previews
+**What goes wrong:** Currently safe (static `metadata` in `app/layout.tsx`, no sitemap/robots/OG image), but adding `generateMetadata` from content, OG images, or per-item routes would expose titles to crawlers and link-preview bots (Discord/Telegram fetch anonymously).
+**Prevention:** Keep metadata static; add `robots: { index: false, follow: false }` and a `noindex` header; no per-record URLs/OG; hash-based window state must not put record ids in the URL. **Phase:** PB.
+
+### 23. CDN purge and Set-Cookie interplay in `proxy.ts`
+**What goes wrong:** `proxy.ts` matcher deliberately excludes `/` and CDN-cached GETs. Adding visitor-session cookies (`Set-Cookie`) to a route that still has `Netlify-CDN-Cache-Control` could cache one user's cookie.
+**Prevention:** Any route that sets or reads the visitor cookie is `no-store` and `force-dynamic`; cookie `HttpOnly; Secure; SameSite=Lax`, secret-keyed token digest like `lib/portia-device-binding.ts` (`PORTIA_PROMOTION_DEVICE_SECRET` pattern; new secret named separately, never printed). **Phase:** PB.
+
+### 24. Users tab polling and queue UX
+**What goes wrong:** 10 s polling from each editor + pending badge costs requests; list pages unbounded; reject/approve without reason or undo; stale-list approvals of a request already decided.
+**Prevention:** Fetch on tab open + manual refresh + slow visible-only poll; pagination/limits (content-limits pattern); optimistic concurrency per row (`updated_at`/status condition) with clear 409 text. **Phase:** PD.
+
+### 25. Approver sees no context, rejected people retry forever
+**What goes wrong:** Reject is final or invisible; user sees nothing.
+**Prevention:** Distinct visitor states (pending / rejected with cooldown / approved / revoked), cooldown enforced in DB, owner can clear. **Phase:** PC/PD.
+
+## Minor Pitfalls
+
+- **Dark Reader lock / fonts:** keep `darkreader-lock` meta and Cyrillic faces when introducing new tokens or fonts (owner wants to choose fonts/SVG animations first — propose variants before adding). Phase PG.
+- **Close button / maximised windows:** `window-geometry.test.ts` and `shortcut-layout.test.ts` encode current geometry; update tests with intent, not to green. Phase PG.
+- **«Информация» compact sections button on phone:** reuse existing responsive pattern; do not add a fourth copy of the 900px query. Phase PG.
+- **Unified editor tab format:** `tabRegistry` is the single source; adding «Пользователи» is one line (`regular`), but UI strip and closed-tab messages (`closedMessage`) must be checked. Phase PD.
+- **Env/secret hygiene:** never read/print `.env*`; new HMAC secret documented in `.env.example` only.
+
+---
+
+## Technical Debt Patterns
+
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Cookie with "approved" claim, no DB lookup | One fewer RPC | Revocation impossible (#11) | Never |
+| Filter by level in the React renderer | 1-hour change | Pure decoration, leaks all data (#4) | Never |
+| Keep anon `select` on `portia_content` "for now" | No RPC rewrite | Gate bypass (#1) | Never |
+| Item levels inside the payload | No new table | Any editor can rewrite them (D-11) | Only if documented as accepted risk by the owner |
+| Auto-approve sheet nicks | Smooth onboarding | Impersonation (#9) | Never; bulk **owner-clicked** approve is fine |
+| Big-bang CSS rewrite | Looks done fast | Unbisectable regressions (#15) | Never |
+| Updating snapshots to turn tests green | Fast CI | Evidence meaningless | Only after owner overall «принято», once |
+| Gate flip without flag | Simpler code | No rollback, community lockout (#13) | Never |
+
+## Integration Gotchas
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Supabase RLS/RPC | `grant ... to anon, authenticated` copy-paste; definer without `search_path=''` | Revoke from public first, minimal grants, checks inside body, fingerprint + expected-authz updated |
+| Supabase storage | Assuming "public bucket" means no leak surface | Drop anon list policy; decide signed URLs explicitly |
+| Netlify CDN | Reusing `publicCacheHeaders` on a per-user route; trusting local dev for cache behaviour | `noStoreHeaders`; verify with `Cache-Status` on a deploy preview; purge tags at flip |
+| Netlify `durable` | Assuming deploy clears everything | Purge tags explicitly at rollout (deploy-time invalidation behaviour not confirmed, MEDIUM) |
+| Google Sheet / GitHub Pages | Treating iframe src as protected | Public by nature; document as limitation or move content in-app |
+| Promotion | Merging cookies/bindings with the new session | Link, don't merge; server-side nick resolution |
+| Roblox lookup | Using it as proof of ownership | Evidence for approvers only |
+
+## Performance Traps
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Per-request DB resolve of token on every poll | Latency on `/api/content` | Single RPC returning level + payload; poll interval >=10 s | Hundreds of concurrent viewers (not expected) |
+| Losing CDN caching on content | More Supabase reads | Accept; community is small | >~1-2K active users |
+| Large projected payloads per level | Slow first paint | Project server-side, keep body limits (`MAX_CONTENT_BODY_BYTES`) | Large Справочник with images |
+| Users tab unpaginated | Slow tab after spam | Limits + cleanup cron | A few thousand requests |
+
+## Security Mistakes
+
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Anon read of content/profiles via PostgREST | Total bypass of gate | #1 revokes |
+| Status endpoint reveals nick states | Roster harvesting | #10 uniform responses |
+| Self/escalating approvals by editors | Level model void | #12 DB-enforced rules + audit |
+| Client-supplied nickname trusted in Promotion | Impersonation | #14 server-side resolution |
+| Raising item level via direct `portia_content` write | Bypass of restrictions | Separate guarded storage or documented accepted risk |
+| Public profile columns (`updated_by`, `nickname`) in `/api/employees` | Leaks editor ids/nicks to the gated-out | Gate `/api/employees` too; select explicit columns |
+| Secrets in logs | Credential exposure | Never print env/cookies/token hashes in `console.error` |
+
+## UX Pitfalls
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Gate that says only "доступ закрыт" | Members think the site broke | Clear states: enter nick, pending, rejected, revoked; link for editors |
+| Losing access on cleared cookies/new phone | Re-request every time | "Тот же ник, новое устройство" flow approved by an editor |
+| Long form on phone | Abandoned requests | One field + radio «из таблицы / не из таблицы» + submit |
+| Hidden items vanish without explanation | Confusion about levels | Show level badge of the user; neutral "не доступно" only where an owner wants a teaser (and then no title leaks) |
+| Restyle changes familiar hit areas | Regressions on shortcuts/windows | Move surface by surface; owner checks text list of changes |
+
+## "Looks Done But Isn't" Checklist
+
+- [ ] **Gate:** anon `curl` of `/api/content`, `/api/employees`, and PostgREST tables (staging) returns nothing; JS-disabled view shows no data.
+- [ ] **CDN:** `Cache-Status` is miss/bypass for gated routes; both cache tags purged at flip.
+- [ ] **Projection:** per-level property test covers viruses, trash, recycle files, `formattedText`, recommendations, info/guide, search index.
+- [ ] **Editor save:** a restricted editor's save does not delete higher-level records.
+- [ ] **Revocation:** revoke/downgrade is visible to an open session within one poll; localStorage cleared.
+- [ ] **Users tab rules:** no self-approve, no grant above own level, owner untouchable, concurrent clicks safe, audit row written.
+- [ ] **RLS:** `register_attempt` revoked from anon+authenticated; fingerprint/expected-authz/`portia-sql.test.ts` updated; rls-reviewer run; staging-live proof marked BLOCKED if staging is not attested.
+- [ ] **Promotion:** nick comes from session; regression set green; live proof honestly BLOCKED.
+- [ ] **Existing users:** editors can log in from behind the gate; flag allows rollback; known community pre-approved.
+- [ ] **Design:** tokens contrast-checked for every accent; four known axe findings fixed; template export still styled; phone widths checked.
+- [ ] **Evidence:** no BLOCKED recorded as PASS; physical PC/phone check is the owner's words, not an agent's.
+
+## Recovery Strategies
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Content leaked via anon table / CDN | HIGH | Revoke grants in a hot migration (owner-run), purge both tags, rotate nothing (publishable key is public), assess what was exposed, tell the owner |
+| Stale approvals after revoke | LOW | Force `revoked_at` check in RPC, bump a session epoch to invalidate all tokens |
+| Editor save deleted hidden records | MEDIUM | Restore from `portia_content` revision history / backup of payload; add merge guard |
+| Community locked out at flip | LOW | Flag off; bulk approve; re-flip |
+| Wrong approval granted | LOW | Revoke + audit trail lookup; owner reset |
+| Restyle regression | MEDIUM | Revert the surface commit (tokens-first makes this isolated) |
+| Evidence/baseline drift | MEDIUM | Re-run P0 path repoint; regenerate baselines once after owner «принято» |
+
+## Pitfall-to-Phase Mapping
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| 1 Anon PostgREST bypass | PA, PB | Staging anon REST read denied; expected-authz diff |
+| 2 CDN leak / old copies | PB, PH | `Cache-Status` + anon assertion after purge on preview |
+| 3 Bundle/HTML/localStorage | PB, PC | Bundle grep, JS-off check, cache keyed by identity |
+| 4 UI-only hiding | PB, PE | Per-level projection property test |
+| 5 Editor round trip | PB, PE | Save-from-restricted-editor test |
+| 6 Embedded docs | PE (decision), PB | Written limitation or in-app Устав; URLs out of bundle |
+| 7 Public media bucket | PA, PE | Fingerprint shows no anon list policy; decision logged |
+| 8 Definer/anon grants | PA, PF | rls-reviewer, fingerprint, authz matrix |
+| 9 Nick impersonation | PA, PD, PC | Unique key test, charset tests, no auto-approve |
+| 10 Enumeration/spam | PA, PB, PC | Uniform-response test, bucket tests, cron cleanup |
+| 11 Stale approval | PB | Approve->revoke->poll test |
+| 12 Self/escalation | PA, PD | SQL tests for each forbidden transition |
+| 13 Rollout lockout | PD, PH | Flag exists; bulk approve; editor login path checked |
+| 14 Promotion break | PF | Regression set from todo 2026-10-28 |
+| 15 Big-bang restyle | PG | Tokens-first no-diff commit, per-surface plans, cycle cap |
+| 16 Baseline/test churn | P0, PG, PH | `npm test` green without `.planning/` working paths; approved-visitor fixture |
+| 17 Template export | PG | Export test passes after restyle |
+| 18 Contrast/mobile | PG, PC, PD | axe per accent, phone widths, owner checklist |
+| 19-25 Moderate | as listed | per item |
+
+## Phase-Specific Research Flags
+
+- **PA / PF:** needs deep review (RLS, grants, fingerprint) — mandatory `supabase-rls-reviewer`; staging proof likely BLOCKED, plan for contract tests and owner-run production apply.
+- **PE:** needs an owner decision on embedded documents and on whether media is access-controlled (signed URLs) before planning.
+- **PB:** verify Netlify cache behaviour on a deployed preview (cannot be proven locally).
+- **PG:** standard patterns, but owner-choice loops are the main risk — bound them upfront.
+
+## Sources
+
+- Source reads (HIGH): `.planning/PROJECT.md` (Known Limitations, Key Decisions), `.planning/MILESTONES.md` (v1.3 Known Gaps, carried items), `.planning/RETROSPECTIVE.md` (v1.3 lessons), `app/api/content/route.ts`, `app/api/access/route.ts`, `lib/portia-cdn.ts`, `proxy.ts`, `next.config.ts`, `lib/editor-access.ts`, `lib/editor-tabs.ts`, `lib/portia-device-binding.ts`, `lib/portia-promotion-api.ts`, `lib/portia-content.ts`, `lib/portia-template-export.ts`, `supabase/migrations/20261101000000_portia_baseline.sql` (grants, policies, promo RPCs, storage), `components/portia-desktop.tsx` (embed URLs), memory note on dropped visual ledger.
+- Platform (MEDIUM, web search, not confirmed in official docs; re-verify): [Supabase Storage access control](https://supabase.com/docs/guides/storage/security/access-control), [WeWeb thread on listing public bucket](https://community.weweb.io/t/storage-list-all-files/10035), [Netlify caching overview](https://docs.netlify.com/build/caching/caching-overview), [Netlify cache key variations (Netlify-Vary)](https://www.netlify.com/blog/netlify-cache-key-variations.md), [Durable cache on Netlify](https://flaviocopes.com/durable-cache-on-netlify).
+
+---
+*Pitfalls research for: PORTIA OS v1.4 access gate, levels and design system*
+*Researched: 2026-11-09*
