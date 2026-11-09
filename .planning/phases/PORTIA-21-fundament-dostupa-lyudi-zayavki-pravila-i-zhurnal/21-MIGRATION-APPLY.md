@@ -140,3 +140,24 @@
 - Проверенный код после ревью не менялся: в `supabase/migrations`, `lib/access-store.ts`, `lib/access-session.ts`, `lib/nickname.ts`, `lib/access-levels.ts` после `10b5e98` нет коммитов.
 - Решения владельца 2026-11-09: RLS21-01 вариант 1а, RLS21-02 вариант 2а.
 - Живые проверки (список BLOCKED во всех трёх раундах ревью) не выполнялись и остаются BLOCKED.
+
+## Локальная проверка
+
+Дерево после заморозки (HEAD `4613fa8`), флаг закрытия выключен, сайт ведёт себя как раньше (ACC-09: новых вызывающих в `app/` и `components/` нет). Все команды выполнены напрямую, потому что `npm` из временной Node 22.13.1 сломан (нет `node-gyp`), поэтому `npm test`, `npm run ...` и `.claude/skills/portia-check/run.sh` не использовались; шаги скрипта воспроизведены вручную. Везде Node v22.13.1 (эталонная); `npm` не запускался.
+
+| # | Команда | Код выхода | Итог |
+|---|---|---|---|
+| 1 | `node --version` | 0 | v22.13.1 |
+| 2 | `node --experimental-strip-types --test lib/*.test.ts` | 0 | 1821 тест, 1818 успешно, 0 красных, 3 пропущено; красное окно `lib/security-matrix.test.ts` закрыто |
+| 3 | `node node_modules/typescript/bin/tsc --noEmit` | 0 | без ошибок |
+| 4 | `node node_modules/eslint/bin/eslint.js . --ignore-pattern dist --ignore-pattern .next` | 0 | 0 ошибок, 17 предупреждений; в 21-02 до и после подъёма было 17, новых нет |
+| 5 | `node --experimental-strip-types --test lib/phase15-visual-manifest.test.ts` | 0 | 49 тестов, 49 успешно |
+| 6 | `node --experimental-strip-types scripts/phase15-visual-manifest.mjs --verify-promotion` | 0 | проверено 65 утверждённых владельцем снимков, 18 неутверждённых исключено; режим `--verify` по умолчанию не запускался; файлы доказательств не изменились |
+| 7 | `node node_modules/next/dist/bin/next build` | 0 | Next.js 16.4.5 (Turbopack), компиляция успешна, 3/3 статических страниц; `.env.local` читал сам Next, содержимое не открывалось |
+
+Не запускались и не засчитываются как пройденные:
+
+- Playwright e2e, visual и mutation: BLOCKED (ENV/DATA), нужен источник данных для чтения.
+- Живые наборы staging (`lib/portia-staging-live.test.ts` пропускается без окружения стенда; живой прогон матрицы ролей): BLOCKED (ENV), миграция на staging не применена.
+- Postgres и RLS на живой базе, роли с аутентификацией, физические устройства: BLOCKED.
+- Production: ОЖИДАЕТ ВЛАДЕЛЬЦА.
