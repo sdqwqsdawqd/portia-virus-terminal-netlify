@@ -336,6 +336,7 @@ Full decision history: `.planning/PROJECT.md`.
 | 261102-d7r | Неподвижная паутина, паук без контура и рывков, мягкое завершение анимаций ярлыков, меньше «База вирусов», плавное появление окна | 2026-11-02 | 6222cf8 | [261102-d7r-spider-web-icons-window-motion-fixes](./quick/261102-d7r-spider-web-icons-window-motion-fixes/) |
 | 261104-lkn | Редактор «Повышения»: очередь, раздельные создание и выдача заданий, прокрутка и мобильная ширина | 2026-11-04 | 97d7abb, 2f54ba9 | [261104-lkn-pererabotat-interfeys-redaktora-povyshen](./quick/261104-lkn-pererabotat-interfeys-redaktora-povyshen/) |
 | 261104-m6g | Мобильная ширина, кнопки и список квалификаций, GIF помощника и свой цвет | 2026-11-04 | 23c1c85, 7e5e17a | [261104-m6g-ispravit-mobilnyy-sdvig-stranitsy-pri-ot](./quick/261104-m6g-ispravit-mobilnyy-sdvig-stranitsy-pri-ot/) |
+| 261109-brj | Папки фаз v1.3 перенесены в milestones/v1.3-phases, тесты и гейты релиза читают архив v1.3 | 2026-11-09 | 3bfa520, 9b3230e | [261109-brj-repoint-tests-and-scripts-to-the-v1-3-ar](./quick/261109-brj-repoint-tests-and-scripts-to-the-v1-3-ar/) |
 
 ### Roadmap Evolution
 
