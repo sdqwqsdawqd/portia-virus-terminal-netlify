@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -14,6 +15,10 @@ const phaseDir = `${V13}/PORTIA-20-security-accessibility-i-priemka-reliza`;
 const archived = (recorded: string) => recorded.replace(/^\.planning\/phases\/(?=PORTIA-(?:1[5-9]|20)-)/, `${V13}/`);
 const read = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const matrixText = () => read(`${phaseDir}/20-SECURITY-MATRIX.md`);
+
+/** Phase 21 successor of the matrix: migration coverage and freshness are checked against it (21-07). The v1.3 matrix above stays frozen history. */
+const phase21Dir = ".planning/phases/PORTIA-21-fundament-dostupa-lyudi-zayavki-pravila-i-zhurnal";
+const currentMatrixText = () => read(`${phase21Dir}/21-SECURITY-MATRIX.md`);
 
 /** Text of a `## heading` block, up to the next `## ` heading. Empty string when the heading is missing. */
 function section(markdown: string, heading: string) {
@@ -289,17 +294,21 @@ const fixtureMigrations = ["supabase/migrations/1_a.sql", "supabase/migrations/2
 test("migration coverage: the real matrix has exactly one row per tracked supabase migration", () => {
   const migrations = trackedMigrations();
   assert.ok(migrations.length >= 5, `expected at least 5 tracked migrations, git lists ${migrations.length}`);
-  assert.deepEqual(migrationCoverageProblems(matrixText(), migrations), []);
+  assert.deepEqual(migrationCoverageProblems(currentMatrixText(), migrations), []);
 });
 
 test("migration coverage: the migrations after 20261101 are not recorded as applied on production by the agent", () => {
-  const rows = tableRows(section(matrixText(), migrationsHeading));
-  for (const name of ["20261104000000_portia_rename_virus_classes.sql", "20261104000100_portia_editor_notes.sql", "20261106000000_portia_drop_editor_notes.sql"]) {
+  const rows = tableRows(section(currentMatrixText(), migrationsHeading));
+  for (const name of ["20261104000000_portia_rename_virus_classes.sql", "20261104000100_portia_editor_notes.sql", "20261106000000_portia_drop_editor_notes.sql", "20261109000000_portia_access_foundation.sql"]) {
     const cells = rows.find((cells) => cells[0].includes(name));
     assert.ok(cells, name);
     assert.match(cells[5], /ОЖИДАЕТ ВЛАДЕЛЬЦА/, `${name}: production column`);
     assert.ok(!/\bPASS\b/.test(cells[5]), `${name}: production is never an agent PASS`);
   }
+  const phase21 = rows.find((cells) => cells[0].includes("20261109000000_portia_access_foundation.sql"));
+  assert.ok(phase21);
+  assert.match(phase21[4], /BLOCKED/, "Phase 21 migration: staging is BLOCKED, it was never run");
+  assert.ok(!/\bPASS\b/.test(phase21[4]), "Phase 21 migration: staging is never an agent PASS");
 });
 
 test("migration coverage fixture: a complete table is accepted, a missing, unknown or duplicated row is rejected", () => {
@@ -352,10 +361,13 @@ const freshnessFixture = [
 const freshDeps = (over: Partial<FreshnessDeps> = {}): FreshnessDeps => ({ commitExists: () => true, isAncestor: () => true, changedSince: () => [], ...over });
 
 test("matrix freshness: the real matrix commit is an ancestor of HEAD and no covered file changed after it", () => {
-  assert.deepEqual(matrixFreshnessProblems(matrixText(), realFreshnessDeps), []);
-  const paths = coveredPaths(matrixText());
-  assert.ok(paths.length >= 12, `expected the covered paths, found ${paths.length}`);
-  for (const path of paths) assert.ok(existsSync(new URL(`../${archived(path)}`, import.meta.url)), `covered path does not exist: ${path}`);
+  assert.deepEqual(matrixFreshnessProblems(currentMatrixText(), realFreshnessDeps), []);
+  const paths = coveredPaths(currentMatrixText());
+  assert.ok(paths.length >= 16, `expected the covered paths, found ${paths.length}`);
+  for (const path of paths) assert.ok(existsSync(new URL(`../${path}`, import.meta.url)), `covered path does not exist: ${path}`);
+  for (const path of ["lib/nickname.ts", "lib/access-session.ts", "lib/access-store.ts", "lib/access-levels.ts"]) {
+    assert.ok(paths.includes(path), `the Phase 21 matrix must cover ${path}`);
+  }
 });
 
 test("matrix freshness: git failing is an error, not a fresh matrix", () => {
@@ -378,6 +390,53 @@ test("matrix freshness fixture: a commit that is not an ancestor, does not exist
   assert.deepEqual(matrixFreshnessProblems(freshnessFixture, freshDeps({ commitExists: () => false })), [`stale matrix: commit ${freshCommit} does not exist`]);
   assert.deepEqual(matrixFreshnessProblems(freshnessFixture.replace(freshCommit, "f25b885"), freshDeps()), ["matrix header has no 40-hex «Проверяемый commit»"]);
   assert.deepEqual(matrixFreshnessProblems(freshnessFixture.replace(/## Охват файлов[\s\S]*## Находки/, "## Находки"), freshDeps()), ["«Охват файлов» is empty or missing"]);
+});
+
+/* ------------------------------------------------------------------ Phase 21: matrix tie to the review and apply record (21-07) */
+
+const accessMigration = "20261109000000_portia_access_foundation.sql";
+const applyRecordText = () => read(`${phase21Dir}/21-MIGRATION-APPLY.md`);
+
+test("Phase 21 matrix: the verified commit equals the final reviewed commit and the findings have no open or unresolved high", () => {
+  const review = read(`${phase21Dir}/21-RLS-REVIEW.md`);
+  const reviewed = /Итоговый проверенный commit:\s*([0-9a-f]{40})/.exec(review)?.[1];
+  assert.ok(reviewed, "21-RLS-REVIEW.md must name the final reviewed commit");
+  const matrix = currentMatrixText();
+  assert.equal(/Проверяемый commit:\s*`([0-9a-f]{40})`/.exec(matrix.split("\n").slice(0, 8).join("\n"))?.[1], reviewed);
+  const findings = tableRows(section(matrix, "Находки Phase 21"));
+  assert.equal(findings.length, 16);
+  for (const [id, severity, status] of findings) {
+    assert.ok(["fixed", "accepted", "deferred"].includes(status), `${id}: status "${status}" (open is never allowed)`);
+    if (severity === "high" || severity === "critical") assert.equal(status, "fixed", `${id}: a high finding must be fixed`);
+  }
+});
+
+test("apply record: the four migrations appear in ascending order and the hash equals the pin and the file", () => {
+  const record = applyRecordText();
+  const order = section(record, "Порядок применения");
+  const versions = ["20261104000000", "20261104000100", "20261106000000", "20261109000000"];
+  const positions = versions.map((version) => order.indexOf(version));
+  for (const [index, position] of positions.entries()) assert.ok(position >= 0, `${versions[index]} is missing from «Порядок применения»`);
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions, "the migrations must be listed in version order");
+
+  const recorded = new RegExp(`${accessMigration}:\\s*([0-9a-f]{64})`).exec(section(record, "Закреплённый sha256"))?.[1];
+  assert.ok(recorded, "«Закреплённый sha256» must carry the 64-hex hash");
+  const pinned = new RegExp(`"${accessMigration}":\\s*"([0-9a-f]{64})"`).exec(readFileSync(new URL("./portia-canonical-parity.test.ts", import.meta.url), "utf8"))?.[1];
+  assert.equal(recorded, pinned, "the record must equal the pin in lib/portia-canonical-parity.test.ts");
+  const actual = createHash("sha256").update(read(`supabase/migrations/${accessMigration}`)).digest("hex");
+  assert.equal(recorded, actual, "the record must equal the sha256 of the LF-normalised migration");
+});
+
+test("apply record: statuses are owner/BLOCKED and nothing is recorded as a pass", () => {
+  const record = applyRecordText();
+  const status = section(record, "Статус");
+  assert.match(status, /ОЖИДАЕТ ВЛАДЕЛЬЦА/);
+  assert.match(status, /BLOCKED/);
+  assert.ok(!/\bPASS\b/i.test(status), "no PASS in «Статус»");
+  assert.ok(!/\bPASS\b/.test(record), "no PASS anywhere in the apply record");
+  for (const heading of ["Порядок применения", "Закреплённый sha256", "Статус", "Проверки после применения (владелец)", "Откат", "Решения D-01..D-10", "Принятые риски", "Ревью"]) {
+    assert.ok(section(record, heading).trim().length > 0, `«${heading}» is missing or empty`);
+  }
 });
 
 /* ------------------------------------------------------------------ dependency audit evidence (Task 2) */

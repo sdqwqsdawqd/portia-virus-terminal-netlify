@@ -25,7 +25,9 @@ const migrationHashes: Record<string, string> = {
   "20261104000000_portia_rename_virus_classes.sql": "0037b9303c9524920af5dc810e1d0efacdbc038dcfe535b50535b032c816a98c",
   "20261104000100_portia_editor_notes.sql": "e1866a5bf9e1095955384c8643e6d16d23864349822724a404e9d8433b3aa5fd",
   "20261106000000_portia_drop_editor_notes.sql": "7940895f2a37f3df8d0124c8c39e058473730210c68eeba20641c0b72d61864b",
-  // Phase 21 migration: re-pinned by each Phase 21 plan that edits it, frozen by plan 21-07; applied nowhere before the freeze.
+  // Phase 21 migration: FROZEN by plan 21-07 (see 21-MIGRATION-APPLY.md, "Закреплённый sha256"). It was applied nowhere
+  // before the freeze, and the owner runs it after the three older unapplied migrations. Any later change needs a new
+  // forward-only migration with its own version; this pin must not be re-pinned.
   "20261109000000_portia_access_foundation.sql": "a2c69408a3e4ac3ce99c231bda5b267f7734a235778df5c8da6786ff82334f7e",
 };
 
