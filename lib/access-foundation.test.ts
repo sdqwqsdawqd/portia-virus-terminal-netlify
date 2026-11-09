@@ -264,7 +264,9 @@ test("SQL contract: the three tables and the journal sequence are closed to API 
   for (const table of ["portia_access_people", "portia_access_requests", "portia_access_journal"]) {
     assert.ok(sql.includes(`alter table public.${table} enable row level security;`), `${table}: RLS`);
     assert.ok(sql.includes(`revoke all on table public.${table} from public, anon, authenticated;`), `${table}: revoke`);
-    assert.ok(sql.includes(`grant all on table public.${table} to ${serviceRole};`), `${table}: privileged API role`);
+    // The journal is narrower on purpose (RLS21-03): see the dedicated test below.
+    const privileges = table === "portia_access_journal" ? "select, insert" : "all";
+    assert.ok(sql.includes(`grant ${privileges} on table public.${table} to ${serviceRole};`), `${table}: privileged API role`);
   }
   assert.ok(sql.includes("revoke all on sequence public.portia_access_journal_id_seq from public, anon, authenticated;"));
   assert.ok(!/create\s+policy/i.test(sql), "no policies: RPC only");
@@ -313,6 +315,26 @@ test("SEC-06: portia_promo_register_attempt is revoked from anon and authenticat
     }
   }
   assert.deepEqual(callers, [], "no product or script file refers to portia_promo_register_attempt");
+});
+
+test("RLS21-03 / D-07: the journal cannot be truncated or rewritten, and the privileged role can only read and append", () => {
+  const code = sql.replace(/--[^\n]*/g, "");
+  // Row guard for update/delete, statement guard for truncate, both through the one append-only function.
+  assert.match(
+    code,
+    /create trigger portia_access_journal_append_only before update or delete on public\.portia_access_journal for each row execute function public\.portia_access_journal_append_only\(\);/,
+  );
+  assert.match(
+    code,
+    /create trigger portia_access_journal_no_truncate before truncate on public\.portia_access_journal for each statement execute function public\.portia_access_journal_append_only\(\);/,
+  );
+  assert.match(code, /drop trigger if exists portia_access_journal_no_truncate on public\.portia_access_journal;/, "idempotent re-run");
+  const journalGrants = [...code.matchAll(/grant ([^;]+?) on table public\.portia_access_journal to ([^;]+);/g)].map((m) => `${m[1]} -> ${m[2]}`);
+  assert.deepEqual(journalGrants, [`select, insert -> ${serviceRole}`], "no grant that includes truncate, update, delete, trigger or references");
+  assert.ok(!/grant (all|[^;]*\b(truncate|update|delete|trigger|references)\b)[^;]* on table public\.portia_access_journal\b/i.test(code));
+  const { body } = functionParts("portia_access_journal_append_only");
+  assert.ok(body.includes("raise exception 'journal-append-only'"), "the guard fails for every operation it is attached to");
+  assert.ok(!/\bdelete\s+from\b|\btruncate\s+(table\s+)?public\./i.test(code), "nothing in the migration removes journal rows");
 });
 
 test("RLS21-02 (D-10 extended by the owner on 2026-11-09): portia_promo_bind_device is revoked from anon and authenticated and has no caller", () => {

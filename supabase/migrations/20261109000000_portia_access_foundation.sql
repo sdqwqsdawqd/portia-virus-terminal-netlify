@@ -139,7 +139,8 @@ revoke all on table public.portia_access_requests from public, anon, authenticat
 revoke all on table public.portia_access_journal from public, anon, authenticated;
 grant all on table public.portia_access_people to service_role;
 grant all on table public.portia_access_requests to service_role;
-grant all on table public.portia_access_journal to service_role;
+-- The journal is append-only (D-07, RLS21-03): the privileged role may read and append, never truncate, update or delete.
+grant select, insert on table public.portia_access_journal to service_role;
 
 -- Default privileges would otherwise give anon/authenticated rights on the identity sequence (see 20261101000100).
 revoke all on sequence public.portia_access_journal_id_seq from public, anon, authenticated;
@@ -285,6 +286,8 @@ grant execute on function public.portia_access_resolve(text) to service_role;
 -- caller's account, or the nick key equals such a person. A nickname filed from a signed-out browser carries no link and
 -- cannot be recognised as the caller's own: accepted residual risk, mitigated by the journal and by revocation; the
 -- owner acknowledges it in plan 21-07. Rows linked to the owner's confirmed-email account are owner-protected.
+-- The account link is not proof of nickname ownership (RLS21-04): a signed-in stranger can file a request for any nick, so
+-- the link only widens "self" (fail safe) and is replaced, not kept, when a revoked person is approved again.
 create or replace function public.portia_access_target_guard(p_nickname_key text, p_requested_by uuid)
 returns void
 language plpgsql
@@ -364,9 +367,14 @@ begin
   select * into person from public.portia_access_people where nickname_key = req.nickname_key for update;
   person_exists := found;
 
+  -- RLS21-04: the account link comes from THIS request only. A link held by a different nickname blocks it (one account,
+  -- one person); the link of this nickname's own row does not, because re-approval replaces it (D-09 fresh start).
   select case
     when req.requested_by is not null
-      and not exists (select 1 from public.portia_access_people p where p.account_id = req.requested_by)
+      and not exists (
+        select 1 from public.portia_access_people p
+        where p.account_id = req.requested_by and p.nickname_key <> req.nickname_key
+      )
     then req.requested_by
   end into account_for_person;
 
@@ -389,7 +397,7 @@ begin
       previous_level := person.level;
       update public.portia_access_people
         set status = 'active', level = new_level, origin = req.origin, nickname = req.nickname,
-            account_id = coalesce(person.account_id, account_for_person),
+            account_id = account_for_person,
             approved_at = now(), approved_by = auth.uid(), updated_at = now(), updated_by = auth.uid()
         where id = person.id;
       person_uuid := person.id;
@@ -518,6 +526,11 @@ grant execute on function public.portia_access_journal_append_only() to service_
 
 drop trigger if exists portia_access_journal_append_only on public.portia_access_journal;
 create trigger portia_access_journal_append_only before update or delete on public.portia_access_journal for each row execute function public.portia_access_journal_append_only();
+
+-- RLS21-03: a row trigger does not fire for TRUNCATE, so a statement trigger closes that path for every role, including
+-- the table owner. The privileged role also has no TRUNCATE privilege on the journal (section f).
+drop trigger if exists portia_access_journal_no_truncate on public.portia_access_journal;
+create trigger portia_access_journal_no_truncate before truncate on public.portia_access_journal for each statement execute function public.portia_access_journal_append_only();
 
 -- m. The owner clears the 1-hour pause of a nick (D-06 choice 1b). Owner only; journaled once when something was cleared.
 create or replace function public.portia_access_clear_cooldown(p_nickname_key text)

@@ -177,6 +177,20 @@ test("D-09 re-approval after revocation starts at the type default, not at the o
   assert.match(body, /previous_level := person\.level;/);
 });
 
+test("RLS21-04 / D-09 re-approval gives a fresh account link: set from this request, never kept by coalesce", () => {
+  const { body } = functionParts("portia_access_decide");
+  const revived = body.match(/update public\.portia_access_people\s+set status = 'active'[^;]*;/)?.[0] ?? "";
+  assert.ok(revived.length > 0, "the re-approval update exists");
+  assert.match(revived, /account_id = account_for_person/, "the link is replaced by the link derived from this request");
+  assert.ok(!/coalesce\s*\(\s*person\.account_id/.test(body), "a stranger's old link must not survive a re-approval");
+  // The link of another person's row must not block the person's own re-approval: the lookup excludes this nick's row.
+  const lookup = body.match(/select case[\s\S]*?into account_for_person;/)?.[0] ?? "";
+  assert.match(lookup, /p\.account_id = req\.requested_by/);
+  assert.match(lookup, /p\.nickname_key <> req\.nickname_key/, "only a link held by a different nickname blocks the new link");
+  assert.match(sql, /create table if not exists public\.portia_access_people[\s\S]*?constraint portia_access_people_account_unique unique \(account_id\)/);
+  assert.match(raw, /link is not proof of nickname ownership/i, "the migration states that the account link is not an ownership proof");
+});
+
 type Call = { fn: string; args: Record<string, unknown> | undefined };
 
 function stubClient(replies: Record<string, unknown>, calls: Call[] = []): AccessRpcClient {

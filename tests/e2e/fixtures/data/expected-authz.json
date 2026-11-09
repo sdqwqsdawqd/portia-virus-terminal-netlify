@@ -443,27 +443,27 @@
       "cells": {
         "anon": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:634"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:647"
         },
         "outsider": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:634"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:647"
         },
         "editor-full": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:634"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:647"
         },
         "editor-restricted": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:634"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:647"
         },
         "promo-reviewer": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:634"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:647"
         },
         "owner": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:634"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:647"
         }
       }
     },
@@ -517,27 +517,27 @@
       "cells": {
         "anon": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:625"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:638"
         },
         "outsider": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:625"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:638"
         },
         "editor-full": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:625"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:638"
         },
         "editor-restricted": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:625"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:638"
         },
         "promo-reviewer": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:625"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:638"
         },
         "owner": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:625"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:638"
         }
       }
     },
@@ -1544,27 +1544,27 @@
       "cells": {
         "anon": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:316"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:319"
         },
         "outsider": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:316"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:319"
         },
         "editor-full": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:316"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:319"
         },
         "editor-restricted": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:316"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:319"
         },
         "promo-reviewer": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:316"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:319"
         },
         "owner": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:316"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:319"
         }
       }
     },
@@ -1578,27 +1578,27 @@
       "cells": {
         "anon": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:516"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:524"
         },
         "outsider": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:516"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:524"
         },
         "editor-full": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:516"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:524"
         },
         "editor-restricted": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:516"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:524"
         },
         "promo-reviewer": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:516"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:524"
         },
         "owner": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:516"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:524"
         }
       }
     },
@@ -1617,27 +1617,27 @@
       "cells": {
         "anon": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:229"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:230"
         },
         "outsider": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:229"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:230"
         },
         "editor-full": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:229"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:230"
         },
         "editor-restricted": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:229"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:230"
         },
         "promo-reviewer": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:229"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:230"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:229"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:230"
         }
       }
     },
@@ -1653,27 +1653,27 @@
       "cells": {
         "anon": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:279"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:280"
         },
         "outsider": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:279"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:280"
         },
         "editor-full": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:279"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:280"
         },
         "editor-restricted": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:279"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:280"
         },
         "promo-reviewer": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:279"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:280"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:279"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:280"
         }
       }
     },
@@ -1687,27 +1687,27 @@
       "cells": {
         "anon": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:591"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:604"
         },
         "outsider": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:591"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:604"
         },
         "editor-full": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:591"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:604"
         },
         "editor-restricted": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:591"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:604"
         },
         "promo-reviewer": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:591"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:604"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:591"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:604"
         }
       }
     },
@@ -1725,27 +1725,27 @@
       "cells": {
         "anon": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:411"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:419"
         },
         "outsider": {
           "outcome": "forbidden",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:338"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:341"
         },
         "editor-full": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:412"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:420"
         },
         "editor-restricted": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:412"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:420"
         },
         "promo-reviewer": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:412"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:420"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:412"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:420"
         }
       }
     },
@@ -1763,27 +1763,27 @@
       "cells": {
         "anon": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:459"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:467"
         },
         "outsider": {
           "outcome": "forbidden",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:427"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:435"
         },
         "editor-full": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:460"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:468"
         },
         "editor-restricted": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:460"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:468"
         },
         "promo-reviewer": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:460"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:468"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:460"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:468"
         }
       }
     },
@@ -1799,27 +1799,27 @@
       "cells": {
         "anon": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:501"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:509"
         },
         "outsider": {
           "outcome": "forbidden",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:476"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:484"
         },
         "editor-full": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:502"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:510"
         },
         "editor-restricted": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:502"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:510"
         },
         "promo-reviewer": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:502"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:510"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:502"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:510"
         }
       }
     },
@@ -1835,27 +1835,27 @@
       "cells": {
         "anon": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:555"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:568"
         },
         "outsider": {
           "outcome": "owner-required",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:534"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:547"
         },
         "editor-full": {
           "outcome": "owner-required",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:534"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:547"
         },
         "editor-restricted": {
           "outcome": "owner-required",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:534"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:547"
         },
         "promo-reviewer": {
           "outcome": "owner-required",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:534"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:547"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:556"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:569"
         }
       }
     },
@@ -1871,27 +1871,27 @@
       "cells": {
         "anon": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:617"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:630"
         },
         "outsider": {
           "outcome": "owner-required",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:606"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:619"
         },
         "editor-full": {
           "outcome": "owner-required",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:606"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:619"
         },
         "editor-restricted": {
           "outcome": "owner-required",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:606"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:619"
         },
         "promo-reviewer": {
           "outcome": "owner-required",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:606"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:619"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:618"
+          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:631"
         }
       }
     }
@@ -4784,105 +4784,105 @@
         "select": {
           "anon": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "outsider": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "editor-full": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "editor-restricted": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "promo-reviewer": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "owner": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           }
         },
         "insert": {
           "anon": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "outsider": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "editor-full": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "editor-restricted": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "promo-reviewer": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "owner": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           }
         },
         "update": {
           "anon": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "outsider": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "editor-full": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "editor-restricted": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "promo-reviewer": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "owner": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           }
         },
         "delete": {
           "anon": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "outsider": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "editor-full": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "editor-restricted": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "promo-reviewer": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           },
           "owner": {
             "outcome": "42501",
-            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:572"
+            "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:585"
           }
         }
       }

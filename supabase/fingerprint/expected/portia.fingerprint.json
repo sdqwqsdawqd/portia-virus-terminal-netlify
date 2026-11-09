@@ -2443,7 +2443,7 @@
         "kind": "f",
         "returns": "jsonb",
         "secdef": true,
-        "src_sha256": "71079e61cc43b9230a8d4062edab4e2d6b9546c076e841e3b3f93474930630f1",
+        "src_sha256": "9f1e8941f5ba13003317c43708a96b764733c9e9a07265fed8c6f4014017e1e1",
         "volatility": "v"
       },
       "public.portia_access_journal_append_only()": {
@@ -3520,14 +3520,8 @@
     "tables": {
       "public.portia_access_journal": {
         "acl": [
-          "service_role:DELETE",
           "service_role:INSERT",
-          "service_role:MAINTAIN",
-          "service_role:REFERENCES",
-          "service_role:SELECT",
-          "service_role:TRIGGER",
-          "service_role:TRUNCATE",
-          "service_role:UPDATE"
+          "service_role:SELECT"
         ],
         "force_rls": false,
         "options": null,
@@ -4019,6 +4013,10 @@
     "triggers": {
       "portia_access_journal.portia_access_journal_append_only": {
         "def": "CREATE TRIGGER portia_access_journal_append_only BEFORE DELETE OR UPDATE ON public.portia_access_journal FOR EACH ROW EXECUTE FUNCTION portia_access_journal_append_only()",
+        "enabled": "O"
+      },
+      "portia_access_journal.portia_access_journal_no_truncate": {
+        "def": "CREATE TRIGGER portia_access_journal_no_truncate BEFORE TRUNCATE ON public.portia_access_journal FOR EACH STATEMENT EXECUTE FUNCTION portia_access_journal_append_only()",
         "enabled": "O"
       }
     }
