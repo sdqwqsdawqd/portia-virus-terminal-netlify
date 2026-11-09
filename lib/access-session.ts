@@ -1,7 +1,8 @@
 import { createHmac } from "node:crypto";
+import { isIPv4, isIPv6 } from "node:net";
 import { ACCESS_ORIGINS, type AccessOrigin } from "./access-levels.ts";
 import { isValidNickname } from "./nickname.ts";
-import { coarseIpBucket, createDeviceToken, promotionDeviceSecret } from "./portia-device-binding.ts";
+import { createDeviceToken, promotionDeviceSecret } from "./portia-device-binding.ts";
 
 // Opaque device token for site access (Phase 21). The browser holds the random token in an HttpOnly cookie; only the
 // server-side HMAC digest ("access:" label, apart from the promotion "device:" space) ever reaches the database.
@@ -89,6 +90,56 @@ export function readAccessToken(headers: Headers) {
   }
 }
 
+// RLS21-08: the access path groups IP addresses on its own. The Promotion helper (coarseIp in portia-device-binding.ts)
+// cuts the TEXT form of an IPv6 address after four groups, so `::` compression gave `2001:db8::5` and `2001:db8::6`
+// different buckets and a free /48 bought 65536 of them. Here the address is canonicalised first (every group expanded,
+// lower case, brackets and zone id removed, IPv4-mapped read as IPv4) and IPv6 is grouped by /48, IPv4 by /24.
+// Promotion buckets must stay byte-identical, so the shared helper is not changed.
+function accessClientAddress(headers: Headers) {
+  const raw = headers.get("x-nf-client-connection-ip")
+    ?? headers.get("x-forwarded-for")?.split(",", 1)[0]
+    ?? headers.get("x-real-ip")
+    ?? "";
+  return raw.trim().toLocaleLowerCase("en-US").slice(0, 128);
+}
+
+// Eight 16-bit groups of a valid IPv6 address, or null. net.isIPv6 validates; the expansion below is the only parsing.
+function ipv6Groups(address: string) {
+  const text = address.split("%", 1)[0];
+  if (!isIPv6(text)) return null;
+  let head = text;
+  const dotted = text.match(/^(.*:)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (dotted) {
+    const octets = dotted[2].split(".").map(Number);
+    if (octets.some((octet) => octet > 255)) return null;
+    head = `${dotted[1]}${((octets[0] << 8) | octets[1]).toString(16)}:${((octets[2] << 8) | octets[3]).toString(16)}`;
+  }
+  const halves = head.split("::");
+  const side = (part: string | undefined) => (part ? part.split(":") : []);
+  const left = side(halves[0]);
+  const right = side(halves[1]);
+  const groups = halves.length === 2 ? [...left, ...Array<string>(8 - left.length - right.length).fill("0"), ...right] : left;
+  if (groups.length !== 8) return null;
+  const numbers = groups.map((group) => Number.parseInt(group, 16));
+  return numbers.every((value) => Number.isInteger(value) && value >= 0 && value <= 0xffff) ? numbers : null;
+}
+
+export function accessIpGroup(headers: Headers) {
+  let value = accessClientAddress(headers);
+  if (value.startsWith("[") && value.endsWith("]")) value = value.slice(1, -1);
+  if (isIPv4(value)) return ipv4Group(value.split(".").map(Number));
+  const groups = ipv6Groups(value);
+  if (!groups) return "unknown";
+  const mapped = groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff;
+  if (mapped) return ipv4Group([groups[6] >> 8, groups[6] & 255, groups[7] >> 8, groups[7] & 255]);
+  return `${groups.slice(0, 3).map((group) => group.toString(16).padStart(4, "0")).join(":")}::/48`;
+}
+
+function ipv4Group(octets: number[]) {
+  return `${octets[0]}.${octets[1]}.${octets[2]}.0/24`;
+}
+
 export function accessIpBucket(headers: Headers, secret: string) {
-  return coarseIpBucket(headers, secret);
+  if (secret.length < 32) throw new Error("Access session secret must contain at least 32 characters.");
+  return createHmac("sha256", secret).update(`access-ip:${accessIpGroup(headers)}`).digest("hex").slice(0, 32);
 }
