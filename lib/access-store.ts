@@ -60,7 +60,7 @@ export type SetLevelResult =
 
 export type RevokeResult = { code: "revoked" | "already-revoked" | "not-found" };
 
-const submitCodes = ["created", "pending", "approved", "device-busy", "unavailable", "invalid"] as const;
+const submitCodes = ["created", "pending", "approved", "device-busy", "unavailable", "invalid", "throttled"] as const;
 
 const unexpected = () => new AccessStoreError("unexpected-reply");
 
@@ -86,8 +86,12 @@ export async function submitAccessRequest(
     p_ip_bucket: input.ipBucket,
   });
   const code = data.code;
+  if (code === "cooldown") {
+    if (typeof data.retryAt !== "string") throw unexpected();
+    return { code: "cooldown", retryAt: data.retryAt };
+  }
   if (typeof code !== "string" || !(submitCodes as readonly string[]).includes(code)) throw unexpected();
-  return { code } as SubmitResult;
+  return { code: code as Exclude<SubmitResult, { code: "cooldown" }>["code"] };
 }
 
 export async function resolveAccess(client: AccessRpcClient, tokenHash: string): Promise<AccessState> {
@@ -171,7 +175,14 @@ export async function revokeAccess(client: AccessRpcClient, input: { personId: s
   }
 }
 
-// RED stub (21-03 task 2): replaced by the real wrapper in the GREEN commit.
-export async function clearAccessCooldown(_client: AccessRpcClient, _input: { nicknameKey: string }): Promise<ClearCooldownResult> {
-  throw new Error("not implemented");
+export async function clearAccessCooldown(client: AccessRpcClient, input: { nicknameKey: string }): Promise<ClearCooldownResult> {
+  const data = await call(client, accessRpc.clearCooldown, { p_nickname_key: input.nicknameKey });
+  switch (data.code) {
+    case "cleared":
+    case "no-cooldown":
+    case "invalid":
+      return { code: data.code };
+    default:
+      throw unexpected();
+  }
 }

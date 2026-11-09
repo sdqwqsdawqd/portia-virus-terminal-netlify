@@ -219,6 +219,7 @@ test("SQL contract: every access function pins search_path and revokes before it
     [...names].sort(),
     [
       "portia_access_caller_level",
+      "portia_access_clear_cooldown",
       "portia_access_decide",
       "portia_access_journal_append_only",
       "portia_access_nickname_key",

@@ -5,6 +5,9 @@
 -- no policies, every privilege revoked); anon and authenticated reach them only through SECURITY DEFINER functions
 -- pinned to search_path ''. Levels are 1..5; editors and the owner are level 5 without a person row (D-03).
 --
+-- Request cleanup policy (Phase 21): no automatic deletion and no new scheduled job. Stale pending requests wait for an
+-- editor's decision (Phase 22 queue) and the 200-pending cap bounds that queue; journal rows are never deleted.
+--
 -- Not applied anywhere by the agent. Apply order: 20261104000000_portia_rename_virus_classes.sql,
 -- 20261104000100_portia_editor_notes.sql, 20261106000000_portia_drop_editor_notes.sql, then this file.
 -- Postgres/RLS execution is BLOCKED until an isolated staging run; production is applied by the owner only.
@@ -150,6 +153,11 @@ declare
   normalized_key text := public.portia_access_nickname_key(p_nickname);
   device_key text;
   device_status text;
+  recent_by_nickname integer;
+  recent_by_bucket integer;
+  pending_total integer;
+  pause_decided_at timestamptz;
+  pause_is_own boolean;
 begin
   if normalized_key is null
     or p_origin is null or p_origin not in ('sheet', 'outside')
@@ -171,11 +179,40 @@ begin
     return jsonb_build_object('code', 'approved');
   end if;
 
+  -- D-06 caps, exact under the global queue lock: 3 per nick and 10 per IP bucket in 24 hours, 200 pending in total.
+  -- Only rows of this table are counted; Promotion attempt buckets are a separate namespace and are never touched.
+  select count(*) into recent_by_nickname from public.portia_access_requests r
+    where r.nickname_key = normalized_key and r.created_at > now() - interval '24 hours';
+  select count(*) into recent_by_bucket from public.portia_access_requests r
+    where r.ip_bucket = p_ip_bucket and r.created_at > now() - interval '24 hours';
+  select count(*) into pending_total from public.portia_access_requests r
+    where r.status = 'pending';
+  if recent_by_nickname >= 3 or recent_by_bucket >= 10 or pending_total >= 200 then
+    return jsonb_build_object('code', 'throttled');
+  end if;
+
   -- Another device already waits for this nick: say nothing about who or why (ACC-05 groundwork).
   if exists (
     select 1 from public.portia_access_requests r
     where r.nickname_key = normalized_key and r.status = 'pending'
   ) then
+    return jsonb_build_object('code', 'unavailable');
+  end if;
+
+  -- D-06 pause: the latest uncleared rejection or revocation of this nick decided within the last hour. Only the device
+  -- that owns that request is told (with retryAt); any other device gets the neutral reply.
+  select r.decided_at, (r.token_hash = p_token_hash) into pause_decided_at, pause_is_own
+    from public.portia_access_requests r
+    where r.nickname_key = normalized_key
+      and r.status in ('rejected', 'revoked')
+      and r.cooldown_cleared_at is null
+      and r.decided_at > now() - interval '1 hour'
+    order by (r.token_hash = p_token_hash) desc, r.decided_at desc
+    limit 1;
+  if found then
+    if pause_is_own then
+      return jsonb_build_object('code', 'cooldown', 'retryAt', pause_decided_at + interval '1 hour');
+    end if;
     return jsonb_build_object('code', 'unavailable');
   end if;
 
@@ -477,3 +514,40 @@ grant execute on function public.portia_access_journal_append_only() to service_
 
 drop trigger if exists portia_access_journal_append_only on public.portia_access_journal;
 create trigger portia_access_journal_append_only before update or delete on public.portia_access_journal for each row execute function public.portia_access_journal_append_only();
+
+-- m. The owner clears the 1-hour pause of a nick (D-06 choice 1b). Owner only; journaled once when something was cleared.
+create or replace function public.portia_access_clear_cooldown(p_nickname_key text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  cleared_count integer;
+  person_uuid uuid;
+begin
+  if not public.portia_is_owner() then raise exception 'owner-required'; end if;
+  if p_nickname_key is null or public.portia_access_nickname_key(p_nickname_key) is distinct from p_nickname_key then
+    return jsonb_build_object('code', 'invalid');
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('access:nickname:' || p_nickname_key, 0));
+  update public.portia_access_requests
+    set cooldown_cleared_at = now(), cooldown_cleared_by = auth.uid()
+    where nickname_key = p_nickname_key
+      and status in ('rejected', 'revoked')
+      and cooldown_cleared_at is null
+      and decided_at > now() - interval '1 hour';
+  get diagnostics cleared_count = row_count;
+  if cleared_count = 0 then return jsonb_build_object('code', 'no-cooldown'); end if;
+
+  select p.id into person_uuid from public.portia_access_people p where p.nickname_key = p_nickname_key;
+  insert into public.portia_access_journal (event_type, actor_id, nickname_key, person_id, details)
+  values ('cooldown-clear', auth.uid(), p_nickname_key, person_uuid, jsonb_build_object('count', cleared_count));
+  return jsonb_build_object('code', 'cleared');
+end; $$;
+
+revoke all on function public.portia_access_clear_cooldown(text) from public, anon, authenticated;
+grant execute on function public.portia_access_clear_cooldown(text) to authenticated;
+grant execute on function public.portia_access_clear_cooldown(text) to service_role;
