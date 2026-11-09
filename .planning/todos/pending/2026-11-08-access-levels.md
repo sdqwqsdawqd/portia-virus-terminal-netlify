@@ -2,6 +2,7 @@
 created: 2026-11-08T00:00:00.000Z
 title: Уровни допуска 1–5 к информации; записи учёных по желанию
 area: auth-and-access
+resolves_phase: 24
 phase: next
 severity: high
 status: captured

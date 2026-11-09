@@ -2,6 +2,7 @@
 created: 2026-11-08T12:00:00.000Z
 title: Окно «Видимая часть» в конструкторе шаблона «Повышения»
 area: promotion-template
+resolves_phase: 23
 phase: 20
 severity: medium
 status: pending

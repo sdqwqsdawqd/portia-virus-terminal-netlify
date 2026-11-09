@@ -3,7 +3,7 @@ created: 2026-11-03T13:30:00.000Z
 title: «Информация» на телефоне — компактная кнопка разделов вместо ленты карточек
 area: ui-mobile
 phase: 20
-resolves_phase: 20
+resolves_phase: 26
 severity: medium
 status: pending
 source: owner UAT 19-14 (2026-11-03), перенесено в Phase 20 решением владельца

@@ -2,6 +2,7 @@
 created: 2026-11-07T12:00:00.000Z
 title: Переделка вида рабочего стола и окон, новые иконки классов
 area: ui-desktop
+resolves_phase: 26
 phase: next
 severity: high
 status: captured

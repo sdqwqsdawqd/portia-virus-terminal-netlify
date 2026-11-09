@@ -2,6 +2,7 @@
 created: 2026-11-07T12:00:00.000Z
 title: Вход на сайт по нику с заявкой (сотрудник или наблюдатель)
 area: auth-and-access
+resolves_phase: 23
 phase: next
 severity: high
 status: captured
