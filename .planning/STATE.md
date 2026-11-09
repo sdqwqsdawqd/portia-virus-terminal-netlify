@@ -2,15 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.4
 milestone_name: Доступ и единый стиль
+current_phase: 21
+current_phase_name: "Фундамент доступа: люди, заявки, правила и журнал"
 status: planning
-last_updated: "2026-11-09T04:43:51.000Z"
+stopped_at: Phase 21 context gathered
+last_updated: "2026-11-09T05:13:44.169Z"
 last_activity: 2026-11-09
+last_activity_desc: Roadmap v1.4 created (7 phases, 52/52 requirements mapped)
+state_head: 5910b8c390df784c42ee4849fc0803770b4971f8
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 0
 ---
 
 # Project State
@@ -247,9 +251,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-09
-Stopped at: Roadmap v1.4 created (Phases 21–27, 52/52 requirements mapped); nothing planned or executed yet
-Resume file: None
+Last session: 2026-11-09T05:13:44.138Z
+Stopped at: Phase 21 context gathered
+Resume file: .planning/phases/PORTIA-21-fundament-dostupa-lyudi-zayavki-pravila-i-zhurnal/21-CONTEXT.md
 
 ## Operator Next Steps
 
