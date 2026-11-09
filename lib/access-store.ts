@@ -17,6 +17,8 @@ export const accessRpc = {
   setLevel: "portia_access_set_level",
   revoke: "portia_access_revoke",
   clearCooldown: "portia_access_clear_cooldown",
+  closureEnabled: "portia_access_closure_enabled",
+  setClosure: "portia_access_set_closure",
 } as const;
 
 export class AccessStoreError extends Error {
@@ -185,4 +187,17 @@ export async function clearAccessCooldown(client: AccessRpcClient, input: { nick
     default:
       throw unexpected();
   }
+}
+
+export type SetClosureResult = { code: "updated"; enabled: boolean; updatedAt: string } | { code: "invalid" };
+
+export async function isClosureEnabled(client: AccessRpcClient): Promise<boolean> {
+  void client;
+  throw new Error("not implemented");
+}
+
+export async function setClosure(client: AccessRpcClient, input: { enabled: boolean }): Promise<SetClosureResult> {
+  void client;
+  void input;
+  throw new Error("not implemented");
 }
