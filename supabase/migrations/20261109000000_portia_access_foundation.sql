@@ -624,3 +624,12 @@ grant execute on function public.portia_access_set_closure(boolean) to service_r
 -- function itself is not redefined. Rollback: a forward migration that re-grants execute to anon, authenticated.
 revoke all on function public.portia_promo_register_attempt(text, text, boolean) from public, anon, authenticated;
 grant execute on function public.portia_promo_register_attempt(text, text, boolean) to service_role;
+
+-- p. RLS21-02: portia_promo_bind_device has no caller either (the API never calls it; portia_promo_submit_request inserts
+-- the device binding itself) and the baseline left it executable by anon and authenticated: anyone could bind an arbitrary
+-- token to a participant's nickname, which denies that participant (device-denied, bucket lock) until an owner reset, and
+-- 'nickname-bound' was an existence oracle. D-10 (Promotion unchanged except the register_attempt revoke) was extended by
+-- the owner on 2026-11-09 to cover this revoke. The function itself is not redefined. Rollback: a forward migration that
+-- re-grants execute to anon, authenticated.
+revoke all on function public.portia_promo_bind_device(text, text, text) from public, anon, authenticated;
+grant execute on function public.portia_promo_bind_device(text, text, text) to service_role;

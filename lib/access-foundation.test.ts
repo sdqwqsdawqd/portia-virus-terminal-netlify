@@ -314,3 +314,29 @@ test("SEC-06: portia_promo_register_attempt is revoked from anon and authenticat
   }
   assert.deepEqual(callers, [], "no product or script file refers to portia_promo_register_attempt");
 });
+
+test("RLS21-02 (D-10 extended by the owner on 2026-11-09): portia_promo_bind_device is revoked from anon and authenticated and has no caller", () => {
+  const signature = "public.portia_promo_bind_device(text, text, text)";
+  const revoke = `revoke all on function ${signature} from public, anon, authenticated;`;
+  assert.equal(sql.split(revoke).length - 1, 1, "the revoke line appears exactly once in the Phase 21 migration");
+  const lines = sql.split("\n");
+  const revokeAt = lines.indexOf(revoke);
+  assert.ok(revokeAt >= 0);
+  assert.equal(lines[revokeAt + 1], `grant execute on function ${signature} to ${serviceRole};`, "only the privileged API role keeps EXECUTE");
+  const registerRevoke = lines.indexOf("revoke all on function public.portia_promo_register_attempt(text, text, boolean) from public, anon, authenticated;");
+  assert.ok(registerRevoke >= 0 && revokeAt > registerRevoke, "appended at the end, after the register_attempt revoke");
+  assert.doesNotMatch(sql, /grant execute on function public\.portia_promo_bind_device[^;]*\b(anon|authenticated|public)\b/);
+  assert.doesNotMatch(sql, /create (or replace )?function public\.portia_promo_bind_device\b/, "the function body is not redefined");
+
+  const callers: string[] = [];
+  for (const dir of ["app", "components", "lib", "scripts"]) {
+    const base = join(repoRoot, dir);
+    if (!existsSync(base)) continue;
+    for (const entry of readdirSync(base, { recursive: true }) as string[]) {
+      if (!/\.(ts|tsx|mjs)$/.test(entry) || /\.test\.(ts|tsx|mjs)$/.test(entry) || entry.includes("node_modules")) continue;
+      const full = join(base, entry);
+      if (statSync(full).isFile() && readFileSync(full, "utf8").includes("portia_promo_bind_device")) callers.push(full);
+    }
+  }
+  assert.deepEqual(callers, [], "no product or script file refers to portia_promo_bind_device");
+});
