@@ -5,11 +5,11 @@ milestone_name: Доступ и единый стиль
 current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
 status: ready_to_plan
-stopped_at: Phase PORTIA-22 context gathered
-last_updated: "2026-11-09T15:47:03.105Z"
+stopped_at: Phase PORTIA-22 UI-SPEC approved
+last_updated: "2026-11-09T16:04:54.336Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase PORTIA-21 closed as owner-accepted risk (D-72), not PASS
-state_head: 42e432baa34e0df8d66431252854c43a4bf6a841
+state_head: a7acb5fe1b969c1b4c497d902887faedba4cf90d
 progress:
   total_phases: 7
   completed_phases: 1
@@ -252,9 +252,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-09T15:47:02.994Z
-Stopped at: Phase PORTIA-22 context gathered
-Resume file: .planning/phases/PORTIA-22-vkladka-polzovateli-i-karkas-tokenov-stilya/22-CONTEXT.md
+Last session: 2026-11-09T16:04:54.230Z
+Stopped at: Phase PORTIA-22 UI-SPEC approved
+Resume file: .planning/phases/PORTIA-22-vkladka-polzovateli-i-karkas-tokenov-stilya/22-UI-SPEC.md
 
 ## Operator Next Steps
 
