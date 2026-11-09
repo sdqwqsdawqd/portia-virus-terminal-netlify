@@ -66,6 +66,17 @@ describe("outcome classifier", () => {
     assert.deepEqual(named, ["test:tracer guard: isolated staging target is required", "check:tracer: anon portia_content select"]);
   });
 
+  test("RLS21-15: the live matrix run reads expected_response and compares the response body for allow cells", () => {
+    const source = readFileSync(new URL(import.meta.url), "utf8");
+    assert.match(source, /expected_response\?: unknown;/u, "the function spec type carries expected_response");
+    assert.match(source, /function expectResponse\(observed: Observed, expectedResponse: unknown, label: string\)/u);
+    assert.match(source, /assert\.deepEqual\(observed\.data, expectedResponse,/u, "the body is compared deeply");
+    assert.match(source, /expectResponse\(observed, fn\.expected_response, /u, "the function loop passes the pinned body");
+    // Every matrix row that pins a body is reachable by that loop (a pinned body on a function row, never on a table row).
+    const pinned = matrix.functions.filter((fn) => fn.expected_response !== undefined).map((fn) => fn.name);
+    assert.ok(pinned.includes("portia_access_submit_request"), "the unsigned submit probe pins its neutral refusal");
+  });
+
   test("Storage statuses become rls-deny or http-NNN", () => {
     assert.equal(classify({ error: { message: "new row violates row-level security policy", status: 400, statusCode: "403" } }), "rls-deny");
     assert.equal(classify({ error: { message: "Unauthorized", status: 403 } }), "rls-deny");
@@ -82,6 +93,8 @@ type FunctionSpec = {
   name: string;
   args: Record<string, unknown>;
   creates_rows: boolean;
+  // RLS21-15: a pinned response body; the live run compares it for every role whose cell is an allow, so an outcome-only pass cannot hide a changed answer.
+  expected_response?: unknown;
   cells: Record<string, Cell>;
   variants?: Array<{ label: string; args: Record<string, unknown>; cells: Record<string, Cell> }>;
 };
@@ -183,6 +196,11 @@ function registerLiveSuite(live: StagingLiveTarget) {
       assert.equal(actual, expected, `${label}: expected ${cell.outcome}, observed ${actual}${detail ? ` (${detail})` : ""}${tag}`);
       if (cell.message) assert.ok(observed.error?.message?.includes(cell.message), `${label}: expected message ${cell.message}, got ${observed.error?.message}`);
       if (cell.returns !== undefined) assert.equal(observed.data, cell.returns, `${label}: expected return value ${cell.returns}`);
+    }
+
+    function expectResponse(observed: Observed, expectedResponse: unknown, label: string) {
+      if (expectedResponse === undefined || classify(observed) !== "allow") return;
+      assert.deepEqual(observed.data, expectedResponse, `${label}: response body differs from expected_response`);
     }
 
     const clientOf = (role: string) => env().run.client(role);
@@ -315,7 +333,11 @@ function registerLiveSuite(live: StagingLiveTarget) {
 
     for (const fn of matrix.functions) {
       for (const role of roles) {
-        check(`${role} function ${fn.name}`, async () => expectCell(await rpcOp(role, fn.name, fn.args), fn.cells[role], `${role} ${fn.key}`));
+        check(`${role} function ${fn.name}`, async () => {
+          const observed = await rpcOp(role, fn.name, fn.args);
+          expectCell(observed, fn.cells[role], `${role} ${fn.key}`);
+          expectResponse(observed, fn.expected_response, `${role} ${fn.key}`);
+        });
       }
       for (const variant of fn.variants ?? []) {
         for (const role of roles) {
