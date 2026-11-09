@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.3
 milestone_name: «Стабилизация PORTIA OS»
-current_phase: 20
-current_phase_name: Security, accessibility и приёмка релиза
-status: executing
-stopped_at: Completed PORTIA-20-15-PLAN.md (ожидает независимый 20-VERIFICATION.md и --verify-independent)
-last_updated: "2026-11-08T19:16:27.118Z"
-last_activity: 2026-11-08
-last_activity_desc: Phase PORTIA-20 execution resumed (wave continue)
-state_head: 284e504422d310c5448b448ba3676e596291eb12
+status: Awaiting next milestone
+stopped_at: Milestone v1.3 closed (override closeout, soft close)
+last_updated: "2026-11-09T03:10:46.845Z"
+last_activity: 2026-11-09
+last_activity_desc: Milestone v1.3 completed and archived
+state_head: 47e129f0bddc7c757fee9958f376d0dc51b8a9d0
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 134
   completed_plans: 134
   percent: 50
+current_phase: 20
+current_phase_name: Security, accessibility и приёмка релиза
 ---
 
 # Project State
@@ -29,12 +29,10 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 ## Current Position
 
-Phase: PORTIA-20 (Security, accessibility и приёмка релиза) — READY TO EXECUTE
-Plan: 40 of 47
-Status: Executing Phase PORTIA-20
-Last activity: 2026-11-08 — Phase PORTIA-20 execution resumed (wave continue)
-
-Progress: [█████░░░░░] 50%
+Phase: Milestone v1.3 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-11-09 — Milestone v1.3 completed and archived
 
 ## Performance Metrics
 
@@ -351,13 +349,17 @@ Full decision history: `.planning/PROJECT.md`.
 | owner_uat | Promotion plus desktop/motion PC/phone acceptance | Open gate in Phase 19/22 | v1.2 incomplete close |
 | security | Local security matrix and finding disposition | Open gate in Phase 20 | v1.2 incomplete close |
 | architecture | Oversized desktop/editor composition roots | Planned for reversible extraction in Phase 17 | v1.2 incomplete close |
+| verification_gaps | Phases 18, 19, 20 = gaps_found (override closeout, accepted risk) | Known Gaps in MILESTONES.md | v1.3 close 2026-11-09 |
+| requirements | STAB-BASE-02/03/04/06 | Carried to v1.4 (owner) | v1.3 close 2026-11-09 |
+| security | portia_promo_register_attempt granted to anon, no caller | Revoke in v1.4 (owner) | v1.3 close 2026-11-09 |
+| planning | Tests/scripts read .planning/REQUIREMENTS.md, ROADMAP.md, phases/PORTIA-15..20 | Repoint to v1.3 archive, then archive phases | v1.3 soft close 2026-11-09 |
 
 ## Session Continuity
 
-Last session: 2026-11-08T19:16:26.543Z
-Stopped at: Completed PORTIA-20-15-PLAN.md (ожидает независимый 20-VERIFICATION.md и --verify-independent)
+Last session: 2026-11-09
+Stopped at: Milestone v1.3 closed (override closeout, soft close: originals kept in place)
 Resume file: None
 
-## Operator Next Step
+## Operator Next Steps
 
-Phase 20: plan 20-37 executed with outcome `stopped-for-fixes` (owner verdict 2026-11-07, decisions D-53..D-57 in 20-CONTEXT.md). Plan a new gap-closure cycle (`/gsd-plan-phase 20 --gaps`): spider without rim and with all 8 legs stepping and the web synced (D-53), flasks animation and density (D-54), template builder output as the real virus-database card (D-55), short hints (D-56), editor format launch button name (D-57). Then recapture the 36 fix rows and the 39 rows without a verdict. Do not run 20-12 until the ledger is approved.
+- Start the next milestone with /gsd-new-milestone. First v1.4 step: repoint tests/scripts to `.planning/milestones/v1.3-*`, then archive phase dirs 15–20 and REQUIREMENTS.md; carry STAB-BASE-02/03/04/06; revoke register_attempt.
