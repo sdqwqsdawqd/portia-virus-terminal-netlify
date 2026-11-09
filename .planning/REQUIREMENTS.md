@@ -106,11 +106,63 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| ACC-01 | Phase 23 | Pending |
+| ACC-02 | Phase 23 | Pending |
+| ACC-03 | Phase 23 | Pending |
+| ACC-04 | Phase 21 | Pending |
+| ACC-05 | Phase 23 | Pending |
+| ACC-06 | Phase 23 | Pending |
+| ACC-07 | Phase 23 | Pending |
+| ACC-08 | Phase 23 | Pending |
+| ACC-09 | Phase 21 | Pending |
+| USR-01 | Phase 22 | Pending |
+| USR-02 | Phase 22 | Pending |
+| USR-03 | Phase 22 | Pending |
+| USR-04 | Phase 22 | Pending |
+| USR-05 | Phase 21 | Pending |
+| USR-06 | Phase 22 | Pending |
+| USR-07 | Phase 22 | Pending |
+| USR-08 | Phase 22 | Pending |
+| USR-09 | Phase 22 | Pending |
+| LVL-01 | Phase 21 | Pending |
+| LVL-02 | Phase 24 | Pending |
+| LVL-03 | Phase 24 | Pending |
+| LVL-04 | Phase 24 | Pending |
+| LVL-05 | Phase 24 | Pending |
+| LVL-06 | Phase 24 | Pending |
+| LVL-07 | Phase 24 | Pending |
+| LVL-08 | Phase 24 | Pending |
+| LVL-09 | Phase 24 | Pending |
+| PROM-01 | Phase 23 | Pending |
+| PROM-02 | Phase 23 | Pending |
+| PROM-03 | Phase 23 | Pending |
+| PROM-04 | Phase 23 | Pending |
+| PROM-05 | Phase 23 | Pending |
+| SEC-01 | Phase 25 | Pending |
+| SEC-02 | Phase 25 | Pending |
+| SEC-03 | Phase 25 | Pending |
+| SEC-04 | Phase 25 | Pending |
+| SEC-05 | Phase 25 | Pending |
+| SEC-06 | Phase 21 | Pending |
+| SEC-07 | Phase 24 | Pending |
+| SEC-08 | Phase 21 | Pending |
+| UI-01 | Phase 22 | Pending |
+| UI-02 | Phase 26 | Pending |
+| UI-03 | Phase 26 | Pending |
+| UI-04 | Phase 26 | Pending |
+| UI-05 | Phase 26 | Pending |
+| UI-06 | Phase 26 | Pending |
+| UI-07 | Phase 26 | Pending |
+| UI-08 | Phase 26 | Pending |
+| UI-09 | Phase 26 | Pending |
+| UI-10 | Phase 26 | Pending |
+| UI-11 | Phase 26 | Pending |
+| UAT-01 | Phase 27 | Pending |
 
 **Coverage:**
 - v1.4 requirements: 52 total
-- Mapped to phases: 0 (заполняет roadmap)
+- Mapped to phases: 52 (Phases 21–27), orphans: 0, duplicates: 0
 
 ---
 *Requirements defined: 2026-11-09*
-*Last updated: 2026-11-09 after initial definition*
+*Last updated: 2026-11-09 after roadmap creation (traceability filled)*

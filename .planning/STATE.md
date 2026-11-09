@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.4
 milestone_name: Доступ и единый стиль
 status: planning
-last_updated: "2026-11-09T03:56:13.626Z"
+last_updated: "2026-11-09T04:43:51.000Z"
 last_activity: 2026-11-09
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,155 +17,45 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-29)
+See: .planning/PROJECT.md (updated 2026-11-09)
 
-**Core value:** Сделать существующий PORTIA OS доказуемо устойчивым, безопасным и визуально последовательным, сохранив его текущую художественную основу.
-**Current focus:** Phase PORTIA-20 — Security, accessibility и приёмка релиза
+**Core value:** Участник открывает сайт и сразу находит нужную запись; редактор правит её без потерь и без путаницы — и всё это выглядит как цельная «PORTIA OS».
+**Current focus:** Phase 21 — Фундамент доступа: люди, заявки, правила и журнал
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 21 of 27 (Фундамент доступа: люди, заявки, правила и журнал)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-11-09 — Milestone v1.4 started
+Status: Ready to plan
+Last activity: 2026-11-09 — Roadmap v1.4 created (7 phases, 52/52 requirements mapped)
 
+Progress: [░░░░░░░░░░] 0% (0/7 phases, 0 plans)
 
 ## Performance Metrics
 
-**Current milestone:**
+**Current milestone (v1.4):**
 
-- Total plans completed: 52
-- Average duration: 49m
-- Total execution time: 8h09m
+- Total plans completed: 0
+- Phases: 0 of 7 complete (21–27)
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 15 | 10 | 8h09m | 49m |
-| PORTIA-17 | 8 | - | - |
-| 16 | 14 | - | - |
-| PORTIA-15 | 20 | - | - |
+| — | — | — | — |
 
-*Plan counts and velocity begin after Phase 15 planning.*
-| Phase 15 P01 | 8 min | 3 tasks | 5 files |
-| Phase 15 P02 | 8 min | 3 tasks | 9 files |
-| Phase 15 P03 | 47 min | 3 tasks | 20 files |
-| Phase 15 P04 | 38 min | 3 tasks | 9 files |
-| Phase 15 P05 | 4h51m | 3 tasks | 34 files |
-| Phase 15 P06 | 12min | 2 tasks | 9 files |
-| Phase 15 P07 | 12min | 2 tasks | 5 files |
-| Phase 15 P08 | 18min | 2 tasks | 10 files |
-| Phase 15 P09 | 30min | 2 tasks | 8 files |
-| Phase 15 P10 | 25min | 2 tasks | 10 files |
-| Phase 15 P11 | 35min | 3 tasks | repository UI authority |
-| Phase 15 P12 | 45min | 2 tasks | approved visual authority |
-**Per-Plan Metrics:**
+*Plan counts and velocity begin after Phase 21 planning.*
 
-| Plan | Duration | Tasks | Files |
-|------|----------|-------|-------|
-| Phase 15 P13 | 20min | 2 tasks | 2 files |
-| Phase 15 P14 | 45min | 2 tasks | 3 files |
-| Phase 15 P15 | 35min | 1 tasks | 5 files |
-| Phase 15 P16 | 40 min | 3 tasks | 8 files |
-| Phase 17 P01 | 25 min | 2 tasks | 9 files |
-| Phase 17 P02 | 20min | 2 tasks | 3 files |
-| Phase PORTIA-17 P03 | 15min | 2 tasks | 3 files |
-| Phase PORTIA-17 P04 | 20min | 2 tasks | 3 files |
-| Phase 17 P05 | 35min | 3 tasks | 6 files |
-| Phase 17 P06 | 15min | 2 tasks | 3 files |
-| Phase 17 P07 | 20min | 2 tasks | 2 files |
-| Phase 16 P08 | 40min | 2 tasks | 3 files |
-| Phase 16 P09 | 40min | 2 tasks | 3 files |
-| Phase 16 P09 | 35min | 2 tasks | 3 files |
-| Phase 16 P10 | ~1h | 3 tasks | 10 files |
-| Phase 16 P11 | ~50min | 3 tasks | 7 files |
-| Phase 16 P12 | 35min | 3 tasks | 5 files |
-| Phase 16 P13 | ~2h | 3 tasks | 15 files |
-| Phase 16 P14 | 40min | 3 tasks | 10 files |
-| Phase PORTIA-18 P01 | n/a | 3 tasks | 8 files |
-| Phase 18 P02 | not measured | 3 tasks | 8 files |
-| Phase PORTIA-18 P03 | not measured | 3 tasks | 5 files |
-| Phase PORTIA-18 P18-04 | not measured | 3 tasks | 6 files |
-| Phase 18 P05 | not measured | 3 tasks | 6 files |
-| Phase 18 P06 | not measured | 3 tasks | 7 files |
-| Phase PORTIA-18 P07 | not measured | 3 tasks | 4 files |
-| Phase 19 P02 | 25 min | 3 tasks | 7 files |
-| Phase 19 P01 | n/a | 3 tasks | 6 files |
-| Phase 19 P03 | ~40min | 3 tasks | 7 files |
-| Phase 19 P04 | 30min | 3 tasks | 8 files |
-| Phase 19 P05 | 40min | 3 tasks | 9 files |
-| Phase 19 P08 | single session | 3 tasks | 9 files |
-| Phase 19 P06 | n/a (multi-session) | 3 tasks | 12 files |
-| Phase 19 P15 | 15min | 3 tasks | 9 files |
-| Phase 19 P16 | 8min | 2 tasks | 7 files |
-| Phase PORTIA-19 P17 | 15min | 2 tasks | 4 files |
-| Phase 19 P18 | 17min | 2 tasks | 6 files |
-| Phase 19 P19 | 31min | 3 tasks | 11 files |
-| Phase PORTIA-19 P20 | 17min | 3 tasks | 10 files |
-| Phase PORTIA-20 P01 | 40min | 2 tasks | 6 files |
-| Phase PORTIA-20 P08 | 50min | 2 tasks | 6 files |
-| Phase PORTIA-20 P09 | 35min | 2 tasks | 3 files |
-| Phase PORTIA-20 P17 | 30min | 2 tasks | 7 files |
-| Phase PORTIA-20 P18 | 25min | 2 tasks | 6 files |
-| Phase PORTIA-20 P19 | 60min | 3 tasks | 8 files |
-| Phase PORTIA-20 P02 | 45min | 2 tasks | 5 files |
-| Phase PORTIA-20 P03 | 40 min | 3 tasks | 6 files |
-| Phase PORTIA-20 P10 | 35min | 3 tasks | 6 files |
-| Phase PORTIA-20 P20 | 70min | 3 tasks | 8 files |
-| Phase PORTIA-20 P04 | 80 min | 2 tasks | 4 files |
-| Phase PORTIA-20 P21 | 35m | 3 tasks | 5 files |
-| Phase PORTIA-20 P05 | 105min | 2 tasks | 4 files |
-| Phase PORTIA-20 P06 | 105 min | 2 tasks | 4 files |
-| Phase PORTIA-20 P24 | 25m | 3 tasks | 8 files |
-| Phase PORTIA-20 P16 | 2h30m | 3 tasks | 7 files |
-| Phase PORTIA-20 P07 | 3h | 2 tasks | 6 files |
-| Phase PORTIA-20 P22 | not recorded | 3 tasks | 12 files |
-| Phase PORTIA-20 P23 | not recorded | 3 tasks | 10 files |
-| Phase 20 P25 | 77 min | 3 tasks | 10 files |
-| Phase PORTIA-20 P26 | 32 min | 3 tasks | 3 files |
-| Phase 20 P27 | 35 min | 3 tasks | 2 files |
-| Phase PORTIA-20 P28 | ~5h | 3 tasks | 4 files |
-| Phase 20 P30 | 75 min | 3 tasks | 3 files |
-| Phase PORTIA-20 P29 | ~120 min | 3 tasks | 4 files |
-| Phase PORTIA-20 P31 | 10 min | 3 tasks | 5 files |
-| Phase PORTIA-20 P20-11 | owner-gated | 2 tasks | 2 files |
-| Phase PORTIA-20 P20-34 | session | 3 tasks | 2 files |
-| Phase PORTIA-20 P20-38 | 14min | 2 tasks | 6 files |
-| Phase PORTIA-20 P20-35 | 1 session | 2 tasks | 7 files |
-| Phase PORTIA-20 P20-36 | 2 sessions | 2 tasks | 5 files |
-| Phase PORTIA-20 P20-39 | split | 3 tasks | 12 files |
-| Phase PORTIA-20 P45 | 3 min | 2 tasks | 2 files |
-| Phase PORTIA-20 P20-40 | 8 min | 2 tasks | 7 files |
-| Phase PORTIA-20 P41 | 9 min | 2 tasks | 6 files |
-| Phase PORTIA-20 P42 | 25 min | 2 tasks | 5 files |
-| Phase PORTIA-20 P43 | 23 min | 3 tasks | 11 files |
-| Phase PORTIA-20 P44 | 120 min | 3 tasks | 7 files |
-| Phase PORTIA-20 P46 | 28 min | 3 tasks | 21 files |
-| Phase PORTIA-20 P47 | 3 sessions | 3 tasks | 6 files |
-| Phase PORTIA-20 P48 | 41 min | 2 tasks | 6 files |
-| Phase PORTIA-20 P49 | 50 min | 2 tasks | 6 files |
-| Phase PORTIA-20 P50 | 12 min | 2 tasks | 7 files |
-| Phase PORTIA-20 P51 | 28 min | 3 tasks | 10 files |
-| Phase PORTIA-20 P52 | 5min | 1 tasks | 1 files |
-| Phase PORTIA-20 P53 | 100min | 3 tasks | 13 files |
-| Phase PORTIA-20 P54 | n/a | 3 tasks | 6 files |
-| Phase PORTIA-20 P55 | 2h | 2 tasks | 5 files |
-| Phase PORTIA-20 P56 | about 3 h | 2 tasks | 6 files |
-| Phase PORTIA-20 P57 | about 2 h | 3 tasks | 6 files |
-| Phase PORTIA-20 P12 | multi-session | 3 tasks | 30 files |
-| Phase PORTIA-20 P13 | multi-session | 2 tasks | 3 files |
-| Phase PORTIA-20 P59 | about 1h30m | 2 tasks | 4 files |
-| Phase PORTIA-20 P60 | 35min | 3 tasks | 5 files |
-| Phase PORTIA-20 P61 | multi-session | 3 tasks | 4 files |
-| Phase 20 P62 | multi-session | 2 tasks | 7 files |
-| Phase PORTIA-20 P63 | 40min | 2 tasks | 4 files |
-| Phase PORTIA-20 P20-14 | about 10 min | 2 tasks | 3 files |
-| Phase PORTIA-20 P15 | 45min | 3 tasks | 16 files |
+**Previous milestone (v1.3, closed 2026-11-09 via override):** 6 phases, 134 plans. Per-plan duration table was reset at v1.4 roadmap creation; it remains in the git history of this file and the totals are in `.planning/MILESTONES.md`.
 
 ## Accumulated Context
 
 ### Decisions
 
 Full decision history: `.planning/PROJECT.md`.
+
+- [v1.4 roadmap]: 7 фаз (21–27), нумерация продолжает v1.3; 52/52 требования отображены ровно по одной фазе. Порядок: основа доступа → вкладка «Пользователи» → вход по нику при выключенном закрытии → уровни → переключение → единый стиль → приёмка.
+- [v1.4 roadmap]: Вкладка «Пользователи» идёт раньше входного экрана (иначе некому одобрять); закрытие сайта — флаг, выключенный по умолчанию и меняемый только владельцем; включение на production — шаг владельца в Phase 25.
+- [v1.4 roadmap]: `register_attempt` отзывается в миграции Phase 21 (SEC-06) вместе с правилами доступа; `next` 16.4.5 — отдельным коммитом (SEC-08). Новая миграция нумеруется после неприменённых `20261104000000`, `20261104000100`, `20261106000000`.
+- [v1.4 roadmap]: Решения владельца D-71 (1б–8а) закреплены; три направления стиля A/B/C показываются текстом в Phase 22, перекраска идёт в Phase 26 (не больше одной переделки на экран); галереи и реестр по хэшам не возвращаются.
 
 - [v1.3 roadmap]: Continue numbering after incomplete Phase 14; v1.3 uses Phases 15–22.
 - [v1.3 roadmap]: Stabilization preserves current PORTIA OS identity and validated behavior; it is not a redesign.
@@ -323,6 +213,9 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 20] Resolved (807ab9f): the guard-boundary test skips as BLOCKED (ENV) when .claude/hooks/guard.mjs is absent; clean-checkout unit and typecheck were PASS in the 20-13 rehearsal.
 - [Phase 20] 20-13 rehearsal on c11adf6 = FAIL: ui-contract-offline red (srcdoc console event, cause unexplained), visual-approved red (webkit-phone 58293 px, motion vivian), visual-phase20 and e2e/mutation BLOCKED (ENV); STAB-REL-01..03 stay open; see deferred-items.md
 - Phase 20: new gap cycle for D-53..D-57 (spider gait and rim, flasks animation, template builder as real card, short hints, editor format button) must run and be recaptured before 20-12; 20-12 must not run
+- [v1.4] Три миграции ждут владельца и не применены ни на production, ни (последняя) на staging: `20261104000000`, `20261104000100`, `20261106000000`; новая миграция v1.4 идёт после них, порядок применения нужно записать в Phase 21.
+- [v1.4] Postgres/RLS, авторизованные роли, staging, production и физические устройства BLOCKED, пока соответствующая фаза не докажет: Phase 21–24 доказывают только офлайн-стендом и тестами, Phase 25 — на предпросмотре/staging, Phase 27 — на устройствах владельца.
+- [v1.4] Открытый вопрос для discuss-phase 21/22: как база узнаёт, что редактор одобряет «себя» (нужна ли редактору запись о нике); поведение Netlify-кэша (stale-while-revalidate, `Set-Cookie`) и листинг хранилища Supabase — доказывать в Phase 25.
 
 ### Quick Tasks Completed
 
@@ -337,6 +230,7 @@ Full decision history: `.planning/PROJECT.md`.
 ### Roadmap Evolution
 
 - Phase 19 edited: merged former phases 19+20 into 19 and 21+22 into 20 (owner decision 2026-11-02); requirements traceability remapped
+- v1.4 roadmap created 2026-11-09: Phases 21–27 added (7 phases, 52 requirements ACC/USR/LVL/PROM/SEC/UI/UAT); Phase 21 is the first phase of the milestone
 
 ## Deferred Items
 
@@ -347,16 +241,16 @@ Full decision history: `.planning/PROJECT.md`.
 | security | Local security matrix and finding disposition | Open gate in Phase 20 | v1.2 incomplete close |
 | architecture | Oversized desktop/editor composition roots | Planned for reversible extraction in Phase 17 | v1.2 incomplete close |
 | verification_gaps | Phases 18, 19, 20 = gaps_found (override closeout, accepted risk) | Known Gaps in MILESTONES.md | v1.3 close 2026-11-09 |
-| requirements | STAB-BASE-02/03/04/06 | Carried to v1.4 (owner) | v1.3 close 2026-11-09 |
-| security | portia_promo_register_attempt granted to anon, no caller | Revoke in v1.4 (owner) | v1.3 close 2026-11-09 |
-| planning | Tests/scripts read .planning/REQUIREMENTS.md, ROADMAP.md, phases/PORTIA-15..20 | Repoint to v1.3 archive, then archive phases | v1.3 soft close 2026-11-09 |
+| requirements | STAB-BASE-02/03/04/06 | Not in v1.4 scope: listed in REQUIREMENTS.md Future Requirements (owner) | v1.3 close 2026-11-09 |
+| security | portia_promo_register_attempt granted to anon, no caller | Mapped to v1.4 Phase 21 (SEC-06) | v1.3 close 2026-11-09 |
+| planning | Tests/scripts read .planning/REQUIREMENTS.md, ROADMAP.md, phases/PORTIA-15..20 | Repointed to v1.3 archive by quick 261109-brj | v1.3 soft close 2026-11-09 |
 
 ## Session Continuity
 
 Last session: 2026-11-09
-Stopped at: Milestone v1.3 closed (override closeout, soft close: originals kept in place)
+Stopped at: Roadmap v1.4 created (Phases 21–27, 52/52 requirements mapped); nothing planned or executed yet
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone. First v1.4 step: repoint tests/scripts to `.planning/milestones/v1.3-*`, then archive phase dirs 15–20 and REQUIREMENTS.md; carry STAB-BASE-02/03/04/06; revoke register_attempt.
+- Phase 21 (Фундамент доступа): `/gsd-discuss-phase 21`, затем `/gsd-plan-phase 21`. Ревью `supabase-rls-reviewer` обязательно; миграция нумеруется после `20261104000000`, `20261104000100`, `20261106000000`; на production ничего не применять.
