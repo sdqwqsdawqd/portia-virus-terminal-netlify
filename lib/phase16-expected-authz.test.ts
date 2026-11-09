@@ -240,8 +240,8 @@ test("function set in the matrix equals the effective create or replace function
 test("table set in the matrix equals the effective create table if not exists public.portia_* of all migrations", () => {
   const diff = diffSets(matrix.tables.map((table: { name: string }) => table.name), effectiveTableNames);
   assert.deepEqual(diff, { missing: [], extra: [] }, `tables without a decision: ${diff.missing.join("; ")}; unknown entries: ${diff.extra.join("; ")}`);
-  // 20 baseline + portia_access_people, _requests, _journal, _settings; portia_editor_notes is created and dropped.
-  assert.equal(effectiveTableNames.length, 24);
+  // 20 baseline + portia_access_people, _requests, _journal, _settings, _secrets; portia_editor_notes is created and dropped.
+  assert.equal(effectiveTableNames.length, 25);
   assert.ok(!effectiveTableNames.includes("portia_editor_notes"), "a created-then-dropped table is not part of the effective schema");
   assert.equal(new Set(matrix.tables.map((table: { name: string }) => table.name)).size, matrix.tables.length, "duplicate table entries");
 });
@@ -316,8 +316,8 @@ test("table cells agree with the effective grant statements of all migrations", 
 
 test("RPC-only tables (portia_promo_*, portia_access_*): RLS on, every privilege revoked, no grant and no policy, so every role gets 42501", () => {
   const rpcOnly = matrix.tables.filter((table: { name: string }) => table.name.startsWith("portia_promo_") || table.name.startsWith("portia_access_"));
-  assert.equal(rpcOnly.length, 20);
-  assert.equal(rpcOnly.filter((table: { name: string }) => table.name.startsWith("portia_access_")).length, 4);
+  assert.equal(rpcOnly.length, 21);
+  assert.equal(rpcOnly.filter((table: { name: string }) => table.name.startsWith("portia_access_")).length, 5);
   const allSql = [...migrationTexts.values()].join("\n");
   for (const table of rpcOnly) {
     const created = effectiveTables.get(table.name);
@@ -380,18 +380,26 @@ test("function arguments are inert: namespaced text, inert uuid, row creators fl
   }
 });
 
-test("Phase 21 access functions are inert in a live run: they create no rows and every nickname probe is invalid", () => {
+test("Phase 21 access functions are inert in a live run: no probe can pass the signature gate or write a row", () => {
   const access = matrix.functions.filter((fn: { name: string }) => fn.name.startsWith("portia_access_"));
   assert.ok(access.length >= 12, `only ${access.length} portia_access_* functions in the matrix`);
+  const roles = Object.keys(matrix.roles);
+  // RLS21-07: the probe nicknames are VALID (D-01), so the probes get past the format check and exercise the real branches.
+  // Submit is still inert: the signature gate refuses a probe (stale time, zero signature) before any lock, count or insert,
+  // so creates_rows stays false. A probe that inserts would need the staging secret and is BLOCKED until 21-07 provides it.
+  const fill = (value: string, role: string) =>
+    value.replaceAll("{digits}", "4294967295").replaceAll("{n}", String(roles.indexOf(role))).replaceAll("{role}", role).replaceAll("{prefix}", "abcrun").replaceAll("{runId}", "run_1");
   for (const fn of access) {
     assert.equal(fn.creates_rows, false, `${fn.key}: creates_rows`);
     for (const args of [fn.args, ...(fn.variants ?? []).map((variant: { args: Record<string, unknown> }) => variant.args)]) {
       for (const [argName, value] of Object.entries<unknown>(args ?? {})) {
         if (/nickname/u.test(argName)) {
           assert.equal(typeof value, "string", `${fn.key}.${argName}`);
-          for (const role of Object.keys(matrix.roles)) {
-            const filled = String(value).replaceAll("{prefix}", "abcrun").replaceAll("{role}", role).replaceAll("{runId}", "run_1");
-            assert.ok(!NICKNAME_PATTERN.test(filled), `${fn.key}.${argName} would be a valid nickname for ${role}: ${filled}`);
+          for (const role of roles) {
+            const filled = fill(String(value), role);
+            assert.ok(NICKNAME_PATTERN.test(filled), `${fn.key}.${argName} must be a valid D-01 nickname for ${role}: ${filled}`);
+            if (argName === "p_nickname_key") assert.equal(filled, filled.toLowerCase(), `${fn.key}.${argName}: a key is lower case`);
+            assert.ok(filled.startsWith("p21_"), `${fn.key}.${argName}: namespaced probe nickname ${filled}`);
           }
         }
         if (argName === "p_token_hash") assert.equal(value, "{token}", `${fn.key}.${argName}`);
@@ -400,6 +408,10 @@ test("Phase 21 access functions are inert in a live run: they create no rows and
       }
     }
   }
+  const submit = access.find((fn: { name: string }) => fn.name === "portia_access_submit_request");
+  assert.equal(submit.args.p_issued_at, 0, "a stale time: the signature gate refuses the probe before any lock or row");
+  assert.match(String(submit.args.p_signature), /^0{64}$/u, "a zero signature can never verify");
+  assert.deepEqual(Object.keys(submit.args), ["p_nickname", "p_origin", "p_token_hash", "p_ip_bucket", "p_issued_at", "p_signature"]);
 });
 
 test("storage decisions mirror the bucket and policies of the baseline", () => {

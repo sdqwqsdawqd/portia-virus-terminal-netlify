@@ -218,10 +218,10 @@ for (const match of accessText.matchAll(/^create table if not exists public\.(po
 const sequences = tables.flatMap((table) => table.columns.filter((column) => column.identity === "a").map((column) => `${table.name}_${column.name}_seq`));
 const privilegedTable = ["DELETE", "INSERT", "MAINTAIN", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE"].map((priv) => `${PRIVILEGED}:${priv}`);
 
-test("the migration creates the four Phase 21 tables and one identity sequence", () => {
+test("the migration creates the five Phase 21 tables and one identity sequence", () => {
   assert.deepEqual(
     tables.map((table) => table.name).sort(),
-    ["portia_access_journal", "portia_access_people", "portia_access_requests", "portia_access_settings"],
+    ["portia_access_journal", "portia_access_people", "portia_access_requests", "portia_access_secrets", "portia_access_settings"],
   );
   assert.deepEqual(sequences, ["portia_access_journal_id_seq"]);
 });
@@ -233,11 +233,18 @@ test("golden tables: every Phase 21 table (RLS on, only the privileged role) and
     assert.ok(table.rls, `${table.name}: row level security is enabled in the migration`);
     assert.match(accessText, new RegExp(`^revoke all on table public\\.${table.name} from public, anon, authenticated;`, "mu"));
     // The journal is append-only (RLS21-03): the privileged role may only read and append, no truncate/update/delete.
+    // The secret table (RLS21-01) is closed to the privileged role as well: only the definer function and the table owner read it.
     const journal = table.name === "portia_access_journal";
-    assert.match(accessText, new RegExp(`^grant ${journal ? "select, insert" : "all"} on table public\\.${table.name} to ${PRIVILEGED};`, "mu"));
+    const secrets = table.name === "portia_access_secrets";
+    if (secrets) {
+      assert.match(accessText, new RegExp(`^revoke all on table public\\.${table.name} from ${PRIVILEGED};`, "mu"));
+      assert.doesNotMatch(accessText, new RegExp(`^grant [^;]+ on table public\\.${table.name} `, "mu"));
+    } else {
+      assert.match(accessText, new RegExp(`^grant ${journal ? "select, insert" : "all"} on table public\\.${table.name} to ${PRIVILEGED};`, "mu"));
+    }
     assert.deepEqual(
       sections.tables[`public.${table.name}`],
-      { acl: journal ? [`${PRIVILEGED}:INSERT`, `${PRIVILEGED}:SELECT`] : privilegedTable, force_rls: false, options: null, relkind: "r", rls: true, viewdef: null },
+      { acl: secrets ? [] : journal ? [`${PRIVILEGED}:INSERT`, `${PRIVILEGED}:SELECT`] : privilegedTable, force_rls: false, options: null, relkind: "r", rls: true, viewdef: null },
       `${table.name}`,
     );
   }

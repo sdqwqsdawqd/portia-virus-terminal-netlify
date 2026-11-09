@@ -281,6 +281,30 @@
         "notnull": true,
         "type": "text"
       },
+      "public.portia_access_secrets.name": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_secrets.secret": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_secrets.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
       "public.portia_access_settings.closure_enabled": {
         "acl": null,
         "default": "false",
@@ -1648,6 +1672,21 @@
         "type": "c",
         "validated": true
       },
+      "portia_access_secrets.portia_access_secrets_name_check": {
+        "def": "CHECK ((name = 'submit'::text))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_secrets.portia_access_secrets_pkey": {
+        "def": "PRIMARY KEY (name)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_access_secrets.portia_access_secrets_secret_check": {
+        "def": "CHECK ((length(secret) >= 32))",
+        "type": "c",
+        "validated": true
+      },
       "portia_access_settings.portia_access_settings_id_check": {
         "def": "CHECK ((id = 'main'::text))",
         "type": "c",
@@ -2529,7 +2568,7 @@
         "src_sha256": "0626c25872d2c0d5eb2cd6b507996ef1c41b2c184fc0e42d6ac1c3803421bd5a",
         "volatility": "v"
       },
-      "public.portia_access_submit_request(p_nickname text, p_origin text, p_token_hash text, p_ip_bucket text)": {
+      "public.portia_access_submit_request(p_nickname text, p_origin text, p_token_hash text, p_ip_bucket text, p_issued_at bigint, p_signature text)": {
         "acl": [
           "anon:EXECUTE",
           "authenticated:EXECUTE",
@@ -2541,7 +2580,7 @@
         "kind": "f",
         "returns": "jsonb",
         "secdef": true,
-        "src_sha256": "3b425e38590dae6e85bb9dd478565ae1318413dde2b00202bcdcedd262bd1d32",
+        "src_sha256": "5e8f0ee87ca6bcd67e61ea22afd5a430e0da681059028907b3a96d953b1b6472",
         "volatility": "v"
       },
       "public.portia_access_target_guard(p_nickname_key text, p_requested_by uuid)": {
@@ -3109,6 +3148,11 @@
         "unique": true,
         "valid": true
       },
+      "portia_access_requests.portia_access_requests_created_recent": {
+        "def": "CREATE INDEX portia_access_requests_created_recent ON public.portia_access_requests USING btree (created_at DESC)",
+        "unique": false,
+        "valid": true
+      },
       "portia_access_requests.portia_access_requests_ip_recent": {
         "def": "CREATE INDEX portia_access_requests_ip_recent ON public.portia_access_requests USING btree (ip_bucket, created_at DESC)",
         "unique": false,
@@ -3127,6 +3171,11 @@
       "portia_access_requests.portia_access_requests_token_recent": {
         "def": "CREATE INDEX portia_access_requests_token_recent ON public.portia_access_requests USING btree (token_hash, created_at DESC)",
         "unique": false,
+        "valid": true
+      },
+      "portia_access_secrets.portia_access_secrets_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_access_secrets_pkey ON public.portia_access_secrets USING btree (name)",
+        "unique": true,
         "valid": true
       },
       "portia_access_settings.portia_access_settings_pkey": {
@@ -3569,6 +3618,14 @@
           "service_role:TRUNCATE",
           "service_role:UPDATE"
         ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_access_secrets": {
+        "acl": [],
         "force_rls": false,
         "options": null,
         "relkind": "r",

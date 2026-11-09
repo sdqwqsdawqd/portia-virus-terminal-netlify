@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,11 +8,15 @@ import { fileURLToPath } from "node:url";
 import { isValidNickname, nicknameKey, NICKNAME_PATTERN, parseNicknameInput, sameNickname } from "./nickname.ts";
 import {
   ACCESS_COOKIE,
+  ACCESS_SUBMIT_SECRET_ENV,
   accessIpBucket,
+  accessSubmitMessage,
+  accessSubmitSecret,
   accessTokenDigest,
   buildAccessCookie,
   createAccessToken,
   readAccessToken,
+  signAccessSubmit,
 } from "./access-session.ts";
 import { deviceTokenDigest } from "./portia-device-binding.ts";
 import {
@@ -114,6 +119,57 @@ test("access cookie round-trips and rejects malformed tokens", () => {
   assert.equal(readAccessToken(new Headers({ cookie: `${ACCESS_COOKIE}=%E0%A4%A` })), null);
 });
 
+const signFields = {
+  nickname: "Qloxz",
+  origin: "sheet" as const,
+  tokenHash: "a".repeat(64),
+  ipBucket: "b".repeat(32),
+  issuedAt: 1_762_650_000,
+};
+
+test("RLS21-01 the submit signature is HMAC-SHA256 over a labelled, pipe-separated message", () => {
+  const secret = "s3cret".repeat(8);
+  const message = accessSubmitMessage(signFields);
+  assert.equal(message, `access-submit-v1|sheet|Qloxz|${"a".repeat(64)}|${"b".repeat(32)}|1762650000`);
+  const signature = signAccessSubmit(signFields, secret);
+  assert.match(signature, /^[0-9a-f]{64}$/);
+  assert.equal(signature, createHmac("sha256", secret).update(message).digest("hex"));
+  assert.equal(signature, signAccessSubmit(signFields, secret));
+  // Every signed field changes the signature, so a captured signature cannot be replayed for another nick, device or bucket.
+  const variants = [
+    { ...signFields, nickname: "Qloxy" },
+    { ...signFields, origin: "outside" as const },
+    { ...signFields, tokenHash: "c".repeat(64) },
+    { ...signFields, ipBucket: "d".repeat(32) },
+    { ...signFields, issuedAt: signFields.issuedAt + 1 },
+  ];
+  for (const variant of variants) assert.notEqual(signAccessSubmit(variant, secret), signature, JSON.stringify(variant));
+  assert.notEqual(signAccessSubmit(signFields, `${secret}x`), signature);
+});
+
+test("RLS21-01 signing refuses a short secret and every malformed field", () => {
+  const secret = "k".repeat(32);
+  assert.throws(() => signAccessSubmit(signFields, "k".repeat(31)), /at least 32/);
+  assert.throws(() => signAccessSubmit(signFields, ""), /at least 32/);
+  assert.throws(() => signAccessSubmit({ ...signFields, nickname: "a|b" }, secret), /nickname/i);
+  assert.throws(() => signAccessSubmit({ ...signFields, nickname: "ab" }, secret), /nickname/i);
+  assert.throws(() => signAccessSubmit({ ...signFields, origin: "elsewhere" as never }, secret), /origin/i);
+  assert.throws(() => signAccessSubmit({ ...signFields, tokenHash: "A".repeat(64) }, secret), /token/i);
+  assert.throws(() => signAccessSubmit({ ...signFields, ipBucket: "b".repeat(31) }, secret), /bucket/i);
+  assert.throws(() => signAccessSubmit({ ...signFields, issuedAt: 1.5 }, secret), /issuedAt|time/i);
+  assert.throws(() => signAccessSubmit({ ...signFields, issuedAt: -1 }, secret), /issuedAt|time/i);
+});
+
+test("RLS21-01 the signing secret comes from one server env variable that is only named in .env.example", () => {
+  assert.equal(ACCESS_SUBMIT_SECRET_ENV, "PORTIA_ACCESS_SUBMIT_SECRET");
+  assert.equal(accessSubmitSecret({ [ACCESS_SUBMIT_SECRET_ENV]: "z".repeat(32) }), "z".repeat(32));
+  assert.throws(() => accessSubmitSecret({}), /PORTIA_ACCESS_SUBMIT_SECRET/);
+  assert.throws(() => accessSubmitSecret({ [ACCESS_SUBMIT_SECRET_ENV]: "short" }), /at least 32/);
+  const example = readFileSync(join(repoRoot, ".env.example"), "utf8");
+  const line = example.split(/\r?\n/).find((entry) => entry.startsWith(`${ACCESS_SUBMIT_SECRET_ENV}=`));
+  assert.equal(line, `${ACCESS_SUBMIT_SECRET_ENV}=`, "the example names the variable with an empty placeholder and carries no value");
+});
+
 type Call = { fn: string; args: Record<string, unknown> | undefined };
 
 function stubClient(replies: Record<string, unknown>, calls: Call[] = []): AccessRpcClient {
@@ -144,13 +200,26 @@ test("tracer: nickname -> token -> digest -> submit -> editor approves without l
   const tokenHash = accessTokenDigest(token, secret);
   const ipBucket = accessIpBucket(new Headers({ "x-forwarded-for": "203.0.113.9" }), secret);
 
-  assert.deepEqual(await submitAccessRequest(client, { nickname: parsed.nickname, origin: "sheet", tokenHash, ipBucket }), { code: "created" });
+  const submitSecret = "q".repeat(40);
+  const issuedAt = 1_762_650_000;
+  assert.deepEqual(
+    await submitAccessRequest(client, { nickname: parsed.nickname, origin: "sheet", tokenHash, ipBucket, submitSecret, issuedAt }),
+    { code: "created" },
+  );
   const decided = await decideAccessRequest(client, { requestId: "22222222-2222-4222-8222-222222222222", decision: "approve" });
   assert.deepEqual(decided, { code: "approved", personId: "11111111-1111-4111-8111-111111111111", level: 2 });
   assert.deepEqual(await resolveAccess(client, tokenHash), { state: "approved", nickname: "Qloxz", level: 2 });
 
   assert.deepEqual(calls.map((call) => call.fn), ["portia_access_submit_request", "portia_access_decide", "portia_access_resolve"]);
-  assert.deepEqual(calls[0].args, { p_nickname: "Qloxz", p_origin: "sheet", p_token_hash: tokenHash, p_ip_bucket: ipBucket });
+  assert.deepEqual(calls[0].args, {
+    p_nickname: "Qloxz",
+    p_origin: "sheet",
+    p_token_hash: tokenHash,
+    p_ip_bucket: ipBucket,
+    p_issued_at: issuedAt,
+    p_signature: signAccessSubmit({ nickname: "Qloxz", origin: "sheet", tokenHash, ipBucket, issuedAt }, submitSecret),
+  });
+  assert.equal(JSON.stringify(calls).includes(submitSecret), false, "the signing secret never reaches the RPC");
   assert.equal(calls[1].args?.p_level, null, "approve without an explicit level sends null so the SQL default decides");
   assert.equal(JSON.stringify(calls).includes(token), false, "the raw token never reaches the RPC");
 });
@@ -166,7 +235,7 @@ test("every RPC argument name equals a parameter of the one-line SQL signature",
     calls,
   );
   const tokenHash = "a".repeat(64);
-  await submitAccessRequest(client, { nickname: "Qloxz", origin: "outside", tokenHash, ipBucket: "b".repeat(32) });
+  await submitAccessRequest(client, { nickname: "Qloxz", origin: "outside", tokenHash, ipBucket: "b".repeat(32), submitSecret: "q".repeat(40) });
   await decideAccessRequest(client, { requestId: "22222222-2222-4222-8222-222222222222", decision: "reject" });
   await resolveAccess(client, tokenHash);
   for (const call of calls) {
@@ -188,7 +257,7 @@ test("grants: submit and resolve reach anon and authenticated, decide only authe
 
 test("the store fails closed on RPC errors and unknown replies", async () => {
   const tokenHash = "a".repeat(64);
-  const submitInput = { nickname: "Qloxz", origin: "sheet" as const, tokenHash, ipBucket: "b".repeat(32) };
+  const submitInput = { nickname: "Qloxz", origin: "sheet" as const, tokenHash, ipBucket: "b".repeat(32), submitSecret: "q".repeat(40) };
   const decideInput = { requestId: "22222222-2222-4222-8222-222222222222", decision: "approve" as const };
 
   await assert.rejects(

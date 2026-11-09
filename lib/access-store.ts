@@ -2,6 +2,7 @@
 // A SupabaseClient satisfies AccessRpcClient. No other module imports this file in Phase 21 (Phase 23 adds the route).
 
 import { isAccessLevel, type AccessLevel, type AccessOrigin } from "./access-levels.ts";
+import { signAccessSubmit } from "./access-session.ts";
 
 export type AccessRpcClient = {
   rpc(
@@ -36,10 +37,12 @@ export const ACCESS_REQUEST_LIMITS = {
   perNicknamePerDay: 3,
   perIpBucketPerDay: 10,
   maxPending: 200,
+  // RLS21-01: global rate of new requests, counted under the same queue lock.
+  maxNewPerMinute: 20,
 } as const;
 
 export type SubmitResult =
-  | { code: "created" | "pending" | "approved" | "device-busy" | "unavailable" | "invalid" | "throttled" }
+  | { code: "created" | "pending" | "approved" | "device-busy" | "unavailable" | "invalid" | "throttled" | "unauthorized" }
   | { code: "cooldown"; retryAt: string };
 
 export type ClearCooldownResult = { code: "cleared" | "no-cooldown" | "invalid" };
@@ -62,7 +65,7 @@ export type SetLevelResult =
 
 export type RevokeResult = { code: "revoked" | "already-revoked" | "not-found" };
 
-const submitCodes = ["created", "pending", "approved", "device-busy", "unavailable", "invalid", "throttled"] as const;
+const submitCodes = ["created", "pending", "approved", "device-busy", "unavailable", "invalid", "throttled", "unauthorized"] as const;
 
 const unexpected = () => new AccessStoreError("unexpected-reply");
 
@@ -77,15 +80,24 @@ async function call(client: AccessRpcClient, fn: string, args: Record<string, un
   return data;
 }
 
+// The server signs every submit (RLS21-01): submitSecret is the server-only PORTIA_ACCESS_SUBMIT_SECRET (see
+// accessSubmitSecret in access-session.ts), issuedAt defaults to now in whole seconds. The secret itself is never sent.
 export async function submitAccessRequest(
   client: AccessRpcClient,
-  input: { nickname: string; origin: AccessOrigin; tokenHash: string; ipBucket: string },
+  input: { nickname: string; origin: AccessOrigin; tokenHash: string; ipBucket: string; submitSecret: string; issuedAt?: number },
 ): Promise<SubmitResult> {
+  const issuedAt = input.issuedAt ?? Math.floor(Date.now() / 1000);
+  const signature = signAccessSubmit(
+    { nickname: input.nickname, origin: input.origin, tokenHash: input.tokenHash, ipBucket: input.ipBucket, issuedAt },
+    input.submitSecret,
+  );
   const data = await call(client, accessRpc.submit, {
     p_nickname: input.nickname,
     p_origin: input.origin,
     p_token_hash: input.tokenHash,
     p_ip_bucket: input.ipBucket,
+    p_issued_at: issuedAt,
+    p_signature: signature,
   });
   const code = data.code;
   if (code === "cooldown") {

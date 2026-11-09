@@ -12,6 +12,17 @@
 -- production is an owner step in Phase 25. Toggles are not journaled (D-07, owner choice 2б); the row keeps the last
 -- change (updated_at, updated_by).
 --
+-- Server-signed submit (RLS21-01, owner decision of 2026-11-09). portia_access_submit_request is executable with the public
+-- key, so it only trusts a request that the site server signed: HMAC-SHA256 over origin, nickname, token hash, IP bucket
+-- and issue time, checked against the secret in the closed table portia_access_secrets, with a few minutes of tolerance.
+-- With no secret stored the function refuses every request (fail closed). This migration carries NO secret value.
+-- OWNER STEP at apply time (isolated test project first, production by the owner only), run as the database owner after the
+-- migration and before the site accepts requests, with the same random value (32+ characters) that the server holds in
+-- PORTIA_ACCESS_SUBMIT_SECRET:
+--   insert into public.portia_access_secrets (name, secret) values ('submit', '<random value>')
+--     on conflict (name) do update set secret = excluded.secret, updated_at = now();
+-- Rotating the secret is the same statement plus the new server value; requests signed with the old one are refused.
+--
 -- Not applied anywhere by the agent. Apply order: 20261104000000_portia_rename_virus_classes.sql,
 -- 20261104000100_portia_editor_notes.sql, 20261106000000_portia_drop_editor_notes.sql, then this file.
 -- Postgres/RLS execution is BLOCKED until an isolated staging run; production is applied by the owner only.
@@ -106,6 +117,9 @@ create index if not exists portia_access_requests_ip_recent
   on public.portia_access_requests (ip_bucket, created_at desc);
 create index if not exists portia_access_requests_token_recent
   on public.portia_access_requests (token_hash, created_at desc);
+-- RLS21-01: the global per-minute rate counts the newest rows.
+create index if not exists portia_access_requests_created_recent
+  on public.portia_access_requests (created_at desc);
 
 -- e. Decision journal (D-07): decisions about people only, kept forever. No foreign key to auth.users or to requests:
 -- the journal outlives accounts and request rows.
@@ -129,14 +143,29 @@ create index if not exists portia_access_journal_by_nickname
 create index if not exists portia_access_journal_by_person
   on public.portia_access_journal (person_id, id desc);
 
+-- e2. Shared secret that the site server uses to sign access requests (RLS21-01). One row, name 'submit', inserted by the
+-- owner at apply time (see the header); never by this migration. Read only inside portia_access_submit_request.
+create table if not exists public.portia_access_secrets (
+  name text primary key,
+  secret text not null,
+  updated_at timestamptz not null default now(),
+  constraint portia_access_secrets_name_check check (name in ('submit')),
+  constraint portia_access_secrets_secret_check check (length(secret) >= 32)
+);
+
 -- f. Closed to every API role: RPC only.
 alter table public.portia_access_people enable row level security;
 alter table public.portia_access_requests enable row level security;
 alter table public.portia_access_journal enable row level security;
+alter table public.portia_access_secrets enable row level security;
 
 revoke all on table public.portia_access_people from public, anon, authenticated;
 revoke all on table public.portia_access_requests from public, anon, authenticated;
 revoke all on table public.portia_access_journal from public, anon, authenticated;
+revoke all on table public.portia_access_secrets from public, anon, authenticated;
+-- The default privileges of the platform would hand the privileged API role every right on a new table: take them away,
+-- nothing but the definer function (running as the table owner) and the owner reads the secret.
+revoke all on table public.portia_access_secrets from service_role;
 grant all on table public.portia_access_people to service_role;
 grant all on table public.portia_access_requests to service_role;
 -- The journal is append-only (D-07, RLS21-03): the privileged role may read and append, never truncate, update or delete.
@@ -147,7 +176,7 @@ revoke all on sequence public.portia_access_journal_id_seq from public, anon, au
 grant all on sequence public.portia_access_journal_id_seq to service_role;
 
 -- g. A visitor asks for access. Requests are collected whether the site is open or closed.
-create or replace function public.portia_access_submit_request(p_nickname text, p_origin text, p_token_hash text, p_ip_bucket text)
+create or replace function public.portia_access_submit_request(p_nickname text, p_origin text, p_token_hash text, p_ip_bucket text, p_issued_at bigint, p_signature text)
 returns jsonb
 language plpgsql
 volatile
@@ -156,11 +185,15 @@ set search_path = ''
 as $$
 declare
   normalized_key text := public.portia_access_nickname_key(p_nickname);
+  now_epoch bigint := floor(extract(epoch from now()))::bigint;
+  signing_secret text;
+  expected_signature text;
   device_key text;
   device_status text;
   recent_by_nickname integer;
   recent_by_bucket integer;
   pending_total integer;
+  new_last_minute integer;
   pause_decided_at timestamptz;
   pause_is_own boolean;
 begin
@@ -169,6 +202,23 @@ begin
     or p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}$'
     or p_ip_bucket is null or p_ip_bucket !~ '^[0-9a-f]{32}$' then
     return jsonb_build_object('code', 'invalid');
+  end if;
+
+  -- RLS21-01: only a request that the site server signed gets past this point. Nothing below runs, no lock is taken and
+  -- no request row is read for an unsigned caller. The nickname is validated above, so the pipe separator cannot be forged.
+  -- A missing, short or malformed secret, signature or time leaves expected_signature or the comparison null/different:
+  -- every such case ends in the same neutral refusal (fail closed).
+  select s.secret into signing_secret
+    from public.portia_access_secrets s
+    where s.name = 'submit';
+  expected_signature := encode(extensions.hmac(
+    'access-submit-v1|' || p_origin || '|' || p_nickname || '|' || p_token_hash || '|' || p_ip_bucket || '|' || p_issued_at::text,
+    signing_secret, 'sha256'), 'hex');
+  if signing_secret is null or length(signing_secret) < 32
+    or p_issued_at is null or p_signature is null or p_signature !~ '^[0-9a-f]{64}$'
+    or p_issued_at < now_epoch - 300 or p_issued_at > now_epoch + 60
+    or extensions.digest(p_signature, 'sha256') is distinct from extensions.digest(expected_signature, 'sha256') then
+    return jsonb_build_object('code', 'unauthorized');
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('access:queue', 0));
@@ -192,7 +242,10 @@ begin
     where r.ip_bucket = p_ip_bucket and r.created_at > now() - interval '24 hours';
   select count(*) into pending_total from public.portia_access_requests r
     where r.status = 'pending';
-  if recent_by_nickname >= 3 or recent_by_bucket >= 10 or pending_total >= 200 then
+  -- RLS21-01: a global ceiling on new requests per minute, counted under the same queue lock.
+  select count(*) into new_last_minute from public.portia_access_requests r
+    where r.created_at > now() - interval '1 minute';
+  if recent_by_nickname >= 3 or recent_by_bucket >= 10 or pending_total >= 200 or new_last_minute >= 20 then
     return jsonb_build_object('code', 'throttled');
   end if;
 
@@ -226,9 +279,9 @@ begin
   return jsonb_build_object('code', 'created');
 end; $$;
 
-revoke all on function public.portia_access_submit_request(text, text, text, text) from public, anon, authenticated;
-grant execute on function public.portia_access_submit_request(text, text, text, text) to anon, authenticated;
-grant execute on function public.portia_access_submit_request(text, text, text, text) to service_role;
+revoke all on function public.portia_access_submit_request(text, text, text, text, bigint, text) from public, anon, authenticated;
+grant execute on function public.portia_access_submit_request(text, text, text, text, bigint, text) to anon, authenticated;
+grant execute on function public.portia_access_submit_request(text, text, text, text, bigint, text) to service_role;
 
 -- h. A device reads back only its own state (D-06: 1-hour pause after a rejection or revocation).
 create or replace function public.portia_access_resolve(p_token_hash text)
