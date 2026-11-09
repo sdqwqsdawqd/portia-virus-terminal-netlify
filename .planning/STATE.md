@@ -1,21 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: v1.3
-milestone_name: «Стабилизация PORTIA OS»
-status: Awaiting next milestone
-stopped_at: Milestone v1.3 closed (override closeout, soft close)
-last_updated: "2026-11-09T03:10:46.845Z"
+milestone: v1.4
+milestone_name: Доступ и единый стиль
+status: planning
+last_updated: "2026-11-09T03:56:13.626Z"
 last_activity: 2026-11-09
-last_activity_desc: Milestone v1.3 completed and archived
-state_head: 47e129f0bddc7c757fee9958f376d0dc51b8a9d0
 progress:
-  total_phases: 6
-  completed_phases: 3
-  total_plans: 134
-  completed_plans: 134
-  percent: 50
-current_phase: 20
-current_phase_name: Security, accessibility и приёмка релиза
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -29,10 +24,11 @@ See: .planning/PROJECT.md (updated 2026-10-29)
 
 ## Current Position
 
-Phase: Milestone v1.3 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-11-09 — Milestone v1.3 completed and archived
+Status: Defining requirements
+Last activity: 2026-11-09 — Milestone v1.4 started
+
 
 ## Performance Metrics
 
