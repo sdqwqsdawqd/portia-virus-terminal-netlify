@@ -6,7 +6,7 @@ import test from "node:test";
 // compares the draft with the evidence it summarizes (security matrix, owner waiver registry) and rejects any wording that
 // promises more than is proven. Plan 20-15 finalizes the same file; it must not be created from scratch.
 
-const phaseDir = ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza";
+const phaseDir = ".planning/milestones/v1.3-phases/PORTIA-20-security-accessibility-i-priemka-reliza";
 const read = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
 /** Text of a `## heading` block, up to the next `## ` heading. Empty string when the heading is missing. */

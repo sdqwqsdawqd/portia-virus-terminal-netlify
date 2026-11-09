@@ -162,7 +162,7 @@ test("the runner script contains no git clean, reset --hard or stash", () => {
 
 // --- Task 2: catalogue, Playwright classification, waivers, environment, running gates -----------------------------------
 
-const waiverRegistry = readFileSync(new URL("../.planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-PLAYWRIGHT-WAIVERS.md", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+const waiverRegistry = readFileSync(new URL(`../${gate.WAIVERS_MD}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 // The owner accepted PW-10 on 2026-11-04. The pending-waiver rules are proven on a copy of the real
 // registry with PW-10 put back to «ОЖИДАЕТ ВЛАДЕЛЬЦА», so they keep testing real rows, not only fixtures.
 const pendingPw10Registry = (() => {
@@ -1484,6 +1484,46 @@ test("readEffectiveOwnerVerdict on a real git repository: descendant is accepted
   }
 });
 
+test("v1.3 archive layout: the phase files and the requirement documents are read from the milestone archive", () => {
+  assert.equal(gate.V13_PHASES, ".planning/milestones/v1.3-phases");
+  assert.ok(gate.PHASE_DIR.startsWith(`${gate.V13_PHASES}/`));
+  assert.equal(gate.REQUIREMENTS_MD, ".planning/milestones/v1.3-REQUIREMENTS.md");
+  assert.equal(gate.ROADMAP_MD, ".planning/milestones/v1.3-ROADMAP.md");
+  assert.equal(gate.PLAN_BASE_REQUIREMENTS_MD, ".planning/REQUIREMENTS.md");
+  assert.equal(gate.LEGACY_PHASES, ".planning/phases");
+  assert.equal(gate.LEGACY_PHASE_DIR, `${gate.LEGACY_PHASES}/${path.posix.basename(gate.PHASE_DIR)}`);
+});
+
+test("phaseDirIn and readEffectiveOwnerVerdict: a commit before the archive keeps the legacy location, the archive wins when both exist", () => {
+  const git = () => ({ status: 0, stdout: "", stderr: "" });
+  const tree = (layouts: Array<{ dir: string; verdict: string }>) => {
+    const base = mkdtempSync(path.join(os.tmpdir(), "phase20-archive-layout-"));
+    for (const { dir, verdict } of layouts) {
+      mkdirSync(path.join(base, dir), { recursive: true });
+      writeFileSync(path.join(base, dir, "20-58-SUMMARY.md"), OWNER_SUMMARY(verdict));
+    }
+    return base;
+  };
+  const roots: string[] = [];
+  try {
+    const legacyOnly = tree([{ dir: gate.LEGACY_PHASE_DIR, verdict: "accepted" }]);
+    roots.push(legacyOnly);
+    assert.equal(gate.phaseDirIn(nodeFs, legacyOnly), gate.LEGACY_PHASE_DIR);
+    assert.equal(gate.readEffectiveOwnerVerdict({ root: legacyOnly, fs: nodeFs, git }, legacyOnly)?.verdict, "accepted");
+
+    const both = tree([{ dir: gate.LEGACY_PHASE_DIR, verdict: "fixes-requested" }, { dir: gate.PHASE_DIR, verdict: "accepted" }]);
+    roots.push(both);
+    assert.equal(gate.phaseDirIn(nodeFs, both), gate.PHASE_DIR);
+    assert.equal(gate.readEffectiveOwnerVerdict({ root: both, fs: nodeFs, git }, both)?.verdict, "accepted", "the archive copy wins");
+
+    const empty = tree([]);
+    roots.push(empty);
+    assert.equal(gate.phaseDirIn(nodeFs, empty), gate.PHASE_DIR);
+  } finally {
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function evidenceRoot(summaries: Record<string, string>, evidence = goodEvidence()) {
   const base = mkdtempSync(path.join(os.tmpdir(), "phase20-evidence-test-"));
   mkdirSync(path.join(base, gate.PHASE_DIR), { recursive: true });
@@ -2256,10 +2296,10 @@ test("the runner states in a comment that D-70 is an accepted risk, not an accep
 const DEBT20 = ["STAB-REL-05", "STAB-REL-06", "STAB-REL-07", "STAB-REL-08", "STAB-A11Y-01", "STAB-A11Y-02", "STAB-A11Y-03", "STAB-A11Y-04"];
 const DEBT_STATUS = "Принятый долг (D-70)";
 const BASIS_V2 = "«Открытые пункты Phase 18 и 19 с staging тоже уйдут как принятые долги» (слова оркестратора, выбранные владельцем «2»); прочтение 20-CONTEXT.md D-70 (4)";
-const V18 = ".planning/phases/PORTIA-18-rabochiy-stol-okna-i-zhivye-animatsii/18-VERIFICATION.md";
-const V19 = ".planning/phases/PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media/19-VERIFICATION.md";
-const REQ_MD = ".planning/REQUIREMENTS.md";
-const ROADMAP_MD = ".planning/ROADMAP.md";
+const V18 = gate.PHASE18_VERIFICATION_MD;
+const V19 = gate.PHASE19_VERIFICATION_MD;
+const REQ_MD = gate.REQUIREMENTS_MD;
+const ROADMAP_MD = gate.ROADMAP_MD;
 const NOTES_MD = `${gate.PHASE_DIR}/20-RELEASE-NOTES.md`;
 const OWNER_QUOTE = "а) да. принято";
 
@@ -2332,7 +2372,12 @@ function docsRepo(o: { files?: Record<string, string | null>; baseRequirements?:
     },
   });
   const baseText = o.baseRequirements ?? requirementsText();
-  const git = (args: string[]) => (args[0] === "show" ? { status: 0, stdout: baseText, stderr: "" } : base.deps.git(args));
+  // plan_base is a history commit: REQUIREMENTS.md had its pre-archive path there, so only that exact object name answers.
+  const planBaseObject = `${"1".repeat(40)}:${gate.PLAN_BASE_REQUIREMENTS_MD}`;
+  const git = (args: string[]) => {
+    if (args[0] !== "show") return base.deps.git(args);
+    return args[1] === planBaseObject ? { status: 0, stdout: baseText, stderr: "" } : { status: 128, stdout: "", stderr: "fatal" };
+  };
   return { ...base.deps, git };
 }
 const docsErrors = (o: Parameters<typeof docsRepo>[0] = {}) => gate.verifyDocs(docsRepo(o));
@@ -2530,7 +2575,13 @@ test("verifyReconciliation: deployed evidence is trusted metadata or an explicit
 });
 
 test("verifyReconciliation: after the FRC only .planning, the runner and its test may change; a git error is an error", () => {
-  assert.deepEqual(reconErrors({ changes: [".planning/ROADMAP.md", "scripts/phase20-release-gate.mjs", "lib/phase20-release-gate.test.ts", "lib/phase20-release-notes.test.ts", "lib/phase20-uat.test.ts"] }), []);
+  assert.deepEqual(reconErrors({ changes: [
+    ".planning/ROADMAP.md", "scripts/phase20-release-gate.mjs", "lib/phase20-release-gate.test.ts", "lib/phase20-release-notes.test.ts", "lib/phase20-uat.test.ts",
+    "scripts/phase15-visual-manifest.mjs", "scripts/phase16-staging.mjs", "scripts/phase19-acceptance.mjs", "scripts/phase19-matrix-data.mjs", "scripts/phase20-audit-check.mjs",
+    "lib/editor-image-framing.test.ts", "lib/phase15-visual-manifest.test.ts", "lib/phase20-hints-inventory.test.ts", "lib/phase20-requirements-ledger.test.ts", "lib/security-matrix.test.ts",
+    "tests/e2e/visual-candidates/support.ts",
+  ] }), []);
+  mentions(reconErrors({ changes: ["lib/portia-content.test.ts"] }), /после FRC.*lib\/portia-content\.test\.ts/);
   mentions(reconErrors({ changes: [".planning/STATE.md", "components/portia-desktop.tsx"] }), /после FRC.*components\/portia-desktop\.tsx/);
   mentions(reconErrors({ changes: ["lib/portia-content.ts"] }), /после FRC.*lib\/portia-content\.ts/);
   mentions(reconErrors({ changes: ["package-lock.json"] }), /после FRC.*package-lock\.json/);

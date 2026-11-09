@@ -46,7 +46,7 @@ const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
 }).trim();
 const setId = process.env.PORTIA_VISUAL_SET_ID?.trim() || `phase15-current-${sourceCommit.slice(0, 12)}`;
 const runRoot = path.resolve("tests/e2e/visual-candidates/.runs", setId);
-const dirtyLedgerPath = path.resolve(".planning/phases/PORTIA-15-baseline/evidence/15-DIRTY-OWNERSHIP.md");
+const dirtyLedgerPath = path.resolve(".planning/milestones/v1.3-phases/PORTIA-15-baseline/evidence/15-DIRTY-OWNERSHIP.md");
 const dirtyLedgerId = `sha256:${createHash("sha256").update(readFileSync(dirtyLedgerPath)).digest("hex")}`;
 const packageJson = JSON.parse(readFileSync(path.resolve("package.json"), "utf8")) as {
   devDependencies: Record<string, string>;

@@ -8,7 +8,10 @@ import * as audit from "../scripts/phase20-audit-check.mjs";
 // Structure checks for the Phase 20 security matrix (20-10). The matrix is evidence; this file keeps it honest:
 // no empty matrix, no silent `open`, no unresolved high without a blocker, every medium in the release ledger.
 
-const phaseDir = ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza";
+const V13 = ".planning/milestones/v1.3-phases";
+const phaseDir = `${V13}/PORTIA-20-security-accessibility-i-priemka-reliza`;
+/** The frozen matrix records some sources by their pre-archive path; they are read from the v1.3 archive. */
+const archived = (recorded: string) => recorded.replace(/^\.planning\/phases\/(?=PORTIA-(?:1[5-9]|20)-)/, `${V13}/`);
 const read = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const matrixText = () => read(`${phaseDir}/20-SECURITY-MATRIX.md`);
 
@@ -113,7 +116,7 @@ const withFinding = (row: string) => goodMatrix.replace("| T-02 |", `${row}\n| T
 test("the real matrix is non-empty, structurally valid and every source path exists", () => {
   const markdown = matrixText();
   assert.ok(findingsOf(markdown).length >= 10, "deep review must record its findings");
-  const problems = matrixProblems(markdown, (path) => existsSync(new URL(`../${path}`, import.meta.url)));
+  const problems = matrixProblems(markdown, (path) => existsSync(new URL(`../${archived(path)}`, import.meta.url)));
   assert.deepEqual(problems, []);
 });
 
@@ -352,7 +355,7 @@ test("matrix freshness: the real matrix commit is an ancestor of HEAD and no cov
   assert.deepEqual(matrixFreshnessProblems(matrixText(), realFreshnessDeps), []);
   const paths = coveredPaths(matrixText());
   assert.ok(paths.length >= 12, `expected the covered paths, found ${paths.length}`);
-  for (const path of paths) assert.ok(existsSync(new URL(`../${path}`, import.meta.url)), `covered path does not exist: ${path}`);
+  for (const path of paths) assert.ok(existsSync(new URL(`../${archived(path)}`, import.meta.url)), `covered path does not exist: ${path}`);
 });
 
 test("matrix freshness: git failing is an error, not a fresh matrix", () => {
@@ -519,7 +522,7 @@ test("normalizeAudit: own advisory keeps its GHSA id, propagated packages get vi
 
 const d33Ids = ["WR-03", "WR-05", "IN-01", "IN-02", "IN-03", "IN-04", "IN-05"];
 const d33Heading = "Перенесённые находки 19-REVIEW (D-33)";
-const disposition19Path = ".planning/phases/PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media/19-REVIEW-DISPOSITION.md";
+const disposition19Path = `${V13}/PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media/19-REVIEW-DISPOSITION.md`;
 
 type D33Env = { commitExists: (sha: string) => boolean; fileContains: (file: string, text: string) => boolean };
 const backticks = (cell: string) => [...cell.matchAll(/`([^`]+)`/g)].map((match) => match[1]);

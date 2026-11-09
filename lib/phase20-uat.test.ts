@@ -8,8 +8,9 @@ import { describe, test } from "node:test";
 // Default mode checks structure and honest statuses. PORTIA_REQUIRE_UAT=1 (20-14 Task 2 gate) additionally requires final statuses and verdicts.
 
 const root = path.resolve(import.meta.dirname, "..");
-const uatPath = path.join(root, ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-UAT.md");
-const contextPath = path.join(root, ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-CONTEXT.md");
+const phaseDirRelative = ".planning/milestones/v1.3-phases/PORTIA-20-security-accessibility-i-priemka-reliza";
+const uatPath = path.join(root, phaseDirRelative, "20-UAT.md");
+const contextPath = path.join(root, phaseDirRelative, "20-CONTEXT.md");
 
 // D-70 is the owner's refusal of the step-by-step device acceptance, not an acceptance: it is never PASS and PORTIA_REQUIRE_UAT=1 stays red.
 // The owner words are copied verbatim from 20-CONTEXT.md D-70 (2026-11-08); the ledger section must repeat them exactly.
@@ -926,7 +927,7 @@ describe("20-UAT D-70 owner waiver, not an acceptance (plan 20-14)", () => {
 });
 
 describe("20-UAT the committed ledger as 20-14 records it (D-70)", () => {
-  const phaseDir = path.join(root, ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza");
+  const phaseDir = path.join(root, phaseDirRelative);
   const readText = (file: string) => readFileSync(file, "utf8").replace(/\r\n/g, "\n");
   const uat = parseUat(ledger);
   const steps = [...uat.pc, ...uat.phone];

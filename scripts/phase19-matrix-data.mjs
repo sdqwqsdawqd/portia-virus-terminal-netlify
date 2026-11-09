@@ -9,7 +9,7 @@ import { defaultPortiaContent } from "../lib/portia-content.ts";
 
 // Called only after phase16-staging resolveStagingTarget. No env file is read here.
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const MANIFEST = path.join(ROOT, ".planning/phases/PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media/evidence/19-MATRIX-DATA-RUN.json");
+const MANIFEST = path.join(ROOT, ".planning/milestones/v1.3-phases/PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media/evidence/19-MATRIX-DATA-RUN.json");
 const SPECS = ["app-states", "search-click", "media-states", "media-offscreen", "search"]
   .map((name) => `tests/e2e/specs/${name}.spec.ts`);
 const LISTS = ["viruses", "infoSections", "guideSections", "broadcasts", "recycleFiles", "recycledViruses"];

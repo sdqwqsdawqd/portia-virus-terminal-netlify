@@ -12,7 +12,7 @@ const fieldLines = (text: string) => text.split("\n").filter((line) => line.incl
 
 /** The decision of 20-52 about the employee photo: `employee_framing: a` or `b` in its SUMMARY. */
 function employeeFraming(): "a" | "b" {
-  const summary = read(".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-52-SUMMARY.md");
+  const summary = read(".planning/milestones/v1.3-phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-52-SUMMARY.md");
   const found = /^employee_framing:\s*(a|b)\s*$/m.exec(summary)?.[1];
   assert.ok(found === "a" || found === "b", "20-52-SUMMARY.md says employee_framing: a or b");
   return found;

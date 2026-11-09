@@ -166,7 +166,7 @@ export function runCli(args, target, deps = {}) {
   return typeof result.status === "number" ? result.status : 1;
 }
 
-const EVIDENCE_DIR = path.join(REPO_ROOT, ".planning", "phases", "PORTIA-16-kanonicheskiy-supabase-staging-i-sql-istina", "evidence");
+const EVIDENCE_DIR = path.join(REPO_ROOT, ".planning", "milestones", "v1.3-phases", "PORTIA-16-kanonicheskiy-supabase-staging-i-sql-istina", "evidence");
 const FINGERPRINT_SQL = path.join(REPO_ROOT, "supabase", "fingerprint", "portia_schema_fingerprint.sql");
 
 // D1: the isolated project is built only from supabase/migrations through `db push`, then the journal is listed.

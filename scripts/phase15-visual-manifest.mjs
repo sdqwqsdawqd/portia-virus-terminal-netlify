@@ -8,12 +8,14 @@ import { isDeepStrictEqual } from "node:util";
 const workspace = process.cwd();
 const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace, encoding: "utf8" }).trim();
 const setId = process.env.PORTIA_VISUAL_SET_ID?.trim() || `phase15-current-${commit.slice(0, 12)}`;
-const evidencePath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-VISUAL-CANDIDATES.md");
-const frameMapPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-FRAME-TEST-MAP.md");
-const localContractPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-LOCAL-UI-CONTRACT.md");
-const approvalPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-VISUAL-APPROVAL.md");
-const inventoryPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-STABLE-ROW-INVENTORY.json");
-const candidateIndexPath = path.resolve(workspace, ".planning/phases/PORTIA-15-baseline/evidence/15-CANDIDATE-INDEX.json");
+const v13Phases = ".planning/milestones/v1.3-phases";
+const phase15Evidence = path.resolve(workspace, v13Phases, "PORTIA-15-baseline", "evidence");
+const evidencePath = path.join(phase15Evidence, "15-VISUAL-CANDIDATES.md");
+const frameMapPath = path.join(phase15Evidence, "15-FRAME-TEST-MAP.md");
+const localContractPath = path.join(phase15Evidence, "15-LOCAL-UI-CONTRACT.md");
+const approvalPath = path.join(phase15Evidence, "15-VISUAL-APPROVAL.md");
+const inventoryPath = path.join(phase15Evidence, "15-STABLE-ROW-INVENTORY.json");
+const candidateIndexPath = path.join(phase15Evidence, "15-CANDIDATE-INDEX.json");
 const candidateIndexSchema = "portia-phase15-candidate-index-v1";
 const snapshotRoot = path.resolve(workspace, "tests/e2e/visual/__screenshots__");
 const args = new Set(process.argv.slice(2));
@@ -372,7 +374,10 @@ function promoteApproved() {
 
 const phase20RegisterPath = path.resolve(workspace, "tests/e2e/visual/phase20-baselines.json");
 const phase20RegisterSchema = "portia-phase20-baselines-v1";
+// The register names the owner verdict by its pre-archive path: that is its signed identity and it is compared verbatim.
+// The file itself is read from the v1.3 archive.
 const phase20VerdictSource = ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-58-SUMMARY.md";
+const phase20VerdictFile = path.resolve(workspace, v13Phases, "PORTIA-20-security-accessibility-i-priemka-reliza", "20-58-SUMMARY.md");
 const phase20SnapshotDir = "tests/e2e/visual/__screenshots__/";
 
 function frontmatterValue(text, key) {
@@ -453,7 +458,7 @@ function verifyPromotion() {
       const destination = typeof row?.snapshot === "string" ? path.resolve(workspace, row.snapshot) : "";
       if (destination && existsSync(destination) && statSync(destination).isFile()) fileHashes.set(row.snapshot, sha256(destination));
     }
-    const summaryFile = path.resolve(workspace, phase20VerdictSource);
+    const summaryFile = phase20VerdictFile;
     const problems = validatePhase20Register({
       approvedRows: approved,
       register,

@@ -18,7 +18,12 @@ import { fileURLToPath } from "node:url";
 // Nothing here runs git clean, git reset --hard or git stash; only the worktree this run created is removed.
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-export const PHASE_DIR = ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza";
+// The v1.3 phase directories live in the milestone archive (quick 261109-brj). Commits made before the archive keep them in the legacy location.
+export const V13_PHASES = ".planning/milestones/v1.3-phases";
+export const LEGACY_PHASES = ".planning/phases";
+const PHASE_NAME = "PORTIA-20-security-accessibility-i-priemka-reliza";
+export const PHASE_DIR = `${V13_PHASES}/${PHASE_NAME}`;
+export const LEGACY_PHASE_DIR = `${LEGACY_PHASES}/${PHASE_NAME}`;
 export const EVIDENCE_MD = `${PHASE_DIR}/20-RELEASE-EVIDENCE.md`;
 export const WAIVERS_MD = `${PHASE_DIR}/20-PLAYWRIGHT-WAIVERS.md`;
 export const MATRIX_MD = `${PHASE_DIR}/20-SECURITY-MATRIX.md`;
@@ -1112,6 +1117,17 @@ export function readOwnerVerdict(markdown) {
   return { verdict: read("owner_verdict"), date: read("owner_verdict_date"), commit: read("owner_verdict_commit") };
 }
 
+/**
+ * The phase directory inside a tree of a given commit: the archive, unless that tree predates the archive and has only the legacy location.
+ * Used for commit-bound reads (--run on a worktree of a commit); the --verify-* modes read HEAD and keep PHASE_DIR.
+ */
+export function phaseDirIn(fs, root) {
+  try {
+    if (!fs.existsSync(path.join(root, PHASE_DIR)) && fs.existsSync(path.join(root, LEGACY_PHASE_DIR))) return LEGACY_PHASE_DIR;
+  } catch { /* an unreadable tree keeps the archive path */ }
+  return PHASE_DIR;
+}
+
 const OWNER_WAITING = "ОЖИДАЕТ ВЛАДЕЛЬЦА";
 const OWNER_SUMMARY_NAME = path.posix.basename(OWNER_SUMMARY_MD);
 
@@ -1130,20 +1146,21 @@ export function readEffectiveOwnerVerdict(deps, root = deps.root) {
       return deps.fs.existsSync(target) ? String(deps.fs.readFileSync(target, "utf8")) : null;
     } catch { return null; }
   };
-  const baseText = readText(OWNER_SUMMARY_MD);
+  const dir = phaseDirIn(deps.fs, root);
+  const baseText = readText(`${dir}/${path.posix.basename(OWNER_SUMMARY_MD)}`);
   const base = baseText === null ? null : readOwnerVerdict(baseText);
   if (!base) return null;
   let current = { ...base, source: OWNER_SUMMARY_NAME, chainError: "", baseCommit: base.commit };
 
   let names = [];
-  try { names = deps.fs.readdirSync(path.join(root, PHASE_DIR)).map(String); } catch { names = []; }
+  try { names = deps.fs.readdirSync(path.join(root, dir)).map(String); } catch { names = []; }
   const links = names
     .map((name) => ({ name, plan: Number(name.match(/^20-(\d+)-SUMMARY\.md$/)?.[1] ?? Number.NaN) }))
     .filter((entry) => Number.isInteger(entry.plan) && entry.plan > 58)
     .sort((a, b) => a.plan - b.plan);
 
   for (const { name } of links) {
-    const text = readText(`${PHASE_DIR}/${name}`);
+    const text = readText(`${dir}/${name}`);
     const front = text === null ? null : normalizeText(text).match(/^---\n([\s\S]*?)\n---/)?.[1] ?? null;
     if (front === null || !/^owner_verdict(?:_date|_commit|_renews)?:/m.test(front)) continue; // not a link: a summary without owner fields
     const read = (field) => front.match(new RegExp(`^${field}:[ \\t]*(.*?)[ \\t]*$`, "m"))?.[1]?.replace(/^["']|["']$/g, "") ?? "";
@@ -1625,11 +1642,13 @@ export function verifyLineage(deps) {
 // ---------------------------------------------------------------------------------------------------------------------
 // 20-15 Task 2: --verify-docs. The register of accepted debts (D-70), release notes, requirement statuses and the decision rows.
 
-export const REQUIREMENTS_MD = ".planning/REQUIREMENTS.md";
-export const ROADMAP_MD = ".planning/ROADMAP.md";
+export const REQUIREMENTS_MD = ".planning/milestones/v1.3-REQUIREMENTS.md";
+export const ROADMAP_MD = ".planning/milestones/v1.3-ROADMAP.md";
+// The path REQUIREMENTS.md had in commit plan_base, before the v1.3 archive; `git show` reads history, so this one keeps the pre-archive path.
+export const PLAN_BASE_REQUIREMENTS_MD = ".planning/REQUIREMENTS.md";
 export const RELEASE_NOTES_MD = `${PHASE_DIR}/20-RELEASE-NOTES.md`;
-export const PHASE18_VERIFICATION_MD = ".planning/phases/PORTIA-18-rabochiy-stol-okna-i-zhivye-animatsii/18-VERIFICATION.md";
-export const PHASE19_VERIFICATION_MD = ".planning/phases/PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media/19-VERIFICATION.md";
+export const PHASE18_VERIFICATION_MD = `${V13_PHASES}/PORTIA-18-rabochiy-stol-okna-i-zhivye-animatsii/18-VERIFICATION.md`;
+export const PHASE19_VERIFICATION_MD = `${V13_PHASES}/PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media/19-VERIFICATION.md`;
 /** The four statuses a row of «Принятые долги (D-70)» may have; none of them is PASS or Complete. */
 export const DEBT_STATUSES = Object.freeze(["Принятый долг (D-70)", "ОЖИДАЕТ ВЛАДЕЛЬЦА", "Отложено владельцем", "Вне D-70: решает владелец"]);
 /** Phase 20 requirements that only the physical acceptance closed (D-70 (3)): they always have a register row. */
@@ -1773,7 +1792,7 @@ export function verifyDocs(deps) {
 
   // Phase 15, 18 and 19 rows of REQUIREMENTS.md stay as at plan_base (D-34).
   if (/^[0-9a-f]{40}$/.test(planBase) && requirementsText !== null) {
-    const base = deps.git(["show", `${planBase}:${REQUIREMENTS_MD}`]);
+    const base = deps.git(["show", `${planBase}:${PLAN_BASE_REQUIREMENTS_MD}`]);
     if (base.status !== 0) errors.push(`REQUIREMENTS.md на plan_base ${short(planBase)} не прочитан`);
     else {
       const before = parseRequirements(base.stdout);
@@ -1851,7 +1870,13 @@ export const SELF_PLAN = 15;
 export const SELF_ROW_NOTE = "SUMMARY создаётся после гейта; проверяется --verify-independent";
 /** Paths that may change after the FRC: planning documents and the check modes of this plan. */
 // lib/phase20-release-notes.test.ts and lib/phase20-uat.test.ts assert the real notes and the real protocol: finalizing the notes (draft -> final) and writing the protocol of the FRC change those assertions, so they are two more allowed paths (deviation of 20-15, tests only).
-export const POST_FRC_PATHS = Object.freeze([".planning/", "scripts/phase20-release-gate.mjs", "lib/phase20-release-gate.test.ts", "lib/phase20-release-notes.test.ts", "lib/phase20-uat.test.ts"]);
+// quick 261109-brj (2026-11-09) archived the v1.3 phase directories to .planning/milestones/v1.3-phases and changed only the path constants of the eleven files below; no product code. The record is 20-POST-ARCHIVE-PATHS.md in the phase directory.
+export const POST_FRC_PATHS = Object.freeze([
+  ".planning/", "scripts/phase20-release-gate.mjs", "lib/phase20-release-gate.test.ts", "lib/phase20-release-notes.test.ts", "lib/phase20-uat.test.ts",
+  "scripts/phase15-visual-manifest.mjs", "scripts/phase16-staging.mjs", "scripts/phase19-acceptance.mjs", "scripts/phase19-matrix-data.mjs", "scripts/phase20-audit-check.mjs",
+  "lib/editor-image-framing.test.ts", "lib/phase15-visual-manifest.test.ts", "lib/phase20-hints-inventory.test.ts", "lib/phase20-requirements-ledger.test.ts", "lib/security-matrix.test.ts",
+  "tests/e2e/visual-candidates/support.ts",
+]);
 const VERIFICATION_STATUSES = Object.freeze(["PASS", "FAIL", "BLOCKED", "Принятый долг (D-70)"]);
 
 /** Numbers of the 20-NN-PLAN.md files of the phase directory, ascending; the list and every count derive from the files. */
@@ -2182,7 +2207,7 @@ export function runRelease(deps, options) {
     const includesPlaywright = selected.some((gate) => gate.kind === "playwright");
     let waivers = null;
     if (includesPlaywright) {
-      const waiverFile = path.join(created.path, WAIVERS_MD);
+      const waiverFile = path.join(created.path, phaseDirIn(deps.fs, created.path), path.posix.basename(WAIVERS_MD));
       waivers = deps.fs.existsSync(waiverFile) ? readWaivers(deps.fs.readFileSync(waiverFile, "utf8")) : null;
     }
     const results = [];

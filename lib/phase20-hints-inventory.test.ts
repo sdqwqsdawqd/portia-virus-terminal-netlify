@@ -9,7 +9,7 @@ import ts from "typescript";
 // This test reads the register and the sources and fails when the two disagree; the long-text search below is reproducible by anyone.
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const registryPath = ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-HINTS-INVENTORY.md";
+const registryPath = ".planning/milestones/v1.3-phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-HINTS-INVENTORY.md";
 const editorFile = "components/portia-editor.tsx";
 
 const shortened = "сокращено";

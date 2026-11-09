@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 // No environment file is read and nothing is installed. A lockfile change is out of scope for both modes.
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const PHASE_DIR = ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza";
+const PHASE_DIR = ".planning/milestones/v1.3-phases/PORTIA-20-security-accessibility-i-priemka-reliza";
 export const REPORT_JSON = `${PHASE_DIR}/20-DEPENDENCY-AUDIT.json`;
 export const REPORT_MD = `${PHASE_DIR}/20-DEPENDENCY-AUDIT.md`;
 export const SCHEMA = "phase20-dependency-audit/1";

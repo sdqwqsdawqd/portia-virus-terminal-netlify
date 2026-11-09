@@ -18,7 +18,7 @@ import { promotionTitles, qualificationPromotionTransitions } from "../lib/porti
 export const MANIFEST_SCHEMA = "portia-acceptance-run-v2";
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MANIFEST_FILE = path.join(
-  REPO_ROOT, ".planning", "phases", "PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media", "evidence", "19-ACCEPTANCE-RUN.json",
+  REPO_ROOT, ".planning", "milestones", "v1.3-phases", "PORTIA-19-povyshenie-prilozheniya-redaktor-poisk-i-media", "evidence", "19-ACCEPTANCE-RUN.json",
 );
 const runIdPattern = /^[0-9a-z]+_[0-9a-f]{8}$/u;
 const labelPattern = /^[a-z0-9-]{1,24}$/u;

@@ -16,6 +16,8 @@ import {
   validatePhase20Register,
 } from "../scripts/phase15-visual-manifest.mjs";
 
+// The register records the Phase 20 owner verdict by its pre-archive path: its signed identity, compared verbatim by the script.
+const phase20VerdictSource = ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-58-SUMMARY.md";
 const base = {
   id: "editor-role-clean",
   project: "chromium-desktop",
@@ -144,7 +146,7 @@ describe("Phase 15 signed authority metadata", () => {
 
 describe("Phase 15 CLI authority binding (disposable fixtures)", () => {
   const script = path.resolve("scripts/phase15-visual-manifest.mjs");
-  const evidenceDir = ".planning/phases/PORTIA-15-baseline/evidence";
+  const evidenceDir = ".planning/milestones/v1.3-phases/PORTIA-15-baseline/evidence";
   const files = ["15-VISUAL-APPROVAL.md", "15-LOCAL-UI-CONTRACT.md", "15-FRAME-TEST-MAP.md", "15-STABLE-ROW-INVENTORY.json", "15-CANDIDATE-INDEX.json"];
 
   function fixture(mutate: (name: string, text: string) => string = (_, text) => text, omit: string[] = []) {
@@ -367,7 +369,7 @@ describe("Phase 20 baseline register (D-68)", () => {
   const register = (rows: unknown[] = [newRow(), replacedRow()], overrides = {}) => ({
     schema: "portia-phase20-baselines-v1",
     decision: "D-68",
-    ownerVerdict: { source: ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-58-SUMMARY.md", commit: verdictCommit },
+    ownerVerdict: { source: phase20VerdictSource, commit: verdictCommit },
     captureCommit: "e".repeat(40),
     data: "offline stub",
     rows,
@@ -429,14 +431,17 @@ describe("Phase 20 baseline register (D-68)", () => {
     assert.deepEqual(check({ register: register([newRow()], { schema: "other-v1" }) }), ["PORTIA_PHASE20_REGISTER_INVALID"]);
     assert.deepEqual(check({ register: register([], { rows: undefined }) }), ["PORTIA_PHASE20_REGISTER_INVALID"]);
     assert.deepEqual(check({ register: register([newRow()], { ownerVerdict: { source: "20-VISUAL-APPROVAL.md", commit: verdictCommit } }) }), ["PORTIA_PHASE20_REGISTER_INVALID"]);
+    // The register keeps its signed identity: the archived path is not that identity.
+    const archivedSource = ".planning/milestones/v1.3-phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-58-SUMMARY.md";
+    assert.deepEqual(check({ register: register([newRow()], { ownerVerdict: { source: archivedSource, commit: verdictCommit } }) }), ["PORTIA_PHASE20_REGISTER_INVALID"]);
   });
 });
 
 describe("Phase 20 baseline register through --verify-promotion (disposable fixtures)", () => {
   const script = path.resolve("scripts/phase15-visual-manifest.mjs");
-  const evidenceDir = ".planning/phases/PORTIA-15-baseline/evidence";
+  const evidenceDir = ".planning/milestones/v1.3-phases/PORTIA-15-baseline/evidence";
   const names = ["15-VISUAL-APPROVAL.md", "15-LOCAL-UI-CONTRACT.md", "15-FRAME-TEST-MAP.md", "15-STABLE-ROW-INVENTORY.json", "15-CANDIDATE-INDEX.json"];
-  const summaryPath = ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-58-SUMMARY.md";
+  const summaryPath = ".planning/milestones/v1.3-phases/PORTIA-20-security-accessibility-i-priemka-reliza/20-58-SUMMARY.md";
   const commit = "c".repeat(40);
   const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
   const spiderPath = "tests/e2e/visual/__screenshots__/phase20-spider--chromium-desktop.png";
@@ -484,7 +489,7 @@ describe("Phase 20 baseline register through --verify-promotion (disposable fixt
     `${JSON.stringify({
       schema: "portia-phase20-baselines-v1",
       decision: "D-68",
-      ownerVerdict: { source: summaryPath, commit },
+      ownerVerdict: { source: phase20VerdictSource, commit },
       captureCommit: "e".repeat(40),
       data: "offline stub",
       rows,

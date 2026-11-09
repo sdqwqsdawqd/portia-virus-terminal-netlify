@@ -6,7 +6,9 @@ import test from "node:test";
 // traceability table agree for every Phase 20 ID, and a requirement that is Complete has the evidence file that proves it.
 // Plan 20-15 cannot inherit an over-marked requirement: reopening one needs the proof listed in `evidenceProblems`.
 
-const phaseDir = ".planning/phases/PORTIA-20-security-accessibility-i-priemka-reliza";
+const phaseDir = ".planning/milestones/v1.3-phases/PORTIA-20-security-accessibility-i-priemka-reliza";
+const roadmapPath = ".planning/milestones/v1.3-ROADMAP.md";
+const requirementsPath = ".planning/milestones/v1.3-REQUIREMENTS.md";
 const read = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const exists = (relative: string) => existsSync(new URL(`../${relative}`, import.meta.url));
 
@@ -256,15 +258,15 @@ const realProof = (): Evidence => ({
 });
 
 test("the roadmap lists the 32 requirement IDs of Phase 20", () => {
-  const ids = phaseIds(read(".planning/ROADMAP.md"));
+  const ids = phaseIds(read(roadmapPath));
   assert.equal(ids.length, 32);
   assert.equal(new Set(ids).size, 32);
 });
 
 test("the real REQUIREMENTS.md: checkbox and traceability agree for all 32 IDs of Phase 20", () => {
-  assert.deepEqual(ledgerProblems(read(".planning/REQUIREMENTS.md"), phaseIds(read(".planning/ROADMAP.md"))), []);
+  assert.deepEqual(ledgerProblems(read(requirementsPath), phaseIds(read(roadmapPath))), []);
 });
 
 test("the real REQUIREMENTS.md: nothing is Complete without its proof (20-UAT verdict, MEDIA-01, release notes, matrix, reconciliation)", () => {
-  assert.deepEqual(evidenceProblems(read(".planning/REQUIREMENTS.md"), realProof()), []);
+  assert.deepEqual(evidenceProblems(read(requirementsPath), realProof()), []);
 });
