@@ -3581,7 +3581,6 @@
       "public.portia_access_journal_id_seq": {
         "acl": [
           "service_role:SELECT",
-          "service_role:UPDATE",
           "service_role:USAGE"
         ],
         "force_rls": false,

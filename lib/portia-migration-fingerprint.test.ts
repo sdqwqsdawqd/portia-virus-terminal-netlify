@@ -250,9 +250,12 @@ test("golden tables: every Phase 21 table (RLS on, only the privileged role) and
   }
   for (const name of sequences) {
     assert.match(accessText, new RegExp(`^revoke all on sequence public\\.${name} from public, anon, authenticated;`, "mu"));
+    // RLS21-10: the privileged role gets usage and select on the sequence, never update (setval can roll the journal back).
+    assert.match(accessText, new RegExp(`^revoke all on sequence public\\.${name} from ${PRIVILEGED};`, "mu"));
+    assert.match(accessText, new RegExp(`^grant usage, select on sequence public\\.${name} to ${PRIVILEGED};`, "mu"));
     assert.deepEqual(
       sections.tables[`public.${name}`],
-      { acl: [`${PRIVILEGED}:SELECT`, `${PRIVILEGED}:UPDATE`, `${PRIVILEGED}:USAGE`], force_rls: false, options: null, relkind: "S", rls: false, viewdef: null },
+      { acl: [`${PRIVILEGED}:SELECT`, `${PRIVILEGED}:USAGE`], force_rls: false, options: null, relkind: "S", rls: false, viewdef: null },
       name,
     );
   }

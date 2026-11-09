@@ -18,10 +18,15 @@
 -- With no secret stored the function refuses every request (fail closed). This migration carries NO secret value.
 -- OWNER STEP at apply time (isolated test project first, production by the owner only), run as the database owner after the
 -- migration and before the site accepts requests, with the same random value (32+ characters) that the server holds in
--- PORTIA_ACCESS_SUBMIT_SECRET:
---   insert into public.portia_access_secrets (name, secret) values ('submit', '<random value>')
+-- PORTIA_ACCESS_SUBMIT_SECRET. Check that the value has 32+ characters BEFORE you run the insert: a shorter value would
+-- trip the check constraint, and Postgres prints the failing row, secret included, in the DETAIL of the error and in its
+-- logs (RLS21-13). The guarded form below stores nothing for a short value instead of raising:
+--   insert into public.portia_access_secrets (name, secret)
+--     select 'submit', v from (select '<random value>'::text as v) t where length(v) >= 32
 --     on conflict (name) do update set secret = excluded.secret, updated_at = now();
+-- Expect INSERT 0 1 (1 row); INSERT 0 0 means the value was shorter than 32 characters and nothing was stored.
 -- Rotating the secret is the same statement plus the new server value; requests signed with the old one are refused.
+-- The Phase 23 route must log every `unauthorized` reply as an alert: a missing secret and a bad signature look the same.
 --
 -- Not applied anywhere by the agent. Apply order: 20261104000000_portia_rename_virus_classes.sql,
 -- 20261104000100_portia_editor_notes.sql, 20261106000000_portia_drop_editor_notes.sql, then this file.
@@ -173,9 +178,14 @@ grant select, insert on table public.portia_access_journal to service_role;
 
 -- Default privileges would otherwise give anon/authenticated rights on the identity sequence (see 20261101000100).
 revoke all on sequence public.portia_access_journal_id_seq from public, anon, authenticated;
-grant all on sequence public.portia_access_journal_id_seq to service_role;
+-- RLS21-10: usage and select only. UPDATE would allow setval, and a rolled-back sequence makes every journal insert fail on the key.
+revoke all on sequence public.portia_access_journal_id_seq from service_role;
+grant usage, select on sequence public.portia_access_journal_id_seq to service_role;
 
 -- g. A visitor asks for access. Requests are collected whether the site is open or closed.
+-- RLS21-09: create or replace with a new signature adds an overload. The unsigned round 1 signature must not survive next
+-- to the signed one (it stays callable with the public key on any database that ever ran it): drop it first.
+drop function if exists public.portia_access_submit_request(text, text, text, text);
 create or replace function public.portia_access_submit_request(p_nickname text, p_origin text, p_token_hash text, p_ip_bucket text, p_issued_at bigint, p_signature text)
 returns jsonb
 language plpgsql
