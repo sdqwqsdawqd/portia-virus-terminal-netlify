@@ -16,6 +16,7 @@ export const accessRpc = {
   decide: "portia_access_decide",
   setLevel: "portia_access_set_level",
   revoke: "portia_access_revoke",
+  clearCooldown: "portia_access_clear_cooldown",
 } as const;
 
 export class AccessStoreError extends Error {
@@ -27,7 +28,19 @@ export class AccessStoreError extends Error {
   }
 }
 
-export type SubmitResult = { code: "created" | "pending" | "approved" | "device-busy" | "unavailable" | "invalid" };
+// D-06. The SQL in portia_access_submit_request carries the same values as literals (pinned by lib/access-requests.test.ts).
+export const ACCESS_REQUEST_LIMITS = {
+  cooldownMinutes: 60,
+  perNicknamePerDay: 3,
+  perIpBucketPerDay: 10,
+  maxPending: 200,
+} as const;
+
+export type SubmitResult =
+  | { code: "created" | "pending" | "approved" | "device-busy" | "unavailable" | "invalid" | "throttled" }
+  | { code: "cooldown"; retryAt: string };
+
+export type ClearCooldownResult = { code: "cleared" | "no-cooldown" | "invalid" };
 
 export type AccessState =
   | { state: "none" }
@@ -74,7 +87,7 @@ export async function submitAccessRequest(
   });
   const code = data.code;
   if (typeof code !== "string" || !(submitCodes as readonly string[]).includes(code)) throw unexpected();
-  return { code: code as SubmitResult["code"] };
+  return { code } as SubmitResult;
 }
 
 export async function resolveAccess(client: AccessRpcClient, tokenHash: string): Promise<AccessState> {
@@ -156,4 +169,9 @@ export async function revokeAccess(client: AccessRpcClient, input: { personId: s
     default:
       throw unexpected();
   }
+}
+
+// RED stub (21-03 task 2): replaced by the real wrapper in the GREEN commit.
+export async function clearAccessCooldown(_client: AccessRpcClient, _input: { nicknameKey: string }): Promise<ClearCooldownResult> {
+  throw new Error("not implemented");
 }
