@@ -89,8 +89,35 @@ Plans:
   5. Владельцу показаны текстом три направления стиля (A строгий острый, B мягкий «оконный», C смешанный по смыслу) с таблицей значений, выбранное направление записано; токены лежат в коде в нынешних значениях, тест на радиусы фиксирует нынешнее число объявлений, а вид сайта не изменился. [UI-01]
 **Constraints**: если фаза добавляет SQL (RPC списка, решения, уровня, отзыва) — ревью `supabase-rls-reviewer` обязательно; визуальные изменения владельцу описываются текстом и таблицей значений, без галерей `review.html` и без реестра по хэшам. Токены — обычные `:root` CSS-переменные, `portia.css` правится на месте, порядок каскада не переставляется.
 **Acceptance gate**: роли редактора и владельца на живой базе — BLOCKED до staging; выбор направления — решение владельца, не агента.
-**Plans**: TBD
+**Plans**: 10 plans
 **UI hint**: yes
+
+Plans:
+**Wave 1**
+- [ ] 22-01-PLAN.md — tracer: pending requests from portia_access_list through /api/users to the «Пользователи» tab; badge, closable per editor (USR-01, USR-09)
+- [ ] 22-02-PLAN.md — style-token skeleton at today's values, radius pins 129/6, no-change digest; A/B/C presentation, status BLOCKED (UI-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 22-03-PLAN.md — full read model: people, closed block, search, masked decider, Moscow captions, phone action window, CSS block (USR-01, USR-02, USR-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 22-04-PLAN.md — decisions: approve with pre-set level, reject, change level, revoke, owner clears pause, «уже решено» (USR-03, USR-04, USR-07)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 22-05-PLAN.md — history (last 5) and journal retention 20 per person, D-07 one-way (settled) (USR-06)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 22-06-PLAN.md — «в таблице» mark at decision time and owner bulk approval with level 2 (USR-02, USR-08)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 22-07-PLAN.md — mocked browser lane: phone width 320/390/900, 20-char search (BLOCKED (ENV) if it cannot run)
+- [ ] 22-08-PLAN.md — supabase-rls-reviewer review with fix-and-rereview loop to zero blocking findings
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 22-09-PLAN.md — frozen migration, apply record (BLOCKED / ОЖИДАЕТ ВЛАДЕЛЬЦА), Phase 22 security matrix, full local check
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 22-10-PLAN.md — [BLOCKING] owner decisions: migration apply (BLOCKED or isolated staging only) and style direction A/B/C
 
 ### Phase 23: Вход по нику, «Повышение» и его регрессии
 

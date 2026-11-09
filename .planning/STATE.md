@@ -6,14 +6,14 @@ current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
 status: ready_to_plan
 stopped_at: Phase PORTIA-22 UI-SPEC approved
-last_updated: "2026-11-09T16:04:54.336Z"
+last_updated: "2026-11-09T18:18:18.912Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase PORTIA-21 closed as owner-accepted risk (D-72), not PASS
-state_head: a7acb5fe1b969c1b4c497d902887faedba4cf90d
+state_head: 7b5a44598e0b8893582f6e68069a02a68a2c0c4c
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 7
+  total_plans: 17
   completed_plans: 7
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 
 ## Current Position
 
-Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — READY TO PLAN
+Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — READY TO EXECUTE
 Plan: not planned
 Status: Phase PORTIA-21 closed as owner-accepted risk (D-72), not PASS
 Last activity: 2026-11-09 — Phase PORTIA-21 UAT: 6 пунктов приняты владельцем без прогона
