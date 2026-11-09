@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.4
 milestone_name: Доступ и единый стиль
-current_phase: 21
-current_phase_name: "Фундамент доступа: люди, заявки, правила и журнал"
-status: executing
-stopped_at: Phase 21 context gathered
+current_phase: 22
+current_phase_name: "Вкладка «Пользователи» и каркас токенов стиля"
+status: ready_to_plan
+stopped_at: Phase 21 closed as owner-accepted risk (D-72)
 last_updated: "2026-11-09T08:02:57.828Z"
 last_activity: 2026-11-09
-last_activity_desc: Phase PORTIA-21 execution started
+last_activity_desc: Phase PORTIA-21 closed as owner-accepted risk (D-72), not PASS
 state_head: a1cd491d8196a37ce51f72538410cfdccbaed24f
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
-  completed_plans: 0
+  completed_plans: 7
 ---
 
 # Project State
@@ -24,23 +24,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-09)
 
 **Core value:** Участник открывает сайт и сразу находит нужную запись; редактор правит её без потерь и без путаницы — и всё это выглядит как цельная «PORTIA OS».
-**Current focus:** Phase PORTIA-21 — Фундамент доступа: люди, заявки, правила и журнал
+**Current focus:** Phase PORTIA-22 — Вкладка «Пользователи» и каркас токенов стиля
 
 ## Current Position
 
-Phase: PORTIA-21 (Фундамент доступа: люди, заявки, правила и журнал) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase PORTIA-21
-Last activity: 2026-11-09 — Phase PORTIA-21 execution started
+Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — READY TO PLAN
+Plan: not planned
+Status: Phase PORTIA-21 closed as owner-accepted risk (D-72), not PASS
+Last activity: 2026-11-09 — Phase PORTIA-21 UAT: 6 пунктов приняты владельцем без прогона
 
-Progress: [░░░░░░░░░░] 0% (0/7 phases, 0 plans)
+Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 — принятый риск)
 
 ## Performance Metrics
 
 **Current milestone (v1.4):**
 
 - Total plans completed: 0
-- Phases: 0 of 7 complete (21–27)
+- Phases: 1 of 7 closed (21 — принятый риск D-72, не PASS)
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
@@ -59,6 +59,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [v1.4 roadmap]: 7 фаз (21–27), нумерация продолжает v1.3; 52/52 требования отображены ровно по одной фазе. Порядок: основа доступа → вкладка «Пользователи» → вход по нику при выключенном закрытии → уровни → переключение → единый стиль → приёмка.
 - [v1.4 roadmap]: Вкладка «Пользователи» идёт раньше входного экрана (иначе некому одобрять); закрытие сайта — флаг, выключенный по умолчанию и меняемый только владельцем; включение на production — шаг владельца в Phase 25.
 - [v1.4 roadmap]: `register_attempt` отзывается в миграции Phase 21 (SEC-06) вместе с правилами доступа; `next` 16.4.5 — отдельным коммитом (SEC-08). Новая миграция нумеруется после неприменённых `20261104000000`, `20261104000100`, `20261106000000`.
+- [Phase PORTIA-21]: D-72: фаза закрыта владельцем как принятый риск без живого прогона, не PASS; 6 пунктов 21-UAT.md skipped («принято владельцем»), 21-VERIFICATION.md остаётся human_needed с разделом Acknowledged Gaps; Postgres/RLS, роли, pgcrypto, конкурентность, Netlify-адаптер BLOCKED; требования без галочки; WR-01 закрыть до staging, WR-04 до Phase 23
 - [v1.4 roadmap]: Решения владельца D-71 (1б–8а) закреплены; три направления стиля A/B/C показываются текстом в Phase 22, перекраска идёт в Phase 26 (не больше одной переделки на экран); галереи и реестр по хэшам не возвращаются.
 
 - [v1.3 roadmap]: Continue numbering after incomplete Phase 14; v1.3 uses Phases 15–22.

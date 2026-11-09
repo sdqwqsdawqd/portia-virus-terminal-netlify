@@ -37,6 +37,9 @@ Not in this phase: the «Пользователи» tab UI (22), boot-screen for
 ### «Повышение»
 - **D-10:** Promotion keeps its current nickname validation (up to 64 chars) in this phase; the only Promotion change here is the `register_attempt` revoke. Moving Promotion onto the shared nick rule happens in Phase 23 together with taking the nick from the approved request (owner chose 4а). Promotion contract tests must stay green.
 
+### Закрытие фазы
+- **D-72:** 2026-11-09 владелец закрыл фазу 21 как принятый риск, без живого прогона (ответ в UAT: «all pass ведь все работает», затем выбор «1»). Все 6 пунктов `21-UAT.md` (ACL на staging, роли с аутентификацией, pgcrypto/HMAC, адаптер Netlify >= 5.16.6, конкурентность, живые контракты «Повышения») записаны `skipped` с причиной «принято владельцем», не PASS. Поведение Postgres/RLS остаётся BLOCKED (ENV); миграция `20261109000000` нигде не применена. Долг переходит на staging-прогон по `21-MIGRATION-APPLY.md` до включения закрытия в Phase 25. Требования ACC-04, ACC-09, USR-05, LVL-01, SEC-06, SEC-08 галочкой не отмечаются. Прецедент: D-70 (v1.3).
+
 ### Claude's Discretion
 - Table/column names, RPC names and signatures (research suggests `portia_access_people / _requests / _audit_events`, digest-keyed definer RPCs).
 - Exact daily attempt cap; request cleanup policy for stale pending rows (must not delete journal rows).
