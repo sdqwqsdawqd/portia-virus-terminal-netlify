@@ -290,3 +290,27 @@ test("visitor behaviour is unchanged: nothing under app/ or components/ uses the
     assert.ok(!text.includes("portia_access_"), `${file} references a portia_access_ RPC`);
   }
 });
+
+test("SEC-06: portia_promo_register_attempt is revoked from anon and authenticated, has no caller and is not redefined", () => {
+  const signature = "public.portia_promo_register_attempt(text, text, boolean)";
+  const revoke = `revoke all on function ${signature} from public, anon, authenticated;`;
+  assert.equal(sql.split(revoke).length - 1, 1, "the revoke line appears exactly once in the Phase 21 migration");
+  const lines = sql.split("\n");
+  const revokeAt = lines.indexOf(revoke);
+  assert.ok(revokeAt >= 0);
+  assert.equal(lines[revokeAt + 1], `grant execute on function ${signature} to ${serviceRole};`, "only the privileged API role keeps EXECUTE");
+  assert.doesNotMatch(sql, /grant execute on function public\.portia_promo_register_attempt[^;]*\b(anon|authenticated|public)\b/);
+  assert.doesNotMatch(sql, /create (or replace )?function public\.portia_promo_(register_attempt|submit_request)\b/, "neither promo function is redefined");
+
+  const callers: string[] = [];
+  for (const dir of ["app", "components", "lib", "scripts"]) {
+    const base = join(repoRoot, dir);
+    if (!existsSync(base)) continue;
+    for (const entry of readdirSync(base, { recursive: true }) as string[]) {
+      if (!/\.(ts|tsx|mjs)$/.test(entry) || /\.test\.(ts|tsx|mjs)$/.test(entry) || entry.includes("node_modules")) continue;
+      const full = join(base, entry);
+      if (statSync(full).isFile() && readFileSync(full, "utf8").includes("portia_promo_register_attempt")) callers.push(full);
+    }
+  }
+  assert.deepEqual(callers, [], "no product or script file refers to portia_promo_register_attempt");
+});

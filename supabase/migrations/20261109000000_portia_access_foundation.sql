@@ -617,3 +617,10 @@ end; $$;
 revoke all on function public.portia_access_set_closure(boolean) from public, anon, authenticated;
 grant execute on function public.portia_access_set_closure(boolean) to authenticated;
 grant execute on function public.portia_access_set_closure(boolean) to service_role;
+
+-- o. SEC-06: portia_promo_register_attempt has no caller. portia_promo_submit_request (definer) does its bucket logic
+-- inline and never calls it, and no product code does either, yet the baseline left it executable by anon and
+-- authenticated (bucket poisoning, lock-out of promotion participants). Only the privileged API role keeps EXECUTE. The
+-- function itself is not redefined. Rollback: a forward migration that re-grants execute to anon, authenticated.
+revoke all on function public.portia_promo_register_attempt(text, text, boolean) from public, anon, authenticated;
+grant execute on function public.portia_promo_register_attempt(text, text, boolean) to service_role;

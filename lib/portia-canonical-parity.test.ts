@@ -26,7 +26,7 @@ const migrationHashes: Record<string, string> = {
   "20261104000100_portia_editor_notes.sql": "e1866a5bf9e1095955384c8643e6d16d23864349822724a404e9d8433b3aa5fd",
   "20261106000000_portia_drop_editor_notes.sql": "7940895f2a37f3df8d0124c8c39e058473730210c68eeba20641c0b72d61864b",
   // Phase 21 migration: re-pinned by each Phase 21 plan that edits it, frozen by plan 21-07; applied nowhere before the freeze.
-  "20261109000000_portia_access_foundation.sql": "520f3ff27735bb320090ac3ca7e85a5b49b26136505816dac868afee0cd3d848",
+  "20261109000000_portia_access_foundation.sql": "5940629cdbfc98e0b0d89e742bb32ba05a2c7292fec02c476e39419c1e1d6139",
 };
 
 const baselineName = "20261101000000_portia_baseline.sql";
