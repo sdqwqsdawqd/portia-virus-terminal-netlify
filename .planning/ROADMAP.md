@@ -53,7 +53,7 @@ v1.4 «Доступ и единый стиль» делает две вещи. �
   5. `portia_promo_register_attempt` недоступна анониму и обычному пользователю напрямую (отзыв в миграции фазы; fingerprint и expected-authz обновлены в том же коммите; контракты «Повышения» зелёные), а `next` и `eslint-config-next` закреплены точно на 16.4.5 отдельным коммитом, сборка и тесты зелёные. [SEC-06, SEC-08]
 **Constraints**: ревью `supabase-rls-reviewer` обязательно (новые таблицы, RPC, права, отзыв `register_attempt`); новая миграция нумеруется после трёх неприменённых — `20261104000000`, `20261104000100`, `20261106000000` — и порядок применения записан явно (эти три, затем новая); применение на production делает владелец, не агент. Вместе с каждым новым объектом обновляются fingerprint JSON, `expected-authz.json`, офлайн-стенд Supabase, `portia-sql.test.ts` и явные права `service_role`. Перед подъёмом `next` перечитать список исправлений Netlify от 2026-11-03.
 **Acceptance gate**: Postgres/RLS, роли и staging остаются BLOCKED; пункты 2–5 не записываются как PASS на Postgres без прогона на изолированном staging.
-**Plans**: 2/7 plans executed
+**Plans**: 3/7 plans executed
 
 Plans:
 **Wave 1**
@@ -61,7 +61,7 @@ Plans:
 - [x] 21-02-PLAN.md — SEC-08: advisory re-read, owner legitimacy check, exact pin next / eslint-config-next 16.4.5 in a standalone commit
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 21-03-PLAN.md — DB-enforced decision rules, set level, revoke, append-only journal, 1-hour pause and daily caps (USR-05, D-02, D-06, D-07)
+- [x] 21-03-PLAN.md — DB-enforced decision rules, set level, revoke, append-only journal, 1-hour pause and daily caps (USR-05, D-02, D-06, D-07)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 21-04-PLAN.md — owner-only closure flag default OFF (ACC-09) and expected-authz parity across all migrations
@@ -180,7 +180,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 21. Фундамент доступа: люди, заявки, правила и журнал | 2/7 | In Progress | - |
+| 21. Фундамент доступа: люди, заявки, правила и журнал | 3/7 | In Progress | - |
 | 22. Вкладка «Пользователи» и каркас токенов стиля | 0/0 | Not started | - |
 | 23. Вход по нику, «Повышение» и его регрессии | 0/0 | Not started | - |
 | 24. Уровни допуска и закрытие содержимого | 0/0 | Not started | - |
