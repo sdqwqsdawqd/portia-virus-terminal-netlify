@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
 status: executing
-stopped_at: Completed PORTIA-22-01-PLAN.md
-last_updated: "2026-11-10T11:38:26.901Z"
+stopped_at: Completed PORTIA-22-02-PLAN.md
+last_updated: "2026-11-10T11:51:30.288Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase PORTIA-22 execution resumed (wave continue)
-state_head: d465f1a89661d1fa647d508fb9f0eaa5a7250f35
+state_head: 5ed8cbed2ddac75caea36b30899501772650d0b3
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — EXECUTING
-Plan: 2 of 10
+Plan: 3 of 10
 Status: Executing Phase PORTIA-22
 Last activity: 2026-11-10 — Phase PORTIA-22 execution resumed (wave continue)
 
@@ -54,6 +54,7 @@ Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 �
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase PORTIA-22 P01 | 18min | 2 tasks | 23 files |
+| Phase PORTIA-22 P02 | 12m | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -207,6 +208,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-22]: The HTTP route and the directly callable SQL function both enforce the users-tab gate.
 - [Phase PORTIA-22]: Unknown, failed or stale badge counts render no badge; active-tab list responses remain authoritative.
 - [Phase PORTIA-22]: Long Russian UI copy stays in lib/users-copy.ts to preserve the frozen component copy inventory.
+- [Phase PORTIA-22]: Radius and tap-target tokens remain declare-only until the owner selects A, B, or C.
+- [Phase PORTIA-22]: UI-01 remains BLOCKED and is not marked complete before the owner decision.
 
 ### Pending Todos
 
@@ -260,8 +263,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-10T11:38:26.657Z
-Stopped at: Completed PORTIA-22-01-PLAN.md
+Last session: 2026-11-10T11:51:30.033Z
+Stopped at: Completed PORTIA-22-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
