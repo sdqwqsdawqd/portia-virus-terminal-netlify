@@ -2502,10 +2502,17 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .users-action-dialog-body dl > div { display: grid; gap: 4px; min-width: 0; }
 .users-action-dialog-body dt { color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .07em; }
 .users-action-dialog-body dd { min-width: 0; margin: 0; color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.35 var(--sans); overflow-wrap: anywhere; }
+.users-row-actions { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: end; gap: 8px; min-width: 0; }
+.users-level-control { flex: 0 1 152px; min-width: 120px; margin: 0; }
+.users-fixed-level, .users-action-caption { margin: 0; color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.35 var(--sans); }
+.users-action-note { flex-basis: 100%; margin: 0; padding: 8px; border-left: 2px solid #754b46; color: #e0aaa3; font: 400 11px/1.35 var(--sans); overflow-wrap: anywhere; }
 @media (max-width: 900px) {
   .users-closed > summary, .users-phone-row { min-height: 44px; }
   .users-row { padding: 8px 16px; }
   .users-row-main strong, .users-row-caption { overflow-wrap: anywhere; white-space: normal; }
   .users-action-dialog-body .portia-dialog-actions button { width: 100%; min-height: 44px; }
+  .users-action-dialog-body .users-row-actions { display: grid; width: 100%; }
+  .users-action-dialog-body .users-row-actions button, .users-action-dialog-body .users-row-actions select { width: 100%; min-height: 44px; }
+  .users-action-dialog-body .users-row-actions select { font-size: 16px; }
 }
 /* users-tab:end */

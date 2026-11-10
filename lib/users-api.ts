@@ -1,7 +1,10 @@
 import {
   AccessStoreError,
+  clearAccessCooldown,
   decideAccessRequest,
   listAccess,
+  revokeAccess,
+  setAccessLevel,
   type AccessRpcClient,
 } from "./access-store.ts";
 import { isAccessLevel, type AccessLevel } from "./access-levels.ts";
@@ -110,7 +113,19 @@ export async function handleUsersPost(deps: UsersApiDeps, body: Record<string, u
       });
       return { status: 200, body: { ...result } };
     }
-    return { status: 400, body: { code: "invalid-action" } };
+    if (parsed.action.action === "set-level") {
+      const result = await setAccessLevel(deps.client, {
+        personId: parsed.action.personId,
+        level: parsed.action.level,
+        expectedLevel: parsed.action.expectedLevel,
+      });
+      return { status: 200, body: { ...result } };
+    }
+    if (parsed.action.action === "revoke") {
+      return { status: 200, body: { ...await revokeAccess(deps.client, { personId: parsed.action.personId }) } };
+    }
+    if (!deps.access.canManageEditors) return { status: 403, body: { code: "owner-only" } };
+    return { status: 200, body: { ...await clearAccessCooldown(deps.client, { nicknameKey: parsed.action.nicknameKey }) } };
   } catch (error) {
     return mapAccessError(error);
   }

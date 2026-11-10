@@ -113,7 +113,7 @@ test("person and cooldown actions are available on PC and in the phone action wi
   assert.match(component, /disabled=\{[^}]*level[^}]*===/u);
   assert.match(component, /usersCopy\.revokeDialog/u);
   const block = css.slice(css.lastIndexOf("/* users-tab:start"));
-  assert.match(block, /\.users-row-actions[^}]*gap:\s*8px/su);
+  assert.match(block, /\.users-row-actions[^}]*gap:\s*8px/u);
   assert.match(block, /\.users-action-note/u);
   assert.match(block, /@media \(max-width: 900px\)[\s\S]*\.users-action-dialog-body \.users-row-actions[\s\S]*min-height:\s*44px/u);
 });

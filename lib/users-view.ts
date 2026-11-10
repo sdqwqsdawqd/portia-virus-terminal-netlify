@@ -90,7 +90,6 @@ export function decisionLevelOptions(maximum: AccessLevel = 5): { value: AccessL
 }
 
 export function visibleControls(row: UsersPendingRow | UsersPersonRow | UsersClosedRow, callerIsOwner: boolean): UsersVisibleControls {
-  void callerIsOwner;
   if ("canDecide" in row) {
     if (!row.canDecide) {
       return {
@@ -107,6 +106,20 @@ export function visibleControls(row: UsersPendingRow | UsersPersonRow | UsersClo
       fixedLevelText: row.existingLevel === null ? null : usersCopy.fixedLevel(row.existingLevel),
     };
   }
+  if ("canSetLevel" in row) {
+    const controls: UsersControl[] = [];
+    if (row.canSetLevel) controls.push("level", "setLevel");
+    if (row.canRevoke) controls.push("revoke");
+    return {
+      controls,
+      caption: controls.length === 0 ? (row.reason === "owner" ? usersCopy.ownerCaption : usersCopy.selfCaption) : null,
+      levelDefault: row.canSetLevel ? row.level : null,
+      fixedLevelText: null,
+    };
+  }
+  if (callerIsOwner && row.retryAt) {
+    return { controls: ["clearCooldown"], caption: null, levelDefault: null, fixedLevelText: null };
+  }
   return { controls: [], caption: null, levelDefault: null, fixedLevelText: null };
 }
 
@@ -115,12 +128,21 @@ export function resultNote(code: string): string {
   if (code === "not-found") return usersCopy.requestNotFound;
   if (code === "self") return usersCopy.selfCaption;
   if (code === "owner") return usersCopy.ownerCaption;
+  if (code === "stale") return usersCopy.staleLevel;
+  if (code === "not-active") return usersCopy.notActive;
+  if (code === "already-revoked") return usersCopy.alreadyDecided;
+  if (code === "no-cooldown") return usersCopy.noCooldown;
+  if (code === "level-change-separate") return usersCopy.levelChangeSeparate;
+  if (code === "level-above-own") return usersCopy.levelAboveOwn;
   return usersCopy.actionFailed;
 }
 
 export function successAnnouncement(kind: string, nickname: string, level?: AccessLevel): string {
   if (kind === "approved" && level !== undefined) return usersCopy.approved(nickname, level);
   if (kind === "rejected") return usersCopy.rejected(nickname);
+  if (kind === "level" && level !== undefined) return usersCopy.levelChanged(nickname, level);
+  if (kind === "revoked") return usersCopy.revoked(nickname);
+  if (kind === "cleared") return usersCopy.cleared;
   return usersCopy.actionFailed;
 }
 

@@ -17,9 +17,10 @@ type UsersTabProps = {
 
 type ViewRow = UsersView["pending"]["rows"][number];
 type UsersSectionKind = "pending" | "people" | "closed";
-type RowAction = "approve" | "reject";
+type RowAction = "approve" | "reject" | "set-level" | "revoke" | "clear-cooldown";
 type RowContext = { row: ViewRow; section: UsersSectionKind; index: number };
 type BusyAction = { key: string; action: RowAction } | null;
+type ConfirmState = { kind: "reject" | "revoke"; context: RowContext };
 
 async function responseBody(response: Response): Promise<Record<string, unknown>> {
   try { return await response.json() as Record<string, unknown>; } catch { return {}; }
@@ -52,6 +53,9 @@ function RowActions({
   busy,
   onApprove,
   onReject,
+  onSetLevel,
+  onRevoke,
+  onClearCooldown,
 }: {
   context: RowContext;
   callerIsOwner: boolean;
@@ -59,10 +63,14 @@ function RowActions({
   busy: BusyAction;
   onApprove: (context: RowContext, level: AccessLevel | undefined, fromPhone: boolean) => void;
   onReject: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
+  onSetLevel: (context: RowContext, level: AccessLevel, fromPhone: boolean) => void;
+  onRevoke: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
+  onClearCooldown: (context: RowContext, fromPhone: boolean) => void;
 }) {
   const controls = visibleControls(context.row.source, callerIsOwner);
   const [level, setLevel] = useState<AccessLevel | null>(controls.levelDefault);
   const rowBusy = busy?.key === context.row.key;
+  const currentLevel = "canSetLevel" in context.row.source ? context.row.source.level : null;
   if (controls.controls.length === 0) return controls.caption ? <p className="users-action-caption">{controls.caption}</p> : null;
   return (
     <div className="users-row-actions">
@@ -96,6 +104,31 @@ function RowActions({
           {rowBusy && busy?.action === "reject" ? usersCopy.rejecting : usersCopy.reject}
         </button>
       ) : null}
+      {controls.controls.includes("setLevel") && level !== null ? (
+        <button
+          type="button"
+          className="secondary-control"
+          disabled={rowBusy || level === currentLevel}
+          onClick={() => onSetLevel(context, level, fromPhone)}
+        >
+          {rowBusy && busy?.action === "set-level" ? usersCopy.saving : usersCopy.setLevel}
+        </button>
+      ) : null}
+      {controls.controls.includes("revoke") ? (
+        <button
+          type="button"
+          className="danger-control"
+          disabled={rowBusy}
+          onClick={(event) => onRevoke(context, event.currentTarget, fromPhone)}
+        >
+          {rowBusy && busy?.action === "revoke" ? usersCopy.revoking : usersCopy.revoke}
+        </button>
+      ) : null}
+      {controls.controls.includes("clearCooldown") ? (
+        <button type="button" className="secondary-control" disabled={rowBusy} onClick={() => onClearCooldown(context, fromPhone)}>
+          {usersCopy.clearCooldown}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -106,6 +139,9 @@ function UsersActionDialog({
   busy,
   onApprove,
   onReject,
+  onSetLevel,
+  onRevoke,
+  onClearCooldown,
   onClose,
 }: {
   context: RowContext;
@@ -113,6 +149,9 @@ function UsersActionDialog({
   busy: BusyAction;
   onApprove: (context: RowContext, level: AccessLevel | undefined, fromPhone: boolean) => void;
   onReject: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
+  onSetLevel: (context: RowContext, level: AccessLevel, fromPhone: boolean) => void;
+  onRevoke: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
+  onClearCooldown: (context: RowContext, fromPhone: boolean) => void;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -142,7 +181,7 @@ function UsersActionDialog({
           <div><dt>{usersCopy.profileLabel}</dt><dd><ProfileLink row={row} /></dd></div>
         </dl>
         <RowCaption row={row} />
-        <RowActions context={context} callerIsOwner={callerIsOwner} fromPhone busy={busy} onApprove={onApprove} onReject={onReject} />
+        <RowActions context={context} callerIsOwner={callerIsOwner} fromPhone busy={busy} onApprove={onApprove} onReject={onReject} onSetLevel={onSetLevel} onRevoke={onRevoke} onClearCooldown={onClearCooldown} />
         <div className="portia-dialog-actions">
           <button type="button" className="secondary-control" data-autofocus onClick={onClose}>{usersCopy.closeWindow}</button>
         </div>
@@ -161,6 +200,9 @@ function UsersRows({
   onOpen,
   onApprove,
   onReject,
+  onSetLevel,
+  onRevoke,
+  onClearCooldown,
 }: {
   rows: ViewRow[];
   section: UsersSectionKind;
@@ -171,6 +213,9 @@ function UsersRows({
   onOpen: (context: RowContext, opener: HTMLButtonElement) => void;
   onApprove: (context: RowContext, level: AccessLevel | undefined, fromPhone: boolean) => void;
   onReject: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
+  onSetLevel: (context: RowContext, level: AccessLevel, fromPhone: boolean) => void;
+  onRevoke: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
+  onClearCooldown: (context: RowContext, fromPhone: boolean) => void;
 }) {
   return (
     <ul className="users-list">
@@ -190,7 +235,7 @@ function UsersRows({
               <span className={`users-plaque${row.statusPlaque === usersCopy.pendingPlaque ? " warning" : row.typePlaque === row.statusPlaque ? " danger" : ""}`}>{row.statusPlaque}</span>
               <ProfileLink row={row} />
               <RowCaption row={row} />
-              <RowActions context={context} callerIsOwner={callerIsOwner} fromPhone={false} busy={busy} onApprove={onApprove} onReject={onReject} />
+              <RowActions context={context} callerIsOwner={callerIsOwner} fromPhone={false} busy={busy} onApprove={onApprove} onReject={onReject} onSetLevel={onSetLevel} onRevoke={onRevoke} onClearCooldown={onClearCooldown} />
             </>
           )}
           {notes[row.source.nicknameKey] ? <p className="users-action-note" role="status">{notes[row.source.nicknameKey]}</p> : null}
@@ -220,13 +265,14 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [isPhone, setIsPhone] = useState(false);
   const [dialogContext, setDialogContext] = useState<RowContext | null>(null);
-  const [confirmContext, setConfirmContext] = useState<RowContext | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [busy, setBusy] = useState<BusyAction>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [announcement, setAnnouncement] = useState("");
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const confirmReturnRef = useRef<HTMLElement | null>(null);
   const requestEpoch = useRef(0);
+  const callerIsOwner = Boolean(list?.callerIsOwner && canManageEditors);
 
   const load = useCallback(async () => {
     const requestId = ++requestEpoch.current;
@@ -315,18 +361,24 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
         setAnnouncement(usersCopy.approved(context.row.nickname, responseJson.level));
       } else if (code === "rejected") {
         setAnnouncement(usersCopy.rejected(context.row.nickname));
-      } else if (["already-decided", "not-found", "self", "owner", "level-change-separate", "level-above-own"].includes(code)) {
+      } else if ((code === "updated" || code === "unchanged") && typeof responseJson.level === "number") {
+        setAnnouncement(usersCopy.levelChanged(context.row.nickname, responseJson.level));
+      } else if (code === "revoked") {
+        setAnnouncement(usersCopy.revoked(context.row.nickname));
+      } else if (code === "cleared") {
+        setAnnouncement(usersCopy.cleared);
+      } else if (["already-decided", "not-found", "self", "owner", "stale", "not-active", "already-revoked", "no-cooldown", "level-change-separate", "level-above-own"].includes(code)) {
         setNotes((current) => ({ ...current, [noteKey]: resultNote(code) }));
       } else {
         throw new Error("unexpected-reply");
       }
       setDialogContext(null);
-      setConfirmContext(null);
+      setConfirmState(null);
       if (await load()) focusAfterRefresh(context.section, context.index);
     } catch {
       setNotes((current) => ({ ...current, [noteKey]: usersCopy.actionFailed }));
       setDialogContext(null);
-      setConfirmContext(null);
+      setConfirmState(null);
       queueMicrotask(() => confirmReturnRef.current?.focus());
     } finally {
       setBusy(null);
@@ -347,11 +399,35 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
     if (!("canDecide" in context.row.source)) return;
     confirmReturnRef.current = fromPhone ? openerRef.current : opener;
     if (fromPhone) setDialogContext(null);
-    setConfirmContext(context);
+    setConfirmState({ kind: "reject", context });
   }, []);
 
+  const setLevel = useCallback((context: RowContext, level: AccessLevel, fromPhone: boolean) => {
+    if (!("canSetLevel" in context.row.source)) return;
+    if (fromPhone) confirmReturnRef.current = openerRef.current;
+    void postAction(context, "set-level", {
+      action: "set-level",
+      personId: context.row.source.id,
+      level,
+      expectedLevel: context.row.source.level,
+    });
+  }, [postAction]);
+
+  const requestRevoke = useCallback((context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => {
+    if (!("canRevoke" in context.row.source)) return;
+    confirmReturnRef.current = fromPhone ? openerRef.current : opener;
+    if (fromPhone) setDialogContext(null);
+    setConfirmState({ kind: "revoke", context });
+  }, []);
+
+  const clearCooldown = useCallback((context: RowContext, fromPhone: boolean) => {
+    if (!("retryAt" in context.row.source) || !callerIsOwner) return;
+    if (fromPhone) confirmReturnRef.current = openerRef.current;
+    void postAction(context, "clear-cooldown", { action: "clear-cooldown", nicknameKey: context.row.source.nicknameKey });
+  }, [callerIsOwner, postAction]);
+
   const cancelConfirm = useCallback(() => {
-    setConfirmContext(null);
+    setConfirmState(null);
     queueMicrotask(() => confirmReturnRef.current?.focus());
   }, []);
 
@@ -360,7 +436,6 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
   if (!list) return <AppSkeleton shape="employees" />;
 
   const view = buildUsersView(list, debouncedQuery, new Date());
-  const callerIsOwner = list.callerIsOwner && canManageEditors;
   const searchEmpty = view.emptyKind === "search";
 
   return (
@@ -375,40 +450,52 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
       <section data-users-section="pending" aria-labelledby="users-pending-title">
         <h2 id="users-pending-title" tabIndex={-1}>{view.pending.title}</h2>
         {!searchEmpty && view.pending.emptyKind ? <EmptyState kind={view.pending.emptyKind} /> : null}
-        <UsersRows rows={view.pending.rows} section="pending" isPhone={isPhone} callerIsOwner={callerIsOwner} busy={busy} notes={notes} onOpen={openDialog} onApprove={approve} onReject={requestReject} />
+        <UsersRows rows={view.pending.rows} section="pending" isPhone={isPhone} callerIsOwner={callerIsOwner} busy={busy} notes={notes} onOpen={openDialog} onApprove={approve} onReject={requestReject} onSetLevel={setLevel} onRevoke={requestRevoke} onClearCooldown={clearCooldown} />
         {view.pending.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
       </section>
       <section data-users-section="people" aria-labelledby="users-people-title">
         <h2 id="users-people-title" tabIndex={-1}>{view.people.title}</h2>
         <p className="users-moscow-note">{usersCopy.moscowNote}</p>
         {!searchEmpty && view.people.emptyKind ? <EmptyState kind={view.people.emptyKind} /> : null}
-        <UsersRows rows={view.people.rows} section="people" isPhone={isPhone} callerIsOwner={callerIsOwner} busy={busy} notes={notes} onOpen={openDialog} onApprove={approve} onReject={requestReject} />
+        <UsersRows rows={view.people.rows} section="people" isPhone={isPhone} callerIsOwner={callerIsOwner} busy={busy} notes={notes} onOpen={openDialog} onApprove={approve} onReject={requestReject} onSetLevel={setLevel} onRevoke={requestRevoke} onClearCooldown={clearCooldown} />
         {view.people.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
       </section>
       <details className="users-closed" data-users-section="closed">
         <summary tabIndex={-1}>{view.closed.title}</summary>
         {!searchEmpty && view.closed.emptyKind ? <EmptyState kind={view.closed.emptyKind} /> : null}
-        <UsersRows rows={view.closed.rows} section="closed" isPhone={isPhone} callerIsOwner={callerIsOwner} busy={busy} notes={notes} onOpen={openDialog} onApprove={approve} onReject={requestReject} />
+        <UsersRows rows={view.closed.rows} section="closed" isPhone={isPhone} callerIsOwner={callerIsOwner} busy={busy} notes={notes} onOpen={openDialog} onApprove={approve} onReject={requestReject} onSetLevel={setLevel} onRevoke={requestRevoke} onClearCooldown={clearCooldown} />
         {view.closed.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
       </details>
-      {dialogContext ? <UsersActionDialog context={dialogContext} callerIsOwner={callerIsOwner} busy={busy} onApprove={approve} onReject={requestReject} onClose={closeDialog} /> : null}
-      {confirmContext ? (
+      {dialogContext ? <UsersActionDialog context={dialogContext} callerIsOwner={callerIsOwner} busy={busy} onApprove={approve} onReject={requestReject} onSetLevel={setLevel} onRevoke={requestRevoke} onClearCooldown={clearCooldown} onClose={closeDialog} /> : null}
+      {confirmState ? (
         <ConfirmDialog
-          title={usersCopy.rejectDialog.title}
-          text={usersCopy.rejectDialog.text(confirmContext.row.nickname)}
+          title={confirmState.kind === "reject" ? usersCopy.rejectDialog.title : usersCopy.revokeDialog.title}
+          text={confirmState.kind === "reject" ? usersCopy.rejectDialog.text(confirmState.context.row.nickname) : usersCopy.revokeDialog.text(confirmState.context.row.nickname)}
           onCancel={cancelConfirm}
           actions={[
             {
-              label: busy?.action === "reject" ? usersCopy.rejecting : usersCopy.rejectDialog.danger,
+              label: confirmState.kind === "reject"
+                ? (busy?.action === "reject" ? usersCopy.rejecting : usersCopy.rejectDialog.danger)
+                : (busy?.action === "revoke" ? usersCopy.revoking : usersCopy.revokeDialog.danger),
               tone: "danger",
               disabled: busy !== null,
               onClick: () => {
-                if ("canDecide" in confirmContext.row.source) {
-                  void postAction(confirmContext, "reject", { action: "reject", requestId: confirmContext.row.source.id });
+                const { context, kind } = confirmState;
+                if (kind === "reject" && "canDecide" in context.row.source) {
+                  void postAction(context, "reject", { action: "reject", requestId: context.row.source.id });
+                }
+                if (kind === "revoke" && "canRevoke" in context.row.source) {
+                  void postAction(context, "revoke", { action: "revoke", personId: context.row.source.id });
                 }
               },
             },
-            { label: usersCopy.rejectDialog.safe, tone: "secondary", autoFocus: true, disabled: busy !== null, onClick: cancelConfirm },
+            {
+              label: confirmState.kind === "reject" ? usersCopy.rejectDialog.safe : usersCopy.revokeDialog.safe,
+              tone: "secondary",
+              autoFocus: true,
+              disabled: busy !== null,
+              onClick: cancelConfirm,
+            },
           ]}
         />
       ) : null}
