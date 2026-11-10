@@ -1,0 +1,174 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
+import { extname, join } from "node:path";
+
+const repoRoot = new URL("../", import.meta.url);
+const portiaCssRaw = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
+const promoCssRaw = readFileSync(new URL("../app/portia-promotion-editor.css", import.meta.url), "utf8");
+const globalsCssRaw = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+const layoutSource = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
+
+const PORTIA_RADIUS_DECLARATIONS = 129;
+// Phase 26 restyle changes these on purpose and updates them in the same commit.
+const PROMO_RADIUS_DECLARATIONS = 6;
+// app/portia.css before Phase 22; any later phase that edits app/portia.css outside the marked blocks re-pins it in the same commit and says why.
+const PRE_PHASE_PORTIA_CSS_SHA256 = "0446df52dd83bb42e3a4837b7262b73d230f4600572475b28222e569e192367c";
+
+const TOKEN_NAMES = [
+  "--radius-0",
+  "--radius-2",
+  "--radius-3",
+  "--radius-4",
+  "--radius-5",
+  "--radius-6",
+  "--radius-7",
+  "--radius-8",
+  "--radius-9",
+  "--radius-10",
+  "--radius-12",
+  "--radius-14",
+  "--radius-18",
+  "--radius-19",
+  "--radius-round",
+  "--radius-pill",
+  "--radius-window",
+  "--radius-dialog",
+  "--radius-control",
+  "--radius-field",
+  "--radius-plaque",
+  "--radius-tab",
+  "--tap-target",
+] as const;
+
+function lf(text: string) {
+  return text.replace(/\r\n/g, "\n");
+}
+
+function withoutComments(text: string) {
+  return lf(text).replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+function declarationCount(text: string) {
+  return (withoutComments(text).match(/border-radius\s*:/g) ?? []).length;
+}
+
+export function stripMarkedBlocks(css: string) {
+  const lines = lf(css).split("\n");
+  const kept: string[] = [];
+  let skipping: "tokens" | "users" | null = null;
+  for (const line of lines) {
+    if (!skipping && line.includes("style-tokens:start")) skipping = "tokens";
+    if (!skipping && line.startsWith("/* users-tab:start")) skipping = "users";
+    if (!skipping) kept.push(line);
+    if (skipping === "tokens" && line.includes("style-tokens:end")) skipping = null;
+    if (skipping === "users" && line === "/* users-tab:end */") skipping = null;
+  }
+  assert.equal(skipping, null, "a marked block is not closed");
+  return kept.join("\n");
+}
+
+export function ruleRadius(css: string, selectorStart: string) {
+  for (const match of withoutComments(css).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!match[1].trim().startsWith(selectorStart)) continue;
+    return match[2].match(/border-radius\s*:\s*([^;]+);/)?.[1].trim() ?? "0";
+  }
+  assert.fail(`selector not found: ${selectorStart}`);
+}
+
+function rootBody(css: string) {
+  return lf(css).match(/^:root\s*\{([\s\S]*?)^\}/m)?.[1] ?? "";
+}
+
+function declarations(text: string) {
+  return new Map([...withoutComments(text).matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((match) => [match[1], match[2].trim()]));
+}
+
+function sourceFiles(directory: "app" | "components") {
+  const root = new URL(`../${directory}/`, import.meta.url);
+  const files: string[] = [];
+  const walk = (path: string) => {
+    for (const entry of readdirSync(path, { withFileTypes: true })) {
+      const child = join(path, entry.name);
+      if (entry.isDirectory()) walk(child);
+      else if ([".css", ".ts", ".tsx"].includes(extname(entry.name))) files.push(child);
+    }
+  };
+  walk(root.pathname.replace(/^\/(?:[A-Za-z]:)/, (drive) => drive.slice(1)));
+  return files;
+}
+
+test("UI-01: radius counts, root count and stylesheet order stay pinned", () => {
+  assert.equal(declarationCount(portiaCssRaw), PORTIA_RADIUS_DECLARATIONS);
+  assert.equal(declarationCount(promoCssRaw), PROMO_RADIUS_DECLARATIONS);
+  assert.equal(declarationCount(globalsCssRaw), 0);
+  assert.equal((lf(portiaCssRaw).match(/^:root\s*\{/gm) ?? []).length, 2);
+  assert.deepEqual(
+    [...layoutSource.matchAll(/import "\.\/([\w-]+\.css)";/g)].map((match) => match[1]),
+    ["globals.css", "portia.css", "portia-promotion-editor.css"],
+  );
+});
+
+test("UI-01: declare-only tokens sit in the first root at today's values", () => {
+  const css = lf(portiaCssRaw);
+  const firstRoot = rootBody(css);
+  const assistant = firstRoot.indexOf('  --assistant-font: "Segoe UI", Arial, sans-serif;');
+  const start = firstRoot.indexOf("style-tokens:start");
+  const end = firstRoot.indexOf("style-tokens:end");
+  assert.ok(start > assistant, "style token markers are missing after --assistant-font");
+  assert.ok(end > start, "style token end marker is missing");
+
+  const block = firstRoot.slice(start, end);
+  const tokens = declarations(block);
+  assert.deepEqual([...tokens.keys()], TOKEN_NAMES);
+
+  const outside = withoutComments(stripMarkedBlocks(css));
+  const simpleRadiusValues = new Set(
+    [...outside.matchAll(/border-radius\s*:\s*([^;]+);/g)]
+      .map((match) => match[1].replace(/\s*!important\s*$/, "").trim())
+      .filter((value) => !value.includes(" ")),
+  );
+  for (const name of TOKEN_NAMES.slice(0, 16)) {
+    assert.ok(simpleRadiusValues.has(tokens.get(name) ?? ""), `${name} is outside the current radius census`);
+  }
+
+  assert.equal(tokens.get("--radius-window"), ruleRadius(css, ".app-window"));
+  assert.equal(tokens.get("--radius-dialog"), ruleRadius(css, ".portia-dialog"));
+  assert.equal(tokens.get("--radius-field"), ruleRadius(css, ".editor-field input"));
+  assert.equal(tokens.get("--radius-control"), "0");
+  assert.equal(ruleRadius(css, ".primary-control, .secondary-control, .danger-control"), "0");
+  assert.equal(tokens.get("--radius-plaque"), "0");
+  assert.equal(ruleRadius(css, ".manual-mark,"), "0");
+  assert.equal(ruleRadius(css, ".quest-badge"), "0");
+  assert.equal(tokens.get("--radius-tab"), "0");
+  assert.equal(ruleRadius(css, ".editor-tabs button"), "0");
+  assert.equal(tokens.get("--tap-target"), "44px");
+});
+
+test("UI-01: marked additions preserve the pre-phase stylesheet byte shape", () => {
+  const css = lf(portiaCssRaw);
+  const stripped = stripMarkedBlocks(css);
+  assert.equal(createHash("sha256").update(stripped).digest("hex"), PRE_PHASE_PORTIA_CSS_SHA256);
+
+  const tokenBlock = css.match(/^.*style-tokens:start[\s\S]*?^.*style-tokens:end.*$/m)?.[0] ?? "";
+  assert.ok(tokenBlock, "style token block is missing");
+  assert.doesNotMatch(tokenBlock, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:|--muted\s*:/);
+
+  const usersStart = css.search(/^\/\* users-tab:start/m);
+  if (usersStart >= 0) {
+    const usersBlock = css.slice(usersStart);
+    assert.match(usersBlock, /^\/\* users-tab:start[\s\S]*\/\* users-tab:end \*\/\n?$/);
+    assert.doesNotMatch(usersBlock, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:|--muted\s*:/);
+  }
+
+  const lfCount = (portiaCssRaw.match(/\n/g) ?? []).length;
+  const crlfCount = (portiaCssRaw.match(/\r\n/g) ?? []).length;
+  assert.ok(crlfCount === 0 || crlfCount === lfCount, "app/portia.css has mixed line endings");
+});
+
+test("UI-01: radius and tap tokens remain declarations only", () => {
+  for (const file of [...sourceFiles("app"), ...sourceFiles("components")]) {
+    assert.doesNotMatch(readFileSync(file, "utf8"), /var\(--(?:radius-|tap-target)/, file.replace(repoRoot.pathname, ""));
+  }
+});
