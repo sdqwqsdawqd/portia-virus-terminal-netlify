@@ -9,6 +9,13 @@ const portiaCssRaw = readFileSync(new URL("../app/portia.css", import.meta.url),
 const promoCssRaw = readFileSync(new URL("../app/portia-promotion-editor.css", import.meta.url), "utf8");
 const globalsCssRaw = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const layoutSource = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
+const directionRecord = readFileSync(
+  new URL(
+    "../.planning/phases/PORTIA-22-vkladka-polzovateli-i-karkas-tokenov-stilya/22-STYLE-DIRECTION.md",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 const PORTIA_RADIUS_DECLARATIONS = 129;
 // Phase 26 restyle changes these on purpose and updates them in the same commit.
@@ -170,5 +177,35 @@ test("UI-01: marked additions preserve the pre-phase stylesheet byte shape", () 
 test("UI-01: radius and tap tokens remain declarations only", () => {
   for (const file of [...sourceFiles("app"), ...sourceFiles("components")]) {
     assert.doesNotMatch(readFileSync(file, "utf8"), /var\(--(?:radius-|tap-target)/, file.replace(repoRoot.pathname, ""));
+  }
+});
+
+test("UI-01: the direction record presents A/B/C as text and carries no agent choice", () => {
+  const record = lf(directionRecord);
+  assert.deepEqual(
+    [...record.matchAll(/^## (.+)$/gm)].map((match) => match[1]),
+    ["Что меняется в Phase 26", "Три направления", "Таблица значений", "Вопрос владельцу", "Статус"],
+  );
+
+  const tableSection = record.match(/^## Таблица значений\n([\s\S]*?)^## Вопрос владельцу/m)?.[1] ?? "";
+  const tableLines = tableSection.split("\n").filter((line) => line.startsWith("|"));
+  assert.equal(tableLines[0], "| Семейство элементов | Сейчас (селектор) | A | B | C |");
+  const dataRows = tableLines.slice(2).map((line) => line.split("|").slice(1, -1).map((cell) => cell.trim()));
+  assert.equal(dataRows.length, 7);
+  for (const row of dataRows) assert.equal(row.length, 5);
+
+  const nowByFamily = new Map(dataRows.map((row) => [row[0], row[1]]));
+  assert.match(nowByFamily.get("Окно приложения") ?? "", /--radius-window/);
+  assert.match(nowByFamily.get("Диалог \/ подтверждение") ?? "", /--radius-dialog/);
+  assert.match(nowByFamily.get("Поля") ?? "", /--radius-field/);
+
+  assert.doesNotMatch(record, /\bPASS\b/);
+  assert.doesNotMatch(record, /\bрекоменд[а-яё-]*\b/iu);
+  const blocked = record.includes("BLOCKED (решение владельца): буква не выбрана.");
+  const choices = [...record.matchAll(/Выбрано:\s*([ABC])\b/g)];
+  assert.ok((blocked && choices.length === 0) || (!blocked && choices.length === 1));
+  if (choices.length === 1) {
+    assert.match(record, /\b\d{4}-\d{2}-\d{2}\b/);
+    assert.match(record, /\bвладелец\b/iu);
   }
 });
