@@ -25,6 +25,10 @@ type UsersViewModule = {
   };
   resultNote?: (code: string) => string;
   successAnnouncement?: (kind: string, nickname: string, level?: 1 | 2 | 3 | 4 | 5) => string;
+  historyLine?: (
+    entry: { type: "approve" | "reject" | "level-change" | "revoke" | "cooldown-clear"; at: string; actor: string | null; details: Record<string, unknown> },
+    now: Date,
+  ) => string | null;
 };
 
 async function usersView(): Promise<UsersViewModule> {
@@ -68,6 +72,25 @@ test("Europe/Moscow formatter is device-independent and adds a different year", 
   assert.equal(time.formatMoscow?.("2025-12-31T21:05:00Z", new Date("2026-01-05T09:00:00Z")), "1 янв., 00:05");
   assert.equal(time.formatMoscow?.("2025-12-31T21:05:00Z", new Date("2027-03-01T09:00:00Z")), "1 янв. 2026 г., 00:05");
   assert.equal(time.formatMoscow?.("invalid", new Date()), null);
+});
+
+test("history lines carry the event verb, safe details, actor and Moscow time", async () => {
+  const view = await usersView();
+  assert.equal(typeof view.historyLine, "function", "historyLine must exist");
+  const now = new Date("2026-11-09T12:00:00Z");
+  assert.equal(
+    view.historyLine?.({ type: "approve", at: "2026-11-09T11:32:00Z", actor: "q•••z@gmail.com", details: { level: 2, origin: "sheet", deviceAdded: true } }, now),
+    "одобрил · q•••z@gmail.com · 9 нояб., 14:32 МСК",
+  );
+  assert.equal(
+    view.historyLine?.({ type: "level-change", at: "2026-11-09T11:32:00Z", actor: "q•••z@gmail.com", details: { from: 2, to: 3 } }, now),
+    "изменил уровень 2 → 3 · q•••z@gmail.com · 9 нояб., 14:32 МСК",
+  );
+  assert.equal(
+    view.historyLine?.({ type: "reject", at: "2026-11-09T11:32:00Z", actor: null, details: { origin: "outside" } }, now),
+    "отклонил · неизвестно · 9 нояб., 14:32 МСК",
+  );
+  assert.equal(view.historyLine?.({ type: "revoke", at: "invalid", actor: null, details: { level: 2 } }, now), null);
 });
 
 test("pluralZayavka follows Russian one-few-many endings", async () => {

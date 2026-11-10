@@ -117,3 +117,28 @@ test("person and cooldown actions are available on PC and in the phone action wi
   assert.match(block, /\.users-action-note/u);
   assert.match(block, /@media \(max-width: 900px\)[\s\S]*\.users-action-dialog-body \.users-row-actions[\s\S]*min-height:\s*44px/u);
 });
+
+test("history stays open across list refresh and reloads by nicknameKey", () => {
+  assert.match(component, /parseUsersHistory/u);
+  assert.match(component, /view=history&key=/u);
+  assert.match(component, /openHistoryKeys/u);
+  assert.match(component, /setOpenHistoryKeys/u);
+  assert.match(component, /\[\.\.\.openHistoryKeys\][\s\S]*loadHistory/u);
+  assert.match(component, /row\.source\.nicknameKey/u);
+  assert.doesNotMatch(component, /setOpenHistoryKeys\(new Set\(\)\)/u, "list refresh must not close history panels");
+});
+
+test("history is accessible inline on PC and always present in the phone action window", () => {
+  assert.match(component, /aria-expanded=/u);
+  assert.match(component, /aria-controls=/u);
+  assert.match(component, /<ol/u);
+  assert.match(component, /usersCopy\.historyHeading/u);
+  assert.match(component, /usersCopy\.historyEmpty/u);
+  assert.match(component, /usersCopy\.hideHistory/u);
+  assert.match(component, /phoneHistory/u);
+  assert.doesNotMatch(component, /Показать ещё/iu);
+  const block = css.slice(css.lastIndexOf("/* users-tab:start"));
+  assert.match(block, /\.users-history-list[^}]*gap:\s*4px/u);
+  assert.match(block, /\.users-history-list[^}]*font:\s*400 11px/u);
+  assert.doesNotMatch(block, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:/u);
+});
