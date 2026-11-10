@@ -1,8 +1,9 @@
 // Typed wrappers over the portia_access_* RPCs (Phase 21). Fail closed: any error or unknown reply throws.
-// A SupabaseClient satisfies AccessRpcClient. No other module imports this file in Phase 21 (Phase 23 adds the route).
+// A SupabaseClient satisfies AccessRpcClient. Phase 22 adds the editor read wrappers used by lib/users-api.ts.
 
 import { isAccessLevel, type AccessLevel, type AccessOrigin } from "./access-levels.ts";
 import { signAccessSubmit } from "./access-session.ts";
+import { parseUsersList, UsersReplyError, type UsersList } from "./users-model.ts";
 
 export type AccessRpcClient = {
   rpc(
@@ -18,16 +19,19 @@ export const accessRpc = {
   setLevel: "portia_access_set_level",
   revoke: "portia_access_revoke",
   clearCooldown: "portia_access_clear_cooldown",
+  list: "portia_access_list",
   closureEnabled: "portia_access_closure_enabled",
   setClosure: "portia_access_set_closure",
 } as const;
 
 export class AccessStoreError extends Error {
   readonly code: string;
-  constructor(code: string) {
+  readonly sqlState: string | null;
+  constructor(code: string, sqlState: string | null = null) {
     super(code);
     this.name = "AccessStoreError";
     this.code = code;
+    this.sqlState = sqlState;
   }
 }
 
@@ -75,7 +79,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 async function call(client: AccessRpcClient, fn: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
   const { data, error } = await client.rpc(fn, args);
-  if (error) throw new AccessStoreError(error.message);
+  if (error) throw new AccessStoreError(error.message, error.code ?? null);
   if (!isRecord(data)) throw unexpected();
   return data;
 }
@@ -201,12 +205,22 @@ export async function clearAccessCooldown(client: AccessRpcClient, input: { nick
   }
 }
 
+export async function listAccess(client: AccessRpcClient, input: { query: string; limit: number }): Promise<UsersList> {
+  const data = await call(client, accessRpc.list, { p_query: input.query, p_limit: input.limit });
+  try {
+    return parseUsersList(data);
+  } catch (error) {
+    if (error instanceof UsersReplyError) throw unexpected();
+    throw error;
+  }
+}
+
 export type SetClosureResult = { code: "updated"; enabled: boolean; updatedAt: string } | { code: "invalid" };
 
 // The reply is a bare boolean (not a record), so this one does not go through call().
 export async function isClosureEnabled(client: AccessRpcClient): Promise<boolean> {
   const { data, error } = await client.rpc(accessRpc.closureEnabled, {});
-  if (error) throw new AccessStoreError(error.message);
+  if (error) throw new AccessStoreError(error.message, error.code ?? null);
   if (typeof data !== "boolean") throw unexpected();
   return data;
 }

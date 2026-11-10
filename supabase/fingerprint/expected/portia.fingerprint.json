@@ -2498,6 +2498,20 @@
         "src_sha256": "03077c03837e4b8bb258da5b3fce65f1823348f0316c677260ea180017f0d23c",
         "volatility": "v"
       },
+      "public.portia_access_list(p_query text, p_limit integer)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "9a81a0e8cee28a4465a06ec84c626e40a5471f61545803496332aed6b7380c78",
+        "volatility": "s"
+      },
       "public.portia_access_nickname_key(p_nickname text)": {
         "acl": [
           "service_role:EXECUTE"

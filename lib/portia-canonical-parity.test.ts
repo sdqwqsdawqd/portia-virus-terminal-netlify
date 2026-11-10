@@ -29,6 +29,8 @@ const migrationHashes: Record<string, string> = {
   // before the freeze, and the owner runs it after the three older unapplied migrations. Any later change needs a new
   // forward-only migration with its own version; this pin must not be re-pinned.
   "20261109000000_portia_access_foundation.sql": "a2c69408a3e4ac3ce99c231bda5b267f7734a235778df5c8da6786ff82334f7e",
+  // The Phase 22 migration is re-pinned by each Phase 22 plan that edits it and frozen by plan 22-09.
+  "20261110000000_portia_users_tab.sql": "f5cae7378f1c29c1e3d88b28d64b91ee96af9376875cd303d9f9af934f9101d0",
 };
 
 const baselineName = "20261101000000_portia_baseline.sql";

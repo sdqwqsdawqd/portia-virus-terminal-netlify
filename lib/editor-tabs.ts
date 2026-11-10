@@ -7,10 +7,12 @@ export type TabDef = { id: string; label: string; kind: TabKind };
 // Editor tab strip order (D-01). A future regular tab such as «Справочник» is one new line here and is open
 // to everyone by default (D-05); a trusted tab such as «Повышение» is one new line with kind "trusted" and
 // stays closed until granted (D-24, D-25). The owner-only «Доступ» is never in the registry (D-09).
+// «Пользователи» (Phase 22, USR-01/USR-09) is open to every editor and closable per editor; its id equals the SQL gate portia_can_edit_tab('users').
 // "employees" is not an EditorSection on purpose: changedSections keeps returning content sections only.
 export const tabRegistry: TabDef[] = [
   ...editorSections.map((id) => ({ id, label: sectionLabels[id], kind: "regular" as const })),
   { id: "employees", label: "Сотрудники", kind: "regular" },
+  { id: "users", label: "Пользователи", kind: "regular" },
   { id: "promo", label: "Повышение", kind: "trusted" },
 ];
 

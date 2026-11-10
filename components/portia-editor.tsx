@@ -35,10 +35,11 @@ import { acceptsEditorList, changedDetails, changedFields, employeeRatings, prof
 import { ActiveFormatContext, FloatingTextFormatPanel, FormatLaunchButton, FormattedTextarea, findFormatField, replaceRichText, type EditorPreviewSurface, type FormatTarget } from "@/components/portia-editor-rich-text";
 import { PromotionEditor } from "@/components/portia-promotion-editor";
 import { AppDeniedPanel } from "@/components/portia-desktop-states";
+import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";
 import { accessCheckFailedText } from "@/lib/app-state";
 import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
 
-type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "promo" | "access";
+type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "users" | "promo" | "access";
 
 type Props = {
   content: PortiaContent;
@@ -480,6 +481,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const focusRequest = useRef<EditorSection | null>(null);
   const errorIdBase = useId();
   const tab: EditorTab = stripTabs.some(([id]) => id === pickedTab) ? pickedTab : stripTabs[0]?.[0] ?? pickedTab;
+  const usersPending = useUsersPendingCount({ enabled: openTabs.includes("users"), visible: active && !minimized, tabActive: tab === "users" });
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
   // The Recycle selection is one of two ids; the other stays "" (the render and the row highlight rely on it).
@@ -1055,7 +1057,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   useEffect(() => {
     if (!active || dialog || closeAsked || accessFailed) return;
     // Сотрудники and Доступ are saved separately; their fields keep the browser's native undo.
-    const historyTab = tab !== "employees" && tab !== "promo" && tab !== "access";
+    const historyTab = tab !== "employees" && tab !== "users" && tab !== "promo" && tab !== "access";
     const onKeyDown = (event: KeyboardEvent) => {
       const action = shortcutOf(event);
       if (!action) return;
@@ -1179,7 +1181,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
           const savedNow = partial?.sections.some((section) => section === id) ?? false;
           return (
             <button key={id} type="button" data-tab-id={id} data-save-error={failed || undefined} className={tab === id ? "active" : ""} aria-describedby={failed ? `${errorIdBase}-${id}` : undefined} aria-label={failed ? `${label}, не сохранено` : unsaved ? `${label}, есть несохранённые правки` : savedNow ? `${label}, сохранено` : undefined} onClick={() => switchTab(id)}>
-              {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}{savedNow && !unsaved && <i className="tab-saved" aria-hidden="true">✓</i>}
+              {label}{id === "users" && <UsersTabCount count={usersPending.count} />}{unsaved && <i className="tab-dot" aria-hidden="true" />}{savedNow && !unsaved && <i className="tab-saved" aria-hidden="true">✓</i>}
             </button>
           );
         })}
@@ -1622,6 +1624,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       )}
 
       {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
+
+      {tab === "users" && openTabs.includes("users") && <UsersTab visible={active && !minimized} canManageEditors={canManageEditors} onPendingCount={usersPending.report} />}
 
       {tab === "promo" && openTabs.includes("promo") && <PromotionEditor visible={active && !minimized} canManageEditors={canManageEditors} />}
 

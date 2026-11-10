@@ -8,7 +8,8 @@
     "20261104000000_portia_rename_virus_classes.sql",
     "20261104000100_portia_editor_notes.sql",
     "20261106000000_portia_drop_editor_notes.sql",
-    "20261109000000_portia_access_foundation.sql"
+    "20261109000000_portia_access_foundation.sql",
+    "20261110000000_portia_users_tab.sql"
   ],
   "generated_from": "all supabase/migrations SQL text replayed in version order (grant/revoke/policy/raise lines); not from observed behavior. Phase 21 adds the portia_access_* functions and tables (migration 20261109000000_portia_access_foundation.sql).",
   "roles": {
@@ -1897,6 +1898,43 @@
         "owner": {
           "outcome": "allow",
           "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:694"
+        }
+      }
+    },
+    {
+      "key": "public.portia_access_list(p_query text, p_limit integer)",
+      "name": "portia_access_list",
+      "identity": "p_query text, p_limit integer",
+      "args": {
+        "p_query": "",
+        "p_limit": 0
+      },
+      "creates_rows": false,
+      "kind": "users-editor",
+      "cells": {
+        "anon": {
+          "outcome": "42501",
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:69"
+        },
+        "outsider": {
+          "outcome": "forbidden",
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:24"
+        },
+        "editor-full": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:70"
+        },
+        "editor-restricted": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:70"
+        },
+        "promo-reviewer": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:70"
+        },
+        "owner": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:70"
         }
       }
     }

@@ -61,6 +61,8 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //   2. D-57 — кнопка «ОФОРМЛЕНИЕ» стала общим FormatLaunchButton (applyLaunchButtonHunk).
 //   3. D-62 — во вкладке «Информация» блок SectionAddBar перед SectionTabs «Разделы информации», нижней кнопки раздела нет (applyInfoAddSectionHunk).
 //   4. D-63 — атрибуты кадра `framing`, `framingBox`, `onFramingChange` в строках `<ImageEditorField` (stripFramingAttributes).
+//   5. PORTIA-22 (USR-01, USR-09) — вкладка «Пользователи»: импорт, EditorTab, счётчик, historyTab, строка вкладки
+//      (applyUsersTabHunk); русских строк нет (D-58). Источник одобрения: ROADMAP Phase 22, success criterion 1.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -157,6 +159,51 @@ function applyInfoAddSectionHunk(text: string): string {
   return lines.join("\n");
 }
 
+function replaceOnce(text: string, from: string, to: string, label: string): string {
+  assert.equal(text.split(from).length - 1, 1, `${label}: exactly one approved anchor`);
+  return text.replace(from, to);
+}
+
+/** PORTIA-22: шесть побайтных правок оболочки вкладки «Пользователи» (USR-01, USR-09). */
+function applyUsersTabHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { AppDeniedPanel } from "@/components/portia-desktop-states";',
+    'import { AppDeniedPanel } from "@/components/portia-desktop-states";\nimport { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";',
+    "users import",
+  );
+  next = replaceOnce(
+    next,
+    'type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "promo" | "access";',
+    'type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "users" | "promo" | "access";',
+    "EditorTab users member",
+  );
+  next = replaceOnce(
+    next,
+    '  const tab: EditorTab = stripTabs.some(([id]) => id === pickedTab) ? pickedTab : stripTabs[0]?.[0] ?? pickedTab;',
+    '  const tab: EditorTab = stripTabs.some(([id]) => id === pickedTab) ? pickedTab : stripTabs[0]?.[0] ?? pickedTab;\n  const usersPending = useUsersPendingCount({ enabled: openTabs.includes("users"), visible: active && !minimized, tabActive: tab === "users" });',
+    "users pending hook",
+  );
+  next = replaceOnce(
+    next,
+    '{label}{unsaved && <i className="tab-dot" aria-hidden="true" />}',
+    '{label}{id === "users" && <UsersTabCount count={usersPending.count} />}{unsaved && <i className="tab-dot" aria-hidden="true" />}',
+    "users tab count",
+  );
+  next = replaceOnce(
+    next,
+    '    const historyTab = tab !== "employees" && tab !== "promo" && tab !== "access";',
+    '    const historyTab = tab !== "employees" && tab !== "users" && tab !== "promo" && tab !== "access";',
+    "users history exclusion",
+  );
+  return replaceOnce(
+    next,
+    '      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}',
+    '      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}\n\n      {tab === "users" && openTabs.includes("users") && <UsersTab visible={active && !minimized} canManageEditors={canManageEditors} onPendingCount={usersPending.report} />}',
+    "users tab body",
+  );
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -202,6 +249,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "D-57", apply: applyLaunchButtonHunk },
   { id: "D-62", apply: applyInfoAddSectionHunk },
   { id: "D-63", apply: (text) => text, normalizeActual: stripFramingAttributes },
+  { id: "PORTIA-22", apply: applyUsersTabHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -297,6 +345,8 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.throws(() => applyInfoAddSectionHunk(expected), /exactly one bottom add-section button/, "a file without the bottom button cannot be turned into the expected one");
   // Без правки D-62 (только D-57) файл отличается от ожидаемого.
   assert.notEqual(firstDifference(expected, applyLaunchButtonHunk(sample)), null, "a file without the D-62 hunk is a difference");
+  const withoutUsers = approvedEditorEdits.slice(0, -1).reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutUsers), null, "a file without the PORTIA-22 hunk is a difference");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");
