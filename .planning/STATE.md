@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
 status: executing
-stopped_at: Completed PORTIA-22-03-PLAN.md
-last_updated: "2026-11-10T13:57:04.000Z"
+stopped_at: Completed PORTIA-22-04-PLAN.md
+last_updated: "2026-11-10T14:14:56.000Z"
 last_activity: 2026-11-10
-last_activity_desc: Completed PORTIA-22-03 full users read model and responsive tab
-state_head: 1150a16a17df952aadcd5b9c10f9374a1d26200d
+last_activity_desc: Completed PORTIA-22-04 guarded access decision workflows
+state_head: 68bbfb30f6641142ccd59391dfd22eae11bae45d
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — EXECUTING
-Plan: 4 of 10
+Plan: 5 of 10
 Status: Executing Phase PORTIA-22
-Last activity: 2026-11-10 — Completed PORTIA-22-03 full users read model and responsive tab
+Last activity: 2026-11-10 — Completed PORTIA-22-04 guarded access decision workflows
 
 Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 — принятый риск)
 
@@ -56,6 +56,7 @@ Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 �
 | Phase PORTIA-22 P01 | 18min | 2 tasks | 23 files |
 | Phase PORTIA-22 P02 | 12m | 2 tasks | 3 files |
 | Phase PORTIA-22 P03 | 1h45m | 2 tasks | 16 files |
+| Phase PORTIA-22 P04 | 32m | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -214,6 +215,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-22]: Decision actors are masked inside portia_access_list; the client only renders the server value.
 - [Phase PORTIA-22]: Search responses use a monotonic request epoch so an older refresh cannot replace newer results.
 - [Phase PORTIA-22]: The phone action window reuses the native portia-dialog chrome and returns focus to its row.
+- [Phase PORTIA-22]: Mutation controls are rendered only from server permission flags; database result codes remain authoritative and are never retried automatically.
+- [Phase PORTIA-22]: Clearing a cooldown is owner-only in both the UI and POST handler before the Phase 21 RPC is called.
 
 ### Pending Todos
 
@@ -267,8 +270,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-10T13:57:04.000Z
-Stopped at: Completed PORTIA-22-03-PLAN.md
+Last session: 2026-11-10T14:14:56.000Z
+Stopped at: Completed PORTIA-22-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
