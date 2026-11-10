@@ -36,6 +36,31 @@ html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-
   --doc: var(--font-golos), system-ui, -apple-system, "Segoe UI", sans-serif;
   --serif: var(--font-plex-serif), serif;
   --assistant-font: "Segoe UI", Arial, sans-serif;
+  /* style-tokens:start — Phase 22 (UI-01, D-12): today's values, declare-only, nothing reads them yet; Phase 26 rewires them after the owner's pick */
+  --radius-0: 0;
+  --radius-2: 2px;
+  --radius-3: 3px;
+  --radius-4: 4px;
+  --radius-5: 5px;
+  --radius-6: 6px;
+  --radius-7: 7px;
+  --radius-8: 8px;
+  --radius-9: 9px;
+  --radius-10: 10px;
+  --radius-12: 12px;
+  --radius-14: 14px;
+  --radius-18: 18px;
+  --radius-19: 19px;
+  --radius-round: 50%;
+  --radius-pill: 999px;
+  --radius-window: 10px; /* .app-window */
+  --radius-dialog: 7px; /* .portia-dialog */
+  --radius-control: 0; /* .primary-control, .secondary-control, .danger-control */
+  --radius-field: 3px; /* .editor-field input */
+  --radius-plaque: 0; /* .manual-mark, .quest-badge */
+  --radius-tab: 0; /* .editor-tabs button */
+  --tap-target: 44px; /* the 900px-and-below tap minimum */
+  /* style-tokens:end */
 }
 
 .owner-login-page { min-height: 100svh; display: grid; place-items: center; padding: 24px; background: oklch(.167 calc(.016 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); }
