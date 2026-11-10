@@ -86,3 +86,18 @@ test("users CSS is one sharp marked block at the end", () => {
   assert.match(block, /var\(--warning\)/u);
   assert.doesNotMatch(block, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:|--muted|oklch\(\.559/u);
 });
+
+test("request decisions use the shared confirmation dialog and honest busy states", () => {
+  assert.match(component, /ConfirmDialog/u);
+  assert.match(component, /usersCopy\.approveAria/u);
+  assert.match(component, /aria-busy=/u);
+  assert.match(component, /role="status"/u);
+  assert.match(component, /method:\s*"POST"/u);
+  assert.match(component, /"content-type":\s*"application\/json"/u);
+  assert.match(component, /cache:\s*"no-store"/u);
+  assert.doesNotMatch(component, /window\.confirm/u);
+  assert.match(component, /usersCopy\.approving/u);
+  assert.match(component, /usersCopy\.rejecting/u);
+  assert.match(component, /tone:\s*"danger"/u);
+  assert.match(component, /tone:\s*"secondary"[\s\S]*autoFocus:\s*true/u);
+});

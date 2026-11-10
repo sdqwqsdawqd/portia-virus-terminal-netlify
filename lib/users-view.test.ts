@@ -17,6 +17,14 @@ type UsersViewModule = {
     closed: { title: string; truncated: boolean };
     emptyKind: string | null;
   };
+  visibleControls?: (row: UsersList["pending"]["rows"][number], callerIsOwner: boolean) => {
+    controls: string[];
+    caption: string | null;
+    levelDefault: number | null;
+    fixedLevelText: string | null;
+  };
+  resultNote?: (code: string) => string;
+  successAnnouncement?: (kind: string, nickname: string, level?: 1 | 2 | 3 | 4 | 5) => string;
 };
 
 async function usersView(): Promise<UsersViewModule> {
@@ -90,4 +98,47 @@ test("full users view builds captions, plaques, section totals and truncation", 
   assert.equal(built?.people.title, "ЛЮДИ · 3");
   assert.equal(built?.closed.title, "Отклонённые и отозванные · 4");
   assert.equal(built?.people.truncated, true);
+});
+
+test("pending decision controls follow server flags and approval defaults", async () => {
+  const view = await usersView();
+  assert.equal(typeof view.visibleControls, "function", "visibleControls must exist");
+  const base = {
+    id: "123e4567-e89b-42d3-a456-426614174000",
+    nickname: "Qloxz",
+    nicknameKey: "qloxz",
+    origin: "sheet" as const,
+    createdAt: "2026-11-10T00:00:00.000Z",
+    existingLevel: null,
+    canDecide: true,
+    reason: null,
+  };
+  assert.deepEqual(view.visibleControls?.(base, false), {
+    controls: ["level", "approve", "reject"],
+    caption: null,
+    levelDefault: 2,
+    fixedLevelText: null,
+  });
+  assert.deepEqual(view.visibleControls?.({ ...base, origin: "outside" }, false)?.levelDefault, 1);
+  assert.deepEqual(view.visibleControls?.({ ...base, existingLevel: 4 }, false), {
+    controls: ["approve", "reject"],
+    caption: null,
+    levelDefault: null,
+    fixedLevelText: "Уровень 4 уже выдан",
+  });
+  assert.deepEqual(view.visibleControls?.({ ...base, canDecide: false, reason: "self" }, false)?.controls, []);
+  assert.equal(view.visibleControls?.({ ...base, canDecide: false, reason: "self" }, false)?.caption, "Свою заявку решить нельзя.");
+  assert.equal(view.visibleControls?.({ ...base, canDecide: false, reason: "owner" }, false)?.caption, "Владельца изменить нельзя.");
+});
+
+test("decision notes and announcements use the frozen Russian copy", async () => {
+  const view = await usersView();
+  assert.equal(typeof view.resultNote, "function", "resultNote must exist");
+  assert.equal(view.resultNote?.("already-decided"), "Уже решено. Строка обновлена.");
+  assert.equal(view.resultNote?.("not-found"), "Заявка не найдена. Список обновлён.");
+  assert.equal(view.resultNote?.("self"), "Свою заявку решить нельзя.");
+  assert.equal(view.resultNote?.("owner"), "Владельца изменить нельзя.");
+  assert.equal(view.resultNote?.("unexpected"), "Не удалось выполнить. Проверьте связь и повторите.");
+  assert.equal(view.successAnnouncement?.("approved", "Qloxz", 2), "Заявка «Qloxz» одобрена, Уровень 2.");
+  assert.equal(view.successAnnouncement?.("rejected", "Qloxz"), "Заявка «Qloxz» отклонена.");
 });

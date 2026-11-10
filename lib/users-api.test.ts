@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AccessStoreError, accessRpc, type AccessRpcClient } from "./access-store.ts";
-import { handleUsersGet, mapAccessError, type UsersApiDeps } from "./users-api.ts";
+import * as usersApiModule from "./users-api.ts";
+import { handleUsersGet, mapAccessError, type UsersApiDeps, type UsersApiResult } from "./users-api.ts";
+
+type UsersPostModule = {
+  handleUsersPost?: (deps: UsersApiDeps, body: Record<string, unknown>) => Promise<UsersApiResult>;
+  parseUsersPostRequest?: (request: Request) => Promise<{ result?: UsersApiResult; body?: Record<string, unknown> }>;
+};
+
+const postModule = usersApiModule as typeof usersApiModule & UsersPostModule;
 
 const row = {
   id: "123e4567-e89b-42d3-a456-426614174000",
@@ -152,4 +160,74 @@ test("AccessStoreError keeps SQL state", () => {
   const error = new AccessStoreError("missing", "42P01");
   assert.equal(error.sqlState, "42P01");
   assert.deepEqual(mapAccessError(error), { status: 503, body: { code: "pending-database" } });
+});
+
+test("USR-07 already-decided is a 200 result code and is never retried", async () => {
+  assert.equal(typeof postModule.handleUsersPost, "function", "handleUsersPost must exist");
+  const fixture = dependencies({ reply: { code: "already-decided", status: "approved" } });
+  const result = await postModule.handleUsersPost?.(fixture.deps, {
+    action: "approve",
+    requestId: row.id,
+    level: 2,
+  });
+  assert.deepEqual(result, { status: 200, body: { code: "already-decided", status: "approved" } });
+  assert.deepEqual(fixture.calls, [{ fn: accessRpc.decide, args: { p_request_id: row.id, p_decision: "approve", p_level: 2 } }]);
+});
+
+test("approve validates the optional level and sends null for an existing person", async () => {
+  assert.equal(typeof postModule.handleUsersPost, "function", "handleUsersPost must exist");
+  const withoutLevel = dependencies({ reply: { code: "approved", personId: person.id, level: 4 } });
+  assert.deepEqual(await postModule.handleUsersPost?.(withoutLevel.deps, { action: "approve", requestId: row.id }), {
+    status: 200,
+    body: { code: "approved", personId: person.id, level: 4 },
+  });
+  assert.deepEqual(withoutLevel.calls[0], { fn: accessRpc.decide, args: { p_request_id: row.id, p_decision: "approve", p_level: null } });
+
+  for (const level of [0, 6, "2"]) {
+    const invalid = dependencies();
+    assert.deepEqual(await postModule.handleUsersPost?.(invalid.deps, { action: "approve", requestId: row.id, level }), {
+      status: 400,
+      body: { code: "invalid-level" },
+    });
+    assert.equal(invalid.calls.length, 0);
+  }
+});
+
+test("decision POST rejects malformed bodies and maps database guards", async () => {
+  assert.equal(typeof postModule.handleUsersPost, "function", "handleUsersPost must exist");
+  for (const body of [
+    { action: "approve", requestId: "not-a-uuid", level: 2 },
+    { action: "other", requestId: row.id },
+  ]) {
+    const invalid = dependencies();
+    const result = await postModule.handleUsersPost?.(invalid.deps, body);
+    assert.equal(result?.status, 400);
+    assert.equal(invalid.calls.length, 0);
+  }
+
+  const self = dependencies({ rpcError: { message: "self-decision" } });
+  assert.deepEqual(await postModule.handleUsersPost?.(self.deps, { action: "reject", requestId: row.id }), { status: 409, body: { code: "self" } });
+  const owner = dependencies({ rpcError: { message: "owner-protected" } });
+  assert.deepEqual(await postModule.handleUsersPost?.(owner.deps, { action: "reject", requestId: row.id }), { status: 409, body: { code: "owner" } });
+  const separate = dependencies({ rpcError: { message: "level-change-separate" } });
+  assert.deepEqual(await postModule.handleUsersPost?.(separate.deps, { action: "approve", requestId: row.id, level: 2 }), { status: 409, body: { code: "level-change-separate" } });
+});
+
+test("decision POST checks the users-tab gate before any RPC", async () => {
+  assert.equal(typeof postModule.handleUsersPost, "function", "handleUsersPost must exist");
+  const fixture = dependencies({ access: { canEdit: true, canManageEditors: false, openTabs: [] } });
+  const result = await postModule.handleUsersPost?.(fixture.deps, { action: "reject", requestId: row.id });
+  assert.equal(result?.status, 403);
+  assert.equal(result && "code" in result.body, false);
+  assert.equal(fixture.calls.length, 0);
+});
+
+test("POST request parsing requires JSON and a plain object", async () => {
+  assert.equal(typeof postModule.parseUsersPostRequest, "function", "parseUsersPostRequest must exist");
+  const plain = await postModule.parseUsersPostRequest?.(new Request("http://local/api/users", { method: "POST", headers: { "content-type": "text/plain" }, body: "{}" }));
+  assert.deepEqual(plain, { result: { status: 415, body: { code: "json-required" } } });
+  const broken = await postModule.parseUsersPostRequest?.(new Request("http://local/api/users", { method: "POST", headers: { "content-type": "application/json" }, body: "{" }));
+  assert.deepEqual(broken, { result: { status: 400, body: { code: "invalid-body" } } });
+  const valid = await postModule.parseUsersPostRequest?.(new Request("http://local/api/users", { method: "POST", headers: { "content-type": "application/json; charset=utf-8" }, body: JSON.stringify({ action: "reject", requestId: row.id }) }));
+  assert.deepEqual(valid, { body: { action: "reject", requestId: row.id } });
 });
