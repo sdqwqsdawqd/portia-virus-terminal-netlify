@@ -1902,6 +1902,24 @@
       }
     },
     {
+      "key": "public.portia_access_mask_email(p_email text)",
+      "name": "portia_access_mask_email",
+      "identity": "p_email text",
+      "args": {
+        "p_email": "probe@example.invalid"
+      },
+      "creates_rows": false,
+      "kind": "internal",
+      "cells": {
+        "anon": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:30" },
+        "outsider": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:30" },
+        "editor-full": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:30" },
+        "editor-restricted": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:30" },
+        "promo-reviewer": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:30" },
+        "owner": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:30" }
+      }
+    },
+    {
       "key": "public.portia_access_list(p_query text, p_limit integer)",
       "name": "portia_access_list",
       "identity": "p_query text, p_limit integer",
@@ -1914,27 +1932,27 @@
       "cells": {
         "anon": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:69"
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:202"
         },
         "outsider": {
           "outcome": "forbidden",
-          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:24"
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:53"
         },
         "editor-full": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:70"
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:203"
         },
         "editor-restricted": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:70"
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:203"
         },
         "promo-reviewer": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:70"
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:203"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:70"
+          "source": "supabase/migrations/20261110000000_portia_users_tab.sql:203"
         }
       }
     }

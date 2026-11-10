@@ -52,7 +52,7 @@ test("email masking is internal and matches the D-05 reference table", () => {
   const body = definition.split("as $$")[1].split("$$;")[0];
   assert.match(body, /strpos\(p_email, '@'\) = 0/u);
   assert.match(body, /length\([^)]*local[^)]*\) <= 2/u);
-  assert.match(body, /left\([^,]+, 1\).*'•••'.*right\([^,]+, 1\)/su);
+  assert.match(body, /left\([^,]+, 1\)[\s\S]*'•••'[\s\S]*right\([^,]+, 1\)/u);
   const revoke = sql.indexOf("revoke all on function public.portia_access_mask_email(text) from public, anon, authenticated;");
   const grant = sql.indexOf("grant execute on function public.portia_access_mask_email(text) to service_role;");
   assert.ok(revoke > 0 && revoke < grant);
@@ -60,7 +60,7 @@ test("email masking is internal and matches the D-05 reference table", () => {
 });
 
 test("full access list masks actors and mirrors target guard predicates without redefining it", () => {
-  assert.match(sql, /case\s+when public\.portia_is_owner\(\) then [\w.]+email\s+else public\.portia_access_mask_email\([\w.]+email\)/su);
+  assert.match(sql, /case\s+when public\.portia_is_owner\(\) then [\w.]+email\s+else public\.portia_access_mask_email\([\w.]+email\)/u);
   assert.match(sql, /requested_by\s*=\s*auth\.uid\(\)/u);
   assert.match(sql, /account_id\s*=\s*auth\.uid\(\)/u);
   assert.match(sql, /portia_owner_email\(\)/u);
@@ -76,7 +76,14 @@ test("listAccess sends SQL parameter names and the RPC constant is pinned", asyn
   const calls: { fn: string; args?: Record<string, unknown> }[] = [];
   const client: AccessRpcClient = { rpc: async (fn, args) => {
     calls.push({ fn, args });
-    return { data: { callerIsOwner: false, pendingTotalAll: 0, serverNow: "2026-11-10T00:00:00.000Z", pending: { total: 0, rows: [] } }, error: null };
+    return { data: {
+      callerIsOwner: false,
+      pendingTotalAll: 0,
+      serverNow: "2026-11-10T00:00:00.000Z",
+      pending: { total: 0, rows: [] },
+      people: { total: 0, rows: [] },
+      closed: { total: 0, rows: [] },
+    }, error: null };
   } };
   await listAccess(client, { query: "qloxz", limit: 50 });
   assert.equal(calls.length, 1);

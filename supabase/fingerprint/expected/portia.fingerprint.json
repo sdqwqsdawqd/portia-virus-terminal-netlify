@@ -2509,8 +2509,21 @@
         "kind": "f",
         "returns": "jsonb",
         "secdef": true,
-        "src_sha256": "9a81a0e8cee28a4465a06ec84c626e40a5471f61545803496332aed6b7380c78",
+        "src_sha256": "069cf0edd29dcd7d5ff5fc1bdf180104b80c6249dc456910c4ef065097a5935f",
         "volatility": "s"
+      },
+      "public.portia_access_mask_email(p_email text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "text",
+        "secdef": false,
+        "src_sha256": "180dd2bbb5ae91d334b4513cdfe1aa373b401a3b381e54f1bb6f49bb187d4a37",
+        "volatility": "i"
       },
       "public.portia_access_nickname_key(p_nickname text)": {
         "acl": [

@@ -18,7 +18,7 @@ const person = {
   id: "223e4567-e89b-42d3-a456-426614174000",
   nickname: "Ada_1",
   nicknameKey: "ada_1",
-  origin: "manual",
+  origin: "outside",
   level: 3,
   approvedAt: "2026-11-10T00:01:00.000Z",
   canSetLevel: true,
