@@ -3,7 +3,7 @@
 
 import { isAccessLevel, type AccessLevel, type AccessOrigin } from "./access-levels.ts";
 import { signAccessSubmit } from "./access-session.ts";
-import { parseUsersList, UsersReplyError, type UsersList } from "./users-model.ts";
+import { parseUsersHistory, parseUsersList, UsersReplyError, type UsersHistoryEntry, type UsersList } from "./users-model.ts";
 
 export type AccessRpcClient = {
   rpc(
@@ -20,6 +20,7 @@ export const accessRpc = {
   revoke: "portia_access_revoke",
   clearCooldown: "portia_access_clear_cooldown",
   list: "portia_access_list",
+  history: "portia_access_history",
   closureEnabled: "portia_access_closure_enabled",
   setClosure: "portia_access_set_closure",
 } as const;
@@ -209,6 +210,16 @@ export async function listAccess(client: AccessRpcClient, input: { query: string
   const data = await call(client, accessRpc.list, { p_query: input.query, p_limit: input.limit });
   try {
     return parseUsersList(data);
+  } catch (error) {
+    if (error instanceof UsersReplyError) throw unexpected();
+    throw error;
+  }
+}
+
+export async function accessHistory(client: AccessRpcClient, input: { nicknameKey: string }): Promise<UsersHistoryEntry[]> {
+  const data = await call(client, accessRpc.history, { p_nickname_key: input.nicknameKey });
+  try {
+    return parseUsersHistory(data);
   } catch (error) {
     if (error instanceof UsersReplyError) throw unexpected();
     throw error;

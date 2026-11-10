@@ -1,5 +1,6 @@
 import {
   AccessStoreError,
+  accessHistory,
   clearAccessCooldown,
   decideAccessRequest,
   listAccess,
@@ -93,6 +94,11 @@ export async function handleUsersGet(deps: UsersApiDeps, params: URLSearchParams
     if (view === "count") {
       const list = await listAccess(deps.client, { query: "", limit: 0 });
       return { status: 200, body: { pending: list.pendingTotalAll } };
+    }
+    if (view === "history") {
+      const key = params.get("key") ?? "";
+      if (nicknameKey(key) !== key) return { status: 400, body: { code: "invalid-key" } };
+      return { status: 200, body: { entries: await accessHistory(deps.client, { nicknameKey: key }) } };
     }
     return { status: 400, body: { code: "invalid-view" } };
   } catch (error) {

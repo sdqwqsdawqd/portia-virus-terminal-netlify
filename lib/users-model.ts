@@ -22,6 +22,16 @@ export type UsersPendingRow = {
 export type AccessEventType = "approve" | "reject" | "level-change" | "revoke" | "cooldown-clear";
 export type UsersGuardReason = "self" | "owner" | null;
 export type UsersEvent = { type: AccessEventType; at: string; actor: string | null };
+export type UsersHistoryDetails = {
+  level?: AccessLevel;
+  from?: AccessLevel;
+  to?: AccessLevel;
+  origin?: AccessOrigin;
+  deviceAdded?: boolean;
+  previousLevel?: AccessLevel;
+  count?: number;
+};
+export type UsersHistoryEntry = UsersEvent & { details: UsersHistoryDetails };
 
 export type UsersPersonRow = {
   id: string;
@@ -89,6 +99,42 @@ function parseEvent(value: unknown): UsersEvent | null {
   return { type: value.type as AccessEventType, at: value.at, actor: value.actor as string | null };
 }
 
+function parseHistoryDetails(type: AccessEventType, value: unknown): UsersHistoryDetails {
+  if (!isRecord(value)) throw new UsersReplyError();
+  const allowed = new Set(["level", "from", "to", "origin", "deviceAdded", "previousLevel", "count"]);
+  if (Object.keys(value).some((key) => !allowed.has(key))) throw new UsersReplyError();
+  const level = value.level;
+  const from = value.from;
+  const to = value.to;
+  const origin = value.origin;
+  const deviceAdded = value.deviceAdded;
+  const previousLevel = value.previousLevel;
+  const count = value.count;
+
+  if (type === "approve") {
+    if (!isAccessLevel(level) || typeof origin !== "string" || !(ACCESS_ORIGINS as readonly string[]).includes(origin) || typeof deviceAdded !== "boolean") {
+      throw new UsersReplyError();
+    }
+    if (previousLevel !== undefined && !isAccessLevel(previousLevel)) throw new UsersReplyError();
+    if (from !== undefined || to !== undefined || count !== undefined) throw new UsersReplyError();
+    return { level, origin: origin as AccessOrigin, deviceAdded, ...(previousLevel === undefined ? {} : { previousLevel }) };
+  }
+  if (type === "reject") {
+    if (typeof origin !== "string" || !(ACCESS_ORIGINS as readonly string[]).includes(origin) || Object.keys(value).length !== 1) throw new UsersReplyError();
+    return { origin: origin as AccessOrigin };
+  }
+  if (type === "level-change") {
+    if (!isAccessLevel(from) || !isAccessLevel(to) || Object.keys(value).length !== 2) throw new UsersReplyError();
+    return { from, to };
+  }
+  if (type === "revoke") {
+    if (!isAccessLevel(level) || Object.keys(value).length !== 1) throw new UsersReplyError();
+    return { level };
+  }
+  if (!isNonNegativeInteger(count) || count === 0 || Object.keys(value).length !== 1) throw new UsersReplyError();
+  return { count };
+}
+
 function parsePendingRow(value: unknown): UsersPendingRow {
   if (!isRecord(value)) throw new UsersReplyError();
   const { id, nickname, nicknameKey: key, origin, createdAt, existingLevel, canDecide, reason } = value;
@@ -154,6 +200,16 @@ export function parseUsersList(value: unknown): UsersList {
     people: parseSection(people, parsePersonRow),
     closed: parseSection(closed, parseClosedRow),
   };
+}
+
+export function parseUsersHistory(value: unknown): UsersHistoryEntry[] {
+  if (!isRecord(value) || !Array.isArray(value.entries) || value.entries.length > 5) throw new UsersReplyError();
+  return value.entries.map((entry) => {
+    if (!isRecord(entry)) throw new UsersReplyError();
+    const parsed = parseEvent(entry);
+    if (parsed === null) throw new UsersReplyError();
+    return { ...parsed, details: parseHistoryDetails(parsed.type, entry.details) };
+  });
 }
 
 export function parseUsersCount(value: unknown): number {
