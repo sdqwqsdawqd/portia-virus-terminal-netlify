@@ -1,0 +1,10 @@
+{
+  "command": "node --experimental-strip-types --test --test-reporter=tap --test-name-pattern=\"view=history returns five\" lib/users-api.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: view=history returns five validated entries and sends the SQL signature argument\nnot ok 1 - view=history returns five validated entries and sends the SQL signature argument\n  ---\n  duration_ms: 3.2627\n  location: 'C:\\\\Users\\\\User\\\\code\\\\portia-site\\\\lib\\\\users-api.test.ts:129:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly deep-equal:\n    + actual - expected\n    \n      {\n        body: {\n    +     code: 'invalid-view'\n    -     entries: [\n    -       { actor: 'q•••z@gmail.com', at: '2026-11-10T00:01:00.000Z', details: { deviceAdded: true, level: 2, origin: 'sheet' }, type: 'approve' }\n    -     ]\n        },\n    +   status: 400\n    -   status: 200\n      }\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected:\n    status: 200\n  actual:\n    status: 400\n  operator: 'deepStrictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///C:/Users/User/code/portia-site/lib/users-api.test.ts:132:10)\n    async Test.run (node:internal/test_runner/test:932:9)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 149.4517\n",
+  "targetTest": "view=history returns five validated entries and sends the SQL signature argument",
+  "targetFile": "lib/users-api.test.ts",
+  "expected": "view=history returns the validated history entries and calls portia_access_history with p_nickname_key.",
+  "actual": "The target assertion received invalid-view with status 400 because the history branch is absent.",
+  "semanticAssessment": "The named target executed and failed on the planned missing view=history behavior; there was no syntax, import, setup, fixture or discovery failure."
+}

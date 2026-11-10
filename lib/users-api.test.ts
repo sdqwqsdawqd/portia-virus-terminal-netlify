@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { AccessStoreError, accessRpc, type AccessRpcClient } from "./access-store.ts";
+import * as accessStoreModule from "./access-store.ts";
 import * as usersApiModule from "./users-api.ts";
 import { handleUsersGet, mapAccessError, type UsersApiDeps, type UsersApiResult } from "./users-api.ts";
+import * as usersModelModule from "./users-model.ts";
 
 type UsersPostModule = {
   handleUsersPost?: (deps: UsersApiDeps, body: Record<string, unknown>) => Promise<UsersApiResult>;
@@ -10,6 +13,13 @@ type UsersPostModule = {
 };
 
 const postModule = usersApiModule as typeof usersApiModule & UsersPostModule;
+type HistoryEntry = { type: string; at: string; actor: string | null; details: Record<string, unknown> };
+const historyStore = accessStoreModule as typeof accessStoreModule & {
+  accessHistory?: (client: AccessRpcClient, input: { nicknameKey: string }) => Promise<HistoryEntry[]>;
+};
+const historyModel = usersModelModule as typeof usersModelModule & {
+  parseUsersHistory?: (value: unknown) => HistoryEntry[];
+};
 
 const row = {
   id: "123e4567-e89b-42d3-a456-426614174000",
@@ -22,6 +32,7 @@ const row = {
   reason: null,
 };
 const event = { type: "approve", at: "2026-11-10T00:01:00.000Z", actor: "q•••z@gmail.com" };
+const historyEntry = { ...event, details: { level: 2, origin: "sheet", deviceAdded: true } };
 const person = {
   id: "223e4567-e89b-42d3-a456-426614174000",
   nickname: "Ada_1",
@@ -113,6 +124,51 @@ test("view=count uses limit 0 and returns the unfiltered pending total", async (
   const result = await handleUsersGet(fixture.deps, new URLSearchParams("view=count"));
   assert.deepEqual(result, { status: 200, body: { pending: 1 } });
   assert.deepEqual(fixture.calls[0].args, { p_query: "", p_limit: 0 });
+});
+
+test("view=history returns five validated entries and sends the SQL signature argument", async () => {
+  const fixture = dependencies({ reply: { entries: [historyEntry] } });
+  const result = await handleUsersGet(fixture.deps, new URLSearchParams("view=history&key=qloxz"));
+  assert.deepEqual(result, { status: 200, body: { entries: [historyEntry] } });
+  assert.deepEqual(fixture.calls, [{ fn: "portia_access_history", args: { p_nickname_key: "qloxz" } }]);
+  assert.equal(typeof historyStore.accessHistory, "function");
+  assert.equal((accessRpc as Record<string, string>).history, "portia_access_history");
+
+  const sql = readFileSync(new URL("../supabase/migrations/20261110000000_portia_users_tab.sql", import.meta.url), "utf8");
+  const signature = /create or replace function public\.portia_access_history\(([^)]*)\)/u.exec(sql)?.[1] ?? "";
+  assert.match(signature, /\bp_nickname_key\b/u);
+});
+
+test("history parser rejects overflow, unknown keys and event-incompatible details", () => {
+  assert.equal(typeof historyModel.parseUsersHistory, "function");
+  const parse = historyModel.parseUsersHistory as NonNullable<typeof historyModel.parseUsersHistory>;
+  assert.deepEqual(parse({ entries: [historyEntry] }), [historyEntry]);
+  const invalidReplies = [
+    { entries: Array.from({ length: 6 }, () => historyEntry) },
+    { entries: [{ ...historyEntry, details: { ...historyEntry.details, raw: "secret" } }] },
+    { entries: [{ ...historyEntry, type: "other" }] },
+    { entries: [{ ...historyEntry, at: "not-a-date" }] },
+    { entries: [{ ...historyEntry, actor: 7 }] },
+    { entries: [{ ...historyEntry, details: { level: "2", origin: "sheet", deviceAdded: true } }] },
+    { entries: [{ ...historyEntry, type: "level-change", details: { from: 2 } }] },
+  ];
+  for (const reply of invalidReplies) assert.throws(() => parse(reply), { name: "UsersReplyError" });
+});
+
+test("invalid history keys fail before the RPC and a closed users tab stays denied", async () => {
+  for (const key of ["QLoxz", "a b", "a".repeat(21), ""]) {
+    const fixture = dependencies();
+    assert.deepEqual(await handleUsersGet(fixture.deps, new URLSearchParams({ view: "history", key })), {
+      status: 400,
+      body: { code: "invalid-key" },
+    });
+    assert.equal(fixture.calls.length, 0);
+  }
+  const closedTab = dependencies({ access: { canEdit: true, canManageEditors: false, openTabs: [] } });
+  const deniedHistory = await handleUsersGet(closedTab.deps, new URLSearchParams("view=history&key=qloxz"));
+  assert.equal(deniedHistory.status, 403);
+  assert.equal("code" in deniedHistory.body, false);
+  assert.equal(closedTab.calls.length, 0);
 });
 
 test("an unknown view returns invalid-view without an RPC call", async () => {
