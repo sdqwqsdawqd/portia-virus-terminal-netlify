@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppDeniedPanel, AppFatalPanel, AppSkeleton } from "@/components/portia-desktop-states";
 import { failureFromResponse, type AppFailure } from "@/lib/app-state";
-import { parseUsersList, type UsersList } from "@/lib/users-model";
+import { usersCopy } from "@/lib/users-copy";
+import { parseUsersCount, parseUsersList, type UsersList } from "@/lib/users-model";
+import { originPlaque, pendingBadgeText } from "@/lib/users-view";
 
 type UsersTabProps = {
   visible: boolean;
@@ -70,15 +72,19 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
     <div className="users-tab">
       <p role="status" aria-live="polite" />
       <section aria-labelledby="users-pending-title">
-        <h2 id="users-pending-title" tabIndex={-1}>ЗАЯВКИ · {list.pending.total}</h2>
+        <h2 id="users-pending-title" tabIndex={-1}>{usersCopy.pendingTitle} · {list.pending.total}</h2>
         {list.pending.rows.length === 0 ? (
-          <div className="editor-empty"><strong>Новых заявок нет</strong></div>
+          <div className="editor-empty">
+            <strong>{usersCopy.pendingEmpty.heading}</strong>
+            <p>{usersCopy.pendingEmpty.body}</p>
+          </div>
         ) : (
           <ul className="users-list">
             {list.pending.rows.map((row) => (
               <li className="users-row" key={row.id}>
                 <strong title={row.nickname}>{row.nickname}</strong>
-                <span className="users-plaque warning">ОЖИДАЕТ</span>
+                <span className="users-plaque">{originPlaque(row.origin)}</span>
+                <span className="users-plaque warning">{usersCopy.pendingPlaque}</span>
               </li>
             ))}
           </ul>
@@ -89,13 +95,46 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
 }
 
 export function UsersTabCount({ count }: { count: number | null }) {
-  void count;
-  return null;
+  const text = pendingBadgeText(count);
+  if (text === null || count === null) return null;
+  return <><span className="tab-count" aria-hidden="true">{text}</span><span className="sr-only">{usersCopy.tabPendingSuffix(count)}</span></>;
 }
 
 export function useUsersPendingCount({ enabled, visible, tabActive }: { enabled: boolean; visible: boolean; tabActive: boolean }) {
   const [count, setCount] = useState<number | null>(null);
-  void visible;
-  void tabActive;
-  return { count: enabled ? count : null, report: setCount };
+  const report = useCallback((count: number | null) => {
+    setCount(count);
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) {
+      queueMicrotask(() => setCount(null));
+      return;
+    }
+    let cancelled = false;
+    const publish = (count: number | null) => {
+      if (!cancelled) setCount(count);
+    };
+    const load = async () => {
+      try {
+        const response = await fetch("/api/users?view=count", { cache: "no-store" });
+        if (!response.ok) return publish(null);
+        publish(parseUsersCount(await responseBody(response)));
+      } catch {
+        publish(null);
+      }
+    };
+    queueMicrotask(() => void load());
+    if (!visible) return () => { cancelled = true; };
+    const poll = () => { if (document.visibilityState === "visible") void load(); };
+    const timer = window.setInterval(poll, 30_000);
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", poll);
+    };
+  }, [enabled, visible, tabActive]);
+
+  return { count: enabled ? count : null, report };
 }

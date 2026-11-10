@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { isValidNickname, nicknameKey, NICKNAME_PATTERN, parseNicknameInput, sameNickname } from "./nickname.ts";
@@ -344,8 +344,14 @@ test("SQL contract: the three tables and the journal sequence are closed to API 
   assert.ok(existsSync(migrationPath));
 });
 
-test("visitor behaviour is unchanged: nothing under app/ or components/ uses the access modules or RPCs", () => {
+test("visitor behaviour is unchanged (Phase 22 editor allow-list)", () => {
   const files: string[] = [];
+  const allowed = new Set([
+    "app/api/users/route.ts",
+    "components/portia-users-tab.tsx",
+    "components/portia-editor.tsx",
+  ]);
+  for (const path of allowed) assert.ok(existsSync(join(repoRoot, path)), `${path} must exist`);
   for (const dir of ["app", "components"]) {
     const base = join(repoRoot, dir);
     if (!existsSync(base)) continue;
@@ -357,9 +363,18 @@ test("visitor behaviour is unchanged: nothing under app/ or components/ uses the
   assert.ok(files.length > 0, "expected to scan some app/components files");
   for (const file of files) {
     const text = readFileSync(file, "utf8");
-    assert.doesNotMatch(text, /access-store|access-session|access-levels|\/nickname(\.ts)?["']/, `${file} imports an access module`);
     assert.ok(!text.includes("portia_access_"), `${file} references a portia_access_ RPC`);
+    const path = relative(repoRoot, file).replaceAll("\\", "/");
+    if (!allowed.has(path)) {
+      assert.doesNotMatch(
+        text,
+        /access-store|access-session|access-levels|\/nickname(?:\.ts)?["']|users-(?:api|model|view|copy|time|roster)|portia-users-tab/u,
+        `${path} imports an editor access module`,
+      );
+    }
   }
+  assert.doesNotMatch(readFileSync(join(repoRoot, "components/portia-users-tab.tsx"), "utf8"), /access-store|access-session|users-api|users-roster/u);
+  assert.doesNotMatch(readFileSync(join(repoRoot, "components/portia-editor.tsx"), "utf8"), /@\/lib\/(?:users-|access-)/u);
 });
 
 test("SEC-06: portia_promo_register_attempt is revoked from anon and authenticated, has no caller and is not redefined", () => {

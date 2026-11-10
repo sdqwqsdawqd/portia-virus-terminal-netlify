@@ -10,10 +10,12 @@ export const config = {
   // session on `/` makes the first document depend on Supabase availability.
   // /api/content and /api/employees are left out: their GETs are CDN-cached and
   // must never carry Set-Cookie; their writes refresh the session in the handler.
+  // /api/users is a per-user editor read, so long-lived pollers refresh the session.
   matcher: [
     "/owner-login/:path*",
     "/api/access",
     "/api/editors",
+    "/api/users",
     "/api/uploads",
     "/api/promotion/reviewer/:path*",
     "/api/promotion/banks/:path*",

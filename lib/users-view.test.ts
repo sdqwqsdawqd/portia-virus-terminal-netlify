@@ -32,3 +32,10 @@ test("origin plaque is derived from the shared access label", async () => {
   assert.equal(view.originPlaque?.("sheet"), "ИЗ ТАБЛИЦЫ");
   assert.equal(view.originPlaque?.("outside"), "НЕ ИЗ ТАБЛИЦЫ");
 });
+
+test("users copy keeps the pending empty-state contract outside the component", async () => {
+  const { usersCopy } = await import("./users-copy.ts");
+  assert.equal(usersCopy.tabPendingSuffix(3), ", ожидают: 3");
+  assert.equal(usersCopy.pendingEmpty.heading, "Новых заявок нет");
+  assert.equal(usersCopy.pendingEmpty.body, "Когда посетитель подаст заявку по нику, она появится здесь.");
+});
