@@ -2479,3 +2479,33 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 @media (max-width: 430px) {
   .taskbar-app { max-width: 44px; }
 }
+/* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
+.tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
+.users-tab { display: grid; gap: 24px; min-width: 0; }
+.users-search { margin: 0; }
+.users-tab section, .users-closed { display: grid; gap: 8px; min-width: 0; }
+.users-tab h2, .users-closed > summary { margin: 0; color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .07em; }
+.users-closed > summary { cursor: pointer; }
+.users-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.users-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; padding: 8px 16px; border: 1px solid oklch(.358 calc(.031 * var(--accent-chroma)) var(--accent-hue)); background: rgba(255,255,255,.015); }
+.users-nickname, .users-row-main strong { min-width: 0; overflow: hidden; color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 700 12px/1.35 var(--sans); text-overflow: ellipsis; white-space: nowrap; }
+.users-plaque { padding: 4px 8px; border: 1px solid oklch(.358 calc(.031 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .09em; }
+.users-plaque.warning { border-color: var(--warning); color: var(--warning); }
+.users-plaque.danger { border-color: var(--danger); color: var(--danger); }
+.users-row > a, .users-action-dialog-body a { color: var(--teal); font: 700 11px/1.35 var(--sans); }
+.users-row-caption, .users-moscow-note, .users-truncated { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; margin: 0; color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.35 var(--sans); overflow-wrap: anywhere; }
+.users-row-caption { flex-basis: 100%; }
+.users-phone-row { display: grid; gap: 4px; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
+.users-row-main { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.users-action-dialog-body { max-height: calc(100svh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+.users-action-dialog-body dl { display: grid; gap: 8px; margin: 16px 0; }
+.users-action-dialog-body dl > div { display: grid; gap: 4px; min-width: 0; }
+.users-action-dialog-body dt { color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .07em; }
+.users-action-dialog-body dd { min-width: 0; margin: 0; color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.35 var(--sans); overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .users-closed > summary, .users-phone-row { min-height: 44px; }
+  .users-row { padding: 8px 16px; }
+  .users-row-main strong, .users-row-caption { overflow-wrap: anywhere; white-space: normal; }
+  .users-action-dialog-body .portia-dialog-actions button { width: 100%; min-height: 44px; }
+}
+/* users-tab:end */
