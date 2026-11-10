@@ -1,7 +1,7 @@
-import { accessLevelLabel, accessOriginLabel, type AccessLevel, type AccessOrigin } from "./access-levels.ts";
+import { ACCESS_LEVELS, accessLevelLabel, accessOriginLabel, defaultApprovalLevel, type AccessLevel, type AccessOrigin } from "./access-levels.ts";
 import { usersCopy } from "./users-copy.ts";
 import { formatMoscow } from "./users-time.ts";
-import type { AccessEventType, UsersEvent, UsersList } from "./users-model.ts";
+import type { AccessEventType, UsersClosedRow, UsersEvent, UsersList, UsersPendingRow, UsersPersonRow } from "./users-model.ts";
 
 export function pendingBadgeText(count: number | null): string | null {
   if (count === null || !Number.isInteger(count) || count <= 0) return null;
@@ -60,6 +60,7 @@ type ViewRow = {
   caption: string | null;
   captionAt: string | null;
   pause: string | null;
+  source: UsersPendingRow | UsersPersonRow | UsersClosedRow;
 };
 
 type ViewSection = {
@@ -76,6 +77,53 @@ export type UsersView = {
   emptyKind: "search" | null;
 };
 
+export type UsersControl = "level" | "approve" | "reject" | "setLevel" | "revoke" | "clearCooldown";
+export type UsersVisibleControls = {
+  controls: UsersControl[];
+  caption: string | null;
+  levelDefault: AccessLevel | null;
+  fixedLevelText: string | null;
+};
+
+export function decisionLevelOptions(maximum: AccessLevel = 5): { value: AccessLevel; label: string }[] {
+  return ACCESS_LEVELS.filter((level) => level <= maximum).map((level) => ({ value: level, label: accessLevelLabel(level) }));
+}
+
+export function visibleControls(row: UsersPendingRow | UsersPersonRow | UsersClosedRow, callerIsOwner: boolean): UsersVisibleControls {
+  void callerIsOwner;
+  if ("canDecide" in row) {
+    if (!row.canDecide) {
+      return {
+        controls: [],
+        caption: row.reason === "owner" ? usersCopy.ownerCaption : usersCopy.selfCaption,
+        levelDefault: null,
+        fixedLevelText: null,
+      };
+    }
+    return {
+      controls: row.existingLevel === null ? ["level", "approve", "reject"] : ["approve", "reject"],
+      caption: null,
+      levelDefault: row.existingLevel === null ? defaultApprovalLevel(row.origin) : null,
+      fixedLevelText: row.existingLevel === null ? null : usersCopy.fixedLevel(row.existingLevel),
+    };
+  }
+  return { controls: [], caption: null, levelDefault: null, fixedLevelText: null };
+}
+
+export function resultNote(code: string): string {
+  if (code === "already-decided") return usersCopy.alreadyDecided;
+  if (code === "not-found") return usersCopy.requestNotFound;
+  if (code === "self") return usersCopy.selfCaption;
+  if (code === "owner") return usersCopy.ownerCaption;
+  return usersCopy.actionFailed;
+}
+
+export function successAnnouncement(kind: string, nickname: string, level?: AccessLevel): string {
+  if (kind === "approved" && level !== undefined) return usersCopy.approved(nickname, level);
+  if (kind === "rejected") return usersCopy.rejected(nickname);
+  return usersCopy.actionFailed;
+}
+
 export function buildUsersView(list: UsersList, query: string, now: Date): UsersView {
   const pendingRows: ViewRow[] = list.pending.rows.map((row) => ({
     key: row.id,
@@ -86,6 +134,7 @@ export function buildUsersView(list: UsersList, query: string, now: Date): Users
     caption: formatMoscow(row.createdAt, now) ? `заявка от ${formatMoscow(row.createdAt, now)}` : null,
     captionAt: row.createdAt,
     pause: null,
+    source: row,
   }));
   const peopleRows: ViewRow[] = list.people.rows.map((row) => ({
     key: row.id,
@@ -96,6 +145,7 @@ export function buildUsersView(list: UsersList, query: string, now: Date): Users
     caption: rowCaption(row.lastEvent, now),
     captionAt: row.lastEvent?.at ?? null,
     pause: null,
+    source: row,
   }));
   const closedRows: ViewRow[] = list.closed.rows.map((row) => ({
     key: row.nicknameKey,
@@ -106,6 +156,7 @@ export function buildUsersView(list: UsersList, query: string, now: Date): Users
     caption: rowCaption(row.lastEvent, now),
     captionAt: row.lastEvent?.at ?? row.decidedAt,
     pause: pauseCaption(row.retryAt, now),
+    source: row,
   }));
   const searchEmpty = query.trim() !== "" && list.pending.total === 0 && list.people.total === 0 && list.closed.total === 0;
   return {
