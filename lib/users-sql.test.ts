@@ -5,6 +5,15 @@ import { accessRpc, listAccess, type AccessRpcClient } from "./access-store.ts";
 
 const sql = readFileSync(new URL("../supabase/migrations/20261110000000_portia_users_tab.sql", import.meta.url), "utf8").replace(/\r\n/gu, "\n");
 
+function maskEmailReference(email: string | null) {
+  if (email === null || !email.includes("@")) return null;
+  const [local, ...domainParts] = email.split("@");
+  const domain = domainParts.join("@");
+  return local.length <= 2
+    ? `${local.slice(0, 1)}•••@${domain}`
+    : `${local.slice(0, 1)}•••${local.slice(-1)}@${domain}`;
+}
+
 test("users migration is forward-only and follows the Phase 21 apply order", () => {
   assert.doesNotMatch(sql, /^(begin|commit);$/mu);
   assert.ok(sql.indexOf("20261109000000_portia_access_foundation.sql") < sql.indexOf("then this file"));
@@ -29,6 +38,37 @@ test("access list is revoked before grants and is executable only by authenticat
   const privileged = sql.indexOf("grant execute on function public.portia_access_list(text, integer) to service_role;");
   assert.ok(revoke > 0 && revoke < authenticated && authenticated < privileged);
   assert.doesNotMatch(sql, /grant execute on function public\.portia_access_list\(text, integer\) to anon;/u);
+});
+
+test("email masking is internal and matches the D-05 reference table", () => {
+  assert.deepEqual(
+    ["qloxz@gmail.com", "ab@x.ru", "a@x.ru", "abc@x.ru", "", null, "no-at-sign"].map(maskEmailReference),
+    ["q•••z@gmail.com", "a•••@x.ru", "a•••@x.ru", "a•••c@x.ru", null, null, null],
+  );
+  const definition = sql.split("create or replace function public.portia_access_mask_email(p_email text)")[1];
+  assert.ok(definition, "mask helper must be present");
+  assert.match(definition, /language sql\s+immutable\s+set search_path = ''/u);
+  assert.doesNotMatch(definition.split("as $$")[0], /security definer/u);
+  const body = definition.split("as $$")[1].split("$$;")[0];
+  assert.match(body, /strpos\(p_email, '@'\) = 0/u);
+  assert.match(body, /length\([^)]*local[^)]*\) <= 2/u);
+  assert.match(body, /left\([^,]+, 1\).*'•••'.*right\([^,]+, 1\)/su);
+  const revoke = sql.indexOf("revoke all on function public.portia_access_mask_email(text) from public, anon, authenticated;");
+  const grant = sql.indexOf("grant execute on function public.portia_access_mask_email(text) to service_role;");
+  assert.ok(revoke > 0 && revoke < grant);
+  assert.doesNotMatch(sql, /grant execute on function public\.portia_access_mask_email\(text\) to (?:anon|authenticated);/u);
+});
+
+test("full access list masks actors and mirrors target guard predicates without redefining it", () => {
+  assert.match(sql, /case\s+when public\.portia_is_owner\(\) then [\w.]+email\s+else public\.portia_access_mask_email\([\w.]+email\)/su);
+  assert.match(sql, /requested_by\s*=\s*auth\.uid\(\)/u);
+  assert.match(sql, /account_id\s*=\s*auth\.uid\(\)/u);
+  assert.match(sql, /portia_owner_email\(\)/u);
+  assert.match(sql, /status = 'active'[\s\S]*order by [\w.]+level desc, [\w.]+nickname_key asc/u);
+  assert.match(sql, /order by j\.id desc\s+limit 1/u);
+  assert.match(sql, /interval '1 hour'/u);
+  assert.match(sql, /cooldown_cleared_at is null/u);
+  assert.doesNotMatch(sql, /create or replace function public\.portia_access_target_guard/u);
 });
 
 test("listAccess sends SQL parameter names and the RPC constant is pinned", async () => {
