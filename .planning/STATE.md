@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
 status: executing
-stopped_at: Completed PORTIA-22-02-PLAN.md
-last_updated: "2026-11-10T11:51:30.288Z"
+stopped_at: Completed PORTIA-22-03-PLAN.md
+last_updated: "2026-11-10T13:57:04.000Z"
 last_activity: 2026-11-10
-last_activity_desc: Phase PORTIA-22 execution resumed (wave continue)
-state_head: 5ed8cbed2ddac75caea36b30899501772650d0b3
+last_activity_desc: Completed PORTIA-22-03 full users read model and responsive tab
+state_head: 1150a16a17df952aadcd5b9c10f9374a1d26200d
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — EXECUTING
-Plan: 3 of 10
+Plan: 4 of 10
 Status: Executing Phase PORTIA-22
-Last activity: 2026-11-10 — Phase PORTIA-22 execution resumed (wave continue)
+Last activity: 2026-11-10 — Completed PORTIA-22-03 full users read model and responsive tab
 
 Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 — принятый риск)
 
@@ -55,6 +55,7 @@ Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 �
 |------|----------|-------|-------|
 | Phase PORTIA-22 P01 | 18min | 2 tasks | 23 files |
 | Phase PORTIA-22 P02 | 12m | 2 tasks | 3 files |
+| Phase PORTIA-22 P03 | 1h45m | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -210,6 +211,9 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-22]: Long Russian UI copy stays in lib/users-copy.ts to preserve the frozen component copy inventory.
 - [Phase PORTIA-22]: Radius and tap-target tokens remain declare-only until the owner selects A, B, or C.
 - [Phase PORTIA-22]: UI-01 remains BLOCKED and is not marked complete before the owner decision.
+- [Phase PORTIA-22]: Decision actors are masked inside portia_access_list; the client only renders the server value.
+- [Phase PORTIA-22]: Search responses use a monotonic request epoch so an older refresh cannot replace newer results.
+- [Phase PORTIA-22]: The phone action window reuses the native portia-dialog chrome and returns focus to its row.
 
 ### Pending Todos
 
@@ -263,8 +267,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-10T11:51:30.033Z
-Stopped at: Completed PORTIA-22-02-PLAN.md
+Last session: 2026-11-10T13:57:04.000Z
+Stopped at: Completed PORTIA-22-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
