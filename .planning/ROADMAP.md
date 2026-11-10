@@ -89,12 +89,12 @@ Plans:
   5. Владельцу показаны текстом три направления стиля (A строгий острый, B мягкий «оконный», C смешанный по смыслу) с таблицей значений, выбранное направление записано; токены лежат в коде в нынешних значениях, тест на радиусы фиксирует нынешнее число объявлений, а вид сайта не изменился. [UI-01]
 **Constraints**: если фаза добавляет SQL (RPC списка, решения, уровня, отзыва) — ревью `supabase-rls-reviewer` обязательно; визуальные изменения владельцу описываются текстом и таблицей значений, без галерей `review.html` и без реестра по хэшам. Токены — обычные `:root` CSS-переменные, `portia.css` правится на месте, порядок каскада не переставляется.
 **Acceptance gate**: роли редактора и владельца на живой базе — BLOCKED до staging; выбор направления — решение владельца, не агента.
-**Plans**: 10 plans
+**Plans**: 1/10 plans executed
 **UI hint**: yes
 
 Plans:
 **Wave 1**
-- [ ] 22-01-PLAN.md — tracer: pending requests from portia_access_list through /api/users to the «Пользователи» tab; badge, closable per editor (USR-01, USR-09)
+- [x] 22-01-PLAN.md — tracer: pending requests from portia_access_list through /api/users to the «Пользователи» tab; badge, closable per editor (USR-01, USR-09)
 - [ ] 22-02-PLAN.md — style-token skeleton at today's values, radius pins 129/6, no-change digest; A/B/C presentation, status BLOCKED (UI-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -209,7 +209,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 21. Фундамент доступа: люди, заявки, правила и журнал | 7/7 | In Progress | - |
-| 22. Вкладка «Пользователи» и каркас токенов стиля | 0/0 | Not started | - |
+| 22. Вкладка «Пользователи» и каркас токенов стиля | 1/10 | In Progress | - |
 | 23. Вход по нику, «Повышение» и его регрессии | 0/0 | Not started | - |
 | 24. Уровни допуска и закрытие содержимого | 0/0 | Not started | - |
 | 25. Переключение закрытия: база, кэш, сборка, хранилище | 0/0 | Not started | - |

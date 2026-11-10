@@ -4,17 +4,17 @@ milestone: v1.4
 milestone_name: Доступ и единый стиль
 current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
-status: ready_to_plan
-stopped_at: Phase PORTIA-22 UI-SPEC approved
-last_updated: "2026-11-09T18:18:18.912Z"
-last_activity: 2026-11-09
-last_activity_desc: Phase PORTIA-21 closed as owner-accepted risk (D-72), not PASS
-state_head: 7b5a44598e0b8893582f6e68069a02a68a2c0c4c
+status: executing
+stopped_at: Completed PORTIA-22-01-PLAN.md
+last_updated: "2026-11-10T11:38:26.901Z"
+last_activity: 2026-11-10
+last_activity_desc: Phase PORTIA-22 execution resumed (wave continue)
+state_head: d465f1a89661d1fa647d508fb9f0eaa5a7250f35
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 
 ## Current Position
 
-Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — READY TO EXECUTE
-Plan: not planned
-Status: Phase PORTIA-21 closed as owner-accepted risk (D-72), not PASS
-Last activity: 2026-11-09 — Phase PORTIA-21 UAT: 6 пунктов приняты владельцем без прогона
+Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — EXECUTING
+Plan: 2 of 10
+Status: Executing Phase PORTIA-22
+Last activity: 2026-11-10 — Phase PORTIA-22 execution resumed (wave continue)
 
 Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 — принятый риск)
 
@@ -49,6 +49,11 @@ Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 �
 *Plan counts and velocity begin after Phase 21 planning.*
 
 **Previous milestone (v1.3, closed 2026-11-09 via override):** 6 phases, 134 plans. Per-plan duration table was reset at v1.4 roadmap creation; it remains in the git history of this file and the totals are in `.planning/MILESTONES.md`.
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase PORTIA-22 P01 | 18min | 2 tasks | 23 files |
 
 ## Accumulated Context
 
@@ -199,6 +204,9 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-20]: 20-14 (D-70): UAT ledger records the owner's refusal of device acceptance in his words; verdicts are ПРИНЯТО ВЛАДЕЛЬЦЕМ БЕЗ UAT (D-70), never PASS; 80 steps not checked, MEDIA-01 and PROMO-03 stay BLOCKED on both devices; PORTIA_REQUIRE_UAT=1 stays red (not acceptance); STAB-REL-05..08 and STAB-A11Y-01..04 not marked complete (accepted debt, statuses by 20-15)
 - [Phase PORTIA-20]: 20-15: итог релиза под D-70 — худший из итога раннера и PASS-WITH-OWNER-WAIVERS (на FRC a05a6019e867 — BLOCKED); закрытие фазы «С ПРИНЯТЫМИ ДОЛГАМИ (D-70)» — допуск закрытия, не PASS
 - [Phase PORTIA-20]: 20-15: 21 требование Phase 20 без доказательства на FRC записано Accepted debt (D-70) без галочки; открытые пункты Phase 18/19 — принятые долги по прочтению 20-CONTEXT.md D-70 (4); requirements.mark-complete не запускался
+- [Phase PORTIA-22]: The HTTP route and the directly callable SQL function both enforce the users-tab gate.
+- [Phase PORTIA-22]: Unknown, failed or stale badge counts render no badge; active-tab list responses remain authoritative.
+- [Phase PORTIA-22]: Long Russian UI copy stays in lib/users-copy.ts to preserve the frozen component copy inventory.
 
 ### Pending Todos
 
@@ -252,9 +260,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-09T16:04:54.230Z
-Stopped at: Phase PORTIA-22 UI-SPEC approved
-Resume file: .planning/phases/PORTIA-22-vkladka-polzovateli-i-karkas-tokenov-stilya/22-UI-SPEC.md
+Last session: 2026-11-10T11:38:26.657Z
+Stopped at: Completed PORTIA-22-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
