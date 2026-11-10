@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { UsersList } from "./users-model.ts";
+import type { UsersClosedRow, UsersList, UsersPendingRow, UsersPersonRow } from "./users-model.ts";
 
 type UsersViewModule = {
   pendingBadgeText?: (count: number | null) => string | null;
@@ -17,7 +17,7 @@ type UsersViewModule = {
     closed: { title: string; truncated: boolean };
     emptyKind: string | null;
   };
-  visibleControls?: (row: UsersList["pending"]["rows"][number], callerIsOwner: boolean) => {
+  visibleControls?: (row: UsersPendingRow | UsersPersonRow | UsersClosedRow, callerIsOwner: boolean) => {
     controls: string[];
     caption: string | null;
     levelDefault: number | null;
@@ -141,4 +141,52 @@ test("decision notes and announcements use the frozen Russian copy", async () =>
   assert.equal(view.resultNote?.("unexpected"), "Не удалось выполнить. Проверьте связь и повторите.");
   assert.equal(view.successAnnouncement?.("approved", "Qloxz", 2), "Заявка «Qloxz» одобрена, Уровень 2.");
   assert.equal(view.successAnnouncement?.("rejected", "Qloxz"), "Заявка «Qloxz» отклонена.");
+});
+
+test("clear cooldown is owner only and editors never receive the control", async () => {
+  const view = await usersView();
+  assert.equal(typeof view.visibleControls, "function");
+  const closed: UsersClosedRow = {
+    nickname: "Bob_2",
+    nicknameKey: "bob_2",
+    status: "rejected",
+    decidedAt: "2026-11-10T00:02:00.000Z",
+    retryAt: "2026-11-10T01:02:00.000Z",
+    lastEvent: null,
+  };
+  assert.deepEqual(view.visibleControls?.(closed, false)?.controls, []);
+  assert.deepEqual(view.visibleControls?.(closed, true)?.controls, ["clearCooldown"]);
+  assert.deepEqual(view.visibleControls?.({ ...closed, retryAt: null }, true)?.controls, []);
+});
+
+test("person controls and change/revoke result copy stay server driven", async () => {
+  const view = await usersView();
+  const person: UsersPersonRow = {
+    id: "223e4567-e89b-42d3-a456-426614174000",
+    nickname: "Ada_1",
+    nicknameKey: "ada_1",
+    origin: "outside",
+    level: 3,
+    approvedAt: "2026-11-10T00:01:00.000Z",
+    canSetLevel: true,
+    canRevoke: true,
+    reason: null,
+    lastEvent: null,
+  };
+  assert.deepEqual(view.visibleControls?.(person, false)?.controls, ["level", "setLevel", "revoke"]);
+  assert.deepEqual(view.visibleControls?.({ ...person, canSetLevel: false, canRevoke: false, reason: "owner" }, false), {
+    controls: [],
+    caption: "Владельца изменить нельзя.",
+    levelDefault: null,
+    fixedLevelText: null,
+  });
+  assert.equal(view.resultNote?.("stale"), "Уровень уже изменили. Показан актуальный.");
+  assert.equal(view.resultNote?.("not-active"), "Человек уже не активен. Список обновлён.");
+  assert.equal(view.resultNote?.("already-revoked"), "Уже решено. Строка обновлена.");
+  assert.equal(view.resultNote?.("no-cooldown"), "Пауза уже снята. Список обновлён.");
+  assert.equal(view.resultNote?.("level-change-separate"), "Уровень меняется отдельно. Список обновлён.");
+  assert.equal(view.resultNote?.("level-above-own"), "Нельзя выдать уровень выше своего.");
+  assert.equal(view.successAnnouncement?.("level", "Qloxz", 3), "Уровень «Qloxz»: Уровень 3.");
+  assert.equal(view.successAnnouncement?.("revoked", "Qloxz"), "Доступ «Qloxz» отозван.");
+  assert.equal(view.successAnnouncement?.("cleared", "Qloxz"), "Пауза снята.");
 });

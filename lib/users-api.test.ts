@@ -231,3 +231,49 @@ test("POST request parsing requires JSON and a plain object", async () => {
   const valid = await postModule.parseUsersPostRequest?.(new Request("http://local/api/users", { method: "POST", headers: { "content-type": "application/json; charset=utf-8" }, body: JSON.stringify({ action: "reject", requestId: row.id }) }));
   assert.deepEqual(valid, { body: { action: "reject", requestId: row.id } });
 });
+
+test("set-level sends the expected level and preserves database result codes", async () => {
+  assert.equal(typeof postModule.handleUsersPost, "function");
+  for (const reply of [
+    { code: "updated", level: 4 },
+    { code: "unchanged", level: 3 },
+    { code: "stale", level: 2 },
+    { code: "not-found" },
+    { code: "not-active" },
+  ]) {
+    const fixture = dependencies({ reply });
+    assert.deepEqual(await postModule.handleUsersPost?.(fixture.deps, {
+      action: "set-level",
+      personId: person.id,
+      level: 4,
+      expectedLevel: 3,
+    }), { status: 200, body: reply });
+    assert.deepEqual(fixture.calls[0], { fn: accessRpc.setLevel, args: { p_person_id: person.id, p_level: 4, p_expected_level: 3 } });
+  }
+  const invalid = dependencies();
+  assert.deepEqual(await postModule.handleUsersPost?.(invalid.deps, { action: "set-level", personId: person.id, level: 4 }), {
+    status: 400,
+    body: { code: "invalid-level" },
+  });
+  assert.equal(invalid.calls.length, 0);
+});
+
+test("revoke and owner clear-cooldown dispatch only their Phase 21 RPCs", async () => {
+  assert.equal(typeof postModule.handleUsersPost, "function");
+  for (const reply of [{ code: "revoked" }, { code: "already-revoked" }, { code: "not-found" }]) {
+    const fixture = dependencies({ reply });
+    assert.deepEqual(await postModule.handleUsersPost?.(fixture.deps, { action: "revoke", personId: person.id }), { status: 200, body: reply });
+    assert.deepEqual(fixture.calls[0], { fn: accessRpc.revoke, args: { p_person_id: person.id } });
+  }
+  const editor = dependencies();
+  assert.deepEqual(await postModule.handleUsersPost?.(editor.deps, { action: "clear-cooldown", nicknameKey: closed.nicknameKey }), {
+    status: 403,
+    body: { code: "owner-only" },
+  });
+  assert.equal(editor.calls.length, 0);
+  for (const reply of [{ code: "cleared" }, { code: "no-cooldown" }, { code: "invalid" }]) {
+    const owner = dependencies({ access: { canEdit: true, canManageEditors: true, openTabs: ["users"] }, reply });
+    assert.deepEqual(await postModule.handleUsersPost?.(owner.deps, { action: "clear-cooldown", nicknameKey: closed.nicknameKey }), { status: 200, body: reply });
+    assert.deepEqual(owner.calls[0], { fn: accessRpc.clearCooldown, args: { p_nickname_key: closed.nicknameKey } });
+  }
+});

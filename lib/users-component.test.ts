@@ -101,3 +101,19 @@ test("request decisions use the shared confirmation dialog and honest busy state
   assert.match(component, /tone:\s*"danger"/u);
   assert.match(component, /tone:\s*"secondary"[\s\S]*autoFocus:\s*true/u);
 });
+
+test("person and cooldown actions are available on PC and in the phone action window", () => {
+  assert.match(component, /usersCopy\.setLevel/u);
+  assert.match(component, /usersCopy\.revoke/u);
+  assert.match(component, /usersCopy\.clearCooldown/u);
+  assert.match(component, /usersCopy\.saving/u);
+  assert.match(component, /usersCopy\.revoking/u);
+  assert.match(component, /expectedLevel/u);
+  assert.match(component, /callerIsOwner/u);
+  assert.match(component, /disabled=\{[^}]*level[^}]*===/u);
+  assert.match(component, /usersCopy\.revokeDialog/u);
+  const block = css.slice(css.lastIndexOf("/* users-tab:start"));
+  assert.match(block, /\.users-row-actions[^}]*gap:\s*8px/su);
+  assert.match(block, /\.users-action-note/u);
+  assert.match(block, /@media \(max-width: 900px\)[\s\S]*\.users-action-dialog-body \.users-row-actions[\s\S]*min-height:\s*44px/u);
+});
