@@ -93,3 +93,53 @@ test("listAccess sends SQL parameter names and the RPC constant is pinned", asyn
   assert.deepEqual(Object.keys(called.args ?? {}), ["p_query", "p_limit"]);
   for (const name of Object.keys(called.args ?? {})) assert.match(signature, new RegExp(`\\b${name}\\b`, "u"));
 });
+
+test("history RPC is gated, validates nickname keys and exposes only whitelisted journal details", () => {
+  const definition = sql.split("create or replace function public.portia_access_history(p_nickname_key text)")[1];
+  assert.ok(definition, "history RPC must be present");
+  assert.match(definition, /returns jsonb\s+language plpgsql\s+stable\s+security definer\s+set search_path = ''/u);
+  const body = definition.split("as $$")[1].split("$$;")[0];
+  assert.equal(body.split("begin\n")[1].split("\n")[0].trim(), "if not public.portia_can_edit_tab('users') then raise exception 'forbidden'; end if;");
+  assert.match(body, /public\.portia_access_nickname_key\(p_nickname_key\) is distinct from p_nickname_key/u);
+  assert.match(body, /order by j\.id desc\s+limit 5/u);
+  assert.match(body, /case\s+when public\.portia_is_owner\(\) then [\w.]+email\s+else public\.portia_access_mask_email\([\w.]+email\)/u);
+  assert.match(body, /jsonb_build_object\([\s\S]*'level'[\s\S]*'from'[\s\S]*'to'[\s\S]*'origin'[\s\S]*'deviceAdded'[\s\S]*'previousLevel'[\s\S]*'count'/u);
+  assert.doesNotMatch(body, /'details'\s*,\s*j\.details/u, "raw details jsonb never leaves the RPC");
+
+  const revoke = sql.indexOf("revoke all on function public.portia_access_history(text) from public, anon, authenticated;");
+  const authenticated = sql.indexOf("grant execute on function public.portia_access_history(text) to authenticated;");
+  const privileged = sql.indexOf("grant execute on function public.portia_access_history(text) to service_role;");
+  assert.ok(revoke > 0 && revoke < authenticated && authenticated < privileged);
+});
+
+test("D-07 retention permits only rows older than the newest 20 for the same nickname", () => {
+  const guard = sql.split("create or replace function public.portia_access_journal_append_only()")[1];
+  assert.ok(guard, "the Phase 22 migration redefines the journal guard");
+  assert.doesNotMatch(guard.split("as $$")[0], /security definer/u);
+  const guardBody = guard.split("as $$")[1].split("$$;")[0];
+  assert.match(guardBody, /tg_op = 'DELETE'/u);
+  assert.match(guardBody, /nickname_key = old\.nickname_key[\s\S]*order by [\w.]+id desc[\s\S]*offset 19 limit 1/u);
+  assert.match(guardBody, /old\.id < /u);
+  assert.match(guardBody, /return old/u);
+  assert.match(guardBody, /raise exception 'journal-append-only'/u);
+
+  const prune = sql.split("create or replace function public.portia_access_journal_prune()")[1];
+  assert.ok(prune, "bounded prune function must be present");
+  assert.match(prune.split("as $$")[0], /security definer/u);
+  const pruneBody = prune.split("as $$")[1].split("$$;")[0];
+  assert.match(pruneBody, /delete from public\.portia_access_journal/u);
+  assert.match(pruneBody, /nickname_key = new\.nickname_key[\s\S]*offset 19 limit 1/u);
+  assert.match(pruneBody, /return null/u);
+  assert.match(sql, /drop trigger if exists portia_access_journal_prune on public\.portia_access_journal;/u);
+  assert.match(sql, /create trigger portia_access_journal_prune after insert on public\.portia_access_journal for each row execute function public\.portia_access_journal_prune\(\);/u);
+});
+
+test("Phase 22 history and retention do not widen journal table privileges or redefine decision RPCs", () => {
+  const code = sql.replace(/--[^\n]*/gu, "");
+  assert.doesNotMatch(code, /grant\s+(?:delete|update|truncate|trigger|all)[^;]*on (?:table )?public\.portia_access_journal/iu);
+  assert.doesNotMatch(code, /create table/iu);
+  for (const name of ["decide", "set_level", "revoke", "clear_cooldown", "target_guard"]) {
+    assert.doesNotMatch(code, new RegExp(`create or replace function public\\.portia_access_${name}\\b`, "u"));
+  }
+  assert.doesNotMatch(code, /create trigger portia_access_journal_(?:append_only|no_truncate)\b/u);
+});

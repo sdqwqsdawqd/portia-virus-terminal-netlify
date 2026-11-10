@@ -125,7 +125,7 @@ test("the golden still parses and carries the platform function next to every ef
   assert.equal(golden.pg_major, 17);
   const counts = inventory(canonicalize(golden));
   assert.equal(counts.functions, 1 + effectiveFunctions.size, "golden functions = rls_auto_enable + effective portia_* functions");
-  assert.equal(counts.triggers, 2, "two triggers: the journal append-only guards (rows, truncate)");
+  assert.equal(counts.triggers, 3, "three triggers: journal row guard, truncate guard and bounded prune");
 });
 
 test("function set: the golden lists exactly the effective portia_* functions of all migrations (and the platform function)", () => {
@@ -327,15 +327,20 @@ test("golden indexes: primary keys, unique constraints and every explicit create
   assert.deepEqual(sortC(goldenKeys), sortC(expected.keys()));
 });
 
-test("golden triggers: the journal append-only guards, before update or delete (rows) and before truncate (statement), enabled", () => {
-  const rowGuard = /^create trigger (\w+) before update or delete on public\.(\w+) for each row execute function public\.(\w+)\(\);/mu.exec(accessText);
+test("golden triggers: every migration contributes the two journal guards and bounded prune, enabled", () => {
+  const allMigrationText = [...migrationTexts.values()].join("\n");
+  const rowGuard = /^create trigger (\w+) before update or delete on public\.(\w+) for each row execute function public\.(\w+)\(\);/mu.exec(allMigrationText);
   assert.ok(rowGuard, "row trigger statement in the migration");
   assert.equal(rowGuard[1], rowGuard[3], "trigger and function share a name");
-  const truncateGuard = /^create trigger (\w+) before truncate on public\.(\w+) for each statement execute function public\.(\w+)\(\);/mu.exec(accessText);
+  const truncateGuard = /^create trigger (\w+) before truncate on public\.(\w+) for each statement execute function public\.(\w+)\(\);/mu.exec(allMigrationText);
   assert.ok(truncateGuard, "truncate trigger statement in the migration (RLS21-03)");
   assert.equal(truncateGuard[2], rowGuard[2], "both guards sit on the journal");
   assert.equal(truncateGuard[3], rowGuard[3], "both guards run the same append-only function");
-  assert.deepEqual(sortC(Object.keys(sections.triggers)), sortC([`${rowGuard[2]}.${rowGuard[1]}`, `${truncateGuard[2]}.${truncateGuard[1]}`]));
+  const prune = /^create trigger (\w+) after insert on public\.(\w+) for each row execute function public\.(\w+)\(\);/mu.exec(allMigrationText);
+  assert.ok(prune, "bounded prune trigger statement in the Phase 22 migration");
+  assert.equal(prune[1], prune[3], "prune trigger and function share a name");
+  assert.equal(prune[2], rowGuard[2], "all three triggers sit on the journal");
+  assert.deepEqual(sortC(Object.keys(sections.triggers)), sortC([`${rowGuard[2]}.${rowGuard[1]}`, `${truncateGuard[2]}.${truncateGuard[1]}`, `${prune[2]}.${prune[1]}`]));
   assert.deepEqual(sections.triggers[`${rowGuard[2]}.${rowGuard[1]}`], {
     def: `CREATE TRIGGER ${rowGuard[1]} BEFORE DELETE OR UPDATE ON public.${rowGuard[2]} FOR EACH ROW EXECUTE FUNCTION ${rowGuard[3]}()`,
     enabled: "O",
@@ -344,7 +349,12 @@ test("golden triggers: the journal append-only guards, before update or delete (
     def: `CREATE TRIGGER ${truncateGuard[1]} BEFORE TRUNCATE ON public.${truncateGuard[2]} FOR EACH STATEMENT EXECUTE FUNCTION ${truncateGuard[3]}()`,
     enabled: "O",
   });
+  assert.deepEqual(sections.triggers[`${prune[2]}.${prune[1]}`], {
+    def: `CREATE TRIGGER ${prune[1]} AFTER INSERT ON public.${prune[2]} FOR EACH ROW EXECUTE FUNCTION ${prune[3]}()`,
+    enabled: "O",
+  });
   assert.ok(sections.functions[`public.${rowGuard[3]}()`], "the trigger function is in the golden");
+  assert.ok(sections.functions[`public.${prune[3]}()`], "the prune trigger function is in the golden");
 });
 
 test("no policy was added: the Phase 21 tables are RPC only", () => {

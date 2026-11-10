@@ -136,6 +136,8 @@ test("D-07 every decision branch appends exactly one journal row with its event 
   assert.ok(levelChange.includes("'from'") && levelChange.includes("'to'"), "level-change details carry from and to");
 });
 
+// This test describes the frozen Phase 21 file. 20261110000000_portia_users_tab.sql amends DELETE per Phase 22 D-07;
+// lib/users-sql.test.ts proves the bounded retention exception while UPDATE and all other DELETEs stay forbidden.
 test("D-07 the journal cannot be updated or deleted: BEFORE UPDATE OR DELETE trigger raises journal-append-only", () => {
   const { header, body } = functionParts("portia_access_journal_append_only");
   assert.ok(/returns trigger/.test(header) && /language plpgsql/.test(header));
