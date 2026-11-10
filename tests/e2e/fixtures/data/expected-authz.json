@@ -1920,6 +1920,40 @@
       }
     },
     {
+      "key": "public.portia_access_history(p_nickname_key text)",
+      "name": "portia_access_history",
+      "identity": "p_nickname_key text",
+      "args": {
+        "p_nickname_key": "p21_{digits}_{n}"
+      },
+      "creates_rows": false,
+      "kind": "users-editor",
+      "cells": {
+        "anon": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:250" },
+        "outsider": { "outcome": "forbidden", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:218" },
+        "editor-full": { "outcome": "allow", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:251" },
+        "editor-restricted": { "outcome": "allow", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:251" },
+        "promo-reviewer": { "outcome": "allow", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:251" },
+        "owner": { "outcome": "allow", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:251" }
+      }
+    },
+    {
+      "key": "public.portia_access_journal_prune()",
+      "name": "portia_access_journal_prune",
+      "identity": "",
+      "args": {},
+      "creates_rows": false,
+      "kind": "internal",
+      "cells": {
+        "anon": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:299" },
+        "outsider": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:299" },
+        "editor-full": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:299" },
+        "editor-restricted": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:299" },
+        "promo-reviewer": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:299" },
+        "owner": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:299" }
+      }
+    },
+    {
       "key": "public.portia_access_list(p_query text, p_limit integer)",
       "name": "portia_access_list",
       "identity": "p_query text, p_limit integer",

@@ -2485,6 +2485,20 @@
         "src_sha256": "9f1e8941f5ba13003317c43708a96b764733c9e9a07265fed8c6f4014017e1e1",
         "volatility": "v"
       },
+      "public.portia_access_history(p_nickname_key text)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "e70deb47a0666575007b80c22d2bef93aa4a8b85ca5e1d7c79e97cfad133e5e3",
+        "volatility": "s"
+      },
       "public.portia_access_journal_append_only()": {
         "acl": [
           "service_role:EXECUTE"
@@ -2495,7 +2509,20 @@
         "kind": "f",
         "returns": "trigger",
         "secdef": false,
-        "src_sha256": "03077c03837e4b8bb258da5b3fce65f1823348f0316c677260ea180017f0d23c",
+        "src_sha256": "d87f99c5792842fc656a309117e90aa41c544f1dea2dc522251fe4a1561c5ea6",
+        "volatility": "v"
+      },
+      "public.portia_access_journal_prune()": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "trigger",
+        "secdef": true,
+        "src_sha256": "61cfc6d5929d28ec86f75d3735906fa29a63b61d72fbd79d807cb1f18508bd40",
         "volatility": "v"
       },
       "public.portia_access_list(p_query text, p_limit integer)": {
@@ -4100,6 +4127,10 @@
       },
       "portia_access_journal.portia_access_journal_no_truncate": {
         "def": "CREATE TRIGGER portia_access_journal_no_truncate BEFORE TRUNCATE ON public.portia_access_journal FOR EACH STATEMENT EXECUTE FUNCTION portia_access_journal_append_only()",
+        "enabled": "O"
+      },
+      "portia_access_journal.portia_access_journal_prune": {
+        "def": "CREATE TRIGGER portia_access_journal_prune AFTER INSERT ON public.portia_access_journal FOR EACH ROW EXECUTE FUNCTION portia_access_journal_prune()",
         "enabled": "O"
       }
     }

@@ -202,3 +202,102 @@ end; $$;
 revoke all on function public.portia_access_list(text, integer) from public, anon, authenticated;
 grant execute on function public.portia_access_list(text, integer) to authenticated;
 grant execute on function public.portia_access_list(text, integer) to service_role;
+
+-- c. Last five journal entries for one nickname. The RPC owns masking and detail-key whitelisting so a direct caller
+-- cannot recover another editor's full email or the raw details object.
+create or replace function public.portia_access_history(p_nickname_key text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  history_rows jsonb;
+begin
+  if not public.portia_can_edit_tab('users') then raise exception 'forbidden'; end if;
+  if p_nickname_key is null or public.portia_access_nickname_key(p_nickname_key) is distinct from p_nickname_key then
+    return jsonb_build_object('entries', '[]'::jsonb);
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'type', rows.event_type,
+    'at', rows.created_at,
+    'actor', case when public.portia_is_owner() then rows.actor_email
+      else public.portia_access_mask_email(rows.actor_email) end,
+    'details', jsonb_strip_nulls(jsonb_build_object(
+      'level', rows.details -> 'level',
+      'from', rows.details -> 'from',
+      'to', rows.details -> 'to',
+      'origin', rows.details -> 'origin',
+      'deviceAdded', rows.details -> 'deviceAdded',
+      'previousLevel', rows.details -> 'previousLevel',
+      'count', rows.details -> 'count'
+    ))
+  ) order by rows.id desc), '[]'::jsonb) into history_rows
+  from (
+    select j.id, j.event_type, j.created_at, j.details, actor_user.email as actor_email
+    from public.portia_access_journal j
+    left join auth.users actor_user on actor_user.id = j.actor_id
+    where j.nickname_key = p_nickname_key
+    order by j.id desc
+    limit 5
+  ) rows;
+
+  return jsonb_build_object('entries', history_rows);
+end; $$;
+
+revoke all on function public.portia_access_history(text) from public, anon, authenticated;
+grant execute on function public.portia_access_history(text) to authenticated;
+grant execute on function public.portia_access_history(text) to service_role;
+
+-- d. D-07 bounded retention (owner decision 2026-11-09). This becomes one-way after apply: rows older than the
+-- newest 20 for a nickname cannot be restored. The table owner can still disable triggers (residual RLS21-03).
+create or replace function public.portia_access_journal_append_only()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  cutoff_id bigint;
+begin
+  if tg_op = 'DELETE' then
+    select j.id into cutoff_id
+    from public.portia_access_journal j
+    where j.nickname_key = old.nickname_key
+    order by j.id desc
+    offset 19 limit 1;
+    if cutoff_id is not null and old.id < cutoff_id then
+      return old;
+    end if;
+  end if;
+  raise exception 'journal-append-only';
+end; $$;
+
+revoke all on function public.portia_access_journal_append_only() from public, anon, authenticated;
+grant execute on function public.portia_access_journal_append_only() to service_role;
+
+create or replace function public.portia_access_journal_prune()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  delete from public.portia_access_journal j
+  where j.nickname_key = new.nickname_key
+    and j.id < (
+      select boundary.id
+      from public.portia_access_journal boundary
+      where boundary.nickname_key = new.nickname_key
+      order by boundary.id desc
+      offset 19 limit 1
+    );
+  return null;
+end; $$;
+
+revoke all on function public.portia_access_journal_prune() from public, anon, authenticated;
+grant execute on function public.portia_access_journal_prune() to service_role;
+
+drop trigger if exists portia_access_journal_prune on public.portia_access_journal;
+create trigger portia_access_journal_prune after insert on public.portia_access_journal for each row execute function public.portia_access_journal_prune();

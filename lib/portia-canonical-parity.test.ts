@@ -30,7 +30,7 @@ const migrationHashes: Record<string, string> = {
   // forward-only migration with its own version; this pin must not be re-pinned.
   "20261109000000_portia_access_foundation.sql": "a2c69408a3e4ac3ce99c231bda5b267f7734a235778df5c8da6786ff82334f7e",
   // The Phase 22 migration is re-pinned by each Phase 22 plan that edits it and frozen by plan 22-09.
-  "20261110000000_portia_users_tab.sql": "ec46a4af487407730164b8fd57872ada0315793e525f02ac5ad05772f9adfaee",
+  "20261110000000_portia_users_tab.sql": "12e5a8247f4bed8f2e158521892b0a4c0e2177652af4f6168de1b777bdf0dcb6",
 };
 
 const baselineName = "20261101000000_portia_baseline.sql";
