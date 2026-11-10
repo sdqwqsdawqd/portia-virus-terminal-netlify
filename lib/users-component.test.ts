@@ -8,6 +8,7 @@ const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const componentPath = join(repoRoot, "components", "portia-users-tab.tsx");
 const component = readFileSync(new URL("../components/portia-users-tab.tsx", import.meta.url), "utf8");
 const proxy = readFileSync(new URL("../proxy.ts", import.meta.url), "utf8");
+const css = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8").replace(/\r\n/gu, "\n");
 
 function dependencyClosure(path: string, seen = new Set<string>()): Set<string> {
   const resolved = normalize(path);
@@ -52,4 +53,36 @@ test("users component keeps access internals behind its API route", () => {
 
 test("proxy refreshes the editor session for users polling", () => {
   assert.match(proxy, /"\/api\/users"/u);
+});
+
+test("full users component has search, closed details, accessible phone dialog and stale refresh", () => {
+  assert.match(component, /type="search"/u);
+  assert.match(component, /maxLength=\{20\}/u);
+  assert.match(component, /autoComplete="off"/u);
+  assert.match(component, /autoCapitalize="off"/u);
+  assert.match(component, /spellCheck=\{false\}/u);
+  assert.match(component, /300/u);
+  assert.match(component, /<details/u);
+  assert.doesNotMatch(component, /<details[^>]*\sopen/u);
+  assert.match(component, /aria-haspopup="dialog"/u);
+  assert.match(component, /<dialog[\s\S]*className="portia-dialog"/u);
+  assert.match(component, /target="_blank"/u);
+  assert.match(component, /rel="noopener noreferrer"/u);
+  assert.match(component, /<time dateTime=/u);
+  assert.match(component, /AppStaleBanner/u);
+  assert.doesNotMatch(component, /toLocaleString|Intl\./u);
+});
+
+test("users CSS is one sharp marked block at the end", () => {
+  const start = css.lastIndexOf("/* users-tab:start");
+  assert.ok(start > 0, "users-tab CSS block must exist");
+  const block = css.slice(start);
+  assert.ok(css.trimEnd().endsWith("/* users-tab:end */"));
+  assert.match(block, /\.tab-count/u);
+  assert.match(block, /padding:\s*0 8px/u);
+  assert.match(block, /min-width:\s*24px/u);
+  assert.match(block, /margin-left:\s*8px/u);
+  assert.match(block, /var\(--mono\)/u);
+  assert.match(block, /var\(--warning\)/u);
+  assert.doesNotMatch(block, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:|--muted|oklch\(\.559/u);
 });
