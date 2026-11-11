@@ -535,7 +535,6 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
     void postAction(context, "approve", {
       action: "approve",
       requestId: context.row.source.id,
-      nicknameKey: context.row.source.nicknameKey,
       ...(level === undefined ? {} : { level }),
     });
   }, [postAction]);

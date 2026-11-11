@@ -152,7 +152,8 @@ test("owner bulk approval is sequential, safe by default and keeps the three-num
   assert.match(component, /data-autofocus[\s\S]*autoFocus/u);
   assert.match(component, /bulkRunning[\s\S]*event\.preventDefault/u);
   assert.match(component, /aria-live="polite"/u);
-  assert.match(component, /nicknameKey:\s*context\.row\.source\.nicknameKey/u);
+  const singleApprove = component.slice(component.indexOf("const approve ="), component.indexOf("const requestReject"));
+  assert.doesNotMatch(singleApprove, /nicknameKey/u, "single approve must not send a client-selected roster key");
   const bulkRun = component.slice(component.indexOf("const approveBulk"), component.indexOf("if (denied)"));
   assert.doesNotMatch(bulkRun, /Promise\.all/u);
 });

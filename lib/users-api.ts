@@ -30,7 +30,7 @@ export const USERS_POST_MAX_BYTES = 16_384;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export type UsersAction =
-  | { action: "approve"; requestId: string; level?: AccessLevel; bulk?: true; nicknameKey?: string }
+  | { action: "approve"; requestId: string; level?: AccessLevel; bulk?: true }
   | { action: "reject"; requestId: string }
   | { action: "set-level"; personId: string; level: AccessLevel; expectedLevel: AccessLevel }
   | { action: "revoke"; personId: string }
@@ -71,15 +71,12 @@ export function parseUsersAction(body: Record<string, unknown>): UsersActionPars
     if (action === "approve") {
       if (body.level !== undefined && !isAccessLevel(body.level)) return { error: "invalid-level" };
       if (body.bulk !== undefined && body.bulk !== true) return { error: "invalid-body" };
-      if (body.nicknameKey !== undefined && (typeof body.nicknameKey !== "string" || nicknameKey(body.nicknameKey) !== body.nicknameKey)) {
-        return { error: "invalid-body" };
-      }
+      if (body.nicknameKey !== undefined) return { error: "invalid-body" };
       return { action: {
         action,
         requestId: body.requestId,
         ...(body.level === undefined ? {} : { level: body.level }),
         ...(body.bulk === true ? { bulk: true as const } : {}),
-        ...(typeof body.nicknameKey === "string" ? { nicknameKey: body.nicknameKey } : {}),
       } };
     }
     return { action: { action, requestId: body.requestId } };
@@ -205,21 +202,12 @@ export async function handleUsersPost(deps: UsersApiDeps, body: Record<string, u
         });
         return { status: 200, body: { ...result, tableMark: "yes" } };
       }
-      const roster = parsed.action.action === "approve" ? await rosterFor(deps, 0) : null;
       const result = await decideAccessRequest(deps.client, {
         requestId: parsed.action.requestId,
         decision: parsed.action.action,
         ...(parsed.action.action === "approve" && parsed.action.level !== undefined ? { level: parsed.action.level } : {}),
       });
-      return {
-        status: 200,
-        body: {
-          ...result,
-          ...(parsed.action.action === "approve"
-            ? { tableMark: parsed.action.nicknameKey ? tableMarkFor(parsed.action.nicknameKey, roster as UsersRoster) : "unknown" }
-            : {}),
-        },
-      };
+      return { status: 200, body: { ...result } };
     }
     if (parsed.action.action === "set-level") {
       const result = await setAccessLevel(deps.client, {

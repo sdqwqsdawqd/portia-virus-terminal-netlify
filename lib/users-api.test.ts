@@ -237,7 +237,7 @@ test("USR-07 already-decided is a 200 result code and is never retried", async (
     requestId: row.id,
     level: 2,
   });
-  assert.deepEqual(result, { status: 200, body: { code: "already-decided", status: "approved", tableMark: "unknown" } });
+  assert.deepEqual(result, { status: 200, body: { code: "already-decided", status: "approved" } });
   assert.deepEqual(fixture.calls, [{ fn: accessRpc.decide, args: { p_request_id: row.id, p_decision: "approve", p_level: 2 } }]);
 });
 
@@ -246,7 +246,7 @@ test("approve validates the optional level and sends null for an existing person
   const withoutLevel = dependencies({ reply: { code: "approved", personId: person.id, level: 4 } });
   assert.deepEqual(await postModule.handleUsersPost?.(withoutLevel.deps, { action: "approve", requestId: row.id }), {
     status: 200,
-    body: { code: "approved", personId: person.id, level: 4, tableMark: "unknown" },
+    body: { code: "approved", personId: person.id, level: 4 },
   });
   assert.deepEqual(withoutLevel.calls[0], { fn: accessRpc.decide, args: { p_request_id: row.id, p_decision: "approve", p_level: null } });
 
@@ -264,6 +264,7 @@ test("decision POST rejects malformed bodies and maps database guards", async ()
   assert.equal(typeof postModule.handleUsersPost, "function", "handleUsersPost must exist");
   for (const body of [
     { action: "approve", requestId: "not-a-uuid", level: 2 },
+    { action: "approve", requestId: row.id, level: 2, nicknameKey: row.nicknameKey },
     { action: "other", requestId: row.id },
   ]) {
     const invalid = dependencies();
@@ -496,7 +497,7 @@ test("view=bulk is owner-only, uses all SQL candidates and separates eligible na
   assert.deepEqual(owner.calls, [{ fn: accessRpc.bulkCandidates, args: {} }]);
 });
 
-test("D-10 single approval survives a degraded fresh roster read", async () => {
+test("single approval never accepts or queries a client-selected roster nickname", async () => {
   let rosterCalls = 0;
   const fixture = dependencies({
     reply: { code: "approved", personId: person.id, level: 2 },
@@ -509,9 +510,8 @@ test("D-10 single approval survives a degraded fresh roster read", async () => {
     action: "approve",
     requestId: row.id,
     level: 2,
-    nicknameKey: row.nicknameKey,
-  }), { status: 200, body: { code: "approved", personId: person.id, level: 2, tableMark: "unknown" } });
-  assert.equal(rosterCalls, 1);
+  }), { status: 200, body: { code: "approved", personId: person.id, level: 2 } });
+  assert.equal(rosterCalls, 0);
   assert.deepEqual(fixture.calls.map((call) => call.fn), [accessRpc.decide]);
 });
 
