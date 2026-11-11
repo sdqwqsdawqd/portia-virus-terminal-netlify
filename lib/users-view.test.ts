@@ -76,6 +76,11 @@ test("Europe/Moscow formatter is device-independent and adds a different year", 
 
 test("history lines carry the event verb, safe details, actor and Moscow time", async () => {
   const view = await usersView();
+  const { usersCopy } = await import("./users-copy.ts");
+  assert.equal(usersCopy.history, "ИСТОРИЯ");
+  assert.equal(usersCopy.hideHistory, "СКРЫТЬ ИСТОРИЮ");
+  assert.equal(usersCopy.historyHeading, "Последние 5 записей");
+  assert.equal(usersCopy.historyEmpty, "Записей пока нет.");
   assert.equal(typeof view.historyLine, "function", "historyLine must exist");
   const now = new Date("2026-11-09T12:00:00Z");
   assert.equal(

@@ -1,7 +1,7 @@
 import { ACCESS_LEVELS, accessLevelLabel, accessOriginLabel, defaultApprovalLevel, type AccessLevel, type AccessOrigin } from "./access-levels.ts";
 import { usersCopy } from "./users-copy.ts";
 import { formatMoscow } from "./users-time.ts";
-import type { AccessEventType, UsersClosedRow, UsersEvent, UsersList, UsersPendingRow, UsersPersonRow } from "./users-model.ts";
+import type { AccessEventType, UsersClosedRow, UsersEvent, UsersHistoryEntry, UsersList, UsersPendingRow, UsersPersonRow } from "./users-model.ts";
 
 export function pendingBadgeText(count: number | null): string | null {
   if (count === null || !Number.isInteger(count) || count <= 0) return null;
@@ -28,6 +28,15 @@ export function rowCaption(event: UsersEvent | null, now: Date): string | null {
   const time = formatMoscow(event.at, now);
   if (!time) return null;
   return `${eventVerb(event.type)} ${event.actor ?? usersCopy.unknownActor} · ${time}`;
+}
+
+export function historyLine(entry: UsersHistoryEntry, now: Date): string | null {
+  const time = formatMoscow(entry.at, now);
+  if (!time) return null;
+  const verb = entry.type === "level-change"
+    ? `${eventVerb(entry.type)} ${entry.details.from} → ${entry.details.to}`
+    : eventVerb(entry.type);
+  return `${verb} · ${entry.actor ?? usersCopy.unknownActor} · ${time} МСК`;
 }
 
 export function levelPlaque(level: AccessLevel): string {

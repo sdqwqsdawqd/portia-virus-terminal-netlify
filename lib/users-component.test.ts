@@ -123,7 +123,7 @@ test("history stays open across list refresh and reloads by nicknameKey", () => 
   assert.match(component, /view=history&key=/u);
   assert.match(component, /openHistoryKeys/u);
   assert.match(component, /setOpenHistoryKeys/u);
-  assert.match(component, /\[\.\.\.openHistoryKeys\][\s\S]*loadHistory/u);
+  assert.match(component, /\[\.\.\.openHistoryKeys(?:Ref\.current)?\][\s\S]*loadHistory/u);
   assert.match(component, /row\.source\.nicknameKey/u);
   assert.doesNotMatch(component, /setOpenHistoryKeys\(new Set\(\)\)/u, "list refresh must not close history panels");
 });
