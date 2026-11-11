@@ -89,7 +89,7 @@ Plans:
   5. Владельцу показаны текстом три направления стиля (A строгий острый, B мягкий «оконный», C смешанный по смыслу) с таблицей значений, выбранное направление записано; токены лежат в коде в нынешних значениях, тест на радиусы фиксирует нынешнее число объявлений, а вид сайта не изменился. [UI-01]
 **Constraints**: если фаза добавляет SQL (RPC списка, решения, уровня, отзыва) — ревью `supabase-rls-reviewer` обязательно; визуальные изменения владельцу описываются текстом и таблицей значений, без галерей `review.html` и без реестра по хэшам. Токены — обычные `:root` CSS-переменные, `portia.css` правится на месте, порядок каскада не переставляется.
 **Acceptance gate**: роли редактора и владельца на живой базе — BLOCKED до staging; выбор направления — решение владельца, не агента.
-**Plans**: 6/10 plans executed
+**Plans**: 7/10 plans executed
 **UI hint**: yes
 
 Plans:
@@ -110,7 +110,7 @@ Plans:
 - [x] 22-06-PLAN.md — «в таблице» mark at decision time and owner bulk approval with level 2 (USR-02, USR-08)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 22-07-PLAN.md — mocked browser lane: phone width 320/390/900, 20-char search (BLOCKED (ENV) if it cannot run)
+- [x] 22-07-PLAN.md — mocked browser lane: phone width 320/390/900, 20-char search (browser run BLOCKED (ENV); contracts type-check)
 - [ ] 22-08-PLAN.md — supabase-rls-reviewer review with fix-and-rereview loop to zero blocking findings
 
 **Wave 7** *(blocked on Wave 6 completion)*

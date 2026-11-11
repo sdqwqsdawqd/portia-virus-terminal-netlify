@@ -5,11 +5,11 @@ milestone_name: Доступ и единый стиль
 current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
 status: executing
-stopped_at: Completed PORTIA-22-06-PLAN.md
-last_updated: "2026-11-11T17:30:00.000Z"
+stopped_at: Completed PORTIA-22-07-PLAN.md
+last_updated: "2026-11-11T17:43:00.000Z"
 last_activity: 2026-11-11
-last_activity_desc: Completed PORTIA-22-06 staff roster marks and confirmed bulk approval
-state_head: 6079251ab550e0b4b5c318c92dceae3588b7a6d5
+last_activity_desc: Completed PORTIA-22-07 mocked responsive users backstops; browser lane BLOCKED (ENV)
+state_head: 06d22fbb7c9e14190f210194aff5e9740b50db8c
 progress:
   total_phases: 7
   completed_phases: 1
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — EXECUTING
-Plan: 7 of 10
+Plan: 8 of 10
 Status: Executing Phase PORTIA-22
-Last activity: 2026-11-11 — Completed PORTIA-22-06 staff roster marks and confirmed bulk approval
+Last activity: 2026-11-11 — Completed PORTIA-22-07 mocked responsive users backstops; browser lane BLOCKED (ENV)
 
-Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 — принятый риск)
+Progress: [█░░░░░░░░░] 14% (1/7 phases, 8 plans; Phase 21 — принятый риск)
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 �
 | Phase PORTIA-22 P04 | 32m | 2 tasks | 11 files |
 | Phase PORTIA-22 P05 | 21h23m | 3 tasks | 20 files |
 | Phase PORTIA-22 P06 | 5h40m | 3 tasks | 19 files |
+| Phase PORTIA-22 P07 | 12m | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -225,6 +226,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-22]: Only successful roster reads enter the 20-second list cache; every approval reads the roster fresh.
 - [Phase PORTIA-22]: Bulk eligibility is owner-only at both HTTP and SQL boundaries and covers all pending sheet requests, not the 50-row display slice.
 - [Phase PORTIA-22]: Bulk approval is a confirmed sequential loop of ordinary level-2 decisions, each independently re-authorized and re-matched.
+- [Phase PORTIA-22]: The responsive users backstop is fully mocked and aborts every non-GET request; blocked Playwright preflight is recorded as BLOCKED (ENV), never PASS.
 
 ### Pending Todos
 
@@ -278,10 +280,10 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-11T17:30:00.000Z
-Stopped at: Completed PORTIA-22-06-PLAN.md
+Last session: 2026-11-11T17:43:00.000Z
+Stopped at: Completed PORTIA-22-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
 
-- Phase 22: continue with `22-07-PLAN.md`; do not apply migrations, and keep live PostgreSQL/RLS, authenticated roles and devices BLOCKED until their designated proof phases.
+- Phase 22: continue with `22-08-PLAN.md`; keep the 22-07 browser lane BLOCKED (ENV), do not apply migrations, and keep live PostgreSQL/RLS, authenticated roles and devices BLOCKED until their designated proof phases.

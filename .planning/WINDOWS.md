@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 7
+open_count: 9
 waived_count: 0
 fixed_count: 1
-total_count: 8
-last_updated: 2026-11-10T07:39:20.893Z
+total_count: 10
+last_updated: 2026-11-11T17:44:46.360Z
 ---
 
 # Broken Windows Ledger
@@ -23,6 +23,8 @@ last_updated: 2026-11-10T07:39:20.893Z
 | 6 | 20 | unmet-truth | tests/e2e/specs/accessibility.spec.ts |  | 20-07 not proven without a device: screen-reader announcements (nested aria-live/alert in Promotion shell), hardware keyboard and virtual-keyboard occlusion on a physical phone, physical reduced/off motion verdict (STAB-A11Y-04) belong to 20-14 | open |  | 2026-11-04T09:58:59.402Z |  |
 | 7 | PORTIA-20 | unrun-verify | tests/e2e/specs/editor-layout.spec.ts |  | 20-22 editor columns, keyboard/pointer move across columns, pinned add bar and private note: staging scenarios BLOCKED (ENV); notes steps BLOCKED (OWNER, migration 20261104000100 not applied) | open |  | 2026-11-04T10:35:01.351Z |  |
 | 8 | PORTIA-22 | lint-warning | components/portia-editor.tsx | 300 | Three pre-existing no-img-element warnings remain outside plan 22-01 | open |  | 2026-11-10T07:39:20.893Z |  |
+| 9 | 22 | unrun-verify | tests/e2e/specs/users-tab.spec.ts |  | Playwright users-tab responsive lane BLOCKED (ENV): production-target preflight stopped before test discovery | open |  | 2026-11-11T17:44:45.043Z |  |
+| 10 | 22 | unrun-verify | tests/e2e/specs/editor-ui-contract.spec.ts |  | Playwright editor UI-contract lane BLOCKED (ENV): missing-environment preflight stopped before test discovery | open |  | 2026-11-11T17:44:46.360Z |  |
 
 ````json
 [
@@ -127,6 +129,32 @@ last_updated: 2026-11-10T07:39:20.893Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-10T07:39:20.893Z",
+    "resolved_at": null,
+    "milestone": "v1.4"
+  },
+  {
+    "id": 9,
+    "kind": "unrun-verify",
+    "phase": "22",
+    "file": "tests/e2e/specs/users-tab.spec.ts",
+    "line": null,
+    "description": "Playwright users-tab responsive lane BLOCKED (ENV): production-target preflight stopped before test discovery",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-11T17:44:45.043Z",
+    "resolved_at": null,
+    "milestone": "v1.4"
+  },
+  {
+    "id": 10,
+    "kind": "unrun-verify",
+    "phase": "22",
+    "file": "tests/e2e/specs/editor-ui-contract.spec.ts",
+    "line": null,
+    "description": "Playwright editor UI-contract lane BLOCKED (ENV): missing-environment preflight stopped before test discovery",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-11T17:44:46.360Z",
     "resolved_at": null,
     "milestone": "v1.4"
   }
