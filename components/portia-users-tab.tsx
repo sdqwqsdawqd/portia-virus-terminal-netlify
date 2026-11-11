@@ -6,7 +6,7 @@ import { ConfirmDialog } from "@/components/portia-editor-dossier";
 import { failureFromResponse, type AppFailure } from "@/lib/app-state";
 import type { AccessLevel } from "@/lib/access-levels";
 import { usersCopy } from "@/lib/users-copy";
-import { parseUsersCount, parseUsersHistory, parseUsersList, type UsersHistoryEntry, type UsersList } from "@/lib/users-model";
+import { parseUsersCount, parseUsersHistory, parseUsersListReply, type UsersHistoryEntry, type UsersList } from "@/lib/users-model";
 import { buildUsersView, decisionLevelOptions, historyLine, pendingBadgeText, resultNote, visibleControls, type UsersView } from "@/lib/users-view";
 
 type UsersTabProps = {
@@ -358,7 +358,7 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
         onPendingCount(null);
         return false;
       }
-      const parsed = parseUsersList(body.list);
+      const parsed = parseUsersListReply(body.list);
       setList(parsed);
       setLastGoodAt(new Date().toISOString());
       setFailure(null);

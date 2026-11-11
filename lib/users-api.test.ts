@@ -6,6 +6,7 @@ import * as accessStoreModule from "./access-store.ts";
 import * as usersApiModule from "./users-api.ts";
 import { handleUsersGet, mapAccessError, type UsersApiDeps, type UsersApiResult } from "./users-api.ts";
 import * as usersModelModule from "./users-model.ts";
+import { loadUsersRoster, resetUsersRosterCache, tableMarkFor } from "./users-roster.ts";
 
 type UsersPostModule = {
   handleUsersPost?: (deps: UsersApiDeps, body: Record<string, unknown>) => Promise<UsersApiResult>;
@@ -62,6 +63,14 @@ const list = (overrides: Record<string, unknown> = {}) => ({
   closed: { total: 1, rows: [closed] },
   ...overrides,
 });
+const markedList = (overrides: Record<string, unknown> = {}) => ({
+  ...list(),
+  roster: "ok",
+  pending: { total: 1, rows: [{ ...row, tableMark: "no" }] },
+  people: { total: 1, rows: [{ ...person, tableMark: "no" }] },
+  closed: { total: 1, rows: [{ ...closed, tableMark: "no" }] },
+  ...overrides,
+});
 
 function dependencies(overrides: Partial<UsersApiDeps> & { reply?: unknown; rpcError?: { message: string; code?: string } } = {}) {
   const calls: { fn: string; args?: Record<string, unknown> }[] = [];
@@ -72,6 +81,8 @@ function dependencies(overrides: Partial<UsersApiDeps> & { reply?: unknown; rpcE
   const deps: UsersApiDeps = {
     access: { canEdit: true, canManageEditors: false, openTabs: ["users"] },
     client,
+    loadRoster: async () => ({ status: "ok", roster: [] }),
+    now: () => new Date("2026-11-11T00:00:00.000Z"),
     ...overrides,
   };
   return { deps, calls };
@@ -100,7 +111,7 @@ test("view=list parses rows and sends an empty query with limit 50", async () =>
   const fixture = dependencies();
   const result = await handleUsersGet(fixture.deps, new URLSearchParams("view=list"));
   assert.equal(result.status, 200);
-  assert.deepEqual(result.body, { list: list() });
+  assert.deepEqual(result.body, { list: markedList() });
   assert.deepEqual(fixture.calls, [{ fn: accessRpc.list, args: { p_query: "", p_limit: 50 } }]);
 });
 
@@ -226,7 +237,7 @@ test("USR-07 already-decided is a 200 result code and is never retried", async (
     requestId: row.id,
     level: 2,
   });
-  assert.deepEqual(result, { status: 200, body: { code: "already-decided", status: "approved" } });
+  assert.deepEqual(result, { status: 200, body: { code: "already-decided", status: "approved", tableMark: "unknown" } });
   assert.deepEqual(fixture.calls, [{ fn: accessRpc.decide, args: { p_request_id: row.id, p_decision: "approve", p_level: 2 } }]);
 });
 
@@ -235,7 +246,7 @@ test("approve validates the optional level and sends null for an existing person
   const withoutLevel = dependencies({ reply: { code: "approved", personId: person.id, level: 4 } });
   assert.deepEqual(await postModule.handleUsersPost?.(withoutLevel.deps, { action: "approve", requestId: row.id }), {
     status: 200,
-    body: { code: "approved", personId: person.id, level: 4 },
+    body: { code: "approved", personId: person.id, level: 4, tableMark: "unknown" },
   });
   assert.deepEqual(withoutLevel.calls[0], { fn: accessRpc.decide, args: { p_request_id: row.id, p_decision: "approve", p_level: null } });
 
@@ -339,7 +350,7 @@ test("D-10 list marks stay unknown when the roster is degraded and failures are 
   const fixture = dependencies({
     loadRoster: async () => {
       rosterCalls += 1;
-      return { status: "degraded" as const };
+      return { status: "unavailable" as const, reason: "network" as const };
     },
   } as Partial<UsersApiDeps>);
   const result = await handleUsersGet(fixture.deps, new URLSearchParams("view=list"));
@@ -371,7 +382,7 @@ test("D-11 bulk approval is owner-only and re-checks a fresh roster before decid
     } },
     loadRoster: async () => {
       rosterCalls += 1;
-      return { status: "ok" as const, keys: new Set([row.nicknameKey]) };
+      return { status: "ok" as const, roster: [{ nickname: row.nickname, nicknameKey: row.nicknameKey }] };
     },
     now: () => new Date("2026-11-11T00:00:00.000Z"),
   } as UsersApiDeps;
@@ -383,4 +394,150 @@ test("D-11 bulk approval is owner-only and re-checks a fresh roster before decid
   }), { status: 200, body: { code: "approved", personId: person.id, level: 2, tableMark: "yes" } });
   assert.equal(rosterCalls, 1);
   assert.deepEqual(calls.map((call) => call.fn), [accessRpc.bulkCandidates, accessRpc.decide]);
+});
+
+test("roster cache keeps only healthy strict nickname keys and ttl 0 always reloads", async () => {
+  resetUsersRosterCache();
+  let calls = 0;
+  let at = 0;
+  const load = async () => {
+    calls += 1;
+    return {
+      status: "ok" as const,
+      roster: [
+        { nickname: "QLoxz", nicknameKey: "legacy-key" },
+        { nickname: "bad nickname", nicknameKey: "bad nickname" },
+      ],
+    };
+  };
+  const first = await loadUsersRoster({ load, now: () => new Date(at), ttlMs: 20_000 });
+  assert.equal(first.status, "ok");
+  assert.deepEqual(first.status === "ok" ? [...first.keys] : [], ["qloxz"]);
+  assert.equal(tableMarkFor("qloxz", first), "yes");
+  assert.equal(tableMarkFor("ada_1", first), "no");
+
+  at = 19_999;
+  await loadUsersRoster({ load, now: () => new Date(at), ttlMs: 20_000 });
+  assert.equal(calls, 1);
+  at = 20_000;
+  await loadUsersRoster({ load, now: () => new Date(at), ttlMs: 20_000 });
+  assert.equal(calls, 2);
+  await loadUsersRoster({ load, now: () => new Date(at), ttlMs: 0 });
+  assert.equal(calls, 3);
+});
+
+test("D-10 roster failures and throws are degraded, unknown and never cached", async () => {
+  resetUsersRosterCache();
+  let calls = 0;
+  const load = async () => {
+    calls += 1;
+    if (calls === 1) return { status: "unavailable" as const, reason: "network" as const };
+    if (calls === 2) throw new Error("sheet down");
+    return { status: "ok" as const, roster: [{ nickname: "QLoxz", nicknameKey: "qloxz" }] };
+  };
+  const first = await loadUsersRoster({ load });
+  const second = await loadUsersRoster({ load });
+  const third = await loadUsersRoster({ load });
+  assert.deepEqual(first, { status: "degraded" });
+  assert.deepEqual(second, { status: "degraded" });
+  assert.equal(tableMarkFor("qloxz", first), "unknown");
+  assert.equal(third.status, "ok");
+  assert.equal(calls, 3);
+});
+
+test("route reply parsers require marks, roster state and bounded bulk arrays", () => {
+  const parseListReply = (usersModelModule as typeof usersModelModule & {
+    parseUsersListReply: (value: unknown) => unknown;
+    parseUsersBulk: (value: unknown) => unknown;
+  }).parseUsersListReply;
+  const parseBulk = (usersModelModule as typeof usersModelModule & {
+    parseUsersBulk: (value: unknown) => unknown;
+  }).parseUsersBulk;
+  assert.deepEqual(parseListReply(markedList()), markedList());
+  assert.throws(() => parseListReply(list()), { name: "UsersReplyError" });
+  assert.throws(() => parseListReply(markedList({ pending: { total: 1, rows: [{ ...row, tableMark: "maybe" }] } })), { name: "UsersReplyError" });
+  const bulk = { roster: "ok", eligible: [{ id: row.id, nickname: row.nickname }], excluded: [] };
+  assert.deepEqual(parseBulk(bulk), bulk);
+  assert.throws(() => parseBulk({ ...bulk, eligible: Array.from({ length: 201 }, () => bulk.eligible[0]) }), { name: "UsersReplyError" });
+});
+
+test("view=bulk is owner-only, uses all SQL candidates and separates eligible names", async () => {
+  const editor = dependencies({ reply: { candidates: [] } });
+  assert.deepEqual(await handleUsersGet(editor.deps, new URLSearchParams("view=bulk")), {
+    status: 403,
+    body: { code: "owner-only" },
+  });
+  assert.equal(editor.calls.length, 0);
+
+  const other = { id: "323e4567-e89b-42d3-a456-426614174000", nickname: "Bob_2", nicknameKey: "bob_2" };
+  const owner = dependencies({
+    access: { canEdit: true, canManageEditors: true, openTabs: ["users"] },
+    reply: { candidates: [{ id: row.id, nickname: row.nickname, nicknameKey: row.nicknameKey }, other] },
+    loadRoster: async () => ({ status: "ok", roster: [{ nickname: row.nickname, nicknameKey: row.nicknameKey }] }),
+  });
+  assert.deepEqual(await handleUsersGet(owner.deps, new URLSearchParams("view=bulk")), {
+    status: 200,
+    body: {
+      roster: "ok",
+      eligible: [{ id: row.id, nickname: row.nickname }],
+      excluded: [{ id: other.id, nickname: other.nickname }],
+    },
+  });
+  assert.deepEqual(owner.calls, [{ fn: accessRpc.bulkCandidates, args: {} }]);
+});
+
+test("D-10 single approval survives a degraded fresh roster read", async () => {
+  let rosterCalls = 0;
+  const fixture = dependencies({
+    reply: { code: "approved", personId: person.id, level: 2 },
+    loadRoster: async () => {
+      rosterCalls += 1;
+      return { status: "invalid-source", reason: "invalid-data" };
+    },
+  });
+  assert.deepEqual(await postModule.handleUsersPost?.(fixture.deps, {
+    action: "approve",
+    requestId: row.id,
+    level: 2,
+    nicknameKey: row.nicknameKey,
+  }), { status: 200, body: { code: "approved", personId: person.id, level: 2, tableMark: "unknown" } });
+  assert.equal(rosterCalls, 1);
+  assert.deepEqual(fixture.calls.map((call) => call.fn), [accessRpc.decide]);
+});
+
+test("D-11 bulk refuses degraded, non-roster and no-longer-pending requests without deciding", async () => {
+  const ownerAccess = { canEdit: true, canManageEditors: true, openTabs: ["users"] };
+  const body = { action: "approve", requestId: row.id, level: 2, bulk: true };
+
+  const degraded = dependencies({
+    access: ownerAccess,
+    loadRoster: async () => ({ status: "unavailable", reason: "network" }),
+  });
+  assert.deepEqual(await postModule.handleUsersPost?.(degraded.deps, body), {
+    status: 503,
+    body: { code: "roster-unavailable" },
+  });
+  assert.equal(degraded.calls.length, 0);
+
+  const decided = dependencies({
+    access: ownerAccess,
+    reply: { candidates: [] },
+    loadRoster: async () => ({ status: "ok", roster: [{ nickname: row.nickname, nicknameKey: row.nicknameKey }] }),
+  });
+  assert.deepEqual(await postModule.handleUsersPost?.(decided.deps, body), {
+    status: 200,
+    body: { code: "already-decided" },
+  });
+  assert.deepEqual(decided.calls.map((call) => call.fn), [accessRpc.bulkCandidates]);
+
+  const excluded = dependencies({
+    access: ownerAccess,
+    reply: { candidates: [{ id: row.id, nickname: row.nickname, nicknameKey: row.nicknameKey }] },
+    loadRoster: async () => ({ status: "ok", roster: [] }),
+  });
+  assert.deepEqual(await postModule.handleUsersPost?.(excluded.deps, body), {
+    status: 409,
+    body: { code: "not-in-table" },
+  });
+  assert.deepEqual(excluded.calls.map((call) => call.fn), [accessRpc.bulkCandidates]);
 });

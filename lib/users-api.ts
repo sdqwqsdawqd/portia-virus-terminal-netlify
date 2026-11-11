@@ -1,6 +1,7 @@
 import {
   AccessStoreError,
   accessHistory,
+  bulkCandidates as loadBulkCandidates,
   clearAccessCooldown,
   decideAccessRequest,
   listAccess,
@@ -11,9 +12,16 @@ import {
 import { isAccessLevel, type AccessLevel } from "./access-levels.ts";
 import { nicknameKey } from "./nickname.ts";
 import { parseJsonObject } from "./request-json.ts";
+import { loadUsersRoster, tableMarkFor, type UsersRoster, type UsersRosterLoad } from "./users-roster.ts";
+import type { UsersList } from "./users-model.ts";
 
 export type UsersAccess = { canEdit: boolean; canManageEditors: boolean; openTabs: readonly string[] };
-export type UsersApiDeps = { access: UsersAccess; client: AccessRpcClient };
+export type UsersApiDeps = {
+  access: UsersAccess;
+  client: AccessRpcClient;
+  loadRoster?: UsersRosterLoad;
+  now?: () => Date;
+};
 export type UsersApiResult = { status: number; body: Record<string, unknown> };
 
 export const PENDING_DATABASE_STATES = ["PGRST202", "42883", "42P01"] as const;
@@ -21,7 +29,7 @@ export const PENDING_DATABASE_STATES = ["PGRST202", "42883", "42P01"] as const;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export type UsersAction =
-  | { action: "approve"; requestId: string; level?: AccessLevel }
+  | { action: "approve"; requestId: string; level?: AccessLevel; bulk?: true; nicknameKey?: string }
   | { action: "reject"; requestId: string }
   | { action: "set-level"; personId: string; level: AccessLevel; expectedLevel: AccessLevel }
   | { action: "revoke"; personId: string }
@@ -57,7 +65,17 @@ export function parseUsersAction(body: Record<string, unknown>): UsersActionPars
     if (typeof body.requestId !== "string" || !uuidPattern.test(body.requestId)) return { error: "invalid-body" };
     if (action === "approve") {
       if (body.level !== undefined && !isAccessLevel(body.level)) return { error: "invalid-level" };
-      return { action: { action, requestId: body.requestId, ...(body.level === undefined ? {} : { level: body.level }) } };
+      if (body.bulk !== undefined && body.bulk !== true) return { error: "invalid-body" };
+      if (body.nicknameKey !== undefined && (typeof body.nicknameKey !== "string" || nicknameKey(body.nicknameKey) !== body.nicknameKey)) {
+        return { error: "invalid-body" };
+      }
+      return { action: {
+        action,
+        requestId: body.requestId,
+        ...(body.level === undefined ? {} : { level: body.level }),
+        ...(body.bulk === true ? { bulk: true as const } : {}),
+        ...(typeof body.nicknameKey === "string" ? { nicknameKey: body.nicknameKey } : {}),
+      } };
     }
     return { action: { action, requestId: body.requestId } };
   }
@@ -72,6 +90,24 @@ export function parseUsersAction(body: Record<string, unknown>): UsersActionPars
   }
   if (typeof body.nicknameKey !== "string" || nicknameKey(body.nicknameKey) !== body.nicknameKey) return { error: "invalid-body" };
   return { action: { action, nicknameKey: body.nicknameKey } };
+}
+
+async function rosterFor(deps: UsersApiDeps, ttlMs: number): Promise<UsersRoster> {
+  return loadUsersRoster({ load: deps.loadRoster, now: deps.now, ttlMs });
+}
+
+function markUsersList(list: UsersList, roster: UsersRoster): UsersList {
+  const markRows = <T extends { nicknameKey: string }>(rows: T[]) => rows.map((row) => ({
+    ...row,
+    tableMark: tableMarkFor(row.nicknameKey, roster),
+  }));
+  return {
+    ...list,
+    roster: roster.status === "ok" ? "ok" : "degraded",
+    pending: { ...list.pending, rows: markRows(list.pending.rows) },
+    people: { ...list.people, rows: markRows(list.people.rows) },
+    closed: { ...list.closed, rows: markRows(list.closed.rows) },
+  };
 }
 
 export async function parseUsersPostRequest(request: Request): Promise<{ result?: UsersApiResult; body?: Record<string, unknown> }> {
@@ -89,7 +125,8 @@ export async function handleUsersGet(deps: UsersApiDeps, params: URLSearchParams
     if (view === "list") {
       const query = (params.get("q") ?? "").trim().toLowerCase();
       if (!/^[a-z0-9_]{0,20}$/.test(query)) return { status: 400, body: { code: "invalid-query" } };
-      return { status: 200, body: { list: await listAccess(deps.client, { query, limit: 50 }) } };
+      const list = await listAccess(deps.client, { query, limit: 50 });
+      return { status: 200, body: { list: markUsersList(list, await rosterFor(deps, 20_000)) } };
     }
     if (view === "count") {
       const list = await listAccess(deps.client, { query: "", limit: 0 });
@@ -99,6 +136,18 @@ export async function handleUsersGet(deps: UsersApiDeps, params: URLSearchParams
       const key = params.get("key") ?? "";
       if (nicknameKey(key) !== key) return { status: 400, body: { code: "invalid-key" } };
       return { status: 200, body: { entries: await accessHistory(deps.client, { nicknameKey: key }) } };
+    }
+    if (view === "bulk") {
+      if (!deps.access.canManageEditors) return { status: 403, body: { code: "owner-only" } };
+      const candidates = await loadBulkCandidates(deps.client);
+      const roster = await rosterFor(deps, 0);
+      if (roster.status === "degraded") return { status: 200, body: { roster: "degraded", eligible: [], excluded: [] } };
+      const eligible: { id: string; nickname: string }[] = [];
+      const excluded: { id: string; nickname: string }[] = [];
+      for (const candidate of candidates) {
+        (roster.keys.has(candidate.nicknameKey) ? eligible : excluded).push({ id: candidate.id, nickname: candidate.nickname });
+      }
+      return { status: 200, body: { roster: "ok", eligible, excluded } };
     }
     return { status: 400, body: { code: "invalid-view" } };
   } catch (error) {
@@ -112,12 +161,37 @@ export async function handleUsersPost(deps: UsersApiDeps, body: Record<string, u
   if ("error" in parsed) return { status: 400, body: { code: parsed.error } };
   try {
     if (parsed.action.action === "approve" || parsed.action.action === "reject") {
+      if (parsed.action.action === "approve" && parsed.action.bulk) {
+        if (!deps.access.canManageEditors) return { status: 403, body: { code: "owner-only" } };
+        if (parsed.action.level !== 2) return { status: 400, body: { code: "invalid-level" } };
+        const roster = await rosterFor(deps, 0);
+        if (roster.status === "degraded") return { status: 503, body: { code: "roster-unavailable" } };
+        const requestId = parsed.action.requestId;
+        const candidate = (await loadBulkCandidates(deps.client)).find((item) => item.id === requestId);
+        if (!candidate) return { status: 200, body: { code: "already-decided" } };
+        if (!roster.keys.has(candidate.nicknameKey)) return { status: 409, body: { code: "not-in-table" } };
+        const result = await decideAccessRequest(deps.client, {
+          requestId,
+          decision: "approve",
+          level: 2,
+        });
+        return { status: 200, body: { ...result, tableMark: "yes" } };
+      }
+      const roster = parsed.action.action === "approve" ? await rosterFor(deps, 0) : null;
       const result = await decideAccessRequest(deps.client, {
         requestId: parsed.action.requestId,
         decision: parsed.action.action,
         ...(parsed.action.action === "approve" && parsed.action.level !== undefined ? { level: parsed.action.level } : {}),
       });
-      return { status: 200, body: { ...result } };
+      return {
+        status: 200,
+        body: {
+          ...result,
+          ...(parsed.action.action === "approve"
+            ? { tableMark: parsed.action.nicknameKey ? tableMarkFor(parsed.action.nicknameKey, roster as UsersRoster) : "unknown" }
+            : {}),
+        },
+      };
     }
     if (parsed.action.action === "set-level") {
       const result = await setAccessLevel(deps.client, {

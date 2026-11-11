@@ -8,6 +8,9 @@ export class UsersReplyError extends Error {
   }
 }
 
+export type TableMark = "yes" | "no" | "unknown";
+export type UsersRosterStatus = "ok" | "degraded";
+
 export type UsersPendingRow = {
   id: string;
   nickname: string;
@@ -17,6 +20,7 @@ export type UsersPendingRow = {
   existingLevel: AccessLevel | null;
   canDecide: boolean;
   reason: UsersGuardReason;
+  tableMark?: TableMark;
 };
 
 export type AccessEventType = "approve" | "reject" | "level-change" | "revoke" | "cooldown-clear";
@@ -44,6 +48,7 @@ export type UsersPersonRow = {
   canRevoke: boolean;
   reason: UsersGuardReason;
   lastEvent: UsersEvent | null;
+  tableMark?: TableMark;
 };
 
 export type UsersClosedRow = {
@@ -53,6 +58,7 @@ export type UsersClosedRow = {
   decidedAt: string;
   retryAt: string | null;
   lastEvent: UsersEvent | null;
+  tableMark?: TableMark;
 };
 
 export type UsersSection<T> = { total: number; rows: T[] };
@@ -64,7 +70,11 @@ export type UsersList = {
   pending: UsersSection<UsersPendingRow>;
   people: UsersSection<UsersPersonRow>;
   closed: UsersSection<UsersClosedRow>;
+  roster?: UsersRosterStatus;
 };
+
+export type UsersBulkCandidate = { id: string; nickname: string };
+export type UsersBulk = { roster: UsersRosterStatus; eligible: UsersBulkCandidate[]; excluded: UsersBulkCandidate[] };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -199,6 +209,60 @@ export function parseUsersList(value: unknown): UsersList {
     pending: parseSection(pending, parsePendingRow),
     people: parseSection(people, parsePersonRow),
     closed: parseSection(closed, parseClosedRow),
+  };
+}
+
+function parseTableMark(value: unknown): TableMark {
+  if (value !== "yes" && value !== "no" && value !== "unknown") throw new UsersReplyError();
+  return value;
+}
+
+function parseMarkedSection<T extends { tableMark?: TableMark }>(
+  raw: unknown,
+  parsed: UsersSection<T>,
+): UsersSection<T> {
+  if (!isRecord(raw) || !Array.isArray(raw.rows) || raw.rows.length !== parsed.rows.length) throw new UsersReplyError();
+  const rawRows = raw.rows;
+  return {
+    ...parsed,
+    rows: parsed.rows.map((row, index) => {
+      const source = rawRows[index];
+      if (!isRecord(source)) throw new UsersReplyError();
+      return { ...row, tableMark: parseTableMark(source.tableMark) };
+    }),
+  };
+}
+
+export function parseUsersListReply(value: unknown): UsersList {
+  if (!isRecord(value) || (value.roster !== "ok" && value.roster !== "degraded")) throw new UsersReplyError();
+  const parsed = parseUsersList(value);
+  return {
+    ...parsed,
+    roster: value.roster,
+    pending: parseMarkedSection(value.pending, parsed.pending),
+    people: parseMarkedSection(value.people, parsed.people),
+    closed: parseMarkedSection(value.closed, parsed.closed),
+  };
+}
+
+function parseBulkCandidate(value: unknown): UsersBulkCandidate {
+  if (!isRecord(value) || typeof value.id !== "string" || !uuidPattern.test(value.id) || !isValidNickname(value.nickname)) {
+    throw new UsersReplyError();
+  }
+  return { id: value.id, nickname: value.nickname };
+}
+
+export function parseUsersBulk(value: unknown): UsersBulk {
+  if (
+    !isRecord(value)
+    || (value.roster !== "ok" && value.roster !== "degraded")
+    || !Array.isArray(value.eligible) || value.eligible.length > 200
+    || !Array.isArray(value.excluded) || value.excluded.length > 200
+  ) throw new UsersReplyError();
+  return {
+    roster: value.roster,
+    eligible: value.eligible.map(parseBulkCandidate),
+    excluded: value.excluded.map(parseBulkCandidate),
   };
 }
 
