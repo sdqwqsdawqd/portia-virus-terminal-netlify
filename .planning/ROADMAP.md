@@ -89,7 +89,7 @@ Plans:
   5. Владельцу показаны текстом три направления стиля (A строгий острый, B мягкий «оконный», C смешанный по смыслу) с таблицей значений, выбранное направление записано; токены лежат в коде в нынешних значениях, тест на радиусы фиксирует нынешнее число объявлений, а вид сайта не изменился. [UI-01]
 **Constraints**: если фаза добавляет SQL (RPC списка, решения, уровня, отзыва) — ревью `supabase-rls-reviewer` обязательно; визуальные изменения владельцу описываются текстом и таблицей значений, без галерей `review.html` и без реестра по хэшам. Токены — обычные `:root` CSS-переменные, `portia.css` правится на месте, порядок каскада не переставляется.
 **Acceptance gate**: роли редактора и владельца на живой базе — BLOCKED до staging; выбор направления — решение владельца, не агента.
-**Plans**: 3/10 plans executed
+**Plans**: 5/10 plans executed
 **UI hint**: yes
 
 Plans:
@@ -101,10 +101,10 @@ Plans:
 - [x] 22-03-PLAN.md — full read model: people, closed block, search, masked decider, Moscow captions, phone action window, CSS block (USR-01, USR-02, USR-06)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 22-04-PLAN.md — decisions: approve with pre-set level, reject, change level, revoke, owner clears pause, «уже решено» (USR-03, USR-04, USR-07)
+- [x] 22-04-PLAN.md — decisions: approve with pre-set level, reject, change level, revoke, owner clears pause, «уже решено» (USR-03, USR-04, USR-07)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 22-05-PLAN.md — history (last 5) and journal retention 20 per person, D-07 one-way (settled) (USR-06)
+- [x] 22-05-PLAN.md — history (last 5) and journal retention 20 per person, D-07 one-way (settled) (USR-06)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 22-06-PLAN.md — «в таблице» mark at decision time and owner bulk approval with level 2 (USR-02, USR-08)

@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
 status: executing
-stopped_at: Completed PORTIA-22-04-PLAN.md
-last_updated: "2026-11-10T14:14:56.000Z"
-last_activity: 2026-11-10
-last_activity_desc: Completed PORTIA-22-04 guarded access decision workflows
-state_head: 68bbfb30f6641142ccd59391dfd22eae11bae45d
+stopped_at: Completed PORTIA-22-05-PLAN.md
+last_updated: "2026-11-11T11:43:16.000Z"
+last_activity: 2026-11-11
+last_activity_desc: Completed PORTIA-22-05 decision history and bounded retention
+state_head: ea73b530636e9817753e206565c6b917142bc01a
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — EXECUTING
-Plan: 5 of 10
+Plan: 6 of 10
 Status: Executing Phase PORTIA-22
-Last activity: 2026-11-10 — Completed PORTIA-22-04 guarded access decision workflows
+Last activity: 2026-11-11 — Completed PORTIA-22-05 decision history and bounded retention
 
 Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 — принятый риск)
 
@@ -57,6 +57,7 @@ Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 �
 | Phase PORTIA-22 P02 | 12m | 2 tasks | 3 files |
 | Phase PORTIA-22 P03 | 1h45m | 2 tasks | 16 files |
 | Phase PORTIA-22 P04 | 32m | 2 tasks | 11 files |
+| Phase PORTIA-22 P05 | 21h23m | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -217,6 +218,9 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-22]: The phone action window reuses the native portia-dialog chrome and returns focus to its row.
 - [Phase PORTIA-22]: Mutation controls are rendered only from server permission flags; database result codes remain authoritative and are never retried automatically.
 - [Phase PORTIA-22]: Clearing a cooldown is owner-only in both the UI and POST handler before the Phase 21 RPC is called.
+- [Phase PORTIA-22]: History masking and detail-key whitelisting stay inside the security-definer RPC because editors may call it directly.
+- [Phase PORTIA-22]: Open history panels are keyed by nicknameKey and reload through per-key request epochs after every successful list refresh.
+- [Phase PORTIA-22]: D-07 retention deletes only rows older than the newest twenty for the same nickname_key; live trigger execution remains BLOCKED (ENV).
 
 ### Pending Todos
 
@@ -270,10 +274,10 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-10T14:14:56.000Z
-Stopped at: Completed PORTIA-22-04-PLAN.md
+Last session: 2026-11-11T11:43:16.000Z
+Stopped at: Completed PORTIA-22-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
 
-- Phase 21 (Фундамент доступа): `/gsd-discuss-phase 21`, затем `/gsd-plan-phase 21`. Ревью `supabase-rls-reviewer` обязательно; миграция нумеруется после `20261104000000`, `20261104000100`, `20261106000000`; на production ничего не применять.
+- Phase 22: continue with `22-06-PLAN.md`; do not apply migrations, and keep live PostgreSQL/RLS, authenticated roles and devices BLOCKED until their designated proof phases.
