@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { UsersClosedRow, UsersList, UsersPendingRow, UsersPersonRow } from "./users-model.ts";
+import type { TableMark, UsersBulk, UsersClosedRow, UsersList, UsersPendingRow, UsersPersonRow } from "./users-model.ts";
 
 type UsersViewModule = {
   pendingBadgeText?: (count: number | null) => string | null;
@@ -29,6 +29,11 @@ type UsersViewModule = {
     entry: { type: "approve" | "reject" | "level-change" | "revoke" | "cooldown-clear"; at: string; actor: string | null; details: Record<string, unknown> },
     now: Date,
   ) => string | null;
+  markPlaque?: (mark: TableMark) => { text: string; tone: "accent" | "warning" | "neutral" };
+  bulkTitle?: (count: number) => string;
+  bulkProgress?: (completed: number, total: number) => string;
+  bulkSummary?: (result: { approved: number; already: number; failed: number }) => string;
+  bulkButtonState?: (list: UsersList, bulk: UsersBulk | null) => { visible: boolean; disabled: boolean; caption: string | null };
 };
 
 async function usersView(): Promise<UsersViewModule> {
@@ -217,4 +222,32 @@ test("person controls and change/revoke result copy stay server driven", async (
   assert.equal(view.successAnnouncement?.("level", "Qloxz", 3), "Уровень «Qloxz»: Уровень 3.");
   assert.equal(view.successAnnouncement?.("revoked", "Qloxz"), "Доступ «Qloxz» отозван.");
   assert.equal(view.successAnnouncement?.("cleared", "Qloxz"), "Пауза снята.");
+});
+
+test("roster marks and owner bulk copy stay explicit, counted and failure honest", async () => {
+  const view = await usersView();
+  assert.deepEqual(view.markPlaque?.("yes"), { text: "НИК В ТАБЛИЦЕ", tone: "accent" });
+  assert.deepEqual(view.markPlaque?.("no"), { text: "НИКА НЕТ В ТАБЛИЦЕ", tone: "warning" });
+  assert.deepEqual(view.markPlaque?.("unknown"), { text: "НЕ ПРОВЕРЕНО", tone: "neutral" });
+  assert.equal(view.bulkTitle?.(1), "Одобрить 1 заявку с уровнем 2?");
+  assert.equal(view.bulkTitle?.(2), "Одобрить 2 заявки с уровнем 2?");
+  assert.equal(view.bulkTitle?.(5), "Одобрить 5 заявок с уровнем 2?");
+  assert.equal(view.bulkProgress?.(3, 7), "Одобрено 3 из 7");
+  assert.equal(view.bulkSummary?.({ approved: 4, already: 2, failed: 1 }), "Одобрено: 4 · Уже решено другим: 2 · Ошибка: 1");
+
+  const empty = { total: 0, rows: [] };
+  const editor = { callerIsOwner: false, pendingTotalAll: 1, serverNow: new Date().toISOString(), pending: empty, people: empty, closed: empty, roster: "ok" } as UsersList;
+  const owner = { ...editor, callerIsOwner: true } as UsersList;
+  assert.deepEqual(view.bulkButtonState?.(editor, null), { visible: false, disabled: true, caption: null });
+  assert.deepEqual(view.bulkButtonState?.({ ...owner, roster: "degraded" }, null), {
+    visible: true,
+    disabled: true,
+    caption: "Таблица сотрудников недоступна, попробуйте позже",
+  });
+  assert.deepEqual(view.bulkButtonState?.(owner, { roster: "ok", eligible: [], excluded: [] }), {
+    visible: true,
+    disabled: true,
+    caption: "Нет заявок «из таблицы» с ником из таблицы.",
+  });
+  assert.deepEqual(view.bulkButtonState?.(owner, null), { visible: true, disabled: false, caption: null });
 });

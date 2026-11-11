@@ -142,3 +142,28 @@ test("history is accessible inline on PC and always present in the phone action 
   assert.match(block, /\.users-history-list[^}]*font:\s*400 11px/u);
   assert.doesNotMatch(block, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:/u);
 });
+
+test("owner bulk approval is sequential, safe by default and keeps the three-number result", () => {
+  assert.match(component, /usersCopy\.bulkButton/u);
+  assert.match(component, /view=bulk/u);
+  assert.match(component, /bulk:\s*true[\s\S]*level:\s*2/u);
+  assert.match(component, /for \(const candidate of bulkDialog\.eligible\)[\s\S]*await fetch/u);
+  assert.match(component, /role="alertdialog"/u);
+  assert.match(component, /data-autofocus[\s\S]*autoFocus/u);
+  assert.match(component, /bulkRunning[\s\S]*event\.preventDefault/u);
+  assert.match(component, /aria-live="polite"/u);
+  assert.match(component, /nicknameKey:\s*context\.row\.source\.nicknameKey/u);
+});
+
+test("roster marks are visible on PC and phone with bounded sharp lists", () => {
+  assert.match(component, /users-table-mark/u);
+  assert.match(component, /usersCopy\.tableLabel/u);
+  const block = css.slice(css.lastIndexOf("/* users-tab:start"));
+  assert.match(block, /\.users-rows[^}]*max-height:\s*min\(40svh,\s*320px\)/u);
+  assert.match(block, /\.users-rows[^}]*overflow-y:\s*auto/u);
+  assert.match(block, /overflow-wrap:\s*anywhere/u);
+  assert.match(block, /\.users-table-mark\.accent/u);
+  assert.match(block, /\.users-table-mark\.warning/u);
+  assert.match(block, /\.users-table-mark\.neutral/u);
+  assert.doesNotMatch(block, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:/u);
+});

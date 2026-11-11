@@ -1,0 +1,10 @@
+{
+  "command": "node --experimental-strip-types --test --test-reporter=tap --test-name-pattern='roster marks and owner bulk copy' lib/users-view.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: roster marks and owner bulk copy stay explicit, counted and failure honest\nnot ok 1 - roster marks and owner bulk copy stay explicit, counted and failure honest\n  ---\n  duration_ms: 10.0138\n  location: 'C:\\\\Users\\\\User\\\\code\\\\portia-site\\\\lib\\\\users-view.test.ts:227:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly deep-equal:\n    + actual - expected\n    \n    + undefined\n    - {\n    -   text: 'НИК В ТАБЛИЦЕ',\n    -   tone: 'accent'\n    - }\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected:\n    text: 'НИК В ТАБЛИЦЕ'\n    tone: 'accent'\n  operator: 'deepStrictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///C:/Users/User/code/portia-site/lib/users-view.test.ts:229:10)\n    async Test.run (node:internal/test_runner/test:932:9)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 124.3482\n",
+  "targetTest": "roster marks and owner bulk copy stay explicit, counted and failure honest",
+  "targetFile": "lib/users-view.test.ts",
+  "expected": "The view exposes roster mark plaques, Russian bulk copy and an owner-only button state with honest degraded and empty captions.",
+  "actual": "The named assertion executed and found no markPlaque implementation.",
+  "semanticAssessment": "VALID RED: the target executed and failed on the planned missing roster-mark behavior; there was no syntax, import, fixture, setup, load or discovery failure."
+}
