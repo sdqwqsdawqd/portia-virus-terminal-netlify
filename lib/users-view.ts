@@ -1,7 +1,7 @@
 import { ACCESS_LEVELS, accessLevelLabel, accessOriginLabel, defaultApprovalLevel, type AccessLevel, type AccessOrigin } from "./access-levels.ts";
 import { usersCopy } from "./users-copy.ts";
-import { formatMoscow } from "./users-time.ts";
-import type { AccessEventType, UsersClosedRow, UsersEvent, UsersHistoryEntry, UsersList, UsersPendingRow, UsersPersonRow } from "./users-model.ts";
+import { formatMoscow, pluralZayavka } from "./users-time.ts";
+import type { AccessEventType, TableMark, UsersBulk, UsersClosedRow, UsersEvent, UsersHistoryEntry, UsersList, UsersPendingRow, UsersPersonRow } from "./users-model.ts";
 
 export function pendingBadgeText(count: number | null): string | null {
   if (count === null || !Number.isInteger(count) || count <= 0) return null;
@@ -48,6 +48,33 @@ export function statusPlaque(status: "pending" | "rejected" | "revoked"): string
   return status === "rejected" ? "ОТКЛОНЕНА" : "ДОСТУП ОТОЗВАН";
 }
 
+export function markPlaque(mark: TableMark): { text: string; tone: "accent" | "warning" | "neutral" } {
+  if (mark === "yes") return { text: usersCopy.markYes, tone: "accent" };
+  if (mark === "no") return { text: usersCopy.markNo, tone: "warning" };
+  return { text: usersCopy.markUnknown, tone: "neutral" };
+}
+
+export function bulkTitle(count: number): string {
+  return `Одобрить ${count} ${pluralZayavka(count)} с уровнем 2?`;
+}
+
+export function bulkProgress(completed: number, total: number): string {
+  return `Одобрено ${completed} из ${total}`;
+}
+
+export function bulkSummary(result: { approved: number; already: number; failed: number }): string {
+  return `Одобрено ${result.approved}, уже решено другим ${result.already}, ошибка ${result.failed}`;
+}
+
+export function bulkButtonState(list: UsersList, bulk: UsersBulk | null): { visible: boolean; disabled: boolean; caption: string | null } {
+  if (!list.callerIsOwner) return { visible: false, disabled: true, caption: null };
+  if (list.roster === "degraded" || bulk?.roster === "degraded") {
+    return { visible: true, disabled: true, caption: usersCopy.bulkRosterUnavailable };
+  }
+  if (bulk && bulk.eligible.length === 0) return { visible: true, disabled: true, caption: usersCopy.bulkEmpty };
+  return { visible: true, disabled: false, caption: null };
+}
+
 export function pauseCaption(retryAt: string | null, now: Date): string | null {
   if (!retryAt) return null;
   const formatted = formatMoscow(retryAt, now);
@@ -65,6 +92,7 @@ type ViewRow = {
   nickname: string;
   typePlaque: string;
   statusPlaque: string;
+  tableMark: ReturnType<typeof markPlaque>;
   profileUrl: string;
   caption: string | null;
   captionAt: string | null;
@@ -161,6 +189,7 @@ export function buildUsersView(list: UsersList, query: string, now: Date): Users
     nickname: row.nickname,
     typePlaque: originPlaque(row.origin),
     statusPlaque: statusPlaque("pending"),
+    tableMark: markPlaque(row.tableMark ?? "unknown"),
     profileUrl: robloxProfileUrl(row.nickname),
     caption: formatMoscow(row.createdAt, now) ? `заявка от ${formatMoscow(row.createdAt, now)}` : null,
     captionAt: row.createdAt,
@@ -172,6 +201,7 @@ export function buildUsersView(list: UsersList, query: string, now: Date): Users
     nickname: row.nickname,
     typePlaque: originPlaque(row.origin),
     statusPlaque: levelPlaque(row.level),
+    tableMark: markPlaque(row.tableMark ?? "unknown"),
     profileUrl: robloxProfileUrl(row.nickname),
     caption: rowCaption(row.lastEvent, now),
     captionAt: row.lastEvent?.at ?? null,
@@ -183,6 +213,7 @@ export function buildUsersView(list: UsersList, query: string, now: Date): Users
     nickname: row.nickname,
     typePlaque: statusPlaque(row.status),
     statusPlaque: statusPlaque(row.status),
+    tableMark: markPlaque(row.tableMark ?? "unknown"),
     profileUrl: robloxProfileUrl(row.nickname),
     caption: rowCaption(row.lastEvent, now),
     captionAt: row.lastEvent?.at ?? row.decidedAt,

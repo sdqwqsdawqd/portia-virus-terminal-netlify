@@ -6,8 +6,8 @@ import { ConfirmDialog } from "@/components/portia-editor-dossier";
 import { failureFromResponse, type AppFailure } from "@/lib/app-state";
 import type { AccessLevel } from "@/lib/access-levels";
 import { usersCopy } from "@/lib/users-copy";
-import { parseUsersCount, parseUsersHistory, parseUsersListReply, type UsersHistoryEntry, type UsersList } from "@/lib/users-model";
-import { buildUsersView, decisionLevelOptions, historyLine, pendingBadgeText, resultNote, visibleControls, type UsersView } from "@/lib/users-view";
+import { parseUsersBulk, parseUsersCount, parseUsersHistory, parseUsersListReply, type UsersBulk, type UsersHistoryEntry, type UsersList } from "@/lib/users-model";
+import { buildUsersView, bulkButtonState, bulkProgress, bulkSummary, bulkTitle, decisionLevelOptions, historyLine, pendingBadgeText, resultNote, visibleControls, type UsersView } from "@/lib/users-view";
 
 type UsersTabProps = {
   visible: boolean;
@@ -197,6 +197,7 @@ function UsersActionDialog({
         <h2 id={titleId}>{row.nickname}</h2>
         <dl>
           <div><dt>{usersCopy.typeLabel}</dt><dd>{row.typePlaque}</dd></div>
+          <div><dt>{usersCopy.tableLabel}</dt><dd><span className={`users-table-mark ${row.tableMark.tone}`}>{row.tableMark.text}</span></dd></div>
           <div><dt>{usersCopy.profileLabel}</dt><dd><ProfileLink row={row} /></dd></div>
         </dl>
         <RowCaption row={row} />
@@ -204,6 +205,65 @@ function UsersActionDialog({
         <RowActions context={context} callerIsOwner={callerIsOwner} fromPhone busy={busy} onApprove={onApprove} onReject={onReject} onSetLevel={onSetLevel} onRevoke={onRevoke} onClearCooldown={onClearCooldown} />
         <div className="portia-dialog-actions">
           <button type="button" className="secondary-control" data-autofocus onClick={onClose}>{usersCopy.closeWindow}</button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+function UsersBulkDialog({
+  bulkDialog,
+  bulkRunning,
+  progress,
+  onApprove,
+  onClose,
+}: {
+  bulkDialog: UsersBulk;
+  bulkRunning: boolean;
+  progress: string;
+  onApprove: () => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+  }, []);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="portia-dialog users-bulk-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onCancel={(event) => { if (bulkRunning) event.preventDefault(); else { event.preventDefault(); onClose(); } }}
+      onClick={(event) => { if (!bulkRunning && event.target === event.currentTarget) onClose(); }}
+    >
+      <div className="users-action-dialog-body">
+        <h2 id={titleId}>{bulkTitle(bulkDialog.eligible.length)}</h2>
+        <section>
+          <h3>{usersCopy.bulkApproveHeading}</h3>
+          <ul className="users-bulk-list">
+            {bulkDialog.eligible.map((candidate) => <li key={candidate.id}>{candidate.nickname}</li>)}
+          </ul>
+        </section>
+        {bulkDialog.excluded.length > 0 ? (
+          <section>
+            <h3>{usersCopy.bulkExcludedHeading}</h3>
+            <ul className="users-bulk-list muted">
+              {bulkDialog.excluded.map((candidate) => <li key={candidate.id}>{candidate.nickname}</li>)}
+            </ul>
+          </section>
+        ) : null}
+        <p className="users-bulk-progress" role="status" aria-live="polite">{progress}</p>
+        <div className="portia-dialog-actions">
+          <button type="button" className="secondary-control" data-autofocus autoFocus disabled={bulkRunning} onClick={onClose}>{usersCopy.bulkKeep}</button>
+          <button type="button" className="primary-control" disabled={bulkRunning} onClick={onApprove}>{bulkRunning ? usersCopy.approving : usersCopy.approve}</button>
         </div>
       </div>
     </dialog>
@@ -244,7 +304,7 @@ function UsersRows({
   onClearCooldown: (context: RowContext, fromPhone: boolean) => void;
 }) {
   return (
-    <ul className="users-list">
+    <ul className="users-list users-rows">
       {rows.map((row, index) => {
         const context = { row, section, index };
         const nicknameKey = row.source.nicknameKey;
@@ -262,6 +322,7 @@ function UsersRows({
               <strong className="users-nickname" title={row.nickname}>{row.nickname}</strong>
               {row.typePlaque !== row.statusPlaque ? <span className="users-plaque">{row.typePlaque}</span> : null}
               <span className={`users-plaque${row.statusPlaque === usersCopy.pendingPlaque ? " warning" : row.typePlaque === row.statusPlaque ? " danger" : ""}`}>{row.statusPlaque}</span>
+              <span className={`users-table-mark ${row.tableMark.tone}`}>{row.tableMark.text}</span>
               <ProfileLink row={row} />
               <RowCaption row={row} />
               <RowActions context={context} callerIsOwner={callerIsOwner} fromPhone={false} busy={busy} onApprove={onApprove} onReject={onReject} onSetLevel={onSetLevel} onRevoke={onRevoke} onClearCooldown={onClearCooldown} />
@@ -303,6 +364,11 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
   const [isPhone, setIsPhone] = useState(false);
   const [dialogContext, setDialogContext] = useState<RowContext | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [bulk, setBulk] = useState<UsersBulk | null>(null);
+  const [bulkDialog, setBulkDialog] = useState<UsersBulk | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkProgressText, setBulkProgressText] = useState("");
   const [busy, setBusy] = useState<BusyAction>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [historyByKey, setHistoryByKey] = useState<Record<string, HistoryState>>({});
@@ -360,6 +426,7 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
       }
       const parsed = parseUsersListReply(body.list);
       setList(parsed);
+      setBulk(null);
       setLastGoodAt(new Date().toISOString());
       setFailure(null);
       setDenied(false);
@@ -468,6 +535,7 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
     void postAction(context, "approve", {
       action: "approve",
       requestId: context.row.source.id,
+      nicknameKey: context.row.source.nicknameKey,
       ...(level === undefined ? {} : { level }),
     });
   }, [postAction]);
@@ -508,12 +576,67 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
     queueMicrotask(() => confirmReturnRef.current?.focus());
   }, []);
 
+  const openBulk = useCallback(async () => {
+    if (!callerIsOwner || bulkLoading) return;
+    setBulkLoading(true);
+    try {
+      const response = await fetch("/api/users?view=bulk", { cache: "no-store" });
+      const body = await responseBody(response);
+      if (!response.ok) throw new Error("bulk-unavailable");
+      const parsed = parseUsersBulk(body);
+      setBulk(parsed);
+      if (parsed.roster === "ok" && parsed.eligible.length > 0) {
+        setBulkProgressText("");
+        setBulkDialog(parsed);
+      }
+    } catch {
+      setAnnouncement(usersCopy.actionFailed);
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [bulkLoading, callerIsOwner]);
+
+  const closeBulk = useCallback(() => {
+    if (!bulkRunning) setBulkDialog(null);
+  }, [bulkRunning]);
+
+  const approveBulk = useCallback(async () => {
+    if (!bulkDialog || bulkRunning || !callerIsOwner) return;
+    setBulkRunning(true);
+    const result = { approved: 0, already: 0, failed: 0 };
+    let completed = 0;
+    setBulkProgressText(bulkProgress(0, bulkDialog.eligible.length));
+    for (const candidate of bulkDialog.eligible) {
+      try {
+        const response = await fetch("/api/users", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({ action: "approve", requestId: candidate.id, level: 2, bulk: true }),
+        });
+        const body = await responseBody(response);
+        if (response.ok && body.code === "approved") result.approved += 1;
+        else if (response.ok && body.code === "already-decided") result.already += 1;
+        else result.failed += 1;
+      } catch {
+        result.failed += 1;
+      }
+      completed += 1;
+      setBulkProgressText(bulkProgress(completed, bulkDialog.eligible.length));
+    }
+    setAnnouncement(bulkSummary(result));
+    setBulkDialog(null);
+    setBulkRunning(false);
+    await load();
+  }, [bulkDialog, bulkRunning, callerIsOwner, load]);
+
   if (denied) return <AppDeniedPanel />;
   if (!list && failure) return <AppFatalPanel failure={failure} retrying={retrying} onRetry={() => void load()} illustration="flaskEmpty" />;
   if (!list) return <AppSkeleton shape="employees" />;
 
   const view = buildUsersView(list, debouncedQuery, new Date());
   const searchEmpty = view.emptyKind === "search";
+  const ownerBulk = bulkButtonState({ ...list, callerIsOwner }, bulk);
 
   return (
     <div className="users-tab">
@@ -525,7 +648,11 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
       </label>
       {searchEmpty ? <EmptyState kind="search" /> : null}
       <section data-users-section="pending" aria-labelledby="users-pending-title">
-        <h2 id="users-pending-title" tabIndex={-1}>{view.pending.title}</h2>
+        <div className="users-pending-head">
+          <h2 id="users-pending-title" tabIndex={-1}>{view.pending.title}</h2>
+          {callerIsOwner && ownerBulk.visible ? <button type="button" className="secondary-control" disabled={ownerBulk.disabled || bulkLoading} onClick={() => void openBulk()}>{usersCopy.bulkButton}</button> : null}
+          {ownerBulk.caption ? <p role="status">{ownerBulk.caption}</p> : null}
+        </div>
         {!searchEmpty && view.pending.emptyKind ? <EmptyState kind={view.pending.emptyKind} /> : null}
         <UsersRows rows={view.pending.rows} section="pending" isPhone={isPhone} callerIsOwner={callerIsOwner} busy={busy} notes={notes} historyByKey={historyByKey} openHistoryKeys={openHistoryKeys} onToggleHistory={toggleHistory} onOpen={openDialog} onApprove={approve} onReject={requestReject} onSetLevel={setLevel} onRevoke={requestRevoke} onClearCooldown={clearCooldown} />
         {view.pending.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
@@ -544,6 +671,7 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
         {view.closed.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
       </details>
       {dialogContext ? <UsersActionDialog context={dialogContext} callerIsOwner={callerIsOwner} busy={busy} onApprove={approve} onReject={requestReject} onSetLevel={setLevel} onRevoke={requestRevoke} onClearCooldown={clearCooldown} historyState={historyByKey[dialogContext.row.source.nicknameKey]} onClose={closeDialog} /> : null}
+      {bulkDialog ? <UsersBulkDialog bulkDialog={bulkDialog} bulkRunning={bulkRunning} progress={bulkProgressText} onApprove={() => void approveBulk()} onClose={closeBulk} /> : null}
       {confirmState ? (
         <ConfirmDialog
           title={confirmState.kind === "reject" ? usersCopy.rejectDialog.title : usersCopy.revokeDialog.title}

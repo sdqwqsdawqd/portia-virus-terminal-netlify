@@ -224,7 +224,7 @@ test("person controls and change/revoke result copy stay server driven", async (
   assert.equal(view.successAnnouncement?.("cleared", "Qloxz"), "Пауза снята.");
 });
 
-test("roster marks and owner bulk copy stay explicit, counted and failure honest", async () => {
+test("Одобрить 1 заявку: roster marks and owner bulk copy stay explicit, counted and failure honest", async () => {
   const view = await usersView();
   assert.deepEqual(view.markPlaque?.("yes"), { text: "НИК В ТАБЛИЦЕ", tone: "accent" });
   assert.deepEqual(view.markPlaque?.("no"), { text: "НИКА НЕТ В ТАБЛИЦЕ", tone: "warning" });
@@ -233,7 +233,7 @@ test("roster marks and owner bulk copy stay explicit, counted and failure honest
   assert.equal(view.bulkTitle?.(2), "Одобрить 2 заявки с уровнем 2?");
   assert.equal(view.bulkTitle?.(5), "Одобрить 5 заявок с уровнем 2?");
   assert.equal(view.bulkProgress?.(3, 7), "Одобрено 3 из 7");
-  assert.equal(view.bulkSummary?.({ approved: 4, already: 2, failed: 1 }), "Одобрено: 4 · Уже решено другим: 2 · Ошибка: 1");
+  assert.equal(view.bulkSummary?.({ approved: 4, already: 2, failed: 1 }), "Одобрено 4, уже решено другим 2, ошибка 1");
 
   const empty = { total: 0, rows: [] };
   const editor = { callerIsOwner: false, pendingTotalAll: 1, serverNow: new Date().toISOString(), pending: empty, people: empty, closed: empty, roster: "ok" } as UsersList;
