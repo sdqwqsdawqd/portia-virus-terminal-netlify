@@ -25,6 +25,7 @@ export type UsersApiDeps = {
 export type UsersApiResult = { status: number; body: Record<string, unknown> };
 
 export const PENDING_DATABASE_STATES = ["PGRST202", "42883", "42P01"] as const;
+export const USERS_POST_MAX_BYTES = 16_384;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
@@ -38,6 +39,10 @@ export type UsersAction =
 type UsersActionParse = { action: UsersAction } | { error: "invalid-action" | "invalid-body" | "invalid-level" };
 
 const denied = (): UsersApiResult => ({ status: 403, body: { error: "Доступ закрыт." } });
+
+export function canAccessUsers(access: UsersAccess): boolean {
+  return access.canEdit && access.openTabs.includes("users");
+}
 
 export function mapAccessError(error: unknown): UsersApiResult {
   if (error instanceof AccessStoreError) {
@@ -111,20 +116,43 @@ function markUsersList(list: UsersList, roster: UsersRoster): UsersList {
 }
 
 export async function parseUsersPostRequest(request: Request): Promise<{ result?: UsersApiResult; body?: Record<string, unknown> }> {
-  if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) {
+  const mediaType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
     return { result: { status: 415, body: { code: "json-required" } } };
   }
-  const body = parseJsonObject(await request.text());
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > USERS_POST_MAX_BYTES) {
+    return { result: { status: 413, body: { code: "body-too-large" } } };
+  }
+  const reader = request.body?.getReader();
+  const decoder = new TextDecoder();
+  let received = 0;
+  let raw = "";
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > USERS_POST_MAX_BYTES) {
+        await reader.cancel();
+        return { result: { status: 413, body: { code: "body-too-large" } } };
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+  }
+  const body = parseJsonObject(raw);
   return body ? { body } : { result: { status: 400, body: { code: "invalid-body" } } };
 }
 
 export async function handleUsersGet(deps: UsersApiDeps, params: URLSearchParams): Promise<UsersApiResult> {
-  if (!deps.access.canEdit || !deps.access.openTabs.includes("users")) return denied();
+  if (!canAccessUsers(deps.access)) return denied();
   const view = params.get("view") ?? "list";
   try {
     if (view === "list") {
-      const query = (params.get("q") ?? "").trim().toLowerCase();
-      if (!/^[a-z0-9_]{0,20}$/.test(query)) return { status: 400, body: { code: "invalid-query" } };
+      const rawQuery = (params.get("q") ?? "").trim();
+      if (!/^[A-Za-z0-9_]{0,20}$/.test(rawQuery)) return { status: 400, body: { code: "invalid-query" } };
+      const query = rawQuery.toLowerCase();
       const list = await listAccess(deps.client, { query, limit: 50 });
       return { status: 200, body: { list: markUsersList(list, await rosterFor(deps, 20_000)) } };
     }
@@ -156,7 +184,7 @@ export async function handleUsersGet(deps: UsersApiDeps, params: URLSearchParams
 }
 
 export async function handleUsersPost(deps: UsersApiDeps, body: Record<string, unknown>): Promise<UsersApiResult> {
-  if (!deps.access.canEdit || !deps.access.openTabs.includes("users")) return denied();
+  if (!canAccessUsers(deps.access)) return denied();
   const parsed = parseUsersAction(body);
   if ("error" in parsed) return { status: 400, body: { code: parsed.error } };
   try {

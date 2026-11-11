@@ -122,7 +122,7 @@ test("list query is trimmed and lower-cased", async () => {
 });
 
 test("invalid list queries fail without an RPC call", async () => {
-  for (const query of ["a b", "%", "a".repeat(21)]) {
+  for (const query of ["a b", "%", "a".repeat(21), "K"] ) {
     const fixture = dependencies();
     const result = await handleUsersGet(fixture.deps, new URLSearchParams({ view: "list", q: query }));
     assert.deepEqual(result, { status: 400, body: { code: "invalid-query" } });
@@ -293,10 +293,20 @@ test("POST request parsing requires JSON and a plain object", async () => {
   assert.equal(typeof postModule.parseUsersPostRequest, "function", "parseUsersPostRequest must exist");
   const plain = await postModule.parseUsersPostRequest?.(new Request("http://local/api/users", { method: "POST", headers: { "content-type": "text/plain" }, body: "{}" }));
   assert.deepEqual(plain, { result: { status: 415, body: { code: "json-required" } } });
+  const smuggled = await postModule.parseUsersPostRequest?.(new Request("http://local/api/users", { method: "POST", headers: { "content-type": "text/plain;x=application/json" }, body: "{}" }));
+  assert.deepEqual(smuggled, { result: { status: 415, body: { code: "json-required" } } });
   const broken = await postModule.parseUsersPostRequest?.(new Request("http://local/api/users", { method: "POST", headers: { "content-type": "application/json" }, body: "{" }));
   assert.deepEqual(broken, { result: { status: 400, body: { code: "invalid-body" } } });
   const valid = await postModule.parseUsersPostRequest?.(new Request("http://local/api/users", { method: "POST", headers: { "content-type": "application/json; charset=utf-8" }, body: JSON.stringify({ action: "reject", requestId: row.id }) }));
   assert.deepEqual(valid, { body: { action: "reject", requestId: row.id } });
+  const oversized = await postModule.parseUsersPostRequest?.(new Request("http://local/api/users", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ padding: "x".repeat(16_384) }) }));
+  assert.deepEqual(oversized, { result: { status: 413, body: { code: "body-too-large" } } });
+});
+
+test("POST route checks auth and access before reading the request body", () => {
+  const route = readFileSync(new URL("../app/api/users/route.ts", import.meta.url), "utf8");
+  const post = route.split("export async function POST(request: Request)")[1];
+  assert.ok(post.indexOf("getEditorAccess") < post.indexOf("parseUsersPostRequest(request)"));
 });
 
 test("set-level sends the expected level and preserves database result codes", async () => {

@@ -2536,7 +2536,7 @@
         "kind": "f",
         "returns": "trigger",
         "secdef": true,
-        "src_sha256": "61cfc6d5929d28ec86f75d3735906fa29a63b61d72fbd79d807cb1f18508bd40",
+        "src_sha256": "b26934e55d2adac36451831e204762bb3bc249a1fe4cebbedad48ba80e5873ea",
         "volatility": "v"
       },
       "public.portia_access_list(p_query text, p_limit integer)": {
@@ -2550,7 +2550,7 @@
         "kind": "f",
         "returns": "jsonb",
         "secdef": true,
-        "src_sha256": "069cf0edd29dcd7d5ff5fc1bdf180104b80c6249dc456910c4ef065097a5935f",
+        "src_sha256": "b8581a5a4daa96a09eab063e7e736ca8c6f0d1cf432f2f29006c57c49810aaa8",
         "volatility": "s"
       },
       "public.portia_access_mask_email(p_email text)": {
@@ -2563,7 +2563,7 @@
         "kind": "f",
         "returns": "text",
         "secdef": false,
-        "src_sha256": "180dd2bbb5ae91d334b4513cdfe1aa373b401a3b381e54f1bb6f49bb187d4a37",
+        "src_sha256": "9037d0a413c9aeb37bd53b2ad91b4ba4b542a33f6ac143de1eb4ccb26ca9b1a2",
         "volatility": "i"
       },
       "public.portia_access_nickname_key(p_nickname text)": {

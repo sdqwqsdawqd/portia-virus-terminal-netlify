@@ -19,7 +19,10 @@ as $$
       pg_catalog.substr(p_email, pg_catalog.strpos(p_email, '@') + 1) as domain
   )
   select case
-    when p_email is null or pg_catalog.strpos(p_email, '@') = 0 then null
+    when p_email is null
+      or pg_catalog.strpos(p_email, '@') = 0
+      or pg_catalog.strpos(pg_catalog.substr(p_email, pg_catalog.strpos(p_email, '@') + 1), '@') > 0
+      then null
     when pg_catalog.length(parts.local) <= 2
       then pg_catalog.left(parts.local, 1) || '•••@' || parts.domain
     else pg_catalog.left(parts.local, 1) || '•••' || pg_catalog.right(parts.local, 1) || '@' || parts.domain
@@ -52,17 +55,18 @@ declare
 begin
   if not public.portia_can_edit_tab('users') then raise exception 'forbidden'; end if;
   row_limit := least(greatest(coalesce(p_limit, 50), 0), 50);
-  query_text := lower(coalesce(p_query, ''));
+  query_text := coalesce(p_query, '');
   caller_is_owner := public.portia_is_owner();
 
   select count(*)::integer into pending_total_all
   from public.portia_access_requests r where r.status = 'pending';
 
-  if query_text collate "C" !~ '^[a-z0-9_]{0,20}$' then
+  if pg_catalog.octet_length(query_text) > 20 or query_text collate "C" !~ '^[A-Za-z0-9_]{0,20}$' then
     pending_total := 0; pending_rows := '[]'::jsonb;
     people_total := 0; people_rows := '[]'::jsonb;
     closed_total := 0; closed_rows := '[]'::jsonb;
   else
+    query_text := pg_catalog.lower(query_text);
     select count(*)::integer into pending_total
     from public.portia_access_requests r
     where r.status = 'pending'
@@ -119,7 +123,7 @@ begin
     ) order by rows.level desc, rows.nickname_key asc), '[]'::jsonb) into people_rows
     from (
       select p.id, p.nickname, p.nickname_key, p.origin, p.level, p.approved_at,
-        p.account_id = auth.uid() as self_guard,
+        coalesce(p.account_id = auth.uid(), false) as self_guard,
         (not caller_is_owner and exists (
           select 1 from auth.users owner_user
           where pg_catalog.lower(owner_user.email) = public.portia_owner_email()
@@ -284,6 +288,9 @@ security definer
 set search_path = ''
 as $$
 begin
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('access:nickname:' || new.nickname_key, 0)
+  );
   delete from public.portia_access_journal j
   where j.nickname_key = new.nickname_key
     and j.id < (

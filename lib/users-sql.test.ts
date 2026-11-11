@@ -6,9 +6,8 @@ import { accessRpc, bulkCandidates, listAccess, type AccessRpcClient } from "./a
 const sql = readFileSync(new URL("../supabase/migrations/20261110000000_portia_users_tab.sql", import.meta.url), "utf8").replace(/\r\n/gu, "\n");
 
 function maskEmailReference(email: string | null) {
-  if (email === null || !email.includes("@")) return null;
-  const [local, ...domainParts] = email.split("@");
-  const domain = domainParts.join("@");
+  if (email === null || email.split("@").length !== 2) return null;
+  const [local, domain] = email.split("@");
   return local.length <= 2
     ? `${local.slice(0, 1)}•••@${domain}`
     : `${local.slice(0, 1)}•••${local.slice(-1)}@${domain}`;
@@ -30,6 +29,11 @@ test("nickname search uses strpos rather than wildcard matching and clamps the r
   assert.match(sql, /strpos\(/u);
   assert.doesNotMatch(sql, /\b(?:like|ilike)\b/iu);
   assert.match(sql, /least\(greatest\(coalesce\(p_limit, 50\), 0\), 50\)/u);
+  assert.match(sql, /octet_length\(query_text\) > 20/u);
+  assert.ok(
+    sql.indexOf("octet_length(query_text) > 20") < sql.indexOf("query_text := pg_catalog.lower(query_text)"),
+    "raw input must be bounded and validated before Unicode lower-casing",
+  );
 });
 
 test("access list is revoked before grants and is executable only by authenticated and the privileged API role", () => {
@@ -42,8 +46,8 @@ test("access list is revoked before grants and is executable only by authenticat
 
 test("email masking is internal and matches the D-05 reference table", () => {
   assert.deepEqual(
-    ["qloxz@gmail.com", "ab@x.ru", "a@x.ru", "abc@x.ru", "", null, "no-at-sign"].map(maskEmailReference),
-    ["q•••z@gmail.com", "a•••@x.ru", "a•••@x.ru", "a•••c@x.ru", null, null, null],
+    ["qloxz@gmail.com", "ab@x.ru", "a@x.ru", "abc@x.ru", "a@secret@example.com", "", null, "no-at-sign"].map(maskEmailReference),
+    ["q•••z@gmail.com", "a•••@x.ru", "a•••@x.ru", "a•••c@x.ru", null, null, null, null],
   );
   const definition = sql.split("create or replace function public.portia_access_mask_email(p_email text)")[1];
   assert.ok(definition, "mask helper must be present");
@@ -51,6 +55,7 @@ test("email masking is internal and matches the D-05 reference table", () => {
   assert.doesNotMatch(definition.split("as $$")[0], /security definer/u);
   const body = definition.split("as $$")[1].split("$$;")[0];
   assert.match(body, /strpos\(p_email, '@'\) = 0/u);
+  assert.match(body, /strpos\(pg_catalog\.substr\(p_email,[^\n]+\), '@'\) > 0/u);
   assert.match(body, /length\([^)]*local[^)]*\) <= 2/u);
   assert.match(body, /left\([^,]+, 1\)[\s\S]*'•••'[\s\S]*right\([^,]+, 1\)/u);
   const revoke = sql.indexOf("revoke all on function public.portia_access_mask_email(text) from public, anon, authenticated;");
@@ -63,6 +68,7 @@ test("full access list masks actors and mirrors target guard predicates without 
   assert.match(sql, /case\s+when public\.portia_is_owner\(\) then [\w.]+email\s+else public\.portia_access_mask_email\([\w.]+email\)/u);
   assert.match(sql, /requested_by\s*=\s*auth\.uid\(\)/u);
   assert.match(sql, /account_id\s*=\s*auth\.uid\(\)/u);
+  assert.match(sql, /coalesce\(p\.account_id = auth\.uid\(\), false\) as self_guard/u);
   assert.match(sql, /portia_owner_email\(\)/u);
   assert.match(sql, /status = 'active'[\s\S]*order by [\w.]+level desc, [\w.]+nickname_key asc/u);
   assert.match(sql, /order by j\.id desc\s+limit 1/u);
@@ -127,6 +133,7 @@ test("D-07 retention permits only rows older than the newest 20 for the same nic
   assert.ok(prune, "bounded prune function must be present");
   assert.match(prune.split("as $$")[0], /security definer/u);
   const pruneBody = prune.split("as $$")[1].split("$$;")[0];
+  assert.match(pruneBody, /pg_advisory_xact_lock\(\s*pg_catalog\.hashtextextended\('access:nickname:' \|\| new\.nickname_key, 0\)\s*\)/u);
   assert.match(pruneBody, /delete from public\.portia_access_journal/u);
   assert.match(pruneBody, /nickname_key = new\.nickname_key[\s\S]*offset 19 limit 1/u);
   assert.match(pruneBody, /return null/u);
