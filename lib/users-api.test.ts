@@ -333,3 +333,54 @@ test("revoke and owner clear-cooldown dispatch only their Phase 21 RPCs", async 
     assert.deepEqual(owner.calls[0], { fn: accessRpc.clearCooldown, args: { p_nickname_key: closed.nicknameKey } });
   }
 });
+
+test("D-10 list marks stay unknown when the roster is degraded and failures are not cached", async () => {
+  let rosterCalls = 0;
+  const fixture = dependencies({
+    loadRoster: async () => {
+      rosterCalls += 1;
+      return { status: "degraded" as const };
+    },
+  } as Partial<UsersApiDeps>);
+  const result = await handleUsersGet(fixture.deps, new URLSearchParams("view=list"));
+  assert.equal((result.body.list as Record<string, unknown>).roster, "degraded");
+  assert.deepEqual(result, {
+    status: 200,
+    body: {
+      list: {
+        ...list(),
+        roster: "degraded",
+        pending: { total: 1, rows: [{ ...row, tableMark: "unknown" }] },
+        people: { total: 1, rows: [{ ...person, tableMark: "unknown" }] },
+        closed: { total: 1, rows: [{ ...closed, tableMark: "unknown" }] },
+      },
+    },
+  });
+  assert.equal(rosterCalls, 1);
+});
+
+test("D-11 bulk approval is owner-only and re-checks a fresh roster before deciding", async () => {
+  const calls: { fn: string; args?: Record<string, unknown> }[] = [];
+  let rosterCalls = 0;
+  const deps = {
+    access: { canEdit: true, canManageEditors: true, openTabs: ["users"] },
+    client: { rpc: async (fn: string, args?: Record<string, unknown>) => {
+      calls.push({ fn, args });
+      if (fn === accessRpc.bulkCandidates) return { data: { candidates: [{ id: row.id, nickname: row.nickname, nicknameKey: row.nicknameKey }] }, error: null };
+      return { data: { code: "approved", personId: person.id, level: 2 }, error: null };
+    } },
+    loadRoster: async () => {
+      rosterCalls += 1;
+      return { status: "ok" as const, keys: new Set([row.nicknameKey]) };
+    },
+    now: () => new Date("2026-11-11T00:00:00.000Z"),
+  } as UsersApiDeps;
+  assert.deepEqual(await postModule.handleUsersPost?.(deps, {
+    action: "approve",
+    requestId: row.id,
+    level: 2,
+    bulk: true,
+  }), { status: 200, body: { code: "approved", personId: person.id, level: 2, tableMark: "yes" } });
+  assert.equal(rosterCalls, 1);
+  assert.deepEqual(calls.map((call) => call.fn), [accessRpc.bulkCandidates, accessRpc.decide]);
+});
