@@ -9,7 +9,7 @@ import { expect, test } from "../fixtures/test";
 
 type AxeViolation = Awaited<ReturnType<AxeBuilder["analyze"]>>["violations"][number];
 
-// UI-контракт: подменены только GET /api/access и GET /api/content; это не доказательство роли редактора и не живые данные;
+// UI-контракт: подменены только GET /api/access, GET /api/content и GET /api/users; это не доказательство роли редактора и не живые данные;
 // живые проверки редактора остаются в editor-layout.spec.ts на staging (там без роли они «BLOCKED (ENV)», а не прохождение).
 // Что здесь доказывается: раскладка и поведение вкладок редактора в браузере (D-62 «Информация»: кнопка раздела сверху).
 // Чего здесь нет: прав редактора, сохранения, сервера. Любой не-GET запрос к /api роняет тест (трекер записи), PUT /api/content не уходит.
@@ -29,7 +29,7 @@ function trackWrites(page: Page) {
   return writes;
 }
 
-/** Stubs only the two READS the desktop needs to mount the editor; a write to either path is aborted (and the tracker records it).
+/** Stubs only the READS the desktop needs to mount the editor; a write to any stubbed path is aborted (and the tracker records it).
  *  D-63 chain: `content` replaces the default fixture and `puts` collects the body of PUT /api/content, which is then aborted too (the only write the chain tolerates). */
 async function stubEditorReads(page: Page, options: { content?: unknown; revision?: number; puts?: { content: PortiaContent; revision: number }[] } = {}) {
   await page.route("**/api/access", async (route) => {
@@ -39,6 +39,32 @@ async function stubEditorReads(page: Page, options: { content?: unknown; revisio
       contentType: "application/json",
       headers: { "cache-control": "no-store" },
       body: JSON.stringify({ canEdit: true, canManageEditors: false, openTabs: tabRegistry.map((tab) => tab.id), tabsEnforced: false }),
+    });
+  });
+  await page.route("**/api/users**", async (route) => {
+    if (route.request().method() !== "GET") return route.abort();
+    const view = new URL(route.request().url()).searchParams.get("view");
+    const emptyList = {
+      callerIsOwner: false,
+      pendingTotalAll: 0,
+      serverNow: "2026-11-11T12:00:00.000Z",
+      pending: { total: 0, rows: [] },
+      people: { total: 0, rows: [] },
+      closed: { total: 0, rows: [] },
+      roster: "ok",
+    };
+    const body = view === "count"
+      ? { pending: 0 }
+      : view === "history"
+        ? { entries: [] }
+        : view === "bulk"
+          ? { roster: "ok", eligible: [], excluded: [] }
+          : { list: emptyList };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "cache-control": "no-store" },
+      body: JSON.stringify(body),
     });
   });
   await page.route("**/api/content**", async (route) => {
