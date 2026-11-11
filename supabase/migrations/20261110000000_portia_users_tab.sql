@@ -301,3 +301,36 @@ grant execute on function public.portia_access_journal_prune() to service_role;
 
 drop trigger if exists portia_access_journal_prune on public.portia_access_journal;
 create trigger portia_access_journal_prune after insert on public.portia_access_journal for each row execute function public.portia_access_journal_prune();
+
+-- e. D-08 owner-only candidate list. Eligibility still depends on a fresh staff-roster read in the server route;
+-- this RPC only returns every request that is still pending and explicitly came from the sheet flow.
+create or replace function public.portia_access_bulk_candidates()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  candidate_rows jsonb;
+begin
+  if not public.portia_is_owner() then raise exception 'owner-required'; end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', rows.id,
+    'nickname', rows.nickname,
+    'nicknameKey', rows.nickname_key
+  ) order by rows.created_at asc, rows.id asc), '[]'::jsonb) into candidate_rows
+  from (
+    select r.id, r.nickname, r.nickname_key, r.created_at
+    from public.portia_access_requests r
+    where r.status = 'pending' and r.origin = 'sheet'
+    order by r.created_at asc, r.id asc
+  ) rows;
+
+  return jsonb_build_object('candidates', candidate_rows);
+end; $$;
+
+revoke all on function public.portia_access_bulk_candidates() from public, anon, authenticated;
+grant execute on function public.portia_access_bulk_candidates() to authenticated;
+grant execute on function public.portia_access_bulk_candidates() to service_role;

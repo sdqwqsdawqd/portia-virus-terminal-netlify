@@ -2,6 +2,7 @@
 // A SupabaseClient satisfies AccessRpcClient. Phase 22 adds the editor read wrappers used by lib/users-api.ts.
 
 import { isAccessLevel, type AccessLevel, type AccessOrigin } from "./access-levels.ts";
+import { isValidNickname, nicknameKey } from "./nickname.ts";
 import { signAccessSubmit } from "./access-session.ts";
 import { parseUsersHistory, parseUsersList, UsersReplyError, type UsersHistoryEntry, type UsersList } from "./users-model.ts";
 
@@ -21,6 +22,7 @@ export const accessRpc = {
   clearCooldown: "portia_access_clear_cooldown",
   list: "portia_access_list",
   history: "portia_access_history",
+  bulkCandidates: "portia_access_bulk_candidates",
   closureEnabled: "portia_access_closure_enabled",
   setClosure: "portia_access_set_closure",
 } as const;
@@ -224,6 +226,25 @@ export async function accessHistory(client: AccessRpcClient, input: { nicknameKe
     if (error instanceof UsersReplyError) throw unexpected();
     throw error;
   }
+}
+
+export type AccessBulkCandidate = { id: string; nickname: string; nicknameKey: string };
+
+const accessUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export async function bulkCandidates(client: AccessRpcClient): Promise<AccessBulkCandidate[]> {
+  const data = await call(client, accessRpc.bulkCandidates, {});
+  if (!Array.isArray(data.candidates) || data.candidates.length > ACCESS_REQUEST_LIMITS.maxPending) throw unexpected();
+  return data.candidates.map((candidate) => {
+    if (!isRecord(candidate)) throw unexpected();
+    const { id, nickname, nicknameKey: key } = candidate;
+    if (
+      typeof id !== "string" || !accessUuidPattern.test(id)
+      || !isValidNickname(nickname)
+      || typeof key !== "string" || nicknameKey(nickname) !== key
+    ) throw unexpected();
+    return { id, nickname, nicknameKey: key };
+  });
 }
 
 export type SetClosureResult = { code: "updated"; enabled: boolean; updatedAt: string } | { code: "invalid" };

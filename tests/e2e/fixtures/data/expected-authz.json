@@ -1989,6 +1989,22 @@
           "source": "supabase/migrations/20261110000000_portia_users_tab.sql:203"
         }
       }
+    },
+    {
+      "key": "public.portia_access_bulk_candidates()",
+      "name": "portia_access_bulk_candidates",
+      "identity": "",
+      "args": {},
+      "creates_rows": false,
+      "kind": "owner-only",
+      "cells": {
+        "anon": { "outcome": "42501", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:334" },
+        "outsider": { "outcome": "owner-required", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:317" },
+        "editor-full": { "outcome": "owner-required", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:317" },
+        "editor-restricted": { "outcome": "owner-required", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:317" },
+        "promo-reviewer": { "outcome": "owner-required", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:317" },
+        "owner": { "outcome": "allow", "source": "supabase/migrations/20261110000000_portia_users_tab.sql:335" }
+      }
     }
   ],
   "tables": [

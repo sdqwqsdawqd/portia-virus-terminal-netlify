@@ -2429,6 +2429,20 @@
       }
     },
     "functions": {
+      "public.portia_access_bulk_candidates()": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "2eadf802e4ada806541d1822526140fe36c7780985436ace42ffc25ad6abee26",
+        "volatility": "s"
+      },
       "public.portia_access_caller_level()": {
         "acl": [
           "service_role:EXECUTE"

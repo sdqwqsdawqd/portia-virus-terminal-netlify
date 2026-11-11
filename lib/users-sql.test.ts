@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { accessRpc, listAccess, type AccessRpcClient } from "./access-store.ts";
+import { accessRpc, bulkCandidates, listAccess, type AccessRpcClient } from "./access-store.ts";
 
 const sql = readFileSync(new URL("../supabase/migrations/20261110000000_portia_users_tab.sql", import.meta.url), "utf8").replace(/\r\n/gu, "\n");
 
@@ -162,4 +162,26 @@ test("USR-08 owner-only bulk candidates cover every pending sheet request", () =
   const authenticated = sql.indexOf("grant execute on function public.portia_access_bulk_candidates() to authenticated;");
   const privileged = sql.indexOf("grant execute on function public.portia_access_bulk_candidates() to service_role;");
   assert.ok(revoke > 0 && revoke < authenticated && authenticated < privileged);
+});
+
+test("bulkCandidates sends no SQL arguments and rejects malformed or oversized replies", async () => {
+  const signature = /create or replace function public\.portia_access_bulk_candidates\(([^)]*)\)/u.exec(sql)?.[1] ?? "missing";
+  const calls: { fn: string; args?: Record<string, unknown> }[] = [];
+  const valid = { id: "11111111-1111-4111-8111-111111111111", nickname: "Qloxz_1", nicknameKey: "qloxz_1" };
+  const client: AccessRpcClient = { rpc: async (fn, args) => {
+    calls.push({ fn, args });
+    return { data: { candidates: [valid] }, error: null };
+  } };
+  assert.deepEqual(await bulkCandidates(client), [valid]);
+  assert.equal(signature, "");
+  assert.deepEqual(calls, [{ fn: accessRpc.bulkCandidates, args: {} }]);
+
+  for (const candidates of [
+    [{ ...valid, id: "not-a-uuid" }],
+    [{ ...valid, nicknameKey: "different" }],
+    Array.from({ length: 201 }, () => valid),
+  ]) {
+    const malformed: AccessRpcClient = { rpc: async () => ({ data: { candidates }, error: null }) };
+    await assert.rejects(() => bulkCandidates(malformed), /unexpected-reply/u);
+  }
 });
