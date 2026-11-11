@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
 status: executing
-stopped_at: Completed PORTIA-22-05-PLAN.md
-last_updated: "2026-11-11T11:43:16.000Z"
+stopped_at: Completed PORTIA-22-06-PLAN.md
+last_updated: "2026-11-11T17:30:00.000Z"
 last_activity: 2026-11-11
-last_activity_desc: Completed PORTIA-22-05 decision history and bounded retention
-state_head: ea73b530636e9817753e206565c6b917142bc01a
+last_activity_desc: Completed PORTIA-22-06 staff roster marks and confirmed bulk approval
+state_head: 6079251ab550e0b4b5c318c92dceae3588b7a6d5
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — EXECUTING
-Plan: 6 of 10
+Plan: 7 of 10
 Status: Executing Phase PORTIA-22
-Last activity: 2026-11-11 — Completed PORTIA-22-05 decision history and bounded retention
+Last activity: 2026-11-11 — Completed PORTIA-22-06 staff roster marks and confirmed bulk approval
 
 Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 — принятый риск)
 
@@ -58,6 +58,7 @@ Progress: [█░░░░░░░░░] 14% (1/7 phases, 7 plans; Phase 21 �
 | Phase PORTIA-22 P03 | 1h45m | 2 tasks | 16 files |
 | Phase PORTIA-22 P04 | 32m | 2 tasks | 11 files |
 | Phase PORTIA-22 P05 | 21h23m | 3 tasks | 20 files |
+| Phase PORTIA-22 P06 | 5h40m | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -221,6 +222,9 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-22]: History masking and detail-key whitelisting stay inside the security-definer RPC because editors may call it directly.
 - [Phase PORTIA-22]: Open history panels are keyed by nicknameKey and reload through per-key request epochs after every successful list refresh.
 - [Phase PORTIA-22]: D-07 retention deletes only rows older than the newest twenty for the same nickname_key; live trigger execution remains BLOCKED (ENV).
+- [Phase PORTIA-22]: Only successful roster reads enter the 20-second list cache; every approval reads the roster fresh.
+- [Phase PORTIA-22]: Bulk eligibility is owner-only at both HTTP and SQL boundaries and covers all pending sheet requests, not the 50-row display slice.
+- [Phase PORTIA-22]: Bulk approval is a confirmed sequential loop of ordinary level-2 decisions, each independently re-authorized and re-matched.
 
 ### Pending Todos
 
@@ -274,10 +278,10 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-11T11:43:16.000Z
-Stopped at: Completed PORTIA-22-05-PLAN.md
+Last session: 2026-11-11T17:30:00.000Z
+Stopped at: Completed PORTIA-22-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
 
-- Phase 22: continue with `22-06-PLAN.md`; do not apply migrations, and keep live PostgreSQL/RLS, authenticated roles and devices BLOCKED until their designated proof phases.
+- Phase 22: continue with `22-07-PLAN.md`; do not apply migrations, and keep live PostgreSQL/RLS, authenticated roles and devices BLOCKED until their designated proof phases.

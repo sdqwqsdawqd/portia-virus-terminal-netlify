@@ -89,7 +89,7 @@ Plans:
   5. Владельцу показаны текстом три направления стиля (A строгий острый, B мягкий «оконный», C смешанный по смыслу) с таблицей значений, выбранное направление записано; токены лежат в коде в нынешних значениях, тест на радиусы фиксирует нынешнее число объявлений, а вид сайта не изменился. [UI-01]
 **Constraints**: если фаза добавляет SQL (RPC списка, решения, уровня, отзыва) — ревью `supabase-rls-reviewer` обязательно; визуальные изменения владельцу описываются текстом и таблицей значений, без галерей `review.html` и без реестра по хэшам. Токены — обычные `:root` CSS-переменные, `portia.css` правится на месте, порядок каскада не переставляется.
 **Acceptance gate**: роли редактора и владельца на живой базе — BLOCKED до staging; выбор направления — решение владельца, не агента.
-**Plans**: 5/10 plans executed
+**Plans**: 6/10 plans executed
 **UI hint**: yes
 
 Plans:
@@ -107,7 +107,7 @@ Plans:
 - [x] 22-05-PLAN.md — history (last 5) and journal retention 20 per person, D-07 one-way (settled) (USR-06)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 22-06-PLAN.md — «в таблице» mark at decision time and owner bulk approval with level 2 (USR-02, USR-08)
+- [x] 22-06-PLAN.md — «в таблице» mark at decision time and owner bulk approval with level 2 (USR-02, USR-08)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 22-07-PLAN.md — mocked browser lane: phone width 320/390/900, 20-char search (BLOCKED (ENV) if it cannot run)
@@ -209,7 +209,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 21. Фундамент доступа: люди, заявки, правила и журнал | 7/7 | In Progress | - |
-| 22. Вкладка «Пользователи» и каркас токенов стиля | 4/10 | In Progress | - |
+| 22. Вкладка «Пользователи» и каркас токенов стиля | 6/10 | In Progress | - |
 | 23. Вход по нику, «Повышение» и его регрессии | 0/0 | Not started | - |
 | 24. Уровни допуска и закрытие содержимого | 0/0 | Not started | - |
 | 25. Переключение закрытия: база, кэш, сборка, хранилище | 0/0 | Not started | - |
