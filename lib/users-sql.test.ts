@@ -143,3 +143,23 @@ test("Phase 22 history and retention do not widen journal table privileges or re
   }
   assert.doesNotMatch(code, /create trigger portia_access_journal_(?:append_only|no_truncate)\b/u);
 });
+
+test("USR-08 owner-only bulk candidates cover every pending sheet request", () => {
+  const definition = sql.split("create or replace function public.portia_access_bulk_candidates()")[1];
+  assert.ok(definition, "bulk candidate RPC must be present");
+  assert.match(definition, /returns jsonb\s+language plpgsql\s+stable\s+security definer\s+set search_path = ''/u);
+  const body = definition.split("as $$")[1].split("$$;")[0];
+  assert.equal(
+    body.split("begin\n")[1].split("\n")[0].trim(),
+    "if not public.portia_is_owner() then raise exception 'owner-required'; end if;",
+  );
+  assert.match(body, /status = 'pending'/u);
+  assert.match(body, /origin = 'sheet'/u);
+  assert.match(body, /order by [\w.]+created_at asc/u);
+  assert.doesNotMatch(body, /\blimit\s+(?:[1-9]\d?|1\d\d)\b/iu);
+
+  const revoke = sql.indexOf("revoke all on function public.portia_access_bulk_candidates() from public, anon, authenticated;");
+  const authenticated = sql.indexOf("grant execute on function public.portia_access_bulk_candidates() to authenticated;");
+  const privileged = sql.indexOf("grant execute on function public.portia_access_bulk_candidates() to service_role;");
+  assert.ok(revoke > 0 && revoke < authenticated && authenticated < privileged);
+});
