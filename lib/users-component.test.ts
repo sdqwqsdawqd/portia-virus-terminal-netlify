@@ -170,3 +170,11 @@ test("roster marks are visible on PC and phone with bounded sharp lists", () => 
   assert.match(block, /\.users-table-mark\.neutral/u);
   assert.doesNotMatch(block, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:/u);
 });
+
+test("single approval keeps the POST decision-time mark through a cached list refresh", () => {
+  const postAction = component.slice(component.indexOf("const postAction ="), component.indexOf("const approve ="));
+  const load = component.slice(component.indexOf("const load = useCallback"), component.indexOf("const openDialog ="));
+  assert.match(postAction, /responseJson\.tableMark[\s\S]*recentDecisionMarks\.current\.set/u);
+  assert.match(load, /recentDecisionMarks\.current\.get\(row\.id\)[\s\S]*tableMark: recent\.mark/u);
+  assert.match(load, /value\.until <= now/u, "the override must expire after the roster cache window");
+});

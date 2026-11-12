@@ -6,7 +6,7 @@ import { ConfirmDialog } from "@/components/portia-editor-dossier";
 import { failureFromResponse, type AppFailure } from "@/lib/app-state";
 import type { AccessLevel } from "@/lib/access-levels";
 import { usersCopy } from "@/lib/users-copy";
-import { parseUsersBulk, parseUsersCount, parseUsersHistory, parseUsersListReply, type UsersBulk, type UsersHistoryEntry, type UsersList } from "@/lib/users-model";
+import { parseUsersBulk, parseUsersCount, parseUsersHistory, parseUsersListReply, type TableMark, type UsersBulk, type UsersHistoryEntry, type UsersList } from "@/lib/users-model";
 import { buildUsersView, bulkButtonState, bulkProgress, bulkSummary, bulkTitle, decisionLevelOptions, historyLine, pendingBadgeText, resultNote, visibleControls, type UsersView } from "@/lib/users-view";
 
 type UsersTabProps = {
@@ -374,6 +374,7 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
   const [historyByKey, setHistoryByKey] = useState<Record<string, HistoryState>>({});
   const [openHistoryKeys, setOpenHistoryKeys] = useState<Set<string>>(() => new Set());
   const [announcement, setAnnouncement] = useState("");
+  const recentDecisionMarks = useRef(new Map<string, { mark: TableMark; until: number }>());
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const confirmReturnRef = useRef<HTMLElement | null>(null);
   const requestEpoch = useRef(0);
@@ -425,6 +426,14 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
         return false;
       }
       const parsed = parseUsersListReply(body.list);
+      const now = Date.now();
+      for (const [personId, value] of recentDecisionMarks.current) {
+        if (value.until <= now) recentDecisionMarks.current.delete(personId);
+      }
+      parsed.people.rows = parsed.people.rows.map((row) => {
+        const recent = recentDecisionMarks.current.get(row.id);
+        return recent ? { ...row, tableMark: recent.mark } : row;
+      });
       setList(parsed);
       setBulk(null);
       setLastGoodAt(new Date().toISOString());
@@ -502,6 +511,9 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
       const code = typeof responseJson.code === "string" ? responseJson.code : null;
       if (!code) throw new Error("unexpected-reply");
       if (code === "approved" && typeof responseJson.level === "number") {
+        if (typeof responseJson.personId === "string" && ["yes", "no", "unknown"].includes(String(responseJson.tableMark))) {
+          recentDecisionMarks.current.set(responseJson.personId, { mark: responseJson.tableMark as TableMark, until: Date.now() + 25_000 });
+        }
         setAnnouncement(usersCopy.approved(context.row.nickname, responseJson.level));
       } else if (code === "rejected") {
         setAnnouncement(usersCopy.rejected(context.row.nickname));
