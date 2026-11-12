@@ -4,17 +4,17 @@ milestone: v1.4
 milestone_name: Доступ и единый стиль
 current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
-status: executing
-stopped_at: Completed PORTIA-22-09-PLAN.md
-last_updated: "2026-11-12T07:09:29.000Z"
+status: verifying
+stopped_at: Completed PORTIA-22-10-PLAN.md
+last_updated: "2026-11-12T07:35:09.999Z"
 last_activity: 2026-11-12
-last_activity_desc: Completed PORTIA-22-09 offline checks including isolated Node 22 Next build; live Postgres/RLS remains BLOCKED
-state_head: 55e32e1bd01642d506c8115dc5ef11d365ba5232
+last_activity_desc: Completed PORTIA-22-10 owner decisions; migration unapplied, staging and live Postgres/RLS remain BLOCKED; style C chosen
+state_head: ece4b24b7b8db5cdd5d1459245877acc20d0c280
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 # Project State
@@ -28,12 +28,12 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 
 ## Current Position
 
-Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — EXECUTING
+Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — VERIFYING
 Plan: 10 of 10
-Status: Executing Phase PORTIA-22
-Last activity: 2026-11-12 — Completed PORTIA-22-09 offline checks including isolated Node 22 Next build; live Postgres/RLS remains BLOCKED
+Status: Phase complete — ready for verification
+Last activity: 2026-11-12 — Owner left migrations unapplied and chose style C; live evidence remains BLOCKED
 
-Progress: [█░░░░░░░░░] 14% (1/7 phases, 16/17 plans; Phase 21 — принятый риск)
+Progress: [█░░░░░░░░░] 14% (1/7 phases, 17/17 plans; Phase 21 — принятый риск)
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [█░░░░░░░░░] 14% (1/7 phases, 16/17 plans; Phase 2
 | Phase PORTIA-22 P07 | 12m | 2 tasks | 2 files |
 | Phase PORTIA-22 P08 | 12h58m | 2 tasks | 11 files |
 | Phase PORTIA-22 P09 | 26m | 2 tasks | 5 files |
+| Phase PORTIA-22 P10 | 20m | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-21]: D-72: фаза закрыта владельцем как принятый риск без живого прогона, не PASS; 6 пунктов 21-UAT.md skipped («принято владельцем»), 21-VERIFICATION.md остаётся human_needed с разделом Acknowledged Gaps; Postgres/RLS, роли, pgcrypto, конкурентность, Netlify-адаптер BLOCKED; требования без галочки; WR-01 закрыть до staging, WR-04 до Phase 23
 - [v1.4 roadmap]: Решения владельца D-71 (1б–8а) закреплены; три направления стиля A/B/C показываются текстом в Phase 22, перекраска идёт в Phase 26 (не больше одной переделки на экран); галереи и реестр по хэшам не возвращаются.
 - [Phase PORTIA-22]: 22-08: статический supabase-rls-reviewer проверил commit `9f2778c49f63ef44925170bcf07df8e98baf842e`; RLS22-01..05 исправлены, новых находок Phase 22 нет. SEC-M1 остаётся ранее принятым baseline; live Postgres/RLS, роли и конкуренция BLOCKED.
+- [Phase PORTIA-22]: 22-10: владелец 2026-11-12 ответил «оставить blocked C»; миграции не применялись, staging BLOCKED (ENV), production ОЖИДАЕТ ВЛАДЕЛЬЦА.
+- [Phase PORTIA-22]: 22-10: владелец выбрал направление C для Phase 26 — мягкие поверхности, острые элементы управления и вкладки, статусы-капсулы; UI-01 закрыто решением владельца.
 
 - [v1.3 roadmap]: Continue numbering after incomplete Phase 14; v1.3 uses Phases 15–22.
 - [v1.3 roadmap]: Stabilization preserves current PORTIA OS identity and validated behavior; it is not a redesign.
@@ -216,8 +219,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-22]: The HTTP route and the directly callable SQL function both enforce the users-tab gate.
 - [Phase PORTIA-22]: Unknown, failed or stale badge counts render no badge; active-tab list responses remain authoritative.
 - [Phase PORTIA-22]: Long Russian UI copy stays in lib/users-copy.ts to preserve the frozen component copy inventory.
-- [Phase PORTIA-22]: Radius and tap-target tokens remain declare-only until the owner selects A, B, or C.
-- [Phase PORTIA-22]: UI-01 remains BLOCKED and is not marked complete before the owner decision.
+- [Phase PORTIA-22]: Radius and tap-target tokens remain declare-only until Phase 26 applies the owner's choice C.
+- [Phase PORTIA-22]: UI-01 remained BLOCKED until the owner's C decision on 2026-11-12; choosing C does not prove live database or devices.
 - [Phase PORTIA-22]: Decision actors are masked inside portia_access_list; the client only renders the server value.
 - [Phase PORTIA-22]: Search responses use a monotonic request epoch so an older refresh cannot replace newer results.
 - [Phase PORTIA-22]: The phone action window reuses the native portia-dialog chrome and returns focus to its row.
@@ -283,10 +286,10 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-12T07:09:29.000Z
-Stopped at: Completed PORTIA-22-09-PLAN.md
+Last session: 2026-11-12T07:35:09.999Z
+Stopped at: Completed PORTIA-22-10-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
 
-- Phase 22: continue with `22-10-PLAN.md` for owner decisions on isolated staging and style direction A/B/C; keep the 22-07 browser lane BLOCKED (ENV), do not apply migrations, and keep live PostgreSQL/RLS, authenticated roles and devices BLOCKED until their designated proof phases.
+- Phase 22: run phase verification against all ten plan summaries and retain explicit `BLOCKED` evidence for browser, staging, live PostgreSQL/RLS, authenticated roles and devices. Migration remains unapplied by the owner's decision; Phase 26 follows style C.
