@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
 status: executing
-stopped_at: Completed PORTIA-22-08-PLAN.md
-last_updated: "2026-11-12T06:48:57.000Z"
+stopped_at: Completed PORTIA-22-09-PLAN.md
+last_updated: "2026-11-12T07:09:29.000Z"
 last_activity: 2026-11-12
-last_activity_desc: Completed PORTIA-22-08 static RLS review; live Postgres/RLS remains BLOCKED
-state_head: 3f95274bee2a1f380166f0dbd052de2d224928b1
+last_activity_desc: Completed PORTIA-22-09 offline checks including isolated Node 22 Next build; live Postgres/RLS remains BLOCKED
+state_head: 55e32e1bd01642d506c8115dc5ef11d365ba5232
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — EXECUTING
-Plan: 9 of 10
+Plan: 10 of 10
 Status: Executing Phase PORTIA-22
-Last activity: 2026-11-12 — Completed PORTIA-22-08 static RLS review; live Postgres/RLS remains BLOCKED
+Last activity: 2026-11-12 — Completed PORTIA-22-09 offline checks including isolated Node 22 Next build; live Postgres/RLS remains BLOCKED
 
-Progress: [█░░░░░░░░░] 14% (1/7 phases, 15/17 plans; Phase 21 — принятый риск)
+Progress: [█░░░░░░░░░] 14% (1/7 phases, 16/17 plans; Phase 21 — принятый риск)
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [█░░░░░░░░░] 14% (1/7 phases, 15/17 plans; Phase 2
 | Phase PORTIA-22 P06 | 5h40m | 3 tasks | 19 files |
 | Phase PORTIA-22 P07 | 12m | 2 tasks | 2 files |
 | Phase PORTIA-22 P08 | 12h58m | 2 tasks | 11 files |
+| Phase PORTIA-22 P09 | 26m | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -282,10 +283,10 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-12T06:48:57.000Z
-Stopped at: Completed PORTIA-22-08-PLAN.md
+Last session: 2026-11-12T07:09:29.000Z
+Stopped at: Completed PORTIA-22-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
 
-- Phase 22: continue with `22-09-PLAN.md` using reviewed commit `9f2778c49f63ef44925170bcf07df8e98baf842e`; keep the 22-07 browser lane BLOCKED (ENV), do not apply migrations, and keep live PostgreSQL/RLS, authenticated roles and devices BLOCKED until their designated proof phases.
+- Phase 22: continue with `22-10-PLAN.md` for owner decisions on isolated staging and style direction A/B/C; keep the 22-07 browser lane BLOCKED (ENV), do not apply migrations, and keep live PostgreSQL/RLS, authenticated roles and devices BLOCKED until their designated proof phases.

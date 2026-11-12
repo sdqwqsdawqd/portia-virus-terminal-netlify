@@ -19,18 +19,18 @@ key-files:
     - .planning/WINDOWS.md
 key-decisions:
   - "Migration remains unapplied; the owner decides on an isolated staging project in plan 22-10."
-  - "The final build is blocked by the explicit no-.env* constraint; direct offline checks are reported separately."
+  - "The final Next build ran in an isolated clean worktree with no real .env files or Supabase environment values."
 actuals:
-  tokens: 6583
+  tokens: 7613
   tasks: 2
-  commits: 2
-commits: 2
+  commits: 4
+commits: 4
 plan_head_before: 711135fdeaf19ea3f2e0031c7692abb649cedcc8
-plan_head_after: 2dae04a7c8053165f21db73acf98b5e2da3fb007
+plan_head_after: 55e32e1bd01642d506c8115dc5ef11d365ba5232
 requirements-completed: []
-duration: 20m
+duration: 26m
 completed: 2026-11-12
-status: blocked
+status: complete
 ---
 
 # Phase 22 Plan 09: Migration Freeze and Security Evidence Summary
@@ -47,6 +47,7 @@ status: blocked
 
 1. **Task 1 — migration freeze, apply record, matrix and guards:** `d1756e6`.
 2. **Task 2 — safe local verification record:** `2dae04a`.
+3. **Build follow-up — isolated Node 22 Next build and evidence:** `55e32e1`.
 
 ## Local Verification
 
@@ -58,9 +59,9 @@ status: blocked
 | ESLint | exit 0; 0 errors, 17 existing warnings, equal to Phase 21 baseline |
 | Visual manifest test | 49 passed, 0 failed; exit 0 |
 | `--verify-promotion` | 65 approved snapshot bytes verified; 18 excluded; exit 0 |
-| Next build | **BLOCKED (ENV)**: not run because it reads `.env.local`, which this execution was explicitly forbidden to read |
+| Next build | exit 0 on commit `ab5105f` in a clean temporary worktree with a physical copy of `node_modules`, Node 22.13.1, no `.env.local`, Supabase variables removed from the process; Turbopack compiled, TypeScript finished, 3/3 static pages generated |
 
-The earlier `portia-check` wrapper stopped before tests because its temporary npm installation lacks `node-gyp/bin/node-gyp.js` (`22-08-SUMMARY.md`). Direct `node` commands above supplied the safe local checks. There was no package install or attempt to substitute a package. A green type or test result does not prove that the migration is live.
+The earlier `portia-check` wrapper stopped before tests because its temporary npm installation lacks `node-gyp/bin/node-gyp.js` (`22-08-SUMMARY.md`). Direct `node` commands above supplied the local checks. The first isolated build attempt used a junction for `node_modules`; Turbopack rejected package resolution outside its root before compilation. A physical dependency copy resolved that environment issue, and the normal build completed. There was no package install. A green build or test result does not prove that the migration is live.
 
 ## Unverified Boundaries
 
@@ -71,13 +72,12 @@ The earlier `portia-check` wrapper stopped before tests because its temporary np
 
 ## Deviations from Plan
 
-The plan requested a successful Next build. The parent execution constraint expressly prohibited running it because Next.js reads `.env.local`; therefore the full-check acceptance criterion remains unmet. No build result is inferred from other checks. The documented site visual description is based on source and style-token contracts, not a rendered browser comparison.
+The Next build ran in a separate clean worktree to respect the no-`.env*` constraint. The build does not provide browser, authenticated-role or database evidence. The documented site visual description remains based on source and style-token contracts, without a rendered browser comparison.
 
 ## Deferred Issues
 
-- Next build is unrun under the no-`.env*` constraint; the owner or a later authorized environment must perform that gate before describing the full local check as complete.
 - Live evidence and owner approval remain for 22-10 and the isolated staging run.
-- The unrun build is recorded as open entry 11 in `.planning/WINDOWS.md`.
+- The earlier unrun build entry 11 in `.planning/WINDOWS.md` is fixed by the isolated build; browser and live-data entries remain open.
 
 ## Known Stubs
 
@@ -85,4 +85,4 @@ None introduced by this plan. The `pending-database` 503 response is the intenti
 
 ## Self-Check: PASSED
 
-The four task files exist; commits `d1756e6` and `2dae04a` are ancestors of HEAD. The Phase 21 and v1.3 archive paths are unchanged, and the protected owner paths were neither staged nor committed.
+The four task files exist; commits `d1756e6`, `2dae04a` and `55e32e1` are ancestors of HEAD. The isolated worktree built the same source commit as the main checkout before the build-evidence update. The Phase 21 and v1.3 archive paths are unchanged, and the protected owner paths were neither staged nor committed.
