@@ -111,7 +111,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [x] 22-07-PLAN.md — mocked browser lane: phone width 320/390/900, 20-char search (browser run BLOCKED (ENV); contracts type-check)
-- [ ] 22-08-PLAN.md — supabase-rls-reviewer review with fix-and-rereview loop to zero blocking findings
+- [x] 22-08-PLAN.md — supabase-rls-reviewer review with fix-and-rereview loop to zero blocking findings (static scope; live Postgres/RLS BLOCKED)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 22-09-PLAN.md — frozen migration, apply record (BLOCKED / ОЖИДАЕТ ВЛАДЕЛЬЦА), Phase 22 security matrix, full local check
@@ -209,7 +209,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 21. Фундамент доступа: люди, заявки, правила и журнал | 7/7 | In Progress | - |
-| 22. Вкладка «Пользователи» и каркас токенов стиля | 6/10 | In Progress | - |
+| 22. Вкладка «Пользователи» и каркас токенов стиля | 8/10 | In Progress | - |
 | 23. Вход по нику, «Повышение» и его регрессии | 0/0 | Not started | - |
 | 24. Уровни допуска и закрытие содержимого | 0/0 | Not started | - |
 | 25. Переключение закрытия: база, кэш, сборка, хранилище | 0/0 | Not started | - |
