@@ -115,7 +115,9 @@
 | `node node_modules/eslint/bin/eslint.js . --ignore-pattern dist --ignore-pattern .next` | 0 | 0 ошибок, 17 предупреждений — ровно baseline Phase 21; новых предупреждений Phase 22 нет |
 | `node --experimental-strip-types --test lib/phase15-visual-manifest.test.ts` | 0 | 49 тестов успешно |
 | `node --experimental-strip-types scripts/phase15-visual-manifest.mjs --verify-promotion` | 0 | 65 утверждённых снимков совпали побайтно, 18 неутверждённых строк исключены |
-| `node node_modules/next/dist/bin/next build` | не запускалась | `BLOCKED (ENV)`: Next.js читает `.env.local`; ограничение этого запуска запрещает чтение реальных `.env*` |
+| `node node_modules/next/dist/bin/next build` | 0 | Node 22.13.1: Turbopack собрал приложение за 8,4 с, TypeScript завершился за 15,6 с, сгенерированы 3/3 статических страниц |
+
+Сборка выполнена на commit `ab5105fc8be428cfa24cd0638883c09d80237326` в чистом временном git worktree с физической копией `node_modules`. В нём отсутствует `.env.local` (отслеживается только `.env.example`); переменные Supabase удалены из окружения процесса, телеметрия Next отключена. Первая попытка с junction для `node_modules` завершилась до компиляции: Turbopack не нашёл пакет `next` внутри корня worktree. После копирования зависимостей повторный штатный build завершился с кодом 0. Сборка не подключалась к Supabase и не доказывает применённую схему, работу ролей или живого API.
 
 В полосе редактора добавлена вкладка «Пользователи» со счётчиком ожидающих заявок. Другие экраны в коде этой фазы не менялись; digest стилевых токенов в `lib/style-tokens.test.ts` защищает прежние объявления. Это исходный и контрактный вывод, не результат браузерного или физического визуального прогона.
 
