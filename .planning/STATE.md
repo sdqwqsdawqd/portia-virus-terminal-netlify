@@ -5,11 +5,11 @@ milestone_name: Доступ и единый стиль
 current_phase: 22
 current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
 status: verifying
-stopped_at: Completed PORTIA-22-10-PLAN.md
-last_updated: "2026-11-12T07:35:09.999Z"
+stopped_at: Phase 23 context gathered
+last_updated: "2026-11-12T13:10:55.099Z"
 last_activity: 2026-11-12
 last_activity_desc: Completed PORTIA-22-10 owner decisions; migration unapplied, staging and live Postgres/RLS remain BLOCKED; style C chosen
-state_head: ece4b24b7b8db5cdd5d1459245877acc20d0c280
+state_head: cb3c804f630fe9f8258ebd1886dc6b9fb8528dd3
 progress:
   total_phases: 7
   completed_phases: 1
@@ -286,9 +286,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-12T07:35:09.999Z
-Stopped at: Completed PORTIA-22-10-PLAN.md
-Resume file: None
+Last session: 2026-11-12T13:10:54.810Z
+Stopped at: Phase 23 context gathered
+Resume file: .planning/phases/PORTIA-23-vhod-po-niku-povyshenie-i-ego-regressii/23-CONTEXT.md
 
 ## Operator Next Steps
 
