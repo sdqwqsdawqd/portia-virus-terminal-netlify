@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v1.4
 milestone_name: Доступ и единый стиль
-current_phase: 22
-current_phase_name: Вкладка «Пользователи» и каркас токенов стиля
-status: verifying
-stopped_at: Phase 23 context gathered
-last_updated: "2026-11-12T13:10:55.099Z"
+current_phase: 23
+current_phase_name: Вход по нику, «Повышение» и его регрессии
+status: executing
+stopped_at: Phase 23 UI-SPEC approved
+last_updated: "2026-11-12T17:51:41.482Z"
 last_activity: 2026-11-12
-last_activity_desc: Completed PORTIA-22-10 owner decisions; migration unapplied, staging and live Postgres/RLS remain BLOCKED; style C chosen
-state_head: cb3c804f630fe9f8258ebd1886dc6b9fb8528dd3
+last_activity_desc: Planned PORTIA-23 in seven verified plans; live Postgres/RLS, roles, staging and devices remain BLOCKED
+state_head: 9f38caccaacc7ebb79be3a7c30716912fa6c7966
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 17
+  total_plans: 24
   completed_plans: 17
 ---
 
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-09)
 
 **Core value:** Участник открывает сайт и сразу находит нужную запись; редактор правит её без потерь и без путаницы — и всё это выглядит как цельная «PORTIA OS».
-**Current focus:** Phase PORTIA-22 — Вкладка «Пользователи» и каркас токенов стиля
+**Current focus:** Phase PORTIA-23 — Вход по нику, «Повышение» и его регрессии
 
 ## Current Position
 
-Phase: PORTIA-22 (Вкладка «Пользователи» и каркас токенов стиля) — VERIFYING
-Plan: 10 of 10
-Status: Phase complete — ready for verification
-Last activity: 2026-11-12 — Owner left migrations unapplied and chose style C; live evidence remains BLOCKED
+Phase: PORTIA-23 (Вход по нику, «Повышение» и его регрессии) — READY TO EXECUTE
+Plan: 0 of 7
+Status: Ready to execute
+Last activity: 2026-11-12 — Phase 23 planned in seven verified plans; live evidence remains BLOCKED
 
-Progress: [█░░░░░░░░░] 14% (1/7 phases, 17/17 plans; Phase 21 — принятый риск)
+Progress: [█░░░░░░░░░] 14% (1/7 phases, 17/24 plans; Phase 21 — принятый риск)
 
 ## Performance Metrics
 
@@ -286,9 +286,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-12T13:10:54.810Z
-Stopped at: Phase 23 context gathered
-Resume file: .planning/phases/PORTIA-23-vhod-po-niku-povyshenie-i-ego-regressii/23-CONTEXT.md
+Last session: 2026-11-12T17:11:41.680Z
+Stopped at: Phase 23 UI-SPEC approved
+Resume file: .planning/phases/PORTIA-23-vhod-po-niku-povyshenie-i-ego-regressii/23-UI-SPEC.md
 
 ## Operator Next Steps
 
