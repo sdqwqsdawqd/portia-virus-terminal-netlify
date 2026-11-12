@@ -206,6 +206,6 @@ test("UI-01: the direction record presents A/B/C as text and carries no agent ch
   assert.ok((blocked && choices.length === 0) || (!blocked && choices.length === 1));
   if (choices.length === 1) {
     assert.match(record, /\b\d{4}-\d{2}-\d{2}\b/);
-    assert.match(record, /\bвладелец\b/iu);
+    assert.match(record, /(?<![\p{L}\p{N}_])владелец(?![\p{L}\p{N}_])/iu);
   }
 });
