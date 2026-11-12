@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 9
+open_count: 10
 waived_count: 0
 fixed_count: 1
-total_count: 10
-last_updated: 2026-11-11T17:44:46.360Z
+total_count: 11
+last_updated: 2026-11-12T07:03:01.066Z
 ---
 
 # Broken Windows Ledger
@@ -25,6 +25,7 @@ last_updated: 2026-11-11T17:44:46.360Z
 | 8 | PORTIA-22 | lint-warning | components/portia-editor.tsx | 300 | Three pre-existing no-img-element warnings remain outside plan 22-01 | open |  | 2026-11-10T07:39:20.893Z |  |
 | 9 | 22 | unrun-verify | tests/e2e/specs/users-tab.spec.ts |  | Playwright users-tab responsive lane BLOCKED (ENV): production-target preflight stopped before test discovery | open |  | 2026-11-11T17:44:45.043Z |  |
 | 10 | 22 | unrun-verify | tests/e2e/specs/editor-ui-contract.spec.ts |  | Playwright editor UI-contract lane BLOCKED (ENV): missing-environment preflight stopped before test discovery | open |  | 2026-11-11T17:44:46.360Z |  |
+| 11 | 22 | unrun-verify | .planning/phases/PORTIA-22-vkladka-polzovateli-i-karkas-tokenov-stilya/22-MIGRATION-APPLY.md |  | Next build BLOCKED (ENV): prohibited .env.local read in plan 22-09 execution | open |  | 2026-11-12T07:03:01.066Z |  |
 
 ````json
 [
@@ -155,6 +156,19 @@ last_updated: 2026-11-11T17:44:46.360Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-11T17:44:46.360Z",
+    "resolved_at": null,
+    "milestone": "v1.4"
+  },
+  {
+    "id": 11,
+    "kind": "unrun-verify",
+    "phase": "22",
+    "file": ".planning/phases/PORTIA-22-vkladka-polzovateli-i-karkas-tokenov-stilya/22-MIGRATION-APPLY.md",
+    "line": null,
+    "description": "Next build BLOCKED (ENV): prohibited .env.local read in plan 22-09 execution",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-12T07:03:01.066Z",
     "resolved_at": null,
     "milestone": "v1.4"
   }
