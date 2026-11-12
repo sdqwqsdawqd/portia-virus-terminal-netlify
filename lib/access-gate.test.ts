@@ -39,6 +39,41 @@ test("open gate stays usable when optional token resolution fails", async () => 
   assert.equal(decision.mode, "open");
 });
 
+test("two devices resolve independently even when their nickname matches", async () => {
+  const secondToken = "b".repeat(43);
+  const seen: string[] = [];
+  const rpc: AccessRpcClient = { rpc(fn, args) {
+    if (fn === "portia_access_closure_enabled") return Promise.resolve({ data: true, error: null });
+    const digest = String(args?.p_token_hash);
+    seen.push(digest);
+    return Promise.resolve({ data: digest === accessTokenDigest(token, secret)
+      ? { state: "approved", nickname: "SameNick", level: 2 }
+      : { state: "pending", nickname: "SameNick" }, error: null });
+  } };
+  const dependencies = { client: rpc, sessionSecret: secret, editorAccess: async () => ({ canEdit: false }) };
+  const first = await resolveGate(headers, dependencies);
+  const second = await resolveGate(new Headers({ cookie: `portia_access=${secondToken}` }), dependencies);
+  assert.equal(first.mode === "closed" && first.allowed, true);
+  assert.equal(second.mode === "closed" && second.allowed, false);
+  assert.notEqual(seen[0], seen[1]);
+});
+
+test("repeated reads remain stable and revoked status closes the gate", async () => {
+  let state: Record<string, unknown> = { state: "pending", nickname: "Visitor_1" };
+  const rpc: AccessRpcClient = { rpc(fn) { return Promise.resolve({ data: fn === "portia_access_closure_enabled" ? true : state, error: null }); } };
+  const dependencies = { client: rpc, sessionSecret: secret, editorAccess: async () => ({ canEdit: false }) };
+  const pendingA = await resolveGate(headers, dependencies);
+  const pendingB = await resolveGate(headers, dependencies);
+  assert.deepEqual(pendingA, pendingB);
+  state = { state: "approved", nickname: "Visitor_1", level: 2 };
+  const approved = await resolveGate(headers, dependencies);
+  assert.equal(approved.mode === "closed" && approved.allowed, true);
+  state = { state: "revoked", nickname: "Visitor_1", retryAt: "2026-11-12T18:00:00Z" };
+  const revoked = await resolveGate(headers, dependencies);
+  assert.equal(revoked.mode === "closed" && revoked.allowed, false);
+  assert.equal(revoked.state.state, "revoked");
+});
+
 test("home page's static shell contains no desktop content", () => {
   const page = readFileSync(fileURLToPath(new URL("../app/page.tsx", import.meta.url)), "utf8");
   assert.match(page, /PortiaAccessGate/);
