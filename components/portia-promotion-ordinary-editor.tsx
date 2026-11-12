@@ -76,7 +76,9 @@ export function PortiaPromotionOrdinaryEditor({ banks, requests, busy, post, ref
   const mutateItem = async (item: Item, patch: Partial<Item>) => settleMutation({ action: "save-task-item", bankId: bank!.id, itemId: item.id, text: patch.text ?? item.text, active: patch.active ?? item.active, sortOrder: patch.sortOrder ?? item.sortOrder }, "Задание обновлено.");
   const reorder = async (index: number, delta: -1 | 1) => {
     if (!bank) return; const other = bank.items[index + delta]; const item = bank.items[index]; if (!other) return;
-    await mutateItem(item, { sortOrder: other.sortOrder }); await mutateItem(other, { sortOrder: item.sortOrder });
+    const first = await mutateItem(item, { sortOrder: other.sortOrder });
+    if (!first) return;
+    await mutateItem(other, { sortOrder: item.sortOrder });
   };
   const remove = (item: Item, opener: HTMLElement) => {
     if (!bank) return;

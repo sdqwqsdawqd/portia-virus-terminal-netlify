@@ -227,7 +227,7 @@ test("confirmations name the action being declined and never use a generic cance
   assert.doesNotMatch(all, />\s*Отмена\s*</);
   assert.doesNotMatch(all, /ПОДТВЕРДИТЬ<\/button><\/div>/);
   for (const label of ["Удалить запрос", "Не удалять", "Снять claim", "Не снимать"]) assert.ok(main.includes(label), label);
-  for (const label of ["Удалить вопрос", "Оставить вопрос", "Вопрос будет удалён. Это нельзя отменить."]) assert.ok(qualification.includes(label), label);
+  for (const label of ["Удалить вопрос", "Оставить вопрос", "Удалить вопрос «${item.text}»? Это нельзя отменить."]) assert.ok(qualification.includes(label), label);
   assert.equal([...(all.match(/requestConfirm\(\{|setConfirm\(\{|onConfirm\(\{/g) ?? [])].length, [...(all.match(/cancelLabel: "/g) ?? [])].length);
 });
 
