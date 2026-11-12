@@ -16,9 +16,11 @@ const archived = (recorded: string) => recorded.replace(/^\.planning\/phases\/(?
 const read = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const matrixText = () => read(`${phaseDir}/20-SECURITY-MATRIX.md`);
 
-/** Phase 21 successor of the matrix: migration coverage and freshness are checked against it (21-07). The v1.3 matrix above stays frozen history. */
+/** Phase 21 and 22 successors; the v1.3 matrix above stays frozen history. */
 const phase21Dir = ".planning/phases/PORTIA-21-fundament-dostupa-lyudi-zayavki-pravila-i-zhurnal";
-const currentMatrixText = () => read(`${phase21Dir}/21-SECURITY-MATRIX.md`);
+const phase22Dir = ".planning/phases/PORTIA-22-vkladka-polzovateli-i-karkas-tokenov-stilya";
+const phase21MatrixText = () => read(`${phase21Dir}/21-SECURITY-MATRIX.md`);
+const currentMatrixText = () => read(`${phase22Dir}/22-SECURITY-MATRIX.md`);
 
 /** Text of a `## heading` block, up to the next `## ` heading. Empty string when the heading is missing. */
 function section(markdown: string, heading: string) {
@@ -238,9 +240,10 @@ const fixtureRoutes = ["app/api/a/route.ts", "app/api/content/notes/route.ts"];
 
 test("route coverage: the real matrix has exactly one row per tracked app/api route", () => {
   const routes = trackedRoutes();
-  assert.ok(routes.length >= 11, `expected at least 11 tracked routes, git lists ${routes.length}`);
+  assert.ok(routes.length >= 12, `expected at least 12 tracked routes, git lists ${routes.length}`);
+  assert.ok(routes.includes("app/api/users/route.ts"), "Phase 22 users route must be tracked");
   assert.ok(!routes.includes("app/api/content/notes/route.ts"), "the notes route was removed in 20-33");
-  assert.deepEqual(routeCoverageProblems(matrixText(), routes), []);
+  assert.deepEqual(routeCoverageProblems(currentMatrixText(), routes), []);
 });
 
 test("route coverage: git failing is an error, not an empty route list", () => {
@@ -293,13 +296,13 @@ const fixtureMigrations = ["supabase/migrations/1_a.sql", "supabase/migrations/2
 
 test("migration coverage: the real matrix has exactly one row per tracked supabase migration", () => {
   const migrations = trackedMigrations();
-  assert.ok(migrations.length >= 5, `expected at least 5 tracked migrations, git lists ${migrations.length}`);
+  assert.ok(migrations.length >= 8, `expected at least 8 tracked migrations, git lists ${migrations.length}`);
   assert.deepEqual(migrationCoverageProblems(currentMatrixText(), migrations), []);
 });
 
 test("migration coverage: the migrations after 20261101 are not recorded as applied on production by the agent", () => {
   const rows = tableRows(section(currentMatrixText(), migrationsHeading));
-  for (const name of ["20261104000000_portia_rename_virus_classes.sql", "20261104000100_portia_editor_notes.sql", "20261106000000_portia_drop_editor_notes.sql", "20261109000000_portia_access_foundation.sql"]) {
+  for (const name of ["20261104000000_portia_rename_virus_classes.sql", "20261104000100_portia_editor_notes.sql", "20261106000000_portia_drop_editor_notes.sql", "20261109000000_portia_access_foundation.sql", "20261110000000_portia_users_tab.sql"]) {
     const cells = rows.find((cells) => cells[0].includes(name));
     assert.ok(cells, name);
     assert.match(cells[5], /ОЖИДАЕТ ВЛАДЕЛЬЦА/, `${name}: production column`);
@@ -309,6 +312,10 @@ test("migration coverage: the migrations after 20261101 are not recorded as appl
   assert.ok(phase21);
   assert.match(phase21[4], /BLOCKED/, "Phase 21 migration: staging is BLOCKED, it was never run");
   assert.ok(!/\bPASS\b/.test(phase21[4]), "Phase 21 migration: staging is never an agent PASS");
+  const phase22 = rows.find((cells) => cells[0].includes("20261110000000_portia_users_tab.sql"));
+  assert.ok(phase22);
+  assert.match(phase22[4], /BLOCKED/, "Phase 22 migration: staging is BLOCKED, it was never run");
+  assert.ok(!/\bPASS\b/.test(phase22[4]), "Phase 22 migration: staging is never an agent PASS");
 });
 
 test("migration coverage fixture: a complete table is accepted, a missing, unknown or duplicated row is rejected", () => {
@@ -363,10 +370,10 @@ const freshDeps = (over: Partial<FreshnessDeps> = {}): FreshnessDeps => ({ commi
 test("matrix freshness: the real matrix commit is an ancestor of HEAD and no covered file changed after it", () => {
   assert.deepEqual(matrixFreshnessProblems(currentMatrixText(), realFreshnessDeps), []);
   const paths = coveredPaths(currentMatrixText());
-  assert.ok(paths.length >= 16, `expected the covered paths, found ${paths.length}`);
+  assert.ok(paths.length >= 19, `expected the covered paths, found ${paths.length}`);
   for (const path of paths) assert.ok(existsSync(new URL(`../${path}`, import.meta.url)), `covered path does not exist: ${path}`);
-  for (const path of ["lib/nickname.ts", "lib/access-session.ts", "lib/access-store.ts", "lib/access-levels.ts"]) {
-    assert.ok(paths.includes(path), `the Phase 21 matrix must cover ${path}`);
+  for (const path of ["lib/nickname.ts", "lib/access-session.ts", "lib/access-store.ts", "lib/access-levels.ts", "lib/users-api.ts", "lib/users-model.ts", "lib/users-roster.ts"]) {
+    assert.ok(paths.includes(path), `the Phase 22 matrix must cover ${path}`);
   }
 });
 
@@ -401,7 +408,7 @@ test("Phase 21 matrix: the verified commit equals the final reviewed commit and 
   const review = read(`${phase21Dir}/21-RLS-REVIEW.md`);
   const reviewed = /Итоговый проверенный commit:\s*([0-9a-f]{40})/.exec(review)?.[1];
   assert.ok(reviewed, "21-RLS-REVIEW.md must name the final reviewed commit");
-  const matrix = currentMatrixText();
+  const matrix = phase21MatrixText();
   assert.equal(/Проверяемый commit:\s*`([0-9a-f]{40})`/.exec(matrix.split("\n").slice(0, 8).join("\n"))?.[1], reviewed);
   const findings = tableRows(section(matrix, "Находки Phase 21"));
   assert.equal(findings.length, 16);
@@ -435,6 +442,54 @@ test("apply record: statuses are owner/BLOCKED and nothing is recorded as a pass
   assert.ok(!/\bPASS\b/i.test(status), "no PASS in «Статус»");
   assert.ok(!/\bPASS\b/.test(record), "no PASS anywhere in the apply record");
   for (const heading of ["Порядок применения", "Закреплённый sha256", "Статус", "Проверки после применения (владелец)", "Откат", "Решения D-01..D-10", "Принятые риски", "Ревью"]) {
+    assert.ok(section(record, heading).trim().length > 0, `«${heading}» is missing or empty`);
+  }
+});
+
+/* ------------------------------------------------------------------ Phase 22: reviewed matrix and unapplied migration */
+
+const usersMigration = "20261110000000_portia_users_tab.sql";
+const phase22ApplyRecordText = () => read(`${phase22Dir}/22-MIGRATION-APPLY.md`);
+
+test("Phase 22 matrix: the verified commit equals the final reviewed commit and the findings have no open or unresolved high", () => {
+  const review = read(`${phase22Dir}/22-RLS-REVIEW.md`);
+  const reviewed = /Итоговый проверенный commit:\s*`?([0-9a-f]{40})`?/.exec(review)?.[1];
+  assert.ok(reviewed, "22-RLS-REVIEW.md must name the final reviewed commit");
+  const matrix = currentMatrixText();
+  assert.equal(/Проверяемый commit:\s*`([0-9a-f]{40})`/.exec(matrix.split("\n").slice(0, 8).join("\n"))?.[1], reviewed);
+  const reviewIds = new Set(review.match(/RLS22-0[1-5]/g) ?? []);
+  const findings = tableRows(section(matrix, "Находки Phase 22"));
+  assert.equal(findings.length, reviewIds.size, "one row per reviewed Phase 22 finding");
+  assert.deepEqual(new Set(findings.map((row) => row[0])), reviewIds);
+  for (const [id, severity, status] of findings) {
+    assert.match(status, /^fixed\b/, `${id}: no open or unresolved finding`);
+    if (severity === "high" || severity === "critical") assert.fail(`${id}: unresolved high finding`);
+  }
+});
+
+test("apply record 22: the five migrations appear in ascending order and the hash equals the pin and the file", () => {
+  const record = phase22ApplyRecordText();
+  const order = section(record, "Порядок применения");
+  const versions = ["20261104000000", "20261104000100", "20261106000000", "20261109000000", "20261110000000"];
+  const lines = order.split("\n").filter((line) => /^\d+\. `\d{14}_/.test(line));
+  assert.equal(lines.length, versions.length, "exactly five migration order entries");
+  assert.deepEqual(lines.map((line) => /\d{14}/.exec(line)?.[0]), versions);
+  const recorded = new RegExp(`${usersMigration}:\\s*([0-9a-f]{64})`).exec(section(record, "Закреплённый sha256"))?.[1];
+  assert.ok(recorded, "«Закреплённый sha256» must carry the 64-hex hash");
+  const pinned = new RegExp(`"${usersMigration}":\\s*"([0-9a-f]{64})"`).exec(readFileSync(new URL("./portia-canonical-parity.test.ts", import.meta.url), "utf8"))?.[1];
+  assert.equal(recorded, pinned, "the record must equal the pin");
+  assert.equal(recorded, createHash("sha256").update(read(`supabase/migrations/${usersMigration}`)).digest("hex"), "the record must equal the LF-normalised file");
+});
+
+test("apply record 22: statuses are owner/BLOCKED and nothing is recorded as a pass", () => {
+  const record = phase22ApplyRecordText();
+  const status = section(record, "Статус");
+  const row = tableRows(status).find((cells) => cells[0].includes(usersMigration));
+  assert.ok(row, "Phase 22 migration needs a status row");
+  assert.match(row[1], /BLOCKED \(ENV\)/);
+  assert.match(row[2], /ОЖИДАЕТ ВЛАДЕЛЬЦА/);
+  assert.ok(!/\bPASS\b/i.test(record), "no PASS anywhere in the Phase 22 apply record");
+  for (const heading of ["Порядок применения", "Закреплённый sha256", "Статус", "Что доказано офлайн", "Проверки после применения (владелец)", "Откат", "Решения D-01..D-12", "Принятые риски", "Ревью"]) {
     assert.ok(section(record, heading).trim().length > 0, `«${heading}» is missing or empty`);
   }
 });
