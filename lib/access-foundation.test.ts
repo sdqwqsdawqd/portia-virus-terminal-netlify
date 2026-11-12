@@ -188,7 +188,7 @@ test("tracer: nickname -> token -> digest -> submit -> editor approves without l
   const client = stubClient(
     {
       [accessRpc.submit]: { code: "created" },
-      [accessRpc.decide]: { code: "approved", personId: "11111111-1111-4111-8111-111111111111", level: 2 },
+      [accessRpc.decide]: { code: "approved", personId: "11111111-1111-4111-8111-111111111111", level: 2, nicknameKey: "qloxz" },
       [accessRpc.resolve]: { state: "approved", nickname: "Qloxz", level: 2 },
     },
     calls,
@@ -207,7 +207,7 @@ test("tracer: nickname -> token -> digest -> submit -> editor approves without l
     { code: "created" },
   );
   const decided = await decideAccessRequest(client, { requestId: "22222222-2222-4222-8222-222222222222", decision: "approve" });
-  assert.deepEqual(decided, { code: "approved", personId: "11111111-1111-4111-8111-111111111111", level: 2 });
+  assert.deepEqual(decided, { code: "approved", personId: "11111111-1111-4111-8111-111111111111", level: 2, nicknameKey: "qloxz" });
   assert.deepEqual(await resolveAccess(client, tokenHash), { state: "approved", nickname: "Qloxz", level: 2 });
 
   assert.deepEqual(calls.map((call) => call.fn), ["portia_access_submit_request", "portia_access_decide", "portia_access_resolve"]);
@@ -271,6 +271,8 @@ test("the store fails closed on RPC errors and unknown replies", async () => {
   await assert.rejects(() => resolveAccess(stubClient({ [accessRpc.resolve]: { state: "weird", nickname: "Qloxz" } }), tokenHash), unexpected);
   await assert.rejects(() => decideAccessRequest(stubClient({ [accessRpc.decide]: { code: "surprise" } }), decideInput), unexpected);
   await assert.rejects(() => decideAccessRequest(stubClient({ [accessRpc.decide]: { code: "approved", personId: "x", level: 0 } }), decideInput), unexpected);
+  await assert.rejects(() => decideAccessRequest(stubClient({ [accessRpc.decide]: { code: "approved", personId: "11111111-1111-4111-8111-111111111111", level: 2 } }), decideInput), unexpected);
+  await assert.rejects(() => decideAccessRequest(stubClient({ [accessRpc.decide]: { code: "approved", personId: "11111111-1111-4111-8111-111111111111", level: 2, nicknameKey: "other key" } }), decideInput), unexpected);
 
   assert.deepEqual(
     await decideAccessRequest(stubClient({ [accessRpc.decide]: { code: "already-decided", status: "rejected" } }), decideInput),

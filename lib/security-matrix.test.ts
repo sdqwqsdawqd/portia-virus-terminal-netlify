@@ -302,7 +302,7 @@ test("migration coverage: the real matrix has exactly one row per tracked supaba
 
 test("migration coverage: the migrations after 20261101 are not recorded as applied on production by the agent", () => {
   const rows = tableRows(section(currentMatrixText(), migrationsHeading));
-  for (const name of ["20261104000000_portia_rename_virus_classes.sql", "20261104000100_portia_editor_notes.sql", "20261106000000_portia_drop_editor_notes.sql", "20261109000000_portia_access_foundation.sql", "20261110000000_portia_users_tab.sql"]) {
+  for (const name of ["20261104000000_portia_rename_virus_classes.sql", "20261104000100_portia_editor_notes.sql", "20261106000000_portia_drop_editor_notes.sql", "20261109000000_portia_access_foundation.sql", "20261110000000_portia_users_tab.sql", "20261112000000_portia_access_decision_mark.sql"]) {
     const cells = rows.find((cells) => cells[0].includes(name));
     assert.ok(cells, name);
     assert.match(cells[5], /ОЖИДАЕТ ВЛАДЕЛЬЦА/, `${name}: production column`);
@@ -467,27 +467,31 @@ test("Phase 22 matrix: the verified commit equals the final reviewed commit and 
   }
 });
 
-test("apply record 22: the five migrations appear in ascending order and the hash equals the pin and the file", () => {
+test("apply record 22: the six migrations appear in ascending order and both hashes equal their pins and files", () => {
   const record = phase22ApplyRecordText();
   const order = section(record, "Порядок применения");
-  const versions = ["20261104000000", "20261104000100", "20261106000000", "20261109000000", "20261110000000"];
+  const versions = ["20261104000000", "20261104000100", "20261106000000", "20261109000000", "20261110000000", "20261112000000"];
   const lines = order.split("\n").filter((line) => /^\d+\. `\d{14}_/.test(line));
-  assert.equal(lines.length, versions.length, "exactly five migration order entries");
+  assert.equal(lines.length, versions.length, "exactly six migration order entries");
   assert.deepEqual(lines.map((line) => /\d{14}/.exec(line)?.[0]), versions);
-  const recorded = new RegExp(`${usersMigration}:\\s*([0-9a-f]{64})`).exec(section(record, "Закреплённый sha256"))?.[1];
-  assert.ok(recorded, "«Закреплённый sha256» must carry the 64-hex hash");
-  const pinned = new RegExp(`"${usersMigration}":\\s*"([0-9a-f]{64})"`).exec(readFileSync(new URL("./portia-canonical-parity.test.ts", import.meta.url), "utf8"))?.[1];
-  assert.equal(recorded, pinned, "the record must equal the pin");
-  assert.equal(recorded, createHash("sha256").update(read(`supabase/migrations/${usersMigration}`)).digest("hex"), "the record must equal the LF-normalised file");
+  for (const migration of [usersMigration, "20261112000000_portia_access_decision_mark.sql"]) {
+    const recorded = new RegExp(`${migration}:\\s*([0-9a-f]{64})`).exec(section(record, "Закреплённый sha256"))?.[1];
+    assert.ok(recorded, `«Закреплённый sha256» must carry the 64-hex hash for ${migration}`);
+    const pinned = new RegExp(`"${migration}":\\s*"([0-9a-f]{64})"`).exec(readFileSync(new URL("./portia-canonical-parity.test.ts", import.meta.url), "utf8"))?.[1];
+    assert.equal(recorded, pinned, `${migration}: the record must equal the pin`);
+    assert.equal(recorded, createHash("sha256").update(read(`supabase/migrations/${migration}`)).digest("hex"), `${migration}: the record must equal the LF-normalised file`);
+  }
 });
 
 test("apply record 22: statuses are owner/BLOCKED and nothing is recorded as a pass", () => {
   const record = phase22ApplyRecordText();
   const status = section(record, "Статус");
-  const row = tableRows(status).find((cells) => cells[0].includes(usersMigration));
-  assert.ok(row, "Phase 22 migration needs a status row");
-  assert.match(row[1], /BLOCKED \(ENV\)/);
-  assert.match(row[2], /ОЖИДАЕТ ВЛАДЕЛЬЦА/);
+  for (const migration of [usersMigration, "20261112000000_portia_access_decision_mark.sql"]) {
+    const row = tableRows(status).find((cells) => cells[0].includes(migration));
+    assert.ok(row, `${migration}: migration needs a status row`);
+    assert.match(row[1], /BLOCKED \(ENV\)/);
+    assert.match(row[2], /ОЖИДАЕТ ВЛАДЕЛЬЦА/);
+  }
   assert.ok(!/\bPASS\b/i.test(record), "no PASS anywhere in the Phase 22 apply record");
   for (const heading of ["Порядок применения", "Закреплённый sha256", "Статус", "Что доказано офлайн", "Проверки после применения (владелец)", "Откат", "Решения D-01..D-12", "Принятые риски", "Ревью"]) {
     assert.ok(section(record, heading).trim().length > 0, `«${heading}» is missing or empty`);

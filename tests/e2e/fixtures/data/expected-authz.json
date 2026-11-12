@@ -9,7 +9,8 @@
     "20261104000100_portia_editor_notes.sql",
     "20261106000000_portia_drop_editor_notes.sql",
     "20261109000000_portia_access_foundation.sql",
-    "20261110000000_portia_users_tab.sql"
+    "20261110000000_portia_users_tab.sql",
+    "20261112000000_portia_access_decision_mark.sql"
   ],
   "generated_from": "all supabase/migrations SQL text replayed in version order (grant/revoke/policy/raise lines); not from observed behavior. Phase 21 adds the portia_access_* functions and tables (migration 20261109000000_portia_access_foundation.sql).",
   "roles": {
@@ -1731,27 +1732,27 @@
       "cells": {
         "anon": {
           "outcome": "42501",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:482"
+          "source": "supabase/migrations/20261112000000_portia_access_decision_mark.sql:3"
         },
         "outsider": {
           "outcome": "forbidden",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:404"
+          "source": "supabase/migrations/20261112000000_portia_access_decision_mark.sql:23"
         },
         "editor-full": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:483"
+          "source": "supabase/migrations/20261112000000_portia_access_decision_mark.sql:101"
         },
         "editor-restricted": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:483"
+          "source": "supabase/migrations/20261112000000_portia_access_decision_mark.sql:101"
         },
         "promo-reviewer": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:483"
+          "source": "supabase/migrations/20261112000000_portia_access_decision_mark.sql:101"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:483"
+          "source": "supabase/migrations/20261112000000_portia_access_decision_mark.sql:101"
         }
       }
     },

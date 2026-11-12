@@ -2496,7 +2496,7 @@
         "kind": "f",
         "returns": "jsonb",
         "secdef": true,
-        "src_sha256": "9f1e8941f5ba13003317c43708a96b764733c9e9a07265fed8c6f4014017e1e1",
+        "src_sha256": "a8d4316758ac8f875f825ca673d7cbe2d77c36fa22e1ed285841954bd55d2c0f",
         "volatility": "v"
       },
       "public.portia_access_history(p_nickname_key text)": {

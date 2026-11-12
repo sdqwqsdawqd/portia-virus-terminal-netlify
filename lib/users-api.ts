@@ -200,13 +200,22 @@ export async function handleUsersPost(deps: UsersApiDeps, body: Record<string, u
           decision: "approve",
           level: 2,
         });
-        return { status: 200, body: { ...result, tableMark: "yes" } };
+        if (result.code === "approved") {
+          return { status: 200, body: { code: result.code, personId: result.personId, level: result.level, tableMark: "yes" } };
+        }
+        return { status: 200, body: { ...result } };
       }
+      // The RPC supplies the key for the exact decided request; a client nickname is never trusted.
+      // A degraded roster leaves single approval available and reports an unknown mark.
+      const roster = parsed.action.action === "approve" ? await rosterFor(deps, 0) : null;
       const result = await decideAccessRequest(deps.client, {
         requestId: parsed.action.requestId,
         decision: parsed.action.action,
         ...(parsed.action.action === "approve" && parsed.action.level !== undefined ? { level: parsed.action.level } : {}),
       });
+      if (result.code === "approved") {
+        return { status: 200, body: { code: result.code, personId: result.personId, level: result.level, tableMark: tableMarkFor(result.nicknameKey, roster!) } };
+      }
       return { status: 200, body: { ...result } };
     }
     if (parsed.action.action === "set-level") {

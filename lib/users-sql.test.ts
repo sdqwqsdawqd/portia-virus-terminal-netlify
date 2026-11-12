@@ -4,6 +4,21 @@ import test from "node:test";
 import { accessRpc, bulkCandidates, listAccess, type AccessRpcClient } from "./access-store.ts";
 
 const sql = readFileSync(new URL("../supabase/migrations/20261110000000_portia_users_tab.sql", import.meta.url), "utf8").replace(/\r\n/gu, "\n");
+const markSql = readFileSync(new URL("../supabase/migrations/20261112000000_portia_access_decision_mark.sql", import.meta.url), "utf8").replace(/\r\n/gu, "\n");
+
+test("decision mark migration keeps the users gate and exposes a key only after successful approval", () => {
+  const definition = markSql.split("create or replace function public.portia_access_decide(p_request_id uuid, p_decision text, p_level smallint default null)")[1];
+  assert.ok(definition);
+  assert.match(definition, /returns jsonb\s+language plpgsql\s+volatile\s+security definer\s+set search_path = ''/u);
+  const body = definition.split("as $$")[1].split("$$;")[0];
+  assert.equal(body.split("begin\n")[1].split("\n")[0].trim(), "if not public.portia_can_edit_tab('users') then raise exception 'forbidden'; end if;");
+  assert.match(body, /return jsonb_build_object\('code', 'approved',[^;]*'nicknameKey', req\.nickname_key\);/u);
+  assert.doesNotMatch(body.split("if req.status <> 'pending' then")[1].split("end if;")[0], /nicknameKey/u);
+  assert.doesNotMatch(body.split("if not found then return jsonb_build_object('code', 'not-found'); end if;")[0], /nicknameKey/u);
+  assert.match(markSql, /revoke all on function public\.portia_access_decide\(uuid, text, smallint\) from public, anon, authenticated;/u);
+  assert.match(markSql, /grant execute on function public\.portia_access_decide\(uuid, text, smallint\) to authenticated;/u);
+  assert.doesNotMatch(markSql, /grant execute on function public\.portia_access_decide\(uuid, text, smallint\) to anon;/u);
+});
 
 function maskEmailReference(email: string | null) {
   if (email === null || email.split("@").length !== 2) return null;

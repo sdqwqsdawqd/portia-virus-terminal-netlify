@@ -61,7 +61,7 @@ export type AccessState =
   | { state: "rejected" | "revoked"; nickname: string; retryAt: string | null };
 
 export type DecideResult =
-  | { code: "approved"; personId: string; level: AccessLevel }
+  | { code: "approved"; personId: string; level: AccessLevel; nicknameKey: string }
   | { code: "rejected" }
   | { code: "already-decided"; status: string }
   | { code: "not-found" };
@@ -145,9 +145,9 @@ export async function decideAccessRequest(
   });
   switch (data.code) {
     case "approved": {
-      const { personId, level } = data;
-      if (typeof personId !== "string" || !isAccessLevel(level)) throw unexpected();
-      return { code: "approved", personId, level };
+      const { personId, level, nicknameKey: key } = data;
+      if (typeof personId !== "string" || !isAccessLevel(level) || typeof key !== "string" || nicknameKey(key) !== key) throw unexpected();
+      return { code: "approved", personId, level, nicknameKey: key };
     }
     case "rejected":
       return { code: "rejected" };

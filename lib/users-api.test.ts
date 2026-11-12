@@ -243,10 +243,10 @@ test("USR-07 already-decided is a 200 result code and is never retried", async (
 
 test("approve validates the optional level and sends null for an existing person", async () => {
   assert.equal(typeof postModule.handleUsersPost, "function", "handleUsersPost must exist");
-  const withoutLevel = dependencies({ reply: { code: "approved", personId: person.id, level: 4 } });
+  const withoutLevel = dependencies({ reply: { code: "approved", personId: person.id, level: 4, nicknameKey: row.nicknameKey } });
   assert.deepEqual(await postModule.handleUsersPost?.(withoutLevel.deps, { action: "approve", requestId: row.id }), {
     status: 200,
-    body: { code: "approved", personId: person.id, level: 4 },
+    body: { code: "approved", personId: person.id, level: 4, tableMark: "no" },
   });
   assert.deepEqual(withoutLevel.calls[0], { fn: accessRpc.decide, args: { p_request_id: row.id, p_decision: "approve", p_level: null } });
 
@@ -389,7 +389,7 @@ test("D-11 bulk approval is owner-only and re-checks a fresh roster before decid
     client: { rpc: async (fn: string, args?: Record<string, unknown>) => {
       calls.push({ fn, args });
       if (fn === accessRpc.bulkCandidates) return { data: { candidates: [{ id: row.id, nickname: row.nickname, nicknameKey: row.nicknameKey }] }, error: null };
-      return { data: { code: "approved", personId: person.id, level: 2 }, error: null };
+      return { data: { code: "approved", personId: person.id, level: 2, nicknameKey: row.nicknameKey }, error: null };
     } },
     loadRoster: async () => {
       rosterCalls += 1;
@@ -497,10 +497,10 @@ test("view=bulk is owner-only, uses all SQL candidates and separates eligible na
   assert.deepEqual(owner.calls, [{ fn: accessRpc.bulkCandidates, args: {} }]);
 });
 
-test("single approval never accepts or queries a client-selected roster nickname", async () => {
+test("single approval ignores client-selected nickname and reports a degraded roster honestly", async () => {
   let rosterCalls = 0;
   const fixture = dependencies({
-    reply: { code: "approved", personId: person.id, level: 2 },
+    reply: { code: "approved", personId: person.id, level: 2, nicknameKey: row.nicknameKey },
     loadRoster: async () => {
       rosterCalls += 1;
       return { status: "invalid-source", reason: "invalid-data" };
@@ -510,8 +510,46 @@ test("single approval never accepts or queries a client-selected roster nickname
     action: "approve",
     requestId: row.id,
     level: 2,
-  }), { status: 200, body: { code: "approved", personId: person.id, level: 2 } });
-  assert.equal(rosterCalls, 0);
+  }), { status: 200, body: { code: "approved", personId: person.id, level: 2, tableMark: "unknown" } });
+  assert.equal(rosterCalls, 1);
+  assert.deepEqual(fixture.calls.map((call) => call.fn), [accessRpc.decide]);
+});
+
+test("single approval reloads the roster after a cached list and marks the decided request", async () => {
+  resetUsersRosterCache();
+  let rosterCalls = 0;
+  const calls: string[] = [];
+  const deps: UsersApiDeps = {
+    access: { canEdit: true, canManageEditors: false, openTabs: ["users"] },
+    client: { rpc: async (fn) => {
+      calls.push(fn);
+      return { data: fn === accessRpc.list ? list() : { code: "approved", personId: person.id, level: 2, nicknameKey: row.nicknameKey }, error: null };
+    } },
+    loadRoster: async () => {
+      rosterCalls += 1;
+      return { status: "ok", roster: rosterCalls === 1 ? [{ nickname: row.nickname, nicknameKey: row.nicknameKey }] : [] };
+    },
+    now: () => new Date("2026-11-11T00:00:00.000Z"),
+  };
+  const before = await handleUsersGet(deps, new URLSearchParams("view=list"));
+  assert.equal((before.body.list as { pending: { rows: { tableMark: string }[] } }).pending.rows[0].tableMark, "yes");
+  assert.deepEqual(await postModule.handleUsersPost?.(deps, { action: "approve", requestId: row.id, level: 2 }), {
+    status: 200,
+    body: { code: "approved", personId: person.id, level: 2, tableMark: "no" },
+  });
+  assert.equal(rosterCalls, 2, "approval bypasses the list's 20-second roster cache");
+  assert.deepEqual(calls, [accessRpc.list, accessRpc.decide]);
+});
+
+test("single approval uses the database key and never exposes it in the HTTP result", async () => {
+  const fixture = dependencies({
+    reply: { code: "approved", personId: person.id, level: 2, nicknameKey: person.nicknameKey },
+    loadRoster: async () => ({ status: "ok", roster: [{ nickname: row.nickname, nicknameKey: row.nicknameKey }] }),
+  });
+  assert.deepEqual(await postModule.handleUsersPost?.(fixture.deps, { action: "approve", requestId: row.id, level: 2 }), {
+    status: 200,
+    body: { code: "approved", personId: person.id, level: 2, tableMark: "no" },
+  });
   assert.deepEqual(fixture.calls.map((call) => call.fn), [accessRpc.decide]);
 });
 
