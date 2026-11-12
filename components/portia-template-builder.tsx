@@ -15,6 +15,8 @@ import {
 import type { DossierTab } from "@/lib/editor-changes";
 import { portiaTextKey, type PortiaContent, type RichTextDocument, type Virus } from "@/lib/portia-content";
 import { VirusCardBody, type VirusCardSlot } from "@/components/portia-virus-card";
+import { ImageFramingEditor } from "@/components/portia-image-framing";
+import { imageFramingStyles, type ImageFraming } from "@/lib/image-framing";
 import {
   addTemplateMutation,
   editTemplateText,
@@ -24,6 +26,7 @@ import {
   isLocalTemplateImage,
   removeTemplateMutation,
   setTemplateImage,
+  setTemplateImageFraming,
   templateDossierSnapshotKey,
   templateFieldRuns,
   templateVirusId,
@@ -74,7 +77,7 @@ const sizeLabel = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 
  * A picture slot in the place and with the markup of the editor's ImageEditorField, but local only: there is no address field,
  * no upload and no GIF (D-24). A refused file shows an error and changes neither the text nor the previous picture.
  */
-function TemplateImageField({ label, placement, image, error, busy, onFile, onRemove }: {
+function TemplateImageField({ label, placement, image, error, busy, onFile, onRemove, onFrame }: {
   label: string;
   placement: "dossier" | "mutation";
   image: TemplateImage | null;
@@ -82,6 +85,7 @@ function TemplateImageField({ label, placement, image, error, busy, onFile, onRe
   busy: boolean;
   onFile: (file: File | undefined) => void;
   onRemove: () => void;
+  onFrame: (framing: ImageFraming | undefined) => void;
 }) {
   const titleId = useId();
   const actionId = useId();
@@ -99,6 +103,7 @@ function TemplateImageField({ label, placement, image, error, busy, onFile, onRe
       {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL; next/image cannot optimise it */}
       <img src={image.dataUrl} alt={`Предпросмотр: ${label}`} />
     </figure>}
+    {image && <ImageFramingEditor src={image.dataUrl} framing={image.framing} box="tile" label={label} onChange={onFrame} />}
     {image && <button type="button" className="secondary-control" disabled={busy} onClick={onRemove}>Убрать изображение</button>}
   </div>;
 }
@@ -130,10 +135,11 @@ function templateMedia(images: TemplateDossier["images"], slot: VirusCardSlot): 
     return <figure className="subject-media media-empty"><div><span>ВИЗУАЛЬНЫЙ МАТЕРИАЛ</span><strong>ОЖИДАЕТ ЗАГРУЗКИ</strong><small>{slot.label}</small></div></figure>;
   }
   const alt = slot.kind === "infected" ? photoCaption : slot.alt.trim() === "" ? mutationCaption : slot.alt;
+  const styles = imageFramingStyles(image.framing);
   return <figure className="subject-media">
-    <span className="portia-image is-loaded">
+    <span className="portia-image is-loaded is-fill" data-framing={styles.frame ? "true" : undefined} style={styles.frame}>
       {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL; next/image cannot optimise it */}
-      <img src={image.dataUrl} alt={alt} width={image.width} height={image.height} />
+      <img src={image.dataUrl} alt={alt} width={image.width} height={image.height} style={styles.image} />
     </span>
     <figcaption>{slot.label}</figcaption>
   </figure>;
@@ -452,7 +458,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
               <Field label="Название"><input value={virus.name} maxLength={120} autoComplete="off" onChange={(event) => updateVirus((next) => { next.name = event.target.value; })} /></Field>
               <Field label="Код"><input value={virus.code} maxLength={40} autoComplete="off" onChange={(event) => updateVirus((next) => { next.code = event.target.value; })} /></Field>
               <Field label="Статус"><input value={virus.status} maxLength={80} autoComplete="off" onChange={(event) => updateVirus((next) => { next.status = event.target.value; })} /></Field>
-              <TemplateImageField label="Фото после заражения" placement="dossier" image={dossier.images.infected} error={imageErrors.infected === true} busy={busy} onFile={(file) => { void chooseImage("infected", file); }} onRemove={() => removeImage("infected")} />
+              <TemplateImageField label="Фото после заражения" placement="dossier" image={dossier.images.infected} error={imageErrors.infected === true} busy={busy} onFile={(file) => { void chooseImage("infected", file); }} onRemove={() => removeImage("infected")} onFrame={(framing) => change((current) => setTemplateImageFraming(current, "infected", framing))} />
             </EditorGroup>}
 
             {dossierTab === "text" && <EditorGroup title="Описание">
@@ -481,7 +487,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
                   <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={busy} onClick={() => removeMutation(index)}>Удалить</button></div>
                   <Field label="Название"><input value={mutation.name} maxLength={120} autoComplete="off" onChange={(event) => updateVirus((next) => { const item = next.mutations[index]; if (item) item.name = event.target.value; })} /></Field>
                   <FormattedTextarea area="mutation" label="Описание" value={mutation.description} document={dossier.formattedText[portiaTextKey.mutation(templateVirusId, index)]} formatKey={portiaTextKey.mutation(templateVirusId, index)} hint={textHint} onActivate={activateFormatter} onChange={(value, document) => changeText(portiaTextKey.mutation(templateVirusId, index), value, document, (next, text) => { const item = next.virus.mutations[index]; if (item) item.description = text; })} />
-                  <TemplateImageField label="Изображение мутации" placement="mutation" image={dossier.images.mutations[index] ?? null} error={imageErrors[slotKey(index)] === true} busy={busy} onFile={(file) => { void chooseImage(index, file); }} onRemove={() => removeImage(index)} />
+                  <TemplateImageField label="Изображение мутации" placement="mutation" image={dossier.images.mutations[index] ?? null} error={imageErrors[slotKey(index)] === true} busy={busy} onFile={(file) => { void chooseImage(index, file); }} onRemove={() => removeImage(index)} onFrame={(framing) => change((current) => setTemplateImageFraming(current, index, framing))} />
                 </div>
               ))}
               <button className="secondary-control" type="button" onClick={() => change(addTemplateMutation)}>+ ДОБАВИТЬ МУТАЦИЮ</button>

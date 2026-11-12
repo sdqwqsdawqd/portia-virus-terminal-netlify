@@ -14,6 +14,7 @@ import {
   removeTemplateMutation,
   safeTemplateRunStyle,
   setTemplateImage,
+  setTemplateImageFraming,
   templateDossierSnapshotKey,
   templateFieldRuns,
   templateRunBackground,
@@ -239,7 +240,7 @@ test("the traps really fire, so a silent path is evidence and not a broken harne
 const forbiddenTokens = [
   "fetch", "XMLHttpRequest", "sendBeacon", "WebSocket", "EventSource", "localStorage", "sessionStorage", "indexedDB", "supabase",
 ] as const;
-const allowedImports = new Set(["./portia-content.ts", "./editor-items.ts", "./portia-template-dossier.ts", "./portia-template-export.ts"]);
+const allowedImports = new Set(["./portia-content.ts", "./editor-items.ts", "./portia-template-dossier.ts", "./portia-template-export.ts", "./image-framing.ts"]);
 
 /** Removes comments while leaving string and template literals alone. */
 function stripComments(source: string) {
@@ -409,6 +410,21 @@ test("an image goes only into its own slot and only as a local data URL", () => 
   const withQuote = { ...tinyPng, dataUrl: "data:image/png;base64,AAAA\" onerror=\"x" };
   for (const bad of [external, svg, mismatched, withQuote]) assert.equal(setTemplateImage(dossier, "infected", bad), dossier);
   for (const slot of [-1, 3, 0.5]) assert.equal(setTemplateImage(dossier, slot, tinyPng), dossier, String(slot));
+});
+
+test("local image frames are normalized per slot and change the export snapshot", () => {
+  const base = setTemplateImage(setTemplateImage(threeMutations(), "infected", tinyPng), 1, tinyJpeg);
+  const initialKey = templateDossierSnapshotKey(base);
+  const framed = setTemplateImageFraming(base, 1, { x: -20, y: 110, zoom: 999 });
+  assert.deepEqual(framed.images.mutations[1]?.framing, { x: 0, y: 100, zoom: 300 });
+  assert.equal(framed.images.infected?.framing, undefined);
+  assert.notEqual(templateDossierSnapshotKey(framed), initialKey);
+  const other = setTemplateImageFraming(framed, "infected", { x: 45.3, y: 61.6, zoom: 143.9 });
+  assert.deepEqual(other.images.infected?.framing, { x: 45, y: 62, zoom: 144 });
+  assert.deepEqual(other.images.mutations[1]?.framing, framed.images.mutations[1]?.framing);
+  assert.equal(setTemplateImage(other, 1, tinyPng).images.mutations[1]?.framing, undefined);
+  assert.equal(setTemplateImage(other, "infected", null).images.infected, null);
+  assert.deepEqual(base.images.infected, tinyPng, "input remains unchanged");
 });
 
 test("content is detected for any typed character, class change, image or mutation, and not for an empty draft", () => {

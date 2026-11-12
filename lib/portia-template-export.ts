@@ -30,6 +30,8 @@ export const templatePngTooLargeError = "Карточка слишком дли�
 export type TemplateImageMime = "image/png" | "image/jpeg" | "image/webp";
 
 /** A validated local image. `dataUrl` is the only place the bytes live; nothing is uploaded or stored. */
+import type { ImageFraming } from "./image-framing.ts";
+
 export type TemplateImage = Readonly<{
   name: string;
   mime: TemplateImageMime;
@@ -37,6 +39,7 @@ export type TemplateImage = Readonly<{
   width: number;
   height: number;
   bytes: number;
+  framing?: ImageFraming;
 }>;
 
 export type LocalImageFile = Readonly<{
@@ -214,7 +217,7 @@ const cardClasses: ReadonlySet<string> = new Set([
   "classification-panel", "classification-grid", "class-cell", "class-badge",
   "danger", "spread", "escape", "transmission", "mind", "appearance", "behavior", "level-1", "level-2", "level-3",
   "section-kicker", "dossier-section", "lead-copy", "metric-grid", "mutation-grid", "mutation-card", "mutation-index", "mutation-copy",
-  "subject-media", "media-empty", "portia-image", "is-loaded", "formatted-content", "formatted-empty",
+  "subject-media", "media-empty", "portia-image", "is-loaded", "is-fill", "formatted-content", "formatted-empty",
   "template-card-preview", "template-export-card", "template-export",
 ]);
 

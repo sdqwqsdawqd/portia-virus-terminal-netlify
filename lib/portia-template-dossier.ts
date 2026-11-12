@@ -9,6 +9,7 @@
  */
 import { portiaTextKey, type RichTextDocument, type RichTextStyle, type Virus } from "./portia-content.ts";
 import type { TemplateImage } from "./portia-template-export.ts";
+import { normalizeImageFraming, type ImageFraming } from "./image-framing.ts";
 
 /** Every template record carries this id; it is also the middle part of its formatting keys. */
 export const templateVirusId = "template";
@@ -220,6 +221,19 @@ export function setTemplateImage(dossier: TemplateDossier, slot: "infected" | nu
   if (image !== null && !isLocalTemplateImage(image)) return dossier;
   if (slot !== "infected" && (!Number.isInteger(slot) || slot < 0 || slot >= dossier.virus.mutations.length)) return dossier;
   const next = cloneDossier(dossier);
+  const replacement = image?.framing ? { ...image, framing: undefined } : image;
+  if (slot === "infected") next.images.infected = replacement;
+  else next.images.mutations[slot] = replacement;
+  return next;
+}
+
+/** Applies a local crop to one existing slot; an empty or replaced slot has no crop to inherit. */
+export function setTemplateImageFraming(dossier: TemplateDossier, slot: "infected" | number, framing: ImageFraming | undefined): TemplateDossier {
+  if (slot !== "infected" && (!Number.isInteger(slot) || slot < 0 || slot >= dossier.virus.mutations.length)) return dossier;
+  const current = slot === "infected" ? dossier.images.infected : dossier.images.mutations[slot];
+  if (!current) return dossier;
+  const next = cloneDossier(dossier);
+  const image = { ...current, framing: normalizeImageFraming(framing) };
   if (slot === "infected") next.images.infected = image;
   else next.images.mutations[slot] = image;
   return next;
@@ -247,7 +261,7 @@ export function hasTemplateDossierContent(dossier: TemplateDossier) {
     || images.mutations.some((image) => image !== null);
 }
 
-const imageKey = (image: TemplateImage | null) => (image === null ? null : [image.name, image.bytes, image.width, image.height, image.dataUrl.length, image.dataUrl.slice(-48)]);
+const imageKey = (image: TemplateImage | null) => (image === null ? null : [image.name, image.bytes, image.width, image.height, image.dataUrl.length, image.dataUrl.slice(-48), normalizeImageFraming(image.framing) ?? null]);
 
 /** A stable value that changes with every text, formatting, class, mutation or picture change; used to tell a downloaded draft from a changed one. */
 export function templateDossierSnapshotKey(dossier: TemplateDossier) {
