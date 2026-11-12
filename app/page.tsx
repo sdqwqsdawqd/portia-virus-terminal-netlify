@@ -1,6 +1,5 @@
-import { PortiaDesktop } from "@/components/portia-desktop";
-import { defaultPortiaContent } from "@/lib/portia-content";
+import { PortiaAccessGate } from "@/components/portia-access-gate";
 
 export default function Home() {
-  return <PortiaDesktop initialContent={defaultPortiaContent} />;
+  return <PortiaAccessGate />;
 }
