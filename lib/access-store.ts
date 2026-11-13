@@ -1,7 +1,7 @@
 // Typed wrappers over the portia_access_* RPCs (Phase 21). Fail closed: any error or unknown reply throws.
 // A SupabaseClient satisfies AccessRpcClient. Phase 22 adds the editor read wrappers used by lib/users-api.ts.
 
-import { isAccessLevel, type AccessLevel, type AccessOrigin } from "./access-levels.ts";
+import { ACCESS_ORIGINS, isAccessLevel, type AccessLevel, type AccessOrigin } from "./access-levels.ts";
 import { isValidNickname, nicknameKey } from "./nickname.ts";
 import { signAccessSubmit } from "./access-session.ts";
 import { parseUsersHistory, parseUsersList, UsersReplyError, type UsersHistoryEntry, type UsersList } from "./users-model.ts";
@@ -24,6 +24,7 @@ export const accessRpc = {
   history: "portia_access_history",
   bulkCandidates: "portia_access_bulk_candidates",
   closureEnabled: "portia_access_closure_enabled",
+  editorRequestStatus: "portia_access_editor_request_status",
   setClosure: "portia_access_set_closure",
 } as const;
 
@@ -57,7 +58,7 @@ export type ClearCooldownResult = { code: "cleared" | "no-cooldown" | "invalid" 
 export type AccessState =
   | { state: "none" }
   | { state: "pending"; nickname: string }
-  | { state: "approved"; nickname: string; level: AccessLevel }
+  | { state: "approved"; nickname: string; level: AccessLevel; origin: AccessOrigin }
   | { state: "rejected" | "revoked"; nickname: string; retryAt: string | null };
 
 export type DecideResult =
@@ -115,16 +116,16 @@ export async function submitAccessRequest(
   return { code: code as Exclude<SubmitResult, { code: "cooldown" }>["code"] };
 }
 
-export async function resolveAccess(client: AccessRpcClient, tokenHash: string): Promise<AccessState> {
-  const data = await call(client, accessRpc.resolve, { p_token_hash: tokenHash });
+function parseAccessState(data: Record<string, unknown>): AccessState {
   const { state, nickname } = data;
   if (state === "none") return { state: "none" };
   if (typeof nickname !== "string") throw unexpected();
   if (state === "pending") return { state: "pending", nickname };
   if (state === "approved") {
     const level = data.level;
-    if (!isAccessLevel(level)) throw unexpected();
-    return { state: "approved", nickname, level };
+    const origin = data.origin;
+    if (!isAccessLevel(level) || typeof origin !== "string" || !(ACCESS_ORIGINS as readonly string[]).includes(origin)) throw unexpected();
+    return { state: "approved", nickname, level, origin: origin as AccessOrigin };
   }
   if (state === "rejected" || state === "revoked") {
     const retryAt = data.retryAt;
@@ -132,6 +133,14 @@ export async function resolveAccess(client: AccessRpcClient, tokenHash: string):
     return { state, nickname, retryAt };
   }
   throw unexpected();
+}
+
+export async function resolveAccess(client: AccessRpcClient, tokenHash: string): Promise<AccessState> {
+  return parseAccessState(await call(client, accessRpc.resolve, { p_token_hash: tokenHash }));
+}
+
+export async function resolveEditorRequest(client: AccessRpcClient, tokenHash: string): Promise<AccessState> {
+  return parseAccessState(await call(client, accessRpc.editorRequestStatus, { p_token_hash: tokenHash }));
 }
 
 export async function decideAccessRequest(

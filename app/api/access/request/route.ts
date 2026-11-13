@@ -3,14 +3,14 @@ import { accessIpBucket, accessSessionSecret, accessSubmitSecret, accessTokenDig
 import { submitAccessRequest } from "@/lib/access-store";
 import { parseNicknameInput } from "@/lib/nickname";
 import { noStoreHeaders } from "@/lib/portia-cdn";
-import { parseJsonObject } from "@/lib/request-json";
+import { parseLimitedJsonObject } from "@/lib/request-json";
 import { createPublicSupabaseClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
-    const body = parseJsonObject(await request.text());
+    const body = await parseLimitedJsonObject(request, 1024);
     const parsedNickname = parseNicknameInput(body?.nickname);
     const origin = body?.origin;
     if (!parsedNickname || typeof origin !== "string" || !(ACCESS_ORIGINS as readonly string[]).includes(origin)) {

@@ -354,7 +354,7 @@ test("accepted risks D-11 and SEC-M1 are recorded as ACCEPTED, not denied", () =
 
 test("function arguments are inert: namespaced text, inert uuid, row creators flagged", () => {
   const supported = new Set<string>(matrix.placeholders);
-  const creators = new Set(["portia_promo_bind_device", "portia_promo_register_attempt", "portia_promo_submit_request", "portia_promo_reset_device"]);
+  const creators = new Set(["portia_promo_bind_device", "portia_promo_register_attempt", "portia_promo_submit_request", "portia_promo_reset_device", "portia_promo_secure_submit"]);
   for (const fn of matrix.functions) {
     assert.equal(typeof fn.creates_rows, "boolean", `${fn.key}: creates_rows`);
     assert.equal(fn.creates_rows, creators.has(fn.name), `${fn.key}: creates_rows`);

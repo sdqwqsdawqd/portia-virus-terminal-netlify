@@ -189,7 +189,7 @@ test("tracer: nickname -> token -> digest -> submit -> editor approves without l
     {
       [accessRpc.submit]: { code: "created" },
       [accessRpc.decide]: { code: "approved", personId: "11111111-1111-4111-8111-111111111111", level: 2, nicknameKey: "qloxz" },
-      [accessRpc.resolve]: { state: "approved", nickname: "Qloxz", level: 2 },
+      [accessRpc.resolve]: { state: "approved", nickname: "Qloxz", level: 2, origin: "sheet" },
     },
     calls,
   );
@@ -208,7 +208,7 @@ test("tracer: nickname -> token -> digest -> submit -> editor approves without l
   );
   const decided = await decideAccessRequest(client, { requestId: "22222222-2222-4222-8222-222222222222", decision: "approve" });
   assert.deepEqual(decided, { code: "approved", personId: "11111111-1111-4111-8111-111111111111", level: 2, nicknameKey: "qloxz" });
-  assert.deepEqual(await resolveAccess(client, tokenHash), { state: "approved", nickname: "Qloxz", level: 2 });
+  assert.deepEqual(await resolveAccess(client, tokenHash), { state: "approved", nickname: "Qloxz", level: 2, origin: "sheet" });
 
   assert.deepEqual(calls.map((call) => call.fn), ["portia_access_submit_request", "portia_access_decide", "portia_access_resolve"]);
   assert.deepEqual(calls[0].args, {
@@ -352,6 +352,10 @@ test("visitor behaviour is unchanged (Phase 22 editor allow-list)", () => {
     "app/api/users/route.ts",
     "components/portia-users-tab.tsx",
     "components/portia-editor.tsx",
+    "app/api/access/request/route.ts",
+    "app/api/access/status/route.ts",
+    "app/api/access/editor-request/route.ts",
+    "components/portia-access-gate.tsx",
   ]);
   for (const path of allowed) assert.ok(existsSync(join(repoRoot, path)), `${path} must exist`);
   for (const dir of ["app", "components"]) {
@@ -365,9 +369,9 @@ test("visitor behaviour is unchanged (Phase 22 editor allow-list)", () => {
   assert.ok(files.length > 0, "expected to scan some app/components files");
   for (const file of files) {
     const text = readFileSync(file, "utf8");
-    assert.ok(!text.includes("portia_access_"), `${file} references a portia_access_ RPC`);
     const path = relative(repoRoot, file).replaceAll("\\", "/");
     if (!allowed.has(path)) {
+      assert.ok(!text.includes("portia_access_"), `${file} references a portia_access_ RPC`);
       assert.doesNotMatch(
         text,
         /access-store|access-session|access-levels|\/nickname(?:\.ts)?["']|users-(?:api|model|view|copy|time|roster)|portia-users-tab/u,

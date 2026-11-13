@@ -19,6 +19,8 @@
 -- refuses otherwise): type and expression text depends on search_path.
 --
 -- Executed and calibrated on a live Postgres 17 in plan 16-10 (assumption A11): deterministic across runs.
+-- Phase 23's access/Promotion functions are included by fnset automatically. Their expected hashes and ACLs are
+-- text-derived until this query is run on an isolated project; live parity remains BLOCKED.
 
 with
 ext as (

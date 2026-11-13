@@ -2499,6 +2499,20 @@
         "src_sha256": "a8d4316758ac8f875f825ca673d7cbe2d77c36fa22e1ed285841954bd55d2c0f",
         "volatility": "v"
       },
+      "public.portia_access_editor_request_status(p_token_hash text)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "d85bed89a0fb254c2fc99af824229ea5a5f05c5cddf41743f31970c51a1ab422",
+        "volatility": "s"
+      },
       "public.portia_access_history(p_nickname_key text)": {
         "acl": [
           "authenticated:EXECUTE",
@@ -2591,7 +2605,7 @@
         "kind": "f",
         "returns": "jsonb",
         "secdef": true,
-        "src_sha256": "0c9a687c1a027b14508e1ff053520541c4637dbd59605a46ea556abf4e47018f",
+        "src_sha256": "dbdbe7137e67ac55310f8652f8746b02ac0839715ea7efe7a2c4742676fa1a3f",
         "volatility": "s"
       },
       "public.portia_access_revoke(p_person_id uuid)": {
@@ -2764,8 +2778,6 @@
       },
       "public.portia_promo_answer_question(p_attempt_id uuid, p_question_id uuid, p_expected_question_index integer, p_answer jsonb, p_nonce text, p_token_hash text)": {
         "acl": [
-          "anon:EXECUTE",
-          "authenticated:EXECUTE",
           "service_role:EXECUTE"
         ],
         "config": [
@@ -2903,8 +2915,6 @@
       },
       "public.portia_promo_current_test(p_attempt_id uuid, p_token_hash text, p_client_mode text)": {
         "acl": [
-          "anon:EXECUTE",
-          "authenticated:EXECUTE",
           "service_role:EXECUTE"
         ],
         "config": [
@@ -2945,8 +2955,6 @@
       },
       "public.portia_promo_fail_attempt(p_attempt_id uuid, p_reason text, p_token_hash text)": {
         "acl": [
-          "anon:EXECUTE",
-          "authenticated:EXECUTE",
           "service_role:EXECUTE"
         ],
         "config": [
@@ -2988,8 +2996,6 @@
       },
       "public.portia_promo_heartbeat_test(p_attempt_id uuid, p_token_hash text)": {
         "acl": [
-          "anon:EXECUTE",
-          "authenticated:EXECUTE",
           "service_role:EXECUTE"
         ],
         "config": [
@@ -3015,10 +3021,19 @@
         "src_sha256": "968d3c83de2a1028d2b7afcbeb4e888bcf9af825f82885ef89c66d3026adaa7c",
         "volatility": "v"
       },
+      "public.portia_promo_participant_key(p_access_hash text)": {
+        "acl": [],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "text",
+        "secdef": true,
+        "src_sha256": "b11a04778a96001a5d6b3f6afad280f2398d63c0fcec0140154f5e4b06b0d5dc",
+        "volatility": "v"
+      },
       "public.portia_promo_public_status(p_nickname_key text, p_title_id text, p_token_hash text)": {
         "acl": [
-          "anon:EXECUTE",
-          "authenticated:EXECUTE",
           "service_role:EXECUTE"
         ],
         "config": [
@@ -3101,8 +3116,6 @@
       },
       "public.portia_promo_resolve_device(p_token_hash text)": {
         "acl": [
-          "anon:EXECUTE",
-          "authenticated:EXECUTE",
           "service_role:EXECUTE"
         ],
         "config": [
@@ -3128,10 +3141,117 @@
         "src_sha256": "6268ffb636e3d3b8b3cf91a9f11c3c1ab3fe725d3f00618a891dfb06ecfcfa30",
         "volatility": "v"
       },
-      "public.portia_promo_start_test(p_attempt_id uuid, p_token_hash text, p_client_mode text)": {
+      "public.portia_promo_secure_answer_question(p_access_hash text, p_attempt_id uuid, p_question_id uuid, p_expected_question_index integer, p_answer jsonb, p_nonce text, p_token_hash text, p_issued_at bigint, p_signature text)": {
         "acl": [
           "anon:EXECUTE",
-          "authenticated:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "7b65f83daf7c28b6ee05e1d0250d9ec56d4ec55500d680d3d39e9f581861ab40",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_attempt(p_access_hash text, p_attempt_id uuid)": {
+        "acl": [],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "dc40534a9f2ddb96c04431c74546798716fabd9182dc57a3359ef2283e644737",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_current_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "08eb31defc20f908427465343dcecd218778119eb92768ce844e931ada401978",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_fail_attempt(p_access_hash text, p_attempt_id uuid, p_reason text, p_token_hash text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "86aec04f1362625489c63a0866cbc3b2e59218e6ee47c1f51511f58ed6006aec",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_heartbeat_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "6b62cb4f952212fe1589a52cd4a36ba72ca4ee60e3534ee1d973bb42c64b699a",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_start_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "timestamp with time zone",
+        "secdef": true,
+        "src_sha256": "7b7106553522606d322a50f2cdec19a7139344d326222084171c1e65d5d2fcaa",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_status(p_access_hash text, p_title_id text, p_token_hash text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "b47a32502226a507a2526c18cb4543e14a2bd9f3601c7d68ca80092c9d2853ab",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_submit(p_access_hash text, p_kind text, p_title_id text, p_target_id text, p_token_hash text, p_risk_bucket text, p_bucket_key text, p_ip_bucket text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "5c2c45729dbbe4b7f12972a01385a5004e6666b8951623ca8b0fb2ed8a462ef6",
+        "volatility": "v"
+      },
+      "public.portia_promo_start_test(p_attempt_id uuid, p_token_hash text, p_client_mode text)": {
+        "acl": [
           "service_role:EXECUTE"
         ],
         "config": [
@@ -3145,8 +3265,6 @@
       },
       "public.portia_promo_submit_request(p_kind text, p_nickname text, p_nickname_key text, p_title_id text, p_target_id text, p_token_hash text, p_risk_bucket text, p_bucket_key text, p_ip_bucket text)": {
         "acl": [
-          "anon:EXECUTE",
-          "authenticated:EXECUTE",
           "service_role:EXECUTE"
         ],
         "config": [
@@ -3156,6 +3274,17 @@
         "returns": "jsonb",
         "secdef": true,
         "src_sha256": "78a6f9beeb1a2f317428bd4dac75bd7c1fc536f70f953810695c3ff707ffb91d",
+        "volatility": "v"
+      },
+      "public.portia_promo_test_proof_valid(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_action text, p_issued_at bigint, p_signature text)": {
+        "acl": [],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "ccfd784b8da9e115c649ce1e39ee2072dbd63ee3f9033a4cb6f84b20bf955c8d",
         "volatility": "v"
       },
       "public.rls_auto_enable()": {

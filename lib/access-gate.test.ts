@@ -20,8 +20,8 @@ function client(closed: boolean, state: Record<string, unknown>): AccessRpcClien
 }
 
 test("closed gate admits only approved current-device token", async () => {
-  const approved = await resolveGate(headers, { client: client(true, { state: "approved", nickname: "Visitor_1", level: 2 }), sessionSecret: secret, editorAccess: async () => ({ canEdit: false }) });
-  assert.deepEqual(approved, { mode: "closed", state: { state: "approved", nickname: "Visitor_1", level: 2 }, allowed: true, level: 2, editor: false });
+  const approved = await resolveGate(headers, { client: client(true, { state: "approved", nickname: "Visitor_1", level: 2, origin: "sheet" }), sessionSecret: secret, editorAccess: async () => ({ canEdit: false }) });
+  assert.deepEqual(approved, { mode: "closed", state: { state: "approved", nickname: "Visitor_1", level: 2, origin: "sheet" }, allowed: true, level: 2, editor: false });
   const pending = await resolveGate(headers, { client: client(true, { state: "pending", nickname: "Visitor_1" }), sessionSecret: secret, editorAccess: async () => ({ canEdit: false }) });
   assert.equal(pending.mode, "closed");
   assert.equal(pending.mode === "closed" && pending.allowed, false);
@@ -47,7 +47,7 @@ test("two devices resolve independently even when their nickname matches", async
     const digest = String(args?.p_token_hash);
     seen.push(digest);
     return Promise.resolve({ data: digest === accessTokenDigest(token, secret)
-      ? { state: "approved", nickname: "SameNick", level: 2 }
+      ? { state: "approved", nickname: "SameNick", level: 2, origin: "sheet" }
       : { state: "pending", nickname: "SameNick" }, error: null });
   } };
   const dependencies = { client: rpc, sessionSecret: secret, editorAccess: async () => ({ canEdit: false }) };
@@ -65,7 +65,7 @@ test("repeated reads remain stable and revoked status closes the gate", async ()
   const pendingA = await resolveGate(headers, dependencies);
   const pendingB = await resolveGate(headers, dependencies);
   assert.deepEqual(pendingA, pendingB);
-  state = { state: "approved", nickname: "Visitor_1", level: 2 };
+  state = { state: "approved", nickname: "Visitor_1", level: 2, origin: "sheet" };
   const approved = await resolveGate(headers, dependencies);
   assert.equal(approved.mode === "closed" && approved.allowed, true);
   state = { state: "revoked", nickname: "Visitor_1", retryAt: "2026-11-12T18:00:00Z" };
