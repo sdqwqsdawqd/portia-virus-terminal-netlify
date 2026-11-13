@@ -253,6 +253,7 @@ test("participant routes derive nickname from approved access and use only secur
   const requests = readFileSync(new URL("../app/api/promotion/requests/route.ts", import.meta.url), "utf8");
   const qualification = readFileSync(new URL("../app/api/promotion/test/route.ts", import.meta.url), "utf8");
   const adapter = readFileSync(new URL("./portia-promotion-api.ts", import.meta.url), "utf8");
+  const participant = readFileSync(new URL("./promotion-participant.ts", import.meta.url), "utf8");
   for (const route of [status, requests, qualification]) assert.ok(route.includes("resolvePromotionParticipant(request.headers)"));
   assert.ok(status.includes("nickname: participant.nickname"));
   assert.ok(requests.includes("nickname: participant.nickname"));
@@ -261,6 +262,7 @@ test("participant routes derive nickname from approved access and use only secur
   for (const rpc of ["portia_promo_secure_status", "portia_promo_secure_submit"]) assert.ok(adapter.includes(rpc));
   for (const rpc of ["portia_promo_secure_current_test", "portia_promo_secure_start_test", "portia_promo_secure_heartbeat_test", "portia_promo_secure_answer_question", "portia_promo_secure_fail_attempt"]) assert.ok(qualification.includes(rpc));
   assert.ok(!qualification.includes('rpc("portia_promo_current_test"'));
+  assert.ok(participant.includes("data.user && !editor"), "signed-in non-editors must match the SQL participant rule");
 });
 
 test("request admission has no preliminary binding or throttle mutation", () => {

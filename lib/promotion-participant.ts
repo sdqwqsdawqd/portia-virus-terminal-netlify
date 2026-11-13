@@ -17,6 +17,7 @@ export async function resolvePromotionParticipant(headers: Headers): Promise<Pro
   const editorAccess = await getEditorAccess(client, data.user);
   if (editorAccess.unavailable) return { status: "unavailable" };
   const editor = editorAccess.canEdit;
+  if (data.user && !editor) return { status: "unapproved", state: "none", editor: false };
   const accessHash = currentAccessHash(headers, accessSessionSecret());
   if (!accessHash) return { status: "unapproved", state: "none", editor };
   const state = editor ? await resolveEditorRequest(client, accessHash) : await resolveAccess(client, accessHash);
