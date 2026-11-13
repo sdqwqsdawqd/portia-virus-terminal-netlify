@@ -155,18 +155,24 @@ begin
 end; $$;
 revoke all on function public.portia_promo_test_proof_valid(text, uuid, text, text, bigint, text) from public, anon, authenticated;
 
-create or replace function public.portia_promo_secure_start_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_issued_at bigint, p_signature text)
+create or replace function public.portia_promo_secure_start_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_title_id text, p_issued_at bigint, p_signature text)
 returns timestamptz language plpgsql volatile security definer set search_path = '' as $$
 begin
   if not public.portia_promo_test_proof_valid(p_access_hash, p_attempt_id, p_token_hash, 'start', p_issued_at, p_signature) then return null; end if;
   if not public.portia_promo_secure_attempt(p_access_hash, p_attempt_id) then return null; end if;
+  if not exists (select 1 from public.portia_promo_attempts a
+    join public.portia_promo_qualification_requests r on r.id = a.request_id
+    where a.id = p_attempt_id and r.title_id = p_title_id for share of a, r) then return null; end if;
   return public.portia_promo_start_test(p_attempt_id, p_token_hash, p_client_mode);
 end; $$;
-create or replace function public.portia_promo_secure_current_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_issued_at bigint, p_signature text)
+create or replace function public.portia_promo_secure_current_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_title_id text, p_issued_at bigint, p_signature text)
 returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 begin
   if not public.portia_promo_test_proof_valid(p_access_hash, p_attempt_id, p_token_hash, 'current', p_issued_at, p_signature) then return null; end if;
   if not public.portia_promo_secure_attempt(p_access_hash, p_attempt_id) then return null; end if;
+  if not exists (select 1 from public.portia_promo_attempts a
+    join public.portia_promo_qualification_requests r on r.id = a.request_id
+    where a.id = p_attempt_id and r.title_id = p_title_id for share of a, r) then return null; end if;
   return public.portia_promo_current_test(p_attempt_id, p_token_hash, p_client_mode);
 end; $$;
 create or replace function public.portia_promo_secure_heartbeat_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_issued_at bigint, p_signature text)
@@ -191,13 +197,13 @@ begin
   return public.portia_promo_fail_attempt(p_attempt_id, p_reason, p_token_hash);
 end; $$;
 
-revoke all on function public.portia_promo_secure_start_test(text, uuid, text, text, bigint, text) from public, anon, authenticated;
-revoke all on function public.portia_promo_secure_current_test(text, uuid, text, text, bigint, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_secure_start_test(text, uuid, text, text, text, bigint, text) from public, anon, authenticated;
+revoke all on function public.portia_promo_secure_current_test(text, uuid, text, text, text, bigint, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_secure_heartbeat_test(text, uuid, text, bigint, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_secure_answer_question(text, uuid, uuid, integer, jsonb, text, text, bigint, text) from public, anon, authenticated;
 revoke all on function public.portia_promo_secure_fail_attempt(text, uuid, text, text, bigint, text) from public, anon, authenticated;
-grant execute on function public.portia_promo_secure_start_test(text, uuid, text, text, bigint, text) to anon, authenticated;
-grant execute on function public.portia_promo_secure_current_test(text, uuid, text, text, bigint, text) to anon, authenticated;
+grant execute on function public.portia_promo_secure_start_test(text, uuid, text, text, text, bigint, text) to anon, authenticated;
+grant execute on function public.portia_promo_secure_current_test(text, uuid, text, text, text, bigint, text) to anon, authenticated;
 grant execute on function public.portia_promo_secure_heartbeat_test(text, uuid, text, bigint, text) to anon, authenticated;
 grant execute on function public.portia_promo_secure_answer_question(text, uuid, uuid, integer, jsonb, text, text, bigint, text) to anon, authenticated;
 grant execute on function public.portia_promo_secure_fail_attempt(text, uuid, text, text, bigint, text) to anon, authenticated;

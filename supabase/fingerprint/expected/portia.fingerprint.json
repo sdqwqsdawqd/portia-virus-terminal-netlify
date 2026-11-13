@@ -3166,7 +3166,7 @@
         "src_sha256": "dc40534a9f2ddb96c04431c74546798716fabd9182dc57a3359ef2283e644737",
         "volatility": "v"
       },
-      "public.portia_promo_secure_current_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_issued_at bigint, p_signature text)": {
+      "public.portia_promo_secure_current_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_title_id text, p_issued_at bigint, p_signature text)": {
         "acl": [
           "anon:EXECUTE",
           "authenticated:EXECUTE"
@@ -3177,7 +3177,7 @@
         "kind": "f",
         "returns": "jsonb",
         "secdef": true,
-        "src_sha256": "08eb31defc20f908427465343dcecd218778119eb92768ce844e931ada401978",
+        "src_sha256": "2a7d95be251a9d6995c9e64d91e254fbbaaa28a08fd1c50e1110039e4862561f",
         "volatility": "v"
       },
       "public.portia_promo_secure_fail_attempt(p_access_hash text, p_attempt_id uuid, p_reason text, p_token_hash text, p_issued_at bigint, p_signature text)": {
@@ -3208,7 +3208,7 @@
         "src_sha256": "6b62cb4f952212fe1589a52cd4a36ba72ca4ee60e3534ee1d973bb42c64b699a",
         "volatility": "v"
       },
-      "public.portia_promo_secure_start_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_issued_at bigint, p_signature text)": {
+      "public.portia_promo_secure_start_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_title_id text, p_issued_at bigint, p_signature text)": {
         "acl": [
           "anon:EXECUTE",
           "authenticated:EXECUTE"
@@ -3219,7 +3219,7 @@
         "kind": "f",
         "returns": "timestamp with time zone",
         "secdef": true,
-        "src_sha256": "7b7106553522606d322a50f2cdec19a7139344d326222084171c1e65d5d2fcaa",
+        "src_sha256": "1d94b5896feab7851b413c15a289ba806c3860d523f9b3682b7ebcd738fd684a",
         "volatility": "v"
       },
       "public.portia_promo_secure_status(p_access_hash text, p_title_id text, p_token_hash text)": {

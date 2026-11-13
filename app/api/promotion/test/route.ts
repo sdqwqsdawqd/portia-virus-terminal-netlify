@@ -38,7 +38,7 @@ async function current(participant: Approved, attemptId: string, tokenHash: stri
   const entry = findPromotionRosterEntry(roster.roster, participant.nickname);
   if (!entry) return { removed: true } as const;
   const { data, error } = await participant.client.rpc("portia_promo_secure_current_test", {
-    ...proof(participant, attemptId, tokenHash, "current"), p_client_mode: mode,
+    ...proof(participant, attemptId, tokenHash, "current"), p_client_mode: mode, p_title_id: entry.titleId,
   });
   if (error || !data || typeof data !== "object" || Array.isArray(data)) return null;
   const row = data as Record<string, unknown>;
@@ -71,8 +71,9 @@ export async function POST(request: Request) {
   if (body.action === "start") {
     const roster = await loadPromotionRoster();
     if (roster.status !== "ok") return Response.json({ code: "sheet-unavailable" }, { status: 503, headers: noStoreHeaders });
-    if (!findPromotionRosterEntry(roster.roster, participant.nickname)) return Response.json({ code: "not-listed" }, { status: 403, headers: noStoreHeaders });
-    const { data, error } = await participant.client.rpc("portia_promo_secure_start_test", { ...proof(participant, attemptId, tokenHash, "start"), p_client_mode: mode });
+    const entry = findPromotionRosterEntry(roster.roster, participant.nickname);
+    if (!entry) return Response.json({ code: "not-listed" }, { status: 403, headers: noStoreHeaders });
+    const { data, error } = await participant.client.rpc("portia_promo_secure_start_test", { ...proof(participant, attemptId, tokenHash, "start"), p_client_mode: mode, p_title_id: entry.titleId });
     if (error) return Response.json({ error: "Проверка временно недоступна.", code: "test-unavailable" }, { status: 503, headers: noStoreHeaders });
     if (!data) return Response.json({ code: "test-inactive" }, { status: 403, headers: noStoreHeaders });
     const started = await current(participant, attemptId, tokenHash, mode);
