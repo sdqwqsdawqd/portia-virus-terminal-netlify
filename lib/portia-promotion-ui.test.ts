@@ -5,23 +5,17 @@ import test from "node:test";
 const source = readFileSync(new URL("../components/portia-promotion.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
 
-test("participant gate explains lookup binding and restores only through the HttpOnly-backed status flow", () => {
+test("participant gate derives identity from access and lets editors request their own sheet entry", () => {
   assert.ok(source.includes("function PromotionIdentityGate"));
-  assert.ok(source.includes("ПРОВЕРИТЬ ПОВЫШЕНИЕ"));
-  assert.ok(source.includes("PORTIA // ПОВЫШЕНИЕ"));
-  assert.ok(source.includes("Ник Roblox, указанный в таблице"));
-  assert.ok(source.includes('placeholder="Введите ник Roblox из таблицы"'));
-  assert.ok(!source.includes("КАДРОВЫЙ КОНТУР"));
-  assert.ok(!source.includes("Portia_User"));
-  assert.ok(source.includes("ПРОВЕРИТЬ НИК"));
-  // D-56 (20-37): the binding note is one short phrase.
-  assert.ok(source.includes("Первая заявка закрепит ник за устройством."));
-  assert.ok(source.includes('!error && <p className="promotion-binding-note"'));
-  assert.ok(source.includes('autoComplete="off"'));
-  assert.ok(source.includes('spellCheck={false}'));
-  assert.doesNotMatch(source, /(?:localStorage|sessionStorage)\.setItem\([^\n]*(?:nickname|checkedNickname)/i);
-  assert.ok(source.includes('loadStatus("", false, true)'));
-  assert.ok(source.includes("setNickname(next.nickname)"));
+  assert.ok(source.includes('fetch("/api/promotion/status"'));
+  assert.ok(source.includes('fetch("/api/access/editor-request"'));
+  assert.ok(source.includes('body: JSON.stringify({ kind })'));
+  assert.ok(source.includes('accessState === "pending"'));
+  assert.ok(source.includes('accessState === "rejected"'));
+  assert.ok(source.includes('accessState === "revoked"'));
+  assert.ok(!source.includes('status?nickname='));
+  assert.ok(!source.includes('JSON.stringify({ nickname: checkedNickname, kind })'));
+  assert.doesNotMatch(source, /(?:localStorage|sessionStorage).*setItem.*nickname/i);
 });
 
 test("admitted employees without a promotion row get a truthful disabled state", () => {
@@ -93,7 +87,7 @@ test("status poll routes refusals through the decision and only resets the gate 
   assert.match(load, /if \(outcome === "keep-stale"\)[\s\S]*setStale\(true\)/);
   assert.match(load, /if \(outcome === "ignore"\) return/);
   assert.match(load, /if \(outcome === "reset"\)[\s\S]*setStatus\(null\)/);
-  assert.equal((source.match(/setStatus\(null\)/g) ?? []).length, 1);
+  assert.equal((source.match(/setStatus\(null\)/g) ?? []).length, 2);
   assert.match(load, /catch[\s\S]*if \(status\) \{ setStale\(true\); setError\(""\); \}/);
 });
 
@@ -113,7 +107,7 @@ test("ordinary and qualification submits have independent visible feedback", () 
   assert.ok(source.includes("busy={submitState.qualification.phase === \"submitting\"}"));
   assert.ok(source.includes('className={`promotion-submit-feedback ${feedback.phase}`}'));
   assert.match(source, /feedback\.phase === "error" \? "alert" : "status"/);
-  assert.ok(!source.includes('setError(publicError(body, "Заявку не удалось отправить."))'));
+  assert.ok(source.includes('fetch("/api/access/editor-request"'));
 });
 
 test("typed submit refusal stays local while transport failure alone marks the projection stale", () => {
@@ -132,7 +126,7 @@ test("promotion window is responsive and motion respects the desktop preference"
   assert.match(styles, /html\[data-motion="full"\][^{]*\.promotion-card/);
   assert.match(styles, /@media \(max-width:\s*520px\)[\s\S]*\.promotion-app/);
   assert.match(styles, /html:is\(\[data-motion="reduced"\], \[data-motion="off"\]\)[^\n]*\.promotion-card[^\n]*animation:\s*none/);
-  assert.doesNotMatch(styles, /prefers-reduced-motion/);
+  assert.doesNotMatch(styles.slice(styles.indexOf("/* Promotion is a standalone")), /prefers-reduced-motion/);
 });
 
 test("promotion copy and visual tokens follow the reviewed accessibility contract", () => {

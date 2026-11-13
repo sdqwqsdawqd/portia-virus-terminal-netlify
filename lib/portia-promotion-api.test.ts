@@ -214,7 +214,7 @@ test("Supabase submit adapter classifies missing RPC, database failure and malfo
     { data: { code: "mystery" }, error: null },
   ];
   const supabase = { rpc: async () => responses.shift()! };
-  const deps = createPromotionApiDependencies(supabase as never, secret);
+  const deps = createPromotionApiDependencies(supabase as never, secret, "a".repeat(64), secret);
   const input = {
     kind: "ordinary" as const,
     nickname: "Alice",
@@ -246,6 +246,21 @@ test("public promotion routes are dynamic, no-store and never select wildcard ro
     assert.ok(!route.includes('select("*")'), path);
     if (path === "requests") assert.ok(route.includes("Set-Cookie"), "accepted submit must persist the binding cookie");
   }
+});
+
+test("participant routes derive nickname from approved access and use only secure RPCs", () => {
+  const status = readFileSync(new URL("../app/api/promotion/status/route.ts", import.meta.url), "utf8");
+  const requests = readFileSync(new URL("../app/api/promotion/requests/route.ts", import.meta.url), "utf8");
+  const qualification = readFileSync(new URL("../app/api/promotion/test/route.ts", import.meta.url), "utf8");
+  const adapter = readFileSync(new URL("./portia-promotion-api.ts", import.meta.url), "utf8");
+  for (const route of [status, requests, qualification]) assert.ok(route.includes("resolvePromotionParticipant(request.headers)"));
+  assert.ok(status.includes("nickname: participant.nickname"));
+  assert.ok(requests.includes("nickname: participant.nickname"));
+  assert.ok(!status.includes('searchParams.get("nickname")'));
+  assert.ok(!requests.includes("body.nickname"));
+  for (const rpc of ["portia_promo_secure_status", "portia_promo_secure_submit"]) assert.ok(adapter.includes(rpc));
+  for (const rpc of ["portia_promo_secure_current_test", "portia_promo_secure_start_test", "portia_promo_secure_heartbeat_test", "portia_promo_secure_answer_question", "portia_promo_secure_fail_attempt"]) assert.ok(qualification.includes(rpc));
+  assert.ok(!qualification.includes('rpc("portia_promo_current_test"'));
 });
 
 test("request admission has no preliminary binding or throttle mutation", () => {

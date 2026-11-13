@@ -1,17 +1,18 @@
 import { noStoreHeaders } from "@/lib/portia-cdn";
 import { promotionDeviceSecret, readDeviceToken } from "@/lib/portia-device-binding";
 import { createPromotionApiDependencies, promotionStatus } from "@/lib/portia-promotion-api";
-import { createPublicSupabaseClient } from "@/lib/supabase/server";
+import { promotionParticipantResponse, resolvePromotionParticipant } from "@/lib/promotion-participant";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    const nickname = new URL(request.url).searchParams.get("nickname") ?? "";
+    const participant = await resolvePromotionParticipant(request.headers);
+    if (participant.status !== "approved") return promotionParticipantResponse(participant);
     const secret = promotionDeviceSecret();
     const result = await promotionStatus(
-      { nickname, token: readDeviceToken(request.headers), headers: request.headers },
-      createPromotionApiDependencies(createPublicSupabaseClient(), secret),
+      { nickname: participant.nickname, token: readDeviceToken(request.headers), headers: request.headers },
+      createPromotionApiDependencies(participant.client, secret, participant.accessHash),
     );
     return Response.json(result.body, { status: result.status, headers: noStoreHeaders });
   } catch (error) {

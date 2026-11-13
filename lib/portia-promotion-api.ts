@@ -4,6 +4,8 @@ import {
   deviceTokenDigest,
   promotionAttemptBucket,
 } from "./portia-device-binding.ts";
+import { signPromotionSubmit } from "./access-identity.ts";
+import { accessSubmitSecret } from "./access-session.ts";
 import { promotionEligibility, promotionTitles, type PromotionRequestKind, type PromotionTitleId } from "./portia-promotion.ts";
 import {
   findPromotionAccessEntry,
@@ -299,23 +301,16 @@ const unavailableRpc = (error: RpcError) => error?.code === "PGRST202" || error?
 const rpcFailureReason = (error: RpcError): PromotionUnavailableReason => unavailableRpc(error) ? "rpc-missing" : "database-error";
 
 /** Server-route adapter. Public clients receive only security-definer RPC execution, never table access. */
-export function createPromotionApiDependencies(supabase: SupabaseClient, secret: string): PromotionApiDependencies {
+export function createPromotionApiDependencies(supabase: SupabaseClient, secret: string, accessHash: string, signingSecret = accessSubmitSecret()): PromotionApiDependencies {
   return {
     now: () => new Date(),
     secret,
     loadAccessRoster: () => loadPromotionAccessRoster(),
     loadRoster: () => loadPromotionRoster(),
-    resolveDevice: async (tokenHash) => {
-      const { data, error } = await supabase.rpc("portia_promo_resolve_device", { p_token_hash: tokenHash });
-      if (error) {
-        if (!unavailableRpc(error)) console.error("PORTIA promotion device restore RPC failed", { code: error.code });
-        return { status: "unavailable", reason: rpcFailureReason(error) } as const;
-      }
-      return { status: "ok", nicknameKey: typeof data === "string" ? data : null } as const;
-    },
-    workflowStatus: async ({ nicknameKey, titleId: currentTitleId, tokenHash }) => {
-      const { data, error } = await supabase.rpc("portia_promo_public_status", {
-        p_nickname_key: nicknameKey,
+    resolveDevice: async () => ({ status: "ok", nicknameKey: null }),
+    workflowStatus: async ({ titleId: currentTitleId, tokenHash }) => {
+      const { data, error } = await supabase.rpc("portia_promo_secure_status", {
+        p_access_hash: accessHash,
         p_title_id: currentTitleId,
         p_token_hash: tokenHash,
       });
@@ -327,16 +322,23 @@ export function createPromotionApiDependencies(supabase: SupabaseClient, secret:
       return projection ? { status: "ok", projection } as const : { status: "unavailable", reason: "invalid-response" } as const;
     },
     submitRequest: async (input) => {
-      const { data, error } = await supabase.rpc("portia_promo_submit_request", {
+      const issuedAt = Math.floor(Date.now() / 1000);
+      const signature = signPromotionSubmit({
+        accessHash, kind: input.kind, titleId: input.titleId, targetId: input.targetId,
+        tokenHash: input.tokenHash, riskBucket: input.riskBucket, bucketKey: input.bucketKey,
+        ipBucket: input.ipBucket, issuedAt,
+      }, signingSecret);
+      const { data, error } = await supabase.rpc("portia_promo_secure_submit", {
+        p_access_hash: accessHash,
         p_kind: input.kind,
-        p_nickname: input.nickname,
-        p_nickname_key: input.nicknameKey,
         p_title_id: input.titleId,
         p_target_id: input.targetId,
         p_token_hash: input.tokenHash,
         p_risk_bucket: input.riskBucket,
         p_bucket_key: input.bucketKey,
         p_ip_bucket: input.ipBucket,
+        p_issued_at: issuedAt,
+        p_signature: signature,
       });
       if (error) {
         if (unavailableRpc(error)) return { status: "unavailable", reason: "rpc-missing" } as const;
