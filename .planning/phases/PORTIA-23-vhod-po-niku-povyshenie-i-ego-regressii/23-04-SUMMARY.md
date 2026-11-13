@@ -13,7 +13,7 @@ provides:
 affects: [PORTIA-23-07]
 actuals:
   tasks: 2
-  commits: 1
+  commits: 3
 tech-stack:
   added: []
   patterns: [server-derived participant, roster-before-test, independent promotion card feedback]
@@ -43,3 +43,5 @@ Promotion routes now resolve the participant from the current approved sheet req
 ## Commit
 
 - `d42184e` — server-derived promotion identity and participant UI.
+- `6db7d24` — align signed-in non-editor refusal with SQL participant resolution.
+- `213d99b` — reject stale-title qualification attempts before mutating RPCs.
