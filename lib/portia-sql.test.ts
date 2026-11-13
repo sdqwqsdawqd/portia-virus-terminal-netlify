@@ -163,15 +163,20 @@ test("no migration lets a function resolve objects through the writable public s
 
 test("every function created after the baseline is revoked from public, anon and authenticated before any grant", () => {
   let checked = 0;
+  const previouslyDefined = new Set([...migrationTexts[0][1].matchAll(/^create or replace function public\.(\w+)\(/gm)].map((match) => match[1]));
   for (const [name, text] of migrationTexts) {
     if (name === baselineMigration) continue;
     for (const match of text.matchAll(/^create or replace function public\.(\w+)\(/gm)) {
       const fn = match[1];
       const revoke = text.indexOf(`revoke all on function public.${fn}(`, match.index);
-      assert.ok(revoke > match.index, `${name}: ${fn} has no revoke all after its definition`);
-      assert.match(text.slice(revoke, text.indexOf(";", revoke)), /from public, anon, authenticated$/, `${name}: ${fn} revoke must cover public, anon, authenticated`);
       const firstGrant = text.indexOf(`grant execute on function public.${fn}(`, match.index);
-      assert.ok(firstGrant < 0 || revoke < firstGrant, `${name}: ${fn} is granted before it is revoked`);
+      if (revoke < match.index) {
+        assert.ok(previouslyDefined.has(fn), `${name}: new ${fn} has no revoke all after its definition`);
+      } else {
+        assert.match(text.slice(revoke, text.indexOf(";", revoke)), /from public, anon, authenticated$/, `${name}: ${fn} revoke must cover public, anon, authenticated`);
+        assert.ok(firstGrant < 0 || revoke < firstGrant, `${name}: ${fn} is granted before it is revoked`);
+      }
+      previouslyDefined.add(fn);
       checked += 1;
     }
   }

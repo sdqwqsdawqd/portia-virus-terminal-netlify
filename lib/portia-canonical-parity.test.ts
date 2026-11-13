@@ -33,6 +33,7 @@ const migrationHashes: Record<string, string> = {
   // needs a new forward-only migration with its own version; this pin must not be re-pinned.
   "20261110000000_portia_users_tab.sql": "75e9b89d08eb9893dac2bf9fe0f082be5e9ed9ae640dd38f4373535963d70c60",
   "20261112000000_portia_access_decision_mark.sql": "f1b124918f9a7708aab5c914410b81dbbcd3873e94ada0450016128ba07d6948",
+  "20261113000000_portia_access_promotion.sql": "59877c13f4fadf56d9274fc5ccbf5978c285d882c0a65811da32a0ec08343e81",
 };
 
 const baselineName = "20261101000000_portia_baseline.sql";

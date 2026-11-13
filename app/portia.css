@@ -1,6 +1,6 @@
 .access-gate { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; overflow: auto; padding: 16px; background: var(--bg); color: var(--paper); }
 .access-gate-open { inset: 16px 16px auto auto; display: block; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); background: transparent; padding: 0; pointer-events: none; }
-.access-card { position: relative; width: min(440px, 100%); padding: 28px; border: 1px solid var(--line); border-radius: var(--radius-dialog); background: var(--panel); box-shadow: 0 16px 56px #0008; overflow-wrap: anywhere; }
+.access-card { position: relative; width: min(440px, 100%); padding: 28px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); box-shadow: 0 16px 56px #0008; overflow-wrap: anywhere; }
 .access-gate-open .access-card { pointer-events: auto; max-height: calc(100dvh - 32px); overflow: auto; }
 .access-eyebrow, .access-card legend, .access-label { display: block; color: var(--teal); font-size: 12px; font-weight: 700; }
 .access-card h1 { margin: 12px 0 24px; font-size: 28px; line-height: 1.2; }
@@ -9,7 +9,7 @@
 .access-card fieldset { min-width: 0; border: 0; padding: 4px 0; margin: 0; }
 .access-card fieldset label { display: flex; align-items: center; min-height: 44px; gap: 10px; cursor: pointer; }
 .access-card fieldset input { width: 18px; height: 18px; accent-color: var(--teal); }
-.access-card button:not(.access-close), .access-reopen { min-height: 44px; padding: 8px 14px; border: 1px solid var(--teal); background: var(--teal); color: #07100f; font: inherit; font-weight: 700; cursor: pointer; }
+.access-card button:not(.access-close), .access-reopen { min-height: 44px; padding: 8px 14px; border: 1px solid var(--teal); background: var(--teal); color: var(--desktop-base); font: inherit; font-weight: 700; cursor: pointer; }
 .access-card button:disabled { opacity: .65; cursor: wait; }
 .access-card a { display: inline-block; margin-top: 20px; color: var(--paper); text-decoration: underline; text-underline-offset: 4px; }
 .access-error { margin: 0; color: #ffaaa2; font-size: 13px; }
@@ -18,7 +18,7 @@
 .access-reopen { position: fixed; z-index: 1000; top: 16px; right: 16px; }
 .access-dots { display: inline-block; animation: access-dots 1200ms infinite; }
 @keyframes access-dots { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .access-dots { animation: none; opacity: 1; } }
+html:is([data-motion="reduced"], [data-motion="off"]) .access-dots { animation: none; opacity: 1; }
 html[data-motion=off] .access-dots { animation: none; opacity: 1; }
 @media (max-width: 480px) { .access-card { padding: 22px 18px; } .access-gate-open { top: 16px; right: 16px; } }
 

@@ -17,11 +17,11 @@ const directionRecord = readFileSync(
   "utf8",
 );
 
-const PORTIA_RADIUS_DECLARATIONS = 129;
+const PORTIA_RADIUS_DECLARATIONS = 131;
 // Phase 26 restyle changes these on purpose and updates them in the same commit.
 const PROMO_RADIUS_DECLARATIONS = 6;
-// app/portia.css before Phase 22; any later phase that edits app/portia.css outside the marked blocks re-pins it in the same commit and says why.
-const PRE_PHASE_PORTIA_CSS_SHA256 = "0446df52dd83bb42e3a4837b7262b73d230f4600572475b28222e569e192367c";
+// Phase 23 adds access and promotion states to app/portia.css; keep the current unmarked stylesheet pinned.
+const PRE_PHASE_PORTIA_CSS_SHA256 = "8c05aed42e15d0a9aa0f8b955ec50d20a85f7bbd2b4da9927480de1429b6dc18";
 
 const TOKEN_NAMES = [
   "--radius-0",

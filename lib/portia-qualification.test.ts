@@ -63,10 +63,10 @@ test("qualification API contracts never return keys or future snapshots", () => 
   const route = readFileSync(new URL("../app/api/promotion/test/route.ts", import.meta.url), "utf8");
   assert.ok(route.includes('dynamic = "force-dynamic"'));
   assert.ok(route.includes("deadlineAt"));
-  assert.ok(route.includes("portia_promo_current_test"));
-  assert.ok(route.includes("portia_promo_answer_question"));
-  assert.ok(route.includes("portia_promo_fail_attempt"));
-  assert.ok(route.includes("portia_promo_heartbeat_test"));
+  assert.ok(route.includes("portia_promo_secure_current_test"));
+  assert.ok(route.includes("portia_promo_secure_answer_question"));
+  assert.ok(route.includes("portia_promo_secure_fail_attempt"));
+  assert.ok(route.includes("portia_promo_secure_heartbeat_test"));
   assert.match(route, /p_expected_question_index:\s*expectedQuestionIndex/);
   assert.match(route, /code:\s*"answer-conflict"/);
   assert.doesNotMatch(route, /select\("\*"\)/);

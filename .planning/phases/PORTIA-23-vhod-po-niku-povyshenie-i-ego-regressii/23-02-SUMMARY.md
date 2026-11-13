@@ -22,7 +22,7 @@ key-files:
   modified: [app/api/access/request/route.ts, lib/access-gate.test.ts]
 key-decisions:
   - "Reuse the Phase 21 signed submit, server cooldown and per-device digest wrappers without duplicating them."
-requirements-completed: [ACC-05, ACC-06]
+requirements-completed: [ACC-05, ACC-06, ACC-07]
 duration: 15min
 completed: 2026-11-12
 status: complete

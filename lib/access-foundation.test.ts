@@ -356,6 +356,10 @@ test("visitor behaviour is unchanged (Phase 22 editor allow-list)", () => {
     "app/api/access/status/route.ts",
     "app/api/access/editor-request/route.ts",
     "components/portia-access-gate.tsx",
+    "app/api/promotion/status/route.ts",
+    "app/api/promotion/requests/route.ts",
+    "app/api/promotion/test/route.ts",
+    "components/portia-promotion.tsx",
   ]);
   for (const path of allowed) assert.ok(existsSync(join(repoRoot, path)), `${path} must exist`);
   for (const dir of ["app", "components"]) {

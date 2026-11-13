@@ -19,8 +19,10 @@ const matrixText = () => read(`${phaseDir}/20-SECURITY-MATRIX.md`);
 /** Phase 21 and 22 successors; the v1.3 matrix above stays frozen history. */
 const phase21Dir = ".planning/phases/PORTIA-21-fundament-dostupa-lyudi-zayavki-pravila-i-zhurnal";
 const phase22Dir = ".planning/phases/PORTIA-22-vkladka-polzovateli-i-karkas-tokenov-stilya";
+const phase23Dir = ".planning/phases/PORTIA-23-vhod-po-niku-povyshenie-i-ego-regressii";
 const phase21MatrixText = () => read(`${phase21Dir}/21-SECURITY-MATRIX.md`);
-const currentMatrixText = () => read(`${phase22Dir}/22-SECURITY-MATRIX.md`);
+const phase22MatrixText = () => read(`${phase22Dir}/22-SECURITY-MATRIX.md`);
+const currentMatrixText = () => read(`${phase23Dir}/23-SECURITY-MATRIX.md`);
 
 /** Text of a `## heading` block, up to the next `## ` heading. Empty string when the heading is missing. */
 function section(markdown: string, heading: string) {
@@ -455,7 +457,7 @@ test("Phase 22 matrix: the verified commit equals the final reviewed commit and 
   const review = read(`${phase22Dir}/22-RLS-REVIEW.md`);
   const reviewed = /Итоговый проверенный commit:\s*`?([0-9a-f]{40})`?/.exec(review)?.[1];
   assert.ok(reviewed, "22-RLS-REVIEW.md must name the final reviewed commit");
-  const matrix = currentMatrixText();
+  const matrix = phase22MatrixText();
   assert.equal(/Проверяемый commit:\s*`([0-9a-f]{40})`/.exec(matrix.split("\n").slice(0, 8).join("\n"))?.[1], reviewed);
   const reviewIds = new Set(review.match(/RLS22-0[1-5]/g) ?? []);
   const findings = tableRows(section(matrix, "Находки Phase 22"));

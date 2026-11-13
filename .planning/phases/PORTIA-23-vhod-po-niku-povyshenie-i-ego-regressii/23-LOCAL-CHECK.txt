@@ -1,0 +1,25 @@
+Phase 23 local check output excerpt
+UTC completed: 2026-11-13 08:37:41 UTC
+Node: v22.13.1
+Command: PORTIA_NODE22=/tmp/portia-node22-check-only (PATH excludes broken temporary npm); C:\Program Files\Git\bin\bash.exe .agents/skills/portia-check/run.sh
+Exit: 0
+Full transient output: %TEMP%\portia-phase23-check-final2.log
+Full output SHA256: 839e765d02f19c1dc2d423bdf21144a160f4fa0e1e844b7b5eb14eaefd64e501
+
+== node v22.13.1
+== unit tests
+# tests 1909
+# pass 1906
+# fail 0
+# skipped 3
+== types
+== lint
+17 problems (0 errors, 17 warnings)
+== visual manifest test
+# tests 49
+# pass 49
+# fail 0
+# skipped 0
+== visual promotion
+Verified 65 exact owner-approved snapshot bytes; 18 non-approved rows excluded.
+== all checks passed
