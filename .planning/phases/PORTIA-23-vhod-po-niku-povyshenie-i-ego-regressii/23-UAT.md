@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: PORTIA-23-vhod-po-niku-povyshenie-i-ego-regressii
 source: [23-01-SUMMARY.md, 23-02-SUMMARY.md, 23-03-SUMMARY.md, 23-04-SUMMARY.md, 23-05-SUMMARY.md, 23-06-SUMMARY.md, 23-07-SUMMARY.md]
 started: 2026-11-14T00:00:00Z
-updated: 2026-11-14T16:53:33.051Z
+updated: 2026-11-14T16:54:43.899Z
 ---
 
 ## Current Test
@@ -69,8 +69,18 @@ blocked: 0
   reason: "User reported: Не удалось проверить доступ. Повторите проверку; содержимое сайта пока недоступно. Захожу с входа редактора, вход потверждается но не входит,  также отсуствует подачи заявки для обычных пользователей"
   severity: blocker
   test: 2
-  artifacts: []
-  missing: []
+  root_cause: "GET /api/access/status (app/api/access/status/route.ts) отвечает 503: resolveGate (lib/access-gate.ts:16) первым вызывает isClosureEnabled -> RPC portia_access_closure_enabled из миграции 20261109000000 (Phase 21), которая не применена ни на одну базу (D-72). Ошибка RPC бросается до проверки редактора, поэтому и вошедший редактор получает ошибку; PortiaAccessGate (components/portia-access-gate.tsx:37,111) при любой ошибке показывает экран ошибки без рабочего стола и без формы (форма рисуется только при view.kind === decision). Подтверждение: в логе dev-сервера строка «PORTIA visitor gate check failed»."
+  artifacts:
+    - path: "lib/access-gate.ts"
+      issue: "проверка закрытия идёт до проверки редактора; любая ошибка RPC закрывает сайт целиком"
+    - path: "components/portia-access-gate.tsx"
+      issue: "экран ошибки не показывает ни рабочий стол, ни форму"
+    - path: "supabase/migrations/20261109000000_portia_access_foundation.sql"
+      issue: "не применена: функции portia_access_* в базе нет"
+  missing:
+    - "проверять сессию редактора до флага закрытия"
+    - "решение владельца: применить миграции 21–23 на изолированную базу или поведение сайта, пока функций доступа нет"
+  debug_session: ""
 
 - gap_id: G-PORTIA-23-3
   truth: "При включённом закрытии вместо рабочего стола показывается экран «Заявка на доступ» с полем ника, после отправки — статус заявки на этом устройстве"
@@ -78,5 +88,10 @@ blocked: 0
   reason: "User reported: не показывается поле с ником"
   severity: major
   test: 3
-  artifacts: []
-  missing: []
+  root_cause: "Тот же, что G-PORTIA-23-2: статус не читается, поэтому экран остаётся в состоянии ошибки и форма заявки не рисуется."
+  artifacts:
+    - path: "components/portia-access-gate.tsx"
+      issue: "showForm зависит от decision, которого нет"
+  missing:
+    - "исправляется вместе с G-PORTIA-23-2"
+  debug_session: ""
