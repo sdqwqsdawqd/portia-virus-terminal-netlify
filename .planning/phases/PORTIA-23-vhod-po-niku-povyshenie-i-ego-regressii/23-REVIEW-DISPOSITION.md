@@ -3,6 +3,26 @@ phase: 23
 review: 23-REVIEW.md
 titles: json
 findings:
+  - id: WR-08
+    severity: warning
+    disposition: open
+    title: "повторное одобрение на том же устройстве проходит молча, а `noticeOpen` не сбрасывается"
+  - id: WR-09
+    severity: warning
+    disposition: open
+    title: "уведомление «Доступ подтверждён» накладывается на квест-тост, а один Escape может закрыть оба"
+  - id: IN-11
+    severity: info
+    disposition: open
+    title: "ветка `approved` в `statusText` теперь недостижима"
+  - id: IN-12
+    severity: info
+    disposition: open
+    title: "пустой экран между исчезновением карточки и загрузкой `PortiaDesktop`"
+  - id: IN-13
+    severity: info
+    disposition: open
+    title: "тесты проверяют подстроки исходников, а не поведение `refresh()`"
   - id: WR-07
     severity: warning
     disposition: open
@@ -71,21 +91,26 @@ findings:
     severity: info
     disposition: open
     title: "дублирующее CSS-правило и переименованный «пин» хэша"
-open: 14
-total: 17
-recorded: 2026-11-14T21:45:51.435Z
+open: 19
+total: 22
+recorded: 2026-11-14T23:54:49.313Z
 ---
 
 # Phase 23: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-07 | warning | open | - |
-| IN-06 | info | open | - |
-| IN-07 | info | open | - |
-| IN-08 | info | open | - |
-| IN-09 | info | open | - |
-| IN-10 | info | open | - |
+| WR-08 | warning | open | - |
+| WR-09 | warning | open | - |
+| IN-11 | info | open | - |
+| IN-12 | info | open | - |
+| IN-13 | info | open | - |
+| WR-07 | warning | open | - (not in the current review) |
+| IN-06 | info | open | - (not in the current review) |
+| IN-07 | info | open | - (not in the current review) |
+| IN-08 | info | open | - (not in the current review) |
+| IN-09 | info | open | - (not in the current review) |
+| IN-10 | info | open | - (not in the current review) |
 | WR-01 | warning | open | - (not in the current review) |
 | WR-02 | warning | fixed | 23-09 7b860cf fail-closed (not in the current review) |
 | WR-03 | warning | fixed | 23-09 97ef402 (not in the current review) |
