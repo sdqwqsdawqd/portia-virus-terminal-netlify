@@ -6,7 +6,7 @@ import { createServerClient } from "@supabase/ssr";
 import { isAuthRetryableFetchError, type SupabaseClient } from "@supabase/supabase-js";
 import { accessTokenDigest } from "./access-session.ts";
 import { isMissingClosureFunction, onceWarn, resolveGate, type GateDecision } from "./access-gate.ts";
-import { accessGateLayout, accessSubmitFailure } from "./access-gate-view.ts";
+import { ACCESS_APPROVED_NOTICE_KEY, accessGateLayout, accessSubmitFailure, claimApprovedNotice } from "./access-gate-view.ts";
 import { AccessStoreError, type AccessRpcClient } from "./access-store.ts";
 import { getEditorAccess } from "./editor-access.ts";
 
@@ -268,20 +268,112 @@ test("unavailable or failing editor verification keeps the previous branch behav
 
 test("gate layout: open mode shows desktop and the request form; closed and error states never mount the desktop", () => {
   const closed = (state: GateDecision["state"], allowed = false): GateDecision => ({ mode: "closed", state, allowed, level: allowed ? 2 : null, editor: false });
-  assert.deepEqual(accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, true), { desktop: true, showCard: true, showForm: true, showReopen: false, showError: false, status: null });
-  assert.deepEqual(accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, false), { desktop: true, showCard: false, showForm: true, showReopen: true, showError: false, status: null });
-  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "none" }) }, true), { desktop: false, showCard: true, showForm: true, showReopen: false, showError: false, status: null });
-  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "pending", nickname: "Visitor_1" }) }, true), { desktop: false, showCard: true, showForm: false, showReopen: false, showError: false, status: "pending" });
-  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "approved", nickname: "Visitor_1", level: 2, origin: "sheet" }, true) }, false), { desktop: true, showCard: false, showForm: false, showReopen: true, showError: false, status: "approved" });
-  assert.deepEqual(accessGateLayout({ kind: "error" }, true), { desktop: false, showCard: true, showForm: false, showReopen: false, showError: true, status: null });
-  assert.deepEqual(accessGateLayout({ kind: "checking" }, true), { desktop: false, showCard: true, showForm: false, showReopen: false, showError: false, status: null });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, true), { desktop: true, showCard: true, showForm: true, showReopen: false, showError: false, status: null, approvedNotice: false });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, false), { desktop: true, showCard: false, showForm: true, showReopen: true, showError: false, status: null, approvedNotice: false });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "none" }) }, true), { desktop: false, showCard: true, showForm: true, showReopen: false, showError: false, status: null, approvedNotice: false });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "pending", nickname: "Visitor_1" }) }, true), { desktop: false, showCard: true, showForm: false, showReopen: false, showError: false, status: "pending", approvedNotice: false });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "approved", nickname: "Visitor_1", level: 2, origin: "sheet" }, true) }, false), { desktop: true, showCard: false, showForm: false, showReopen: false, showError: false, status: "approved", approvedNotice: true });
+  assert.deepEqual(accessGateLayout({ kind: "error" }, true), { desktop: false, showCard: true, showForm: false, showReopen: false, showError: true, status: null, approvedNotice: false });
+  assert.deepEqual(accessGateLayout({ kind: "checking" }, true), { desktop: false, showCard: true, showForm: false, showReopen: false, showError: false, status: null, approvedNotice: false });
 });
 
 test("gate layout: a verified editor never sees the visitor card, form or reopen button (WR-04)", () => {
   const editor: GateDecision = { mode: "closed", state: { state: "none" }, allowed: true, level: 5, editor: true };
   for (const cardOpen of [true, false]) {
-    assert.deepEqual(accessGateLayout({ kind: "decision", decision: editor }, cardOpen), { desktop: true, showCard: false, showForm: false, showReopen: false, showError: false, status: null });
+    assert.deepEqual(accessGateLayout({ kind: "decision", decision: editor }, cardOpen), { desktop: true, showCard: false, showForm: false, showReopen: false, showError: false, status: null, approvedNotice: false });
   }
+});
+
+test("gate layout: an approved visitor on an open desktop gets no card and no reopen button, only the one-time notice (G-PORTIA-23-3-r2)", () => {
+  const approvedState = { state: "approved", nickname: "Visitor_1", level: 2, origin: "sheet" } as const;
+  const approvedLayout = { desktop: true, showCard: false, showForm: false, showReopen: false, showError: false, status: "approved", approvedNotice: true };
+  const closedApproved: GateDecision = { mode: "closed", state: approvedState, allowed: true, level: 2, editor: false };
+  const openApproved: GateDecision = { mode: "open", state: approvedState };
+  for (const cardOpen of [true, false]) {
+    assert.deepEqual(accessGateLayout({ kind: "decision", decision: closedApproved }, cardOpen), approvedLayout);
+    assert.deepEqual(accessGateLayout({ kind: "decision", decision: openApproved }, cardOpen), approvedLayout);
+  }
+  // Approved but not allowed: the card with its status text stays, no desktop and no notice.
+  const notAllowed: GateDecision = { mode: "closed", state: approvedState, allowed: false, level: null, editor: false };
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: notAllowed }, true), { desktop: false, showCard: true, showForm: false, showReopen: false, showError: false, status: "approved", approvedNotice: false });
+  // D-05 unchanged: open mode keeps the card and the reopen button for every non-approved state.
+  const openStates: GateDecision["state"][] = [{ state: "none" }, { state: "pending", nickname: "Visitor_1" }, { state: "rejected", nickname: "Visitor_1", retryAt: null }, { state: "revoked", nickname: "Visitor_1", retryAt: null }];
+  for (const state of openStates) {
+    const decision: GateDecision = { mode: "open", state };
+    const shown = accessGateLayout({ kind: "decision", decision }, true);
+    const hidden = accessGateLayout({ kind: "decision", decision }, false);
+    assert.equal(shown.showCard, true, state.state);
+    assert.equal(shown.showReopen, false, state.state);
+    assert.equal(hidden.showCard, false, state.state);
+    assert.equal(hidden.showReopen, true, state.state);
+    assert.equal(shown.approvedNotice, false, state.state);
+    assert.equal(hidden.approvedNotice, false, state.state);
+  }
+  // WR-04, D-03, D-08: a verified editor never sees the notice.
+  const editor: GateDecision = { mode: "closed", state: approvedState, allowed: true, level: 5, editor: true };
+  for (const cardOpen of [true, false]) {
+    assert.equal(accessGateLayout({ kind: "decision", decision: editor }, cardOpen).approvedNotice, false);
+  }
+});
+
+test("approved notice is claimed once per device and never when storage fails (G-PORTIA-23-3-r2)", () => {
+  assert.equal(ACCESS_APPROVED_NOTICE_KEY, "portia-access-approved-notice-v1");
+  const fake = (initial?: string) => {
+    const map = new Map<string, string>();
+    if (initial !== undefined) map.set(ACCESS_APPROVED_NOTICE_KEY, initial);
+    const writes: Array<[string, string]> = [];
+    return { map, writes, storage: { getItem: (key: string) => map.get(key) ?? null, setItem: (key: string, value: string) => { writes.push([key, value]); map.set(key, value); } } };
+  };
+  const once = fake();
+  assert.equal(claimApprovedNotice(() => once.storage), true);
+  assert.equal(once.map.get(ACCESS_APPROVED_NOTICE_KEY), "1");
+  assert.equal(claimApprovedNotice(() => once.storage), false);
+  assert.equal(once.writes.length, 1);
+  const done = fake("1");
+  assert.equal(claimApprovedNotice(() => done.storage), false);
+  assert.equal(done.writes.length, 0);
+  const odd = fake("yes");
+  assert.equal(claimApprovedNotice(() => odd.storage), true);
+  assert.equal(odd.map.get(ACCESS_APPROVED_NOTICE_KEY), "1");
+  assert.equal(claimApprovedNotice(() => { throw new Error("storage access denied"); }), false);
+  let setCalls = 0;
+  assert.equal(claimApprovedNotice(() => ({ getItem: () => { throw new Error("read failed"); }, setItem: () => { setCalls++; } })), false);
+  assert.equal(setCalls, 0);
+  assert.equal(claimApprovedNotice(() => ({ getItem: () => null, setItem: () => { throw new Error("quota exceeded"); } })), false);
+});
+
+test("approved notice looks like the quest notice, never takes focus and closes on × or Escape outside inputs and dialogs (G-PORTIA-23-3-r2)", () => {
+  const component = readFileSync(fileURLToPath(new URL("../components/portia-access-gate.tsx", import.meta.url)), "utf8");
+  const declaration = component.indexOf("function AccessApprovedToast");
+  assert.ok(declaration >= 0, "AccessApprovedToast is declared");
+  const nextFunction = component.indexOf("\nfunction ", declaration + 1);
+  const body = component.slice(declaration, nextFunction < 0 ? undefined : nextFunction);
+  const aside = body.match(/<aside[^>]*>/)?.[0] ?? "";
+  assert.ok(aside.includes("portia-dialog quest-toast access-approved-toast"));
+  assert.ok(aside.includes("aria-labelledby"));
+  assert.doesNotMatch(aside, /role=/);
+  assert.doesNotMatch(aside, /onKeyDown/);
+  for (const part of [
+    '<span role="status" className="sr-only">Доступ подтверждён.</span>',
+    'className="quest-toast-head"',
+    'className="quest-toast-eyebrow"',
+    'className="quest-toast-close"',
+    'aria-label="Закрыть уведомление"',
+    "<h2 id={titleId}>Доступ подтверждён</h2>",
+    'window.document.addEventListener("keydown"',
+    'window.document.removeEventListener("keydown"',
+    "defaultPrevented",
+    "isContentEditable",
+    'closest("input, textarea, select")',
+    "dialog[open]",
+    "event.preventDefault()",
+  ]) assert.ok(body.includes(part), part);
+  assert.doesNotMatch(body, /autoFocus|\.focus\(/);
+  assert.ok(component.includes("claimApprovedNotice(() => window.localStorage)"));
+  assert.ok(component.includes("layout.approvedNotice"));
+  const css = readFileSync(fileURLToPath(new URL("../app/portia.css", import.meta.url)), "utf8");
+  assert.ok(css.includes(".access-approved-toast { border-color: var(--teal-dim); }"));
+  assert.ok(css.includes(".access-approved-toast .quest-toast-eyebrow { color: var(--teal); }"));
 });
 
 test("request form shows only known or server failure texts, never a raw exception (WR-03)", () => {
