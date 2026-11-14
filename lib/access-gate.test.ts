@@ -79,3 +79,34 @@ test("home page's static shell contains no desktop content", () => {
   assert.match(page, /PortiaAccessGate/);
   assert.doesNotMatch(page, /PortiaDesktop|defaultPortiaContent/);
 });
+
+const missingClosureReplies = [
+  { code: "PGRST202", message: "Could not find the function public.portia_access_closure_enabled without parameters in the schema cache" },
+  { code: "PGRST202", message: "Could not find the public.portia_access_closure_enabled() function in the schema cache" },
+  { code: "42883", message: "function public.portia_access_closure_enabled() does not exist" },
+];
+
+function recordingClient(closure: { data?: unknown; error?: { message: string; code?: string } | null }, called: string[]): AccessRpcClient {
+  return { rpc(fn) {
+    called.push(fn);
+    if (fn === "portia_access_closure_enabled") return Promise.resolve({ data: closure.data ?? null, error: closure.error ?? null });
+    assert.fail(`unexpected rpc ${fn}`);
+  } };
+}
+
+test("missing closure function opens the site with the request form (G-PORTIA-23-2/3)", async () => {
+  for (const reply of missingClosureReplies) {
+    const called: string[] = [];
+    const warnings: Array<{ message: string; detail: unknown }> = [];
+    const decision = await resolveGate(headers, {
+      client: recordingClient({ error: reply }, called),
+      sessionSecret: secret,
+      editorAccess: async () => ({ canEdit: false }),
+      warn: (message: string, detail: unknown) => { warnings.push({ message, detail }); },
+    } as Parameters<typeof resolveGate>[1]).catch((error: unknown) => error);
+    assert.deepEqual(decision, { mode: "open", state: { state: "none" } });
+    assert.deepEqual(called, ["portia_access_closure_enabled"]);
+    assert.equal(warnings.length, 1);
+    assert.deepEqual(warnings[0].detail, { sqlState: reply.code });
+  }
+});
