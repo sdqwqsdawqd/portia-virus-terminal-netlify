@@ -34,6 +34,9 @@ const migrationHashes: Record<string, string> = {
   "20261110000000_portia_users_tab.sql": "75e9b89d08eb9893dac2bf9fe0f082be5e9ed9ae640dd38f4373535963d70c60",
   "20261112000000_portia_access_decision_mark.sql": "f1b124918f9a7708aab5c914410b81dbbcd3873e94ada0450016128ba07d6948",
   "20261113000000_portia_access_promotion.sql": "59877c13f4fadf56d9274fc5ccbf5978c285d882c0a65811da32a0ec08343e81",
+  // Phase 23 migration (23-10, owner decision 2026-11-14 3a: closure ON by default): pinned by plan 23-10, frozen by 23-11
+  // after the supabase-rls-reviewer review (23-MIGRATION-APPLY.md). Until the freeze only a fix from that review may re-pin it.
+  "20261114000000_portia_access_closure_default_on.sql": "44c07e2f76baccf06017852fdf50843bae6fc005d889715cc898b4fbdc4c47b4",
 };
 
 const baselineName = "20261101000000_portia_baseline.sql";

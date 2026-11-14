@@ -11,9 +11,10 @@
     "20261109000000_portia_access_foundation.sql",
     "20261110000000_portia_users_tab.sql",
     "20261112000000_portia_access_decision_mark.sql",
-    "20261113000000_portia_access_promotion.sql"
+    "20261113000000_portia_access_promotion.sql",
+    "20261114000000_portia_access_closure_default_on.sql"
   ],
-  "generated_from": "all supabase/migrations SQL text replayed in version order (grant/revoke/policy/raise lines); not from observed behavior. Phase 21 adds the portia_access_* functions and tables (migration 20261109000000_portia_access_foundation.sql). Phase 23 adds approved-request Promotion RPC wrappers (offline evidence only).",
+  "generated_from": "all supabase/migrations SQL text replayed in version order (grant/revoke/policy/raise lines); not from observed behavior. Phase 21 adds the portia_access_* functions and tables (migration 20261109000000_portia_access_foundation.sql). Phase 23 adds approved-request Promotion RPC wrappers (offline evidence only). Phase 23 (23-10) turns site closure ON by default (20261114000000_portia_access_closure_default_on.sql restates the grants of portia_access_closure_enabled unchanged).",
   "roles": {
     "anon": {
       "session": false
