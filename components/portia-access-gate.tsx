@@ -3,16 +3,15 @@
 import dynamic from "next/dynamic";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { GateDecision } from "@/lib/access-gate";
+import { accessGateLayout, type AccessGateView } from "@/lib/access-gate-view";
 import type { AccessOrigin } from "@/lib/access-levels";
 import { defaultPortiaContent } from "@/lib/portia-content";
 import { isValidNickname } from "@/lib/nickname";
 
 const PortiaDesktop = dynamic(() => import("@/components/portia-desktop").then((mod) => mod.PortiaDesktop), { ssr: false });
 
-type View = { kind: "checking" } | { kind: "error" } | { kind: "decision"; decision: GateDecision };
-
 export function PortiaAccessGate() {
-  const [view, setView] = useState<View>({ kind: "checking" });
+  const [view, setView] = useState<AccessGateView>({ kind: "checking" });
   const epoch = useRef(0);
   const approved = useRef(false);
   const [nickname, setNickname] = useState("");
@@ -86,18 +85,13 @@ export function PortiaAccessGate() {
     }
   };
 
-  const decision = view.kind === "decision" ? view.decision : null;
-  const desktop = decision !== null && (decision.mode === "open" || decision.allowed);
-  const state = decision?.state;
-  const pending = state?.state === "pending";
-  const approvedState = state?.state === "approved";
-  const statusText = pending ? "Заявка отправлена. Ожидайте решения проверяющего."
-    : approvedState ? "Доступ подтверждён. Открываем рабочий стол."
-    : state?.state === "rejected" ? "Заявка отклонена. Обратитесь к проверяющему."
-    : state?.state === "revoked" ? "Доступ отозван. Обратитесь к проверяющему."
+  const layout = accessGateLayout(view, cardOpen);
+  const { desktop, showCard, showForm } = layout;
+  const statusText = layout.status === "pending" ? "Заявка отправлена. Ожидайте решения проверяющего."
+    : layout.status === "approved" ? "Доступ подтверждён. Открываем рабочий стол."
+    : layout.status === "rejected" ? "Заявка отклонена. Обратитесь к проверяющему."
+    : layout.status === "revoked" ? "Доступ отозван. Обратитесь к проверяющему."
     : null;
-  const showForm = state?.state === "none" || state?.state === "rejected" || state?.state === "revoked";
-  const showCard = !desktop || cardOpen;
 
   return <>
     {desktop && <PortiaDesktop initialContent={defaultPortiaContent} />}
@@ -108,7 +102,7 @@ export function PortiaAccessGate() {
         <span className="access-eyebrow">PORTIA // ДОСТУП</span>
         <h1 id="access-title">{view.kind === "checking" ? "Проверяем доступ…" : "Заявка на доступ"}</h1>
         {view.kind === "checking" && <p className="access-loading" role="status">Проверяем доступ<span className="access-dots" aria-hidden="true">…</span></p>}
-        {view.kind === "error" && <div ref={statusRef} tabIndex={-1} role="alert"><p>Не удалось проверить доступ. Повторите проверку; содержимое сайта пока недоступно.</p><button type="button" onClick={() => void refresh()}>ПОВТОРИТЬ ПРОВЕРКУ</button></div>}
+        {layout.showError && <div ref={statusRef} tabIndex={-1} role="alert"><p>Не удалось проверить доступ. Повторите проверку; содержимое сайта пока недоступно.</p><button type="button" onClick={() => void refresh()}>ПОВТОРИТЬ ПРОВЕРКУ</button></div>}
         {statusText && <div ref={statusRef} tabIndex={-1} className="access-status" role="status">{statusText}</div>}
         {showForm && <form onSubmit={submit} noValidate>
           <label className="access-label" htmlFor="access-nickname">НИК ROBLOX</label>

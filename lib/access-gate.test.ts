@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { accessTokenDigest } from "./access-session.ts";
-import { resolveGate } from "./access-gate.ts";
+import { onceWarn, resolveGate, type GateDecision } from "./access-gate.ts";
+import { accessGateLayout } from "./access-gate-view.ts";
 import type { AccessRpcClient } from "./access-store.ts";
 
 const secret = "s".repeat(40);
@@ -102,11 +103,19 @@ test("missing closure function opens the site with the request form (G-PORTIA-23
       client: recordingClient({ error: reply }, called),
       sessionSecret: secret,
       editorAccess: async () => ({ canEdit: false }),
-      warn: (message: string, detail: unknown) => { warnings.push({ message, detail }); },
-    } as Parameters<typeof resolveGate>[1]).catch((error: unknown) => error);
+      warn: (message, detail) => { warnings.push({ message, detail }); },
+    });
     assert.deepEqual(decision, { mode: "open", state: { state: "none" } });
     assert.deepEqual(called, ["portia_access_closure_enabled"]);
     assert.equal(warnings.length, 1);
     assert.deepEqual(warnings[0].detail, { sqlState: reply.code });
+    const layout = accessGateLayout({ kind: "decision", decision: decision as GateDecision }, true);
+    assert.deepEqual(layout, { desktop: true, showCard: true, showForm: true, showError: false, status: null });
   }
+  const forwarded: Array<[string, unknown]> = [];
+  const warn = onceWarn((message, detail) => { forwarded.push([message, detail]); });
+  warn("first", { sqlState: "PGRST202" });
+  warn("second", { sqlState: "42883" });
+  warn("third", { sqlState: null });
+  assert.deepEqual(forwarded, [["first", { sqlState: "PGRST202" }]]);
 });
