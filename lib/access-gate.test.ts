@@ -310,3 +310,44 @@ test("status route keeps a missing session secret fail-closed and the view helpe
   assert.ok(imports.length > 0);
   for (const line of imports) assert.match(line, /^import type /);
 });
+
+test("status poll network budget: an anonymous visitor makes one request and a signed-in editor never reads the closure flag", async () => {
+  const dependencies = (client: ReturnType<typeof probeClient>["client"]) => ({ client, sessionSecret: secret, editorAccess: routeEditorAccess(client), warn: () => {} });
+
+  // (a) anonymous visitor, closure ON: one request.
+  const a = probeClient([], { [closureRoute]: { status: 200, body: true } });
+  assert.deepEqual(await resolveGate(new Headers(), dependencies(a.client)), closedNone);
+  assert.deepEqual(a.calls, [closureRoute]);
+
+  // (b) anonymous visitor, closure OFF: one request.
+  const b = probeClient([], { [closureRoute]: { status: 200, body: false } });
+  assert.equal((await resolveGate(new Headers(), dependencies(b.client))).mode, "open");
+  assert.deepEqual(b.calls, [closureRoute]);
+
+  // (c) visitor with a device cookie, closure ON: closure flag, then the token resolve.
+  const c = probeClient([], {
+    [closureRoute]: { status: 200, body: true },
+    "POST /rest/v1/rpc/portia_access_resolve": { status: 200, body: { state: "pending", nickname: "Visitor_1" } },
+  });
+  assert.deepEqual(await resolveGate(headers, dependencies(c.client)), { mode: "closed", state: { state: "pending", nickname: "Visitor_1" }, allowed: false, level: null, editor: false });
+  assert.deepEqual(c.calls, [closureRoute, "POST /rest/v1/rpc/portia_access_resolve"]);
+
+  // (d) signed-in owner-editor: user lookup, then three parallel lookups, and no closure read at all.
+  const user = {
+    id: "00000000-0000-4000-8000-000000000001", aud: "authenticated", role: "authenticated", email: "editor@example.invalid",
+    email_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: {}, user_metadata: {}, created_at: "2026-01-01T00:00:00Z",
+  };
+  const session = { access_token: "h.e.s", refresh_token: "r", token_type: "bearer", expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user };
+  const cookie = { name: "sb-probe-auth-token", value: `base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}` };
+  const d = probeClient([cookie], {
+    "GET /auth/v1/user": { status: 200, body: user },
+    "POST /rest/v1/rpc/portia_can_edit": { status: 200, body: true },
+    "POST /rest/v1/rpc/portia_is_owner": { status: 200, body: true },
+    "GET /rest/v1/portia_editors": { status: 200, body: null },
+  });
+  assert.deepEqual(await resolveGate(new Headers(), dependencies(d.client)), editorDecision);
+  assert.equal(d.calls[0], "GET /auth/v1/user");
+  assert.deepEqual(d.calls.slice(1).sort(), ["GET /rest/v1/portia_editors", "POST /rest/v1/rpc/portia_can_edit", "POST /rest/v1/rpc/portia_is_owner"]);
+  assert.equal(d.calls.length, 4);
+  assert.ok(d.calls.every((call) => !call.includes("closure")));
+});
