@@ -202,27 +202,27 @@
       "cells": {
         "anon": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:667"
+          "source": "supabase/migrations/20261114000000_portia_access_closure_default_on.sql:38"
         },
         "outsider": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:667"
+          "source": "supabase/migrations/20261114000000_portia_access_closure_default_on.sql:38"
         },
         "editor-full": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:667"
+          "source": "supabase/migrations/20261114000000_portia_access_closure_default_on.sql:38"
         },
         "editor-restricted": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:667"
+          "source": "supabase/migrations/20261114000000_portia_access_closure_default_on.sql:38"
         },
         "promo-reviewer": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:667"
+          "source": "supabase/migrations/20261114000000_portia_access_closure_default_on.sql:38"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261109000000_portia_access_foundation.sql:667"
+          "source": "supabase/migrations/20261114000000_portia_access_closure_default_on.sql:38"
         }
       }
     },
