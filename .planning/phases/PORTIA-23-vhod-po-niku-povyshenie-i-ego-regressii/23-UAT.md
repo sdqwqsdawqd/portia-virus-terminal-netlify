@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: PORTIA-23-vhod-po-niku-povyshenie-i-ego-regressii
 source: [23-01-SUMMARY.md, 23-02-SUMMARY.md, 23-03-SUMMARY.md, 23-04-SUMMARY.md, 23-05-SUMMARY.md, 23-06-SUMMARY.md, 23-07-SUMMARY.md]
 started: 2026-11-14T00:00:00Z
-updated: 2026-11-14T22:39:58.886Z
+updated: 2026-11-15T15:40:00Z
 ---
 
 ## Current Test
@@ -135,12 +135,20 @@ blocked: 0
   reason: "User reported: Ну, теперь почему-то появляется это ужасное уведомление в правом верхнем углу, хотя можно было сделать примерно такое же уведомление, когда приходит какой-то квест уведомление. Вместо того, чтобы показывать такое уродливое окно сверху в правом. Но теперь хорошо, что вообще работает."
   severity: cosmetic
   test: 3
+  root_cause: "lib/access-gate-view.ts:29 accessGateLayout даёт showCard = !editor && (!desktop || cardOpen), а cardOpen по умолчанию true (components/portia-access-gate.tsx:34). Для одобренного гостя (mode closed, allowed, state approved) рабочий стол уже открыт, но поверх него остаётся полная карточка доступа access-gate-open (заголовок «Заявка на доступ», текст «Доступ подтверждён. Открываем рабочий стол.», ссылка «Вход для редактора»), пока её не закроют крестиком. Состояние cardOpen не запоминается, поэтому карточка возвращается при каждой загрузке страницы. Отдельного короткого уведомления для одобрения нет; образец есть: QuestToast (components/portia-desktop.tsx:1939, классы portia-dialog quest-toast)."
   artifacts:
+    - path: "lib/access-gate-view.ts"
+      issue: "showCard true для одобренного гостя с открытым рабочим столом"
     - path: "components/portia-access-gate.tsx"
-      issue: "после одобрения карточка («Доступ подтверждён. Открываем рабочий стол.», ссылка «Вход для редактора») остаётся поверх рабочего стола (строка 99)"
+      issue: "cardOpen=true по умолчанию; статус approved показывается в карточке, а не уведомлением; ссылка «Вход для редактора» в одобренном состоянии"
     - path: "components/portia-desktop.tsx"
-      issue: "образец: QuestToast / боковое уведомление (строка 1939)"
-  missing: []
+      issue: "образец уведомления QuestToast (не меняется, только стиль и поведение)"
+  missing:
+    - "для state approved при открытом рабочем столе карточку доступа не показывать"
+    - "один раз на устройство после одобрения показать неблокирующее уведомление «Доступ подтверждён» в стиле quest-toast: без фокуса, закрывается крестиком и Escape (кроме полей ввода и открытых dialog)"
+    - "запоминать показ (try/catch вокруг localStorage), чтобы уведомление не повторялось при каждой загрузке"
+    - "состояния pending/rejected/revoked/none и вид для редактора (WR-04) не меняются; юнит-тест accessGateLayout на approved"
+  debug_session: ""
 
 - gap_id: G-PORTIA-23-3-log
   truth: "Каждый отказ подписи заявки (код unauthorized) пишется в серверный лог как тревога, чтобы отсутствующий или неверный секрет был виден сразу"
@@ -148,7 +156,12 @@ blocked: 0
   reason: "Found during UAT 2026-11-15 (agent): POST /api/access/request 503 без строки в логе; причину (секрет в базе 45 символов вместо 43) пришлось искать вручную. Шапка 20261109000000_portia_access_foundation.sql требует: The Phase 23 route must log every unauthorized reply as an alert."
   severity: minor
   test: 3
+  root_cause: "app/api/access/request/route.ts переводит код unauthorized из portia_access_submit_request в HTTP 503 без console.error/console.warn; строка лога пишется только в catch (исключения). Отсутствующий секрет и неверная подпись (в т.ч. рассинхрон значения в env и в public.portia_access_secrets) поэтому не видны в логе, хотя шапка 20261109000000_portia_access_foundation.sql:29 требует логировать каждый unauthorized как тревогу."
   artifacts:
     - path: "app/api/access/request/route.ts"
-      issue: "код unauthorized превращается в 503 без записи в лог"
-  missing: []
+      issue: "нет записи в лог для result.code === unauthorized"
+  missing:
+    - "при unauthorized писать одну строку console.error без секрета, подписи, ника и token hash (например: PORTIA access request unauthorized: submit signature refused — check PORTIA_ACCESS_SUBMIT_SECRET matches the database)"
+    - "ответ клиенту не меняется (503, нейтральный текст)"
+    - "юнит-тест: при unauthorized вызывается лог, в строке нет значений секрета/подписи"
+  debug_session: ""
