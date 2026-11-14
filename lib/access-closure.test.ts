@@ -22,6 +22,13 @@ const raw = readFileSync(migrationPath, "utf8").replace(/\r\n/g, "\n");
 // Comment-stripped text so a rule mentioned only in a header comment cannot satisfy a contract.
 const sql = raw.replace(/--[^\n]*/g, "");
 
+// Phase 23 (23-10, owner decision 2026-11-14 3a): the forward-only migration that switches the closure ON by default.
+// The foundation above stays frozen and still creates the flag OFF; the effective result after all migrations is ON.
+const migrationsDir = join(repoRoot, "supabase", "migrations");
+const defaultOnName = "20261114000000_portia_access_closure_default_on.sql";
+const defaultOnRaw = readFileSync(join(migrationsDir, defaultOnName), "utf8").replace(/\r\n/g, "\n");
+const defaultOnSql = defaultOnRaw.replace(/--[^\n]*/g, "");
+
 function functionParts(name: string) {
   const start = sql.indexOf(`create or replace function public.${name}(`);
   assert.ok(start >= 0, `${name} is missing from the migration`);
@@ -31,9 +38,9 @@ function functionParts(name: string) {
   return { header: sql.slice(start, bodyStart), body: sql.slice(bodyStart + 5, bodyEnd), start };
 }
 
-function grantedRoles(name: string) {
+function grantedRoles(name: string, text: string = sql) {
   const roles = new Set<string>();
-  for (const match of sql.matchAll(new RegExp(`grant execute on function public\\.${name}\\([^)]*\\) to ([^;]+);`, "g"))) {
+  for (const match of text.matchAll(new RegExp(`grant execute on function public\\.${name}\\([^)]*\\) to ([^;]+);`, "g"))) {
     for (const role of match[1].split(",")) roles.add(role.trim());
   }
   return roles;
@@ -41,7 +48,7 @@ function grantedRoles(name: string) {
 
 const journalInsert = /insert into public\.portia_access_journal/;
 
-test("ACC-09 / D-05 the flag is row 'main' of portia_access_settings, created OFF and never flipped by a re-run", () => {
+test("ACC-09 / D-05 foundation 20261109000000 (frozen) creates row 'main' OFF and never flips it on re-run; 20261114000000 switches the default ON (owner 2026-11-14, 3a)", () => {
   assert.match(sql, /create table if not exists public\.portia_access_settings \(/);
   assert.match(sql, /id text primary key/);
   assert.match(sql, /constraint portia_access_settings_id_check check \(id = 'main'\)/);
@@ -64,7 +71,7 @@ test("ACC-09 the settings table is closed to every API role (RPC only)", () => {
   assert.ok(!/references\s+auth\./i.test(sql), "no foreign key to auth.users");
 });
 
-test("ACC-09 closure_enabled reads the stored value, false when the row is missing, for anon and authenticated", () => {
+test("ACC-09 foundation closure_enabled reads the stored value with a false fallback (frozen text; 20261114000000 redefines the fallback to true)", () => {
   const { header, body } = functionParts("portia_access_closure_enabled");
   assert.match(header, /portia_access_closure_enabled\(\)/);
   assert.ok(header.includes("returns boolean") && header.includes("language sql") && header.includes("stable"));
@@ -79,6 +86,60 @@ test("ACC-09 closure_enabled reads the stored value, false when the row is missi
   const revoke = sql.indexOf("revoke all on function public.portia_access_closure_enabled() from public, anon, authenticated;", start);
   const grant = sql.indexOf("grant execute on function public.portia_access_closure_enabled()", start);
   assert.ok(revoke > 0 && grant > revoke, "revoke all before grant");
+});
+
+test("G-PORTIA-23-4 / owner 3a: 20261114000000 turns closure ON by default without overriding an owner toggle", () => {
+  const alter = defaultOnSql.indexOf("alter table public.portia_access_settings alter column closure_enabled set default true;");
+  assert.ok(alter >= 0, "the column default becomes true");
+  assert.match(
+    defaultOnSql,
+    /insert into public\.portia_access_settings \(id, closure_enabled\) values \('main', true\)\s+on conflict \(id\) do nothing;/,
+  );
+  assert.match(
+    defaultOnSql,
+    /update public\.portia_access_settings\s+set closure_enabled = true, updated_at = now\(\)\s+where id = 'main' and updated_by is null and closure_enabled is distinct from true;/,
+  );
+  assert.ok(!defaultOnSql.includes("values ('main', false)"), "never created OFF");
+  assert.ok(!/closure_enabled\s*=\s*false/.test(defaultOnSql), "never switched OFF");
+  assert.ok(!/updated_by\s*=/.test(defaultOnSql), "an owner toggle (updated_by) is never overwritten or claimed");
+  const insert = defaultOnSql.indexOf("insert into public.portia_access_settings");
+  const update = defaultOnSql.indexOf("update public.portia_access_settings");
+  const fn = defaultOnSql.indexOf("create or replace function public.portia_access_closure_enabled(");
+  assert.ok(alter < insert && insert < update && update < fn, "order: alter, insert, update, function");
+});
+
+test("after all migrations portia_access_closure_enabled() is ON for a missing row and keeps its grants", () => {
+  const files = readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")).sort();
+  const marker = "create or replace function public.portia_access_closure_enabled(";
+  const definers = files.filter((name) => readFileSync(join(migrationsDir, name), "utf8").includes(marker));
+  assert.equal(definers.at(-1), defaultOnName, "the last definition lives in 20261114000000");
+  const start = defaultOnSql.indexOf(marker);
+  const bodyStart = defaultOnSql.indexOf("as $$", start);
+  const bodyEnd = defaultOnSql.indexOf("$$;", bodyStart + 5);
+  assert.ok(start >= 0 && bodyStart > start && bodyEnd > bodyStart, "cannot find the $$ body");
+  const header = defaultOnSql.slice(start, bodyStart);
+  const body = defaultOnSql.slice(bodyStart + 5, bodyEnd);
+  assert.ok(header.includes("returns boolean") && header.includes("language sql") && header.includes("stable"));
+  assert.ok(header.includes("security definer") && header.includes("set search_path = ''"));
+  assert.match(body, /coalesce\(/);
+  assert.match(body, /true\)\s*;\s*$/, "true when the row is missing");
+  assert.ok(!/false\)\s*;\s*$/.test(body), "no false fallback");
+  const revoke = defaultOnSql.indexOf("revoke all on function public.portia_access_closure_enabled() from public, anon, authenticated;");
+  const grant = defaultOnSql.indexOf("grant execute on function public.portia_access_closure_enabled()");
+  assert.ok(revoke > 0 && grant > revoke, "revoke all before grant");
+  assert.deepEqual([...grantedRoles("portia_access_closure_enabled", defaultOnSql)].sort(), ["anon", "authenticated", "service_role"]);
+});
+
+test("20261114000000 changes nothing else: one function, no journal, set_closure, submit, policy, table grant or transaction wrapper, and it reloads the PostgREST schema cache", () => {
+  assert.equal((defaultOnSql.match(/create or replace function/g) ?? []).length, 1);
+  for (const forbidden of ["portia_access_journal", "portia_access_set_closure", "portia_access_submit_request"]) {
+    assert.ok(!defaultOnSql.includes(forbidden), `${forbidden} is not touched`);
+  }
+  assert.ok(!/create\s+policy/i.test(defaultOnSql), "no policies");
+  assert.ok(!/grant\s+[^;]+\s+on\s+table/i.test(defaultOnSql), "no table grants");
+  assert.ok(!/^(begin|commit);$/m.test(defaultOnRaw), "the CLI owns the transaction");
+  const lines = defaultOnRaw.split("\n").map((line) => line.trim()).filter(Boolean);
+  assert.equal(lines.at(-1), "notify pgrst, 'reload schema';");
 });
 
 test("T-21-19 / D-05 set_closure: owner-only first statement, null is invalid, upsert with last-change metadata", () => {
