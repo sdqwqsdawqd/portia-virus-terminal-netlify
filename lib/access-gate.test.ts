@@ -191,8 +191,8 @@ test("unavailable or failing editor verification keeps the previous branch behav
   for (const editorAccess of editors) {
     const run = (closure: ClosureReply) => resolveGate(headers, { client: closureClient(closure, []), sessionSecret: secret, editorAccess, warn: () => {} });
     const off = await run({ data: false });
-    assert.equal(off.mode, "open");
     assert.equal(off.mode === "closed" && off.editor, false);
+    assert.equal(off.mode, "open");
     assert.deepEqual(await run(missing), { mode: "open", state: { state: "none" } });
     await assert.rejects(run({ data: true }));
     await assert.rejects(run({ error: { code: "", message: "TypeError: fetch failed" } }));

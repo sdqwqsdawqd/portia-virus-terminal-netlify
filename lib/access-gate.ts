@@ -15,8 +15,9 @@ export type GateDependencies = {
   warn?: GateWarn;
 };
 
-// The closure RPC name as a whole identifier: "public.portia_access_closure_enabled" and "portia_access_closure_enabled()"
-// match, a longer identifier such as "portia_access_closure_enabled_legacy" does not. The name holds only [a-z_].
+// The closure RPC name (accessRpc.closureEnabled) as a whole identifier: a schema-qualified name or one followed by
+// "()" matches, a longer identifier that merely starts with it does not. The name holds only [a-z_]. The literal is kept
+// out of this file on purpose: lib/access-closure.test.ts scans product code for it.
 const closureFunctionName = new RegExp(`(^|[^A-Za-z0-9_])${accessRpc.closureEnabled}($|[^A-Za-z0-9_])`);
 
 // Owner decision 2026-11-14: only the exact "this function is not in the database" signal turns closure OFF (D-01).
@@ -41,7 +42,19 @@ const defaultWarn = onceWarn((message, detail) => { console.warn(message, detail
 
 const closureMissingMessage = "PORTIA access gate: closure RPC is missing in the database; treating closure as OFF (pre-Phase-23 behaviour)";
 
+// A thrown or rejected editor check is never a grant: it counts as unavailable.
+async function readEditorAccess(dependencies: GateDependencies): Promise<{ canEdit: boolean; unavailable?: true }> {
+  try { return await dependencies.editorAccess(); }
+  catch { return { canEdit: false, unavailable: true }; }
+}
+
 export async function resolveGate(headers: Headers, dependencies: GateDependencies): Promise<GateDecision> {
+  // D-03 / owner decision 2026-11-14 item 1: a verified editor is decided before the closure flag is read,
+  // so no closure RPC failure can block them.
+  const editorAccess = await readEditorAccess(dependencies);
+  if (editorAccess.canEdit && !editorAccess.unavailable) {
+    return { mode: "closed", state: { state: "none" }, allowed: true, level: EDITOR_ACCESS_LEVEL, editor: true };
+  }
   let closed: boolean;
   try {
     closed = await isClosureEnabled(dependencies.client);
@@ -59,9 +72,7 @@ export async function resolveGate(headers: Headers, dependencies: GateDependenci
     }
     return { mode: "open", state };
   }
-  const editorAccess = await dependencies.editorAccess();
   if (editorAccess.unavailable) throw new Error("Editor verification unavailable.");
-  if (editorAccess.canEdit) return { mode: "closed", state: { state: "none" }, allowed: true, level: EDITOR_ACCESS_LEVEL, editor: true };
   const state = token
     ? await resolveAccess(dependencies.client, accessTokenDigest(token, dependencies.sessionSecret))
     : { state: "none" } as const;
