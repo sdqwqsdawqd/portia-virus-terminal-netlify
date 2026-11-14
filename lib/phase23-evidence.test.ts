@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -90,4 +91,56 @@ test("Phase 23 matrix covers each tracked route and migration exactly once; all 
   }
   assert.match(evidence, /Build is BLOCKED/);
   assert.match(matrix, /RLS23-04 \| medium \| release-ledger/);
+});
+
+test("Phase 23 apply record: owner order, pinned hashes, cache reload, closure ON checks; the agent applied nothing", () => {
+  const record = read("23-MIGRATION-APPLY.md");
+  assert.ok(record.includes("Агент не применил ничего"), "intro must say the agent applied nothing");
+  assert.ok(!/\bPASS\b/.test(record), "the record must never claim PASS");
+  assert.ok(!record.includes("sb_secret_") && !record.includes("sb_publishable_"), "no key prefixes in the record");
+  for (const heading of [
+    "Что изменится на сайте", "Перед началом", "Порядок применения", "Проверка до применения", "Как применить", "Секрет подписи заявок",
+    "Перезагрузка кэша схемы", "Проверки после применения", "Проверка сайта после применения", "Откат и выключение закрытия",
+    "Закреплённый sha256", "Статус", "Ревью", "Что доказано офлайн",
+  ]) assert.ok(section(record, heading).trim().length > 0, `${heading} must not be empty`);
+
+  // Order equals the tracked migrations after Phase 16 (20261101000200): a future migration without a record update fails here.
+  const versions = tracked("supabase/migrations", ".sql").map((path) => /(\d{14})_/.exec(path)?.[1] ?? "").filter((version) => version > "20261101000200").sort();
+  assert.ok(versions.length >= 8);
+  const listed = section(record, "Порядок применения").split("\n").map((line) => /^\d+\. `(\d{14})_[a-z0-9_]+\.sql`/.exec(line)?.[1]).filter((version): version is string => Boolean(version));
+  assert.deepEqual(listed, versions);
+
+  // Frozen hashes: recorded value, pin in the parity test and the LF-normalised file must agree.
+  const parity = readFileSync(new URL("./portia-canonical-parity.test.ts", import.meta.url), "utf8");
+  const hashes = section(record, "Закреплённый sha256");
+  for (const file of ["20261113000000_portia_access_promotion.sql", "20261114000000_portia_access_closure_default_on.sql"]) {
+    const recorded = new RegExp(`${file}: ([0-9a-f]{64})`).exec(hashes)?.[1];
+    const pinned = new RegExp(`"${file}": "([0-9a-f]{64})"`).exec(parity)?.[1];
+    const actual = createHash("sha256").update(readFileSync(new URL(`../supabase/migrations/${file}`, import.meta.url), "utf8").replace(/\r\n/g, "\n")).digest("hex");
+    assert.ok(recorded && pinned, file);
+    assert.equal(recorded, pinned, `${file}: record differs from the pin`);
+    assert.equal(recorded, actual, `${file}: record differs from the file`);
+  }
+
+  // Cache reload: the closure migration ends with the notify and the record repeats it.
+  const lastLine = readFileSync(new URL("../supabase/migrations/20261114000000_portia_access_closure_default_on.sql", import.meta.url), "utf8")
+    .split(/\r?\n/).map((line) => line.trim()).filter(Boolean).pop();
+  assert.equal(lastLine, "notify pgrst, 'reload schema';");
+  assert.ok(section(record, "Перезагрузка кэша схемы").includes("notify pgrst, 'reload schema';"));
+
+  // Owner checks: counts come from the golden fingerprint.
+  const golden = JSON.parse(readFileSync(new URL("../supabase/fingerprint/expected/portia.fingerprint.json", import.meta.url), "utf8")) as { sections: { functions: Record<string, unknown> } };
+  const keys = Object.keys(golden.sections.functions);
+  const accessCount = keys.filter((key) => key.startsWith("public.portia_access_")).length;
+  const promotionCount = keys.filter((key) => /^public\.portia_promo_secure_/.test(key) || /^public\.portia_promo_participant_key\(/.test(key) || /^public\.portia_promo_test_proof_valid\(/.test(key)).length;
+  const checks = section(record, "Проверки после применения");
+  for (const needle of ["select public.portia_access_closure_enabled();", "has_function_privilege", "PGRST202",
+    "portia_access_journal", "portia_access_people", "portia_access_requests", "portia_access_secrets", "portia_access_settings",
+    `ожидается ${accessCount}`, `ожидается ${promotionCount}`]) assert.ok(checks.includes(needle), `checks must contain ${needle}`);
+  assert.ok(section(record, "Секрет подписи заявок").includes("length(v) >= 32"));
+
+  // Status: one row per ordered migration, production always waits for the owner.
+  const status = rows(record, "Статус");
+  assert.deepEqual(status.map((row) => /(\d{14})_/.exec(row[0])?.[1]), versions);
+  for (const row of status) assert.match(row[2], /ОЖИДАЕТ ВЛАДЕЛЬЦА/, row[0]);
 });
