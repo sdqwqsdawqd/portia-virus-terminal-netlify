@@ -15,6 +15,7 @@ import { canonicalize, inventory } from "../scripts/phase16-fingerprint-compare.
 // The normalised definition text of those (pg_get_constraintdef, pg_get_indexdef, pg_get_triggerdef, column defaults) is
 // derived offline from analogous golden entries of the promo tables. It is confirmed only by a fingerprint capture on an
 // isolated staging project: BLOCKED (ENV) until that run, never a pass. Nothing here talks to a database.
+// Column defaults are the foundation text plus later `alter column ... set default` statements, by migration version.
 
 const migrationsDir = "supabase/migrations";
 const migrationFiles = readdirSync(new URL(`../${migrationsDir}/`, import.meta.url))
@@ -213,6 +214,24 @@ for (const match of accessText.matchAll(/^create table if not exists public\.(po
     constraints,
     rls: new RegExp(`^alter table public\\.${match[1]} enable row level security;`, "mu").test(accessText),
   });
+}
+
+// Column defaults are the foundation text plus later `alter table public.portia_access_* alter column ... set default ...;`
+// statements, replayed by migration version (Phase 23, 23-10: closure ON by default). Any other alter column form on these
+// tables fails loudly: an unknown form must not pass silently.
+const foundationFile = "20261109000000_portia_access_foundation.sql";
+for (const file of migrationFiles.filter((name) => name > foundationFile)) {
+  const text = migrationTexts.get(file) ?? "";
+  for (const match of text.matchAll(/^alter table public\.(portia_access_\w+) alter column (\w+) .*$/gmu)) {
+    const setDefault = /^alter table public\.(portia_access_\w+) alter column (\w+) set default (.+);$/u.exec(match[0]);
+    if (!setDefault) assert.fail(`${file}: unknown alter column form on ${match[1]}: ${match[0]}`);
+    const table = tables.find((candidate) => candidate.name === setDefault[1]);
+    const column = table?.columns.find((candidate) => candidate.name === setDefault[2]);
+    if (!table || !column) assert.fail(`${file}: set default on unknown column ${setDefault[1]}.${setDefault[2]}`);
+    let defaultText = setDefault[3];
+    if (/^'.*'$/u.test(defaultText) && column.type === "text") defaultText = `${defaultText}::text`;
+    column.defaultText = defaultText;
+  }
 }
 
 const sequences = tables.flatMap((table) => table.columns.filter((column) => column.identity === "a").map((column) => `${table.name}_${column.name}_seq`));

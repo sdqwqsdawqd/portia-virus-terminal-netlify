@@ -307,7 +307,7 @@
       },
       "public.portia_access_settings.closure_enabled": {
         "acl": null,
-        "default": "false",
+        "default": "true",
         "generated": "",
         "identity": "",
         "notnull": true,
