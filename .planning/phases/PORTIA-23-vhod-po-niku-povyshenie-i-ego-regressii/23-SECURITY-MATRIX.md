@@ -1,14 +1,15 @@
 # 23 - Security matrix (Phase 22 carried forward)
 
-Дата: 2026-11-14. Проверяемый commit: `12eecb108f3c24f5cc0b558a882ddbef09ec2522` (Phase 23 static RLS review round 2: closure ON by default and fail-closed gate; open critical/high 0).
+Дата: 2026-11-15. Проверяемый commit: `7cb8702c51b50332d8687f21e58bd94ed71ee005` (Phase 23 static RLS review round 3: unauthorized submit alert log; open critical/high 0).
 
 Машинная проверка: `node --experimental-strip-types --test lib/security-matrix.test.ts` проверяет полноту маршрутов и миграций и отсутствие изменений охваченного кода после проверенного commit.
 
 ## Метод и границы
 
-- Только статическое ревью SQL, RLS/RPC-контрактов и вызывающего TypeScript; два раунда `supabase-rls-reviewer`. Результат `SECURED` не относится к живой базе.
+- Только статическое ревью SQL, RLS/RPC-контрактов и вызывающего TypeScript; раунды `supabase-rls-reviewer` (в Phase 23: 23-07, 23-11, 23-12). Результат `SECURED` не относится к живой базе.
 - Миграция Phase 22 нигде не применялась агентом. Живой Postgres, ACL/RLS реальных ролей, staging, production, конкуренция, Netlify и физические устройства остаются `BLOCKED` либо `ОЖИДАЕТ ВЛАДЕЛЬЦА` по `22-RLS-REVIEW.md`.
 - Раунд 2 Phase 23 (23-11): только статическое чтение; `20261114000000` нигде не применялась, агент ни к какой базе не подключался. Ревьюера запустил оркестратор.
+- Раунд 3 Phase 23 (23-12): только статическое чтение маршрута `app/api/access/request/route.ts` и помощника `lib/access-request-reply.ts` (тревога unauthorized); SQL не менялся, агент ни к какой базе не подключался. Ревьюера запустил оркестратор; побайтный diff маршрута подтвердил оркестратор (у ревьюера не было shell).
 - Реальные `.env*` и секреты не читались; Supabase CLI и сетевые подключения не выполнялись.
 
 ## Охват файлов
@@ -31,6 +32,7 @@
 - `lib/access-session.ts`
 - `lib/access-gate.ts` (шлюз решает закрытый экран; любая его правка требует проверенного commit матрицы)
 - `lib/access-store.ts`
+- `lib/access-request-reply.ts` (тревога unauthorized и карта статусов маршрута заявки)
 - `lib/access-levels.ts`
 - `lib/users-api.ts`
 - `lib/users-model.ts`
@@ -47,7 +49,7 @@
 |---|---|---|---|---|---|
 | `app/api/access/route.ts` | GET | `getUser()` + `getEditorAccess`; сбой auth или RPC даёт 503, не `canEdit:false` | да | — | `e0f89ef` |
 | `app/api/access/editor-request/route.ts` | GET, POST | authenticated editor, own request token and auth.uid | yes | RLS23-02 | `465a1b9` |
-| `app/api/access/request/route.ts` | POST | signed guest sheet request, current device | yes | RLS23-01 | `465a1b9` |
+| `app/api/access/request/route.ts` | POST | signed guest sheet request, current device; every unauthorized reply logs one constant alert line (no secret, signature, nickname, token hash or IP bucket), reply unchanged (23-12) | yes | RLS23-01, T-23-37 | `7cb8702` |
 | `app/api/access/status/route.ts` | GET | current access device digest; editor first; missing closure function = closed (fail-closed, 23-09) | yes | RLS23-01, T-23-22 | `c2e6cf7` |
 | `app/api/content/route.ts` | GET, PUT | PUT: `getEditorAccess`, закрытые разделы через `contentRefusal`; GET публичный (CDN-кэш) | PUT да; GET публичный кэш | SEC20-02, SEC20-05, SEC20-07, SEC20-09, SEC20-25 | `f93f894` |
 | `app/api/editors/route.ts` | GET, POST, DELETE, PATCH | только владелец (`canManageEditors`) | да, кроме части 403/500 | SEC20-02, SEC20-05, SEC20-07 | `49555da` |
@@ -107,7 +109,7 @@
 
 | Lane | Verdict | Reason |
 |---|---|---|
-| Static SQL and caller review | PASS-local | supabase-rls-reviewer at 12eecb1 (round 2) and 0046f80 (23-07), no open critical/high. |
+| Static SQL and caller review | PASS-local | supabase-rls-reviewer at 7cb8702 (round 3, 23-12), 12eecb1 (round 2) and 0046f80 (23-07), no open critical/high. |
 | Isolated migration push and direct roles | BLOCKED | No explicitly isolated test project. |
 | Postgres/RLS and concurrency | BLOCKED | Migration not applied to isolated database. |
 | Staging, production and physical devices | BLOCKED | No Phase 23 deployment or device proof. |
