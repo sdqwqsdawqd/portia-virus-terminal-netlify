@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 23
 current_phase_name: Вход по нику, «Повышение» и его регрессии
 status: executing
-stopped_at: Completed PORTIA-23-10-PLAN.md
-last_updated: "2026-11-14T18:53:40.300Z"
+stopped_at: Completed PORTIA-23-11-PLAN.md
+last_updated: "2026-11-14T19:03:13.130Z"
 last_activity: 2026-11-14
 last_activity_desc: Phase PORTIA-23 execution resumed (wave continue)
-state_head: 50668405ce7248e76eb05a06f204ce06e24722f4
+state_head: 700cf078fbb0a3d6f9411032c60aed98298b11bd
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 28
-  completed_plans: 27
+  completed_plans: 28
 ---
 
 # Project State
@@ -66,6 +66,7 @@ Progress: [█░░░░░░░░░] 14% (1/7 phases, 17/24 plans; Phase 2
 | Phase PORTIA-23 P23-08 | ~45min | 2 tasks | 4 files |
 | Phase PORTIA-23 P09 | 25min | 3 tasks | 4 files |
 | Phase PORTIA-23 P10 | 20min | 2 tasks | 6 files |
+| Phase PORTIA-23 P11 | 45min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -239,6 +240,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-23]: 23-08: resolveGate проверяет редактора до флага закрытия; откат на open/none только при PGRST202/42883 + имя функции закрытия целым идентификатором, одно предупреждение на процесс; остальные сбои fail-closed (503). Перенос в Phase 25: пересмотреть/убрать откат и подтвердить перезагрузку кэша схемы до включения закрытия.
 - [Phase PORTIA-23]: 23-09: missing closure function = closure ON (fail-closed, owner 1a); editor-first kept; unverifiable editor gets 503; poll latency not fixed (no proven code cause), owner measures on dev server
 - [Phase PORTIA-23]: 23-10: closure ON by default via new forward-only migration 20261114000000 (owner 3a, overrides D-01); frozen foundation untouched; not applied anywhere (D-72)
+- [Phase PORTIA-23]: 23-11: RLS23-05 (low) принята, ручной повторный запуск миграции 20261114000000 запрещён инструкцией владельцу; миграция заморожена; D-01 отменён владельцем 2026-11-14
 
 ### Pending Todos
 
@@ -292,8 +294,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-14T18:53:39.690Z
-Stopped at: Completed PORTIA-23-10-PLAN.md
+Last session: 2026-11-14T19:03:12.519Z
+Stopped at: Completed PORTIA-23-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
