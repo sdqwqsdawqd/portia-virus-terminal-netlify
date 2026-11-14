@@ -1,184 +1,112 @@
 ---
 phase: PORTIA-23-vhod-po-niku-povyshenie-i-ego-regressii
-reviewed: 2026-11-14T00:00:00Z
+reviewed: 2026-11-15T00:00:00Z
 depth: standard
-files_reviewed: 45
+files_reviewed: 11
 files_reviewed_list:
-  - app/api/access/editor-request/route.ts
-  - app/api/access/request/route.ts
-  - app/api/access/status/route.ts
-  - app/api/promotion/requests/route.ts
-  - app/api/promotion/status/route.ts
-  - app/api/promotion/test/route.ts
-  - app/page.tsx
-  - app/portia.css
   - components/portia-access-gate.tsx
-  - components/portia-promotion-ordinary-editor.tsx
-  - components/portia-promotion-qualification-editor.tsx
-  - components/portia-promotion.tsx
-  - components/portia-template-builder.tsx
-  - lib/access-editor-request.test.ts
-  - lib/access-foundation.test.ts
+  - lib/access-gate.ts
   - lib/access-gate-view.ts
   - lib/access-gate.test.ts
-  - lib/access-gate.ts
-  - lib/access-identity.test.ts
-  - lib/access-identity.ts
-  - lib/access-store.ts
-  - lib/phase16-expected-authz.test.ts
-  - lib/phase20-hints-inventory.test.ts
+  - lib/access-closure.test.ts
   - lib/phase23-evidence.test.ts
   - lib/portia-canonical-parity.test.ts
-  - lib/portia-promotion-api.test.ts
-  - lib/portia-promotion-api.ts
-  - lib/portia-promotion-editor.test.ts
-  - lib/portia-promotion-security.test.ts
-  - lib/portia-promotion-ui.test.ts
-  - lib/portia-qualification.test.ts
-  - lib/portia-sql.test.ts
-  - lib/portia-template-dossier.test.ts
-  - lib/portia-template-dossier.ts
-  - lib/portia-template-export.ts
-  - lib/promotion-participant.ts
-  - lib/request-json.test.ts
-  - lib/request-json.ts
-  - lib/security-matrix.test.ts
-  - lib/style-tokens.test.ts
-  - scripts/phase23-sync-evidence.mjs
+  - lib/portia-migration-fingerprint.test.ts
+  - supabase/migrations/20261114000000_portia_access_closure_default_on.sql
   - supabase/fingerprint/expected/portia.fingerprint.json
-  - supabase/fingerprint/portia_schema_fingerprint.sql
-  - supabase/migrations/20261113000000_portia_access_promotion.sql
   - tests/e2e/fixtures/data/expected-authz.json
 findings:
   critical: 0
-  warning: 6
+  warning: 1
   info: 5
-  total: 11
+  total: 6
 status: issues_found
 ---
 
-# Phase 23: Отчёт о код-ревью
+# Phase 23: Code Review Report (round 2, gap closure 23-09..23-11)
 
-**Проверено:** 2026-11-14
-**Глубина:** standard
-**Файлов:** 45
-**Статус:** issues_found
+**Reviewed:** 2026-11-15
+**Depth:** standard
+**Files Reviewed:** 11
+**Status:** issues_found
 
 ## Summary
 
-Проверены ворота доступа (`lib/access-gate.ts`, `lib/access-gate-view.ts`, `components/portia-access-gate.tsx`), путь идентификации и RPC повышения (`lib/promotion-participant.ts`, `lib/access-identity.ts`, `lib/portia-promotion-api.ts`, три маршрута `app/api/promotion/*`, миграция `20261113000000_portia_access_promotion.sql`), а также побочные правки (шаблон досье, CSS, evidence-скрипт).
+Scope: the diff `9a7b0db..HEAD` for the gap-closure plans 23-09..23-11 (G-PORTIA-23-4): fail-closed gate on a missing closure function, editor hidden from the visitor form (WR-04), honest submit failure text (WR-03), the forward-only migration that makes closure ON by default.
 
-Итог по плану 23-08: порядок «редактор раньше флага закрытия» реализован корректно. Редактор решается до чтения RPC закрытия, а ошибки RPC закрытия не блокируют подтверждённого редактора. Откат в `open` срабатывает только для `PGRST202`/`42883` при совпадении имени функции с границами идентификатора. Все остальные ошибки (`PGRST002`, `42501`, таймауты, сетевые, неверный тип ответа) остаются fail-closed. Это подтверждено тестами. Критических дефектов (обход авторизации, инъекции, утечка секретов) не найдено. В SQL-слое подпись HMAC сравнивается через `digest`, внутренние функции отозваны у `anon/authenticated`, идентичность участника привязана к `requested_by`/`auth.uid()` и не принимает ник.
+No structural (fallow) findings were provided. The migration was not re-reviewed for RLS (round 2 in `23-RLS-REVIEW.md` passed it); I checked it only for correctness against the frozen foundation (`20261109000000`): the `alter ... set default`, the `insert ... on conflict do nothing`, the guarded `update` and the `create or replace` body are consistent, the grants match the foundation, the `notify` is the last statement, and the golden fingerprint (`default: "true"`, new `src_sha256`) and `expected-authz.json` (line 38 is the `grant ... to anon, authenticated`) agree with it.
 
-Остаются предупреждения по надёжности и согласованности поведения; главное из них — `test/route.ts` без `try/catch`, в отличие от соседних маршрутов.
+I ran the five phase-23 test files plus `phase16-expected-authz` and `access-rls-round2` locally (node 22.13.1, no database): 53 + 20 tests, 0 failures.
 
-Оценка необходимости (necessity, #4100) не выполнялась: справочник `necessity-review.md` не загружался, поэтому ключ `necessity:` опущен.
+Fail-closed logic in `resolveGate` is correct: the editor is decided before the closure read, a missing function (exact PGRST202/42883 plus the identifier match) gives `closed/none`, and an unavailable editor check still throws on that branch (the warning is emitted first, the throw second). The new `layout.editor` exclusion cannot hide the form from a non-editor. No critical issues. One warning and five info items. Necessity (#4100) was not assessed separately; no necessity findings were raised.
+
+IDs below continue the numbering of the earlier review (WR-07, IN-06) so they do not collide with the carried-forward IDs.
 
 ## Warnings
 
-### WR-01: `app/api/promotion/test/route.ts` — GET и POST без `try/catch`, любое исключение превращается в пустой 500
+### WR-07: an approved or pending visitor is offered "ПОДАТЬ ЗАЯВКУ" (submit a request) and the status card never closes on its own
 
-**File:** `app/api/promotion/test/route.ts:49-118`
-**Issue:** `status/route.ts` и `requests/route.ts` оборачивают тело в `try/catch` и отдают 503 с `no-store`. В `test/route.ts` обёртки нет. Исключения возможны в трёх местах:
-- `resolvePromotionParticipant` бросает `AccessStoreError`, когда `resolveAccess`/`resolveEditorRequest` получают ошибку RPC или «unexpected-reply»;
-- `accessSubmitSecret()` и `promotionDeviceSecret()` бросают при отсутствии секрета (`proof()` вызывается на каждом действии);
-- `loadPromotionRoster()` или `rpc` могут отклонить промис.
-
-В этом случае Next.js вернёт 500 без JSON и без `Cache-Control: no-store`. Клиент `QualificationRunner` ожидает коды `test-unavailable` и `heartbeat-failed`, поэтому поведение на сбое отличается от остальных маршрутов, а текст ошибки может попасть в логи сервера без маскировки.
-**Fix:** вынести тела в `handleGet`/`handlePost` и обернуть так же, как в `status/route.ts`:
+**File:** `lib/access-gate-view.ts:35` (also `components/portia-access-gate.tsx:106`, `:34`)
+**Issue:** `showReopen: desktop && !editor && !cardOpen` ignores the request status. When a visitor is approved, the decision is `closed/allowed`, so `desktop` is true. `cardOpen` starts `true` and is only ever set to `false` by the "×" button. The result is that an approved visitor lands on the desktop under a floating card that says "Доступ подтверждён. Открываем рабочий стол." (the desktop is already open), and after pressing "×" the only control left is a button labelled "ПОДАТЬ ЗАЯВКУ", although the form is hidden for that status (`showForm` is false). The updated layout test pins this behaviour (`approved ... showReopen: true`). Before the 23-10 migration this path was rare (the site was open by default); with closure ON by default, every approved visitor takes it. The same applies to a pending visitor if the desktop is shown (open mode with a pending token): the button promises a form that never appears.
+**Fix:** Tie the reopen button to a state where the form exists, or give it a status-neutral label, and close the card when the status first becomes approved:
 ```ts
-export async function GET(request: Request) {
-  try { return await handleGet(request); }
-  catch (error) {
-    console.error("PORTIA promotion test failed", error instanceof Error ? error.message : "unknown");
-    return Response.json({ error: "Проверка временно недоступна.", code: "test-unavailable" }, { status: 503, headers: noStoreHeaders });
-  }
-}
+// access-gate-view.ts
+showReopen: desktop && !editor && !cardOpen && (showForm || status !== null),
+// label chosen in the component: showForm ? "ПОДАТЬ ЗАЯВКУ" : "СТАТУС ЗАЯВКИ"
 ```
-То же для `POST`.
-
-### WR-02: откат в `open` по `PGRST202` — fail-open при устаревшем кэше схемы PostgREST
-
-**File:** `lib/access-gate.ts:23-29, 58-65`
-**Issue:** Решение владельца от 2026-11-14 (D-01) осознанно открывает сайт, если функция закрытия «отсутствует». Но `PGRST202` возвращается не только когда функции нет в базе. Он же приходит при устаревшем кэше схемы после применения миграции и до `NOTIFY pgrst, 'reload schema'`, при частично применённой или откатившейся миграции и при переименовании функции. Если владелец уже включил закрытие в рабочей базе, в таком окне сайт откроется для всех. При этом предупреждение пишется один раз на процесс (`onceWarn`). На Netlify это один раз на холодный старт функции, а повторные срабатывания не видны. Тест `failClosedReplies` фиксирует корректное различение разных ошибок, но не различает «функции нет совсем» и «кэш устарел».
-**Fix:** оставить решение владельца, но уменьшить риск. Варианты:
-- логировать каждое срабатывание откат-ветки с ограничением частоты (например, раз в минуту), а не раз на процесс;
-- подтверждать отсутствие второй пробой (например, `portia_access_resolve` с нулевым хэшем), и открывать сайт только если отсутствуют обе функции;
-- зафиксировать в runbook, что после применения миграций обязателен `reload schema`.
-
-### WR-03: форма заявки показывает пользователю сырой текст исключения разбора JSON
-
-**File:** `components/portia-access-gate.tsx:70, 81-82`
-**Issue:** `await response.json()` вызывается до проверки `response.ok`. Если сервер вернул не JSON (502/504 от Netlify, HTML-страница ошибки), `response.json()` бросает `SyntaxError`, и `catch` выводит `error.message` дословно: «Unexpected token '<', "<!DOCTYPE "... is not valid JSON». Это английский технический текст внутри русского интерфейса, а `formError` отображается с `role="alert"`.
-**Fix:** различать собственные ошибки и системные:
-```ts
-const result = await response.json().catch(() => ({})) as { code?: string; error?: string };
-// ...
-} catch (error) {
-  setFormError(error instanceof FormMessage ? error.message : "Не удалось отправить заявку. Проверьте соединение и повторите.");
-}
+```tsx
+// component, inside refresh() after the approved check
+if (decision.mode === "closed" && decision.allowed && !approved.current) setCardOpen(false);
 ```
-где `FormMessage` — небольшой подкласс `Error` для заранее известных сообщений.
-
-### WR-04: подтверждённому редактору в воротах показывается гостевая форма заявки
-
-**File:** `lib/access-gate-view.ts:17-24`, `lib/access-gate.ts:54-57`, `components/portia-access-gate.tsx:107`
-**Issue:** Ветка «редактор первым» возвращает `state: { state: "none" }`, а `accessGateLayout` вычисляет `showForm` только из `state`, игнорируя `editor`. Поэтому редактор с открытой карточкой (`cardOpen` по умолчанию `true`) видит форму «ОТПРАВИТЬ ЗАЯВКУ». Форма отправляет на `/api/access/request`, где используется анонимный `createPublicSupabaseClient()`. Заявка получается гостевой (`requested_by IS NULL`) и обходит `editor-request`, который специально привязывает заявку к аккаунту (комментарий в миграции про «cannot be adopted»). Правильный путь для редактора — `/api/access/editor-request` в Promotion.
-**Fix:** передавать признак `editor` в раскладку и не показывать гостевую форму:
-```ts
-const showForm = !(decision?.mode === "closed" && decision.editor)
-  && (state === "none" || state === "rejected" || state === "revoked");
-```
-Добавить тест в `accessGateLayout` для `editor: true`.
-
-### WR-05: `editor-request` молча подменяет гостевой cookie устройства
-
-**File:** `app/api/access/editor-request/route.ts:44-52`, `lib/access-identity.ts:12-14`
-**Issue:** `editorRequestToken` переиспользует существующий токен только если `ownStatus.state !== "none"`, где `ownStatus` — статус заявки именно этого редактора. Если в браузере уже лежит гостевой токен (например, с одобренной гостевой заявкой), `ownStatus` будет `none`, будет создан новый токен, а при `created/pending/approved` гостевой cookie перезапишется. Побочные эффекты:
-- прежний гостевой доступ этого устройства теряется;
-- после выхода из аккаунта новый токен разрешается через `portia_access_resolve`, который не фильтрует по `requested_by`, так что устройство остаётся «одобренным гостем» по заявке, созданной редактором.
-**Fix:** хранить токен редактора в отдельном cookie (например, `portia_access_editor`) и читать его только в `editor-request` и `resolvePromotionParticipant` для `editor === true`; либо явно задокументировать и покрыть тестом, что подмена допустима.
-
-### WR-06: `portia-promotion.tsx` — залипание «Проверяем доступ…» и сентинел в `checkedNickname`
-
-**File:** `components/portia-promotion.tsx:327, 382-385`
-**Issue:** `loading` начинается с `true` и сбрасывается только в `finally` у `loadStatus`. Начальная загрузка запускается эффектом, который выходит при `document.visibilityState !== "visible"` и не перезапускается при смене видимости (в зависимостях нет состояния видимости). Если окно Promotion стало видимым, когда вкладка скрыта, пользователь видит «Проверяем доступ к повышению…» без кнопки повтора, пока не изменится `visible`. Кроме того, переменная `checkedNickname` теперь содержит магическую строку `"checked"`, и она по-прежнему называется «ник» (параметр `_value` в `loadStatus` не используется). Это скрытая связь между эффектом загрузки и эффектом опроса (строка 389), которую легко сломать.
-**Fix:** заменить на явное `const [started, setStarted] = useState(false)`, убрать неиспользуемый параметр `_value`, а в начальном эффекте подписаться на `visibilitychange`, чтобы загрузка стартовала, когда вкладка станет видимой.
+Update the layout test expectation for the approved case accordingly.
 
 ## Info
 
-### IN-01: `device-busy`, `unauthorized`, `unavailable` отдаются как HTTP 503
+### IN-06: `isMissingClosureFunction` is a type predicate that is false for some real `AccessStoreError` values
 
-**File:** `app/api/access/request/route.ts:31-32`, `app/api/access/editor-request/route.ts:53-54`
-**Issue:** В цепочке `? 200 : invalid ? 400 : throttled ? 429 : cooldown ? 409 : 503` код `device-busy` (состояние клиента: «ник связан с другой записью») попадает в ветку 503 вместе с настоящими сбоями. Клиент различает по `code`, поэтому функционально работает, но мониторинг и ретраи Netlify видят ложные «недоступно». Дублирование цепочки в двух файлах повышает риск расхождения.
-**Fix:** вынести `accessSubmitHttpStatus(code)` в `lib/access-store.ts` и вернуть 409 для `device-busy`.
+**File:** `lib/access-gate.ts:26`
+**Issue:** The signature `error is AccessStoreError` was added so the caller can read `error.sqlState` without a cast. A type predicate that returns `false` for an `AccessStoreError` (any other closure failure) is unsound: in a union-typed caller TypeScript narrows an `AccessStoreError` out of the `else` branch. Today the caller passes `unknown` and rethrows, so nothing breaks, but it is a trap for the next caller.
+**Fix:** Keep the boolean return and read the field through a small narrow instead, e.g. `if (!isMissingClosureFunction(error)) throw error; const sqlState = error instanceof AccessStoreError ? error.sqlState : null;`, or name the predicate honestly (`isMissingClosureFunctionError`) and document that `false` is not a negation of the class.
 
-### IN-02: форма заявки редактора теряет причину отказа при `cooldown`/`throttled`
+### IN-07: the submit failure text can still say "check your connection" for a server-side refusal
 
-**File:** `components/portia-promotion.tsx:422-425`
-**Issue:** Ответы `submitAccessRequest` для `cooldown` и `throttled` содержат только `code` (и `retryAt`), без поля `error`. `publicError(body, …)` берёт `error`, поэтому редактор получает общее «Заявку не удалось отправить», тогда как в `PortiaAccessGate` для тех же кодов есть словарь сообщений. Кроме того, поле ника ограничено `maxLength={20}`, а в проверке на сервере используется `parseNicknameInput`; значения согласованы, но не вынесены в общую константу.
-**Fix:** переиспользовать словарь сообщений из ворот (вынести в `lib/access-gate-view.ts`) и общую константу длины ника.
+**File:** `lib/access-gate-view.ts:41-52`, `components/portia-access-gate.tsx:13-22`
+**Issue:** WR-03 is fixed for raw exceptions, but the "honest text" goal is only partly met. `app/api/access/request/route.ts` returns `{ code: "invalid" }` with HTTP 400 for an RPC-level `invalid` reply and `{ code: <other> }` with 503 for unknown codes, both without an `error` field; these fall to `kind: "default"` and the user is told "Проверьте соединение и повторите", which is wrong for a refusal (retrying will not help). Separately, the `kind: "server"` branch shows any upstream JSON `error` string of 1..300 characters; 300 is an unexplained magic number, and a proxy or CDN error body in English would be shown verbatim.
+**Fix:** Add an `invalid` entry to `knownFailureCodes` with its own text ("Проверьте ник и выбор: заявка не принята."), and name the limit (`const maxServerTextLength = 300`). Optionally restrict the server branch to `response.status === 400` where the route owns the text.
 
-### IN-03: `import` в середине и в конце файла
+### IN-08: the status-route callback is copied into the test and nothing guards the copy
 
-**File:** `lib/portia-promotion-api.ts:358`, `lib/portia-template-export.ts:33`
-**Issue:** В `portia-promotion-api.ts` `import type { SupabaseClient }` стоит в самом конце файла (после использования). В `portia-template-export.ts` новый `import type` вставлен между JSDoc-комментарием и типом `TemplateImage`, поэтому документирующий комментарий «A validated local image…» теперь относится к импорту. Код работает (импорты поднимаются), но это ломает чтение и инструменты документации.
-**Fix:** перенести оба импорта в верхний блок импортов.
+**File:** `lib/access-gate.test.ts:127-135`
+**Issue:** `routeEditorAccess` is documented as a "verbatim copy" of the callback in `app/api/access/status/route.ts`, but no assertion ties the two together. If the route changes (for example another retryable-error check), the network-budget and tracer tests keep passing against the stale copy.
+**Fix:** Read `app/api/access/status/route.ts` in the test (the "status route keeps a missing session secret..." test already does) and assert that it contains the same three statements, or extract the callback into a shared module that both import.
 
-### IN-04: `AccessStoreError.code` хранит сообщение, а `sqlState` — код PostgREST
+### IN-09: the alter-column replay does not fail on forms it claims to catch
 
-**File:** `lib/access-store.ts:31-40, 86`, `lib/access-gate.ts:24-29, 63`
-**Issue:** Конструктор вызывается как `new AccessStoreError(error.message, error.code)`, поэтому поле `code` содержит сообщение, а `sqlState` — настоящий код (включая `PGRST202`, который не является SQLSTATE). Решение `isMissingClosureFunction` держится на этой инверсии и поясняется только комментарием. В `resolveGate` добавлено лишнее приведение `(error as AccessStoreError).sqlState`: после `isMissingClosureFunction` тип не сужается, потому что функция не объявлена как type guard.
-**Fix:** объявить `isMissingClosureFunction(error): error is AccessStoreError`; переименовать поля в `message`/`rpcCode`, когда это не заденет остальные модули.
+**File:** `lib/portia-migration-fingerprint.test.ts:219-234`
+**Issue:** The comment says "Any other alter column form on these tables fails loudly". The matcher `^alter table public\.(portia_access_\w+) alter column (\w+) .*$` only sees a single-line statement that starts the line and is written exactly that way. A later migration that writes `alter table only public.portia_access_x`, `alter table if exists ...`, splits `alter column` onto the next line, or chains `alter column a ..., alter column b ...` is silently skipped, and the golden default would then drift without a failing test.
+**Fix:** Scan the comment-stripped migration text for any `alter table\b[^;]*portia_access_` statement (multi-line, `[^;]*`) and fail when it is not exactly the supported single `set default` form.
 
-### IN-05: дублирующее CSS-правило и переименованный «пин» хэша
+### IN-10: brittle constants and unescaped file names in the evidence test
 
-**File:** `app/portia.css:22-23`, `lib/style-tokens.test.ts:20-24`
-**Issue:** Строки `html:is([data-motion="reduced"], [data-motion="off"]) .access-dots` и `html[data-motion=off] .access-dots` задают одинаковые свойства, вторая избыточна. В `style-tokens.test.ts` константа `PRE_PHASE_PORTIA_CSS_SHA256` теперь содержит хэш текущего файла (комментарий: «keep the current unmarked stylesheet pinned»), а название по-прежнему говорит «до фазы». Тест перестал отражать состояние до фазы и фиксирует любую текущую правку, а имя вводит в заблуждение.
-**Fix:** удалить второе правило; переименовать константу в `PORTIA_CSS_SHA256` и обновить комментарий.
+**File:** `lib/phase23-evidence.test.ts:106-113, 117-119`
+**Issue:** `versions.length >= 8` and the `"20261101000200"` cut-off are magic numbers that must be edited by hand with each migration; the migration file names are interpolated into `new RegExp(...)` with an unescaped `.`; and the whole test depends on 14 Russian section headings and on the literal `"Агент не применил ничего"`. A harmless edit of the record fails the suite, while a real regression (for example the record listing the right names in the wrong text) would not.
+**Fix:** Derive the lower bound from the Phase 16 postflight record or drop the `>= 8` check (the `deepEqual(listed, versions)` already covers it), escape the file names (`file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")`), and keep only the headings that carry a machine-checked value.
+
+## Prior review (carried forward, outside this diff, not re-reviewed)
+
+Still open per `23-REVIEW-DISPOSITION.md` (WR-02, WR-03, WR-04 are fixed and verified above):
+
+- WR-01: `app/api/promotion/test/route.ts` has GET and POST without `try/catch`.
+- WR-05: `editor-request` silently replaces the guest device cookie.
+- WR-06: `portia-promotion.tsx` "Проверяем доступ…" can stick, plus a sentinel in `checkedNickname`.
+- IN-01: `device-busy`, `unauthorized`, `unavailable` are returned as HTTP 503 (relevant to IN-07 above).
+- IN-02: the editor request form loses the reason for `cooldown` / `throttled`.
+- IN-03: `import` in the middle and at the end of a file.
+- IN-04: `AccessStoreError.code` holds the message while `sqlState` holds the PostgREST code.
+- IN-05: duplicate CSS rule and a renamed hash "pin".
 
 ---
 
-_Проверено: 2026-11-14_
-_Ревьюер: Claude (gsd-code-reviewer)_
-_Глубина: standard_
+_Reviewed: 2026-11-15_
+_Reviewer: Claude (gsd-code-reviewer)_
+_Depth: standard_
