@@ -9,15 +9,15 @@ findings:
     title: "`app/api/promotion/test/route.ts` — GET и POST без `try/catch`, любое исключение превращается в пустой 500"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "откат в `open` по `PGRST202` — fail-open при устаревшем кэше схемы PostgREST"
   - id: WR-03
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "форма заявки показывает пользователю сырой текст исключения разбора JSON"
   - id: WR-04
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "подтверждённому редактору в воротах показывается гостевая форма заявки"
   - id: WR-05
     severity: warning
@@ -47,7 +47,7 @@ findings:
     severity: info
     disposition: open
     title: "дублирующее CSS-правило и переименованный «пин» хэша"
-open: 11
+open: 8
 total: 11
 recorded: 2026-11-14T17:38:13.159Z
 ---
@@ -57,9 +57,9 @@ recorded: 2026-11-14T17:38:13.159Z
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
 | WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| WR-03 | warning | open | - |
-| WR-04 | warning | open | - |
+| WR-02 | warning | fixed | 23-09 7b860cf fail-closed |
+| WR-03 | warning | fixed | 23-09 97ef402 |
+| WR-04 | warning | fixed | 23-09 97ef402 |
 | WR-05 | warning | open | - |
 | WR-06 | warning | open | - |
 | IN-01 | info | open | - |

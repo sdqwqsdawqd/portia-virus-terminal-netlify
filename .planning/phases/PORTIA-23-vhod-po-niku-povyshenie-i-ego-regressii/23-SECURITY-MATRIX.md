@@ -1,6 +1,6 @@
 # 23 - Security matrix (Phase 22 carried forward)
 
-Дата: 2026-11-13. Проверяемый commit: `0046f80ca35c01bb87e1475a0d316c2870484eb8` (Phase 23 final static RLS review; open critical/high 0).
+Дата: 2026-11-14. Проверяемый commit: `12eecb108f3c24f5cc0b558a882ddbef09ec2522` (Phase 23 static RLS review round 2: closure ON by default and fail-closed gate; open critical/high 0).
 
 Машинная проверка: `node --experimental-strip-types --test lib/security-matrix.test.ts` проверяет полноту маршрутов и миграций и отсутствие изменений охваченного кода после проверенного commit.
 
@@ -8,6 +8,7 @@
 
 - Только статическое ревью SQL, RLS/RPC-контрактов и вызывающего TypeScript; два раунда `supabase-rls-reviewer`. Результат `SECURED` не относится к живой базе.
 - Миграция Phase 22 нигде не применялась агентом. Живой Postgres, ACL/RLS реальных ролей, staging, production, конкуренция, Netlify и физические устройства остаются `BLOCKED` либо `ОЖИДАЕТ ВЛАДЕЛЬЦА` по `22-RLS-REVIEW.md`.
+- Раунд 2 Phase 23 (23-11): только статическое чтение; `20261114000000` нигде не применялась, агент ни к какой базе не подключался. Ревьюера запустил оркестратор.
 - Реальные `.env*` и секреты не читались; Supabase CLI и сетевые подключения не выполнялись.
 
 ## Охват файлов
@@ -28,6 +29,7 @@
 - `app/owner-login/actions.ts`
 - `lib/nickname.ts`
 - `lib/access-session.ts`
+- `lib/access-gate.ts` (шлюз решает закрытый экран; любая его правка требует проверенного commit матрицы)
 - `lib/access-store.ts`
 - `lib/access-levels.ts`
 - `lib/users-api.ts`
@@ -46,7 +48,7 @@
 | `app/api/access/route.ts` | GET | `getUser()` + `getEditorAccess`; сбой auth или RPC даёт 503, не `canEdit:false` | да | — | `e0f89ef` |
 | `app/api/access/editor-request/route.ts` | GET, POST | authenticated editor, own request token and auth.uid | yes | RLS23-02 | `465a1b9` |
 | `app/api/access/request/route.ts` | POST | signed guest sheet request, current device | yes | RLS23-01 | `465a1b9` |
-| `app/api/access/status/route.ts` | GET | current access device digest | yes | RLS23-01 | `c2e6cf7` |
+| `app/api/access/status/route.ts` | GET | current access device digest; editor first; missing closure function = closed (fail-closed, 23-09) | yes | RLS23-01, T-23-22 | `c2e6cf7` |
 | `app/api/content/route.ts` | GET, PUT | PUT: `getEditorAccess`, закрытые разделы через `contentRefusal`; GET публичный (CDN-кэш) | PUT да; GET публичный кэш | SEC20-02, SEC20-05, SEC20-07, SEC20-09, SEC20-25 | `f93f894` |
 | `app/api/editors/route.ts` | GET, POST, DELETE, PATCH | только владелец (`canManageEditors`) | да, кроме части 403/500 | SEC20-02, SEC20-05, SEC20-07 | `49555da` |
 | `app/api/employees/editor/route.ts` | GET | `getEditorAccess`, вкладка `employees` открыта | да | SEC20-02 | `6f6b841` |
@@ -71,10 +73,11 @@
 | `supabase/migrations/20261104000000_portia_rename_virus_classes.sql` | Переименование девяти значений классов вирусов в `portia_content` (`viruses`, `recycledViruses`), `revision + 1` у изменённых строк | RLS, grants и политики не затрагивает (вердикт агента: PASS-WITH-NOTES, статический); находка SEC20-22 | supabase-rls-reviewer через оркестратора, 20-21: PASS-WITH-NOTES, без high | PASS по фикстуре на изолированном staging (`20-CLASS-MIGRATION-EVIDENCE.md`); строки `main` на staging не было, поведение на реальном контенте не доказано (LIMITATION) | ОЖИДАЕТ ВЛАДЕЛЬЦА |
 | `supabase/migrations/20261104000100_portia_editor_notes.sql` | Таблица `portia_editor_notes` для заметок редактора (D-41/D-47), недоступная anon | RLS включена; anon и authenticated лишены прав, затем authenticated получает select, insert и update по столбцам; три политики по `portia_can_edit_tab(tab)`; delete нет; находки SEC20-18..SEC20-21 | supabase-rls-reviewer через оркестратора, 20-24: PASS-WITH-NOTES, без high; LOW-1..3 и MEDIUM-4 приняты владельцем без исправлений | PASS на изолированном staging 2026-11-05 (`20-EDITOR-NOTES-EVIDENCE.md`); таблицу удаляет `20261106000000` | ОЖИДАЕТ ВЛАДЕЛЬЦА (вместе с `20261106000000`, итог — таблицы нет) |
 | `supabase/migrations/20261106000000_portia_drop_editor_notes.sql` | Удаление таблицы `portia_editor_notes`: владелец убрал заметки редактора (20-33), маршрут `/api/content/notes` удалён | `drop table if exists`: уходят таблица, её три политики и grants; `portia_can_edit_tab` и другие таблицы не затрагиваются; закрывает SEC20-18..SEC20-21 | supabase-rls-reviewer, 20-33: PASS-WITH-NOTES, без high и medium (статическое чтение; дроп на живой базе не выполнялся); применять только вместе с `20261104000100`, никогда одну create-миграцию | Не применена: ОЖИДАЕТ ВЛАДЕЛЬЦА | ОЖИДАЕТ ВЛАДЕЛЬЦА |
-| `supabase/migrations/20261109000000_portia_access_foundation.sql` | Фундамент доступа: люди, заявки, уровни 1-5, журнал решений только на добавление, флаг закрытия (по умолчанию OFF), серверная подпись заявок, revoke `portia_promo_register_attempt` (SEC-06) и `portia_promo_bind_device` (RLS21-02) | Четыре таблицы только через RPC (RLS включён, политик нет, всё отозвано у public, anon, authenticated); 12 определяемых функций со `search_path ''`, revoke перед каждым grant; `submit`, `resolve` и `closure_enabled` (одна булева) доступны anon, остальные только вошедшим или привилегированной роли; триггеры журнала на update/delete и на truncate; секрет подписи в закрытой таблице, значения в миграции нет | supabase-rls-reviewer через оркестратора, три раунда (`70fe43d`, `9f9dad2`, `10b5e98`): итог «без блокирующих замечаний»; находки RLS21-01..16 | BLOCKED (ENV): не применялась, живого прогона на изолированном staging нет | ОЖИДАЕТ ВЛАДЕЛЬЦА |
+| `supabase/migrations/20261109000000_portia_access_foundation.sql` | Фундамент доступа: люди, заявки, уровни 1-5, журнал решений только на добавление, флаг закрытия (в этом файле OFF; ON по умолчанию с 20261114000000), серверная подпись заявок, revoke `portia_promo_register_attempt` (SEC-06) и `portia_promo_bind_device` (RLS21-02) | Четыре таблицы только через RPC (RLS включён, политик нет, всё отозвано у public, anon, authenticated); 12 определяемых функций со `search_path ''`, revoke перед каждым grant; `submit`, `resolve` и `closure_enabled` (одна булева) доступны anon, остальные только вошедшим или привилегированной роли; триггеры журнала на update/delete и на truncate; секрет подписи в закрытой таблице, значения в миграции нет | supabase-rls-reviewer через оркестратора, три раунда (`70fe43d`, `9f9dad2`, `10b5e98`): итог «без блокирующих замечаний»; находки RLS21-01..16 | BLOCKED (ENV): не применялась, живого прогона на изолированном staging нет | ОЖИДАЕТ ВЛАДЕЛЬЦА |
 | `supabase/migrations/20261110000000_portia_users_tab.sql` | Список заявок и людей, история 5 событий, кандидаты массового одобрения, удержание последних 20 записей журнала | `security definer` read RPC с `search_path=''`, revoke-before-grant; маска email для не-владельца; owner-only bulk candidates; bounded prune D-07, запрет обычного UPDATE/DELETE/TRUNCATE | `supabase-rls-reviewer`, два раунда: RLS22-01..05 исправлены, итог `SECURED` статически на `9f2778c` | BLOCKED (ENV): не применялась, нет прогона на изолированном staging | ОЖИДАЕТ ВЛАДЕЛЬЦА |
 | `supabase/migrations/20261112000000_portia_access_decision_mark.sql` | Свежая отметка таблицы при одиночном одобрении: ответ об успешном решении содержит ключ ника из строки заявки | `portia_access_decide` сохраняет DB users-tab gate и target guard; ключ есть только в ответе успешного approve, route не передаёт ключ клиенту; revoke-before-grant | `supabase-rls-reviewer`, раунд 3 на `89235be`: `SECURED` статически | BLOCKED (ENV): не применялась, нет прогона на изолированном staging | ОЖИДАЕТ ВЛАДЕЛЬЦА |
 | `supabase/migrations/20261113000000_portia_access_promotion.sql` | approved sheet identity and signed promotion RPCs | legacy participant grants revoked; secure wrappers | reviewer 2026-11-13, 0046f80; open critical/high 0 | BLOCKED isolated target unavailable | BLOCKED no production mutation |
+| `supabase/migrations/20261114000000_portia_access_closure_default_on.sql` | закрытие включено по умолчанию (решение владельца 2026-11-14, 3a; отменяет D-01): default true, строка main ON, если владелец её не переключал; closure_enabled() при отсутствии строки — true | права closure_enabled повторены без изменений (anon, authenticated, и привилегированная роль API), revoke перед grant; таблица настроек закрыта, set_closure не меняется, журнал не пишется; notify pgrst в конце | supabase-rls-reviewer, раунд 2 на 12eecb1: открытых critical/high 0 | BLOCKED (ENV): не применялась | ОЖИДАЕТ ВЛАДЕЛЬЦА (применяет владелец по 23-MIGRATION-APPLY.md) |
 
 ## Находки Phase 22
 
@@ -97,12 +100,14 @@
 | RLS23-02 | medium | fixed | Authenticated non-editor gate aligned with SQL at 6db7d24. |
 | RLS23-03 | medium | fixed | Stale-title start/current blocked before legacy RPCs at 213d99b. |
 | RLS23-04 | medium | release-ledger | Test-action HMAC does not bind all payload fields; server-only signature, five-minute window. |
+| RLS23-05 | low | accepted | Manual re-run of 20261114000000 can flip an OFF set outside set_closure; warning in 23-MIGRATION-APPLY.md; round 2 at 12eecb1. |
+| RLS23-06 | low | fixed | Authz fixture source line updated at d675d73. |
 
 ## Phase 23 environment
 
 | Lane | Verdict | Reason |
 |---|---|---|
-| Static SQL and caller review | PASS-local | supabase-rls-reviewer at 0046f80, no open critical/high. |
+| Static SQL and caller review | PASS-local | supabase-rls-reviewer at 12eecb1 (round 2) and 0046f80 (23-07), no open critical/high. |
 | Isolated migration push and direct roles | BLOCKED | No explicitly isolated test project. |
 | Postgres/RLS and concurrency | BLOCKED | Migration not applied to isolated database. |
 | Staging, production and physical devices | BLOCKED | No Phase 23 deployment or device proof. |

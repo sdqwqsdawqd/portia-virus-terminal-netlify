@@ -1,9 +1,10 @@
 # 23 — RLS/RPC review
 
-- Reviewer: `supabase-rls-reviewer` agent, final read-only run 2026-11-13 08:21 UTC.
-- Reviewed commit: `0046f80ca35c01bb87e1475a0d316c2870484eb8`.
-- Scope: `supabase/migrations/20261113000000_portia_access_promotion.sql`, `app/api/access/editor-request/route.ts`, `app/api/promotion/{status,requests,test}/route.ts`, `lib/promotion-participant.ts`, `lib/portia-promotion-api.ts`.
-- Open critical: **0**. Open high: **0**. Verdict: **static review passed with a medium note**.
+- Reviewer: `supabase-rls-reviewer` agent, final read-only run 2026-11-14 18:57 UTC (23-11, round 2; run by the orchestrator).
+- Reviewed commit: `12eecb108f3c24f5cc0b558a882ddbef09ec2522`.
+- Earlier round: 23-07, 2026-11-13, commit 0046f80ca35c01bb87e1475a0d316c2870484eb8 (Promotion RPCs).
+- Scope: `supabase/migrations/20261113000000_portia_access_promotion.sql`, `app/api/access/editor-request/route.ts`, `app/api/promotion/{status,requests,test}/route.ts`, `lib/promotion-participant.ts`, `lib/portia-promotion-api.ts`, `supabase/migrations/20261114000000_portia_access_closure_default_on.sql`, `lib/access-gate.ts`, `app/api/access/status/route.ts`.
+- Open critical: **0**. Open high: **0**. Verdict: **static review passed** (round 2: no critical, high or medium findings; RLS23-05 accepted, RLS23-06 fixed; live Postgres items BLOCKED).
 
 ## Findings and fixes
 
@@ -13,6 +14,8 @@
 | RLS23-02 | medium | An authenticated non-editor was offered guest approved status by the route helper, while SQL requires editor ownership for authenticated callers. | Fixed in `6db7d24`: helper returns unapproved for signed-in non-editors. |
 | RLS23-03 | medium | Qualification start/current could invoke mutating legacy RPCs for a stale title before the route checked the title. | Fixed in `213d99b`: current roster title is passed to SQL; start/current check request title before old RPC. |
 | RLS23-04 | medium | Test action HMAC does not bind `p_title_id`, answer, nonce, failure reason, or client mode. A leaked signature could be replayed within the five-minute window with altered fields. | Open defense-in-depth item. Signature stays server-only and is never returned to browser; no high authorization bypass found. |
+| RLS23-05 | low | Round 2: manual re-run of `20261114000000` (psql, outside the CLI history) switches an OFF that the owner set outside `portia_access_set_closure` back to ON, because `updated_by` stays null. | accepted: no anon/authenticated path; warning and a safe shutdown statement are in `23-MIGRATION-APPLY.md`; SQL unchanged. |
+| RLS23-06 | low | Round 2: the authz fixture cited the superseded foundation line 667 for the `closure_enabled` grants. | Fixed in `d675d73`: source is now `20261114000000_portia_access_closure_default_on.sql:38`. |
 
 The reviewer checked `SECURITY DEFINER` functions, narrow grants and revoked legacy participant functions, current access proof, editor `requested_by=auth.uid()` ownership, signature parity, and title checks. This was static inspection only. Migration application, live Postgres/RLS roles, and concurrent revocation remain **BLOCKED** until an explicitly isolated test project is available.
 
