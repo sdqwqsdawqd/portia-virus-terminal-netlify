@@ -1,53 +1,48 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.3 — «Стабилизация PORTIA OS»",
+  "milestone": "v1.4 — Доступ и единый стиль",
   "phases": [
     {
-      "number": "15",
-      "name": "Восстановление контроля, контракты и браузерный baseline",
+      "number": "21",
+      "name": "Фундамент доступа: люди, заявки, правила и журнал",
       "status": "in_progress"
     },
     {
-      "number": "16",
-      "name": "Канонический Supabase staging и SQL-истина",
-      "status": "pending"
-    },
-    {
-      "number": "17",
-      "name": "Обратимая декомпозиция рабочего стола и редактора",
-      "status": "pending"
-    },
-    {
-      "number": "18",
-      "name": "Рабочий стол, окна и живые анимации",
-      "status": "pending"
-    },
-    {
-      "number": "19",
-      "name": "Доказательство «Повышения» и точечная стабилизация",
-      "status": "pending"
-    },
-    {
-      "number": "20",
-      "name": "Стабилизация приложений, редактора, поиска и медиа",
-      "status": "pending"
-    },
-    {
-      "number": "21",
-      "name": "Закрытие security, accessibility, CSP и зависимостей",
-      "status": "pending"
-    },
-    {
       "number": "22",
-      "name": "Репетиция релиза и приёмка владельца",
+      "name": "Вкладка «Пользователи» и каркас токенов стиля",
+      "status": "in_progress"
+    },
+    {
+      "number": "23",
+      "name": "Вход по нику, «Повышение» и его регрессии",
+      "status": "in_progress"
+    },
+    {
+      "number": "24",
+      "name": "Уровни допуска и закрытие содержимого",
+      "status": "pending"
+    },
+    {
+      "number": "25",
+      "name": "Переключение закрытия: база, кэш, сборка, хранилище",
+      "status": "pending"
+    },
+    {
+      "number": "26",
+      "name": "Единый стиль сайта",
+      "status": "pending"
+    },
+    {
+      "number": "27",
+      "name": "Приёмка владельцем",
       "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 17 of 8 · 0% · executing"
+    "command": "/gsd-verify-work",
+    "label": "Re-verify work",
+    "reason": "Recent verification failed — re-verify or debug"
   },
-  "updated_at": "2026-11-01T00:19:25.290Z"
+  "updated_at": "2026-11-14T17:32:00.910Z"
 }

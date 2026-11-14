@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 23
 current_phase_name: Вход по нику, «Повышение» и его регрессии
 status: executing
-stopped_at: Phase 23 UI-SPEC approved
-last_updated: "2026-11-12T17:55:45.742Z"
-last_activity: 2026-11-12
-last_activity_desc: Phase PORTIA-23 execution started
-state_head: a010eb787f1dc2d188dd60f907ddb28c0e37e702
+stopped_at: Completed PORTIA-23-08-PLAN.md (gap closure G-PORTIA-23-2/3 in code; owner re-test pending)
+last_updated: "2026-11-14T17:32:18.190Z"
+last_activity: 2026-11-14
+last_activity_desc: Plan 23-08 complete (G-PORTIA-23-2/3 closed in code, owner re-test pending)
+state_head: 4fd826fa90a20e6ebb9c2bde743f659322e2fb0c
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 24
-  completed_plans: 17
+  total_plans: 25
+  completed_plans: 25
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-23 (Вход по нику, «Повышение» и его регрессии) — EXECUTING
-Plan: 1 of 7
+Plan: 8 of 8 (23-08 gap closure выполнен в коде; повторная приёмка владельцем и верификация фазы ожидаются)
 Status: Executing Phase PORTIA-23
-Last activity: 2026-11-12 — Phase PORTIA-23 execution started
+Last activity: 2026-11-14 — Plan 23-08 complete
 
 Progress: [█░░░░░░░░░] 14% (1/7 phases, 17/24 plans; Phase 21 — принятый риск)
 
@@ -63,6 +63,7 @@ Progress: [█░░░░░░░░░] 14% (1/7 phases, 17/24 plans; Phase 2
 | Phase PORTIA-22 P08 | 12h58m | 2 tasks | 11 files |
 | Phase PORTIA-22 P09 | 26m | 2 tasks | 5 files |
 | Phase PORTIA-22 P10 | 20m | 3 tasks | 3 files |
+| Phase PORTIA-23 P23-08 | ~45min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -233,6 +234,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-22]: Bulk eligibility is owner-only at both HTTP and SQL boundaries and covers all pending sheet requests, not the 50-row display slice.
 - [Phase PORTIA-22]: Bulk approval is a confirmed sequential loop of ordinary level-2 decisions, each independently re-authorized and re-matched.
 - [Phase PORTIA-22]: The responsive users backstop is fully mocked and aborts every non-GET request; blocked Playwright preflight is recorded as BLOCKED (ENV), never PASS.
+- [Phase PORTIA-23]: 23-08: resolveGate проверяет редактора до флага закрытия; откат на open/none только при PGRST202/42883 + имя функции закрытия целым идентификатором, одно предупреждение на процесс; остальные сбои fail-closed (503). Перенос в Phase 25: пересмотреть/убрать откат и подтвердить перезагрузку кэша схемы до включения закрытия.
 
 ### Pending Todos
 
@@ -286,9 +288,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-12T17:11:41.680Z
-Stopped at: Phase 23 UI-SPEC approved
-Resume file: .planning/phases/PORTIA-23-vhod-po-niku-povyshenie-i-ego-regressii/23-UI-SPEC.md
+Last session: 2026-11-14T17:32:17.778Z
+Stopped at: Completed PORTIA-23-08-PLAN.md (gap closure G-PORTIA-23-2/3 in code; owner re-test pending)
+Resume file: .planning/phases/PORTIA-23-vhod-po-niku-povyshenie-i-ego-regressii/23-08-SUMMARY.md
 
 ## Operator Next Steps
 
