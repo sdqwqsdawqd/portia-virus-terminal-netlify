@@ -6,7 +6,7 @@ import { createServerClient } from "@supabase/ssr";
 import { isAuthRetryableFetchError, type SupabaseClient } from "@supabase/supabase-js";
 import { accessTokenDigest } from "./access-session.ts";
 import { isMissingClosureFunction, onceWarn, resolveGate, type GateDecision } from "./access-gate.ts";
-import { accessGateLayout } from "./access-gate-view.ts";
+import { accessGateLayout, accessSubmitFailure } from "./access-gate-view.ts";
 import { AccessStoreError, type AccessRpcClient } from "./access-store.ts";
 import { getEditorAccess } from "./editor-access.ts";
 
@@ -155,6 +155,7 @@ test("tracer: a real Supabase client answering PGRST202 yields the closed reques
   assert.equal(layout.desktop, false);
   assert.equal(layout.showCard, true);
   assert.equal(layout.showForm, true);
+  assert.equal(layout.showReopen, false);
   assert.equal(layout.showError, false);
   assert.equal(layout.status, null);
 });
@@ -267,13 +268,38 @@ test("unavailable or failing editor verification keeps the previous branch behav
 
 test("gate layout: open mode shows desktop and the request form; closed and error states never mount the desktop", () => {
   const closed = (state: GateDecision["state"], allowed = false): GateDecision => ({ mode: "closed", state, allowed, level: allowed ? 2 : null, editor: false });
-  assert.deepEqual(accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, true), { desktop: true, showCard: true, showForm: true, showError: false, status: null });
-  assert.deepEqual(accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, false), { desktop: true, showCard: false, showForm: true, showError: false, status: null });
-  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "none" }) }, true), { desktop: false, showCard: true, showForm: true, showError: false, status: null });
-  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "pending", nickname: "Visitor_1" }) }, true), { desktop: false, showCard: true, showForm: false, showError: false, status: "pending" });
-  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "approved", nickname: "Visitor_1", level: 2, origin: "sheet" }, true) }, false), { desktop: true, showCard: false, showForm: false, showError: false, status: "approved" });
-  assert.deepEqual(accessGateLayout({ kind: "error" }, true), { desktop: false, showCard: true, showForm: false, showError: true, status: null });
-  assert.deepEqual(accessGateLayout({ kind: "checking" }, true), { desktop: false, showCard: true, showForm: false, showError: false, status: null });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, true), { desktop: true, showCard: true, showForm: true, showReopen: false, showError: false, status: null });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, false), { desktop: true, showCard: false, showForm: true, showReopen: true, showError: false, status: null });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "none" }) }, true), { desktop: false, showCard: true, showForm: true, showReopen: false, showError: false, status: null });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "pending", nickname: "Visitor_1" }) }, true), { desktop: false, showCard: true, showForm: false, showReopen: false, showError: false, status: "pending" });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "approved", nickname: "Visitor_1", level: 2, origin: "sheet" }, true) }, false), { desktop: true, showCard: false, showForm: false, showReopen: true, showError: false, status: "approved" });
+  assert.deepEqual(accessGateLayout({ kind: "error" }, true), { desktop: false, showCard: true, showForm: false, showReopen: false, showError: true, status: null });
+  assert.deepEqual(accessGateLayout({ kind: "checking" }, true), { desktop: false, showCard: true, showForm: false, showReopen: false, showError: false, status: null });
+});
+
+test("gate layout: a verified editor never sees the visitor card, form or reopen button (WR-04)", () => {
+  const editor: GateDecision = { mode: "closed", state: { state: "none" }, allowed: true, level: 5, editor: true };
+  for (const cardOpen of [true, false]) {
+    assert.deepEqual(accessGateLayout({ kind: "decision", decision: editor }, cardOpen), { desktop: true, showCard: false, showForm: false, showReopen: false, showError: false, status: null });
+  }
+});
+
+test("request form shows only known or server failure texts, never a raw exception (WR-03)", () => {
+  const generalText = "Не удалось отправить заявку. Проверьте соединение и повторите.";
+  for (const body of [null, "<!DOCTYPE html>", [], {}, { error: "" }, { error: 42 }, { error: "x".repeat(301) }, { error: "   " }]) {
+    assert.deepEqual(accessSubmitFailure(body), { kind: "default" }, JSON.stringify(body));
+  }
+  assert.deepEqual(accessSubmitFailure({ code: "device-busy" }), { kind: "device-busy" });
+  assert.deepEqual(accessSubmitFailure({ code: "cooldown", retryAt: "2026-11-14T18:00:00Z" }), { kind: "cooldown" });
+  assert.deepEqual(accessSubmitFailure({ code: "throttled" }), { kind: "throttled" });
+  assert.deepEqual(accessSubmitFailure({ code: "unavailable", error: generalText }), { kind: "server", text: generalText });
+  assert.deepEqual(accessSubmitFailure({ code: "cooldown", error: "server text" }), { kind: "cooldown" });
+  assert.deepEqual(accessSubmitFailure({ error: "x".repeat(300) }), { kind: "server", text: "x".repeat(300) });
+  const component = readFileSync(fileURLToPath(new URL("../components/portia-access-gate.tsx", import.meta.url)), "utf8");
+  assert.ok(component.includes("accessSubmitFailure("));
+  assert.ok(component.includes("layout.showReopen"));
+  assert.ok(component.includes(".json().catch("));
+  assert.doesNotMatch(component, /error\.message/);
 });
 
 test("status route keeps a missing session secret fail-closed and the view helper stays client-safe", () => {

@@ -22,3 +22,10 @@ export function accessGateLayout(view: AccessGateView, cardOpen: boolean): Acces
   const status = state === "pending" || state === "approved" || state === "rejected" || state === "revoked" ? state : null;
   return { desktop, showCard: !desktop || cardOpen, showForm, showError: view.kind === "error", status };
 }
+
+// RED-phase stub: replaced by the real implementation in the GREEN commit.
+export type AccessSubmitFailure = { kind: "device-busy" | "cooldown" | "throttled" | "default" } | { kind: "server"; text: string };
+
+export function accessSubmitFailure(_body: unknown): AccessSubmitFailure {
+  return { kind: "default" };
+}
