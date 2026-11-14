@@ -20,9 +20,10 @@ export type GateDependencies = {
 // out of this file on purpose: lib/access-closure.test.ts scans product code for it.
 const closureFunctionName = new RegExp(`(^|[^A-Za-z0-9_])${accessRpc.closureEnabled}($|[^A-Za-z0-9_])`);
 
-// Owner decision 2026-11-14: only the exact "this function is not in the database" signal turns closure OFF (D-01).
+// Owner decision 2026-11-14 (1a): only the exact "this function is not in the database" signal is read as
+// "closure ON, fail-closed" (it replaces the 23-08 fallback to OFF, D-01).
 // AccessStoreError.code carries the PostgREST message; sqlState carries the PostgREST code or SQLSTATE.
-export function isMissingClosureFunction(error: unknown): boolean {
+export function isMissingClosureFunction(error: unknown): error is AccessStoreError {
   return error instanceof AccessStoreError
     && (error.sqlState === "PGRST202" || error.sqlState === "42883")
     && closureFunctionName.test(error.code);
@@ -40,7 +41,7 @@ export function onceWarn(sink: GateWarn): GateWarn {
 // Once per server process, not on every 5 s status poll.
 const defaultWarn = onceWarn((message, detail) => { console.warn(message, detail); });
 
-const closureMissingMessage = "PORTIA access gate: closure RPC is missing in the database; treating closure as OFF (pre-Phase-23 behaviour)";
+const closureMissingMessage = "PORTIA access gate: closure RPC is missing in the database; treating closure as ON (fail-closed) until the access migrations are applied";
 
 // A thrown or rejected editor check is never a grant: it counts as unavailable.
 async function readEditorAccess(dependencies: GateDependencies): Promise<{ canEdit: boolean; unavailable?: true }> {
@@ -60,8 +61,11 @@ export async function resolveGate(headers: Headers, dependencies: GateDependenci
     closed = await isClosureEnabled(dependencies.client);
   } catch (error) {
     if (!isMissingClosureFunction(error)) throw error;
-    (dependencies.warn ?? defaultWarn)(closureMissingMessage, { sqlState: (error as AccessStoreError).sqlState });
-    return { mode: "open", state: { state: "none" } };
+    // Owner decision 2026-11-14 (1a): a missing closure function means closure ON. The visitor sees the closed screen
+    // with the request form; the token is not read, because the resolve function lives in the same unapplied migration.
+    (dependencies.warn ?? defaultWarn)(closureMissingMessage, { sqlState: error.sqlState });
+    if (editorAccess.unavailable) throw new Error("Editor verification unavailable.");
+    return { mode: "closed", state: { state: "none" }, allowed: false, level: null, editor: false };
   }
   const token = readAccessToken(headers);
   if (!closed) {
