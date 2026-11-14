@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createServerClient } from "@supabase/ssr";
+import { isAuthRetryableFetchError, type SupabaseClient } from "@supabase/supabase-js";
 import { accessTokenDigest } from "./access-session.ts";
 import { isMissingClosureFunction, onceWarn, resolveGate, type GateDecision } from "./access-gate.ts";
 import { accessGateLayout } from "./access-gate-view.ts";
 import { AccessStoreError, type AccessRpcClient } from "./access-store.ts";
+import { getEditorAccess } from "./editor-access.ts";
 
 const secret = "s".repeat(40);
 const token = "a".repeat(43);
@@ -95,7 +98,68 @@ function recordingClient(closure: { data?: unknown; error?: { message: string; c
   } };
 }
 
-test("missing closure function opens the site with the request form (G-PORTIA-23-2/3)", async () => {
+const closedNone = { mode: "closed", state: { state: "none" }, allowed: false, level: null, editor: false };
+
+type ProbeReply = { status: number; body: unknown };
+
+// A real @supabase/ssr client on a reserved, unreachable host: every request goes to the injected fetch, which answers
+// from the table (exact "METHOD path" key first, then a path prefix) and records the call. Nothing leaves the machine.
+function probeClient(cookies: Array<{ name: string; value: string }>, routes: Record<string, ProbeReply>) {
+  const calls: string[] = [];
+  const stub = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    const key = `${method} ${url.pathname}`;
+    const reply = url.origin === "https://probe.invalid"
+      ? routes[key] ?? Object.entries(routes).find(([prefix]) => key.startsWith(prefix))?.[1]
+      : undefined;
+    if (!reply) {
+      calls.push(`UNEXPECTED ${method} ${url.origin}${url.pathname}`);
+      assert.fail(`unexpected request ${method} ${url.href}`);
+    }
+    calls.push(key);
+    return new Response(JSON.stringify(reply.body), { status: reply.status, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  const client = createServerClient("https://probe.invalid", "probe-key", {
+    cookies: { getAll: () => cookies, setAll: () => {} },
+    global: { fetch: stub },
+  });
+  return { client, calls };
+}
+
+// Verbatim copy of the editorAccess callback of app/api/access/status/route.ts.
+function routeEditorAccess(client: SupabaseClient) {
+  return async () => {
+    const { data, error } = await client.auth.getUser();
+    if (isAuthRetryableFetchError(error)) return { canEdit: false, unavailable: true as const };
+    const access = await getEditorAccess(client, data.user);
+    return { canEdit: access.canEdit, unavailable: access.unavailable };
+  };
+}
+
+const closureRoute = "POST /rest/v1/rpc/portia_access_closure_enabled";
+
+test("tracer: a real Supabase client answering PGRST202 yields the closed request screen with one request (G-PORTIA-23-4)", async () => {
+  const { client, calls } = probeClient([], {
+    [closureRoute]: { status: 404, body: { code: "PGRST202", details: null, hint: null, message: "Could not find the function public.portia_access_closure_enabled without parameters in the schema cache" } },
+  });
+  const warnings: unknown[] = [];
+  const decision = await resolveGate(new Headers(), {
+    client, sessionSecret: secret, editorAccess: routeEditorAccess(client),
+    warn: (_message, detail) => { warnings.push(detail); },
+  });
+  assert.deepEqual(decision, closedNone);
+  assert.deepEqual(calls, [closureRoute]);
+  assert.deepEqual(warnings, [{ sqlState: "PGRST202" }]);
+  const layout = accessGateLayout({ kind: "decision", decision }, true);
+  assert.equal(layout.desktop, false);
+  assert.equal(layout.showCard, true);
+  assert.equal(layout.showForm, true);
+  assert.equal(layout.showError, false);
+  assert.equal(layout.status, null);
+});
+
+test("missing closure function closes the site and keeps the request form (G-PORTIA-23-4)", async () => {
   for (const reply of missingClosureReplies) {
     const called: string[] = [];
     const warnings: Array<{ message: string; detail: unknown }> = [];
@@ -105,12 +169,14 @@ test("missing closure function opens the site with the request form (G-PORTIA-23
       editorAccess: async () => ({ canEdit: false }),
       warn: (message, detail) => { warnings.push({ message, detail }); },
     });
-    assert.deepEqual(decision, { mode: "open", state: { state: "none" } });
+    assert.deepEqual(decision, closedNone);
     assert.deepEqual(called, ["portia_access_closure_enabled"]);
     assert.equal(warnings.length, 1);
     assert.deepEqual(warnings[0].detail, { sqlState: reply.code });
     const layout = accessGateLayout({ kind: "decision", decision: decision as GateDecision }, true);
-    assert.deepEqual(layout, { desktop: true, showCard: true, showForm: true, showError: false, status: null });
+    assert.equal(layout.desktop, false);
+    assert.equal(layout.showCard, true);
+    assert.equal(layout.showForm, true);
   }
   const forwarded: Array<[string, unknown]> = [];
   const warn = onceWarn((message, detail) => { forwarded.push([message, detail]); });
@@ -163,7 +229,7 @@ const failClosedReplies: ClosureReply[] = [
   "reject",
 ];
 
-test("only the exact missing closure function falls back to open; every other closure failure stays fail-closed", async () => {
+test("only the exact missing closure function gets the closed request screen; every other closure failure stays fail-closed", async () => {
   for (const reply of failClosedReplies) {
     const called: string[] = [];
     let warned = 0;
@@ -193,7 +259,7 @@ test("unavailable or failing editor verification keeps the previous branch behav
     const off = await run({ data: false });
     assert.equal(off.mode === "closed" && off.editor, false);
     assert.equal(off.mode, "open");
-    assert.deepEqual(await run(missing), { mode: "open", state: { state: "none" } });
+    await assert.rejects(run(missing), { message: "Editor verification unavailable." });
     await assert.rejects(run({ data: true }));
     await assert.rejects(run({ error: { code: "", message: "TypeError: fetch failed" } }));
   }
