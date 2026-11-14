@@ -1,9 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { GateDecision } from "@/lib/access-gate";
-import { accessGateLayout, accessSubmitFailure, type AccessGateView, type AccessSubmitFailure } from "@/lib/access-gate-view";
+import { accessGateLayout, accessSubmitFailure, claimApprovedNotice, type AccessGateView, type AccessSubmitFailure } from "@/lib/access-gate-view";
 import type { AccessOrigin } from "@/lib/access-levels";
 import { defaultPortiaContent } from "@/lib/portia-content";
 import { isValidNickname } from "@/lib/nickname";
@@ -33,6 +33,8 @@ export function PortiaAccessGate() {
   const [fieldErrors, setFieldErrors] = useState({ nickname: false, origin: false });
   const [cardOpen, setCardOpen] = useState(true);
   const statusRef = useRef<HTMLDivElement>(null);
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const noticeClaimed = useRef(false);
 
   const refresh = useCallback(async () => {
     const current = ++epoch.current;
@@ -44,6 +46,11 @@ export function PortiaAccessGate() {
       if (decision.mode !== "open" && decision.mode !== "closed") throw new Error("Invalid status");
       if (decision.mode === "closed" && decision.allowed) approved.current = true;
       setView({ kind: "decision", decision });
+      // G-PORTIA-23-3-r2: the approval notice is claimed once per page (ref) and once per device (storage).
+      if (!noticeClaimed.current && accessGateLayout({ kind: "decision", decision }, true).approvedNotice) {
+        noticeClaimed.current = true;
+        if (claimApprovedNotice(() => window.localStorage)) setNoticeOpen(true);
+      }
     } catch {
       if (current === epoch.current && !approved.current) setView({ kind: "error" });
     }
@@ -93,6 +100,8 @@ export function PortiaAccessGate() {
     }
   };
 
+  const dismissNotice = useCallback(() => setNoticeOpen(false), []);
+
   const layout = accessGateLayout(view, cardOpen);
   const { desktop, showCard, showForm } = layout;
   const statusText = layout.status === "pending" ? "Заявка отправлена. Ожидайте решения проверяющего."
@@ -103,6 +112,7 @@ export function PortiaAccessGate() {
 
   return <>
     {desktop && <PortiaDesktop initialContent={defaultPortiaContent} />}
+    {noticeOpen && layout.approvedNotice && <AccessApprovedToast onDismiss={dismissNotice} />}
     {layout.showReopen && <button type="button" className="access-reopen" onClick={() => setCardOpen(true)}>ПОДАТЬ ЗАЯВКУ</button>}
     {showCard && <main className={desktop ? "access-gate access-gate-open" : "access-gate"}>
       <section className="access-card" aria-labelledby="access-title">
@@ -129,4 +139,38 @@ export function PortiaAccessGate() {
       </section>
     </main>}
   </>;
+}
+
+// Non-modal corner notice in the quest toast look (G-PORTIA-23-3-r2). It never takes focus, so Escape is heard on the
+// document; handled keys, typing and modal dialogs keep their Escape. preventDefault keeps one Escape from also closing a
+// quest notice opened later.
+function AccessApprovedToast({ onDismiss }: { onDismiss: () => void }) {
+  const titleId = useId();
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select"))) return;
+      if (window.document.querySelector("dialog[open]")) return;
+      event.preventDefault();
+      onDismiss();
+    };
+    window.document.addEventListener("keydown", onKeyDown);
+    return () => window.document.removeEventListener("keydown", onKeyDown);
+  }, [onDismiss]);
+
+  return (
+    <aside className="portia-dialog quest-toast access-approved-toast" aria-labelledby={titleId}>
+      <span role="status" className="sr-only">Доступ подтверждён.</span>
+      <div>
+        <div className="quest-toast-head">
+          <span className="quest-toast-eyebrow">PORTIA // ДОСТУП</span>
+          <button type="button" className="quest-toast-close" aria-label="Закрыть уведомление" onClick={onDismiss}>×</button>
+        </div>
+        <h2 id={titleId}>Доступ подтверждён</h2>
+        <p className="quest-toast-body">Заявка одобрена. Рабочий стол открыт на этом устройстве.</p>
+      </div>
+    </aside>
+  );
 }

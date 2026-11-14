@@ -13,6 +13,7 @@ export type AccessGateLayout = {
   showReopen: boolean;
   showError: boolean;
   status: AccessGateStatus | null;
+  approvedNotice: boolean;
 };
 
 export function accessGateLayout(view: AccessGateView, cardOpen: boolean): AccessGateLayout {
@@ -23,15 +24,36 @@ export function accessGateLayout(view: AccessGateView, cardOpen: boolean): Acces
   const editor = decision !== null && decision.mode === "closed" && decision.editor;
   const state = decision?.state.state;
   const showForm = !editor && (state === "none" || state === "rejected" || state === "revoked");
+  // G-PORTIA-23-3-r2 (owner, 2026-11-15): an approved visitor on the open desktop needs no card (there is no form, and the
+  // editor login is in the desktop settings); a single notice confirms the approval instead.
+  const approvedOnDesktop = desktop && !editor && state === "approved";
   const status = state === "pending" || state === "approved" || state === "rejected" || state === "revoked" ? state : null;
   return {
     desktop,
-    showCard: !editor && (!desktop || cardOpen),
+    showCard: !editor && !approvedOnDesktop && (!desktop || cardOpen),
     showForm,
-    showReopen: desktop && !editor && !cardOpen,
+    showReopen: desktop && !editor && !approvedOnDesktop && !cardOpen,
     showError: view.kind === "error",
     status,
+    approvedNotice: approvedOnDesktop,
   };
+}
+
+export const ACCESS_APPROVED_NOTICE_KEY = "portia-access-approved-notice-v1";
+
+export type ApprovedNoticeStorage = { getItem(key: string): string | null; setItem(key: string, value: string): void };
+
+// Like the quest notice (portia-desktop.tsx): storage that cannot be read or written means "no notice", never "a notice on
+// every load". Only "1" is stored, no nickname and no token.
+export function claimApprovedNotice(storage: () => ApprovedNoticeStorage): boolean {
+  try {
+    const store = storage();
+    if (store.getItem(ACCESS_APPROVED_NOTICE_KEY) === "1") return false;
+    store.setItem(ACCESS_APPROVED_NOTICE_KEY, "1");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export type AccessSubmitFailure = { kind: "device-busy" | "cooldown" | "throttled" | "default" } | { kind: "server"; text: string };

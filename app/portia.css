@@ -616,6 +616,8 @@ html[data-motion="full"] .quest-toast { animation: fade-in 220ms var(--ease-out)
 html[data-motion="full"] .promotion-retake-toast { animation: fade-in 220ms var(--ease-out); }
 /* Reduced and off: the toast appears at once. */
 html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { animation: none !important; transform: none !important; }
+.access-approved-toast { border-color: var(--teal-dim); }
+.access-approved-toast .quest-toast-eyebrow { color: var(--teal); }
 @media (min-width: 901px) {
   /* The panel is a layer of the desktop and is dragged by its header anywhere on the screen (D-06, EDIT-04). */
   .floating-text-format > header { cursor: grab; touch-action: none; user-select: none; }

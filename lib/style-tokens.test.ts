@@ -20,8 +20,8 @@ const directionRecord = readFileSync(
 const PORTIA_RADIUS_DECLARATIONS = 131;
 // Phase 26 restyle changes these on purpose and updates them in the same commit.
 const PROMO_RADIUS_DECLARATIONS = 6;
-// Phase 23 adds access and promotion states to app/portia.css; keep the current unmarked stylesheet pinned.
-const PRE_PHASE_PORTIA_CSS_SHA256 = "8c05aed42e15d0a9aa0f8b955ec50d20a85f7bbd2b4da9927480de1429b6dc18";
+// Phase 23 adds access and promotion states to app/portia.css; keep the current unmarked stylesheet pinned; 23-12 adds the approved-access notice modifier.
+const PRE_PHASE_PORTIA_CSS_SHA256 = "2e4f25b46ee6327ad428e1c408d79b9ad88f00eacf902993a5ca1f2c1e95ef45";
 
 const TOKEN_NAMES = [
   "--radius-0",
