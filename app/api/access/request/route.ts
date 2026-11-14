@@ -1,5 +1,6 @@
 import { ACCESS_ORIGINS, type AccessOrigin } from "@/lib/access-levels";
 import { accessIpBucket, accessSessionSecret, accessSubmitSecret, accessTokenDigest, buildAccessCookie, createAccessToken, readAccessToken } from "@/lib/access-session";
+import { accessSubmitStatus, reportAccessSubmit } from "@/lib/access-request-reply";
 import { submitAccessRequest } from "@/lib/access-store";
 import { parseNicknameInput } from "@/lib/nickname";
 import { noStoreHeaders } from "@/lib/portia-cdn";
@@ -26,10 +27,10 @@ export async function POST(request: Request) {
       ipBucket: accessIpBucket(request.headers, secret),
       submitSecret: accessSubmitSecret(),
     });
+    reportAccessSubmit(result);
     const headers = new Headers(noStoreHeaders);
     if (["created", "pending", "approved"].includes(result.code) && !existingToken) headers.set("Set-Cookie", buildAccessCookie(token));
-    const status = result.code === "created" || result.code === "pending" || result.code === "approved" ? 200
-      : result.code === "invalid" ? 400 : result.code === "throttled" ? 429 : result.code === "cooldown" ? 409 : 503;
+    const status = accessSubmitStatus(result.code);
     return Response.json(result, { status, headers });
   } catch (error) {
     console.error("PORTIA access request failed", error instanceof Error ? error.message : "unknown");
