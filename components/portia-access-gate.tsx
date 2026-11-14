@@ -3,12 +3,24 @@
 import dynamic from "next/dynamic";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { GateDecision } from "@/lib/access-gate";
-import { accessGateLayout, type AccessGateView } from "@/lib/access-gate-view";
+import { accessGateLayout, accessSubmitFailure, type AccessGateView, type AccessSubmitFailure } from "@/lib/access-gate-view";
 import type { AccessOrigin } from "@/lib/access-levels";
 import { defaultPortiaContent } from "@/lib/portia-content";
 import { isValidNickname } from "@/lib/nickname";
 
 const PortiaDesktop = dynamic(() => import("@/components/portia-desktop").then((mod) => mod.PortiaDesktop), { ssr: false });
+
+const generalSubmitFailure = "Не удалось отправить заявку. Проверьте соединение и повторите.";
+
+function submitFailureText(failure: AccessSubmitFailure): string {
+  switch (failure.kind) {
+    case "device-busy": return "Ник этого устройства связан с другой записью. Попросите проверяющего сбросить привязку.";
+    case "cooldown": return "Повторная заявка пока недоступна. Попробуйте позже.";
+    case "throttled": return "Слишком много попыток. Попробуйте позже.";
+    case "server": return failure.text;
+    default: return generalSubmitFailure;
+  }
+}
 
 export function PortiaAccessGate() {
   const [view, setView] = useState<AccessGateView>({ kind: "checking" });
@@ -67,19 +79,15 @@ export function PortiaAccessGate() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nickname: value, origin }),
       });
-      const result = await response.json() as { code?: string; error?: string };
+      const body: unknown = await response.json().catch(() => null);
       if (!response.ok) {
-        const messages: Record<string, string> = {
-          "device-busy": "Ник этого устройства связан с другой записью. Попросите проверяющего сбросить привязку.",
-          cooldown: "Повторная заявка пока недоступна. Попробуйте позже.",
-          throttled: "Слишком много попыток. Попробуйте позже.",
-        };
-        throw new Error(messages[result.code ?? ""] ?? result.error ?? "Не удалось отправить заявку. Проверьте соединение и повторите.");
+        setFormError(submitFailureText(accessSubmitFailure(body)));
+        return;
       }
       await refresh();
       window.requestAnimationFrame(() => statusRef.current?.focus());
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Не удалось отправить заявку. Проверьте соединение и повторите.");
+    } catch {
+      setFormError(generalSubmitFailure);
     } finally {
       setSubmitting(false);
     }
@@ -95,7 +103,7 @@ export function PortiaAccessGate() {
 
   return <>
     {desktop && <PortiaDesktop initialContent={defaultPortiaContent} />}
-    {desktop && !showCard && <button type="button" className="access-reopen" onClick={() => setCardOpen(true)}>ПОДАТЬ ЗАЯВКУ</button>}
+    {layout.showReopen && <button type="button" className="access-reopen" onClick={() => setCardOpen(true)}>ПОДАТЬ ЗАЯВКУ</button>}
     {showCard && <main className={desktop ? "access-gate access-gate-open" : "access-gate"}>
       <section className="access-card" aria-labelledby="access-title">
         {desktop && <button type="button" className="access-close" onClick={() => setCardOpen(false)} aria-label="Закрыть заявку">×</button>}
