@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { accessTokenDigest } from "./access-session.ts";
-import { onceWarn, resolveGate, type GateDecision } from "./access-gate.ts";
+import { isMissingClosureFunction, onceWarn, resolveGate, type GateDecision } from "./access-gate.ts";
 import { accessGateLayout } from "./access-gate-view.ts";
-import type { AccessRpcClient } from "./access-store.ts";
+import { AccessStoreError, type AccessRpcClient } from "./access-store.ts";
 
 const secret = "s".repeat(40);
 const token = "a".repeat(43);
@@ -118,4 +118,103 @@ test("missing closure function opens the site with the request form (G-PORTIA-23
   warn("second", { sqlState: "42883" });
   warn("third", { sqlState: null });
   assert.deepEqual(forwarded, [["first", { sqlState: "PGRST202" }]]);
+});
+
+type ClosureReply = { data?: unknown; error?: { message: string; code?: string } | null } | "reject";
+
+function closureClient(closure: ClosureReply, called: string[]): AccessRpcClient {
+  return { rpc(fn) {
+    called.push(fn);
+    if (fn !== "portia_access_closure_enabled") assert.fail(`unexpected rpc ${fn}`);
+    if (closure === "reject") return Promise.reject(new Error("socket hang up"));
+    return Promise.resolve({ data: closure.data ?? null, error: closure.error ?? null });
+  } };
+}
+
+const editorDecision = { mode: "closed", state: { state: "none" }, allowed: true, level: 5, editor: true };
+
+test("verified editor gets the desktop before the closure flag is read", async () => {
+  const replies: ClosureReply[] = [
+    { data: true },
+    { data: false },
+    { error: { code: "PGRST202", message: "Could not find the public.portia_access_closure_enabled() function in the schema cache" } },
+    { error: { code: "", message: "TypeError: fetch failed" } },
+    "reject",
+  ];
+  for (const reply of replies) {
+    const called: string[] = [];
+    const decision = await resolveGate(headers, { client: closureClient(reply, called), sessionSecret: secret, editorAccess: async () => ({ canEdit: true }) });
+    assert.deepEqual(decision, editorDecision);
+    assert.deepEqual(called, []);
+  }
+});
+
+const failClosedReplies: ClosureReply[] = [
+  { error: { code: "PGRST202", message: "Could not find the function public.portia_access_resolve(p_token_hash) in the schema cache" } },
+  { error: { code: "42883", message: "operator does not exist: text = integer" } },
+  { error: { code: "42883", message: "function public.portia_access_closure_enabled_legacy() does not exist" } },
+  { error: { code: "42501", message: "permission denied for function portia_access_closure_enabled" } },
+  { error: { code: "PGRST002", message: "Could not query the database for the schema cache. Retrying." } },
+  { error: { code: "57014", message: "canceling statement due to statement timeout" } },
+  { error: { code: "", message: "TypeError: fetch failed" } },
+  { error: { code: "", message: "AbortError: This operation was aborted" } },
+  { error: { message: "Could not find the function public.portia_access_closure_enabled without parameters in the schema cache" } },
+  { data: "yes" },
+  "reject",
+];
+
+test("only the exact missing closure function falls back to open; every other closure failure stays fail-closed", async () => {
+  for (const reply of failClosedReplies) {
+    const called: string[] = [];
+    let warned = 0;
+    const error = await resolveGate(headers, {
+      client: closureClient(reply, called), sessionSecret: secret,
+      editorAccess: async () => ({ canEdit: false }), warn: () => { warned += 1; },
+    }).then(() => null, (caught: unknown) => caught);
+    assert.notEqual(error, null, JSON.stringify(reply));
+    assert.equal(warned, 0, JSON.stringify(reply));
+    assert.equal(isMissingClosureFunction(error), false, JSON.stringify(reply));
+    assert.deepEqual(called, ["portia_access_closure_enabled"]);
+  }
+  assert.equal(isMissingClosureFunction(new Error("x")), false);
+  assert.equal(isMissingClosureFunction(new AccessStoreError("function public.portia_access_closure_enabled() does not exist", "PGRST203")), false);
+  assert.equal(isMissingClosureFunction(new AccessStoreError("function public.portia_access_closure_enabled() does not exist", "42883")), true);
+});
+
+test("unavailable or failing editor verification keeps the previous branch behaviour", async () => {
+  const editors: Array<() => Promise<{ canEdit: boolean; unavailable?: true }>> = [
+    async () => ({ canEdit: false, unavailable: true }),
+    async () => ({ canEdit: true, unavailable: true }),
+    async () => { throw new Error("editor lookup failed"); },
+  ];
+  const missing: ClosureReply = { error: { code: "PGRST202", message: "Could not find the function public.portia_access_closure_enabled without parameters in the schema cache" } };
+  for (const editorAccess of editors) {
+    const run = (closure: ClosureReply) => resolveGate(headers, { client: closureClient(closure, []), sessionSecret: secret, editorAccess, warn: () => {} });
+    const off = await run({ data: false });
+    assert.equal(off.mode, "open");
+    assert.equal(off.mode === "closed" && off.editor, false);
+    assert.deepEqual(await run(missing), { mode: "open", state: { state: "none" } });
+    await assert.rejects(run({ data: true }));
+    await assert.rejects(run({ error: { code: "", message: "TypeError: fetch failed" } }));
+  }
+});
+
+test("gate layout: open mode shows desktop and the request form; closed and error states never mount the desktop", () => {
+  const closed = (state: GateDecision["state"], allowed = false): GateDecision => ({ mode: "closed", state, allowed, level: allowed ? 2 : null, editor: false });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, true), { desktop: true, showCard: true, showForm: true, showError: false, status: null });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, false), { desktop: true, showCard: false, showForm: true, showError: false, status: null });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "none" }) }, true), { desktop: false, showCard: true, showForm: true, showError: false, status: null });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "pending", nickname: "Visitor_1" }) }, true), { desktop: false, showCard: true, showForm: false, showError: false, status: "pending" });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closed({ state: "approved", nickname: "Visitor_1", level: 2, origin: "sheet" }, true) }, false), { desktop: true, showCard: false, showForm: false, showError: false, status: "approved" });
+  assert.deepEqual(accessGateLayout({ kind: "error" }, true), { desktop: false, showCard: true, showForm: false, showError: true, status: null });
+  assert.deepEqual(accessGateLayout({ kind: "checking" }, true), { desktop: false, showCard: true, showForm: false, showError: false, status: null });
+});
+
+test("status route keeps a missing session secret fail-closed and the view helper stays client-safe", () => {
+  const route = readFileSync(fileURLToPath(new URL("../app/api/access/status/route.ts", import.meta.url)), "utf8");
+  assert.match(route, /try \{[\s\S]*sessionSecret: accessSessionSecret\(\)[\s\S]*\} catch[\s\S]*status: 503/);
+  const view = readFileSync(fileURLToPath(new URL("./access-gate-view.ts", import.meta.url)), "utf8");
+  const imports = view.split(/\r?\n/).filter((line) => line.startsWith("import"));
+  assert.ok(imports.length > 0);
+  for (const line of imports) assert.match(line, /^import type /);
 });
