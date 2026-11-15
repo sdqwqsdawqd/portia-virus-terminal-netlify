@@ -1,10 +1,10 @@
 {
   "schema": "phase20-dependency-audit/1",
-  "commit": "92b8405af586714f94fe3d4045b7a09abbb216f7",
-  "capturedAt": "2026-11-09T08:30:15.189Z",
+  "commit": "8edd3d6c552ce509ae6c6577bd57c798b99d5e47",
+  "capturedAt": "2026-11-15T22:42:58.096Z",
   "node": "v24.21.0",
   "lockfileSha256": "b255c0b350a79a6f260c0f9721b25ac5c35f8748446c3735abebe1fb1fee29fa",
-  "packageJsonSha256": "129fe391ec92de887f78c64daa40566ce109f2d2131e58a41e0aea47eeb87d4b",
+  "packageJsonSha256": "d4fd9021f565c13740274ac14b69458a9a9bb0675f755412f5021eb46d5f1691",
   "audits": {
     "production": {
       "command": "npm.cmd audit --omit=dev --json",
@@ -25,10 +25,10 @@
       "counts": {
         "info": 0,
         "low": 0,
-        "moderate": 8,
+        "moderate": 7,
         "high": 0,
         "critical": 0,
-        "total": 8
+        "total": 7
       },
       "findings": [
         {
@@ -37,7 +37,6 @@
           "severity": "moderate",
           "isDirect": false,
           "via": [
-            "@typescript-eslint/parser",
             "@typescript-eslint/type-utils",
             "@typescript-eslint/utils"
           ],
@@ -47,9 +46,9 @@
           "nodes": [
             "node_modules/@typescript-eslint/eslint-plugin"
           ],
-          "path": "eslint-config-next > typescript-eslint > @typescript-eslint/eslint-plugin",
-          "range": ">=6.16.0",
-          "fix": "eslint-config-next@15.5.29 (semver-major)",
+          "path": "@typescript-eslint/eslint-plugin",
+          "range": "6.16.0 - 8.72.2",
+          "fix": "true",
           "advisory": null
         },
         {
@@ -61,15 +60,14 @@
             "@typescript-eslint/typescript-estree"
           ],
           "effects": [
-            "@typescript-eslint/eslint-plugin",
             "typescript-eslint"
           ],
           "nodes": [
             "node_modules/@typescript-eslint/parser"
           ],
-          "path": "eslint-config-next > typescript-eslint > @typescript-eslint/parser",
-          "range": ">=6.16.0",
-          "fix": "eslint-config-next@15.5.29 (semver-major)",
+          "path": "@typescript-eslint/parser",
+          "range": "6.16.0 - 8.72.2",
+          "fix": "true",
           "advisory": null
         },
         {
@@ -87,9 +85,9 @@
           "nodes": [
             "node_modules/@typescript-eslint/type-utils"
           ],
-          "path": "eslint-config-next > typescript-eslint > @typescript-eslint/eslint-plugin > @typescript-eslint/type-utils",
-          "range": ">=6.16.0",
-          "fix": "eslint-config-next@15.5.29 (semver-major)",
+          "path": "@typescript-eslint/type-utils",
+          "range": "6.16.0 - 8.72.2",
+          "fix": "true",
           "advisory": null
         },
         {
@@ -109,9 +107,9 @@
           "nodes": [
             "node_modules/@typescript-eslint/typescript-estree"
           ],
-          "path": "eslint-config-next > typescript-eslint > @typescript-eslint/typescript-estree",
-          "range": ">=6.16.0",
-          "fix": "eslint-config-next@15.5.29 (semver-major)",
+          "path": "@typescript-eslint/typescript-estree",
+          "range": "6.16.0 - 8.72.2",
+          "fix": "true",
           "advisory": null
         },
         {
@@ -130,26 +128,9 @@
           "nodes": [
             "node_modules/@typescript-eslint/utils"
           ],
-          "path": "eslint-config-next > typescript-eslint > @typescript-eslint/utils",
-          "range": ">=6.16.0",
-          "fix": "eslint-config-next@15.5.29 (semver-major)",
-          "advisory": null
-        },
-        {
-          "id": "via:eslint-config-next",
-          "package": "eslint-config-next",
-          "severity": "moderate",
-          "isDirect": true,
-          "via": [
-            "typescript-eslint"
-          ],
-          "effects": [],
-          "nodes": [
-            "node_modules/eslint-config-next"
-          ],
-          "path": "eslint-config-next",
-          "range": ">=15.6.0-canary.0",
-          "fix": "eslint-config-next@15.5.29 (semver-major)",
+          "path": "@typescript-eslint/utils",
+          "range": "6.16.0 - 8.72.2",
+          "fix": "true",
           "advisory": null
         },
         {
@@ -166,9 +147,9 @@
           "nodes": [
             "node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch"
           ],
-          "path": "eslint-config-next > typescript-eslint > @typescript-eslint/typescript-estree > minimatch",
+          "path": "minimatch",
           "range": "7.0.0 - 11.0.0",
-          "fix": "eslint-config-next@15.5.29 (semver-major)",
+          "fix": "true",
           "advisory": {
             "source": 1244623,
             "title": "minimatch has potential denial of service via globparts amplification",
@@ -190,15 +171,13 @@
             "@typescript-eslint/typescript-estree",
             "@typescript-eslint/utils"
           ],
-          "effects": [
-            "eslint-config-next"
-          ],
+          "effects": [],
           "nodes": [
             "node_modules/typescript-eslint"
           ],
-          "path": "eslint-config-next > typescript-eslint",
-          "range": "*",
-          "fix": "eslint-config-next@15.5.29 (semver-major)",
+          "path": "typescript-eslint",
+          "range": "<=8.72.2",
+          "fix": "true",
           "advisory": null
         }
       ]
