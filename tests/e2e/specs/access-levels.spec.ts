@@ -3,7 +3,8 @@ import { contentBodyFor, slotKeyFactory, type ContentRow } from "../../../lib/co
 import { MAX_SCIENTIST_LOGS } from "../../../lib/content-limits.ts";
 import { editorSections } from "../../../lib/editor-changes.ts";
 import type { AccessLevel } from "../../../lib/access-levels.ts";
-import { cloneDefaultContent, type GuideCard, type GuideSection, type PortiaContent, type ScientistLog, type Virus } from "../../../lib/portia-content.ts";
+import { type GuideCard, type GuideSection, type PortiaContent, type ScientistLog, type Virus } from "../../../lib/portia-content.ts";
+import { cloneFixtureContent } from "../../../lib/testing/portia-content-fixture.ts";
 import { DesktopPage } from "../pages/desktop.page";
 import { EditorPage } from "../pages/editor.page";
 import { expect, test } from "../fixtures/test";
@@ -42,7 +43,7 @@ function guideCard(id: string, title: string, level?: AccessLevel): GuideCard {
 // One stored copy for every scenario: leveled viruses (one with the maximum of scientist records), info sections with subsections, guide
 // sections with cards and a closed section, and the recycle bin. Levels start at 1 so every viewer level 1..5 shows something and hides something.
 function storedContent(): PortiaContent {
-  const content = cloneDefaultContent();
+  const content = cloneFixtureContent();
   const base = content.viruses[0];
   content.viruses = [
     virusOf(base, 1, 1, MAX_SCIENTIST_LOGS),

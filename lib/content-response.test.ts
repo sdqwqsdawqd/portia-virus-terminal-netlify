@@ -9,7 +9,8 @@ import { contentAccessRequired, contentBodyFor, slotKeyFactory } from "./content
 import { embeddedDocuments } from "./embedded-documents.ts";
 import { viewerOf } from "./access-viewer.ts";
 import { mergePlaceholders } from "./level-placeholders.ts";
-import { defaultPortiaContent, type Virus } from "./portia-content.ts";
+import { type Virus } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
 import type { GateDecision } from "./access-gate.ts";
 import { requiredLevelOf } from "./access-levels.ts";
@@ -38,7 +39,7 @@ const doc = (text: string) => ({ runs: [{ text }] });
 
 // A, B (level 3), C (no level), D (damaged level "x"): the tracer fixture of the plan.
 function storedPayload(): Record<string, unknown> {
-  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const base = structuredClone(portiaContentFixture) as unknown as Record<string, unknown>;
   return {
     ...base,
     viruses: [virus("vA", "CANARY_A_OPEN", 1), virus("vB", "CANARY_B_LEVEL3", 3), virus("vC", "CANARY_C_NOFIELD"), virus("vD", "CANARY_D_DAMAGED", "x")],
