@@ -362,6 +362,8 @@ test("visitor behaviour is unchanged (Phase 22 editor allow-list)", () => {
     "app/api/promotion/requests/route.ts",
     "app/api/promotion/test/route.ts",
     "components/portia-promotion.tsx",
+    // Phase 24: the shared level picker reads the scale from its single source, lib/access-levels.ts.
+    "components/portia-level-picker.tsx",
   ]);
   for (const path of allowed) assert.ok(existsSync(join(repoRoot, path)), `${path} must exist`);
   for (const dir of ["app", "components"]) {
