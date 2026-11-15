@@ -15,7 +15,7 @@ import { acceptFetchedContent, isNewerAnswer, normalizeDocumentLinks, viewerKeyO
 import { cacheMatchesSource, cacheMatchesViewer, clearDeviceContentCaches, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
 import { networkSaveError, parseRefusedSections, SaveConflictError, SectionClosedError } from "@/lib/editor-save-status";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
-import { mergePlaceholders } from "@/lib/level-placeholders";
+import { mergePlaceholders, shownViewerLevel } from "@/lib/level-placeholders";
 import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { splitEmbeddedMedia } from "@/lib/rich-text-media";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
@@ -1748,7 +1748,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
               </aside>
               <article className="record-view" aria-live="polite">
                 {archiveView === "stale" && contentStaleBanner}
-                {archiveView === "loading" ? <AppSkeleton shape="document" /> : archiveView === "fatal" ? contentFatal("microscopeGuide") : archiveView === "empty" || !activeVirus ? <div className="record-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{emptyCopy.archive.heading}</strong><span>{emptyCopy.archive.body}</span></div> : openLog ? <ScientistDocument key={openLog} virus={activeVirus} logId={openLog} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} onOpenLog={setOpenLog} />}
+                {archiveView === "loading" ? <AppSkeleton shape="document" /> : archiveView === "fatal" ? contentFatal("microscopeGuide") : archiveView === "empty" || !activeVirus ? <div className="record-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{emptyCopy.archive.heading}</strong><span>{emptyCopy.archive.body}</span></div> : openLog ? <ScientistDocument key={openLog} virus={activeVirus} logId={openLog} viewerLevel={shownViewerLevel(content)} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} viewerLevel={shownViewerLevel(content)} onOpenLog={setOpenLog} />}
               </article>
             </div>
           </AppWindow>
@@ -1893,7 +1893,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
                   })}
                   {trashView === "empty" && <div className="editor-empty empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy.trash.heading}</strong><span>{emptyCopy.trash.body}</span></div>}
                 </div>
-                {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} onOpenLog={() => undefined} /></div></div>}
+                {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} viewerLevel={shownViewerLevel(content)} onOpenLog={() => undefined} /></div></div>}
                 {activeTrashFile && <div className={`trash-viewer ${activeTrashFile.kind} doc-open`} key={activeTrashFile.id}>
                   <div className="trash-viewer-head"><div><span>ТОЛЬКО ДЛЯ ЧТЕНИЯ</span><strong>{activeTrashFile.name}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div>
                   <div className="trash-viewer-body doc-print">

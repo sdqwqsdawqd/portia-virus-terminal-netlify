@@ -218,13 +218,14 @@ test("D-56 (20-37): the register has a row for every hint and the rows are well 
 
 test("D-56 (20-37): the register and the sources agree (old texts gone, new texts present, nothing unrecorded, no sample phrases)", () => {
   // Phase 23 replaced these copy surfaces; the Phase 20 register remains historical evidence for unchanged files.
-  const phase23Copy = new Set(["components/portia-promotion-qualification-editor.tsx", "components/portia-promotion.tsx", "components/portia-access-gate.tsx"]);
+  // Phase 24 (D-15): the scientist document's denial text shows the real level, so the dossier is replaced copy too.
+  const replacedCopy = new Set(["components/portia-promotion-qualification-editor.tsx", "components/portia-promotion.tsx", "components/portia-access-gate.tsx", "components/portia-desktop-dossier.tsx"]);
   const historicEnv = {
     ...realEnv,
-    sourcePaths: () => realEnv.sourcePaths().filter((path) => !phase23Copy.has(path)),
-    hintPaths: () => realEnv.hintPaths().filter((path) => !phase23Copy.has(path)),
+    sourcePaths: () => realEnv.sourcePaths().filter((path) => !replacedCopy.has(path)),
+    hintPaths: () => realEnv.hintPaths().filter((path) => !replacedCopy.has(path)),
   };
-  const errors = validateRegistry(registry().filter((row) => !phase23Copy.has(row.file)), historicEnv, appliedFiles.filter((path) => !phase23Copy.has(path)));
+  const errors = validateRegistry(registry().filter((row) => !replacedCopy.has(row.file)), historicEnv, appliedFiles.filter((path) => !replacedCopy.has(path)));
   assert.deepEqual(errors, [], `\n${errors.join("\n")}\n`);
 });
 

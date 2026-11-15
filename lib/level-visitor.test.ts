@@ -82,3 +82,49 @@ test("the gate clears device copies on a closed, not allowed decision and gives 
   assert.match(gate, /<PortiaDesktop[^>]*onAccessLost=\{onAccessLost\}/);
   assert.match(gate, /const onAccessLost = useCallback\(\(\) => \{ void refresh\(\); \}, \[refresh\]\)/);
 });
+
+// Phase 24 dossier. "withheld" is set by the server cut of plan 24-05; here only the client side is proved: a row is closed
+// exactly when it carries the mark, and a closed record never feeds its text to anything.
+const dossier = read("components/portia-desktop-dossier.tsx");
+const romanName = "roman";
+
+test("D-15: the dossier has no Roman numeral helper and no hard-coded level II", () => {
+  assert.ok(!dossier.includes(romanName));
+  assert.ok(!dossier.includes("<strong>II</strong>"));
+  assert.ok(!dossier.includes("Текущий уровень: II"));
+  assert.ok(dossier.includes("<strong>{viewerLevel}</strong>"));
+  assert.ok(dossier.includes("levelCopy.currentLevelPlaque"));
+  assert.ok(dossier.includes("levelCopy.logLevel(log.lockedLevel)"));
+  assert.ok(dossier.includes("levelCopy.archivePath(level)"));
+  assert.ok(dossier.includes("levelCopy.docDenied(viewerLevel, level)"));
+  assert.ok(dossier.includes("<dd>{level}</dd>"));
+});
+
+test("D-12: a scientist record is closed by the server mark, not by a level comparison on the client", () => {
+  assert.equal((dossier.match(/const isOpen = !log\.withheld;/g) ?? []).length, 2, "the row and the document");
+  assert.ok(!/lockedLevel\s*<=/.test(dossier));
+  assert.ok(!/viewerLevel\s*>=/.test(dossier));
+});
+
+test("T-24-13: the redacted bars are built from the record id only", () => {
+  assert.ok(dossier.includes("generatedRedaction("));
+  const body = bodyOf(dossier, "function RedactedDocument(");
+  assert.ok(body.includes("generatedRedaction(id)"));
+  assert.ok(!body.includes("scientistDocument("));
+  assert.ok(!body.includes(".content"));
+  assert.ok(!body.includes("log"), "no record object reaches the bars");
+  assert.ok(dossier.includes("<RedactedDocument id={log.id} />"));
+});
+
+test("LVL-06: the block of scientist records exists only when the virus has records", () => {
+  assert.ok(dossier.includes("after={virus.scientistLogs.length > 0 ? records : undefined}"));
+  assert.ok(!dossier.includes("scientist-log-empty"));
+  assert.ok(!dossier.includes("ЗАПИСИ ОТСУТСТВУЮТ"));
+});
+
+test("D-15: every dossier call of the desktop passes the shown viewer level", () => {
+  const calls = desktop.match(/<(VirusRecord|ScientistDocument)\b[^>]*viewerLevel=\{shownViewerLevel\(content\)\}/g) ?? [];
+  assert.equal(calls.length, 3);
+  assert.equal((desktop.match(/<VirusRecord\b/g) ?? []).length, 2);
+  assert.equal((desktop.match(/<ScientistDocument\b/g) ?? []).length, 1);
+});
