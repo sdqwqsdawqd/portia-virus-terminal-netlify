@@ -6,6 +6,7 @@ import {
   readEmployeeProfiles, readManualEmployees, removeManualEmployee, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, updateManualEmployee,
   saveEmployeeProfile, saveEmployeePatch, loadEmployees, loadEmployeesFromRows, manualRowsFromRows, profileIndexFromRows, withProfile, type EmployeeProfile, type EmployeeUpdate, type PortiaEmployee, type RosterEmployee,
 } from "./portia-employees.ts";
+import { resetEmployeesSnapshot } from "./employees-snapshot-cache.ts";
 
 const noRatings = { pawsRating: null, bioRating: null, sRating: null, activityRating: null, testsRating: null, overallRating: null };
 const header = '"Номер","Никнейм сотрудника","Позывной","Звание","Ранг"';
@@ -388,6 +389,9 @@ test("profileIndexFromRows and manualRowsFromRows: pure row mapping, junk rows s
 });
 
 test("loadEmployeesFromRows gives the same employees as loadEmployees fed with the same stored rows", async (t) => {
+  // The server snapshot is shared by the whole module, so each case starts from an empty one.
+  resetEmployeesSnapshot();
+  t.after(() => resetEmployeesSnapshot());
   const stored = [profileRowOf({ photo_url: "" })];
   const manualStored = [manualRow(50, "Gamma_x")];
   stubSheet(t, ['"1","Fox","Лис","Доктор","2"']);
@@ -400,6 +404,9 @@ test("loadEmployeesFromRows gives the same employees as loadEmployees fed with t
 });
 
 test("loadEmployeesFromRows: empty lists of the database are a healthy read, not a failure (EDGE SEC-01/empty)", async (t) => {
+  // The server snapshot is shared by the whole module, so each case starts from an empty one.
+  resetEmployeesSnapshot();
+  t.after(() => resetEmployeesSnapshot());
   stubSheet(t, ['"1","Fox","","",""']);
   const loaded = await loadEmployeesFromRows({ profiles: [], manual: [] });
   assert.deepEqual([loaded.profilesRead, loaded.manualRead, loaded.complete], [true, true, true]);
@@ -408,6 +415,9 @@ test("loadEmployeesFromRows: empty lists of the database are a healthy read, not
 });
 
 test("loadEmployeesFromRows(null): a signed read that did not happen is the old degradation, the list comes from the sheet alone", async (t) => {
+  // The server snapshot is shared by the whole module, so each case starts from an empty one.
+  resetEmployeesSnapshot();
+  t.after(() => resetEmployeesSnapshot());
   stubSheet(t, ['"1","Fox","Лис","Доктор","2"']);
   const loaded = await loadEmployeesFromRows(null);
   assert.deepEqual([loaded.profilesRead, loaded.manualRead, loaded.complete], [false, false, false]);
@@ -416,6 +426,9 @@ test("loadEmployeesFromRows(null): a signed read that did not happen is the old 
 });
 
 test("loadEmployeesFromRows throws on a non-OK sheet, like loadEmployees", async (t) => {
+  // The server snapshot is shared by the whole module, so each case starts from an empty one.
+  resetEmployeesSnapshot();
+  t.after(() => resetEmployeesSnapshot());
   stubSheet(t, "down");
   await assert.rejects(loadEmployeesFromRows({ profiles: [], manual: [] }), /Google Sheets returned 500/);
 });

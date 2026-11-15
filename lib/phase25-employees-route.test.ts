@@ -46,3 +46,16 @@ test("GET /api/employees: a failed or refused signed read keeps the old degradat
   assert.ok(get.includes("{ status: 503, headers: noStoreHeaders }"));
   assert.ok(get.includes("{ status: 502, headers: noStoreHeaders }"));
 });
+
+test("editor writes keep the session client, their purge for one release, and reset the server snapshot after the purge", () => {
+  for (const name of ["PATCH", "POST", "DELETE"]) {
+    const from = source.indexOf(`export async function ${name}`);
+    assert.ok(from >= 0, name);
+    const next = ["PATCH", "POST", "DELETE"].map((other) => source.indexOf(`export async function ${other}`, from + 1)).filter((index) => index > from);
+    const body = source.slice(from, next.length ? Math.min(...next) : undefined);
+    assert.ok(body.includes("createServerSupabaseClient()"), name);
+    assert.ok(body.includes("purgeCacheTag(employeesCacheTag)"), `${name}: the purge of the old public copies stays for one release`);
+    assert.ok(body.includes("resetEmployeesSnapshot()"), `${name}: the instance snapshot is dropped after a write`);
+    assert.ok(body.indexOf("canEdit") < body.indexOf("resetEmployeesSnapshot()"), `${name}: the refusal comes before the reset`);
+  }
+});

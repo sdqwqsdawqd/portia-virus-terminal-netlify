@@ -6,6 +6,7 @@ import { viewerOf } from "@/lib/access-viewer";
 import { contentAccessRequired } from "@/lib/content-response";
 import { readEmployeeRows, ServerReadError, type EmployeeRows } from "@/lib/server-read";
 import { employeesCacheTag, noStoreHeaders, purgeCacheTag } from "@/lib/portia-cdn";
+import { resetEmployeesSnapshot } from "@/lib/employees-snapshot-cache";
 import { parseJsonObject } from "@/lib/request-json";
 import { addManualEmployee, loadEmployees, loadEmployeesFromRows, removeManualEmployee, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, saveEmployeePatch, withProfile } from "@/lib/portia-employees";
 
@@ -78,6 +79,7 @@ export async function PATCH(request: Request) {
       return Response.json({ error }, { status });
     }
     await purgeCacheTag(employeesCacheTag);
+    resetEmployeesSnapshot();
     const { employee, ratingsPending, detailsPending } = result;
     return Response.json({ employee, ratingsPending, detailsPending }, { headers: noStoreHeaders });
   } catch (error) {
@@ -113,6 +115,7 @@ export async function POST(request: Request) {
     }
 
     await purgeCacheTag(employeesCacheTag);
+    resetEmployeesSnapshot();
     return Response.json({ employee: withProfile(result.employee, profiles) }, { status: 201, headers: noStoreHeaders });
   } catch (error) {
     console.error("PORTIA employee add failed", error);
@@ -141,6 +144,7 @@ export async function DELETE(request: Request) {
     if (result.status === "not-found") return Response.json({ error: "Сотрудник не найден. Обновите страницу." }, { status: 404 });
 
     await purgeCacheTag(employeesCacheTag);
+    resetEmployeesSnapshot();
     return Response.json({ id }, { headers: noStoreHeaders });
   } catch (error) {
     console.error("PORTIA employee delete failed", error);

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { employeesSnapshot } from "./employees-snapshot-cache.ts";
 import { isAllowedMediaUrl } from "./media-url.ts";
 
 export type PortiaEmployee = {
@@ -450,7 +451,9 @@ async function loadSheetSnapshot(manualNicknames: string[]): Promise<SheetSnapsh
 export async function loadEmployeesFromRows(stored: { profiles: unknown[]; manual: unknown[] } | null) {
   const profiles = stored ? profileIndexFromRows(stored.profiles) : null;
   const manual = stored ? { rows: manualRowsFromRows(stored.manual), ok: true } : { rows: [], ok: false };
-  const snapshot = await loadSheetSnapshot(manual.rows.map((row) => row.nickname));
+  // The sheet and Roblox part comes from the shared snapshot (D-23). A manual employee that is not in its Roblox map yet has an
+  // empty avatar until the next snapshot, as one has today while Roblox is down. The signed rows above are read on every request.
+  const snapshot = await employeesSnapshot(() => loadSheetSnapshot(manual.rows.map((row) => row.nickname)));
   return assembleEmployees(snapshot.rows, snapshot.roblox, profiles, manual);
 }
 
