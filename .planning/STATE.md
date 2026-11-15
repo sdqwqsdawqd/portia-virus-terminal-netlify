@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 25
 current_phase_name: "Переключение закрытия: база, кэш, сборка, хранилище"
 status: executing
-stopped_at: Completed PORTIA-25-07-PLAN.md
-last_updated: "2026-11-15T19:20:13.995Z"
+stopped_at: Completed PORTIA-25-08-PLAN.md
+last_updated: "2026-11-15T19:30:49.984Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-25 execution started
-state_head: e4747f77ad44c8ca69dd7c724a08d50b8e487acb
+state_head: a490668150df6f0ea53a4a728b20b371ecd15745
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 50
-  completed_plans: 47
+  completed_plans: 48
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-25 (Переключение закрытия: база, кэш, сборка, хранилище) — EXECUTING
-Plan: 8 of 10
+Plan: 9 of 10
 Status: Executing Phase PORTIA-25
 Last activity: 2026-11-15 — Phase PORTIA-25 execution started
 
@@ -86,6 +86,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-25 P05 | 15 min | 3 tasks | 26 files |
 | Phase 25 P06 | 20 min | 2 tasks | 13 files |
 | Phase PORTIA-25 P07 | 30m | 3 tasks | 5 files |
+| Phase PORTIA-25 P08 | 40 min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -291,6 +292,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 25]: 25-06: working code has no seed; emptyPortiaContent + assistantDefaults; visitor without readable row gets 503 content-unavailable, editor gets the empty structure; shownViewerLevel falls back gate level then 1 (WR-03). SEC-03 not checked off until the 25-09 build scan.
 - [Phase PORTIA-25]: 25-07: rollout applied by variant B only (one psql file at a time, migration repair); db push is forbidden in the owner checklist because it would apply the contract before the code check (D-06)
 - [Phase PORTIA-25]: 25-07: poll intervals unchanged (status 5 s, content 30 s, roster 5 min); 14,2 calls per visitor tab per minute recorded offline, owner did not answer explicitly, recommended variant kept (D-24)
+- [Phase PORTIA-25]: 25-08: device cache identity = viewer key + nickname key; any change between gate answers wipes both -v2 copies (either direction), first answer wipes nothing; -v1 copies deleted on gate mount
+- [Phase PORTIA-25]: 25-08: with closure off rejected and revoked read as none in accessGateLayout (D-09, D-21); closed mode unchanged
 
 ### Pending Todos
 
@@ -344,8 +347,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T19:20:12.940Z
-Stopped at: Completed PORTIA-25-07-PLAN.md
+Last session: 2026-11-15T19:30:48.919Z
+Stopped at: Completed PORTIA-25-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
