@@ -147,3 +147,49 @@ test("T-24-26 the editor still takes the scale only through the picker", () => {
   assert.doesNotMatch(editor, /@\/lib\/(?:users-|access-)/u);
   assert.doesNotMatch(dossier, /access-levels|access-store|access-session/u);
 });
+
+// ---- 24-08 Task 1: the hierarchy in the draft ----
+
+test("LVL-02/D-16 the picker stands at the info section, the subsection, the guide section and the card", () => {
+  assert.ok(count(editor, "<LevelPicker") >= 7, "3 places of 24-07 plus 4 of 24-08");
+  for (const name of ["level-info-${section.id}", "level-sub-${subsection.id}", "level-guide-${section.id}", "level-card-${card.id}"]) {
+    assert.ok(editor.includes(`name={\`${name}\`}`), `${name}: one group per record, named by its id`);
+  }
+  // Each picker follows the title field of its form.
+  assert.match(editor, /<Field label="Заголовок"><input value=\{section\.title\}[^\n]*\n\s*<LevelPicker name=\{`level-info-/);
+  assert.match(editor, /<Field label="Заголовок подраздела">[^\n]*\n\s*<LevelPicker name=\{`level-sub-/);
+  assert.match(editor, /<Field label="Заголовок раздела">[^\n]*\n\s*<LevelPicker name=\{`level-guide-/);
+  assert.match(editor, /<Field label="Заголовок карточки">[^\n]*\n\s*<LevelPicker name=\{`level-card-/);
+  assert.ok(editor.includes('import { effectiveLevel, raiseChildren } from "@/lib/level-hierarchy"'));
+});
+
+test("LVL-03/D-17 a child cannot go below its section; the section lifts its children inside the draft change", () => {
+  assert.ok(editor.includes("raiseChildren(item.subsections, level)"));
+  assert.ok(editor.includes("raiseChildren(item.cards, level)"));
+  assert.ok(count(editor, "min={effectiveLevel(") >= 2, "subsection and card read the section's level as their minimum");
+  assert.ok(editor.includes("min={effectiveLevel(section.level, 1)} value={subsection.level}"));
+  assert.ok(editor.includes("min={effectiveLevel(section.level, 1)} value={card.level}"));
+  // The count is taken from the draft the user sees, before the change, with the same rule as raiseChildren.
+  assert.ok(editor.includes("section.subsections.filter((child) => effectiveLevel(child.level, 1) < level).length"));
+  assert.ok(editor.includes("section.cards.filter((child) => effectiveLevel(child.level, 1) < level).length"));
+});
+
+test("D-17 the lift is told under the section's group, and not when nobody changed", () => {
+  assert.ok(editor.includes("levelCopy.raisedSubsections(level, raised)") && editor.includes("levelCopy.raisedCards(level, raised)"));
+  assert.ok(editor.includes("setRaisedNotice(raised > 0 ? {"), "k = 0 clears the line instead of showing it");
+  assert.ok(editor.includes("notice={raisedNotice?.parentId === section.id ? raisedNotice.text : undefined}"), "the line belongs to its section");
+  assert.equal(count(editor, "setRaisedNotice(null); }} />"), 2, "a change of a child's level clears the line");
+  assert.ok(editor.includes("raisedNotice.parentId !== activeInfoSection && raisedNotice.parentId !== activeGuideSection) setRaisedNotice(null)"), "another section clears the line");
+  assert.equal(levelCopy.raisedSubsections(3, 2), "Уровень подразделов поднят до 3: изменено 2.");
+  assert.equal(levelCopy.raisedCards(4, 1), "Уровень карточек поднят до 4: изменено 1.");
+});
+
+test("D-18 the section tabs, the contents and the card heads carry no level label", () => {
+  assert.ok(!/<SectionTabs[^\n]*level/i.test(editor));
+  assert.ok(!/<EditorToc[^\n]*level/i.test(editor));
+  assert.ok(!/<CollapsibleCard[^\n]*(?:\.level|levelCopy)/.test(editor));
+});
+
+test("A-5 the «Информация» and «Справочник» apps have no level of their own in the editor", () => {
+  assert.ok(!editor.includes("appLevels?.info") && !editor.includes("appLevels?.guide"));
+});

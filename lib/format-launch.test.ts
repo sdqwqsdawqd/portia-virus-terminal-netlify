@@ -65,6 +65,8 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //      (applyUsersTabHunk); русских строк нет (D-58). Источник одобрения: ROADMAP Phase 22, success criterion 1.
 //   6. PORTIA-24 (24-07; LVL-02, LVL-06, LVL-07) — общий выбор уровня LevelPicker у вируса, записей учёных и «Устава», новая карточка без записей, новая запись уровня 1
 //      (applyLevelPickerHunk); русских строк в файле не добавлено, строки выбора лежат в lib/level-copy.ts. Источник одобрения: 24-CONTEXT D-13, D-14, D-16 и план 24-07.
+//   7. PORTIA-24-08 (24-08; LVL-02, LVL-03, LVL-08) — выбор уровня у разделов, подразделов и карточек «Информации» и «Справочника» с иерархией и строкой автоподъёма
+//      (applyLevelHierarchyHunk); русские строки лежат в lib/level-copy.ts. Источник одобрения: 24-CONTEXT D-16, D-17 и план 24-08.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -253,6 +255,72 @@ function applyLevelPickerHunk(text: string): string {
   );
 }
 
+/** PORTIA-24 (24-08): the level picker with the hierarchy in «Информация» and «Справочник» (LVL-03, D-16, D-17). The Russian texts live in lib/level-copy.ts, not here. */
+function applyLevelHierarchyHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { levelCopy } from "@/lib/level-copy";',
+    'import { levelCopy } from "@/lib/level-copy";\nimport { effectiveLevel, raiseChildren } from "@/lib/level-hierarchy";',
+    "level hierarchy import",
+  );
+  next = replaceOnce(
+    next,
+    '  const [selectedGuideSection, setSelectedGuideSection] = useState("");\n',
+    '  const [selectedGuideSection, setSelectedGuideSection] = useState("");\n' +
+      "  // D-17: the line under a parent's level group after its raise lifted children; it lasts until the next level change or another section.\n" +
+      "  const [raisedNotice, setRaisedNotice] = useState<{ parentId: string; text: string } | null>(null);\n",
+    "raised notice state",
+  );
+  next = replaceOnce(
+    next,
+    "  const infoTocItems: TocItem[] = draft.infoSections.filter(",
+    "  // Derived reset, like the popover below: another section has no use for the line of the one left.\n" +
+      "  if (raisedNotice && raisedNotice.parentId !== activeInfoSection && raisedNotice.parentId !== activeGuideSection) setRaisedNotice(null);\n" +
+      "  const infoTocItems: TocItem[] = draft.infoSections.filter(",
+    "raised notice derived reset",
+  );
+  const infoTitle = '              <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>\n';
+  next = replaceOnce(
+    next,
+    infoTitle,
+    `${infoTitle}` +
+      "              <LevelPicker name={`level-info-${section.id}`} value={section.level} notice={raisedNotice?.parentId === section.id ? raisedNotice.text : undefined} onChange={(level) => {\n" +
+      "                const raised = section.subsections.filter((child) => effectiveLevel(child.level, 1) < level).length;\n" +
+      "                changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.level = level; raiseChildren(item.subsections, level); }));\n" +
+      "                setRaisedNotice(raised > 0 ? { parentId: section.id, text: levelCopy.raisedSubsections(level, raised) } : null);\n" +
+      "              }} />\n",
+    "info section level picker",
+  );
+  const subTitle = '                    <Field label="Заголовок подраздела"><input maxLength={300} value={subsection.title} onChange={(event) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.title = event.target.value; })} /></Field>\n';
+  next = replaceOnce(
+    next,
+    subTitle,
+    `${subTitle}` +
+      "                    <LevelPicker name={`level-sub-${subsection.id}`} min={effectiveLevel(section.level, 1)} value={subsection.level} onChange={(level) => { changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.level = level; }); setRaisedNotice(null); }} />\n",
+    "info subsection level picker",
+  );
+  const guideTitle = '              <Field label="Заголовок раздела"><input maxLength={300} value={section.title} onChange={(event) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>\n';
+  next = replaceOnce(
+    next,
+    guideTitle,
+    `${guideTitle}` +
+      "              <LevelPicker name={`level-guide-${section.id}`} value={section.level} notice={raisedNotice?.parentId === section.id ? raisedNotice.text : undefined} onChange={(level) => {\n" +
+      "                const raised = section.cards.filter((child) => effectiveLevel(child.level, 1) < level).length;\n" +
+      "                changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.level = level; raiseChildren(item.cards, level); }));\n" +
+      "                setRaisedNotice(raised > 0 ? { parentId: section.id, text: levelCopy.raisedCards(level, raised) } : null);\n" +
+      "              }} />\n",
+    "guide section level picker",
+  );
+  const cardTitle = '                    <Field label="Заголовок карточки"><input maxLength={300} value={card.title} onChange={(event) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.title = event.target.value; })} /></Field>\n';
+  return replaceOnce(
+    next,
+    cardTitle,
+    `${cardTitle}` +
+      "                    <LevelPicker name={`level-card-${card.id}`} min={effectiveLevel(section.level, 1)} value={card.level} onChange={(level) => { changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.level = level; }); setRaisedNotice(null); }} />\n",
+    "guide card level picker",
+  );
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -299,6 +367,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "D-62", apply: applyInfoAddSectionHunk },
   { id: "D-63", apply: (text) => text, normalizeActual: stripFramingAttributes },
   { id: "PORTIA-24", apply: applyLevelPickerHunk },
+  { id: "PORTIA-24-08", apply: applyLevelHierarchyHunk },
   { id: "PORTIA-22", apply: applyUsersTabHunk },
 ];
 
@@ -397,8 +466,10 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, applyLaunchButtonHunk(sample)), null, "a file without the D-62 hunk is a difference");
   const withoutUsers = approvedEditorEdits.slice(0, -1).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutUsers), null, "a file without the PORTIA-22 hunk is a difference");
-  const withoutLevels = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-24").reduce((text, edit) => edit.apply(text), sample);
+  const withoutLevels = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-24")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutLevels), null, "a file without the PORTIA-24 hunk is a difference");
+  const withoutHierarchy = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-24-08").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutHierarchy), null, "a file without the PORTIA-24-08 hunk is a difference");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

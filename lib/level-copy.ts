@@ -23,8 +23,8 @@ export const levelCopy = {
   pickerOption: (level: number) => `Допуск ${level}`,
   parentHint: (level: number) => `Не ниже раздела: ${level}`,
   parentTitle: (level: number) => `не ниже раздела: ${level}`,
-  raisedSubsections: (level: number, count: number) => `Подразделы подняты до уровня ${level}: ${count}.`,
-  raisedCards: (level: number, count: number) => `Карточки подняты до уровня ${level}: ${count}.`,
+  raisedSubsections: (level: number, count: number) => `Уровень подразделов поднят до ${level}: изменено ${count}.`,
+  raisedCards: (level: number, count: number) => `Уровень карточек поднят до ${level}: изменено ${count}.`,
   savedRaised: (count: number) => `Сохранено. Поднято уровней: ${count}.`,
   logsEmptyEditor: "Записей учёных нет. Карточку можно сохранить без них.",
   editorIncomplete: {

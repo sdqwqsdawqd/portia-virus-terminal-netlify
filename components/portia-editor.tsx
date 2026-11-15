@@ -37,6 +37,7 @@ import { ActiveFormatContext, FloatingTextFormatPanel, FormatLaunchButton, Forma
 import { PromotionEditor } from "@/components/portia-promotion-editor";
 import { LevelPicker } from "@/components/portia-level-picker";
 import { levelCopy } from "@/lib/level-copy";
+import { effectiveLevel, raiseChildren } from "@/lib/level-hierarchy";
 import { AppDeniedPanel } from "@/components/portia-desktop-states";
 import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";
 import { accessCheckFailedText } from "@/lib/app-state";
@@ -505,6 +506,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const [broadcastEditorTab, setBroadcastEditorTab] = useState<BroadcastTab>("news");
   const [selectedInfoSection, setSelectedInfoSection] = useState("");
   const [selectedGuideSection, setSelectedGuideSection] = useState("");
+  // D-17: the line under a parent's level group after its raise lifted children; it lasts until the next level change or another section.
+  const [raisedNotice, setRaisedNotice] = useState<{ parentId: string; text: string } | null>(null);
   // A new or moved card is focused once it is in the DOM; focus scrolls it into view (G-03.2-2a).
   const revealBroadcast = useRef<{ id: string; field: "title" | "type" | "endsAt" } | null>(null);
   const [revealTick, setRevealTick] = useState(0);
@@ -761,6 +764,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   };
   const activeInfoSection = draft.infoSections.some((section) => section.id === selectedInfoSection) ? selectedInfoSection : draft.infoSections[0]?.id ?? "";
   const activeGuideSection = draft.guideSections.some((section) => section.id === selectedGuideSection) ? selectedGuideSection : draft.guideSections[0]?.id ?? "";
+  // Derived reset, like the popover below: another section has no use for the line of the one left.
+  if (raisedNotice && raisedNotice.parentId !== activeInfoSection && raisedNotice.parentId !== activeGuideSection) setRaisedNotice(null);
   const infoTocItems: TocItem[] = draft.infoSections.filter((section) => section.id === activeInfoSection).flatMap((section) => [
     { id: section.id, label: section.title || "БЕЗ НАЗВАНИЯ", depth: 0 as const },
     ...section.subsections.map((subsection) => ({ id: subsection.id, label: subsection.title || "БЕЗ НАЗВАНИЯ", depth: 1 as const })),
@@ -1320,6 +1325,11 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               handle={<OrderDragHandle index={index} label={section.title || "раздел"} itemId={section.id} onMove={(from, to) => { const refocus = keepSectionHandleFocus(section.id); changeDraft((next) => moveArrayItem(next.infoSections, from, to)); refocus(); }} />}
               actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id), ...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div>}>
               <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
+              <LevelPicker name={`level-info-${section.id}`} value={section.level} notice={raisedNotice?.parentId === section.id ? raisedNotice.text : undefined} onChange={(level) => {
+                const raised = section.subsections.filter((child) => effectiveLevel(child.level, 1) < level).length;
+                changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.level = level; raiseChildren(item.subsections, level); }));
+                setRaisedNotice(raised > 0 ? { parentId: section.id, text: levelCopy.raisedSubsections(level, raised) } : null);
+              }} />
               <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
               <div className="info-subsection-list">
                 {section.subsections.map((subsection, subIndex) => (
@@ -1327,6 +1337,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                     handle={<OrderDragHandle index={subIndex} label={subsection.title || "подраздел"} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} />}
                     actions={<div className="nested-editor-actions"><button type="button" onClick={() => { subsection.blocks.forEach((block) => closeFormatterFor(portiaTextKey.infoBlock(block.id))); changeDraft((next) => removeInfoSubsection(next, section.id, subsection.id)); }}>Удалить</button></div>}>
                     <Field label="Заголовок подраздела"><input maxLength={300} value={subsection.title} onChange={(event) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.title = event.target.value; })} /></Field>
+                    <LevelPicker name={`level-sub-${subsection.id}`} min={effectiveLevel(section.level, 1)} value={subsection.level} onChange={(level) => { changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.level = level; }); setRaisedNotice(null); }} />
                     <div className="info-block-list">
                       {subsection.blocks.map((block, blockIndex) => (
                         <CollapsibleCard key={block.id} id={block.id} sortIndex={blockIndex} label={infoBlockHeads[block.type].title} title={block.type === "text" ? block.text.split("\n").map((line) => line.trim()).find(Boolean) : undefined} open={isOpen(block.id)} onToggle={() => toggleCard(block.id)}
@@ -1378,6 +1389,11 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               handle={<OrderDragHandle index={index} label={section.title || "раздел"} itemId={section.id} onMove={(from, to) => { const refocus = keepSectionHandleFocus(section.id); changeDraft((next) => moveArrayItem(next.guideSections, from, to)); refocus(); }} />}
               actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить раздел «${section.title || "Без названия"}» вместе с карточками`} onClick={() => { closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)))); changeDraft((next) => removeGuideSection(next, section.id)); }}>Удалить</button></div>}>
               <Field label="Заголовок раздела"><input maxLength={300} value={section.title} onChange={(event) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
+              <LevelPicker name={`level-guide-${section.id}`} value={section.level} notice={raisedNotice?.parentId === section.id ? raisedNotice.text : undefined} onChange={(level) => {
+                const raised = section.cards.filter((child) => effectiveLevel(child.level, 1) < level).length;
+                changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.level = level; raiseChildren(item.cards, level); }));
+                setRaisedNotice(raised > 0 ? { parentId: section.id, text: levelCopy.raisedCards(level, raised) } : null);
+              }} />
               <ImageEditorField label="Фото раздела" value={section.photo} placement="guide" maxHint="За заголовком раздела: низкая полоса во всю ширину" removeLabel="Убрать фото" uploadState={uploadState} uploadMessage={uploadMessage} framing={section.photoFraming} framingBox="band" onFramingChange={(frame) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { if (frame) item.photoFraming = frame; else delete item.photoFraming; }))}
                 onChange={(value) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = value; }))}
                 onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = url; })))} />
@@ -1396,6 +1412,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                     }} />}
                     actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить карточку «${card.title || "Без названия"}»`} onClick={() => { closeFormatterFor(...card.blocks.map((block) => portiaTextKey.guideBlock(block.id))); changeDraft((next) => removeGuideCard(next, card.id)); }}>Удалить</button></div>}>
                     <Field label="Заголовок карточки"><input maxLength={300} value={card.title} onChange={(event) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.title = event.target.value; })} /></Field>
+                    <LevelPicker name={`level-card-${card.id}`} min={effectiveLevel(section.level, 1)} value={card.level} onChange={(level) => { changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.level = level; }); setRaisedNotice(null); }} />
                     <ImageEditorField label="Обложка" value={card.cover} placement="guide" maxHint="На плитке: 4:3, края обрезаются" removeLabel="Убрать обложку" uploadState={uploadState} uploadMessage={uploadMessage} framing={card.coverFraming} framingBox="tile" onFramingChange={(frame) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) { if (frame) target.coverFraming = frame; else delete target.coverFraming; } })}
                       onChange={(value) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.cover = value; })}
                       onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.cover = url; }))} />
