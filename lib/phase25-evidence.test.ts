@@ -254,3 +254,69 @@ test("browser evidence: eight SEC-04 rows, each PASS-local (mocked API) with exi
   for (const lane of ["Postgres/RLS", "staging", "CDN", "физические устройства"]) assert.ok(unproven.includes(lane), `not-proven section names ${lane}`);
   for (const line of unproven.split("\n").filter((entry) => entry.startsWith("- "))) assert.match(line, /^- BLOCKED/, line);
 });
+
+// Plan 25-10, Task 2: the review, the matrix and the checklist agree with each other and with the tracked files. The review was a static
+// read; nothing here lets a live lane (Postgres, staging, production, CDN, devices) pass.
+const rlsReview = read("25-RLS-REVIEW.md");
+const securityMatrix = read("25-SECURITY-MATRIX.md");
+const reviewedCommit = /Reviewed commit: `([0-9a-f]{40})`/.exec(rlsReview)?.[1] ?? "";
+
+test("Phase 25 review: a named reviewer, a 40-hex reviewed commit equal to the matrix commit, no open critical or high", () => {
+  assert.match(rlsReview, /Reviewer: .*supabase-rls-reviewer/);
+  assert.match(reviewedCommit, /^[0-9a-f]{40}$/);
+  assert.ok(securityMatrix.split("\n").slice(0, 8).join("\n").includes(`Проверяемый commit: \`${reviewedCommit}\``), "the matrix commit must equal the reviewed commit");
+  assert.match(rlsReview, /Open critical: \*\*0\*\*\. Open high: \*\*0\*\*\./);
+  const rounds = [...rlsReview.matchAll(/^## Round (\d+) \(25-10\)[^\n]*\n\nRound commit: `([0-9a-f]{40})`/gm)];
+  assert.ok(rounds.length >= 1 && rounds.length <= 3, "one to three rounds");
+  assert.equal(rounds[rounds.length - 1][2], reviewedCommit, "the last round is the reviewed commit");
+  const outcomes = [...rlsReview.matchAll(/Итог раунда: открытых critical (\d+), открытых high (\d+)/g)];
+  assert.equal(outcomes.length, rounds.length, "every round records its outcome");
+  for (const [, critical, high] of outcomes) assert.equal(`${critical}/${high}`, "0/0");
+});
+
+test("Phase 25 review: the scope names the three SQL files and the four routes; the findings are all dispositioned; the live lanes are BLOCKED", () => {
+  const scope = /^- Scope: .*$/m.exec(rlsReview)?.[0] ?? "";
+  for (const name of [EXPAND, CONTRACT, EMERGENCY.split("/").pop() as string, "app/api/content/route.ts", "app/api/employees/route.ts", "app/api/uploads/route.ts", "app/api/access/status/route.ts", "lib/server-read.ts", "lib/gate-for-request.ts"]) {
+    assert.ok(scope.includes(name), `the review scope must name ${name}`);
+  }
+  const findings = tableRows(section(rlsReview, "Findings and fixes"), ["ID"]);
+  assert.ok(findings.length >= 1);
+  assert.deepEqual(findings.map((row) => row[0]), findings.map((_, index) => `RLS25-${String(index + 1).padStart(2, "0")}`));
+  for (const row of findings) {
+    assert.match(row[3], /^(fixed in `[0-9a-f]{7,40}`|accepted|release-ledger)/, `${row[0]}: no open finding`);
+  }
+  assert.match(rlsReview, /BLOCKED ревьюера/);
+  for (const lane of ["PostgREST", "Storage", "Netlify", "staging"]) assert.ok(rlsReview.slice(rlsReview.indexOf("BLOCKED ревьюера")).includes(lane), `the BLOCKED list names ${lane}`);
+  assert.ok(!/\bPASS\b[^\n]*(Postgres|staging|production|CDN|устройств)/.test(rlsReview), "no live lane is a pass in the review");
+});
+
+test("Phase 25 matrix: one row per tracked route and per tracked migration, the new modules are covered, live lanes are not passes", () => {
+  const routeRows = tableRows(section(securityMatrix, "Маршруты API (охват)"), ["Маршрут"]).map((row) => row[0].replace(/`/g, ""));
+  assert.deepEqual([...routeRows].sort(), tracked("app/api", "/route.ts").sort(), "exactly one row per tracked route");
+  const migrationRows = tableRows(section(securityMatrix, "Миграции (охват)"), ["Миграция"]);
+  assert.deepEqual(migrationRows.map((row) => row[0].replace(/`/g, "")).sort(), tracked("supabase/migrations", ".sql").sort(), "exactly one row per tracked migration");
+  for (const name of [EXPAND, CONTRACT]) {
+    const row = migrationRows.find((cells) => cells[0].includes(name));
+    assert.ok(row, name);
+    assert.match(row[4], /^BLOCKED \(ENV\)/, `${name}: staging`);
+    assert.match(row[5], /^ОЖИДАЕТ ВЛАДЕЛЬЦА/, `${name}: production`);
+  }
+  const covered = section(securityMatrix, "Охват файлов");
+  for (const path of ["lib/server-read.ts", "lib/gate-for-request.ts", "lib/employees-snapshot-cache.ts", "lib/media-rewrite.ts", "lib/media-rewrite-client.ts", "lib/device-cache.ts", "scripts/phase25-build-scan.mjs", EMERGENCY]) {
+    assert.ok(covered.includes(`\`${path}\``), `the coverage list must name ${path}`);
+  }
+  const lanes = tableRows(section(securityMatrix, "Phase 25 environment"), ["Lane"]);
+  assert.ok(lanes.length >= 5);
+  for (const lane of lanes) {
+    if (/Postgres|staging|Staging|production|CDN|Netlify|Storage|physical devices/.test(lane[0])) assert.match(lane[1], /^BLOCKED/, `${lane[0]} must stay BLOCKED`);
+    else assert.match(lane[1], /^PASS-local( \(mocked API\))?$/, lane[0]);
+  }
+});
+
+test("Phase 25 checklist: the review section names the review file and the reviewed commit and keeps the live checks BLOCKED", () => {
+  const text = section(checklist, "Ревью");
+  assert.ok(text.includes("25-RLS-REVIEW.md") && text.includes("25-SECURITY-MATRIX.md"));
+  assert.ok(text.includes(reviewedCommit), "the checklist names the reviewed commit");
+  assert.ok(text.includes("BLOCKED"), "the live checks the reviewer could not do are BLOCKED");
+  assert.ok(!/\bPASS\b/.test(text));
+});
