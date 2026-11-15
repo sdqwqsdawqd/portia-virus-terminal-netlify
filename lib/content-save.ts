@@ -11,8 +11,13 @@ export type ContentSavePlan =
 // The editor works only with the full content (D-05); a copy built for a viewer, with records withheld from them, is never
 // written over the stored content (LVL-08). A full copy has the levels of subsections and cards lifted to their section (D-17)
 // before it is written, so a broken hierarchy is not stored whatever client sent it.
-export function prepareContentSave(normalized: PortiaContent): ContentSavePlan {
-  if (isViewerShapedContent(normalized)) {
+//
+// `submitted` is the body as it arrived, before normalization. The normalizer turns `redaction: null` (or a marker with
+// nothing in it) into "no marker", so the normalized copy alone cannot tell such a viewer copy from a full one (review round
+// 1, L-3): the key itself, with any value, marks a copy that was built for a viewer.
+export function prepareContentSave(normalized: PortiaContent, submitted?: unknown): ContentSavePlan {
+  const carriesMarkerKey = typeof submitted === "object" && submitted !== null && !Array.isArray(submitted) && "redaction" in submitted;
+  if (carriesMarkerKey || isViewerShapedContent(normalized)) {
     return { kind: "refuse", status: 422, body: { error: levelCopy.putRefused, code: "viewer-copy" } };
   }
   const { content, raised } = raiseChildLevels(normalized);

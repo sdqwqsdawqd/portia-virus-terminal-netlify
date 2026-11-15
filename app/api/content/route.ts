@@ -77,7 +77,7 @@ export async function PUT(request: Request) {
 
     // Phase 24, LVL-08 / D-17: a copy built for a viewer is refused before the row is read or written, and the levels of
     // subsections and cards are lifted to their section before the write.
-    const prepared = prepareContentSave(normalized);
+    const prepared = prepareContentSave(normalized, body.content);
     if (prepared.kind === "refuse") return Response.json(prepared.body, { status: prepared.status, headers: noStoreHeaders });
 
     // The database does not check sections (D-11, accepted risk in PROJECT.md), so a restricted editor is checked here.

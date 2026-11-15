@@ -76,7 +76,7 @@ const putBody = routeSource.slice(routeSource.indexOf("export async function PUT
 
 test("LVL-08 / D-17 PUT: prepareContentSave стоит после normalizePortiaContent и до closedSectionsOf, отказ до чтения и записи", () => {
   const normalize = putBody.indexOf("normalizePortiaContent(body.content)");
-  const prepare = putBody.indexOf("prepareContentSave(normalized)");
+  const prepare = putBody.indexOf("prepareContentSave(normalized, body.content)");
   const closed = putBody.indexOf("closedSectionsOf(");
   assert.ok(normalize >= 0 && prepare >= 0 && closed >= 0);
   assert.ok(normalize < prepare && prepare < closed);
@@ -104,4 +104,18 @@ test("EDGE LVL-06/concurrency: сохранение без записей учё
   assert.equal(result.kind, "save");
   if (result.kind !== "save") return;
   assert.deepEqual(result.content.viruses.map((virus) => virus.scientistLogs.length), content.viruses.map((virus) => virus.scientistLogs.length));
+});
+
+// RLS24-04 (review round 1, L-3): `redaction: null` is normalized to "no marker", so the normalized copy alone cannot tell a
+// viewer copy from a full one. The submitted body is checked for the key itself.
+test("L-3: ключ redaction в присланном теле (даже null или пустой) — копия зрителя, отказ 422 viewer-copy", () => {
+  const normalized = fullContent();
+  for (const marker of [null, {}, { level: 1 }, "x", 0, false]) {
+    const result = prepareContentSave(normalized, { ...normalized, redaction: marker });
+    assert.deepEqual(result, { kind: "refuse", status: 422, body: { error: levelCopy.putRefused, code: "viewer-copy" } }, JSON.stringify(marker));
+  }
+  assert.equal(prepareContentSave(normalized, { ...normalized }).kind, "save", "a full copy without the key is saved");
+  assert.equal(prepareContentSave(normalized).kind, "save", "no submitted body given: only the normalized shape is judged");
+  assert.equal(prepareContentSave(normalized, "not an object").kind, "save");
+  assert.equal(prepareContentSave(normalized, null).kind, "save");
 });
