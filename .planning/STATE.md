@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 24
 current_phase_name: Уровни допуска и закрытие содержимого
 status: executing
-stopped_at: Completed PORTIA-24-10-PLAN.md
-last_updated: "2026-11-15T09:15:22.470Z"
+stopped_at: Completed PORTIA-24-11-PLAN.md
+last_updated: "2026-11-15T10:01:03.899Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-24 execution started
-state_head: 8ab9923e90bbf83366df45d0fb9ede407dbca6d0
+state_head: ae9d7c7bf72c1365aa4de746f215ab6857bda009
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 40
-  completed_plans: 39
+  completed_plans: 40
 ---
 
 # Project State
@@ -78,6 +78,7 @@ Progress: [███░░░░░░░] 29% (2/7 phases closed: 21 и 23 — 
 | Phase PORTIA-24 P08 | 35min | 2 tasks | 5 files |
 | Phase PORTIA-24 P09 | 35min | 2 tasks | 3 files |
 | Phase PORTIA-24 P10 | 35min | 3 tasks | 3 files |
+| Phase PORTIA-24 P11 | continuation about 1h | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -269,6 +270,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-24]: 24-10: Корзина — потерянный выбор trashLost через reconcileTrashSelection (ключи virus:<id> сопоставляются со слотами по обычному id)
 - [Phase PORTIA-24]: 24-10: окно Устав читает ссылку из documents ответа; ниже уровня только блок, рамка не монтируется; закрытый Устав вне индекса поиска, иконка остаётся
 - [Phase PORTIA-24]: 24-10: savedRaised приведён к UI-SPEC: Уровни приведены к иерархии: изменено k.
+- [Phase PORTIA-24]: 24-11: ревью и матрица Phase 24 привязаны к коммиту a9847aa; после раунда 2 охваченные пути не правятся, RLS24-08 (комментарий proxy.ts о Set-Cookie) и RLS24-09 переданы Phase 25
+- [Phase PORTIA-24]: 24-11: файл корзины kind virus с пустым или битым virusId закрыт на уровне 5 (fail-closed); прямое anon-чтение portia_content остаётся остаточным риском Phase 25 (SEC-01), transfer, не PASS
 
 ### Pending Todos
 
@@ -322,8 +325,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T09:15:21.871Z
-Stopped at: Completed PORTIA-24-10-PLAN.md
+Last session: 2026-11-15T10:01:03.297Z
+Stopped at: Completed PORTIA-24-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
