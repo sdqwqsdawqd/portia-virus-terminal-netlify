@@ -490,7 +490,7 @@ test("явная сборка ответа: незнакомое поле вер
   for (const level of LEVELS) assert.ok(!JSON.stringify(redactContentForViewer(withExtra, level, slotOf)).includes("CANARY_FUTURE_FIELD"));
 });
 
-// RLS24-02 (review round 1, M-1): a virus file whose virus cannot be found (an empty or a dangling virusId) is not level 1: it
+// RLS24-01 (review round 1, M-1): a virus file whose virus cannot be found (an empty or a dangling virusId) is not level 1: it
 // carries the name and code of a virus that may have been closed and then deleted, so it fails closed to the top level.
 test("«Корзина»: файл вируса с пустым или битым virusId закрыт на уровне 5 (fail closed), открыт только на 5 и не светит имя", () => {
   const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
