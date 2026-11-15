@@ -109,3 +109,33 @@ test("Phase 24 browser evidence: backstop rows are PASS-local (mocked API) or BL
   }
   assert.ok(!/\bPASS\b(?!-local)[^\n]*(Postgres|staging|production|устройств)/i.test(notProven), "the unproven lanes never carry a PASS");
 });
+
+test("Phase 24 local check: unit, tsc and lint exited 0 with no failed test; no live lane is recorded as a pass", () => {
+  const local = read("24-LOCAL-CHECK.md");
+  const rows = tableRows(section(local, "Команды"));
+  assert.equal(rows.length, 5);
+  for (const [command, exit, outcome, utc] of rows) {
+    assert.ok(command && outcome, command);
+    assert.equal(exit, "0", command);
+    assert.match(utc, /^2026-11-15 \d\d:\d\d:\d\d/, command);
+  }
+  const unit = rows.find((row) => row[0].includes("lib/*.test.ts"));
+  assert.ok(unit);
+  const counts = /tests (\d+), pass (\d+), fail (\d+), skipped (\d+)/.exec(unit[2]);
+  assert.ok(counts);
+  assert.ok(Number(counts[1]) > 2000);
+  assert.equal(Number(counts[1]), Number(counts[2]) + Number(counts[4]));
+  assert.equal(Number(counts[3]), 0);
+  assert.ok(rows.some((row) => row[0].includes("tsc --noEmit") && row[2].startsWith("0 ошибок")));
+  assert.ok(rows.some((row) => row[0].includes("eslint") && /\(0 errors, \d+ warnings\)/.test(row[2])));
+  assert.ok(rows.some((row) => row[0].includes("--verify-promotion")));
+  assert.ok(!rows.some((row) => /visual-manifest\.mjs --verify(?!-)/.test(row[0])), "the default --verify mode must never be run");
+  assert.match(local, /all checks passed .*\d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC/);
+  assert.match(local, /Прогон самого `run\.sh` не засчитан/);
+  for (const line of local.split("\n")) {
+    if (/Postgres|staging|production|устройств/i.test(line)) assert.ok(!/\bPASS\b/.test(line), `no PASS beside a live lane: ${line}`);
+  }
+  for (const lane of ["живые роли", "Postgres/RLS", "staging и production", "Netlify CDN", "физические устройства"]) {
+    assert.ok(new RegExp(`BLOCKED: .*${lane}`).test(section(local, "BLOCKED")), `${lane} must be BLOCKED`);
+  }
+});
