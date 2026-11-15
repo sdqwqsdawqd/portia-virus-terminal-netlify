@@ -4,8 +4,9 @@ import { MAX_SCIENTIST_LOGS } from "../../../lib/content-limits.ts";
 import { editorSections } from "../../../lib/editor-changes.ts";
 import type { AccessLevel } from "../../../lib/access-levels.ts";
 import { type GuideCard, type GuideSection, type PortiaContent, type ScientistLog, type Virus } from "../../../lib/portia-content.ts";
+import type { PortiaEmployee } from "../../../lib/portia-employees.ts";
 import { cloneFixtureContent } from "../../../lib/testing/portia-content-fixture.ts";
-import { CONTENT_CACHE_KEY, EMPLOYEES_CACHE_KEY } from "../../../lib/device-cache.ts";
+import { CONTENT_CACHE_KEY, EMPLOYEES_CACHE_KEY, LEGACY_CACHE_KEYS } from "../../../lib/device-cache.ts";
 import { DesktopPage } from "../pages/desktop.page";
 import { EditorPage } from "../pages/editor.page";
 import { expect, test } from "../fixtures/test";
@@ -82,14 +83,19 @@ function storedContent(): PortiaContent {
   return content;
 }
 
+const mockEmployee: PortiaEmployee = { id: "mock-employee-1", nickname: "MockEmployee", callsign: "МОК", title: "Тестовый сотрудник", rank: "1", knowledgeRating: 1, pawsRating: null, bioRating: null, sRating: null, activityRating: null, testsRating: null, overallRating: null, biography: "", photoUrl: "", robloxUserId: null, robloxAvatarUrl: "", robloxFullAvatarUrl: "", order: 1, source: "sheet" };
+
 const row = (): ContentRow => ({ payload: storedContent(), revision: 7, updated_at: "2026-11-15T09:00:00.000Z" });
 
-type Mode = { kind: "level"; level: AccessLevel } | { kind: "editor" } | { kind: "revoked" };
+// "gate" (Phase 25, SEC-04): the test states the whole gate decision and the cut the content route would answer with (null = 401 access-required).
+type Cut = { editor: boolean; level: AccessLevel };
+type Mode = { kind: "level"; level: AccessLevel } | { kind: "editor" } | { kind: "revoked" } | { kind: "gate"; decision: Record<string, unknown>; viewer: Cut | null };
 
-const approvedState = (level: AccessLevel) => ({ state: "approved", nickname: "MockVisitor", level, origin: "sheet" });
+const approvedState = (level: AccessLevel, nickname = "MockVisitor") => ({ state: "approved", nickname, level, origin: "sheet" });
 const revokedState = { state: "revoked", nickname: "MockVisitor", retryAt: null };
 
 function decisionOf(mode: Mode) {
+  if (mode.kind === "gate") return mode.decision;
   if (mode.kind === "editor") return { mode: "closed", state: { state: "none" }, allowed: true, level: 5, editor: true };
   if (mode.kind === "revoked") return { mode: "closed", state: revokedState, allowed: false, level: null, editor: false };
   return { mode: "closed", state: approvedState(mode.level), allowed: true, level: mode.level, editor: false };
@@ -100,7 +106,8 @@ function answer(route: Route, body: unknown, status = 200) {
 }
 
 /** Answers every own /api request from `control.mode`; any other own /api path is aborted and written to `aborted`, never answered. */
-async function mockApi(page: Page, control: { mode: Mode }) {
+// delayContentMs holds the content answer back (real time), so a copy from the device cache is applied before the network answer of the same revision can overwrite it.
+async function mockApi(page: Page, control: { mode: Mode; delayContentMs?: number }) {
   aborted.length = 0;
   // The one-time «Доступ подтверждён» notice would cover the icons on a narrow screen; the device is told it was already shown (key of lib/access-gate-view.ts).
   await page.addInitScript(() => window.localStorage.setItem("portia-access-approved-notice-v1", "1"));
@@ -110,12 +117,16 @@ async function mockApi(page: Page, control: { mode: Mode }) {
     const { mode } = control;
     if (path === "/api/access/status") return answer(route, decisionOf(mode));
     if (path === "/api/content" && route.request().method() === "GET") {
-      if (mode.kind === "revoked") return answer(route, { error: "Нет доступа к содержимому.", code: "access-required" }, 401);
+      if (control.delayContentMs) await new Promise((resolve) => setTimeout(resolve, control.delayContentMs));
+      if (mode.kind === "revoked" || (mode.kind === "gate" && mode.viewer === null)) return answer(route, { error: "Нет доступа к содержимому.", code: "access-required" }, 401);
+      if (mode.kind === "gate") return answer(route, contentBodyFor(mode.viewer!, row(), { slotOf }));
       const viewer = mode.kind === "editor" ? { editor: true, level: 5 as AccessLevel } : { editor: false, level: mode.level };
       return answer(route, contentBodyFor(viewer, row(), { slotOf }));
     }
+    // A complete answer with one invented person, so the roster copy is written on the device (an empty complete answer is cacheable too, but this one is visible).
+    if (path === "/api/employees" && mode.kind === "gate") return mode.viewer === null ? answer(route, { error: "Нет доступа к содержимому.", code: "access-required" }, 401) : answer(route, { employees: [mockEmployee], degraded: false, profilesRead: true, manualRead: true, syncedAt: "2026-11-15T09:00:00.000Z" });
     if (path === "/api/employees") return answer(route, { employees: [], degraded: false, profilesRead: true, manualRead: true, syncedAt: null });
-    if (path === "/api/access") return answer(route, { canEdit: mode.kind === "editor", canManageEditors: false, openTabs: [...editorSections] });
+    if (path === "/api/access") return answer(route, { canEdit: mode.kind === "editor" || (mode.kind === "gate" && mode.decision.editor === true), canManageEditors: false, openTabs: [...editorSections] });
     aborted.push(`${route.request().method()} ${path}`);
     return route.abort("failed");
   });
@@ -343,5 +354,184 @@ test.describe("access-levels backstop (mocked /api/**)", () => {
     await openApp(page, "База вирусов");
     expect(requested.length, "the page asked its API").toBeGreaterThan(0);
     expect(aborted, "own /api paths the mock does not know").toEqual([]);
+  });
+});
+
+// Phase 25 (SEC-04, D-09, D-16, D-21, T-25-28): the device copies follow the gate decision, in a browser build with EVERY /api/** answer replaced.
+// Keys under test: portia-content-last-success-v2 and portia-employees-last-success-v2; the names are imported from lib/device-cache.ts and never
+// retyped here, so a renamed key cannot make "empty" pass on an old name. The old (legacy) names come from the same file.
+// What this proves is the browser logic on mocked gate answers; live roles, Postgres/RLS, staging, production, the Netlify CDN and physical devices are NOT proven here.
+const approved = (level: AccessLevel, nickname = "MockVisitor") => approvedState(level, nickname);
+const gateOf = (decision: Record<string, unknown>, viewer: Cut | null): Mode => ({ kind: "gate", decision, viewer });
+const openApproved = (level: AccessLevel, nickname = "MockVisitor") => gateOf({ mode: "open", state: approved(level, nickname) }, { editor: false, level });
+const openWith = (state: Record<string, unknown>) => gateOf({ mode: "open", state }, { editor: false, level: 1 });
+const closedApproved = (level: AccessLevel, nickname = "MockVisitor") => gateOf({ mode: "closed", state: approved(level, nickname), allowed: true, level, editor: false }, { editor: false, level });
+const closedOut = (state: Record<string, unknown>) => gateOf({ mode: "closed", state, allowed: false, level: null, editor: false }, null);
+const closedEditor = () => gateOf({ mode: "closed", state: { state: "none" }, allowed: true, level: 5, editor: true }, { editor: true, level: 5 });
+const rejectedState = { state: "rejected", nickname: "MockVisitor", retryAt: null };
+
+type CopyStamp = { viewer: unknown; person: unknown } | "unreadable" | null;
+type Copies = { content: CopyStamp; employees: CopyStamp };
+
+async function readCopies(page: Page): Promise<Copies> {
+  return page.evaluate((keys) => {
+    const read = (key: string): CopyStamp => {
+      const raw = window.localStorage.getItem(key);
+      if (raw === null) return null;
+      try { const value = JSON.parse(raw) as { viewer?: unknown; person?: unknown }; return { viewer: value.viewer, person: value.person }; } catch { return "unreadable"; }
+    };
+    return { content: read(keys.content), employees: read(keys.employees) };
+  }, { content: CONTENT_CACHE_KEY, employees: EMPLOYEES_CACHE_KEY });
+}
+
+async function waitForCopies(page: Page, viewer: string, person: string) {
+  await expect.poll(() => readCopies(page), { message: `both copies stamped ${viewer}|${person}`, timeout: 15_000 }).toEqual({ content: { viewer, person }, employees: { viewer, person } });
+}
+
+/** Nothing of an earlier identity is left: each key is empty, or stamped for the current identity (an open desktop writes a fresh copy for it). */
+async function expectOnlyIdentity(page: Page, viewer: string, person: string) {
+  const copies = await readCopies(page);
+  for (const [name, copy] of Object.entries(copies)) {
+    if (copy === null) continue;
+    expect(copy, `${name} copy left on the device`).toEqual({ viewer, person });
+  }
+}
+
+/** No key holds a copy cut for this viewer (an empty key is fine). */
+async function expectNoCopyOfViewer(page: Page, viewer: string) {
+  await expect.poll(async () => { const copies = await readCopies(page); return Object.values(copies).filter((copy) => copy !== null && (copy === "unreadable" || copy.viewer === viewer)).length; }, { message: `copies still cut for ${viewer}`, timeout: 10_000 }).toBe(0);
+}
+
+const refresh = (page: Page) => page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+
+test.describe("SEC-04 device copies follow the gate (mocked /api/**)", () => {
+  test.describe.configure({ timeout: 90_000 });
+  test.afterEach(() => {
+    expect(aborted, "own /api paths the mock does not know").toEqual([]);
+  });
+
+  test("SEC-04 rejected-open: an approved level-2 visitor is rejected, no copy of theirs stays and the card is the one of a person without a request", async ({ page }) => {
+    const control: { mode: Mode } = { mode: openApproved(2) };
+    await mockApi(page, control);
+    await new DesktopPage(page).goto();
+    await waitForCopies(page, "level-2", "mockvisitor");
+
+    control.mode = openWith(rejectedState);
+    await refresh(page);
+    await expect(page.getByRole("button", { name: "ОТПРАВИТЬ ЗАЯВКУ" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Заявка отклонена")).toHaveCount(0);
+    await expect(page.locator(".access-status")).toHaveCount(0);
+    // The open desktop keeps running at level 1; the level-2 copy of the earlier person is gone from both keys. A level-1 copy may or may not exist yet (the content answer of the same revision can come before the gate answer), so none is required.
+    await expectNoCopyOfViewer(page, "level-2");
+  });
+
+  test("SEC-04 revoked-open: an approved level-2 visitor is revoked, no copy of theirs stays and the card is the one of a person without a request", async ({ page }) => {
+    const control: { mode: Mode } = { mode: openApproved(2) };
+    await mockApi(page, control);
+    await new DesktopPage(page).goto();
+    await waitForCopies(page, "level-2", "mockvisitor");
+
+    control.mode = openWith({ state: "revoked", nickname: "MockVisitor", retryAt: null });
+    await refresh(page);
+    await expect(page.getByRole("button", { name: "ОТПРАВИТЬ ЗАЯВКУ" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Доступ отозван")).toHaveCount(0);
+    await expect(page.locator(".access-status")).toHaveCount(0);
+    await expectNoCopyOfViewer(page, "level-2");
+  });
+
+  test("SEC-04 revoked-closed: a revoke on the closed site shows «Доступ отозван», removes the desktop and empties both copies", async ({ page, diagnostics }) => {
+    diagnostics.expectFault({ kind: "response", source: /^(fetch|xhr)$/, text: /^GET \/api\/(content|employees) -> 401$/, reason: "the mocked revoke answers 401 access-required on purpose" });
+    diagnostics.expectFault({ kind: "console", source: /^browser:\/api\/(content|employees)/, text: /Failed to load resource: the server responded with a status of 401/, reason: "the browser mirrors the mocked 401 to its console" });
+    const control: { mode: Mode } = { mode: closedApproved(2) };
+    await mockApi(page, control);
+    await new DesktopPage(page).goto();
+    await waitForCopies(page, "level-2", "mockvisitor");
+
+    control.mode = closedOut({ state: "revoked", nickname: "MockVisitor", retryAt: null });
+    await refresh(page);
+    await expect(page.locator(".access-status")).toContainText("Доступ отозван", { timeout: 15_000 });
+    await expect(page.getByRole("navigation", { name: "Рабочий стол PORTIA" })).toHaveCount(0);
+    expect(await readCopies(page), "no copy of the content or the roster on a revoked device").toEqual({ content: null, employees: null });
+  });
+
+  test("SEC-04 level-down: level 3 to level 2 erases the level-3 copy and the new copy carries the level-2 stamp", async ({ page }) => {
+    const control: { mode: Mode } = { mode: closedApproved(3) };
+    await mockApi(page, control);
+    await new DesktopPage(page).goto();
+    await waitForCopies(page, "level-3", "mockvisitor");
+
+    control.mode = closedApproved(2);
+    await refresh(page);
+    await expect.poll(() => readCopies(page).then((copies) => copies.content), { timeout: 15_000 }).toEqual({ viewer: "level-2", person: "mockvisitor" });
+    await expectOnlyIdentity(page, "level-2", "mockvisitor");
+    // The level-3 record is no longer on the screen either: the window shows the placeholder of the withheld record.
+    const archive = await openApp(page, "База вирусов");
+    await expect(archive.locator(".virus-row", { hasText: "ВИРУС ТРЕТЬЕГО УРОВНЯ" })).toHaveCount(0);
+  });
+
+  test("SEC-04 editor-logout: an editor who is no longer one and is not admitted leaves no copy", async ({ page, diagnostics }) => {
+    diagnostics.expectFault({ kind: "response", source: /^(fetch|xhr)$/, text: /^GET \/api\/(content|employees) -> 401$/, reason: "after the editor session ends the mocked content route answers 401 access-required on purpose" });
+    diagnostics.expectFault({ kind: "console", source: /^browser:\/api\/(content|employees)/, text: /Failed to load resource: the server responded with a status of 401/, reason: "the browser mirrors the mocked 401 to its console" });
+    const control: { mode: Mode } = { mode: closedEditor() };
+    await mockApi(page, control);
+    await new DesktopPage(page).goto();
+    await waitForCopies(page, "editor", "");
+
+    control.mode = closedOut({ state: "none" });
+    await refresh(page);
+    await expect(page.getByRole("navigation", { name: "Рабочий стол PORTIA" })).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "ОТПРАВИТЬ ЗАЯВКУ" })).toBeVisible();
+    expect(await readCopies(page), "no copy of the editor view stays on the device").toEqual({ content: null, employees: null });
+  });
+
+  test("SEC-04 legacy-v1: copies under the old key names are deleted after the first load", async ({ page }) => {
+    await mockApi(page, { mode: openApproved(2) });
+    // Seeds the old names before the app starts and records that both were present, so "deleted" cannot pass on keys that never existed.
+    await page.addInitScript((keys) => {
+      for (const key of keys) window.localStorage.setItem(key, JSON.stringify({ content: "legacy copy", revision: 99 }));
+      window.sessionStorage.setItem("portia-e2e-legacy-seeded", String(keys.filter((key) => window.localStorage.getItem(key) !== null).length));
+    }, [...LEGACY_CACHE_KEYS]);
+    await new DesktopPage(page).goto();
+    expect(await page.evaluate(() => window.sessionStorage.getItem("portia-e2e-legacy-seeded"))).toBe(String(LEGACY_CACHE_KEYS.length));
+    await expect.poll(() => page.evaluate((keys) => keys.map((key) => window.localStorage.getItem(key)), [...LEGACY_CACHE_KEYS]), { timeout: 15_000 }).toEqual(LEGACY_CACHE_KEYS.map(() => null));
+    // The current copies are written afresh by the app, so the purge touched only the old names.
+    await waitForCopies(page, "level-2", "mockvisitor");
+  });
+
+  test("SEC-04 other-person: a copy stamped for another person of the same level is not shown and is replaced", async ({ page }) => {
+    const control: { mode: Mode; delayContentMs?: number } = { mode: openApproved(2, "AlphaPerson") };
+    await mockApi(page, control);
+    const desktop = new DesktopPage(page);
+    await desktop.goto();
+    await waitForCopies(page, "level-2", "alphaperson");
+
+    // Alpha's own copy, with a record renamed so a copy shown from storage can be told from the answer of the network (same revision and same level: the network answer would be dropped).
+    const marker = "КОПИЯ ДРУГОГО ЧЕЛОВЕКА";
+    await page.evaluate(({ key, marker: name }) => {
+      const copy = JSON.parse(window.localStorage.getItem(key) ?? "null") as { content: { viruses: { id: string; name: string }[] } };
+      copy.content.viruses.find((virus) => virus.id === "mock-virus-3")!.name = name;
+      window.localStorage.setItem(key, JSON.stringify(copy));
+    }, { key: CONTENT_CACHE_KEY, marker });
+
+    control.delayContentMs = 1_500;
+    // Control: the same person on the same level is shown their copy, so the seeded copy is a valid one.
+    const same = await openApp(page, "База вирусов");
+    await expect(same.locator(".virus-row", { hasText: marker })).toHaveCount(1);
+
+    // Another person of the same level: the copy is not shown and is replaced by one of theirs.
+    control.mode = openApproved(2, "BetaPerson");
+    const other = await openApp(page, "База вирусов");
+    await expect(other.locator(".virus-row", { hasText: "ВИРУС 3" })).toHaveCount(1);
+    await expect(other.locator(".virus-row", { hasText: marker })).toHaveCount(0);
+    await expect.poll(() => readCopies(page).then((copies) => copies.content), { timeout: 15_000 }).toEqual({ viewer: "level-2", person: "betaperson" });
+    expect(await page.evaluate(({ key, name }) => window.localStorage.getItem(key)?.includes(name) ?? false, { key: CONTENT_CACHE_KEY, name: marker }), "the other person's copy is not kept").toBe(false);
+  });
+
+  test("D-09 pending-open: with closure off a pending request sees the card with the status, not the form", async ({ page }) => {
+    await mockApi(page, { mode: openWith({ state: "pending", nickname: "MockVisitor" }) });
+    await new DesktopPage(page).goto();
+    await expect(page.locator(".access-status")).toContainText("Заявка отправлена", { timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "ОТПРАВИТЬ ЗАЯВКУ" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Рабочий стол PORTIA" })).toBeVisible();
   });
 });

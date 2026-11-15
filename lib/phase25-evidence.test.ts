@@ -219,3 +219,38 @@ test("Phase 25 release notes: what changed, known limits (D-11, D-15) and what i
   for (const lane of ["staging", "production", "CDN", "хранилищ", "анонимн"]) assert.ok(unverified.includes(lane), `not-verified section names ${lane}`);
   assert.ok(section(checklist, "Известные ограничения").includes("сохранённая ссылка на картинку продолжает открываться"), "the checklist repeats the main limit");
 });
+
+// Plan 25-10, Task 1: the browser evidence of SEC-04 is a record of a run on a local build with every /api/** answer replaced. A row is
+// PASS-local (mocked API) only with the exit code 0 of the spec command; a bare PASS and any live lane written as passed are refused.
+test("browser evidence: eight SEC-04 rows, each PASS-local (mocked API) with exit code 0 of the access-levels spec or BLOCKED (ENV)", () => {
+  const evidence = read("25-BROWSER-EVIDENCE.md");
+  const required = ["SEC-04 rejected-open", "SEC-04 revoked-open", "SEC-04 revoked-closed", "SEC-04 level-down", "SEC-04 editor-logout", "SEC-04 legacy-v1", "SEC-04 other-person", "D-09 pending-open"];
+  const rows = tableRows(evidence, ["Пункт"]);
+  assert.deepEqual(rows.map((row) => row[0]), required, "one row per scenario, in this order");
+  const spec = readFileSync(new URL("../tests/e2e/specs/access-levels.spec.ts", import.meta.url), "utf8");
+  const final = /^Итоговый прогон: `([^`]+)` — код выхода (\d+), (\d+) passed/m.exec(evidence);
+  const passRows = rows.filter((row) => row[1] === "PASS-local (mocked API)");
+  if (passRows.length > 0) {
+    assert.ok(final, "the final run line is missing");
+    assert.ok(final[1].includes("access-levels.spec.ts"), "the final run is the access-levels spec");
+    assert.equal(final[2], "0", "PASS-local rows need an exit code 0 of the final run");
+    assert.ok(Number(final[3]) >= required.length, "fewer passed tests than scenarios");
+  }
+  for (const row of rows) {
+    assert.ok(row.length === 6, `${row[0]}: six cells`);
+    assert.ok(spec.includes(`test("${row[0]}`), `${row[0]}: no such test in the spec`);
+    assert.notEqual(row[1], "PASS", `${row[0]}: a bare PASS`);
+    if (row[1] === "PASS-local (mocked API)") {
+      assert.equal(row[3], "0", `${row[0]}: PASS-local needs exit code 0`);
+      assert.ok(row[2].includes("access-levels.spec.ts"), `${row[0]}: the command must name the spec`);
+    } else {
+      assert.match(row[1], /^BLOCKED \(ENV: .+\)$/, `${row[0]}: neither PASS-local nor BLOCKED (ENV: ...)`);
+    }
+  }
+  // The spec keeps the key names in lib/device-cache.ts, aborts every unknown own path and checks that none was aborted.
+  assert.ok(/route\.abort\(/.test(spec) && /LEGACY_CACHE_KEYS/.test(spec));
+  assert.ok(!/last-success-v1/.test(spec), "the old key names live only in lib/device-cache.ts");
+  const unproven = section(evidence, "Не доказано здесь");
+  for (const lane of ["Postgres/RLS", "staging", "CDN", "физические устройства"]) assert.ok(unproven.includes(lane), `not-proven section names ${lane}`);
+  for (const line of unproven.split("\n").filter((entry) => entry.startsWith("- "))) assert.match(line, /^- BLOCKED/, line);
+});
