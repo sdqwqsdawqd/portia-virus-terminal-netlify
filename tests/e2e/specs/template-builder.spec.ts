@@ -6,7 +6,8 @@ import type { Browser, Locator, Page, Request, TestInfo, ViewportSize } from "@p
 import { DesktopPage } from "../pages/desktop.page";
 import { PromotionPage } from "../pages/promotion.page";
 import { templateExportViolations } from "../../../lib/portia-template-export.ts";
-import { classificationOptions, defaultPortiaContent } from "../../../lib/portia-content.ts";
+import { classificationOptions } from "../../../lib/portia-content.ts";
+import { portiaContentFixture } from "../../../lib/testing/portia-content-fixture.ts";
 import { deterministicContract } from "../fixtures/determinism";
 import { sandboxedMeasureFrameScriptBlock } from "../fixtures/diagnostics";
 import { expect, test } from "../fixtures/test";
@@ -1359,7 +1360,7 @@ test("[STAB-TMPL-01] D-65 on a phone the card is laid out like the archive's rec
   test.skip(!isMobile, "The phone layout; the PC is the previous test.");
   const writes = trackWrites(page);
   // The archive's record of a virus with the longest value of all seven axes, on the same phone (a second page of this context, a read answered by a fixture).
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.viruses[0].classification = Object.fromEntries(classAxes.map((axis, index) => [axis, longestClassValues[index]])) as typeof content.viruses[0]["classification"];
   const archivePage = await page.context().newPage();
   const archiveWrites = trackWrites(archivePage);

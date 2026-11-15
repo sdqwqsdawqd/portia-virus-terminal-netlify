@@ -1,5 +1,5 @@
 import type { Page, Request } from "@playwright/test";
-import { defaultPortiaContent } from "../../../lib/portia-content.ts";
+import { portiaContentFixture } from "../../../lib/testing/portia-content-fixture.ts";
 import { tabRegistry } from "../../../lib/editor-tabs.ts";
 import { parseUsersListReply, type UsersList } from "../../../lib/users-model.ts";
 import { EditorPage } from "../pages/editor.page";
@@ -111,7 +111,7 @@ async function stubUsersEditor(page: Page, options: { canManageEditors: boolean;
       status: 200,
       contentType: "application/json",
       headers: { "cache-control": "no-store" },
-      body: JSON.stringify({ content: defaultPortiaContent, revision: 1, updatedAt: null }),
+      body: JSON.stringify({ content: portiaContentFixture, revision: 1, updatedAt: null }),
     });
   });
   await page.route("**/api/users**", async (route) => {

@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Browser, BrowserContext, Page, TestInfo } from "@playwright/test";
-import { defaultPortiaContent } from "../../../lib/portia-content.ts";
+import { portiaContentFixture } from "../../../lib/testing/portia-content-fixture.ts";
 import { DesktopPage } from "../pages/desktop.page";
 import { EditorPage } from "../pages/editor.page";
 import { expect, test, type StagingRun, type StagingSession } from "../fixtures/test";
@@ -39,7 +39,7 @@ async function withContentRestored<T>(stagingRun: StagingRun, work: (seed: (chan
   const before = await admin.from("portia_content").select("*").eq("id", "main").maybeSingle<ContentRow>();
   expect(before.error, "snapshot portia_content").toBeNull();
   const seed = async (change: (payload: Record<string, unknown>) => void) => {
-    const payload = structuredClone((before.data?.payload ?? defaultPortiaContent) as Record<string, unknown>);
+    const payload = structuredClone((before.data?.payload ?? portiaContentFixture) as Record<string, unknown>);
     change(payload);
     const written = before.data
       ? await admin.from("portia_content").update({ payload }).eq("id", "main")

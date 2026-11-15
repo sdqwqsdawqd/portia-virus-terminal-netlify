@@ -7,7 +7,7 @@ import { deflateSync } from "node:zlib";
 import { expect, test } from "../fixtures/test";
 import { visualPolicy, type VisualState } from "../fixtures/visual-policy";
 import type { Locator, Page, Request } from "@playwright/test";
-import { defaultPortiaContent } from "../../../lib/portia-content.ts";
+import { portiaContentFixture } from "../../../lib/testing/portia-content-fixture.ts";
 
 // Phase 20-12 (D-68): baselines of the code the owner accepted (20-58), on FIXED DATA.
 // Data mode: the server runs under tests/e2e/harness/offline-supabase.cjs (empty portia_content -> the starting content of the site) with invented
@@ -100,7 +100,7 @@ test.afterEach(() => {
   expect(writes, "the @phase20 scenes must not write to our API, Supabase or file uploads").toEqual([]);
 });
 
-const contentFixture = (patch: Record<string, unknown>) => ({ ...structuredClone(defaultPortiaContent), ...patch });
+const contentFixture = (patch: Record<string, unknown>) => ({ ...structuredClone(portiaContentFixture), ...patch });
 
 async function stubContent(page: Page, content: unknown) {
   await page.route("**/api/content**", async (route) => {
@@ -411,7 +411,7 @@ async function stepKey(slider: Locator, from: number, to: number, keys: [string,
 
 const chosenFrame = { x: 30, y: 60, zoom: 150 };
 const framePicture = "/assets/portia-assistant.png";
-const framedVirus = (framing?: typeof chosenFrame) => ({ ...structuredClone(defaultPortiaContent.viruses[0]), id: "virus-frames", name: "Вирус для кадра", infectedImage: framePicture, ...(framing ? { infectedImageFraming: framing } : {}), mutations: [] });
+const framedVirus = (framing?: typeof chosenFrame) => ({ ...structuredClone(portiaContentFixture.viruses[0]), id: "virus-frames", name: "Вирус для кадра", infectedImage: framePicture, ...(framing ? { infectedImageFraming: framing } : {}), mutations: [] });
 
 /** The block «Видимая часть» of a field: «Изменить» opens the dialog, «Масштаб» and «Положение картинки» (arrow keys) choose the frame; the dialog stays open. */
 async function chooseFrame(page: Page, group: Locator) {
@@ -435,7 +435,7 @@ async function chooseFrame(page: Page, group: Locator) {
 
 test("@phase20 editor info add section: «Информация» with «+ ДОБАВИТЬ РАЗДЕЛ» above the section tabs (D-62; UI contract, substituted reads)", async ({ page }, testInfo) => {
   trackWrites(page);
-  await openEditorTab(page, defaultPortiaContent, /^Информация/);
+  await openEditorTab(page, portiaContentFixture, /^Информация/);
   await expect(page.getByRole("button", { name: "+ ДОБАВИТЬ РАЗДЕЛ", exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Разделы информации" })).toBeVisible();
   await parkClock(page);

@@ -1,5 +1,5 @@
 import type { Locator, Page, Request } from "@playwright/test";
-import { defaultPortiaContent } from "../../../lib/portia-content.ts";
+import { portiaContentFixture } from "../../../lib/testing/portia-content-fixture.ts";
 import { tabRegistry } from "../../../lib/editor-tabs.ts";
 import { DesktopPage } from "../pages/desktop.page";
 import { EditorPage } from "../pages/editor.page";
@@ -83,8 +83,8 @@ async function stepKey(slider: Locator, from: number, to: number, keys: [string,
 
 const frame = { x: 30, y: 60, zoom: 150 };
 const picture = "/assets/portia-assistant.png";
-const fixture = (patch: Record<string, unknown>) => ({ ...structuredClone(defaultPortiaContent), ...patch });
-const framedVirus = (framing?: typeof frame) => ({ ...structuredClone(defaultPortiaContent.viruses[0]), id: "virus-frames", name: "Вирус для кадра", infectedImage: picture, ...(framing ? { infectedImageFraming: framing } : {}), mutations: [] });
+const fixture = (patch: Record<string, unknown>) => ({ ...structuredClone(portiaContentFixture), ...patch });
+const framedVirus = (framing?: typeof frame) => ({ ...structuredClone(portiaContentFixture.viruses[0]), id: "virus-frames", name: "Вирус для кадра", infectedImage: picture, ...(framing ? { infectedImageFraming: framing } : {}), mutations: [] });
 
 /** The block «Видимая часть» of a field: «Изменить» opens the dialog, «Масштаб» and «Положение картинки» (arrow keys) choose the frame; the dialog stays open for the frame. */
 async function chooseFrame(page: Page, group: Locator) {
@@ -108,7 +108,7 @@ async function chooseFrame(page: Page, group: Locator) {
 
 test("[STAB-EDIT-02] editor-info-add-section: «Информация» with the «+ ДОБАВИТЬ РАЗДЕЛ» bar above the section tabs (UI contract, substituted reads)", async ({ page, browser, determinism }, testInfo) => {
   trackWrites(page);
-  await openEditorTab(page, defaultPortiaContent, /^Информация/);
+  await openEditorTab(page, portiaContentFixture, /^Информация/);
   await expect(page.getByRole("button", { name: "+ ДОБАВИТЬ РАЗДЕЛ", exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Разделы информации" })).toBeVisible();
   await captureCandidate({ page, browser, determinism, testInfo }, {

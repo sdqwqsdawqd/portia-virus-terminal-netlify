@@ -1,5 +1,6 @@
 import type { Locator, Page, Request } from "@playwright/test";
-import { defaultPortiaContent, type PortiaContent } from "../../../lib/portia-content.ts";
+import { type PortiaContent } from "../../../lib/portia-content.ts";
+import { portiaContentFixture } from "../../../lib/testing/portia-content-fixture.ts";
 import { DesktopPage } from "../pages/desktop.page";
 import { expect, test } from "../fixtures/test";
 
@@ -40,7 +41,7 @@ async function stubContent(page: Page, content: Record<string, unknown>) {
   });
 }
 
-const fixture = (patch: Partial<PortiaContent> & Record<string, unknown>): Record<string, unknown> => ({ ...structuredClone(defaultPortiaContent), ...patch });
+const fixture = (patch: Partial<PortiaContent> & Record<string, unknown>): Record<string, unknown> => ({ ...structuredClone(portiaContentFixture), ...patch });
 
 /** The picture of a surface: its frame span and the img inside. */
 const imageOf = (scope: Locator) => ({ frame: scope.locator(".portia-image").first(), img: scope.locator(".portia-image img").first() });
@@ -116,7 +117,7 @@ test.describe("[STAB-REL-08] D-63 the site shows the part of a picture that the 
 
   test("D-63 the dossier shows the chosen part of the photo after infection and of a mutation image", async ({ page }) => {
     const writes = trackWrites(page);
-    const [virus] = defaultPortiaContent.viruses;
+    const [virus] = portiaContentFixture.viruses;
     await stubContent(page, fixture({
       viruses: [{
         ...structuredClone(virus), id: "virus-framed",
@@ -166,7 +167,7 @@ test.describe("[STAB-REL-08] D-63 the site shows the part of a picture that the 
 
   test("D-63 the «Корзина» image file and the photo of a virus in the bin show the chosen part", async ({ page }) => {
     const writes = trackWrites(page);
-    const [virus] = defaultPortiaContent.viruses;
+    const [virus] = portiaContentFixture.viruses;
     await stubContent(page, fixture({
       recycleFiles: [
         { id: "f-framed", name: "Файл с кадром", location: "C:\PORTIA\RECYCLE_BIN", kind: "image", content: "", image: "/assets/portia-assistant.png", imageFraming: framed, virusId: "" },

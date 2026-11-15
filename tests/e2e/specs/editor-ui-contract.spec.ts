@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page, Request } from "@playwright/test";
-import { defaultPortiaContent, type PortiaContent } from "../../../lib/portia-content.ts";
+import { type PortiaContent } from "../../../lib/portia-content.ts";
+import { portiaContentFixture } from "../../../lib/testing/portia-content-fixture.ts";
 import { tabRegistry } from "../../../lib/editor-tabs.ts";
 import { DesktopPage } from "../pages/desktop.page";
 import { EditorPage } from "../pages/editor.page";
@@ -14,7 +15,7 @@ type AxeViolation = Awaited<ReturnType<AxeBuilder["analyze"]>>["violations"][num
 // Что здесь доказывается: раскладка и поведение вкладок редактора в браузере (D-62 «Информация»: кнопка раздела сверху).
 // Чего здесь нет: прав редактора, сохранения, сервера. Любой не-GET запрос к /api роняет тест (трекер записи), PUT /api/content не уходит.
 // Подмена: GET /api/access отвечает canEdit true и всеми открытыми вкладками (редактор монтируется как у владельца без «Доступа»);
-// GET /api/content отвечает содержимым по умолчанию (defaultPortiaContent) ревизии 1. Остальное — настоящая сборка в режиме посетителя.
+// GET /api/content отвечает содержимым по умолчанию (portiaContentFixture) ревизии 1. Остальное — настоящая сборка в режиме посетителя.
 
 /** Every request that could write to our API or Supabase (GET and HEAD are reads). */
 function trackWrites(page: Page) {
@@ -76,7 +77,7 @@ async function stubEditorReads(page: Page, options: { content?: unknown; revisio
       status: 200,
       contentType: "application/json",
       headers: { "cache-control": "no-store" },
-      body: JSON.stringify({ content: options.content ?? defaultPortiaContent, revision: options.revision ?? 1, updatedAt: null }),
+      body: JSON.stringify({ content: options.content ?? portiaContentFixture, revision: options.revision ?? 1, updatedAt: null }),
     });
   });
 }
@@ -117,7 +118,7 @@ const overlaps = (a: Rect, b: Rect) => Math.min(a.x + a.width, b.x + b.width) - 
 
 const addSectionButton = (page: Page) => page.getByRole("button", { name: "+ ДОБАВИТЬ РАЗДЕЛ", exact: true });
 const infoTabsNav = (page: Page) => page.getByRole("navigation", { name: "Разделы информации" });
-const infoSectionCount = defaultPortiaContent.infoSections.length;
+const infoSectionCount = portiaContentFixture.infoSections.length;
 
 async function box(locator: Locator) {
   const found = await locator.boundingBox();
@@ -598,7 +599,7 @@ async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Su
   expect(writes, "no write but the intercepted PUT").toEqual([]);
 }
 
-const fixtureContent = (patch: Record<string, unknown>): Record<string, unknown> => ({ ...structuredClone(defaultPortiaContent), ...patch });
+const fixtureContent = (patch: Record<string, unknown>): Record<string, unknown> => ({ ...structuredClone(portiaContentFixture), ...patch });
 
 /** A card of the editor (section, subsection, block, guide card) opens by the toggle of its head; an open one stays open. */
 async function openCard(page: Page, id: string) {
@@ -614,7 +615,7 @@ async function openVirusRecord(page: Page, dossierTab: string) {
   await page.getByRole("navigation", { name: "Разделы досье" }).getByRole("button", { name: dossierTab }).click();
 }
 
-const baseVirus = () => ({ ...structuredClone(defaultPortiaContent.viruses[0]), id: "virus-d63", name: "Вирус с фото", infectedImage: "/assets/portia-assistant.png", mutations: [{ name: "Мутация с фото", description: "", image: "/assets/portia-assistant.png" }] });
+const baseVirus = () => ({ ...structuredClone(portiaContentFixture.viruses[0]), id: "virus-d63", name: "Вирус с фото", infectedImage: "/assets/portia-assistant.png", mutations: [{ name: "Мутация с фото", description: "", image: "/assets/portia-assistant.png" }] });
 const imageField = (page: Page) => page.locator(".image-editor-field").first();
 const guideCard = { id: "c-d63", title: "Карточка с обложкой", cover: "/assets/portia-assistant.png", blocks: [] };
 const infoSection = { id: "i-d63", title: "Раздел с фото", body: "", subsections: [{ id: "i-d63-s", title: "Страница с фото", blocks: [{ id: "ph-d63", type: "photo", url: "/assets/portia-assistant.png" }] }] };
