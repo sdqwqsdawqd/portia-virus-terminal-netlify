@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 24
 current_phase_name: Уровни допуска и закрытие содержимого
 status: executing
-stopped_at: Completed PORTIA-24-05-PLAN.md
-last_updated: "2026-11-15T08:40:16.715Z"
+stopped_at: Completed 24-06-PLAN.md
+last_updated: "2026-11-15T08:44:30.419Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-24 execution started
-state_head: 8166c817df3bdf68d30e6876a48bfc32cc420c3c
+state_head: 8ffad1456547129fecc20c70e454fba06019f574
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 40
-  completed_plans: 34
+  completed_plans: 35
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-24 (Уровни допуска и закрытие содержимого) — EXECUTING
-Plan: 6 of 11
+Plan: 7 of 11
 Status: Executing Phase PORTIA-24
 Last activity: 2026-11-15 — Phase PORTIA-24 execution started
 
@@ -73,6 +73,7 @@ Progress: [███░░░░░░░] 29% (2/7 phases closed: 21 и 23 — 
 | Phase PORTIA-24 P03 | 15 min | 2 tasks | 6 files |
 | Phase PORTIA-24 P04 | 35min | 3 tasks | 11 files |
 | Phase PORTIA-24 P05 | 35min | 3 tasks | 8 files |
+| Phase PORTIA-24 P06 | 15 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -257,6 +258,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-24]: 24-03 (O-2, допущение): appLevels принадлежит разделу info в sectionOfKey; смена места — одна строка
 - [Phase PORTIA-24]: 24-04: ключ зрителя editor|level-N; приём ответа по ревизии или зрителю, порядок по номеру запроса; кэш только при точном совпадении ключа; опрос 30 с посетитель, 10 с редактор
 - [Phase PORTIA-24]: 24-05: formattedText посетителя - allow-list по точному id владельца; ответ собирается явно по полям; documents по зрителю из lib/embedded-documents.ts
+- [Phase PORTIA-24]: 24-06: PUT refuses a viewer copy with 422 viewer-copy before any DB read/write; row stores prepared.content (levels lifted), response carries levelsRaised
 
 ### Pending Todos
 
@@ -310,8 +312,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T08:40:16.084Z
-Stopped at: Completed PORTIA-24-05-PLAN.md
+Last session: 2026-11-15T08:44:29.782Z
+Stopped at: Completed 24-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
