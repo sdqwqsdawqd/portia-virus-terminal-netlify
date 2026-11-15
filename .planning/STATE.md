@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v1.4
 milestone_name: Доступ и единый стиль
-current_phase: 24
-current_phase_name: Уровни допуска и закрытие содержимого
+current_phase: 25
+current_phase_name: "Переключение закрытия: база, кэш, сборка, хранилище"
 status: phase_closed
 stopped_at: Phase 25 context gathered
-last_updated: "2026-11-15T15:41:16.632Z"
+last_updated: "2026-11-15T17:48:28.118Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-24 closed as owner-accepted risk (D-74), not PASS
-state_head: e988d501fa27227cc270f8f9fe9e9ec4e40a9072
+state_head: 2d806f2c926bbb76cf97a6b67e7d5aeb6d2690a9
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 40
+  total_plans: 50
   completed_plans: 40
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 
 ## Current Position
 
-Phase: PORTIA-24 (Уровни допуска и закрытие содержимого) — CLOSED (принятый риск D-74, не PASS)
+Phase: PORTIA-25 (Переключение закрытия: база, кэш, сборка, хранилище) — READY TO EXECUTE
 Plan: 11 of 11
 Status: Phase PORTIA-24 closed; next — plan Phase PORTIA-25
 Last activity: 2026-11-15 — Phase PORTIA-24 closed as owner-accepted risk (D-74)
