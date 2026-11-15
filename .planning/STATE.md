@@ -4,15 +4,15 @@ milestone: v1.4
 milestone_name: Доступ и единый стиль
 current_phase: 24
 current_phase_name: Уровни допуска и закрытие содержимого
-status: executing
-stopped_at: Completed PORTIA-24-11-PLAN.md
+status: phase_closed
+stopped_at: Phase PORTIA-24 closed as owner-accepted risk (D-74)
 last_updated: "2026-11-15T10:01:03.899Z"
 last_activity: 2026-11-15
-last_activity_desc: Phase PORTIA-24 execution started
+last_activity_desc: Phase PORTIA-24 closed as owner-accepted risk (D-74), not PASS
 state_head: ae9d7c7bf72c1365aa4de746f215ab6857bda009
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 40
   completed_plans: 40
 ---
@@ -24,23 +24,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-09)
 
 **Core value:** Участник открывает сайт и сразу находит нужную запись; редактор правит её без потерь и без путаницы — и всё это выглядит как цельная «PORTIA OS».
-**Current focus:** Phase PORTIA-24 — Уровни допуска и закрытие содержимого
+**Current focus:** Phase PORTIA-25 — Переключение закрытия: база, кэш, сборка, хранилище (не спланирована)
 
 ## Current Position
 
-Phase: PORTIA-24 (Уровни допуска и закрытие содержимого) — EXECUTING
+Phase: PORTIA-24 (Уровни допуска и закрытие содержимого) — CLOSED (принятый риск D-74, не PASS)
 Plan: 11 of 11
-Status: Executing Phase PORTIA-24
-Last activity: 2026-11-15 — Phase PORTIA-24 execution started
+Status: Phase PORTIA-24 closed; next — plan Phase PORTIA-25
+Last activity: 2026-11-15 — Phase PORTIA-24 closed as owner-accepted risk (D-74)
 
-Progress: [███░░░░░░░] 29% (2/7 phases closed: 21 и 23 — принятый риск; Phase 22 не закрыта)
+Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 — принятый риск; Phase 22 не закрыта)
 
 ## Performance Metrics
 
 **Current milestone (v1.4):**
 
 - Total plans completed: 0
-- Phases: 2 of 7 closed (21 — D-72, 23 — D-73; принятый риск, не PASS)
+- Phases: 3 of 7 closed (21 — D-72, 23 — D-73, 24 — D-74; принятый риск, не PASS)
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
@@ -91,6 +91,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [v1.4 roadmap]: `register_attempt` отзывается в миграции Phase 21 (SEC-06) вместе с правилами доступа; `next` 16.4.5 — отдельным коммитом (SEC-08). Новая миграция нумеруется после неприменённых `20261104000000`, `20261104000100`, `20261106000000`.
 - [Phase PORTIA-21]: D-72: фаза закрыта владельцем как принятый риск без живого прогона, не PASS; 6 пунктов 21-UAT.md skipped («принято владельцем»), 21-VERIFICATION.md остаётся human_needed с разделом Acknowledged Gaps; Postgres/RLS, роли, pgcrypto, конкурентность, Netlify-адаптер BLOCKED; требования без галочки; WR-01 закрыть до staging, WR-04 до Phase 23
 - [Phase PORTIA-23]: D-73: фаза закрыта владельцем как принятый риск, не PASS; 23-UAT.md 9/9 pass (браузер, dev), 23-SECURITY.md threats_open 0 (офлайн); 23-VERIFICATION.md остаётся human_needed с разделом Acknowledged Gaps; миграции 20261113/20261114 не применены, ACC-05/06/07 и закрытие по умолчанию в базе BLOCKED; WR-08/WR-09 open; требования без галочки
+- [Phase PORTIA-24]: D-74: фаза закрыта владельцем как принятый риск, не PASS; 24-UAT.md 5/5 skipped («принято владельцем»), 24-SECURITY.md threats_open 0 (офлайн), RLS-ревью 2 раунда (open critical/high 0); 24-VERIFICATION.md остаётся human_needed с разделом Acknowledged Gaps; LVL-09 без галочки (живая проверка BLOCKED); WR-01..WR-03 open; анонимное чтение portia_content — Phase 25 (SEC-01)
 - [v1.4 roadmap]: Решения владельца D-71 (1б–8а) закреплены; три направления стиля A/B/C показываются текстом в Phase 22, перекраска идёт в Phase 26 (не больше одной переделки на экран); галереи и реестр по хэшам не возвращаются.
 - [Phase PORTIA-22]: 22-08: статический supabase-rls-reviewer проверил commit `9f2778c49f63ef44925170bcf07df8e98baf842e`; RLS22-01..05 исправлены, новых находок Phase 22 нет. SEC-M1 остаётся ранее принятым baseline; live Postgres/RLS, роли и конкуренция BLOCKED.
 - [Phase PORTIA-22]: 22-10: владелец 2026-11-12 ответил «оставить blocked C»; миграции не применялись, staging BLOCKED (ENV), production ОЖИДАЕТ ВЛАДЕЛЬЦА.
