@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 25
 current_phase_name: "Переключение закрытия: база, кэш, сборка, хранилище"
 status: executing
-stopped_at: Completed PORTIA-25-05-PLAN.md
-last_updated: "2026-11-15T19:02:33.915Z"
+stopped_at: Completed PORTIA-25-06-PLAN.md
+last_updated: "2026-11-15T19:09:09.984Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-25 execution started
-state_head: 182dc62c38ed85412376c17321bd4694ef13f031
+state_head: 34a3485d1f63aca16a024b4d38ebbaa6e0cf6325
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 50
-  completed_plans: 45
+  completed_plans: 46
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-25 (Переключение закрытия: база, кэш, сборка, хранилище) — EXECUTING
-Plan: 6 of 10
+Plan: 7 of 10
 Status: Executing Phase PORTIA-25
 Last activity: 2026-11-15 — Phase PORTIA-25 execution started
 
@@ -84,6 +84,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-25 P03 | 25 min | 2 tasks | 9 files |
 | Phase PORTIA-25 P04 | 20 min | 3 tasks | 9 files |
 | Phase PORTIA-25 P05 | 15 min | 3 tasks | 26 files |
+| Phase 25 P06 | 20 min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -286,6 +287,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-25]: 25-03: GET /api/employees answers no-store with no cache tag; purgeCacheTag(employeesCacheTag) stays in writes for one release; live CDN headers and the owner purge are BLOCKED
 - [Phase PORTIA-25]: 25-04: contract migration 20261115000100 guards its own order with a DO block; outsider keeps authenticated grant (rls-empty); editors read employees by portia_can_edit(); emergency file lives in supabase/emergency/ outside the migration CLI; nothing applied (BLOCKED, owner step)
 - [Phase PORTIA-25]: 25-05: content fixture is a verbatim copy of the seed (sha256 6de93dd9...2fe7 pinned); lives in lib/testing, production import banned by lib/phase25-fixture-boundary.test.ts. Assumption A-25-05: fixture keeps the real records; replacing them with invented ones is a separate owner decision
+- [Phase 25]: 25-06: working code has no seed; emptyPortiaContent + assistantDefaults; visitor without readable row gets 503 content-unavailable, editor gets the empty structure; shownViewerLevel falls back gate level then 1 (WR-03). SEC-03 not checked off until the 25-09 build scan.
 
 ### Pending Todos
 
@@ -339,8 +341,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T19:02:32.902Z
-Stopped at: Completed PORTIA-25-05-PLAN.md
+Last session: 2026-11-15T19:09:08.934Z
+Stopped at: Completed PORTIA-25-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
