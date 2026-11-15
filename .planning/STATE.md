@@ -5,11 +5,11 @@ milestone_name: Доступ и единый стиль
 current_phase: 24
 current_phase_name: Уровни допуска и закрытие содержимого
 status: ready_to_plan
-stopped_at: Phase 23 closed as owner-accepted risk (D-73)
-last_updated: "2026-11-14T23:15:12.699Z"
+stopped_at: Phase 24 context gathered
+last_updated: "2026-11-15T00:42:20.286Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-23 closed as owner-accepted risk (D-73), not PASS
-state_head: 65f267507e5d7a9e1844b61cb960c5dc0423a235
+state_head: 564df9c79cf1202a1ef21a2b2905a7e183f236b5
 progress:
   total_phases: 7
   completed_phases: 2
@@ -297,9 +297,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-14T23:15:12.012Z
-Stopped at: Completed PORTIA-23-12-PLAN.md
-Resume file: None
+Last session: 2026-11-15T00:42:19.832Z
+Stopped at: Phase 24 context gathered
+Resume file: .planning/phases/PORTIA-24-urovni-dopuska-i-zakrytie-soderzhimogo/24-CONTEXT.md
 
 ## Operator Next Steps
 
