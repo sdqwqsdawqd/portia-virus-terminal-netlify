@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 24
 current_phase_name: Уровни допуска и закрытие содержимого
 status: executing
-stopped_at: Completed PORTIA-24-07-PLAN.md
-last_updated: "2026-11-15T08:52:18.088Z"
+stopped_at: Completed PORTIA-24-08-PLAN.md
+last_updated: "2026-11-15T09:00:17.645Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-24 execution started
-state_head: b26abac100f8f10d1e73e0e114f33c89bff0f2f9
+state_head: 06fa4b28266afcb9c680ebb151c44da58fe7b326
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 40
-  completed_plans: 36
+  completed_plans: 37
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-24 (Уровни допуска и закрытие содержимого) — EXECUTING
-Plan: 8 of 11
+Plan: 9 of 11
 Status: Executing Phase PORTIA-24
 Last activity: 2026-11-15 — Phase PORTIA-24 execution started
 
@@ -75,6 +75,7 @@ Progress: [███░░░░░░░] 29% (2/7 phases closed: 21 и 23 — 
 | Phase PORTIA-24 P05 | 35min | 3 tasks | 8 files |
 | Phase PORTIA-24 P06 | 15 min | 2 tasks | 3 files |
 | Phase PORTIA-24 P07 | 40min | 2 tasks | 9 files |
+| Phase PORTIA-24 P08 | 35min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -261,6 +262,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-24]: 24-05: formattedText посетителя - allow-list по точному id владельца; ответ собирается явно по полям; documents по зрителю из lib/embedded-documents.ts
 - [Phase PORTIA-24]: 24-06: PUT refuses a viewer copy with 422 viewer-copy before any DB read/write; row stores prepared.content (levels lifted), response carries levelsRaised
 - [Phase PORTIA-24]: 24-07: LevelPicker - один выбор уровня 1-5 у вируса, записей учёных и «Устава»; новая карточка без записей, новая запись с уровнем 1; охрана файла редактора расширена записью PORTIA-24
+- [Phase PORTIA-24]: 24-08: строка автоподъёма принадлежит разделу и сбрасывается при смене раздела и следующем изменении уровня; contentIncomplete блокирует sync, rebase и save, accessFailed сохраняет приоритет
 
 ### Pending Todos
 
@@ -314,8 +316,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T08:52:17.448Z
-Stopped at: Completed PORTIA-24-07-PLAN.md
+Last session: 2026-11-15T09:00:17.001Z
+Stopped at: Completed PORTIA-24-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
