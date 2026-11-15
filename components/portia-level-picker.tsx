@@ -6,7 +6,7 @@ import { levelCopy } from "@/lib/level-copy";
 
 // Phase 24, D-16 / LVL-02: the one control that sets a needed access level (1..5) in every editor form. Native radios under a
 // fieldset: Tab enters the group, the arrows change the value, no key handler of our own. The shown value is the effective
-// one: max(own level, parent level); an empty or damaged value is shown by requiredLevelOf (no field at all is level 1).
+// one: max(own level, parent level); WR-02: the legend is the first child of the fieldset, so it names the group, and the caption follows it; an empty or damaged value is shown by requiredLevelOf (no field at all is level 1).
 export function LevelPicker({ name, value, min = 1, caption, notice, action, onChange }: {
   name: string;
   value: unknown;
@@ -21,8 +21,8 @@ export function LevelPicker({ name, value, min = 1, caption, notice, action, onC
   const shown = Math.max(requiredLevelOf(value), min);
   return (
     <fieldset className="access-level-picker" aria-describedby={min > 1 ? hintId : undefined}>
-      {caption ? <strong className="access-level-caption">{caption}</strong> : null}
       <legend>{levelCopy.pickerLegend}</legend>
+      {caption ? <strong className="access-level-caption">{caption}</strong> : null}
       <div className="access-level-options">
         {ACCESS_LEVELS.map((level) => (
           <label key={level} className="access-level-option" title={level < min ? levelCopy.parentTitle(min) : undefined}>

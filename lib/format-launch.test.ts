@@ -413,6 +413,31 @@ function applyImageRewriteHunk(text: string): string {
     "<LevelPicker name={`level-virus-${selectedVirus.id}`} value={selectedVirus.level} action={rewrite.action(`virus:${selectedVirus.id}`)} onChange={(level) => { rewrite.raised(`virus:${selectedVirus.id}`, \"virus\", selectedVirus.id, selectedVirus, effectiveLevel(selectedVirus.level, 1), level); updateVirus((virus) => { virus.level = level; }); }} />",
     "virus level picker offer",
   );
+  // Task 2: the same offer beside the level pickers of the «Информация» and «Справочник» records; a section includes the pictures of its children.
+  next = replaceOnce(
+    next,
+    "value={section.level} notice={raisedNotice?.parentId === section.id ? raisedNotice.text : undefined} onChange={(level) => {\n                const raised = section.subsections.filter(",
+    "value={section.level} notice={raisedNotice?.parentId === section.id ? raisedNotice.text : undefined} action={rewrite.action(`info:${section.id}`)} onChange={(level) => {\n                rewrite.raised(`info:${section.id}`, \"info-section\", section.id, section, effectiveLevel(section.level, 1), level);\n                const raised = section.subsections.filter(",
+    "info section offer",
+  );
+  next = replaceOnce(
+    next,
+    "min={effectiveLevel(section.level, 1)} value={subsection.level} onChange={(level) => { changeDraft(",
+    "min={effectiveLevel(section.level, 1)} value={subsection.level} action={rewrite.action(`info:${subsection.id}`)} onChange={(level) => { rewrite.raised(`info:${subsection.id}`, \"info-subsection\", subsection.id, subsection, effectiveLevel(subsection.level, effectiveLevel(section.level, 1)), level); changeDraft(",
+    "info subsection offer",
+  );
+  next = replaceOnce(
+    next,
+    "value={section.level} notice={raisedNotice?.parentId === section.id ? raisedNotice.text : undefined} onChange={(level) => {\n                const raised = section.cards.filter(",
+    "value={section.level} notice={raisedNotice?.parentId === section.id ? raisedNotice.text : undefined} action={rewrite.action(`guide:${section.id}`)} onChange={(level) => {\n                rewrite.raised(`guide:${section.id}`, \"guide-section\", section.id, section, effectiveLevel(section.level, 1), level);\n                const raised = section.cards.filter(",
+    "guide section offer",
+  );
+  next = replaceOnce(
+    next,
+    "min={effectiveLevel(section.level, 1)} value={card.level} onChange={(level) => { changeDraft(",
+    "min={effectiveLevel(section.level, 1)} value={card.level} action={rewrite.action(`guide:${card.id}`)} onChange={(level) => { rewrite.raised(`guide:${card.id}`, \"guide-card\", card.id, card, effectiveLevel(card.level, effectiveLevel(section.level, 1)), level); changeDraft(",
+    "guide card offer",
+  );
   return replaceOnce(
     next,
     '      dispatch({ type: "saved", normalized: outgoing, savedFrom, keep: refused.length ? wanted : undefined, rebase });\n',

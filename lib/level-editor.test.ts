@@ -239,3 +239,37 @@ test("D-17 the notice of the server's lift is a status line beside the save chip
   const popover = editor.indexOf('className="editor-save-popover"');
   assert.ok(chip > 0 && notice > chip && notice < popover, "the notice stands in the chip, before the popover");
 });
+
+// ---- Phase 25, 25-02: WR-02 and the action slot ----
+
+test("WR-02 the legend is the first child of the fieldset, the caption follows it and the action slot is last", () => {
+  const legend = picker.indexOf("<legend>{levelCopy.pickerLegend}</legend>");
+  const caption = picker.indexOf('<strong className="access-level-caption">');
+  const notice = picker.indexOf('<p className="access-level-notice" role="status">');
+  const action = picker.indexOf("{action}");
+  assert.ok(legend > -1 && caption > -1 && action > -1);
+  const fieldsetStart = picker.indexOf('<fieldset className="access-level-picker"');
+  const afterOpen = picker.slice(fieldsetStart).replace(/^<fieldset[^\n]*>\s*/, "");
+  assert.ok(afterOpen.startsWith("<legend>"), "nothing stands between the opening <fieldset> and the <legend>");
+  assert.ok(legend < caption, "the legend comes before the caption");
+  assert.ok(caption < action && notice < action, "the action slot is drawn after the caption and the notice");
+  assert.ok(picker.indexOf("</fieldset>") > action, "the action slot is inside the group");
+  assert.ok(picker.includes("action?: ReactNode;"), "the slot is optional");
+});
+
+test("D-14 the offer stands beside the pickers of the virus, info and guide records and holds no Russian text of its own", () => {
+  for (const key of ["virus:${selectedVirus.id}", "info:${section.id}", "info:${subsection.id}", "guide:${section.id}", "guide:${card.id}"]) {
+    assert.ok(editor.includes("action={rewrite.action(`" + key + "`)}"), `${key}: an offer slot`);
+    assert.ok(editor.includes("rewrite.raised(`" + key + "`"), `${key}: the raise starts the offer`);
+  }
+  for (const kind of ["virus", "info-section", "info-subsection", "guide-section", "guide-card"]) assert.ok(editor.includes(`"${kind}"`), kind);
+  assert.equal(count(editor, "void rewrite.retire(outgoing);"), 1, "old files go only after a save");
+  assert.ok(editor.indexOf('dispatch({ type: "saved"') < editor.indexOf("void rewrite.retire(outgoing);"));
+  const hook = source("components/portia-image-rewrite.tsx");
+  assert.ok(!/[А-Яа-яЁё]/.test(hook), "every text of the offer comes from lib/level-copy.ts");
+  assert.ok(hook.includes("levelCopy.imageRewriteButton") && hook.includes('type="button"'));
+  assert.ok(!hook.includes("fetch("), "the requests are in lib/media-rewrite-client.ts");
+  assert.equal(levelCopy.imageRewriteButton, "Сменить адрес картинки");
+  assert.equal(levelCopy.imageRewriteDone(2), "Адрес картинки сменён: 2. Старый файл удалится после сохранения.");
+  assert.equal(levelCopy.imageRewriteExternal(1), "Внешние ссылки не меняются: 1.");
+});
