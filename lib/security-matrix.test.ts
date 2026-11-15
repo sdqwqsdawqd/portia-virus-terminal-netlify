@@ -16,13 +16,13 @@ const archived = (recorded: string) => recorded.replace(/^\.planning\/phases\/(?
 const read = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const matrixText = () => read(`${phaseDir}/20-SECURITY-MATRIX.md`);
 
-/** Phase 21 and 22 successors; the v1.3 matrix above stays frozen history. */
+/** Phase 21, 22 and 23 are frozen history; the v1.3 matrix above stays frozen too. The current matrix is Phase 24's. */
 const phase21Dir = ".planning/phases/PORTIA-21-fundament-dostupa-lyudi-zayavki-pravila-i-zhurnal";
 const phase22Dir = ".planning/phases/PORTIA-22-vkladka-polzovateli-i-karkas-tokenov-stilya";
-const phase23Dir = ".planning/phases/PORTIA-23-vhod-po-niku-povyshenie-i-ego-regressii";
+const phase24Dir = ".planning/phases/PORTIA-24-urovni-dopuska-i-zakrytie-soderzhimogo";
 const phase21MatrixText = () => read(`${phase21Dir}/21-SECURITY-MATRIX.md`);
 const phase22MatrixText = () => read(`${phase22Dir}/22-SECURITY-MATRIX.md`);
-const currentMatrixText = () => read(`${phase23Dir}/23-SECURITY-MATRIX.md`);
+const currentMatrixText = () => read(`${phase24Dir}/24-SECURITY-MATRIX.md`);
 
 /** Text of a `## heading` block, up to the next `## ` heading. Empty string when the heading is missing. */
 function section(markdown: string, heading: string) {
