@@ -23,16 +23,24 @@ test("stampCacheSource adds the source to what is written", () => {
   assert.deepEqual(stampCacheSource({ revision: 4 }, "https://s.supabase.co"), { revision: 4, source: "https://s.supabase.co" });
 });
 
-test("LVL-05: a content copy is shown only when its viewer key equals the gate's key", () => {
-  assert.equal(cacheMatchesViewer({ viewer: "level-2" }, "level-2"), true);
-  assert.equal(cacheMatchesViewer({ viewer: "level-3" }, "level-2"), false);
-  assert.equal(cacheMatchesViewer({ viewer: "editor" }, "level-5"), false);
-  // A copy without a viewer key cannot prove whose level it is.
-  assert.equal(cacheMatchesViewer({}, "level-2"), false);
-  assert.equal(cacheMatchesViewer({ viewer: "" }, ""), false);
-  assert.equal(cacheMatchesViewer({ viewer: "level-2" }, ""), false);
-  assert.equal(cacheMatchesViewer(null, "level-2"), false);
-  assert.equal(cacheMatchesViewer("junk", "level-2"), false);
+test("LVL-05, D-16: a copy is shown only to the same level and the same person it was saved for", () => {
+  assert.equal(cacheMatchesViewer({ viewer: "level-2", person: "abc" }, "level-2", "abc"), true);
+  assert.equal(cacheMatchesViewer({ viewer: "level-3", person: "abc" }, "level-2", "abc"), false);
+  assert.equal(cacheMatchesViewer({ viewer: "editor", person: "" }, "level-5", ""), false);
+  // Same level, another person (A then B on one device, both level 2): the copy of A is not B's.
+  assert.equal(cacheMatchesViewer({ viewer: "level-2", person: "abc" }, "level-2", "xyz"), false);
+  assert.equal(cacheMatchesViewer({ viewer: "level-2", person: "abc" }, "level-2", ""), false);
+  assert.equal(cacheMatchesViewer({ viewer: "level-2", person: "" }, "level-2", "abc"), false);
+  // An editor or an open-site visitor without a request has an empty person, and a stamped empty person matches it.
+  assert.equal(cacheMatchesViewer({ viewer: "editor", person: "" }, "editor", ""), true);
+  // A copy without a viewer key or without a person stamp cannot prove whose it is.
+  assert.equal(cacheMatchesViewer({ viewer: "level-2" }, "level-2", "abc"), false);
+  assert.equal(cacheMatchesViewer({ viewer: "level-2" }, "level-2", ""), false);
+  assert.equal(cacheMatchesViewer({}, "level-2", ""), false);
+  assert.equal(cacheMatchesViewer({ viewer: "", person: "" }, "", ""), false);
+  assert.equal(cacheMatchesViewer({ viewer: "level-2", person: "" }, "", ""), false);
+  assert.equal(cacheMatchesViewer(null, "level-2", ""), false);
+  assert.equal(cacheMatchesViewer("junk", "level-2", ""), false);
 });
 
 test("SEC-04: identityChanged compares gate answers; the first answer has nothing to compare with", () => {

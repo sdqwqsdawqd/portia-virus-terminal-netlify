@@ -25,11 +25,13 @@ export const CONTENT_CACHE_KEY = "portia-content-last-success-v2";
 export const EMPLOYEES_CACHE_KEY = "portia-employees-last-success-v2";
 export const LEGACY_CACHE_KEYS = ["portia-content-last-success-v1", "portia-employees-last-success-v1"] as const;
 
-// Phase 24 (LVL-05): a content copy is cut for one viewer (editor or one level). It is shown only when the key it was saved
-// with equals the key of the current gate decision; a copy of another level, or one without a key, is not shown.
-export function cacheMatchesViewer(cached: unknown, viewerKey: string): boolean {
+// Phase 24 (LVL-05) and Phase 25 (D-16): a copy of the content or the roster is cut for one viewer (editor or one level) and one
+// person (the nickname key of the approved request, "" for an editor or an open-site visitor). It is shown only when both stamps
+// equal those of the current gate decision; another level, another person at the same level, or a copy without either stamp is not.
+export function cacheMatchesViewer(cached: unknown, viewerKey: string, person: string): boolean {
   if (!viewerKey || !cached || typeof cached !== "object") return false;
-  return (cached as { viewer?: unknown }).viewer === viewerKey;
+  const stamp = cached as { viewer?: unknown; person?: unknown };
+  return stamp.viewer === viewerKey && stamp.person === person;
 }
 
 // D-21: when the gate says "closed and not allowed" (including a revoke), or the person or level on this device changed

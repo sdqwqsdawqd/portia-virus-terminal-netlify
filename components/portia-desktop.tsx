@@ -235,6 +235,22 @@ function patchEmployeesCache(patch: (employees: PortiaEmployee[]) => PortiaEmplo
   } catch {}
 }
 
+// IN-03 (Phase 25): the one place that writes the content copy, after a poll and after a save, always with the documents, the
+// viewer key and the person it was cut for (D-16), so a copy can only be shown to the same level and the same person.
+function writeContentCache(copy: { content: PortiaContent; revision: number; viewer: string; person: string; documents: DocumentLinks; updatedAt: string | null }) {
+  try {
+    window.localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(stampCacheSource({
+      content: copy.content,
+      revision: copy.revision,
+      viewer: copy.viewer,
+      person: copy.person,
+      documents: copy.documents,
+      updatedAt: copy.updatedAt,
+      savedAt: new Date().toISOString(),
+    }, deviceCacheSource())));
+  } catch {}
+}
+
 type ContentResponse = {
   content?: PortiaContent;
   revision?: number;
@@ -582,7 +598,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
       if (response.status === 401) {
         // D-21: the server no longer lets this device in. Nothing of the content stays, and the gate is asked at once.
         const denied = await response.json().catch(() => null) as { code?: unknown } | null;
-        if (denied?.code === "access-required") {
+        // IN-07: only the answer to the newest request may wipe the copies; a late 401 must not erase a copy a newer answer just saved.
+        if (denied?.code === "access-required" && requestSeq === contentRequestSeq.current) {
           accessLost = true;
           clearDeviceContentCaches(() => window.localStorage);
           onAccessLostRef.current?.();
@@ -611,16 +628,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
       setContent(fetched);
       restoreFocus?.();
       setRevision(fetchedRevision);
-      try {
-        window.localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(stampCacheSource({
-          content: fetched,
-          revision: fetchedRevision,
-          viewer: fetchedViewer,
-          documents: fetchedDocuments,
-          updatedAt: payload.updatedAt ?? null,
-          savedAt: new Date().toISOString(),
-        }, deviceCacheSource())));
-      } catch {}
+      writeContentCache({ content: fetched, revision: fetchedRevision, viewer: fetchedViewer, person: viewerPersonRef.current, documents: fetchedDocuments, updatedAt: payload.updatedAt ?? null });
     } catch (error) {
       // The last copy saved on this device keeps the terminal usable while offline; the banner only says so.
       failure = !responded ? failureFromResponse(null, error instanceof DOMException && error.name === "AbortError") : "unexpected";
@@ -703,6 +711,16 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     try {
       const response = await fetchWithTimeout("/api/employees", {}, 15_000);
       responded = true;
+      if (response.status === 401) {
+        // Same as /api/content: the server no longer lets this device in. The copies go and the gate is asked at once.
+        const denied = await response.json().catch(() => null) as { code?: unknown } | null;
+        if (denied?.code === "access-required") {
+          skipped = true;
+          clearDeviceContentCaches(() => window.localStorage);
+          onAccessLostRef.current?.();
+          return;
+        }
+      }
       if (!response.ok) { failure = failureFromResponse(response.status, false); return; }
       const payload = await response.json() as { employees?: PortiaEmployee[]; syncedAt?: string | null; degraded?: boolean; profilesRead?: boolean; manualRead?: boolean };
       if (!acceptsRoster(payload)) { failure = "unavailable"; return; }
@@ -714,7 +732,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
       setEmployeesSyncedAt(payload.syncedAt ?? null);
       setSelectedEmployeeId((current) => merged.employees.some((employee) => employee.id === current) ? current : merged.employees[0]?.id ?? "");
       // A degraded answer never replaces the device cache (D-07).
-      if (merged.cacheable) try { window.localStorage.setItem(EMPLOYEES_CACHE_KEY, JSON.stringify(stampCacheSource(payload, deviceCacheSource()))); } catch {}
+      if (merged.cacheable) try { window.localStorage.setItem(EMPLOYEES_CACHE_KEY, JSON.stringify(stampCacheSource({ ...payload, viewer: viewerKeyRef.current, person: viewerPersonRef.current }, deviceCacheSource()))); } catch {}
       if (payload.degraded !== false) { failure = "unavailable"; shownAt = payload.syncedAt ?? new Date().toISOString(); }
     } catch (error) {
       // The last successful personnel snapshot remains visible on this device.
@@ -754,7 +772,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
         // A copy from another data source (or unstamped) is dropped, never shown: its revision is unrelated (owner UAT 19-14).
         if (cached && !cacheMatchesSource(JSON.parse(cached), cacheSource)) { window.localStorage.removeItem(CONTENT_CACHE_KEY); cached = null; }
         // LVL-05: a copy cut for another viewer (another level, or none recorded) is deleted before anything is shown.
-        if (cached && !cacheMatchesViewer(JSON.parse(cached), viewerKeyRef.current)) { window.localStorage.removeItem(CONTENT_CACHE_KEY); cached = null; }
+        if (cached && !cacheMatchesViewer(JSON.parse(cached), viewerKeyRef.current, viewerPersonRef.current)) { window.localStorage.removeItem(CONTENT_CACHE_KEY); cached = null; }
         if (cached) {
           const parsed = JSON.parse(cached) as { content?: unknown; revision?: number; viewer?: string; documents?: unknown };
           // The cache is device-editable and may predate any field, so it gets the same normalizer as the network (D-20, D-22).
@@ -777,6 +795,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
         }
         let employeeCache = window.localStorage.getItem(EMPLOYEES_CACHE_KEY);
         if (employeeCache && !cacheMatchesSource(JSON.parse(employeeCache), cacheSource)) { window.localStorage.removeItem(EMPLOYEES_CACHE_KEY); employeeCache = null; }
+        // D-16: the roster copy is cut for one viewer and one person too; another one's copy is deleted before anything is shown.
+        if (employeeCache && !cacheMatchesViewer(JSON.parse(employeeCache), viewerKeyRef.current, viewerPersonRef.current)) { window.localStorage.removeItem(EMPLOYEES_CACHE_KEY); employeeCache = null; }
         if (employeeCache) {
           const parsed = JSON.parse(employeeCache) as { employees?: PortiaEmployee[]; syncedAt?: string | null; profilesRead?: boolean };
           if (Array.isArray(parsed.employees)) {
@@ -842,6 +862,18 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   useEffect(() => {
     if (viewerKey && viewerKey !== knownViewerKey.current) void fetchContent();
   }, [viewerKey, fetchContent]);
+
+  // D-16: when the gate reports another level or another person, a device copy stamped for someone else is deleted before it can be
+  // shown again (the gate wipes both copies on a change as well; this keeps the desktop correct on its own).
+  useEffect(() => {
+    if (!viewerKey) return;
+    for (const key of [CONTENT_CACHE_KEY, EMPLOYEES_CACHE_KEY]) {
+      try {
+        const raw = window.localStorage.getItem(key);
+        if (raw && !cacheMatchesViewer(JSON.parse(raw), viewerKey, viewerPerson)) window.localStorage.removeItem(key);
+      } catch {}
+    }
+  }, [viewerKey, viewerPerson]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1406,15 +1438,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
       setContent(next);
       setGuideCardId((current) => findGuide(next.guideSections, current)?.card ? current : "");
       setRevision(savedRevision);
-      try {
-        window.localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(stampCacheSource({
-          content: next,
-          revision: savedRevision,
-          viewer: knownViewerKey.current,
-          updatedAt: new Date().toISOString(),
-          savedAt: new Date().toISOString(),
-        }, deviceCacheSource())));
-      } catch {}
+      writeContentCache({ content: next, revision: savedRevision, viewer: knownViewerKey.current, person: viewerPersonRef.current, documents, updatedAt: new Date().toISOString() });
       // D-17 (LVL-08): the server lifted levels that broke the hierarchy and saved that copy; say how many, and read the copy it kept.
       const levelsRaised = payload.levelsRaised;
       if (typeof levelsRaised === "number" && Number.isInteger(levelsRaised) && levelsRaised > 0) {

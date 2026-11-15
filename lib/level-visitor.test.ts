@@ -64,7 +64,7 @@ test("D-23: a visitor polls every 30 s, an editor every 10 s, and a new viewer k
 
 test("LVL-05: the content cache is shown only for the viewer key of the gate decision and carries it when written", () => {
   const read = desktop.indexOf("window.localStorage.getItem(CONTENT_CACHE_KEY)");
-  const check = desktop.indexOf("cacheMatchesViewer(JSON.parse(cached), viewerKeyRef.current)");
+  const check = desktop.indexOf("cacheMatchesViewer(JSON.parse(cached), viewerKeyRef.current, viewerPersonRef.current)");
   const show = desktop.indexOf("const cachedContent = normalizePortiaContent(parsed.content)");
   assert.ok(read !== -1 && check > read && show > check, "the viewer check sits between the read and the show");
   assert.ok(desktop.includes("viewer: fetchedViewer"));

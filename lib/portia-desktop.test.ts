@@ -232,11 +232,35 @@ test("every result type opens its owner and marks its record; a vanished record 
 });
 
 test("device copies of content and roster are stamped with their data source and foreign copies are dropped (owner UAT 19-14)", () => {
-  assert.equal((source.match(/setItem\(CONTENT_CACHE_KEY, JSON\.stringify\(stampCacheSource\(/g) ?? []).length, 2, "both content writes are stamped");
-  assert.ok(source.includes("setItem(EMPLOYEES_CACHE_KEY, JSON.stringify(stampCacheSource(payload, deviceCacheSource())))"));
+  // IN-03 (Phase 25): one function writes the content copy; after a poll and after a save it is called, never written inline.
+  assert.equal((source.match(/setItem\(CONTENT_CACHE_KEY, JSON\.stringify\(stampCacheSource\(/g) ?? []).length, 1, "the content write is stamped and happens once");
+  assert.equal((source.match(/setItem\(CONTENT_CACHE_KEY/g) ?? []).length, 1, "no content write outside writeContentCache");
+  assert.equal((source.match(/\bwriteContentCache\(/g) ?? []).length, 3, "declaration, poll and save");
+  const writer = source.slice(source.indexOf("function writeContentCache("), source.indexOf("setItem(CONTENT_CACHE_KEY"));
+  assert.ok(writer.length > 0 && !writer.includes("setItem(CONTENT_CACHE_KEY"));
+  const stamp = source.slice(source.indexOf("setItem(CONTENT_CACHE_KEY"), source.indexOf("setItem(CONTENT_CACHE_KEY") + 400);
+  for (const field of ["content", "revision", "viewer", "person", "documents", "updatedAt", "savedAt"]) assert.ok(stamp.includes(field + ":"), "content copy field " + field);
+  // D-16: the roster copy carries the viewer and the person too.
+  assert.ok(source.includes("setItem(EMPLOYEES_CACHE_KEY, JSON.stringify(stampCacheSource({ ...payload, viewer: viewerKeyRef.current, person: viewerPersonRef.current }, deviceCacheSource())))"));
   assert.ok(/!cacheMatchesSource\(JSON\.parse\(cached\), cacheSource\)\) \{ window\.localStorage\.removeItem\(CONTENT_CACHE_KEY\)/.test(source));
   assert.ok(/!cacheMatchesSource\(JSON\.parse\(employeeCache\), cacheSource\)\) \{ window\.localStorage\.removeItem\(EMPLOYEES_CACHE_KEY\)/.test(source));
   assert.ok(!/setItem\(CONTENT_CACHE_KEY, JSON\.stringify\(\{/.test(source), "no unstamped content write");
+  // D-16: both copies are checked for the viewer and the person before they are shown, at load and when the viewer changes.
+  assert.ok(source.includes("cacheMatchesViewer(JSON.parse(cached), viewerKeyRef.current, viewerPersonRef.current)"));
+  assert.ok(source.includes("cacheMatchesViewer(JSON.parse(employeeCache), viewerKeyRef.current, viewerPersonRef.current)"));
+  assert.ok(source.includes("[viewerKey, viewerPerson]"), "the copies are rechecked when the viewer or the person changes");
+});
+
+test("IN-07 and the roster 401: only the answer to the newest request may wipe the copies; an access-required roster answer is a lost access", () => {
+  const content = source.slice(source.indexOf("const fetchContent = useCallback"), source.indexOf("const retryContent = useCallback"));
+  assert.ok(content.includes('denied?.code === "access-required" && requestSeq === contentRequestSeq.current'));
+  assert.ok(content.indexOf("requestSeq === contentRequestSeq.current") < content.indexOf("clearDeviceContentCaches(() => window.localStorage)"));
+  const employees = source.slice(source.indexOf("const fetchEmployees = useCallback"), source.indexOf("const retryEmployees = useCallback"));
+  assert.ok(employees.includes("response.status === 401"));
+  assert.ok(employees.includes('denied?.code === "access-required"'));
+  assert.ok(employees.includes("clearDeviceContentCaches(() => window.localStorage)"));
+  assert.ok(employees.includes("onAccessLostRef.current?.()"));
+  assert.ok(employees.indexOf("clearDeviceContentCaches") < employees.indexOf("failureFromResponse(response.status"), "the 401 branch comes before the generic failure");
 });
 
 test("on a phone the trash list grows with its rows and scrolls with the page, like the virus archive (owner UAT 19-14)", () => {
