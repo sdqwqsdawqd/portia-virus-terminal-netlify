@@ -4,8 +4,12 @@
 //   PORTIA_E2E_OFFLINE_SUPABASE=1 NODE_OPTIONS="--require=<abs path>/tests/e2e/harness/offline-supabase.cjs" node node_modules/next/dist/bin/next start ...
 // It exists for runs WITHOUT a data source (no real Supabase, no staging, no production). It replaces exactly two things:
 //   1. dns.lookup: any name under .supabase.co fails at once with ENOTFOUND instead of waiting for the resolver timeout;
-//   2. fetch: GET /rest/v1/portia_content of the invented project below answers 200 with an empty row list, so the page
-//      renders its default (starting) content. Every other request keeps the original behavior, i.e. fails as it would offline.
+//   2. fetch: POST /rest/v1/rpc/portia_content_read of the invented project below answers 200 {"code":"ok","row":null}, so a
+//      direct run of the content route renders its empty starting structure. Since Phase 25 the row is read by the signed
+//      function, and the anonymous read of the table is forbidden by the contract migration, so that path is no longer stubbed.
+//      GET /api/content stands behind the access gate, and offline the gate closes the site (the closure function is
+//      unreachable), so the row is usually not read at all; the stub is for direct runs of the route.
+//      Every other request keeps the original behavior, i.e. fails as it would offline.
 // Result under this harness is the UI contract on starting content. It is NOT evidence about real data and must be
 // recorded as "offline stub", never as a pass on real data. Product code never imports this file (unit test in lib/).
 // Without PORTIA_E2E_OFFLINE_SUPABASE=1 loading the file changes nothing except exposing OFFLINE_ENV.
@@ -71,8 +75,8 @@ function install(env) {
     try {
       const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
       const method = String((init && init.method) || (typeof input === "object" && input !== null && "method" in input ? input.method : "GET")).toUpperCase();
-      if (url.protocol === "https:" && url.hostname === OFFLINE_HOST && url.pathname === "/rest/v1/portia_content" && method === "GET") {
-        return Promise.resolve(new Response("[]", { status: 200, headers: { "content-type": "application/json" } }));
+      if (url.protocol === "https:" && url.hostname === OFFLINE_HOST && url.pathname === "/rest/v1/rpc/portia_content_read" && method === "POST") {
+        return Promise.resolve(new Response(JSON.stringify({ code: "ok", row: null }), { status: 200, headers: { "content-type": "application/json" } }));
       }
     } catch {
       // not a URL we can read: fall through to the original fetch

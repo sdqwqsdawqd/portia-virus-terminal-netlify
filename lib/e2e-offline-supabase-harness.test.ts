@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 // Phase 20-58 (D-68): the offline Supabase harness is an explicit test-only file preloaded into the Next server process
 // (NODE_OPTIONS --require). These tests start child processes; none of them reaches the network: the invented project
-// host never resolves, the stub answers one GET itself and every other lookup fails at once.
+// host never resolves, the stub answers one signed-read POST itself and every other lookup fails at once.
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const harness = resolve(root, "tests/e2e/harness/offline-supabase.cjs");
@@ -94,16 +94,19 @@ describe("offline Supabase harness (20-58, D-68)", () => {
     assert.equal(out.address, "string");
   });
 
-  test("with the flag only GET /rest/v1/portia_content of the invented project answers 200 []", () => {
+  test("with the flag only POST /rest/v1/rpc/portia_content_read of the invented project answers 200 with an empty row", () => {
+    const rpcUrl = `${projectUrl}/rest/v1/rpc/portia_content_read`;
     const run = runPreloaded(
       `(async () => {
-         const ok = await fetch(${JSON.stringify(`${projectUrl}/rest/v1/portia_content?select=content`)});
+         const ok = await fetch(${JSON.stringify(rpcUrl)}, { method: "POST", body: "{}" });
          const result = { status: ok.status, body: await ok.text(), type: ok.headers.get("content-type"), others: {} };
          const attempts = {
-           post: () => fetch(${JSON.stringify(`${projectUrl}/rest/v1/portia_content`)}, { method: "POST", body: "{}" }),
-           patch: () => fetch(${JSON.stringify(`${projectUrl}/rest/v1/portia_content`)}, { method: "PATCH", body: "{}" }),
+           getTable: () => fetch(${JSON.stringify(`${projectUrl}/rest/v1/portia_content`)}),
+           getRpc: () => fetch(${JSON.stringify(rpcUrl)}),
+           patch: () => fetch(${JSON.stringify(rpcUrl)}, { method: "PATCH", body: "{}" }),
+           otherRpc: () => fetch(${JSON.stringify(`${projectUrl}/rest/v1/rpc/portia_employees_read`)}, { method: "POST", body: "{}" }),
            otherPath: () => fetch(${JSON.stringify(`${projectUrl}/rest/v1/something_else`)}),
-           otherHost: () => fetch("https://otherproject.supabase.co/rest/v1/portia_content"),
+           otherHost: () => fetch("https://otherproject.supabase.co/rest/v1/rpc/portia_content_read", { method: "POST", body: "{}" }),
          };
          for (const [name, run] of Object.entries(attempts)) {
            try { await run(); result.others[name] = "answered"; }
@@ -121,11 +124,14 @@ describe("offline Supabase harness (20-58, D-68)", () => {
       others: Record<string, string>;
     };
     assert.equal(out.status, 200);
-    assert.equal(out.body, "[]");
+    assert.equal(out.body, '{"code":"ok","row":null}');
     assert.match(out.type, /^application\/json/);
+    // The anonymous table read is forbidden by the Phase 25 contract, so it is no longer stubbed: it fails like any offline request.
     assert.deepEqual(out.others, {
-      post: "ENOTFOUND",
+      getTable: "ENOTFOUND",
+      getRpc: "ENOTFOUND",
       patch: "ENOTFOUND",
+      otherRpc: "ENOTFOUND",
       otherPath: "ENOTFOUND",
       otherHost: "ENOTFOUND",
     });
