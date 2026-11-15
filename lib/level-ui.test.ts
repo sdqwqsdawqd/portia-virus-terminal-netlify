@@ -248,3 +248,58 @@ test("D-20 a file that became closed while viewed is replaced by the block; the 
   // The chain of a recycled virus is read through its plain id, the ids of the answer carry the virus: prefix.
   assert.ok(desktop.includes("simpleSlotChain(previous, trashRecordId(current.id))"));
 });
+
+// Plan 24-10, task 2: the «Устав» window, the search index, the Arabic level in the window title and the boot line.
+const clientFiles = readdirSync(componentsDir).filter((name) => /\.tsx?$/.test(name));
+
+test("D-11/T-24-31 the «Устав» address is not in the client code: the window reads it from the answer of the server", async () => {
+  const { embeddedDocuments } = await import("./embedded-documents.ts");
+  assert.ok(!desktop.includes("embeddedDocuments.charter.src"), "the address module is server only");
+  assert.ok(!desktop.includes(embeddedDocuments.charter.src), "the address of the «Устав» is in the desktop source");
+  for (const name of clientFiles) assert.ok(!readFileSync(new URL(name, componentsDir), "utf8").includes(embeddedDocuments.charter.src), `${name} holds the address of the «Устав»`);
+  const embedded = between(desktop, "const embeddedApps = {", "} as const;");
+  assert.ok(embedded.includes("sheet:") && !embedded.includes("charter"), "only the «Таблица» stays (O-1)");
+  assert.ok(desktop.includes("documents.charter"), "the window takes the address from documents");
+  assert.ok(desktop.includes("documents.charter.src") && desktop.includes("documents.charter.external"));
+});
+
+test("D-11/D-20 below the level the «Устав» window shows only the block; no frame, zoom bar or link is drawn, and the icon stays", () => {
+  const windows = between(desktop, '{(["sheet", "charter"] as const).map((app) =>', "<AppWindow app=\"trash\"");
+  assert.ok(windows.includes('meta="ДОКУМЕНТ ОТДЕЛА"'));
+  const charterBranch = windows.slice(windows.indexOf("charterClosed"));
+  assert.ok(charterBranch.startsWith('charterClosed\n                ? <RedactedPlaceholder variant="block" level={charterClosed.requiredLevel} />'), "the closed test comes first and draws the block");
+  assert.ok(charterBranch.indexOf("<RedactedPlaceholder") < charterBranch.indexOf("<EmbeddedDocument"), "the frame is behind the closed test");
+  assert.ok(windows.includes('contentFatal("flaskEmpty")') && windows.includes('<AppSkeleton shape="document" />'));
+  assert.ok(desktop.includes('<DesktopIcon app="charter"'), "the desktop icon stays (D-11)");
+});
+
+test("LVL-05 the search index and the existence check of an app result use the list without a closed «Устав»", () => {
+  assert.ok(desktop.includes("apps: searchApps"));
+  assert.ok(!desktop.includes("apps: globalSearchApps"));
+  assert.ok(desktop.includes("return searchApps.some((app) => app.id === result.id);"));
+  assert.ok(desktop.includes('globalSearchApps.filter((app) => app.id !== "charter")'));
+  assert.ok(desktop.includes("content.redaction?.apps?.charter"), "the filter follows the marker of the answer");
+});
+
+test("D-15 the archive window title and the boot line show the level in Arabic digits, from the answer or from the gate decision", () => {
+  assert.ok(desktop.includes("levelCopy.archiveMeta("));
+  assert.ok(desktop.includes("contentReady ? shownViewerLevel(content) : viewerLevel"));
+  assert.ok(desktop.includes("levelCopy.bootCheck("));
+  assert.ok(desktop.includes("<BootScreen visible={booting} level={viewerLevel} />"));
+  for (const name of clientFiles) {
+    const text = readFileSync(new URL(name, componentsDir), "utf8");
+    assert.doesNotMatch(text, /ДОПУСК II|УРОВЕНЬ II/, `${name} shows a Roman numeral of the level`);
+  }
+  assert.doesNotMatch(desktop, /meta="ДОПУСК/, "the archive title is built from the level");
+  assert.equal(levelCopy.archiveMeta(3), "ДОПУСК 3");
+  assert.equal(levelCopy.archiveMeta(null), "ДОПУСК");
+  assert.equal(levelCopy.bootCheck(3), "ПРОВЕРКА ДОПУСКА… УРОВЕНЬ 3");
+  assert.equal(levelCopy.bootCheck(null), "ПРОВЕРКА ДОПУСКА… OK");
+});
+
+test("SEC-07 no component and no copy of the visitor says that the links of the «Устав» or the «Таблица» are closed", () => {
+  // The same detector as lib/level-docs.test.ts: a sentence that names a link and says closed or protected.
+  const claims = (text: string) => text.split(/[.\n]/).filter((sentence) => /ссылк/i.test(sentence) && /(?:закрыт|защищ)/i.test(sentence));
+  for (const name of clientFiles) assert.deepEqual(claims(lf(readFileSync(new URL(name, componentsDir), "utf8"))), [], name);
+  assert.deepEqual(claims(lf(readFileSync(new URL("../lib/level-copy.ts", import.meta.url), "utf8"))), []);
+});

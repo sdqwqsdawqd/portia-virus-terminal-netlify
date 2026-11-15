@@ -138,10 +138,10 @@ const PortiaEditor = dynamic(
   { ssr: false, loading: () => <div className="editor-empty">Загрузка редактора…</div> },
 );
 
-// Department documents that live elsewhere, shown inside PORTIA as app windows.
+// Department documents that live elsewhere, shown inside PORTIA as app windows. Only the «Таблица» address is client code (O-1): the
+// «Устав» address comes in the answer of the server and only when the level opens it (D-11); the document itself is public (SEC-07, PROJECT.md).
 const embeddedApps = {
   sheet: { src: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/htmlview?widget=true&headers=false", external: "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/" },
-  charter: { src: "https://sdqwqsdawqd.github.io/S.E-Portia/", external: "https://sdqwqsdawqd.github.io/S.E-Portia/" },
 } as const;
 // Must equal the window-close / window-minimize (full motion) and window-fade-out (reduced) durations in app/portia.css.
 const WINDOW_CLOSE_MS = 180;
@@ -164,7 +164,8 @@ const settingValues: Record<Exclude<keyof DesktopSettings, "customAccent">, read
 };
 
 const globalSearchAppIds: AppId[] = ["archive", "employees", "info", "guide", "broadcasts", "trash", "promotion", "settings", "sheet", "charter"];
-// The one access filter of the index (D-07): every listed app is open to every visitor; «Редактор» is gated by canEdit and is not in the list. «Устав» is found by its name only (owner verdict 8).
+// The one access filter of the index: «Редактор» is gated by canEdit and is not in the list; a «Устав» closed to the viewer is left out of the
+// index by searchApps below (D-11, LVL-05) while its icon stays on the desktop (a deliberate asymmetry). «Устав» is found by its name only (owner verdict 8).
 const globalSearchApps = globalSearchAppIds.map((id) => ({ id, label: appMeta[id].label, path: appMeta[id].path }));
 
 const initialWindows: Record<AppId, WindowState> = {
@@ -350,11 +351,10 @@ function richTextLine(document: RichTextDocument | undefined, lines: string[], i
 
 // viewerKey / viewerLevel come from the gate decision (Phase 24): the key tells which cut of the content this device may show
 // (LVL-05), onAccessLost asks the gate to re-check at once when /api/content answers 401 (D-21).
-export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: { initialContent: PortiaContent; viewerKey?: string; viewerLevel?: number | null; onAccessLost?: () => void }) {
+export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = null, onAccessLost }: { initialContent: PortiaContent; viewerKey?: string; viewerLevel?: number | null; onAccessLost?: () => void }) {
   const [content, setContent] = useState<PortiaContent>(initialContent);
   // Links of the leveled document windows the server sent with the copy (read by the document windows, plan 24-10).
   const [documents, setDocuments] = useState<DocumentLinks>({});
-  void documents;
   const onAccessLostRef = useRef(onAccessLost);
   const viewerKeyRef = useRef(viewerKey);
   useEffect(() => { onAccessLostRef.current = onAccessLost; viewerKeyRef.current = viewerKey; });
@@ -1485,6 +1485,9 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
     });
     return () => window.cancelAnimationFrame(frame);
   }, [infoPhone, infoScreen, selectedInfoId]);
+  // D-11, LVL-05: a «Устав» closed to this viewer is not an app of the index and not a target of a search result; its icon stays.
+  const charterClosed = content.redaction?.apps?.charter ?? null;
+  const searchApps = useMemo(() => charterClosed ? globalSearchApps.filter((app) => app.id !== "charter") : globalSearchApps, [charterClosed]);
   const trashFiles = content.recycleFiles;
   const activeTrashFile = trashFiles.find((file) => file.id === activeTrashFileId) ?? null;
   const recycledViruses = useMemo(() => content.recycledViruses ?? [], [content.recycledViruses]);
@@ -1642,7 +1645,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
   // A roster that failed with no last-good copy stays out of the index; the degraded line says so.
   const rosterOutOfSearch = employeesSync.failure !== null && employeesSync.lastGoodAt === null;
   const searchIndex = useMemo(() => buildSearchIndex({
-    apps: globalSearchApps,
+    apps: searchApps,
     viruses: content.viruses,
     employees: rosterOutOfSearch ? [] : employees,
     infoSections: content.infoSections,
@@ -1650,7 +1653,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
     broadcasts: content.broadcasts,
     recycleFiles: content.recycleFiles,
     recycledViruses,
-  }), [content, employees, recycledViruses, rosterOutOfSearch]);
+  }), [content, employees, recycledViruses, rosterOutOfSearch, searchApps]);
   const searchResults = useMemo(() => matchSearch(searchIndex, globalQuery), [searchIndex, globalQuery]);
 
   const isSearchHit = (type: string, id: string) => searchHit?.type === type && searchHit.id === id;
@@ -1709,7 +1712,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
     if (result.type === "guide") return Boolean(findGuide(content.guideSections, result.id)?.card);
     if (result.type === "broadcast") return content.broadcasts.some((item) => item.id === result.id && item.published);
     if (result.type === "file") return result.id.startsWith("virus:") ? recycledViruses.some((item) => item.id === result.id.slice(6)) : content.recycleFiles.some((item) => item.id === result.id);
-    return globalSearchApps.some((app) => app.id === result.id);
+    return searchApps.some((app) => app.id === result.id);
   };
 
   // D-14: the search window is never closed, minimised or made modal here; only the owner app opens and the record is marked.
@@ -1843,7 +1846,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
           : undefined;
   return (
     <>
-      <BootScreen visible={booting} />
+      <BootScreen visible={booting} level={viewerLevel} />
       {questToastItem && <QuestToast quest={questToastItem.quest} more={questToastItem.more} document={content.formattedText[portiaTextKey.broadcast(questToastItem.quest.id)]} onDismiss={dismissQuestToast} />}
       {promotionRetakeToast && <PromotionRetakeToast onDismiss={dismissPromotionRetakeToast} />}
       <div className={`desktop${qualificationLocked ? " is-qualification-locked" : ""}`} id="desktop">
@@ -1870,7 +1873,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
 
           {qualificationLocked && <div className="qualification-focus-backdrop" aria-hidden="true"><span>ИДЁТ КВАЛИФИКАЦИОННАЯ ПРОВЕРКА</span></div>}
 
-          <AppWindow app="archive" state={windows.archive} active={activeApp === "archive"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="archive-window" meta="ДОПУСК II">
+          <AppWindow app="archive" state={windows.archive} active={activeApp === "archive"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="archive-window" meta={levelCopy.archiveMeta(contentReady ? shownViewerLevel(content) : viewerLevel)}>
             <div className="archive-grid">
               <aside className="archive-browser" aria-label="Список вирусов">
                 <div className="browser-heading"><div><h1>База вирусов</h1></div><span className="record-count">{String(virusRecordCount).padStart(2, "0")}</span></div>
@@ -2033,7 +2036,13 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
           </AppWindow>
 
           {(["sheet", "charter"] as const).map((app) => <AppWindow key={app} app={app} state={windows[app]} active={activeApp === app} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window document-window" meta="ДОКУМЕНТ ОТДЕЛА">
-            <EmbeddedDocument src={embeddedApps[app].src} external={embeddedApps[app].external} title={appMeta[app].label} />
+            {app === "sheet"
+              ? <EmbeddedDocument src={embeddedApps.sheet.src} external={embeddedApps.sheet.external} title={appMeta.sheet.label} />
+              : charterClosed
+                ? <RedactedPlaceholder variant="block" level={charterClosed.requiredLevel} />
+                : documents.charter
+                  ? <EmbeddedDocument src={documents.charter.src} external={documents.charter.external} title={appMeta.charter.label} />
+                  : contentSync.failure ? contentFatal("flaskEmpty") : <AppSkeleton shape="document" />}
           </AppWindow>)}
           <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashRows.length).padStart(2, "0")}`}>
             <div className={`trash-app${activeTrashFile || activeTrashVirus || trashLostShown ? " is-viewing" : ""}`}>
@@ -2137,9 +2146,10 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
   );
 }
 
-const bootLines = ["ПОДКЛЮЧЕНИЕ К АРХИВУ… OK", "ПРОВЕРКА ДОПУСКА… УРОВЕНЬ II", "ЗАГРУЗКА ДОСЬЕ… OK", "ТЕРМИНАЛ PORTIA ГОТОВ"];
+// D-15: the level in the check line is the one of the gate decision, in Arabic digits; no decision, no number.
+const bootLines = (level: number | null) => ["ПОДКЛЮЧЕНИЕ К АРХИВУ… OK", levelCopy.bootCheck(level), "ЗАГРУЗКА ДОСЬЕ… OK", "ТЕРМИНАЛ PORTIA ГОТОВ"];
 
-function BootScreen({ visible }: { visible: boolean }) {
+function BootScreen({ visible, level }: { visible: boolean; level: number | null }) {
   // The spider waits on its thread until its PNG is decoded, so it descends instead of popping in late.
   const [markReady, setMarkReady] = useState(false);
   const markRef = useRef<HTMLImageElement>(null);
@@ -2153,7 +2163,7 @@ function BootScreen({ visible }: { visible: boolean }) {
     <span className="boot-thread" />
     <img ref={markRef} className="portia-mark" src="/assets/portia-logo.png" alt="" fetchPriority="high" onLoad={() => setMarkReady(true)} onError={() => setMarkReady(true)} />
     <span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong>
-    <div className="boot-lines">{bootLines.map((line, index) => <p key={line} style={{ animationDelay: `${200 + index * 280}ms` }}>{line}</p>)}</div>
+    <div className="boot-lines">{bootLines(level).map((line, index) => <p key={line} style={{ animationDelay: `${200 + index * 280}ms` }}>{line}</p>)}</div>
   </div></div>;
 }
 
