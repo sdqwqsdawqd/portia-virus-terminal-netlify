@@ -3,14 +3,14 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { defaultPortiaContent } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
 import { matrixPayload, matrixRun, matrixRestore, matrixResidual } from "../scripts/phase19-matrix-data.mjs";
 import { main } from "../scripts/phase16-staging.mjs";
 
 const target = { projectId: "aaaaaaaaaaaaaaaaaaaa", url: "https://aaaaaaaaaaaaaaaaaaaa.supabase.co", adminKey: "fake-key" };
 const clone = <T>(value: T): T => structuredClone(value);
-const original = clone(defaultPortiaContent);
+const original = clone(portiaContentFixture);
 
 function fakeClient(initial: Record<string, unknown> | null = { id: "main", payload: original, revision: 7, updated_at: "2026-01-01T00:00:00Z", updated_by: "owner" }) {
   let row = initial ? clone(initial) : null;

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { defaultPortiaContent } from "../lib/portia-content.ts";
+import { portiaContentFixture } from "../lib/testing/portia-content-fixture.ts";
 
 // Called only after phase16-staging resolveStagingTarget. No env file is read here.
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -86,13 +86,13 @@ function completeGuide(section) {
 
 export function matrixPayload(variant, original) {
   if (variant !== "empty" && variant !== "populated") throw new MatrixError("matrix-variant-invalid");
-  const base = original && typeof original === "object" && !Array.isArray(original) ? clone(original) : clone(defaultPortiaContent);
+  const base = original && typeof original === "object" && !Array.isArray(original) ? clone(original) : clone(portiaContentFixture);
   if (variant === "empty") {
     for (const key of LISTS) base[key] = [];
     return base;
   }
   const existing = Array.isArray(base.viruses) ? base.viruses : [];
-  const sample = clone(existing[0] ?? defaultPortiaContent.viruses[0]);
+  const sample = clone(existing[0] ?? portiaContentFixture.viruses[0]);
   const ids = new Set(existing.map((item) => item.id));
   let id = "matrix-virus-yo";
   while (ids.has(id)) id += "-extra";

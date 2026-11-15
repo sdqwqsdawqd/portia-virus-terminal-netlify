@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { changedDossierTabs, changedSections, deniedSections, dossierTabs, editorSections, revertSections, sectionOfKey, unclassifiedTextKeys, type EditorSection } from "./editor-changes.ts";
-import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./portia-content.ts";
+import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
 import { contentRefusal } from "./editor-tabs.ts";
 
-const fixture = (): PortiaContent => structuredClone(defaultPortiaContent);
+const fixture = (): PortiaContent => structuredClone(portiaContentFixture);
 
 test("identical copies have no changed sections", () => {
   assert.deepEqual(changedSections(fixture(), fixture()), []);
@@ -51,7 +52,7 @@ test("toggling an assistant flag marks the assistant section", () => {
 });
 
 test("every content key except formattedText belongs to a section", () => {
-  for (const key of Object.keys(defaultPortiaContent)) {
+  for (const key of Object.keys(portiaContentFixture)) {
     if (key === "formattedText") continue;
     assert.notEqual(sectionOfKey(key), null, key);
   }
@@ -313,7 +314,7 @@ test("normalizePortiaContent is idempotent, so a normalized compare shows no pha
   rich.broadcasts.push({ id: "b1", type: "quest", title: "a", body: "b", published: true, important: false, startsAt: "", endsAt: "", conditions: "" });
   rich.formattedText[portiaTextKey.broadcast("b1")] = richText;
   moveToBin(rich);
-  for (const content of [defaultPortiaContent, rich]) {
+  for (const content of [portiaContentFixture, rich]) {
     const once = normalizePortiaContent(content)!;
     const twice = normalizePortiaContent(once)!;
     assert.deepEqual(twice, once);

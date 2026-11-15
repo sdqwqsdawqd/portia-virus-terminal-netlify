@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MAX_BLOCK_TEXT, MAX_CONDITIONS, MAX_SCIENTIST_LOGS } from "./content-limits.ts";
-import { classificationOptions, createVirusRecycleFiles, defaultPortiaContent, findInfo, type InfoSection } from "./portia-content.ts";
+import { classificationOptions, createVirusRecycleFiles, findInfo, type InfoSection } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 import { contentRefusal } from "./editor-tabs.ts";
 import { buildSearchIndex, matchSearch } from "./search-index.ts";
 import { normalizeBroadcasts, normalizeGuideSections, normalizeInfoSections, normalizePortiaContent, parseYoutubeId } from "./portia-content-normalize.ts";
 
 test("a save from before Phase 13 reads as an empty guide (D-00f)", () => {
-  const old: Record<string, unknown> = structuredClone(defaultPortiaContent);
+  const old: Record<string, unknown> = structuredClone(portiaContentFixture);
   delete old.guideSections;
   assert.deepEqual(normalizePortiaContent(old)?.guideSections, []);
   assert.deepEqual(normalizeGuideSections("garbage"), []);
@@ -59,13 +60,13 @@ test("guide sections, cards and blocks without ids get positional ids", () => {
 });
 
 test("a save round-trip keeps every field", () => {
-  const once = normalizePortiaContent(structuredClone(defaultPortiaContent));
+  const once = normalizePortiaContent(structuredClone(portiaContentFixture));
   assert.ok(once);
   assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
-  assert.equal(once.viruses.length, defaultPortiaContent.viruses.length);
-  assert.equal(once.viruses[0].external, defaultPortiaContent.viruses[0].external);
-  assert.equal(once.infoSections.length, defaultPortiaContent.infoSections.length);
-  assert.equal(once.broadcasts.length, defaultPortiaContent.broadcasts.length);
+  assert.equal(once.viruses.length, portiaContentFixture.viruses.length);
+  assert.equal(once.viruses[0].external, portiaContentFixture.viruses[0].external);
+  assert.equal(once.infoSections.length, portiaContentFixture.infoSections.length);
+  assert.equal(once.broadcasts.length, portiaContentFixture.broadcasts.length);
 });
 
 test("broken payloads are rejected instead of saved", () => {
@@ -74,7 +75,7 @@ test("broken payloads are rejected instead of saved", () => {
 });
 
 test("unsafe media links are cleaned", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.viruses[0].infectedImage = "javascript:alert(1)";
   content.viruses[0].scientistLogs = Array.from({ length: 7 }, (_, index) => ({
     id: `log-${index}`, title: "", scientist: "", lockedLevel: 2, content: ["text"],
@@ -85,7 +86,7 @@ test("unsafe media links are cleaned", () => {
 });
 
 test("protocol-relative and backslash image links are cleaned (CONT-09)", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.recycleFiles = [
     { id: "r1", name: "a", location: "", kind: "image", content: "", image: "//evil.example/x.png", virusId: "" },
     { id: "r2", name: "b", location: "", kind: "image", content: "", image: "/local.png", virusId: "" },
@@ -113,7 +114,7 @@ test("protocol-relative and backslash image links are cleaned (CONT-09)", () => 
 });
 
 test("scientist logs stay capped at MAX_SCIENTIST_LOGS", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.viruses[0].scientistLogs = Array.from({ length: 7 }, (_, index) => ({
     id: `log-${index}`, title: "", scientist: "", lockedLevel: 2, content: ["text"],
   }));
@@ -121,7 +122,7 @@ test("scientist logs stay capped at MAX_SCIENTIST_LOGS", () => {
 });
 
 test("runs, run text and formatted keys beyond the old caps are kept whole", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.formattedText = {
     big: { runs: [{ text: "x".repeat(150_000) }, ...Array.from({ length: 599 }, () => ({ text: "r" }))] },
     ...Object.fromEntries(Array.from({ length: 1199 }, (_, index) => [`k${index}`, { runs: [{ text: "t" }] }])),
@@ -135,7 +136,7 @@ test("runs, run text and formatted keys beyond the old caps are kept whole", () 
 });
 
 test("line breaks inside text survive normalization", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.formattedText = { note: { runs: [{ text: "first\nsecond\n" }] } };
   assert.equal(normalizePortiaContent(content)?.formattedText.note.runs[0].text, "first\nsecond\n");
 });
@@ -160,7 +161,7 @@ test("important is a strict boolean and junk entries are dropped in order", () =
 });
 
 test("normalizePortiaContent stays idempotent with old and new broadcasts", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.broadcasts = [
     { id: "a", type: "news", title: "A", body: "", published: true, important: true, startsAt: "", endsAt: "", conditions: "" },
     { id: "b", type: "task", title: "B", body: "", published: true } as never,
@@ -185,7 +186,7 @@ test("quest dates keep only strict YYYY-MM-DD and conditions keep line breaks an
 });
 
 test("normalizePortiaContent stays idempotent with quest fields present", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.broadcasts = [{ id: "q", type: "quest", title: "Q", body: "", published: true, important: false, startsAt: "2026-10-20", endsAt: "2026-10-25", conditions: "a\nb", sectionId: "" }];
   const once = normalizePortiaContent(content);
   assert.ok(once);
@@ -271,7 +272,7 @@ test("a guide text block up to and beyond MAX_BLOCK_TEXT is kept whole", () => {
 });
 
 test("normalizePortiaContent normalizes guides, keeps section formatting and is idempotent", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.infoSections.push({ id: "guide", title: "G", body: "", subsections: [{ id: "g1", title: "Sub", blocks: [
     { id: "b1", type: "text", text: "hello" },
     { id: "b2", type: "table", rows: [{ id: "r1", key: "a", value: "b" }] },
@@ -284,7 +285,7 @@ test("normalizePortiaContent normalizes guides, keeps section formatting and is 
   assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
   assert.deepEqual(once.infoSections.at(-1), content.infoSections.at(-1));
   assert.equal(once.formattedText["info:what-is-virus:body"].runs[0].text, "keep");
-  const legacy = { ...structuredClone(defaultPortiaContent), infoSections: [{ id: "old", title: "Old", body: "text" }] };
+  const legacy = { ...structuredClone(portiaContentFixture), infoSections: [{ id: "old", title: "Old", body: "text" }] };
   assert.deepEqual(normalizePortiaContent(legacy)?.infoSections, [{ id: "old", title: "Old", body: "text", subsections: [] }]);
 });
 
@@ -359,7 +360,7 @@ test("only news can be important", () => {
 });
 
 test("wrong-typed virus fields are coerced and missing records are filled", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   const odd = {
     name: 7, ppu: null, classification: "x", mutations: [null],
     scientistLogs: [{ title: {}, lockedLevel: "high", content: ["a"] }],
@@ -390,14 +391,14 @@ const D36_PAIRS = [
 ] as const;
 
 function oldVirus(index: number, mind: string, behavior: string, appearance: string) {
-  const virus = structuredClone(defaultPortiaContent.viruses[0]);
+  const virus = structuredClone(portiaContentFixture.viruses[0]);
   virus.id = `old-${index}`;
   virus.classification = { ...virus.classification, mind, behavior, appearance };
   return virus;
 }
 
 test("D-36 old class names read as the new ones in viruses and recycledViruses", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   const olds = D36_PAIRS.map(([old]) => old);
   content.viruses = [
     oldVirus(0, olds[0], olds[3], olds[6]),
@@ -427,7 +428,7 @@ test("D-36 old class names read as the new ones in viruses and recycledViruses",
 });
 
 test("D-36 an accented value reads as the plain name and an accented old name as the new name", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.viruses = [
     oldVirus(0, "Люци́диум", "Стабила́р", "Изомо́рф"),
     oldVirus(1, "Рубе́до", "Фобус", "Нюктея"),
@@ -442,7 +443,7 @@ test("D-36 an accented value reads as the plain name and an accented old name as
 });
 
 test("D-36 normalizing twice gives the same content", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.viruses = [oldVirus(0, "Нигредо", "Селенус", "Дедалея"), oldVirus(1, "Неизвестный класс", "Ареус", "Морфея")];
   content.recycledViruses = [oldVirus(2, "Альбедо", "Фобус", "Нюктея")];
   const once = normalizePortiaContent(content);
@@ -451,7 +452,7 @@ test("D-36 normalizing twice gives the same content", () => {
 });
 
 test("D-36 prototype member names are not resolved as class names", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.viruses = [oldVirus(0, "__proto__", "constructor", "toString")];
   const result = normalizePortiaContent(content);
   assert.ok(result);
@@ -462,10 +463,10 @@ test("D-36 prototype member names are not resolved as class names", () => {
 });
 
 test("D-36 a restricted editor without the viruses tab gets no false refusal from the rename", () => {
-  const stored = structuredClone(defaultPortiaContent);
+  const stored = structuredClone(portiaContentFixture);
   stored.viruses = [oldVirus(0, "Рубедо", "Фобус", "Нюктея")];
   const baseline = normalizePortiaContent(stored);
-  const draftSource = structuredClone(defaultPortiaContent);
+  const draftSource = structuredClone(portiaContentFixture);
   draftSource.viruses = [oldVirus(0, "Люцидиум", "Стабилар", "Изоморф")];
   const draft = normalizePortiaContent(draftSource);
   assert.ok(baseline && draft);
@@ -495,7 +496,7 @@ test("D-47 normalizeGuideSections returns a section with exactly id, title, phot
 });
 
 test("D-47 a note stored inside a guide section does not reach the normalized public content", () => {
-  const payload: Record<string, unknown> = structuredClone(defaultPortiaContent);
+  const payload: Record<string, unknown> = structuredClone(portiaContentFixture);
   payload.guideSections = [sectionWithNote];
   const content = normalizePortiaContent(payload);
   assert.ok(content);
@@ -503,7 +504,7 @@ test("D-47 a note stored inside a guide section does not reach the normalized pu
 });
 
 test("D-47 the search index cannot find a section by its note text", () => {
-  const content = normalizePortiaContent({ ...structuredClone(defaultPortiaContent), guideSections: [sectionWithNote] });
+  const content = normalizePortiaContent({ ...structuredClone(portiaContentFixture), guideSections: [sectionWithNote] });
   assert.ok(content);
   const index = buildSearchIndex({ apps: [], viruses: [], employees: [], infoSections: [], guideSections: content.guideSections, broadcasts: [], recycleFiles: [], recycledViruses: [] });
   assert.equal(index.length > 0, true, "the section's own card is indexed");
@@ -534,7 +535,7 @@ test("D-63 a garbage or default frame is dropped and a section without a frame k
 });
 
 test("D-63 the frame of a guide section survives normalizePortiaContent and is idempotent", () => {
-  const content: Record<string, unknown> = structuredClone(defaultPortiaContent);
+  const content: Record<string, unknown> = structuredClone(portiaContentFixture);
   content.guideSections = [{ id: "s", title: "T", photo: "/assets/a.png", photoFraming: { x: 30, y: 70, zoom: 150 }, cards: [] }];
   const once = normalizePortiaContent(content);
   assert.deepEqual(once?.guideSections[0].photoFraming, { x: 30, y: 70, zoom: 150 });
@@ -546,11 +547,11 @@ const frameA = { x: 20, y: 80, zoom: 160 };
 const hostileFrame = { x: "50; background:url(//evil.example/x)", y: 50, zoom: 120, extra: "expression(alert(1))" };
 
 function contentWith(patch: Record<string, unknown>) {
-  return { ...structuredClone(defaultPortiaContent), ...patch } as Record<string, unknown>;
+  return { ...structuredClone(portiaContentFixture), ...patch } as Record<string, unknown>;
 }
 
 function virusWith(patch: Record<string, unknown>) {
-  return { ...structuredClone(defaultPortiaContent.viruses[0]), id: "virus-frame", ...patch };
+  return { ...structuredClone(portiaContentFixture.viruses[0]), id: "virus-frame", ...patch };
 }
 
 test("D-63 a virus keeps the frame of its photo and of each mutation image, as numbers, and only with a picture", () => {
@@ -760,7 +761,7 @@ test("D-63 T-20-109 a restricted editor without the «Справочник» tab
 });
 
 // Phase 24, plan 03: the level of every leveled record survives normalization (D-03, D-13, LVL-02, LVL-07).
-const levelContent = (extra: Record<string, unknown>) => ({ ...structuredClone(defaultPortiaContent), ...extra }) as unknown;
+const levelContent = (extra: Record<string, unknown>) => ({ ...structuredClone(portiaContentFixture), ...extra }) as unknown;
 const normalized = (extra: Record<string, unknown>) => {
   const content = normalizePortiaContent(JSON.parse(JSON.stringify(levelContent(extra))));
   assert.ok(content);
@@ -823,7 +824,7 @@ test("LVL-02 / D-03 appLevels keeps only known app ids with a clamped level", ()
 });
 
 const logsOf = (logs: Record<string, unknown>[]) => {
-  const virus = { ...structuredClone(defaultPortiaContent.viruses[0]), scientistLogs: logs };
+  const virus = { ...structuredClone(portiaContentFixture.viruses[0]), scientistLogs: logs };
   return normalized({ viruses: [virus] }).viruses[0].scientistLogs;
 };
 
@@ -871,7 +872,7 @@ test("EDGE LVL-06/ordering: scientist logs keep order and id, an empty list stay
 });
 
 test("EDGE LVL-06/idempotency: normalizing twice equals normalizing once for content with levels, logs, appLevels and redaction", () => {
-  const virus = { ...structuredClone(defaultPortiaContent.viruses[0]), level: 2, scientistLogs: [
+  const virus = { ...structuredClone(portiaContentFixture.viruses[0]), level: 2, scientistLogs: [
     { id: "a", title: "", scientist: "", lockedLevel: "high", content: ["x"], withheld: "yes" },
     { id: "b", title: "", scientist: "", content: [] },
   ] };

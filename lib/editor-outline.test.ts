@@ -30,14 +30,15 @@ import {
 import { contentRefusal } from "./editor-tabs.ts";
 import { editorSections, sectionOfKey } from "./editor-changes.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
-import { defaultPortiaContent, portiaTextKey, type PortiaContent, type RichTextDocument } from "./portia-content.ts";
+import { portiaTextKey, type PortiaContent, type RichTextDocument } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 import { expandStyles } from "./rich-text-style.ts";
 
 const KEY = portiaTextKey.searchRecommendations;
 const RED = { color: "#ff0000" };
 
 const base = (): PortiaContent => {
-  const content = normalizePortiaContent(structuredClone(defaultPortiaContent));
+  const content = normalizePortiaContent(structuredClone(portiaContentFixture));
   assert.ok(content);
   return content;
 };

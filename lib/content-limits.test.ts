@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MAX_BLOCK_TEXT, MAX_CONDITIONS, MAX_CONTENT_BODY_BYTES, MAX_FORMATTED_KEYS, MAX_RICH_RUNS, MAX_RUN_CHARS, bodyTooLargeMessage, contentBodyBytes, limitStatus, limitText, oversizeFields, oversizeMessage, utf8Bytes } from "./content-limits.ts";
-import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./portia-content.ts";
+import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 
 const draft = (): PortiaContent => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.formattedText = {};
   content.broadcasts = [{ id: "bc", type: "news", title: "Сводка", body: "", published: true, important: false, startsAt: "", endsAt: "", conditions: "" }];
   content.infoSections = [{ id: "s1", title: "Раздел", body: "", subsections: [{ id: "u1", title: "Подраздел", blocks: [{ id: "b1", type: "text", text: "" }] }] }];
@@ -69,9 +70,9 @@ test("oversizeMessage names one field or the first and the rest count", () => {
 });
 
 test("contentBodyBytes is an upper bound of the request body", () => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   assert.ok(contentBodyBytes(content) >= utf8Bytes(JSON.stringify({ content, revision: 12 })));
-  const cyrillic = structuredClone(defaultPortiaContent);
+  const cyrillic = structuredClone(portiaContentFixture);
   cyrillic.assistantOffendedPhrase = "я".repeat(1000);
   assert.ok(contentBodyBytes(cyrillic) - contentBodyBytes(content) >= 2000 - utf8Bytes(content.assistantOffendedPhrase));
 });

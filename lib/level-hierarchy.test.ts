@@ -1,14 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { effectiveLevel, raiseChildLevels, raiseChildren } from "./level-hierarchy.ts";
-import { defaultPortiaContent, type GuideCard, type GuideSection, type InfoSection, type InfoSubsection, type PortiaContent } from "./portia-content.ts";
+import { type GuideCard, type GuideSection, type InfoSection, type InfoSubsection, type PortiaContent } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 import type { AccessLevel } from "./access-levels.ts";
 
 const sub = (id: string, level?: AccessLevel | unknown): InfoSubsection => ({ id, title: id, blocks: [], ...(level === undefined ? {} : { level: level as AccessLevel }) });
 const card = (id: string, level?: AccessLevel | unknown): GuideCard => ({ id, title: id, cover: "", blocks: [], ...(level === undefined ? {} : { level: level as AccessLevel }) });
 const infoSection = (id: string, level: unknown, subsections: InfoSubsection[]): InfoSection => ({ id, title: id, body: "", subsections, ...(level === undefined ? {} : { level: level as AccessLevel }) });
 const guideSection = (id: string, level: unknown, cards: GuideCard[]): GuideSection => ({ id, title: id, photo: "", cards, ...(level === undefined ? {} : { level: level as AccessLevel }) });
-const contentOf = (infoSections: InfoSection[], guideSections: GuideSection[]): PortiaContent => ({ ...structuredClone(defaultPortiaContent), infoSections, guideSections });
+const contentOf = (infoSections: InfoSection[], guideSections: GuideSection[]): PortiaContent => ({ ...structuredClone(portiaContentFixture), infoSections, guideSections });
 
 test("LVL-03 / D-17 effectiveLevel is the higher of the record and its parent", () => {
   assert.equal(effectiveLevel(undefined, 1), 1);

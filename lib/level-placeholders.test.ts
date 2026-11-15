@@ -14,7 +14,8 @@ import {
   shownViewerLevel,
   simpleSlotChain,
 } from "./level-placeholders.ts";
-import { defaultPortiaContent, type PortiaContent, type RedactedSlot, type ScientistLog, type Virus } from "./portia-content.ts";
+import { type PortiaContent, type RedactedSlot, type ScientistLog, type Virus } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 
 const node = (slot: string, at: number, requiredLevel: RedactedSlot["requiredLevel"] = 3): RedactedSlot => ({ slot, requiredLevel, at });
 
@@ -106,7 +107,7 @@ test("normalizeContentRedaction: keys of `slots` over 240 characters are dropped
 });
 
 const log = (extra: Partial<ScientistLog> = {}): ScientistLog => ({ id: "l1", title: "t", scientist: "s", lockedLevel: 1, content: [], ...extra });
-const withLogs = (logs: ScientistLog[]): Virus => ({ ...(defaultPortiaContent.viruses[0] as Virus), scientistLogs: logs });
+const withLogs = (logs: ScientistLog[]): Virus => ({ ...(portiaContentFixture.viruses[0] as Virus), scientistLogs: logs });
 
 test("isViewerShapedContent: marker, a withheld log in viruses or in recycledViruses, otherwise full", () => {
   const redaction = normalizeContentRedaction({ level: 1 });
@@ -193,7 +194,7 @@ test("T-24-38 the result carries nothing of the previous record", () => {
 
 // Slot chains.
 
-const contentWith = (extra: Partial<PortiaContent>): PortiaContent => ({ ...(structuredClone(defaultPortiaContent) as PortiaContent), ...extra });
+const contentWith = (extra: Partial<PortiaContent>): PortiaContent => ({ ...(structuredClone(portiaContentFixture) as PortiaContent), ...extra });
 const marker = (slots: Record<string, string>) => ({ ...normalizeContentRedaction({ level: 2 })!, slots });
 
 test("slot chains: simple, info and guide give the record and its parents, nearest first, no empty entries", () => {

@@ -81,7 +81,7 @@ test("repeated reads remain stable and revoked status closes the gate", async ()
 test("home page's static shell contains no desktop content", () => {
   const page = readFileSync(fileURLToPath(new URL("../app/page.tsx", import.meta.url)), "utf8");
   assert.match(page, /PortiaAccessGate/);
-  assert.doesNotMatch(page, /PortiaDesktop|defaultPortiaContent/);
+  assert.doesNotMatch(page, /PortiaDesktop|default[P]ortiaContent|portiaContentFixture/);
 });
 
 const missingClosureReplies = [

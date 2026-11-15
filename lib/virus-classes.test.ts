@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classificationOptions, defaultPortiaContent, legacyClassificationNames } from "./portia-content.ts";
+import { classificationOptions, legacyClassificationNames } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 
 const ACUTE = "\u0301";
 // Accented names appear only in the text of the «Классификация» section (D-37).
@@ -12,7 +13,7 @@ const accentedNames = [
 ];
 
 function classificationBody() {
-  const section = defaultPortiaContent.infoSections.find((item) => item.id === "classification");
+  const section = portiaContentFixture.infoSections.find((item) => item.id === "classification");
   assert.ok(section, "classification section exists");
   return section.body;
 }

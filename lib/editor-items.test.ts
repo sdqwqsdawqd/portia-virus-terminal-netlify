@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { addBroadcast, moveGuideCard, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "./editor-items.ts";
-import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./portia-content.ts";
+import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 
 const fixture = (): PortiaContent => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.broadcasts = [
     { id: "a", type: "news", title: "A", body: "текст A", published: true, important: false, startsAt: "", endsAt: "", conditions: "" },
     { id: "b", type: "task", title: "B", body: "текст B", published: false, important: false, startsAt: "", endsAt: "", conditions: "" },
@@ -140,7 +141,7 @@ test("a new item is blank, not a copy of the last edited one", () => {
 });
 
 const binFixture = (): PortiaContent => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   const [first] = content.viruses;
   content.recycledViruses = [{ ...structuredClone(first), id: "ab" }, { ...structuredClone(first), id: "abc" }];
   content.recycleFiles = [

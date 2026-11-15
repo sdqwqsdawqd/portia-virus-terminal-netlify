@@ -4,9 +4,10 @@ import { readFileSync } from "node:fs";
 import { prepareContentSave } from "./content-save.ts";
 import { levelCopy } from "./level-copy.ts";
 import { normalizeContentRedaction } from "./level-placeholders.ts";
-import { defaultPortiaContent, type InfoSection, type PortiaContent } from "./portia-content.ts";
+import { type InfoSection, type PortiaContent } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 
-const fullContent = (): PortiaContent => structuredClone(defaultPortiaContent);
+const fullContent = (): PortiaContent => structuredClone(portiaContentFixture);
 
 const withInfoSection = (content: PortiaContent, level: 1 | 3, subLevel: 1 | 3): PortiaContent => {
   const section: InfoSection = {

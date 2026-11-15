@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import { slotKeyFactory } from "./content-response.ts";
 import { redactContentForViewer, withoutViewerMarkers } from "./level-redact.ts";
 import { mergePlaceholders } from "./level-placeholders.ts";
-import { defaultPortiaContent, type PortiaContent } from "./portia-content.ts";
+import { type PortiaContent } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
 import type { AccessLevel } from "./access-levels.ts";
 
@@ -35,7 +36,7 @@ function virus(n: number): Record<string, unknown> {
 const doc = (text: string) => ({ runs: [{ text }] });
 
 function contentOf(order: number[]): PortiaContent {
-  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const base = structuredClone(portiaContentFixture) as unknown as Record<string, unknown>;
   const formattedText: Record<string, unknown> = { "mystery:CANARY_PREFIX": doc("CANARY_PREFIX_TEXT"), "broadcast:keep:body": doc("KEEP_BROADCAST") };
   for (const n of order) {
     formattedText[`virus:CANARY_L${n}_ID:external`] = doc(`CANARY_L${n}_TEXT`);
@@ -141,7 +142,7 @@ test("withoutViewerMarkers: копия без redaction и без withheld, вх
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Plan 24-05: every surface of the phase on one pure function. The fixture is built here (not a copy of defaultPortiaContent):
+// Plan 24-05: every surface of the phase on one pure function. The fixture is built here (not a copy of portiaContentFixture):
 // each level-bound object carries a canary of its own effective level in every text field, image URL, id and formatting key.
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -233,7 +234,7 @@ function surfaces() {
   const broadcasts = [{ id: "bc", type: "news", title: "BC_TITLE", body: "", published: true, important: false, startsAt: "", endsAt: "", conditions: "" }];
   formatted["broadcast:bc:body"] = doc("BC_KEEP");
 
-  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const base = structuredClone(portiaContentFixture) as unknown as Record<string, unknown>;
   const content = normalizePortiaContent({
     ...base, viruses, recycledViruses: recycled, recycleFiles: files, recycleOrder: order, infoSections: info, guideSections: guide, broadcasts,
     searchRecommendations: recs, broadcastSections: [{ id: "bs", title: "BS_CANARY", subsections: [] }], searchRecommendationSections: [{ id: "rs", title: "RS_CANARY", items: recs, subsections: [] }],
@@ -299,7 +300,7 @@ test("D-12: исключение узкое — закрытый вирус, р�
 
 // A small tree for the hierarchy and ordering rules.
 function tree(): PortiaContent {
-  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const base = structuredClone(portiaContentFixture) as unknown as Record<string, unknown>;
   const sub = (id: string, level?: number) => ({ id, title: `T_${id}`, ...(level === undefined ? {} : { level }), blocks: [{ id: `b_${id}`, type: "text", text: `X_${id}` }] });
   const card = (id: string, level?: number) => ({ id, title: `T_${id}`, cover: "", ...(level === undefined ? {} : { level }), blocks: [{ id: `b_${id}`, type: "text", text: `X_${id}` }] });
   const formattedText: Record<string, unknown> = {};
@@ -368,7 +369,7 @@ test("EDGE LVL-05/ordering: порядок открытых записей во 
 });
 
 function bin(): PortiaContent {
-  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const base = structuredClone(portiaContentFixture) as unknown as Record<string, unknown>;
   const v = (id: string, level?: number) => ({ ...virus(0), id, code: `C_${id}`, name: `N_${id}`, ...(level === undefined ? {} : { level }) });
   const file = (id: string, kind: string, virusId = "") => ({ id, name: `F_${id}`, location: "C:\\X", kind, content: `TXT_${id}`, image: "", virusId });
   const content = normalizePortiaContent({
@@ -402,7 +403,7 @@ test("«Корзина»: закрытый вирус и файл закрыто
 });
 
 test("EDGE LVL-05/adjacency: закрытый файл между двумя открытыми — открытые на местах, ключа нет, at равен индексу в полном порядке", () => {
-  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const base = structuredClone(portiaContentFixture) as unknown as Record<string, unknown>;
   const files = [
     { id: "x1", name: "X1", location: "C:\\X", kind: "text", content: "", image: "", virusId: "" },
     { id: "x2", name: "CLOSED_FILE", location: "C:\\X", kind: "virus", content: "", image: "", virusId: "VC" },
@@ -421,7 +422,7 @@ test("EDGE LVL-05/adjacency: закрытый файл между двумя о�
 });
 
 function withRecommendations(lines: string[], viruses: Record<string, unknown>[]): PortiaContent {
-  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const base = structuredClone(portiaContentFixture) as unknown as Record<string, unknown>;
   const content = normalizePortiaContent({ ...base, viruses, recycledViruses: [], recycleFiles: [], recycleOrder: [], searchRecommendations: lines, formattedText: { "search:recommendations": doc("RECDOC"), "assistant:advice": doc("ADV") } });
   assert.ok(content);
   return content;
@@ -463,7 +464,7 @@ test("formattedText: неизвестный префикс, несуществу
     assert.ok(keys.includes("assistant:advice") && keys.includes("broadcast:bc:body"));
   }
   // Allow-list by exact id: the key of a closed virus id that is the beginning of an open id is not kept for the open one.
-  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const base = structuredClone(portiaContentFixture) as unknown as Record<string, unknown>;
   const input = normalizePortiaContent({
     ...base, viruses: [{ ...virus(0), id: "a", level: 5 }, { ...virus(0), id: "a:b" }], recycledViruses: [], recycleFiles: [], recycleOrder: [],
     formattedText: { "virus:a:b:external": doc("OPEN_B"), "virus:a:external": doc("CLOSED_A"), "virus:a:b:unknown-field": doc("UNKNOWN_FIELD") },
@@ -493,7 +494,7 @@ test("явная сборка ответа: незнакомое поле вер
 // RLS24-01 (review round 1, M-1): a virus file whose virus cannot be found (an empty or a dangling virusId) is not level 1: it
 // carries the name and code of a virus that may have been closed and then deleted, so it fails closed to the top level.
 test("«Корзина»: файл вируса с пустым или битым virusId закрыт на уровне 5 (fail closed), открыт только на 5 и не светит имя", () => {
-  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const base = structuredClone(portiaContentFixture) as unknown as Record<string, unknown>;
   const file = (id: string, kind: string, virusId: unknown) => ({ id, name: kind === "virus" ? `${id}_CLOSED_NAME_CLOSED_CODE.virus` : `${id}.txt`, location: "C:\\X", kind, content: `TXT_${id}`, image: "", virusId });
   const content = normalizePortiaContent({
     ...base, viruses: [], recycledViruses: [],
@@ -518,7 +519,7 @@ test("«Корзина»: файл вируса с пустым или биты�
 
 // RLS24-05 (L-4): a draft broadcast is not shown to a visitor by the site, so it does not travel to the visitor at all.
 test("сводки: черновик (published: false) не уходит посетителю ни телом, ни ключом formattedText; опубликованная остаётся", () => {
-  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const base = structuredClone(portiaContentFixture) as unknown as Record<string, unknown>;
   const bc = (id: string, published: boolean, body: string) => ({ id, type: "news", title: `T_${id}`, body, published, important: false, startsAt: "", endsAt: "", conditions: "" });
   const content = normalizePortiaContent({
     ...base, viruses: [], recycledViruses: [], recycleFiles: [], recycleOrder: [],
@@ -538,7 +539,7 @@ test("сводки: черновик (published: false) не уходит пос
 
 // RLS24-06 (L-5): the assistant keeps its four exact keys, not any key that starts with "assistant:".
 test("formattedText: ассистент — только четыре точных ключа редактора, любой другой суффикс отброшен", () => {
-  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const base = structuredClone(portiaContentFixture) as unknown as Record<string, unknown>;
   const content = normalizePortiaContent({
     ...base, viruses: [], recycledViruses: [], recycleFiles: [], recycleOrder: [],
     formattedText: {

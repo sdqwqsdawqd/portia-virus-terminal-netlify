@@ -5,13 +5,14 @@ import * as saveStatus from "./editor-save-status.ts";
 import { draftEdits, networkSaveError, parseRefusedSections, partialSave, rebaseDecision, saveStatusText, SaveConflictError, SectionClosedError } from "./editor-save-status.ts";
 import { lf } from "./component-source.ts";
 import { historyReducer, initHistory } from "./editor-history.ts";
-import { defaultPortiaContent, type PortiaContent } from "./portia-content.ts";
+import { type PortiaContent } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 import { changedSections, revertSections } from "./editor-changes.ts";
 import { contentRefusal } from "./editor-tabs.ts";
 
 const editor = readFileSync(new URL("../components/portia-editor.tsx", import.meta.url), "utf8");
 const desktop = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8");
-const fixture = (): PortiaContent => structuredClone(defaultPortiaContent);
+const fixture = (): PortiaContent => structuredClone(portiaContentFixture);
 const cloneOf = <T,>(value: T): T => structuredClone(value);
 const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
 

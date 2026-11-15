@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { editorSections, sectionLabels } from "./editor-changes.ts";
 import { readFileSync } from "node:fs";
-import { defaultPortiaContent, type PortiaContent } from "./portia-content.ts";
+import { type PortiaContent } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 import { closedMessage, closedSectionsOf, contentRefusal, openTabIds, parseTabLists, tabRegistry, type TabDef } from "./editor-tabs.ts";
 
 const regularTabs = ["viruses", "info", "guide", "broadcasts", "recycle", "search", "assistant", "employees", "users"];
@@ -74,7 +75,7 @@ test("parseTabLists removes duplicates and keeps registry order", () => {
   assert.deepEqual(parseTabLists({ grantedTabs: ["promo", "promo"] }), { grantedTabs: ["promo"] });
 });
 
-const fixture = (): PortiaContent => structuredClone(defaultPortiaContent);
+const fixture = (): PortiaContent => structuredClone(portiaContentFixture);
 const sevenSections = regularTabs.slice(0, 7);
 const without = (...ids: string[]) => regularTabs.filter((id) => !ids.includes(id));
 const withBroadcast = (): PortiaContent => {
@@ -205,11 +206,11 @@ test("an editor with no grants and no closures gets every regular tab and no П�
   const open = openTabIds([], []);
   assert.deepEqual(open, regularTabs);
   assert.ok(!open.includes("promo"));
-  assert.equal(contentRefusal(defaultPortiaContent, defaultPortiaContent, open), null);
+  assert.equal(contentRefusal(portiaContentFixture, portiaContentFixture, open), null);
   const none = openTabIds(regularTabs, []);
   assert.deepEqual(none, []);
   // No tab at all: the content save is refused as a whole and the upload route answers by the same empty list.
-  assert.equal(contentRefusal(defaultPortiaContent, defaultPortiaContent, none)?.status, 403);
+  assert.equal(contentRefusal(portiaContentFixture, portiaContentFixture, none)?.status, 403);
   assert.match(readFileSync(new URL("./image-upload.ts", import.meta.url), "utf8"), /access\.openTabs\.length === 0/);
 });
 
@@ -217,11 +218,11 @@ test("a tab revoked while editing: the next access answer drops it and the same 
   const before = openTabIds([], []);
   const after = openTabIds(["info"], []);
   assert.ok(before.includes("info") && !after.includes("info"));
-  const edited = structuredClone(defaultPortiaContent) as PortiaContent;
+  const edited = structuredClone(portiaContentFixture) as PortiaContent;
   edited.infoSections[0].title = "Правка раздела, закрытого во время ввода";
   edited.viruses[0].name = "Правка открытого раздела";
-  assert.equal(contentRefusal(defaultPortiaContent, edited, before), null);
-  const refusal = contentRefusal(defaultPortiaContent, edited, after);
+  assert.equal(contentRefusal(portiaContentFixture, edited, before), null);
+  const refusal = contentRefusal(portiaContentFixture, edited, after);
   assert.equal(refusal?.code, "section-closed");
   assert.deepEqual(refusal?.sections, ["info"]);
 });
