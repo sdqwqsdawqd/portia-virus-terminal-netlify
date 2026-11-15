@@ -17,3 +17,24 @@ export function cacheMatchesSource(cached: unknown, source: string): boolean {
 export function stampCacheSource<T extends object>(value: T, source: string): T & { source: string } {
   return { ...value, source };
 }
+
+export const CONTENT_CACHE_KEY = "portia-content-last-success-v1";
+export const EMPLOYEES_CACHE_KEY = "portia-employees-last-success-v1";
+
+// Phase 24 (LVL-05): a content copy is cut for one viewer (editor or one level). It is shown only when the key it was saved
+// with equals the key of the current gate decision; a copy of another level, or one without a key, is not shown.
+export function cacheMatchesViewer(cached: unknown, viewerKey: string): boolean {
+  if (!viewerKey || !cached || typeof cached !== "object") return false;
+  return (cached as { viewer?: unknown }).viewer === viewerKey;
+}
+
+// D-21: when the gate says "closed and not allowed" (including a revoke) nothing of the content stays on the device.
+export function clearDeviceContentCaches(storage: () => Pick<Storage, "removeItem">): void {
+  for (const key of [CONTENT_CACHE_KEY, EMPLOYEES_CACHE_KEY]) {
+    try {
+      storage().removeItem(key);
+    } catch {
+      // Storage may be blocked or missing; the copy then cannot be read either.
+    }
+  }
+}

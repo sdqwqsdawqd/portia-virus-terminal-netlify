@@ -2,6 +2,7 @@
 // from a request parameter.
 import { MIN_ACCESS_LEVEL, EDITOR_ACCESS_LEVEL, type AccessLevel } from "./access-levels.ts";
 import type { GateDecision } from "./access-gate.ts";
+import { viewerKeyOf } from "./content-sync.ts";
 
 export type Viewer = { editor: boolean; level: AccessLevel };
 
@@ -14,4 +15,14 @@ export function viewerOf(decision: GateDecision): Viewer | null {
   if (decision.editor) return { editor: true, level: EDITOR_ACCESS_LEVEL };
   if (!decision.allowed || decision.level === null) return null;
   return { editor: false, level: decision.level };
+}
+
+// The key a cached or fetched copy carries (format owned by viewerKeyOf in content-sync).
+export function viewerKey(viewer: Viewer | null): string {
+  return viewerKeyOf(viewer);
+}
+
+// D-21: closed site and this device is not allowed in (never approved, pending, rejected or revoked).
+export function shouldClearDeviceCaches(decision: GateDecision): boolean {
+  return decision.mode === "closed" && !decision.allowed;
 }
