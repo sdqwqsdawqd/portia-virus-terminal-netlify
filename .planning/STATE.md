@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 24
 current_phase_name: Уровни допуска и закрытие содержимого
 status: executing
-stopped_at: Completed 24-06-PLAN.md
-last_updated: "2026-11-15T08:44:30.419Z"
+stopped_at: Completed PORTIA-24-07-PLAN.md
+last_updated: "2026-11-15T08:52:18.088Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-24 execution started
-state_head: 8ffad1456547129fecc20c70e454fba06019f574
+state_head: b26abac100f8f10d1e73e0e114f33c89bff0f2f9
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 40
-  completed_plans: 35
+  completed_plans: 36
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-24 (Уровни допуска и закрытие содержимого) — EXECUTING
-Plan: 7 of 11
+Plan: 8 of 11
 Status: Executing Phase PORTIA-24
 Last activity: 2026-11-15 — Phase PORTIA-24 execution started
 
@@ -74,6 +74,7 @@ Progress: [███░░░░░░░] 29% (2/7 phases closed: 21 и 23 — 
 | Phase PORTIA-24 P04 | 35min | 3 tasks | 11 files |
 | Phase PORTIA-24 P05 | 35min | 3 tasks | 8 files |
 | Phase PORTIA-24 P06 | 15 min | 2 tasks | 3 files |
+| Phase PORTIA-24 P07 | 40min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -259,6 +260,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-24]: 24-04: ключ зрителя editor|level-N; приём ответа по ревизии или зрителю, порядок по номеру запроса; кэш только при точном совпадении ключа; опрос 30 с посетитель, 10 с редактор
 - [Phase PORTIA-24]: 24-05: formattedText посетителя - allow-list по точному id владельца; ответ собирается явно по полям; documents по зрителю из lib/embedded-documents.ts
 - [Phase PORTIA-24]: 24-06: PUT refuses a viewer copy with 422 viewer-copy before any DB read/write; row stores prepared.content (levels lifted), response carries levelsRaised
+- [Phase PORTIA-24]: 24-07: LevelPicker - один выбор уровня 1-5 у вируса, записей учёных и «Устава»; новая карточка без записей, новая запись с уровнем 1; охрана файла редактора расширена записью PORTIA-24
 
 ### Pending Todos
 
@@ -312,8 +314,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T08:44:29.782Z
-Stopped at: Completed 24-06-PLAN.md
+Last session: 2026-11-15T08:52:17.448Z
+Stopped at: Completed PORTIA-24-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
