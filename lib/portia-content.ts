@@ -1,3 +1,4 @@
+import type { AccessLevel } from "./access-levels.ts";
 import type { ImageFraming } from "./image-framing.ts";
 
 export type Mutation = {
@@ -32,6 +33,8 @@ export type ScientistLog = {
   lockedLevel: number;
   content: string[];
   richContent?: RichTextDocument;
+  // Phase 24, D-12: set only by the server redaction on a record the visitor may not read (title and scientist stay, the text does not). Never stored.
+  withheld?: true;
 };
 
 export const classificationOptions = {
@@ -116,6 +119,8 @@ export type Virus = {
     behavior: string;
   };
   scientistLogs: ScientistLog[];
+  // Phase 24, D-03: the access level this record needs; no field means level 1.
+  level?: AccessLevel;
 };
 
 // Guides (03.3 D-06..D-08): a category holds ordered subcategories, each a list of blocks in any order.
@@ -129,6 +134,7 @@ export type InfoSubsection = {
   id: string;
   title: string;
   blocks: InfoBlock[];
+  level?: AccessLevel;
 };
 
 export type InfoSection = {
@@ -136,6 +142,7 @@ export type InfoSection = {
   title: string;
   body: string;
   subsections: InfoSubsection[];
+  level?: AccessLevel;
 };
 
 // Resolves a section id or a subsection id to the section (and subsection) it names.
@@ -163,6 +170,7 @@ export type GuideCard = {
   cover: string;
   coverFraming?: ImageFraming;
   blocks: GuideBlock[];
+  level?: AccessLevel;
 };
 
 export type GuideSection = {
@@ -171,6 +179,7 @@ export type GuideSection = {
   photo: string;
   photoFraming?: ImageFraming;
   cards: GuideCard[];
+  level?: AccessLevel;
 };
 
 // Resolves a section id or a card id to the section (and card) it names.
@@ -216,6 +225,31 @@ export type RecycleFile = {
   virusId: string;
 };
 
+// Phase 24, O-1: the apps whose window can be closed by level. One new line here is one new closable app.
+export const LEVELED_APP_IDS = ["charter"] as const;
+export type LeveledAppId = (typeof LEVELED_APP_IDS)[number];
+
+// Phase 24, D-08/D-09: the place of a closed record. Only the level it needs, an opaque key and the index it had in the full list.
+export type RedactedSlot = { slot: string; requiredLevel: AccessLevel; at: number };
+
+// Phase 24: what the server withheld from this visitor. Present only in the copy built for a visitor (never for the editor).
+export type ContentRedaction = {
+  level: AccessLevel;
+  // id of an open record -> its slot key, so the client can tell that a record it had became closed (D-20).
+  slots: Record<string, string>;
+  viruses: RedactedSlot[];
+  recycle: RedactedSlot[];
+  infoSections: RedactedSlot[];
+  infoSubsections: Record<string, RedactedSlot[]>;
+  guideSections: RedactedSlot[];
+  guideCards: Record<string, RedactedSlot[]>;
+  apps: Partial<Record<LeveledAppId, { requiredLevel: AccessLevel }>>;
+};
+
+// A document window: the embedded address and the external one.
+export type DocumentLink = { src: string; external: string };
+export type DocumentLinks = Partial<Record<LeveledAppId, DocumentLink>>;
+
 export type PortiaContent = {
   viruses: Virus[];
   recycledViruses: Virus[];
@@ -242,6 +276,10 @@ export type PortiaContent = {
   assistantAutoMinSeconds: number;
   assistantAutoMaxSeconds: number;
   formattedText: Record<string, RichTextDocument>;
+  // Phase 24: the level each leveled app asks of its visitor (a missing key is level 1).
+  appLevels?: Partial<Record<LeveledAppId, AccessLevel>>;
+  // Only in the copy for a visitor; PUT rejects it.
+  redaction?: ContentRedaction;
 };
 
 export const portiaTextKey = {

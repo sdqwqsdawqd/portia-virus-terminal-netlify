@@ -20,6 +20,8 @@ import { MAX_SCIENTIST_LOGS } from "./content-limits.ts";
 import { normalizeOutlineSections, normalizeRecommendationSections } from "./editor-outline.ts";
 import { isAllowedMediaUrl } from "./media-url.ts";
 import { type ImageFraming, normalizeImageFraming } from "./image-framing.ts";
+import { requiredLevelOf, type AccessLevel } from "./access-levels.ts";
+import { normalizeContentRedaction } from "./level-placeholders.ts";
 
 // Every save and every cached read passes through here: unknown input in, a complete PortiaContent out.
 // It coerces shape and never cuts or drops user content (D-01); the limits in content-limits.ts only drive editor warnings.
@@ -99,6 +101,9 @@ const framingEntry = <Key extends string>(key: Key, picture: string, framing: un
   return safe ? ({ [key]: safe } as Record<Key, ImageFraming>) : {};
 };
 
+// Phase 24, D-03: a stored level is kept as a valid level (a damaged one becomes the highest, never open); no field stays no field.
+const levelEntry = (raw: unknown): { level?: AccessLevel } => (raw === undefined ? {} : { level: requiredLevelOf(raw) });
+
 const dayPattern =/^\d{4}-\d{2}-\d{2}$/;
 const normalizeDay = (value: unknown) => (typeof value === "string" && dayPattern.test(value) ? value : "");
 
@@ -119,6 +124,12 @@ const withoutNote = (record: Record<string, unknown>): Record<string, unknown> =
 const withoutNoteAndKey = (record: Record<string, unknown>, key: string): Record<string, unknown> => {
   const rest = withoutNote(record);
   delete rest[key];
+  return rest;
+};
+
+const withoutKeys = (record: Record<string, unknown>, keys: string[]): Record<string, unknown> => {
+  const rest = withoutNote(record);
+  for (const key of keys) delete rest[key];
   return rest;
 };
 
@@ -313,7 +324,7 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     const classification = isRecord(virus.classification) ? virus.classification : {};
     const infectedImage = normalizeMediaUrl(virus.infectedImage);
     return {
-      ...withoutNoteAndKey(virus, "infectedImageFraming"),
+      ...withoutKeys(virus, ["infectedImageFraming", "level"]),
       id,
       code: textOf(virus.code),
       name: textOf(virus.name),
@@ -326,6 +337,7 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
       ) as Virus["classification"],
       infectedImage,
       ...framingEntry("infectedImageFraming", infectedImage, virus.infectedImageFraming),
+      ...levelEntry(virus.level),
       mutations: Array.isArray(virus.mutations)
         ? virus.mutations.map((item) => {
             const mutation = isRecord(item) ? item : {};
@@ -410,6 +422,8 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
 
   const searchRecommendations = candidate.searchRecommendations.filter((item): item is string => typeof item === "string");
 
+  const redaction = normalizeContentRedaction(candidate.redaction);
+
   return {
     viruses,
     recycledViruses,
@@ -443,5 +457,6 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     assistantAutoMinSeconds,
     assistantAutoMaxSeconds,
     formattedText: normalizeFormattedText(candidate.formattedText),
+    ...(redaction ? { redaction } : {}),
   };
 }

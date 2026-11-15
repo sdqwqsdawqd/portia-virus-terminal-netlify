@@ -1,37 +1,56 @@
 import { defaultPortiaContent } from "@/lib/portia-content";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
+import { accessSessionSecret } from "@/lib/access-session";
+import { resolveGate } from "@/lib/access-gate";
+import { viewerOf } from "@/lib/access-viewer";
+import { contentAccessRequired, contentBodyFor, slotKeyFactory, type ContentRow } from "@/lib/content-response";
 import { MAX_CONTENT_BODY_BYTES, utf8Bytes } from "@/lib/content-limits";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
 import { closedSectionsOf, contentRefusal } from "@/lib/editor-tabs";
-import { contentCacheTag, noStoreHeaders, publicCacheHeaders, purgeCacheTag } from "@/lib/portia-cdn";
+import { contentCacheTag, noStoreHeaders, purgeCacheTag } from "@/lib/portia-cdn";
 import { parseJsonObject } from "@/lib/request-json";
 
 export const dynamic = "force-dynamic";
 
-type ContentRow = { payload: unknown; revision: number; updated_at: string };
-
 const conflictMessage = "Пока вы редактировали, кто-то другой сохранил изменения. Скопируйте свои правки и обновите страницу.";
 
-// Identical for every visitor, so the CDN serves it; each save purges the cache.
-// Who may edit comes from /api/access.
-export async function GET() {
-  const { data: row, error } = await createPublicSupabaseClient()
-    .from("portia_content")
-    .select("payload, revision, updated_at")
-    .eq("id", "main")
-    .maybeSingle<ContentRow>();
-  if (error) {
-    // The CDN keeps serving its last good copy and browsers keep their own.
-    console.error("PORTIA content read failed", error);
-    return Response.json({ error: "База временно недоступна." }, { status: 503, headers: noStoreHeaders });
-  }
+// Built for each viewer (Phase 24, D-04/D-05/D-06), so no CDN or browser may keep it: every answer is no-store and carries no
+// cache tag. The viewer comes from the gate decision only (editor session, then the device cookie). A closed site with no access
+// is refused before the content row is read. The save below still purges the old public copies for one release.
+export async function GET(request: Request) {
+  try {
+    const client = await createServerSupabaseClient();
+    const decision = await resolveGate(request.headers, {
+      client,
+      sessionSecret: accessSessionSecret(),
+      editorAccess: async () => {
+        const { data, error } = await client.auth.getUser();
+        if (isAuthRetryableFetchError(error)) return { canEdit: false, unavailable: true };
+        const access = await getEditorAccess(client, data.user);
+        return { canEdit: access.canEdit, unavailable: access.unavailable };
+      },
+    });
+    const viewer = viewerOf(decision);
+    if (!viewer) return Response.json(contentAccessRequired, { status: 401, headers: noStoreHeaders });
 
-  return Response.json({
-    content: (row?.payload ? normalizePortiaContent(row.payload) : null) ?? defaultPortiaContent,
-    revision: row?.revision ?? 0,
-    updatedAt: row?.updated_at ?? null,
-  }, { headers: publicCacheHeaders(contentCacheTag, 300) });
+    // Still the public client: Phase 25 closes the anonymous read of the table.
+    const { data: row, error } = await createPublicSupabaseClient()
+      .from("portia_content")
+      .select("payload, revision, updated_at")
+      .eq("id", "main")
+      .maybeSingle<NonNullable<ContentRow>>();
+    if (error) {
+      console.error("PORTIA content read failed", error);
+      return Response.json({ error: "База временно недоступна." }, { status: 503, headers: noStoreHeaders });
+    }
+
+    return Response.json(contentBodyFor(viewer, row, { slotOf: slotKeyFactory(accessSessionSecret()) }), { headers: noStoreHeaders });
+  } catch (error) {
+    console.error("PORTIA content gate check failed", error);
+    return Response.json({ error: "Проверка доступа временно недоступна." }, { status: 503, headers: noStoreHeaders });
+  }
 }
 
 export async function PUT(request: Request) {

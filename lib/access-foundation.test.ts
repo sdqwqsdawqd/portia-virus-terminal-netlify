@@ -354,6 +354,8 @@ test("visitor behaviour is unchanged (Phase 22 editor allow-list)", () => {
     "components/portia-editor.tsx",
     "app/api/access/request/route.ts",
     "app/api/access/status/route.ts",
+    // Phase 24: GET by viewer calls the gate and the session secret, as status does.
+    "app/api/content/route.ts",
     "app/api/access/editor-request/route.ts",
     "components/portia-access-gate.tsx",
     "app/api/promotion/status/route.ts",

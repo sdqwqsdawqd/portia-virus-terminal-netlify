@@ -15,6 +15,8 @@ import { acceptFetchedContent } from "@/lib/content-sync";
 import { cacheMatchesSource, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
 import { networkSaveError, parseRefusedSections, SaveConflictError, SectionClosedError } from "@/lib/editor-save-status";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
+import { mergePlaceholders } from "@/lib/level-placeholders";
+import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { splitEmbeddedMedia } from "@/lib/rich-text-media";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
@@ -135,6 +137,9 @@ type ContentResponse = {
   content?: PortiaContent;
   revision?: number;
   updatedAt?: string | null;
+  // Phase 24: who the server built this copy for, and the document links; read by later plans.
+  viewer?: unknown;
+  documents?: unknown;
 };
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, milliseconds = 6_000) {
@@ -1232,6 +1237,10 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
   const filteredViruses = content.viruses.filter((virus) => normalizeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(normalizeSearch(virusQuery)));
   const virusListbox = contentReady && filteredViruses.length > 0;
+  // Phase 24, D-08: closed records stand where they were, drawn from the server marker only. A search drops them (they have no name or code).
+  const virusSearching = normalizeSearch(virusQuery) !== "";
+  const virusRows = virusSearching ? mergePlaceholders(filteredViruses, undefined) : mergePlaceholders(content.viruses, content.redaction?.viruses);
+  const virusRecordCount = content.viruses.length + (content.redaction?.viruses.length ?? 0);
   // D-05: the dossier area shows the stale strip only while last-good records are on screen; the other apps join in 19-08.
   // One appViewState rule for every app (D-05..D-08); the window bodies below only choose what to draw.
   const contentBase = { denied: false, ready: contentReady, hasData: contentSync.lastGoodAt !== null, failure: contentSync.failure };
@@ -1661,19 +1670,23 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
           <AppWindow app="archive" state={windows.archive} active={activeApp === "archive"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="archive-window" meta="ДОПУСК II">
             <div className="archive-grid">
               <aside className="archive-browser" aria-label="Список вирусов">
-                <div className="browser-heading"><div><h1>База вирусов</h1></div><span className="record-count">{String(content.viruses.length).padStart(2, "0")}</span></div>
+                <div className="browser-heading"><div><h1>База вирусов</h1></div><span className="record-count">{String(virusRecordCount).padStart(2, "0")}</span></div>
                 <label className="search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск по базе</span><input value={virusQuery} onChange={(event) => setVirusQuery(event.target.value)} type="search" placeholder="Поиск по имени или коду" /></label>
                 <div className="browser-labels" aria-hidden="true"><span>СУБЪЕКТ</span><span>СТАТУС</span></div>
                 {/* Loading and the empty message are not options, so the container is a listbox only while it holds rows; no wrapper, the phone layout is a flex row. */}
                 <div className="virus-list" role={virusListbox ? "listbox" : undefined} aria-label={virusListbox ? "Записи вирусов" : undefined}>
                   {archiveView === "loading" ? <AppSkeleton shape="archive" /> : <>
-                  {filteredViruses.map((virus, index) => (
+                  {virusRows.map((row) => {
+                    if (row.kind === "redacted") return <RedactedPlaceholder key={row.slot} variant="row" level={row.requiredLevel} index={String(row.position + 1).padStart(2, "0")} listItem={virusListbox} />;
+                    const virus = row.item;
+                    return (
                     <button key={virus.id} type="button" role="option" aria-selected={virus.id === activeVirus?.id} className={`virus-row${virus.id === activeVirus?.id ? " active" : ""}${hitClass("virus", virus.id)}`} {...hitAttrs("virus", virus.id)} onClick={() => { setActiveVirusId(virus.id); setOpenLog(null); }}>
-                      <span className="row-index">{String(index + 1).padStart(2, "0")}</span>
+                      <span className="row-index">{String(row.position + 1).padStart(2, "0")}</span>
                       <span className="row-main"><strong>{virus.name}</strong><small>{virus.code}</small><RowBadges virus={virus} /></span>
                       <span className="row-status">{virus.status}</span>
                     </button>
-                  ))}
+                    );
+                  })}
                   {!filteredViruses.length && content.viruses.length > 0 && <div className="list-empty">Совпадений в архиве нет</div>}
                   </>}
                 </div>

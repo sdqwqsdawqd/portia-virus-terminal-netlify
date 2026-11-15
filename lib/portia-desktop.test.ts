@@ -113,7 +113,8 @@ test("component families start with the full main file", () => {
 test("component families import only their own seams and the known shared components", () => {
   const allowed = {
     // portia-virus-card: the archive's virus card, shared with the template builder (D-55, 20-43).
-    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card"],
+    // portia-redacted: the static «ЗАСЕКРЕЧЕНО · нужен допуск N» placeholder (Phase 24, D-08/D-09).
+    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card", "portia-redacted"],
     // portia-desktop-states: the shared «Доступ закрыт» panel the editor shows when the rights check fails (STAB-APP-09).
     // portia-image-framing: the block «Видимая часть» under a picture field (D-63, 20-53), shared with the template builder through ImageEditorField.
     // portia-users-tab: the «Пользователи» tab body (USR-01, Phase 22).

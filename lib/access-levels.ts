@@ -16,6 +16,13 @@ export function isAccessLevel(value: unknown): value is AccessLevel {
   return typeof value === "number" && Number.isInteger(value) && value >= MIN_ACCESS_LEVEL && value <= MAX_ACCESS_LEVEL;
 }
 
+// Phase 24, D-03: the level a record asks of its visitor. No field at all is level 1; an integer 1..5 is itself; anything
+// else (a string, 0, 6, 2.5, null) is the highest level, so a damaged value hides the record instead of opening it.
+export function requiredLevelOf(raw: unknown): AccessLevel {
+  if (raw === undefined) return MIN_ACCESS_LEVEL;
+  return isAccessLevel(raw) ? raw : MAX_ACCESS_LEVEL;
+}
+
 export function accessLevelLabel(level: AccessLevel): string {
   return `Уровень ${level}`;
 }
