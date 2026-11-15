@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/phase25-build-scan.mjs",
     "start": "next start",
     "test": "node --experimental-strip-types --test lib/*.test.ts",
     "test:promotion-live": "node --experimental-strip-types --test lib/portia-promotion-live.test.ts",
