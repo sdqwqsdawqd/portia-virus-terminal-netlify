@@ -5,11 +5,11 @@ milestone_name: Доступ и единый стиль
 current_phase: 24
 current_phase_name: Уровни допуска и закрытие содержимого
 status: phase_closed
-stopped_at: Phase PORTIA-24 closed as owner-accepted risk (D-74)
-last_updated: "2026-11-15T10:01:03.899Z"
+stopped_at: Phase 25 context gathered
+last_updated: "2026-11-15T15:41:16.632Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-24 closed as owner-accepted risk (D-74), not PASS
-state_head: ae9d7c7bf72c1365aa4de746f215ab6857bda009
+state_head: e988d501fa27227cc270f8f9fe9e9ec4e40a9072
 progress:
   total_phases: 7
   completed_phases: 3
@@ -326,9 +326,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T10:01:03.297Z
-Stopped at: Completed PORTIA-24-11-PLAN.md
-Resume file: None
+Last session: 2026-11-15T15:41:14.214Z
+Stopped at: Phase 25 context gathered
+Resume file: .planning/phases/PORTIA-25-pereklyuchenie-zakrytiya-baza-kesh-sborka-hranilische/25-CONTEXT.md
 
 ## Operator Next Steps
 
