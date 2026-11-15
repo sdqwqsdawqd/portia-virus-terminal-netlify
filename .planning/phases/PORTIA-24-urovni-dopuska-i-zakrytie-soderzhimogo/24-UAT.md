@@ -3,12 +3,12 @@ status: complete
 phase: PORTIA-24-urovni-dopuska-i-zakrytie-soderzhimogo
 source: [24-VERIFICATION.md]
 started: 2026-11-15T12:47:22Z
-updated: 2026-11-15T13:13:42Z
+updated: 2026-11-15T13:16:12.549Z
 ---
 
 ## Current Test
 
-[testing complete — все пункты приняты владельцем как риск, не PASS]
+[testing complete]
 
 ## Tests
 
