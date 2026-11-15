@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 24
 current_phase_name: Уровни допуска и закрытие содержимого
 status: executing
-stopped_at: Completed PORTIA-24-03-PLAN.md
-last_updated: "2026-11-15T08:22:57.015Z"
+stopped_at: Completed PORTIA-24-04-PLAN.md
+last_updated: "2026-11-15T08:29:54.397Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-24 execution started
-state_head: 961119d01c530a0ce12758429ea4676d1ae2e7da
+state_head: 33806f8e1f460ccf168e3d897848ac75f84fa714
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 40
-  completed_plans: 32
+  completed_plans: 33
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-24 (Уровни допуска и закрытие содержимого) — EXECUTING
-Plan: 4 of 11
+Plan: 5 of 11
 Status: Executing Phase PORTIA-24
 Last activity: 2026-11-15 — Phase PORTIA-24 execution started
 
@@ -71,6 +71,7 @@ Progress: [███░░░░░░░] 29% (2/7 phases closed: 21 и 23 — 
 | Phase PORTIA-24 P01 | 25min | 2 tasks | 15 files |
 | Phase PORTIA-24 P02 | 40min | 3 tasks | 7 files |
 | Phase PORTIA-24 P03 | 15 min | 2 tasks | 6 files |
+| Phase PORTIA-24 P04 | 35min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -253,6 +254,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-24]: 24-02: placeholder number span renamed access-redacted-number to avoid collision with the index form class
 - [Phase PORTIA-24]: 24-03: lockedLevel записи учёного — нет поля = 1, целое 1-5 как есть, мусор = 5 (D-13); withheld сохраняется как true при любом значении
 - [Phase PORTIA-24]: 24-03 (O-2, допущение): appLevels принадлежит разделу info в sectionOfKey; смена места — одна строка
+- [Phase PORTIA-24]: 24-04: ключ зрителя editor|level-N; приём ответа по ревизии или зрителю, порядок по номеру запроса; кэш только при точном совпадении ключа; опрос 30 с посетитель, 10 с редактор
 
 ### Pending Todos
 
@@ -306,8 +308,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T08:22:56.385Z
-Stopped at: Completed PORTIA-24-03-PLAN.md
+Last session: 2026-11-15T08:29:53.769Z
+Stopped at: Completed PORTIA-24-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
