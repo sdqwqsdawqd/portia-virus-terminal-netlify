@@ -320,3 +320,53 @@ test("Phase 25 checklist: the review section names the review file and the revie
   assert.ok(text.includes("BLOCKED"), "the live checks the reviewer could not do are BLOCKED");
   assert.ok(!/\bPASS\b/.test(text));
 });
+
+// Plan 25-10, Task 3: the local check is a record of commands, exit codes and numbers. The unit row must be green, types and lint clean,
+// the build scan present; no live lane (Postgres, staging, production, CDN, devices) may be written down as passed.
+test("local check: unit, types, lint and the build scan are recorded with exit code 0 and the numbers; the audit exclusion and the run.sh failure are written down", () => {
+  const local = read("25-LOCAL-CHECK.md");
+  const rows = tableRows(section(local, "Команды"), ["Команда"]);
+  const by = (needle: string) => rows.find((row) => row[0].includes(needle));
+  const unit = by("--test-skip-pattern");
+  assert.ok(unit, "the unit row (with the owner-approved exclusion)");
+  assert.equal(unit[1], "0");
+  assert.match(unit[2], /tests \d+, pass \d+, fail 0, skipped \d+/);
+  assert.ok(unit[0].includes("the real audit evidence verifies"), "the excluded test is named");
+  assert.match(unit[3], /^2026-\d\d-\d\d \d\d:\d\d:\d\d/);
+  for (const needle of ["tsc --noEmit", "eslint.js", "phase15-visual-manifest.test.ts", "--verify-promotion", "next build", "phase25-build-scan.mjs"]) {
+    const row = by(needle);
+    assert.ok(row, `row for ${needle}`);
+    assert.equal(row[1], "0", `${needle}: exit code`);
+  }
+  assert.match(by("eslint.js")![2], /\(0 errors, \d+ warnings[;)]/);
+  assert.match(by("phase25-build-scan.mjs")![2], /build scan: 0 markers in \d+ files/);
+  assert.ok(!local.includes("scripts/phase15-visual-manifest.mjs --verify "), "the signing mode of the visual manifest is never run");
+  const full = rows.find((row) => row[0].includes("lib/*.test.ts") && !row[0].includes("--test-skip-pattern"));
+  assert.ok(full, "the run without the exclusion is recorded too");
+  const script = by("run.sh build");
+  assert.ok(script, "the run of the script itself is recorded");
+  assert.notEqual(script[1], "0", "run.sh did not finish in this environment and the record must not say it did");
+  assert.match(local, /all checks passed[^\n]*\d\d:\d\d:\d\d UTC/);
+  assert.ok(section(local, "BLOCKED").includes("ОЖИДАЕТ ВЛАДЕЛЬЦА"));
+  assert.ok(!/\bPASS\b/.test(local), "no PASS in the local check");
+  for (const line of local.split("\n")) {
+    if (/Postgres|staging|production|CDN|устройств/i.test(line)) assert.ok(!/\bPASS\b/.test(line), `a live lane is written as passed: ${line.slice(0, 80)}`);
+  }
+});
+
+test("Phase 24 review disposition: no open finding; the fixed ones name a commit, the deferred ones name a reason (25-10)", () => {
+  const text = readFileSync(new URL("../.planning/phases/PORTIA-24-urovni-dopuska-i-zakrytie-soderzhimogo/24-REVIEW-DISPOSITION.md", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  assert.ok(!/disposition: open/.test(text), "no open finding in the frontmatter");
+  assert.match(text, /^open: 0$/m);
+  const rows = tableRows(text.slice(text.indexOf("| Finding |")), ["Finding"]);
+  assert.deepEqual(rows.map((row) => row[0]), ["WR-01", "WR-02", "WR-03", "IN-01", "IN-02", "IN-03", "IN-04", "IN-05", "IN-06", "IN-07"]);
+  for (const row of rows) {
+    if (row[2] === "fixed") assert.match(row[3], /^[0-9a-f]{7,40}\b/, `${row[0]}: a fixed finding names a commit`);
+    else {
+      assert.equal(row[2], "deferred", `${row[0]}: fixed or deferred`);
+      assert.ok(row[3].length > 10, `${row[0]}: a deferred finding names a reason`);
+    }
+  }
+  assert.deepEqual(rows.filter((row) => row[2] === "fixed").map((row) => row[0]), ["WR-02", "WR-03", "IN-03", "IN-04", "IN-05", "IN-07"]);
+  assert.ok(rows.find((row) => row[0] === "WR-01")![3].includes("Phase 26"));
+});

@@ -5,45 +5,45 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: deferred
     title: "На телефоне тело открытого раздела «Информации» недостижимо, если все его подразделы закрыты"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "В `LevelPicker` с `caption` элемент `<legend>` не первый потомок `<fieldset>`: группа теряет имя"
   - id: WR-03
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "Показ уровня по умолчанию «5» для копии без маркера (fail-open на отображении)"
   - id: IN-01
     severity: info
-    disposition: open
+    disposition: deferred
     title: "`reconcileSelection` не держит заглушку, если после потери записи закрылся и её родитель"
   - id: IN-02
     severity: info
-    disposition: open
+    disposition: deferred
     title: "`normalizeDocumentLinks` обещает больше, чем проверяет"
   - id: IN-03
     severity: info
-    disposition: open
+    disposition: fixed
     title: "Кэш после сохранения не содержит `documents`"
   - id: IN-04
     severity: info
-    disposition: open
+    disposition: fixed
     title: "Дублирование сборки зависимостей `resolveGate` в двух маршрутах"
   - id: IN-05
     severity: info
-    disposition: open
+    disposition: fixed
     title: "Устаревший комментарий и дубли литералов ключей кэша"
   - id: IN-06
     severity: info
-    disposition: open
+    disposition: deferred
     title: "Секрет слота требуется на пути редактора, где слоты не нужны"
   - id: IN-07
     severity: info
-    disposition: open
+    disposition: fixed
     title: "Ответ 401 обрабатывается без проверки порядка запросов"
-open: 10
+open: 0
 total: 10
 recorded: 2026-11-15T12:42:03.717Z
 ---
@@ -52,16 +52,16 @@ recorded: 2026-11-15T12:42:03.717Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| WR-03 | warning | open | - |
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
-| IN-03 | info | open | - |
-| IN-04 | info | open | - |
-| IN-05 | info | open | - |
-| IN-06 | info | open | - |
-| IN-07 | info | open | - |
+| WR-01 | warning | deferred | Phase 26: «Информация» на телефоне (UI-08) |
+| WR-02 | warning | fixed | 764b78a (25-02: legend first in LevelPicker) |
+| WR-03 | warning | fixed | 34a3485 (25-06: shownViewerLevel, fail closed) |
+| IN-01 | info | deferred | не пересекается с Phase 25; следующий проход ревью |
+| IN-02 | info | deferred | не пересекается с Phase 25; следующий проход ревью |
+| IN-03 | info | fixed | 185726d (25-08: one writeContentCache with documents) |
+| IN-04 | info | fixed | d175cd9 (25-01: one gate helper for both routes) |
+| IN-05 | info | fixed | bf3f1eb (25-08: cache keys from lib/device-cache.ts) |
+| IN-06 | info | deferred | не пересекается с Phase 25; следующий проход ревью |
+| IN-07 | info | fixed | 185726d (25-08: only the newest request may wipe the copies) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
