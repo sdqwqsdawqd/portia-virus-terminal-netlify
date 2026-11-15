@@ -200,3 +200,24 @@ test("UI-SPEC section 4 the focus moves to the next open row, the search box, th
   const fetchBody = between(desktop, "const fetchContent = useCallback(", "const retryContent = useCallback(");
   assert.ok(fetchBody.indexOf("captureRedactionFocus()") < fetchBody.indexOf("setContent(fetched)") && fetchBody.indexOf("restoreFocus?.()") > fetchBody.indexOf("setContent(fetched)"));
 });
+
+test("D-10 the guide draws a closed section as a bar and a closed card as a tile, merged by place, and a closed card page as the block", () => {
+  const guide = componentSource("portia-desktop-documents.tsx");
+  assert.ok(guide.includes('variant="bar"') && guide.includes('variant="tile"') && guide.includes('variant="block"'));
+  assert.ok(guide.includes("mergePlaceholders(sections, placeholders?.sections)"));
+  assert.ok(guide.includes("mergePlaceholders(section.cards, placeholders?.cards[section.id])"));
+  assert.ok(guide.includes("levelCopy.sectionsNoOpen.heading") && guide.includes("levelCopy.sectionsNoOpen.body"));
+  // A closed section has no head button, no photo, no chevron and no grid: its bar is the whole section.
+  const bar = between(guide, 'if (row.kind === "redacted")', "const section = row.item;");
+  assert.doesNotMatch(bar, /<button|PortiaImage|chevron|guide-grid|aria-expanded/);
+  assert.doesNotMatch(guide, /<img[\s>]/, "lib/portia-desktop.test.ts keeps picture tags out of this file");
+  // Only open sections fold: the folded ids are filtered by the open sections.
+  assert.ok(guide.includes("sections.some((section) => section.id === id)"));
+});
+
+test("D-20 the desktop passes the guide placeholders and the lost level, and any card chosen ends a lost selection", () => {
+  assert.ok(desktop.includes("placeholders={{ sections: content.redaction?.guideSections ?? [], cards: content.redaction?.guideCards ?? {} }}"));
+  assert.ok(desktop.includes("lostLevel={guideLostShown?.level ?? null}"));
+  assert.ok(desktop.includes("const openGuideCard = (id: string) => { setGuideCardId(id); setGuideLost(null); };"));
+  assert.ok(desktop.includes("guideSlotChain(previous, current.id)"));
+});

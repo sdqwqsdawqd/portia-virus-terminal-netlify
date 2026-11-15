@@ -1431,6 +1431,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
   const infoNoOpen = content.infoSections.length === 0 && !infoLostShown;
   const selectedInfo = selectedInfoEntry?.section;
   const selectedSubsection = selectedInfoEntry?.subsection ?? null;
+  // Any card chosen, or the back arrow, ends a lost selection (D-20); a search result sets the id itself and so ends it too.
+  const openGuideCard = (id: string) => { setGuideCardId(id); setGuideLost(null); };
   const infoWindowElement = () => document.querySelector<HTMLElement>('.app-window[data-window-app="info"]');
   // D-30: choosing an article opens it as its own screen; returnId names the list item «←» gives the focus back to.
   const openInfoArticle = (id: string, returnId = id) => {
@@ -1976,7 +1978,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
           <AppWindow app="guide" state={windows.guide} active={activeApp === "guide"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window guide-window" meta="СПРАВОЧНИК">
             {guideView === "loading" ? <div className="app-state-body"><AppSkeleton shape="guide" /></div>
               : guideView === "fatal" ? <div className="app-state-body">{contentFatal("microscopeGuide")}</div>
-              : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={setGuideCardId} hitId={searchHit?.type === "guide" ? searchHit.id : ""} banner={guideView === "stale" ? contentStaleBanner : null} />}
+              : <GuideApp sections={content.guideSections} formattedText={content.formattedText} openCardId={guideCardId} onOpenCard={openGuideCard} placeholders={{ sections: content.redaction?.guideSections ?? [], cards: content.redaction?.guideCards ?? {} }} lostLevel={guideLostShown?.level ?? null} hitId={searchHit?.type === "guide" ? searchHit.id : ""} banner={guideView === "stale" ? contentStaleBanner : null} />}
           </AppWindow>
 
           <AppWindow app="promotion" state={windows.promotion} active={activeApp === "promotion"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window promotion-window" meta="Повышение" locked={qualificationLocked}>

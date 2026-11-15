@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { findGuide, portiaTextKey, type GuideBlock, type GuideSection, type PortiaContent } from "@/lib/portia-content";
+import { findGuide, portiaTextKey, type GuideBlock, type GuideSection, type PortiaContent, type RedactedSlot } from "@/lib/portia-content";
+import { mergePlaceholders } from "@/lib/level-placeholders";
+import { levelCopy } from "@/lib/level-copy";
+import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { PortiaIllustration } from "@/components/portia-icons";
 import { emptyCopy, iframeLoadTimeoutMs } from "@/lib/app-state";
 import { FormattedText } from "@/components/portia-desktop-dossier";
@@ -84,7 +87,7 @@ export function EmbeddedDocument({ src, external, title }: { src: string; extern
 const guideCollapsedStorageKey = "portia-guide-collapsed-v2";
 
 // «Справочник»: the grid and the card page are one derived view of openCardId; a card that vanished simply means the grid (D-00d).
-export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitId = "", banner }: {
+export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitId = "", banner, placeholders, lostLevel = null }: {
   sections: GuideSection[];
   formattedText: PortiaContent["formattedText"];
   openCardId: string;
@@ -92,6 +95,10 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
   /** The card a search result named (D-14): marked on its page, or on its tile while the grid shows. */
   hitId?: string;
   banner?: ReactNode;
+  /** Phase 24 (D-08): the places of closed sections and cards, from the server marker; absent for an editor. */
+  placeholders?: { sections: RedactedSlot[]; cards: Record<string, RedactedSlot[]> };
+  /** Phase 24 (D-20): set while the open card became closed; the page then shows the block of that level. */
+  lostLevel?: number | null;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const page = useRef<HTMLElement>(null);
@@ -102,6 +109,7 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
   const backIntent = useRef(false);
   const lastShown = useRef("");
   const found = findGuide(sections, openCardId);
+  const sectionRows = mergePlaceholders(sections, placeholders?.sections);
   const card = found?.card ?? null;
   const shownId = card?.id ?? "";
 
@@ -158,10 +166,19 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
         {!card.blocks.length && <p className="guide-section-empty">В карточке пока нет содержимого</p>}
         <div className="guide-blocks">{card.blocks.map((block) => <GuideBlockView key={block.id} block={block} formattedText={formattedText} cardTitle={card.title} />)}</div>
       </article>
-    </> : !sections.length ? <div className="guide-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{emptyCopy.guide.heading}</strong><span>{emptyCopy.guide.body}</span></div>
-    : sections.map((section) => {
+    </> : lostLevel !== null ? <>
+      <div className="guide-back-bar"><button type="button" aria-label="Назад к списку карточек" onClick={() => { backIntent.current = true; onOpenCard(""); }}><span aria-hidden="true">←</span><span className="guide-back-label">Назад</span></button></div>
+      <RedactedPlaceholder variant="block" level={lostLevel} />
+    </> : !sectionRows.length ? <div className="guide-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{emptyCopy.guide.heading}</strong><span>{emptyCopy.guide.body}</span></div>
+    : <>
+    {!sections.length && <div className="guide-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{levelCopy.sectionsNoOpen.heading}</strong><span>{levelCopy.sectionsNoOpen.body}</span></div>}
+    {sectionRows.map((row) => {
+      // D-10: a closed section is one bar in its place: no button, no photo, no chevron, no grid.
+      if (row.kind === "redacted") return <section className="guide-section" key={row.slot}><RedactedPlaceholder variant="bar" level={row.requiredLevel} /></section>;
+      const section = row.item;
       const folded = collapsed.includes(section.id);
       const gridId = `guide-grid-${section.id}`;
+      const cardRows = mergePlaceholders(section.cards, placeholders?.cards[section.id]);
       return <section className="guide-section" key={section.id}>
         <button type="button" className={`guide-section-head${section.photo ? " has-photo" : ""}`} aria-expanded={!folded} aria-controls={gridId} onClick={() => setCollapsed((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}>
           {section.photo && <PortiaImage src={section.photo} alt="" recordId={`${section.id}:band`} priority="lazy" icon="guide" className="guide-section-band is-fill is-quiet" framing={section.photoFraming} />}
@@ -169,14 +186,19 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
           <span className="guide-section-chevron" aria-hidden="true" />
         </button>
         <div className="guide-grid" id={gridId} hidden={folded}>
-          {!section.cards.length && <p className="guide-section-empty">В разделе пока нет карточек</p>}
-          {section.cards.map((item) => <button key={item.id} type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}${hitId === item.id ? " search-hit" : ""}`} data-card-id={item.id} {...(hitId === item.id ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => openTile(item.id)}>
+          {!cardRows.length && <p className="guide-section-empty">В разделе пока нет карточек</p>}
+          {cardRows.map((cardRow) => {
+            if (cardRow.kind === "redacted") return <RedactedPlaceholder key={cardRow.slot} variant="tile" level={cardRow.requiredLevel} />;
+            const item = cardRow.item;
+            return <button key={item.id} type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}${hitId === item.id ? " search-hit" : ""}`} data-card-id={item.id} {...(hitId === item.id ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => openTile(item.id)}>
             {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" framing={item.coverFraming} /></span>}
             <span className="guide-tile-title">{item.title || "Без названия"}</span>
-          </button>)}
+          </button>;
+          })}
         </div>
       </section>;
     })}
+    </>}
   </div>;
 }
 
