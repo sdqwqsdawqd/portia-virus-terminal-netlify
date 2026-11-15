@@ -3,12 +3,20 @@ import { createHmac } from "node:crypto";
 import type { Viewer } from "./access-viewer.ts";
 import { embeddedDocuments } from "./embedded-documents.ts";
 import { redactContentForViewer, withoutViewerMarkers, type SlotKey } from "./level-redact.ts";
-import { defaultPortiaContent, LEVELED_APP_IDS, type DocumentLinks, type PortiaContent } from "./portia-content.ts";
+import { emptyPortiaContent, LEVELED_APP_IDS, type DocumentLinks, type PortiaContent } from "./portia-content.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
 
 export const contentAccessRequired = { error: "Нет доступа к содержимому.", code: "access-required" } as const;
 
+// D-22: the one body for "there is no data to show" (no row, an unreadable payload, a failed read): one text, one code.
+export const contentUnavailable = { error: "Данные временно недоступны.", code: "content-unavailable" } as const;
+
 export type ContentRow = { payload: unknown; revision: number; updated_at: string } | null;
+
+// True when the row holds a payload the normalizer accepts. A visitor with nothing readable is refused, never shown a seed.
+export function contentReadable(row: ContentRow): boolean {
+  return Boolean(row?.payload) && normalizePortiaContent(row?.payload) !== null;
+}
 
 export type ContentBody = {
   content: PortiaContent;
@@ -27,7 +35,7 @@ export function slotKeyFactory(secret: string): SlotKey {
 }
 
 export function contentBodyFor(viewer: Viewer, row: ContentRow, options: { slotOf: SlotKey }): ContentBody {
-  const stored = (row?.payload ? normalizePortiaContent(row.payload) : null) ?? defaultPortiaContent;
+  const stored = (row?.payload ? normalizePortiaContent(row.payload) : null) ?? normalizePortiaContent(emptyPortiaContent) ?? emptyPortiaContent;
   // Markers are never trusted from storage: the viewer's own are built below.
   const clean = withoutViewerMarkers(stored);
   const content = viewer.editor ? clean : redactContentForViewer(clean, viewer.level, options.slotOf);

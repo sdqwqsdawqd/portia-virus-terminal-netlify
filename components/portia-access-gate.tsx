@@ -7,7 +7,7 @@ import { accessGateLayout, accessSubmitFailure, claimApprovedNotice, type Access
 import type { AccessOrigin } from "@/lib/access-levels";
 import { shouldClearDeviceCaches, viewerKey, viewerOf } from "@/lib/access-viewer";
 import { clearDeviceContentCaches } from "@/lib/device-cache";
-import { defaultPortiaContent } from "@/lib/portia-content";
+import { emptyPortiaContent } from "@/lib/portia-content";
 import { isValidNickname } from "@/lib/nickname";
 
 const PortiaDesktop = dynamic(() => import("@/components/portia-desktop").then((mod) => mod.PortiaDesktop), { ssr: false });
@@ -118,7 +118,7 @@ export function PortiaAccessGate() {
     : null;
 
   return <>
-    {desktop && <PortiaDesktop initialContent={defaultPortiaContent} viewerKey={viewerKey(viewer)} viewerLevel={viewer?.level ?? null} onAccessLost={onAccessLost} />}
+    {desktop && <PortiaDesktop initialContent={emptyPortiaContent} viewerKey={viewerKey(viewer)} viewerLevel={viewer?.level ?? null} onAccessLost={onAccessLost} />}
     {noticeOpen && layout.approvedNotice && <AccessApprovedToast onDismiss={dismissNotice} />}
     {layout.showReopen && <button type="button" className="access-reopen" onClick={() => setCardOpen(true)}>ПОДАТЬ ЗАЯВКУ</button>}
     {showCard && <main className={desktop ? "access-gate access-gate-open" : "access-gate"}>

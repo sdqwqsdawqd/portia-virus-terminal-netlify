@@ -5,7 +5,7 @@ export type AppViewState = "loading" | "empty" | "populated" | "stale" | "fatal"
 // One failure class per cause, so one error code always reads as one reason.
 export const failureCopy: Record<AppFailure, { heading: string; body: string }> = {
   offline: { heading: "Нет связи с сервером", body: "Проверьте подключение и повторите." },
-  unavailable: { heading: "Сервис временно недоступен", body: "Данные не потеряны. Повторите через минуту." },
+  unavailable: { heading: "Данные временно недоступны", body: "Данные не потеряны. Повторите через минуту." },
   unexpected: { heading: "Не удалось загрузить данные", body: "Повторите. Если не помогает, сообщите редактору." },
 };
 

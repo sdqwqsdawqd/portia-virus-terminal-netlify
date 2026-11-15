@@ -5,11 +5,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { componentFamily, lf } from "./component-source.ts";
-import { contentAccessRequired, contentBodyFor, slotKeyFactory } from "./content-response.ts";
+import { contentAccessRequired, contentBodyFor, contentReadable, contentUnavailable, slotKeyFactory } from "./content-response.ts";
 import { embeddedDocuments } from "./embedded-documents.ts";
 import { viewerOf } from "./access-viewer.ts";
 import { mergePlaceholders } from "./level-placeholders.ts";
-import { type Virus } from "./portia-content.ts";
+import { assistantDefaults, emptyPortiaContent, type Virus } from "./portia-content.ts";
 import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
 import type { GateDecision } from "./access-gate.ts";
@@ -135,12 +135,13 @@ test("viewerOf берёт зрителя только из решения шлю
   for (const state of states) assert.deepEqual(viewerOf({ mode: "open", state }), { editor: false, level: 1 }, state.state);
 });
 
-test("contentBodyFor: строки нет — стандартное содержимое проходит ту же очистку; хранимые маркеры снимаются", () => {
+test("contentBodyFor: строки нет — пустая структура проходит ту же очистку; хранимые маркеры снимаются", () => {
   const empty = contentBodyFor({ editor: false, level: 1 }, null, { slotOf });
   assert.equal(empty.revision, 0);
   assert.equal(empty.updatedAt, null);
   assert.ok(empty.content.redaction);
-  assert.deepEqual(Object.keys(empty.documents), ["charter"], "the default content has no level on the charter");
+  assert.deepEqual(empty.content.viruses, []);
+  assert.deepEqual(Object.keys(empty.documents), ["charter"], "the empty content has no level on the charter");
 
   const forged = storedPayload();
   forged.redaction = { level: 1, slots: { vB: "forged" }, viruses: [{ slot: "forged", requiredLevel: 1, at: 0 }] };
@@ -180,7 +181,9 @@ test("исходник GET: шлюз, зритель, тело по зрител
   assert.ok(get.indexOf("resolveGateFor(") < get.indexOf("viewerOf("), "gate first, then the viewer");
   // T-25-05: a failed read logs the kind of the failure and nothing else, and answers a plain 503 without the cause.
   assert.ok(get.includes('console.error("PORTIA content read failed", error.kind);'));
-  assert.ok(get.includes('{ error: "Данные временно недоступны." }, { status: 503, headers: noStoreHeaders }'));
+  assert.ok(get.includes("contentUnavailable, { status: 503, headers: noStoreHeaders }"));
+  assert.ok(get.includes("!viewer.editor && !contentReadable(row)"), "D-22: a visitor without readable data is refused");
+  assert.ok(get.indexOf("contentReadable(") < get.indexOf("contentBodyFor("), "the refusal comes before the body is built");
   assert.ok(get.includes("readContentRow("), "Phase 25: the row is read by the signed server function");
   assert.ok(!get.includes('.from("portia_content")'), "Phase 25: GET no longer reads the table directly");
   assert.ok(get.indexOf("viewerOf(") < get.indexOf("readContentRow("), "the row is read only after the viewer is known");
@@ -235,4 +238,63 @@ test("D-11: ни один файл components/ и app/ (вне app/api) не и�
   // The module itself brings in nothing from the client side.
   const own = readFileSync("lib/embedded-documents.ts", "utf8");
   assert.ok(!/from "(?:@\/)?(?:components|app)\//.test(own));
+});
+
+test("EDGE SEC-03/empty: пустая структура нормализуется в себя, запасные фразы помощника из assistantDefaults", () => {
+  assert.deepEqual(emptyPortiaContent.viruses, []);
+  assert.deepEqual(emptyPortiaContent.recycledViruses, []);
+  assert.deepEqual(emptyPortiaContent.infoSections, []);
+  assert.deepEqual(emptyPortiaContent.guideSections, []);
+  assert.deepEqual(emptyPortiaContent.broadcasts, []);
+  assert.deepEqual(emptyPortiaContent.recycleFiles, []);
+  assert.deepEqual(emptyPortiaContent.recycleOrder, []);
+  assert.deepEqual(emptyPortiaContent.searchRecommendations, []);
+  assert.deepEqual(emptyPortiaContent.formattedText, {});
+  const normalized = normalizePortiaContent(emptyPortiaContent);
+  assert.ok(normalized, "an empty structure is a structure, not null");
+  for (const key of Object.keys(assistantDefaults) as (keyof typeof assistantDefaults)[]) {
+    assert.deepEqual(normalized[key], assistantDefaults[key], key);
+  }
+  assert.ok(normalized.assistantIdlePhrases.length > 0 && normalized.assistantAdvice.length > 0);
+  assert.deepEqual(normalizePortiaContent(normalized), normalized, "normalizing again changes nothing");
+  // Damaged assistant fields fall back to the defaults, not to a seed.
+  const damaged = normalizePortiaContent({ ...emptyPortiaContent, assistantIdlePhrases: [], assistantPatienceVariants: "x" });
+  assert.deepEqual(damaged?.assistantIdlePhrases, assistantDefaults.assistantIdlePhrases);
+  assert.deepEqual(damaged?.assistantPatienceVariants, assistantDefaults.assistantPatienceVariants);
+});
+
+test("D-22: contentReadable — строки нет или payload не читается = false", () => {
+  assert.equal(contentReadable(null), false);
+  assert.equal(contentReadable({ payload: "мусор", revision: 1, updated_at: "2026-11-15T00:00:00.000Z" }), false);
+  assert.equal(contentReadable({ payload: null, revision: 1, updated_at: "2026-11-15T00:00:00.000Z" }), false);
+  assert.equal(contentReadable({ payload: { viruses: 1 }, revision: 1, updated_at: "2026-11-15T00:00:00.000Z" }), false);
+  assert.equal(contentReadable(row(storedPayload())), true);
+  assert.equal(contentReadable(row(emptyPortiaContent)), true, "a saved empty structure is data");
+  assert.deepEqual(contentUnavailable, { error: "Данные временно недоступны.", code: "content-unavailable" });
+});
+
+test("EDGE SEC-03/null: редактор без строки получает пустую структуру без маркера и ревизию 0", () => {
+  const body = contentBodyFor({ editor: true, level: 5 }, null, { slotOf });
+  assert.deepEqual(body.content, normalizePortiaContent(emptyPortiaContent));
+  assert.ok(!("redaction" in body.content));
+  assert.equal(body.revision, 0);
+  assert.equal(body.updatedAt, null);
+  const unreadable = contentBodyFor({ editor: true, level: 5 }, row("мусор"), { slotOf });
+  assert.deepEqual(unreadable.content, normalizePortiaContent(emptyPortiaContent));
+  assert.equal(unreadable.revision, 7);
+});
+
+test("исходник PUT и шлюза: базовая копия — emptyPortiaContent, шлюз монтирует стол с пустой структурой, сида нет", () => {
+  const route = withoutComments(readFileSync(new URL("../app/api/content/route.ts", import.meta.url), "utf8"));
+  const put = route.slice(route.indexOf("export async function PUT"));
+  assert.ok(put.includes("normalizePortiaContent(stored?.payload ?? emptyPortiaContent) ?? normalizePortiaContent(emptyPortiaContent)"));
+  assert.ok(put.includes("baseRevision === 0"), "the first save of an empty structure inserts the row");
+  const get = route.slice(route.indexOf("export async function GET"), route.indexOf("export async function PUT"));
+  assert.ok(get.includes("Response.json(contentUnavailable"), "the read failure and the missing data share one body");
+  const gate = readFileSync(new URL("../components/portia-access-gate.tsx", import.meta.url), "utf8");
+  assert.ok(gate.includes("initialContent={emptyPortiaContent}"));
+  const portia = readFileSync(new URL("./portia-content.ts", import.meta.url), "utf8");
+  assert.ok(!/(defaultPortiaContent|cloneDefaultContent)/.test(portia), "no seed and no clone in the working module");
+  const appState = readFileSync(new URL("./app-state.ts", import.meta.url), "utf8");
+  assert.ok(appState.includes('heading: "Данные временно недоступны"'));
 });

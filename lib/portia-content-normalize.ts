@@ -7,7 +7,7 @@ import {
   LEVELED_APP_IDS,
   type InfoSubsection,
   createVirusRecycleFiles,
-  defaultPortiaContent,
+  assistantDefaults,
   type GuideBlock,
   type GuideCard,
   type GuideSection,
@@ -402,8 +402,8 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     ? candidate.assistantOffendedPhrases.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
     : typeof candidate.assistantOffendedPhrase === "string" && candidate.assistantOffendedPhrase.trim()
       ? [candidate.assistantOffendedPhrase]
-      : [...defaultPortiaContent.assistantOffendedPhrases];
-  if (!assistantOffendedPhrases.length) assistantOffendedPhrases.push(...defaultPortiaContent.assistantOffendedPhrases);
+      : [...assistantDefaults.assistantOffendedPhrases];
+  if (!assistantOffendedPhrases.length) assistantOffendedPhrases.push(...assistantDefaults.assistantOffendedPhrases);
 
   const assistantPatienceVariants = Array.isArray(candidate.assistantPatienceVariants)
     ? candidate.assistantPatienceVariants
@@ -411,25 +411,25 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
         .map((item) => Math.min(60, Math.max(1, Math.round(item))))
     : typeof candidate.assistantPatienceSeconds === "number" && Number.isFinite(candidate.assistantPatienceSeconds)
       ? [Math.min(60, Math.max(1, Math.round(candidate.assistantPatienceSeconds)))]
-      : [...defaultPortiaContent.assistantPatienceVariants];
-  if (!assistantPatienceVariants.length) assistantPatienceVariants.push(...defaultPortiaContent.assistantPatienceVariants);
+      : [...assistantDefaults.assistantPatienceVariants];
+  if (!assistantPatienceVariants.length) assistantPatienceVariants.push(...assistantDefaults.assistantPatienceVariants);
 
   const assistantIdlePhrases = Array.isArray(candidate.assistantIdlePhrases)
     ? candidate.assistantIdlePhrases.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
-    : [...defaultPortiaContent.assistantIdlePhrases];
-  if (!assistantIdlePhrases.length) assistantIdlePhrases.push(...defaultPortiaContent.assistantIdlePhrases);
+    : [...assistantDefaults.assistantIdlePhrases];
+  if (!assistantIdlePhrases.length) assistantIdlePhrases.push(...assistantDefaults.assistantIdlePhrases);
 
   const assistantActivityPhrases = Array.isArray(candidate.assistantActivityPhrases)
     ? candidate.assistantActivityPhrases.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
-    : [...defaultPortiaContent.assistantActivityPhrases];
-  if (!assistantActivityPhrases.length) assistantActivityPhrases.push(...defaultPortiaContent.assistantActivityPhrases);
+    : [...assistantDefaults.assistantActivityPhrases];
+  if (!assistantActivityPhrases.length) assistantActivityPhrases.push(...assistantDefaults.assistantActivityPhrases);
 
   const clampAutoSeconds = (value: unknown, fallback: number) => typeof value === "number" && Number.isFinite(value)
     ? Math.min(3600, Math.max(1, Math.round(value)))
     : fallback;
-  const assistantAutoIntervalSeconds = clampAutoSeconds(candidate.assistantAutoIntervalSeconds, defaultPortiaContent.assistantAutoIntervalSeconds);
-  let assistantAutoMinSeconds = clampAutoSeconds(candidate.assistantAutoMinSeconds, defaultPortiaContent.assistantAutoMinSeconds);
-  let assistantAutoMaxSeconds = clampAutoSeconds(candidate.assistantAutoMaxSeconds, defaultPortiaContent.assistantAutoMaxSeconds);
+  const assistantAutoIntervalSeconds = clampAutoSeconds(candidate.assistantAutoIntervalSeconds, assistantDefaults.assistantAutoIntervalSeconds);
+  let assistantAutoMinSeconds = clampAutoSeconds(candidate.assistantAutoMinSeconds, assistantDefaults.assistantAutoMinSeconds);
+  let assistantAutoMaxSeconds = clampAutoSeconds(candidate.assistantAutoMaxSeconds, assistantDefaults.assistantAutoMaxSeconds);
   if (assistantAutoMinSeconds > assistantAutoMaxSeconds) {
     [assistantAutoMinSeconds, assistantAutoMaxSeconds] = [assistantAutoMaxSeconds, assistantAutoMinSeconds];
   }
@@ -452,14 +452,14 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     searchRecommendationSections: normalizeRecommendationSections(candidate.searchRecommendationSections, searchRecommendations),
     assistantAdvice: Array.isArray(candidate.assistantAdvice)
       ? candidate.assistantAdvice.filter((item): item is string => typeof item === "string")
-      : [...defaultPortiaContent.assistantAdvice],
+      : [...assistantDefaults.assistantAdvice],
     assistantOffendedPhrase: typeof candidate.assistantOffendedPhrase === "string"
       ? candidate.assistantOffendedPhrase
-      : defaultPortiaContent.assistantOffendedPhrase,
+      : assistantDefaults.assistantOffendedPhrase,
     assistantOffendedPhrases,
     assistantPatienceSeconds: typeof candidate.assistantPatienceSeconds === "number" && Number.isFinite(candidate.assistantPatienceSeconds)
       ? Math.min(60, Math.max(1, Math.round(candidate.assistantPatienceSeconds)))
-      : defaultPortiaContent.assistantPatienceSeconds,
+      : assistantDefaults.assistantPatienceSeconds,
     assistantPatienceVariants,
     assistantIdlePhrases,
     assistantActivityPhrases,
@@ -467,7 +467,7 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     assistantActivityEnabled: typeof candidate.assistantActivityEnabled === "boolean" ? candidate.assistantActivityEnabled : true,
     assistantAutoTimingMode: candidate.assistantAutoTimingMode === "fixed" || candidate.assistantAutoTimingMode === "random"
       ? candidate.assistantAutoTimingMode
-      : defaultPortiaContent.assistantAutoTimingMode,
+      : assistantDefaults.assistantAutoTimingMode,
     assistantAutoIntervalSeconds,
     assistantAutoMinSeconds,
     assistantAutoMaxSeconds,

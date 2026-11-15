@@ -1,8 +1,8 @@
-import { defaultPortiaContent } from "@/lib/portia-content";
+import { emptyPortiaContent } from "@/lib/portia-content";
 import { accessSessionSecret } from "@/lib/access-session";
 import { resolveGateFor } from "@/lib/gate-for-request";
 import { viewerOf } from "@/lib/access-viewer";
-import { contentAccessRequired, contentBodyFor, slotKeyFactory, type ContentRow } from "@/lib/content-response";
+import { contentAccessRequired, contentBodyFor, contentReadable, contentUnavailable, slotKeyFactory, type ContentRow } from "@/lib/content-response";
 import { MAX_CONTENT_BODY_BYTES, utf8Bytes } from "@/lib/content-limits";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
@@ -35,8 +35,11 @@ export async function GET(request: Request) {
     } catch (error) {
       if (!(error instanceof ServerReadError)) throw error;
       console.error("PORTIA content read failed", error.kind);
-      return Response.json({ error: "Данные временно недоступны." }, { status: 503, headers: noStoreHeaders });
+      return Response.json(contentUnavailable, { status: 503, headers: noStoreHeaders });
     }
+
+    // Phase 25 (D-22): a visitor with no readable row is refused. Only an editor gets the empty structure, to start filling it.
+    if (!viewer.editor && !contentReadable(row)) return Response.json(contentUnavailable, { status: 503, headers: noStoreHeaders });
 
     return Response.json(contentBodyFor(viewer, row, { slotOf: slotKeyFactory(accessSessionSecret()) }), { headers: noStoreHeaders });
   } catch (error) {
@@ -79,8 +82,8 @@ export async function PUT(request: Request) {
       if (readError) throw readError;
       if ((stored?.revision ?? 0) !== baseRevision) return Response.json({ error: conflictMessage }, { status: 409 });
       // What the editor's own baseline normalizes to, so equal closed sections compare equal.
-      const baseline = normalizePortiaContent(stored?.payload ?? defaultPortiaContent) ?? normalizePortiaContent(defaultPortiaContent);
-      if (!baseline) throw new Error("PORTIA default content failed to normalize");
+      const baseline = normalizePortiaContent(stored?.payload ?? emptyPortiaContent) ?? normalizePortiaContent(emptyPortiaContent);
+      if (!baseline) throw new Error("PORTIA empty content failed to normalize");
       const refusal = contentRefusal(baseline, normalized, access.openTabs);
       if (refusal) return Response.json({ error: refusal.error, code: refusal.code, sections: refusal.sections }, { status: refusal.status });
     }
