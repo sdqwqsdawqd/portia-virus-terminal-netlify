@@ -198,3 +198,62 @@ test("readContentRow: a client error or a reply of an unknown shape is kind unav
     });
   }
 });
+
+test("readContentRow: an editor reads with the session client, no signature and no secret, and the public client is untouched", async () => {
+  const calls: Call[] = [];
+  const session = fakeClient({ data: { code: "ok", row: stored } }, calls);
+  const row = await readContentRow(
+    { editor: true, level: 5 },
+    {
+      session,
+      anonymous: () => {
+        throw new Error("the public client must not be created for an editor");
+      },
+    },
+    {
+      secret: () => {
+        throw new Error("the secret must not be read for an editor");
+      },
+      now: () => {
+        throw new Error("the clock must not be read for an editor");
+      },
+    },
+  );
+  assert.deepEqual(row, stored);
+  assert.deepEqual(calls, [{ fn: "portia_content_read", args: { p_issued_at: 0, p_signature: "" } }]);
+});
+
+test("readContentRow: an editor whose session read is refused or fails gets the same errors as a visitor", async () => {
+  await assert.rejects(
+    readContentRow({ editor: true, level: 5 }, { session: fakeClient({ data: { code: "unauthorized" } }), anonymous: () => forbiddenClient }),
+    (error: unknown) => error instanceof ServerReadError && error.kind === "unauthorized",
+  );
+  await assert.rejects(
+    readContentRow({ editor: true, level: 5 }, { session: fakeClient({ error: { message: "x" } }), anonymous: () => forbiddenClient }),
+    (error: unknown) => error instanceof ServerReadError && error.kind === "unavailable",
+  );
+});
+
+test("readContentRow: a visitor without the secret is unavailable, nothing is sent, and the secret text never reaches the error", async () => {
+  const calls: Call[] = [];
+  const anonymous = fakeClient({ data: { code: "ok", row: stored } }, calls);
+  const missing = () => {
+    throw new Error(`the secret is missing or short: ${SECRET}`);
+  };
+  await assert.rejects(
+    readContentRow({ editor: false, level: 1 }, { session: forbiddenClient, anonymous: () => anonymous }, { secret: missing, now: () => NOW_MS }),
+    (error: unknown) => error instanceof ServerReadError && error.kind === "unavailable" && !error.message.includes(SECRET) && !("cause" in error && error.cause),
+  );
+  assert.deepEqual(calls, []);
+});
+
+test("readContentRow: a public client that cannot be created is unavailable, not an uncaught error", async () => {
+  await assert.rejects(
+    readContentRow(
+      { editor: false, level: 1 },
+      { session: forbiddenClient, anonymous: () => { throw new Error("no Supabase url"); } },
+      { secret: () => SECRET, now: () => NOW_MS },
+    ),
+    (error: unknown) => error instanceof ServerReadError && error.kind === "unavailable",
+  );
+});

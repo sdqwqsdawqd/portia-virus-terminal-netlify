@@ -1,7 +1,6 @@
 import { defaultPortiaContent } from "@/lib/portia-content";
-import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { accessSessionSecret } from "@/lib/access-session";
-import { resolveGate } from "@/lib/access-gate";
+import { resolveGateFor } from "@/lib/gate-for-request";
 import { viewerOf } from "@/lib/access-viewer";
 import { contentAccessRequired, contentBodyFor, slotKeyFactory, type ContentRow } from "@/lib/content-response";
 import { MAX_CONTENT_BODY_BYTES, utf8Bytes } from "@/lib/content-limits";
@@ -24,16 +23,7 @@ const conflictMessage = "Пока вы редактировали, кто-то �
 export async function GET(request: Request) {
   try {
     const client = await createServerSupabaseClient();
-    const decision = await resolveGate(request.headers, {
-      client,
-      sessionSecret: accessSessionSecret(),
-      editorAccess: async () => {
-        const { data, error } = await client.auth.getUser();
-        if (isAuthRetryableFetchError(error)) return { canEdit: false, unavailable: true };
-        const access = await getEditorAccess(client, data.user);
-        return { canEdit: access.canEdit, unavailable: access.unavailable };
-      },
-    });
+    const decision = await resolveGateFor(request, client);
     const viewer = viewerOf(decision);
     if (!viewer) return Response.json(contentAccessRequired, { status: 401, headers: noStoreHeaders });
 

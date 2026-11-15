@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createServerClient } from "@supabase/ssr";
-import { isAuthRetryableFetchError, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { accessTokenDigest } from "./access-session.ts";
 import { isMissingClosureFunction, onceWarn, resolveGate, type GateDecision } from "./access-gate.ts";
 import { ACCESS_APPROVED_NOTICE_KEY, accessGateLayout, accessSubmitFailure, claimApprovedNotice } from "./access-gate-view.ts";
 import { AccessStoreError, type AccessRpcClient } from "./access-store.ts";
-import { getEditorAccess } from "./editor-access.ts";
+import { editorAccessFor } from "./gate-for-request.ts";
 
 const secret = "s".repeat(40);
 const token = "a".repeat(43);
@@ -127,15 +127,8 @@ function probeClient(cookies: Array<{ name: string; value: string }>, routes: Re
   return { client, calls };
 }
 
-// Verbatim copy of the editorAccess callback of app/api/access/status/route.ts.
-function routeEditorAccess(client: SupabaseClient) {
-  return async () => {
-    const { data, error } = await client.auth.getUser();
-    if (isAuthRetryableFetchError(error)) return { canEdit: false, unavailable: true as const };
-    const access = await getEditorAccess(client, data.user);
-    return { canEdit: access.canEdit, unavailable: access.unavailable };
-  };
-}
+// The editorAccess callback of both gate routes lives in lib/gate-for-request.ts (IN-04): the tests use it, not a copy.
+const routeEditorAccess = (client: SupabaseClient) => editorAccessFor(client);
 
 const closureRoute = "POST /rest/v1/rpc/portia_access_closure_enabled";
 
@@ -396,7 +389,12 @@ test("request form shows only known or server failure texts, never a raw excepti
 
 test("status route keeps a missing session secret fail-closed and the view helper stays client-safe", () => {
   const route = readFileSync(fileURLToPath(new URL("../app/api/access/status/route.ts", import.meta.url)), "utf8");
-  assert.match(route, /try \{[\s\S]*sessionSecret: accessSessionSecret\(\)[\s\S]*\} catch[\s\S]*status: 503/);
+  assert.match(route, /try \{[\s\S]*resolveGateFor\([\s\S]*\} catch[\s\S]*status: 503/);
+  assert.ok(!route.includes("editorAccess:"), "the route does not build its own editorAccess callback");
+  const helper = readFileSync(fileURLToPath(new URL("./gate-for-request.ts", import.meta.url)), "utf8");
+  assert.ok(helper.includes("sessionSecret: accessSessionSecret()"), "the helper reads the session secret, so a missing one throws and the route answers 503");
+  assert.ok(helper.includes("resolveGate(request.headers, gateDependencies(client))"));
+  assert.ok(!helper.includes("@/lib/supabase/server"), "the helper stays importable by node:test");
   const view = readFileSync(fileURLToPath(new URL("./access-gate-view.ts", import.meta.url)), "utf8");
   const imports = view.split(/\r?\n/).filter((line) => line.startsWith("import"));
   assert.ok(imports.length > 0);

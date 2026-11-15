@@ -174,7 +174,12 @@ test("исходник GET: шлюз, зритель, тело по зрител
   const start = source.indexOf("export async function GET");
   const get = source.slice(start, source.indexOf("export async function PUT"));
   assert.ok(start >= 0 && get.length > 0);
-  for (const call of ["resolveGate(", "viewerOf(", "contentBodyFor("]) assert.ok(get.includes(call), call);
+  for (const call of ["resolveGateFor(", "viewerOf(", "contentBodyFor("]) assert.ok(get.includes(call), call);
+  assert.ok(!get.includes("editorAccess:"), "IN-04: the gate dependencies are built only in lib/gate-for-request.ts");
+  assert.ok(get.indexOf("resolveGateFor(") < get.indexOf("viewerOf("), "gate first, then the viewer");
+  // T-25-05: a failed read logs the kind of the failure and nothing else, and answers a plain 503 without the cause.
+  assert.ok(get.includes('console.error("PORTIA content read failed", error.kind);'));
+  assert.ok(get.includes('{ error: "Данные временно недоступны." }, { status: 503, headers: noStoreHeaders }'));
   assert.ok(get.includes("readContentRow("), "Phase 25: the row is read by the signed server function");
   assert.ok(!get.includes('.from("portia_content")'), "Phase 25: GET no longer reads the table directly");
   assert.ok(get.indexOf("viewerOf(") < get.indexOf("readContentRow("), "the row is read only after the viewer is known");
