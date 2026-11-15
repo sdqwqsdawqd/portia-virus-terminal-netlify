@@ -38,6 +38,7 @@ import { PromotionEditor } from "@/components/portia-promotion-editor";
 import { LevelPicker } from "@/components/portia-level-picker";
 import { levelCopy } from "@/lib/level-copy";
 import { effectiveLevel, raiseChildren } from "@/lib/level-hierarchy";
+import { useImageRewrite } from "@/components/portia-image-rewrite";
 import { AppDeniedPanel } from "@/components/portia-desktop-states";
 import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";
 import { accessCheckFailedText } from "@/lib/app-state";
@@ -655,6 +656,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
     batchKey.current = id;
     try { run(); } finally { batchKey.current = null; }
   };
+  // Phase 25, D-13 / D-14: «change the address of a picture» after a level is raised; the requests live in lib/media-rewrite-client.ts.
+  const rewrite = useImageRewrite(changeDraft);
 
   const step = (kind: "undo" | "redo") => {
     const target = kind === "undo" ? history.past.at(-1) : history.future[0];
@@ -1027,6 +1030,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       } : undefined;
       // The refused sections stay in the draft: when nothing was typed meanwhile the draft becomes the full copy, not the reduced one that was stored.
       dispatch({ type: "saved", normalized: outgoing, savedFrom, keep: refused.length ? wanted : undefined, rebase });
+      // D-13: only now that the server stored the record may the replaced files go; the server checks the references again.
+      void rewrite.retire(outgoing);
       return clean;
     } catch (error) {
       // Keep the local draft marked as changed so a temporary network error
@@ -1273,7 +1278,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               <DossierTabs active={dossierTab} changed={liveDossierChanged} onSelect={selectDossierTab} />
               {dossierTab === "main" && <EditorGroup title="Основные данные">
                 <Field label="Название"><input value={selectedVirus.name} onChange={(event) => updateVirus((virus) => { virus.name = event.target.value; })} /></Field>
-                <LevelPicker name={`level-virus-${selectedVirus.id}`} value={selectedVirus.level} onChange={(level) => updateVirus((virus) => { virus.level = level; })} />
+                <LevelPicker name={`level-virus-${selectedVirus.id}`} value={selectedVirus.level} action={rewrite.action(`virus:${selectedVirus.id}`)} onChange={(level) => { rewrite.raised(`virus:${selectedVirus.id}`, "virus", selectedVirus.id, selectedVirus, effectiveLevel(selectedVirus.level, 1), level); updateVirus((virus) => { virus.level = level; }); }} />
                 <Field label="Код"><input value={selectedVirus.code} onChange={(event) => updateVirus((virus) => { virus.code = event.target.value; })} /></Field>
                 <Field label="Статус"><input value={selectedVirus.status} onChange={(event) => updateVirus((virus) => { virus.status = event.target.value; })} /></Field>
                 <ImageEditorField label="Фото или GIF после заражения" value={selectedVirus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} uploadMessage={uploadMessage} framing={selectedVirus.infectedImageFraming} framingBox="natural" onFramingChange={(frame) => updateVirus((virus) => { if (frame) virus.infectedImageFraming = frame; else delete virus.infectedImageFraming; })} onChange={(value) => updateVirus((virus) => { virus.infectedImage = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { virus.infectedImage = url; }))} />

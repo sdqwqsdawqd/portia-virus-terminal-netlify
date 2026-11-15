@@ -119,7 +119,8 @@ test("component families import only their own seams and the known shared compon
     // portia-image-framing: the block «Видимая часть» under a picture field (D-63, 20-53), shared with the template builder through ImageEditorField.
     // portia-users-tab: the «Пользователи» tab body (USR-01, Phase 22).
     // portia-level-picker: the shared «Нужен допуск 1–5» control of the editor forms (Phase 24, D-16).
-    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker"],
+    // portia-image-rewrite: the «change the address of a picture» hook beside the level picker (Phase 25, D-13/D-14); it keeps the editor file's requests and texts out of it.
+    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite"],
   } as const;
   for (const [main, family] of [["portia-desktop", desktopFamily], ["portia-editor", editorFamily]] as const) {
     const members = family.map((part) => part.file.replace(/\.tsx$/, ""));

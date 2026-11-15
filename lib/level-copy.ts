@@ -26,6 +26,13 @@ export const levelCopy = {
   raisedSubsections: (level: number, count: number) => `Уровень подразделов поднят до ${level}: изменено ${count}.`,
   raisedCards: (level: number, count: number) => `Уровень карточек поднят до ${level}: изменено ${count}.`,
   savedRaised: (count: number) => `Уровни приведены к иерархии: изменено ${count}.`,
+  // Phase 25, D-13 / D-14: «change the address of a picture» after a level was raised. Pressed by the editor, never automatic.
+  imageRewriteButton: "Сменить адрес картинки",
+  imageRewriteOffer: "Уровень поднят. Сохранённая раньше ссылка на картинку продолжит открываться, пока адрес не сменён.",
+  imageRewriteDone: (count: number) => `Адрес картинки сменён: ${count}. Старый файл удалится после сохранения.`,
+  imageRewriteExternal: (count: number) => `Внешние ссылки не меняются: ${count}.`,
+  imageRewriteFailed: "Не удалось сменить адрес картинки. Повторите.",
+  imageRetireKept: "Старый файл оставлен: на него ещё ссылается сохранённая запись.",
   logsEmptyEditor: "Записей учёных нет. Карточку можно сохранить без них.",
   editorIncomplete: {
     heading: "Содержимое загружено не полностью.",

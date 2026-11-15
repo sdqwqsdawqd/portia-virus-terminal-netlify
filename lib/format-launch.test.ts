@@ -67,6 +67,8 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //      (applyLevelPickerHunk); русских строк в файле не добавлено, строки выбора лежат в lib/level-copy.ts. Источник одобрения: 24-CONTEXT D-13, D-14, D-16 и план 24-07.
 //   7. PORTIA-24-08 (24-08; LVL-02, LVL-03, LVL-08) — выбор уровня у разделов, подразделов и карточек «Информации» и «Справочника» с иерархией и строкой автоподъёма
 //      (applyLevelHierarchyHunk), защита от копии «для зрителя» (contentIncomplete) и строка saveNotice; русские строки лежат в lib/level-copy.ts. Источник одобрения: 24-CONTEXT D-05, D-16, D-17 и план 24-08.
+//   8. PORTIA-25 (25-02; SEC-05, D-13, D-14) — «Сменить адрес картинки» у выбора уровня: хук useImageRewrite (components/portia-image-rewrite.tsx), вызов после подъёма уровня и после сохранения
+//      (applyImageRewriteHunk); русских строк в файле не добавлено, строки лежат в lib/level-copy.ts, запросы — в lib/media-rewrite-client.ts. Источник одобрения: 25-CONTEXT D-13, D-14 и план 25-02.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -389,6 +391,38 @@ function applyLevelHierarchyHunk(text: string): string {
   );
 }
 
+/** PORTIA-25 (25-02; SEC-05, D-13, D-14): «change the address of a picture» beside the level picker. The requests live in lib/media-rewrite-client.ts and the button in components/portia-image-rewrite.tsx; the editor file only calls them and holds no new Russian text. */
+function applyImageRewriteHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { effectiveLevel, raiseChildren } from "@/lib/level-hierarchy";',
+    'import { effectiveLevel, raiseChildren } from "@/lib/level-hierarchy";\nimport { useImageRewrite } from "@/components/portia-image-rewrite";',
+    "image rewrite import",
+  );
+  next = replaceOnce(
+    next,
+    "    try { run(); } finally { batchKey.current = null; }\n  };\n",
+    "    try { run(); } finally { batchKey.current = null; }\n  };\n" +
+      "  // Phase 25, D-13 / D-14: «change the address of a picture» after a level is raised; the requests live in lib/media-rewrite-client.ts.\n" +
+      "  const rewrite = useImageRewrite(changeDraft);\n",
+    "image rewrite hook",
+  );
+  next = replaceOnce(
+    next,
+    "<LevelPicker name={`level-virus-${selectedVirus.id}`} value={selectedVirus.level} onChange={(level) => updateVirus((virus) => { virus.level = level; })} />",
+    "<LevelPicker name={`level-virus-${selectedVirus.id}`} value={selectedVirus.level} action={rewrite.action(`virus:${selectedVirus.id}`)} onChange={(level) => { rewrite.raised(`virus:${selectedVirus.id}`, \"virus\", selectedVirus.id, selectedVirus, effectiveLevel(selectedVirus.level, 1), level); updateVirus((virus) => { virus.level = level; }); }} />",
+    "virus level picker offer",
+  );
+  return replaceOnce(
+    next,
+    '      dispatch({ type: "saved", normalized: outgoing, savedFrom, keep: refused.length ? wanted : undefined, rebase });\n',
+    '      dispatch({ type: "saved", normalized: outgoing, savedFrom, keep: refused.length ? wanted : undefined, rebase });\n' +
+      "      // D-13: only now that the server stored the record may the replaced files go; the server checks the references again.\n" +
+      "      void rewrite.retire(outgoing);\n",
+    "image retire after save",
+  );
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -437,6 +471,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-24", apply: applyLevelPickerHunk },
   { id: "PORTIA-24-08", apply: applyLevelHierarchyHunk },
   { id: "PORTIA-22", apply: applyUsersTabHunk },
+  { id: "PORTIA-25", apply: applyImageRewriteHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -532,12 +567,14 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.throws(() => applyInfoAddSectionHunk(expected), /exactly one bottom add-section button/, "a file without the bottom button cannot be turned into the expected one");
   // Без правки D-62 (только D-57) файл отличается от ожидаемого.
   assert.notEqual(firstDifference(expected, applyLaunchButtonHunk(sample)), null, "a file without the D-62 hunk is a difference");
-  const withoutUsers = approvedEditorEdits.slice(0, -1).reduce((text, edit) => edit.apply(text), sample);
+  const withoutUsers = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-22").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutUsers), null, "a file without the PORTIA-22 hunk is a difference");
-  const withoutLevels = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-24")).reduce((text, edit) => edit.apply(text), sample);
+  const withoutLevels = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-24") && edit.id !== "PORTIA-25").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutLevels), null, "a file without the PORTIA-24 hunk is a difference");
-  const withoutHierarchy = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-24-08").reduce((text, edit) => edit.apply(text), sample);
+  const withoutHierarchy = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-24-08" && edit.id !== "PORTIA-25").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutHierarchy), null, "a file without the PORTIA-24-08 hunk is a difference");
+  const withoutRewrite = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-25").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutRewrite), null, "a file without the PORTIA-25 hunk is a difference");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");
