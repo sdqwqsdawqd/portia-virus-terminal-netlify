@@ -63,6 +63,8 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //   4. D-63 — атрибуты кадра `framing`, `framingBox`, `onFramingChange` в строках `<ImageEditorField` (stripFramingAttributes).
 //   5. PORTIA-22 (USR-01, USR-09) — вкладка «Пользователи»: импорт, EditorTab, счётчик, historyTab, строка вкладки
 //      (applyUsersTabHunk); русских строк нет (D-58). Источник одобрения: ROADMAP Phase 22, success criterion 1.
+//   6. PORTIA-24 (24-07; LVL-02, LVL-06, LVL-07) — общий выбор уровня LevelPicker у вируса, записей учёных и «Устава», новая карточка без записей, новая запись уровня 1
+//      (applyLevelPickerHunk); русских строк в файле не добавлено, строки выбора лежат в lib/level-copy.ts. Источник одобрения: 24-CONTEXT D-13, D-14, D-16 и план 24-07.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -204,6 +206,53 @@ function applyUsersTabHunk(text: string): string {
   );
 }
 
+/** PORTIA-24 (24-07): the shared LevelPicker in the editor, byte-exact edits of the sample (D-13, D-14, D-16, O-2). The Russian texts of the picker live in lib/level-copy.ts, not here. */
+function applyLevelPickerHunk(text: string): string {
+  let next = replaceOnce(text, "  findGuide,\n", "  LEVELED_APP_IDS,\n  findGuide,\n", "leveled app ids import");
+  next = replaceOnce(
+    next,
+    'import { PromotionEditor } from "@/components/portia-promotion-editor";',
+    'import { PromotionEditor } from "@/components/portia-promotion-editor";\nimport { LevelPicker } from "@/components/portia-level-picker";\nimport { levelCopy } from "@/lib/level-copy";',
+    "level picker imports",
+  );
+  next = replaceOnce(
+    next,
+    '  scientistLogs: [\n    { id: makeId("log"), title: "ЗАПИСЬ 01", scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] },\n    { id: makeId("log"), title: "ЗАПИСЬ 02", scientist: "ИМЯ УЧЁНОГО", lockedLevel: 4, content: [""] },\n  ],\n',
+    "  scientistLogs: [],\n",
+    "blank virus without records (D-14)",
+  );
+  const virusName = '<Field label="Название"><input value={selectedVirus.name} onChange={(event) => updateVirus((virus) => { virus.name = event.target.value; })} /></Field>';
+  next = replaceOnce(
+    next,
+    virusName,
+    `${virusName}\n                <LevelPicker name={\`level-virus-\${selectedVirus.id}\`} value={selectedVirus.level} onChange={(level) => updateVirus((virus) => { virus.level = level; })} />`,
+    "virus level picker",
+  );
+  next = replaceOnce(
+    next,
+    '{selectedVirus.scientistLogs.length === 0 && <div className="editor-empty compact-empty">Записей учёных пока нет.</div>}',
+    '{selectedVirus.scientistLogs.length === 0 && <p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>}',
+    "empty records line",
+  );
+  next = replaceOnce(
+    next,
+    '<Field label="Уровень доступа записи"><select value={log.lockedLevel} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].lockedLevel = Number(event.target.value); })}><option value={2}>II — доступна</option><option value={3}>III — заблокирована</option><option value={4}>IV — заблокирована</option></select></Field>',
+    '<LevelPicker name={`level-log-${log.id}`} value={log.lockedLevel} onChange={(level) => updateVirus((virus) => { virus.scientistLogs[index].lockedLevel = level; })} />',
+    "record level picker",
+  );
+  next = replaceOnce(next, 'lockedLevel: 3, content: [""], richContent', 'lockedLevel: 1, content: [""], richContent', "new record at level 1 (D-13)");
+  return replaceOnce(
+    next,
+    '        <div className="editor-form flat-editor-form editor-card-columns">\n          <p className="editor-guidance">Каждый блок становится',
+    '        <div className="editor-form flat-editor-form editor-card-columns">\n' +
+      "          <EditorGroup title={levelCopy.appsGroup}>\n" +
+      "            {LEVELED_APP_IDS.map((id) => <LevelPicker key={id} name={`level-app-${id}`} caption={levelCopy.appLabels[id]} value={draft.appLevels?.[id]} onChange={(level) => changeDraft((next) => { next.appLevels = { ...(next.appLevels ?? {}), [id]: level }; })} />)}\n" +
+      "          </EditorGroup>\n" +
+      '          <p className="editor-guidance">Каждый блок становится',
+    "apps level group (O-2)",
+  );
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -249,6 +298,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "D-57", apply: applyLaunchButtonHunk },
   { id: "D-62", apply: applyInfoAddSectionHunk },
   { id: "D-63", apply: (text) => text, normalizeActual: stripFramingAttributes },
+  { id: "PORTIA-24", apply: applyLevelPickerHunk },
   { id: "PORTIA-22", apply: applyUsersTabHunk },
 ];
 
@@ -347,6 +397,8 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, applyLaunchButtonHunk(sample)), null, "a file without the D-62 hunk is a difference");
   const withoutUsers = approvedEditorEdits.slice(0, -1).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutUsers), null, "a file without the PORTIA-22 hunk is a difference");
+  const withoutLevels = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-24").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutLevels), null, "a file without the PORTIA-24 hunk is a difference");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

@@ -16,6 +16,7 @@ import { historyReducer, initHistory, type EditorHistory, type HistoryAction } f
 import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
 import { addBroadcast, makeId, moveGuideCard, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
 import {
+  LEVELED_APP_IDS,
   findGuide,
   findInfo,
   portiaTextKey,
@@ -34,6 +35,8 @@ import { compactRuns, expandStyles } from "@/lib/rich-text-style";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
 import { ActiveFormatContext, FloatingTextFormatPanel, FormatLaunchButton, FormattedTextarea, findFormatField, replaceRichText, type EditorPreviewSurface, type FormatTarget } from "@/components/portia-editor-rich-text";
 import { PromotionEditor } from "@/components/portia-promotion-editor";
+import { LevelPicker } from "@/components/portia-level-picker";
+import { levelCopy } from "@/lib/level-copy";
 import { AppDeniedPanel } from "@/components/portia-desktop-states";
 import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";
 import { accessCheckFailedText } from "@/lib/app-state";
@@ -424,10 +427,7 @@ const blankVirus = (): Virus => ({
     appearance: "Изоморф",
     behavior: "Стабилар",
   },
-  scientistLogs: [
-    { id: makeId("log"), title: "ЗАПИСЬ 01", scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] },
-    { id: makeId("log"), title: "ЗАПИСЬ 02", scientist: "ИМЯ УЧЁНОГО", lockedLevel: 4, content: [""] },
-  ],
+  scientistLogs: [],
 });
 
 const blankRecycleFile = (): RecycleFile => ({
@@ -1239,6 +1239,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               <DossierTabs active={dossierTab} changed={liveDossierChanged} onSelect={selectDossierTab} />
               {dossierTab === "main" && <EditorGroup title="Основные данные">
                 <Field label="Название"><input value={selectedVirus.name} onChange={(event) => updateVirus((virus) => { virus.name = event.target.value; })} /></Field>
+                <LevelPicker name={`level-virus-${selectedVirus.id}`} value={selectedVirus.level} onChange={(level) => updateVirus((virus) => { virus.level = level; })} />
                 <Field label="Код"><input value={selectedVirus.code} onChange={(event) => updateVirus((virus) => { virus.code = event.target.value; })} /></Field>
                 <Field label="Статус"><input value={selectedVirus.status} onChange={(event) => updateVirus((virus) => { virus.status = event.target.value; })} /></Field>
                 <ImageEditorField label="Фото или GIF после заражения" value={selectedVirus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} uploadMessage={uploadMessage} framing={selectedVirus.infectedImageFraming} framingBox="natural" onFramingChange={(frame) => updateVirus((virus) => { if (frame) virus.infectedImageFraming = frame; else delete virus.infectedImageFraming; })} onChange={(value) => updateVirus((virus) => { virus.infectedImage = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { virus.infectedImage = url; }))} />
@@ -1279,17 +1280,17 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
 
               {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
                 <p className="editor-guidance">Можно оставить досье без записей или добавить до пяти. Если текст не выделен, оформление применяется ко всей записи.</p>
-                {selectedVirus.scientistLogs.length === 0 && <div className="editor-empty compact-empty">Записей учёных пока нет.</div>}
+                {selectedVirus.scientistLogs.length === 0 && <p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>}
                 {selectedVirus.scientistLogs.map((log, index) => (
                   <div className="nested-editor-card" key={log.id}>
                     <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => updateVirus((virus) => { virus.scientistLogs.splice(index, 1); })}>Удалить</button></div>
                     <Field label="Название"><input value={log.title} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].title = event.target.value; })} /></Field>
                     <Field label="Псевдоним учёного"><input value={log.scientist} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].scientist = event.target.value; })} /></Field>
-                    <Field label="Уровень доступа записи"><select value={log.lockedLevel} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].lockedLevel = Number(event.target.value); })}><option value={2}>II — доступна</option><option value={3}>III — заблокирована</option><option value={4}>IV — заблокирована</option></select></Field>
+                    <LevelPicker name={`level-log-${log.id}`} value={log.lockedLevel} onChange={(level) => updateVirus((virus) => { virus.scientistLogs[index].lockedLevel = level; })} />
                     <FormattedTextarea area="scientist" label="Текст записи" value={scientistLogPlainText(log)} document={log.richContent} formatKey={`scientist:${log.id}`} onActivate={activateFormatter} onChange={(value, document) => updateVirus((virus) => { virus.scientistLogs[index].content = value.split(/\n\s*\n/); virus.scientistLogs[index].richContent = document; })} />
                   </div>
                 ))}
-                <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / {MAX_SCIENTIST_LOGS}</span></div>
+                <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / {MAX_SCIENTIST_LOGS}</span></div>
               </EditorGroup>}
 
               <button className="danger-control" type="button" onClick={() => setDialog("recycle")}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
@@ -1300,6 +1301,9 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
 
       {tab === "info" && (
         <div className="editor-form flat-editor-form editor-card-columns">
+          <EditorGroup title={levelCopy.appsGroup}>
+            {LEVELED_APP_IDS.map((id) => <LevelPicker key={id} name={`level-app-${id}`} caption={levelCopy.appLabels[id]} value={draft.appLevels?.[id]} onChange={(level) => changeDraft((next) => { next.appLevels = { ...(next.appLevels ?? {}), [id]: level }; })} />)}
+          </EditorGroup>
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация». Раздел может содержать подразделы, собранные из блоков в любом порядке.</p>
           <SectionAddBar onCreate={(title) => {
             const id = makeId("info");

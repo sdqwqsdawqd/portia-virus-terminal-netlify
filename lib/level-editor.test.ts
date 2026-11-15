@@ -75,3 +75,75 @@ test("T-24-26 only the picker joined the allow-list of components that read the 
   assert.match(foundation, /!allowed\.has\(path\)[\s\S]*access-store\|access-session\|access-levels/);
   assert.match(foundation, /doesNotMatch\(readFileSync\(join\(repoRoot, "components\/portia-editor\.tsx"\), "utf8"\), \/@\\\/lib\\\/\(\?:users-\|access-\)\/u\)/);
 });
+
+// ---- Task 2: the places in the two editors ----
+
+const editor = source("components/portia-editor.tsx");
+const dossier = source("components/portia-editor-dossier.tsx");
+const count = (text: string, part: string) => text.split(part).length - 1;
+
+test("LVL-07 the old three-way select of a record's level is gone from both editors", () => {
+  for (const [name, text] of [["portia-editor.tsx", editor], ["portia-editor-dossier.tsx", dossier]] as const) {
+    assert.ok(!text.includes("заблокирована"), `${name}: the old Roman-numeral options are still there`);
+    assert.ok(!/II\s+—/.test(text), `${name}: the old II — option is still there`);
+    assert.ok(!text.includes("<select value={log.lockedLevel}"), `${name}: the native list of a record's level is still there`);
+    assert.ok(text.includes("virus.scientistLogs[index].lockedLevel = level") || text.includes("item.scientistLogs[index].lockedLevel = level"), `${name}: the picker does not write a record's level`);
+    assert.ok(text.includes("lockedLevel: 1, content:"), `${name}: a new record must start at level 1`);
+    assert.ok(!text.includes("lockedLevel: 3, content:"), `${name}: a new record still starts at level 3`);
+  }
+});
+
+test("D-16 the picker stands at the virus, every record and the apps in the editor; at the virus and records in the trash editor", () => {
+  assert.ok(count(editor, "<LevelPicker") >= 3);
+  assert.ok(count(dossier, "<LevelPicker") >= 2);
+  assert.ok(editor.includes('import { LevelPicker } from "@/components/portia-level-picker"'));
+  assert.ok(dossier.includes('import { LevelPicker } from "@/components/portia-level-picker"'));
+  assert.ok(editor.includes("name={`level-virus-${selectedVirus.id}`}"));
+  assert.ok(editor.includes("name={`level-log-${log.id}`}"), "one group per record: the name comes from the record id");
+  assert.ok(dossier.includes("name={`level-log-${log.id}`}") && dossier.includes("name={`level-virus-${virus.id}`}"));
+  // The picker follows the title field in the main tab.
+  assert.match(editor, /<Field label="Название"><input value=\{selectedVirus\.name\}[^\n]*\n\s*<LevelPicker name=\{`level-virus-/);
+  assert.match(dossier, /<Field label="Название"><input value=\{virus\.name\}[^\n]*\n\s*<LevelPicker name=\{`level-virus-/);
+  assert.ok(editor.includes("virus.level = level;") && dossier.includes("item.level = level;"));
+});
+
+test("O-1/O-2 the apps group walks LEVELED_APP_IDS and opens the info tab", () => {
+  assert.ok(editor.includes("LEVELED_APP_IDS.map("));
+  assert.ok(editor.includes("title={levelCopy.appsGroup}"));
+  assert.ok(editor.includes("caption={levelCopy.appLabels[id]}"));
+  assert.ok(editor.includes("next.appLevels = { ...(next.appLevels ?? {}), [id]: level }"));
+  const group = editor.indexOf("title={levelCopy.appsGroup}");
+  const hint = editor.indexOf("Каждый блок становится отдельным разделом приложения «Информация»");
+  assert.ok(group > 0 && hint > group, "the group is the first element of the info form");
+  assert.ok(editor.lastIndexOf('{tab === "info"', group) > 0 && editor.lastIndexOf('{tab === "info"', group) > editor.lastIndexOf('{tab === "', group - 1) - 1);
+  assert.ok(!editor.includes("charter"), "the editor takes the app list from the content module, not from a literal");
+});
+
+test("D-14/LVL-06 a new virus has no scientist records, and an empty list says it can be saved", () => {
+  const body = editor.match(/const blankVirus = \(\): Virus => \(\{[\s\S]*?\n\}\);/)?.[0] ?? "";
+  assert.ok(body, "blankVirus is missing");
+  assert.ok(body.includes("scientistLogs: [],"));
+  assert.ok(!body.includes("ЗАПИСЬ 01") && !editor.includes("ЗАПИСЬ 01"));
+  assert.ok(editor.includes('<p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>'));
+  assert.ok(dossier.includes('<p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>'));
+  assert.equal(levelCopy.logsEmptyEditor, "Записей учёных нет. Карточку можно сохранить без них.");
+  // The add button keeps its label and the limit.
+  assert.ok(editor.includes("+ ДОБАВИТЬ ЗАПИСЬ") && editor.includes("scientistLogs.length >= MAX_SCIENTIST_LOGS"));
+  assert.ok(dossier.includes("+ ДОБАВИТЬ ЗАПИСЬ") && dossier.includes("scientistLogs.length >= MAX_SCIENTIST_LOGS"));
+});
+
+test("D-18 no level label in the editor lists", () => {
+  assert.ok(!editor.includes("levelCopy.logLevel("));
+  assert.ok(!editor.includes("levelCopy.archiveMeta("));
+});
+
+test("the template builder never shows the level control", () => {
+  for (const path of ["components/portia-template-builder.tsx", "lib/portia-template-dossier.ts"]) {
+    assert.ok(!lf(readFileSync(new URL(path, root), "utf8")).includes("LevelPicker"), `${path} must not use LevelPicker`);
+  }
+});
+
+test("T-24-26 the editor still takes the scale only through the picker", () => {
+  assert.doesNotMatch(editor, /@\/lib\/(?:users-|access-)/u);
+  assert.doesNotMatch(dossier, /access-levels|access-store|access-session/u);
+});

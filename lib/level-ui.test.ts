@@ -106,12 +106,14 @@ test("S2 long-text: the two segments never break, the wrapper wraps anywhere, so
 });
 
 test("D-09 the placeholder is static: no hover, no pointer, no animation in any rule that names it", () => {
-  assert.ok(rules.length > 0);
-  for (const rule of rules) {
+  // Phase 24, plan 24-07: the level picker shares the block and is interactive (hover, pointer), so only the rules that name the placeholder are held static.
+  const placeholderRules = rules.filter((rule) => rule.selector.includes(".access-redacted"));
+  assert.ok(placeholderRules.length > 0);
+  for (const rule of placeholderRules) {
     assert.doesNotMatch(rule.selector, /:hover|:active|:focus/, rule.selector);
+    assert.doesNotMatch(rule.body, /cursor\s*:\s*pointer/, rule.selector);
   }
   assert.equal(declaration(ruleFor(".access-redacted"), "cursor"), "default");
-  assert.doesNotMatch(accessBlock, /cursor\s*:\s*pointer/);
 });
 
 test("S1 populated: a placeholder row has the height of a virus row, on the phone too", () => {

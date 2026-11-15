@@ -4,6 +4,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { dossierTabs, type DossierTab } from "@/lib/editor-changes";
 import { makeId } from "@/lib/editor-items";
 import { classificationOptions, scientistLogPlainText, type Virus } from "@/lib/portia-content";
+import { LevelPicker } from "@/components/portia-level-picker";
+import { levelCopy } from "@/lib/level-copy";
 import { ImageFramingEditor, type ImageFramingBox } from "@/components/portia-image-framing";
 import type { ImageFraming } from "@/lib/image-framing";
 import { isLocalMediaPath } from "@/lib/media-url";
@@ -224,6 +226,7 @@ export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUploa
     <DossierTabs active={dossierTab} changed={dossierChanged} onSelect={setDossierTab} />
     {dossierTab === "main" && <EditorGroup title="Основные данные">
       <Field label="Название"><input value={virus.name} onChange={(event) => onChange((item) => { item.name = event.target.value; })} /></Field>
+      <LevelPicker name={`level-virus-${virus.id}`} value={virus.level} onChange={(level) => onChange((item) => { item.level = level; })} />
       <Field label="Код"><input value={virus.code} onChange={(event) => onChange((item) => { item.code = event.target.value; })} /></Field>
       <Field label="Статус"><input value={virus.status} onChange={(event) => onChange((item) => { item.status = event.target.value; })} /></Field>
       <ImageEditorField label="Фото или GIF после заражения" value={virus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} uploadMessage={uploadMessage} framing={virus.infectedImageFraming} framingBox="natural" onFramingChange={(frame) => onChange((item) => { if (frame) item.infectedImageFraming = frame; else delete item.infectedImageFraming; })} onChange={(value) => onChange((item) => { item.infectedImage = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.infectedImage = url; }))} />
@@ -251,14 +254,15 @@ export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUploa
       <button className="secondary-control" type="button" onClick={() => onChange((item) => { item.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }); })}>+ ДОБАВИТЬ МУТАЦИЮ</button>
     </EditorGroup>}
     {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
+      {virus.scientistLogs.length === 0 && <p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>}
       {virus.scientistLogs.map((log, index) => <div className="nested-editor-card" key={log.id}>
         <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.scientistLogs.splice(index, 1); })}>Удалить</button></div>
         <Field label="Название"><input value={log.title} onChange={(event) => onChange((item) => { item.scientistLogs[index].title = event.target.value; })} /></Field>
         <Field label="Псевдоним учёного"><input value={log.scientist} onChange={(event) => onChange((item) => { item.scientistLogs[index].scientist = event.target.value; })} /></Field>
-        <Field label="Уровень доступа"><select value={log.lockedLevel} onChange={(event) => onChange((item) => { item.scientistLogs[index].lockedLevel = Number(event.target.value); })}><option value={2}>II — доступна</option><option value={3}>III — заблокирована</option><option value={4}>IV — заблокирована</option></select></Field>
+        <LevelPicker name={`level-log-${log.id}`} value={log.lockedLevel} onChange={(level) => onChange((item) => { item.scientistLogs[index].lockedLevel = level; })} />
         <Field label="Текст записи" wide><textarea value={scientistLogPlainText(log)} onChange={(event) => onChange((item) => { item.scientistLogs[index].content = event.target.value.split(/\n\s*\n/); item.scientistLogs[index].richContent = { runs: [{ text: event.target.value }] }; })} /></Field>
       </div>)}
-      <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
+      <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
     </EditorGroup>}
     <div className="archive-virus-actions"><button className="secondary-control" type="button" disabled={restoreBlocked} title={restoreBlocked ? "Раздел «База вирусов» для вас закрыт" : undefined} onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
   </div>;

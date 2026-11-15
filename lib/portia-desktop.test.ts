@@ -118,7 +118,8 @@ test("component families import only their own seams and the known shared compon
     // portia-desktop-states: the shared «Доступ закрыт» panel the editor shows when the rights check fails (STAB-APP-09).
     // portia-image-framing: the block «Видимая часть» under a picture field (D-63, 20-53), shared with the template builder through ImageEditorField.
     // portia-users-tab: the «Пользователи» tab body (USR-01, Phase 22).
-    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab"],
+    // portia-level-picker: the shared «Нужен допуск 1–5» control of the editor forms (Phase 24, D-16).
+    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker"],
   } as const;
   for (const [main, family] of [["portia-desktop", desktopFamily], ["portia-editor", editorFamily]] as const) {
     const members = family.map((part) => part.file.replace(/\.tsx$/, ""));
@@ -320,8 +321,10 @@ test("editor form cards keep one fixed width set by a single variable and fill c
   // It must follow .flat-editor-form (same specificity) to win the cascade, and the sorted lists stay one column.
   assert.ok(styles.indexOf(".editor-card-columns {") > styles.indexOf(".flat-editor-form { display: grid"));
   for (const list of [".recommendation-order-list", ".access-editor-list"]) assert.doesNotMatch(styles, new RegExp(`\\${list}\\s*\\{[^}]*grid-template-columns`));
+  // Phase 24 (O-2): the «Информация» form opens with the «Приложения» level group, then the hint; the other two forms open with their hint.
+  const appsGroup = String.raw`(?:          <EditorGroup title=\{levelCopy\.appsGroup\}>\n[\s\S]*?          </EditorGroup>\n)?`;
   for (const lead of ["Каждый блок становится", "Справочник на рабочем столе", "Публикуйте новости"]) {
-    assert.ok(editorSource.includes(`<div className="editor-form flat-editor-form editor-card-columns">\n          <p className="editor-guidance">${lead}`), `${lead}: form must be in columns`);
+    assert.match(editorSource, new RegExp(String.raw`<div className="editor-form flat-editor-form editor-card-columns">\n${appsGroup}          <p className="editor-guidance">${lead}`), `${lead}: form must be in columns`);
   }
   assert.equal(editorSource.match(/editor-card-columns/g)?.length, 3); // never the sorted recommendation or access lists (D-15)
 });
