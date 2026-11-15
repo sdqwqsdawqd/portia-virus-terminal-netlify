@@ -4,6 +4,7 @@ import {
   classificationOptions,
   type InfoBlock,
   type InfoSection,
+  LEVELED_APP_IDS,
   type InfoSubsection,
   createVirusRecycleFiles,
   defaultPortiaContent,
@@ -20,7 +21,7 @@ import { MAX_SCIENTIST_LOGS } from "./content-limits.ts";
 import { normalizeOutlineSections, normalizeRecommendationSections } from "./editor-outline.ts";
 import { isAllowedMediaUrl } from "./media-url.ts";
 import { type ImageFraming, normalizeImageFraming } from "./image-framing.ts";
-import { requiredLevelOf, type AccessLevel } from "./access-levels.ts";
+import { MIN_ACCESS_LEVEL, requiredLevelOf, type AccessLevel } from "./access-levels.ts";
 import { normalizeContentRedaction } from "./level-placeholders.ts";
 
 // Every save and every cached read passes through here: unknown input in, a complete PortiaContent out.
@@ -233,7 +234,7 @@ function normalizeInfoSubsection(value: unknown, sectionId: string, index: numbe
   const id = typeof value.id === "string" && value.id ? value.id : `${sectionId}-sub-${index}`;
   const blocks = (Array.isArray(value.blocks) ? value.blocks : [])
     .flatMap((block, blockIndex) => normalizeInfoBlock(block, id, blockIndex));
-  return [{ id, title: asText(value.title), blocks }];
+  return [{ id, title: asText(value.title), ...levelEntry(value.level), blocks }];
 }
 
 // Sections saved before 03.3 have no subsections (D-12); title and body keep today's behaviour, never cut.
@@ -245,6 +246,7 @@ export function normalizeInfoSections(value: unknown): InfoSection[] {
     return [{
       id,
       title: typeof item.title === "string" ? item.title : "",
+      ...levelEntry(item.level),
       body: typeof item.body === "string" ? item.body : "",
       subsections: (Array.isArray(item.subsections) ? item.subsections : [])
         .flatMap((sub, subIndex) => normalizeInfoSubsection(sub, id, subIndex)),
@@ -286,6 +288,7 @@ function normalizeGuideCard(value: unknown, sectionId: string, index: number): G
   return [{
     id,
     title: asText(value.title),
+    ...levelEntry(value.level),
     cover,
     ...framingEntry("coverFraming", cover, value.coverFraming),
     blocks: (Array.isArray(value.blocks) ? value.blocks : []).flatMap((block, blockIndex) => normalizeGuideBlock(block, id, blockIndex)),
@@ -302,11 +305,19 @@ export function normalizeGuideSections(value: unknown): GuideSection[] {
     return [{
       id,
       title: asText(item.title),
+      ...levelEntry(item.level),
       photo,
       ...framingEntry("photoFraming", photo, item.photoFraming),
       cards: (Array.isArray(item.cards) ? item.cards : []).flatMap((card, cardIndex) => normalizeGuideCard(card, id, cardIndex)),
     }];
   });
+}
+
+// D-03: only the apps this phase levels keep an entry; a damaged level is the highest one, an empty result is no field at all.
+function normalizeAppLevels(value: unknown): Partial<Record<(typeof LEVELED_APP_IDS)[number], AccessLevel>> | undefined {
+  if (!isRecord(value) || Array.isArray(value)) return undefined;
+  const entries = LEVELED_APP_IDS.flatMap((id) => (Object.prototype.hasOwnProperty.call(value, id) ? [[id, requiredLevelOf(value[id])] as const] : []));
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 export function normalizePortiaContent(value: unknown): PortiaContent | null {
@@ -349,11 +360,14 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
         ? virus.scientistLogs.slice(0, MAX_SCIENTIST_LOGS).map((item) => {
             const log = isRecord(item) ? item : {};
             return {
-              ...withoutNote(log),
+              ...withoutKeys(log, ["withheld"]),
               id: textOf(log.id),
               title: textOf(log.title),
               scientist: textOf(log.scientist),
-              lockedLevel: typeof log.lockedLevel === "number" && Number.isFinite(log.lockedLevel) ? log.lockedLevel : 3,
+              // D-13: no field is level 1, an integer 1..5 is itself, a damaged value is the highest level.
+              lockedLevel: log.lockedLevel === undefined ? MIN_ACCESS_LEVEL : requiredLevelOf(log.lockedLevel),
+              // The withheld marker is kept as true whatever its stored value: a forged or damaged marker fails closed for PUT and the editor.
+              ...("withheld" in log ? { withheld: true as const } : {}),
               content: Array.isArray(log.content) ? log.content.filter((paragraph): paragraph is string => typeof paragraph === "string") : [],
               richContent: normalizeRichText(log.richContent),
             };
@@ -423,6 +437,7 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
   const searchRecommendations = candidate.searchRecommendations.filter((item): item is string => typeof item === "string");
 
   const redaction = normalizeContentRedaction(candidate.redaction);
+  const appLevels = normalizeAppLevels(candidate.appLevels);
 
   return {
     viruses,
@@ -457,6 +472,7 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
     assistantAutoMinSeconds,
     assistantAutoMaxSeconds,
     formattedText: normalizeFormattedText(candidate.formattedText),
+    ...(appLevels ? { appLevels } : {}),
     ...(redaction ? { redaction } : {}),
   };
 }

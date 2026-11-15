@@ -377,7 +377,7 @@ test("wrong-typed virus fields are coerced and missing records are filled", () =
   assert.ok(Object.values(virus.classification).every((item) => item === ""));
   assert.deepEqual(virus.mutations, [{ name: "", description: "", image: "" }]);
   assert.equal(virus.scientistLogs[0].title, "");
-  assert.equal(virus.scientistLogs[0].lockedLevel, 3);
+  assert.equal(virus.scientistLogs[0].lockedLevel, 5); // D-03/D-13: мусор = самый строгий
   assert.equal(once.recycledViruses[0].id, "recycled-0");
   assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
 });
@@ -757,4 +757,134 @@ test("D-63 T-20-109 a restricted editor without the «Справочник» tab
   assert.equal(contentRefusal(baseline, changedPhoto, ["info", "broadcasts"])?.code, "section-closed");
   assert.equal(contentRefusal(baseline, changedCover, ["info", "broadcasts"])?.code, "section-closed");
   assert.equal(contentRefusal(baseline, changedPhoto, ["info", "broadcasts", "guide"]), null, "with the tab open the same change is allowed");
+});
+
+// Phase 24, plan 03: the level of every leveled record survives normalization (D-03, D-13, LVL-02, LVL-07).
+const levelContent = (extra: Record<string, unknown>) => ({ ...structuredClone(defaultPortiaContent), ...extra }) as unknown;
+const normalized = (extra: Record<string, unknown>) => {
+  const content = normalizePortiaContent(JSON.parse(JSON.stringify(levelContent(extra))));
+  assert.ok(content);
+  return content;
+};
+
+test("LVL-02 / D-03 info sections and subsections keep and clamp their level", () => {
+  const out = normalizeInfoSections([
+    { id: "s", title: "S", body: "", level: 3, subsections: [{ id: "u", title: "U", blocks: [], level: 4 }, { id: "v", title: "V", blocks: [], level: "x" }, { id: "w", title: "W", blocks: [] }] },
+    { id: "t", title: "T", body: "", level: "x", subsections: [] },
+    { id: "n", title: "N", body: "", subsections: [] },
+  ]);
+  assert.equal(out[0].level, 3);
+  assert.deepEqual(out[0].subsections.map((sub) => sub.level), [4, 5, undefined]);
+  assert.equal(out[1].level, 5);
+  assert.equal("level" in out[2], false, "no field stays no field");
+  assert.equal("level" in out[0].subsections[2], false);
+});
+
+test("LVL-02 / D-03 guide sections and cards keep and clamp their level", () => {
+  const out = normalizeGuideSections([
+    { id: "g", title: "G", photo: "", level: 2, cards: [{ id: "c", title: "C", cover: "", blocks: [], level: 5 }, { id: "d", title: "D", cover: "", blocks: [], level: 0 }, { id: "e", title: "E", cover: "", blocks: [] }] },
+    { id: "h", title: "H", photo: "", level: 6, cards: [] },
+    { id: "i", title: "I", photo: "", cards: [] },
+  ]);
+  assert.equal(out[0].level, 2);
+  assert.deepEqual(out[0].cards.map((card) => card.level), [5, 5, undefined]);
+  assert.equal(out[1].level, 5);
+  assert.equal("level" in out[2], false);
+  assert.equal("level" in out[0].cards[2], false);
+});
+
+test("EDGE LVL-02/boundary: level 1 and 5 are kept, 0 and 6 one step outside become 5", () => {
+  const out = normalizeInfoSections([1, 5, 0, 6].map((level, index) => ({ id: `s${index}`, title: "", body: "", subsections: [], level })));
+  assert.deepEqual(out.map((section) => section.level), [1, 5, 5, 5]);
+});
+
+test("EDGE LVL-02/precision: 2.5, a string, null and an object are damaged and read as level 5, with no rounding", () => {
+  const out = normalizeInfoSections([2.5, "3", null, {}].map((level, index) => ({ id: `s${index}`, title: "", body: "", subsections: [], level })));
+  assert.deepEqual(out.map((section) => section.level), [5, 5, 5, 5]);
+});
+
+test("EDGE LVL-02/empty: content with no level stays free of new keys and everything reads as level 1", () => {
+  const content = normalized({});
+  const text = JSON.stringify(content);
+  assert.equal(text.includes('"level"'), false);
+  assert.equal("appLevels" in content, false);
+  assert.equal(text.includes('"withheld"'), false);
+});
+
+test("LVL-02 / D-03 appLevels keeps only known app ids with a clamped level", () => {
+  assert.deepEqual(normalized({ appLevels: { charter: 2, sheet: 4, junk: 1 } }).appLevels, { charter: 2 });
+  assert.deepEqual(normalized({ appLevels: { charter: "a" } }).appLevels, { charter: 5 });
+  assert.deepEqual(normalized({ appLevels: { charter: 0 } }).appLevels, { charter: 5 });
+  assert.equal("appLevels" in normalized({ appLevels: 7 }), false);
+  assert.equal("appLevels" in normalized({ appLevels: null }), false);
+  assert.equal("appLevels" in normalized({ appLevels: [] }), false);
+  assert.equal("appLevels" in normalized({ appLevels: { sheet: 3 } }), false, "no known key leaves no key");
+  assert.equal("appLevels" in normalized({}), false);
+});
+
+const logsOf = (logs: Record<string, unknown>[]) => {
+  const virus = { ...structuredClone(defaultPortiaContent.viruses[0]), scientistLogs: logs };
+  return normalized({ viruses: [virus] }).viruses[0].scientistLogs;
+};
+
+test("LVL-07 / D-13 lockedLevel: missing is 1, integers 1..5 as they are, damaged is 5", () => {
+  // A virus keeps at most MAX_SCIENTIST_LOGS records, so the cases go through in small groups.
+  const levelsOf = (values: unknown[]) => logsOf(values.map((value, index) => ({ id: `l${index}`, title: "", scientist: "", content: [], ...(value === MISSING ? {} : { lockedLevel: value }) }))).map((log) => log.lockedLevel);
+  const MISSING = Symbol("missing");
+  assert.ok(MAX_SCIENTIST_LOGS >= 4);
+  assert.deepEqual(levelsOf([MISSING, 2, 3, 4]), [1, 2, 3, 4]);
+  assert.deepEqual(levelsOf(["high", 0, 6, 2.5]), [5, 5, 5, 5]);
+  assert.deepEqual(levelsOf(["3", 3.5, null, {}]), [5, 5, 5, 5]);
+  assert.deepEqual(levelsOf([1, 5]), [1, 5]);
+});
+
+test("EDGE LVL-07/boundary: a log of level 2 shows for a visitor of level 2, a log of level 3 does not", () => {
+  const [two, three] = logsOf([
+    { id: "a", title: "", scientist: "", lockedLevel: 2, content: [] },
+    { id: "b", title: "", scientist: "", lockedLevel: 3, content: [] },
+  ]);
+  const visitor = 2;
+  assert.equal(two.lockedLevel <= visitor, true);
+  assert.equal(three.lockedLevel <= visitor, false);
+});
+
+test("LVL-07 / D-13 the withheld marker of a scientist log survives as true for any value of the key", () => {
+  const logs = logsOf([
+    { id: "a", title: "", scientist: "", lockedLevel: 3, content: [], withheld: "yes" },
+    { id: "b", title: "", scientist: "", lockedLevel: 3, content: [], withheld: false },
+    { id: "c", title: "", scientist: "", lockedLevel: 3, content: [], withheld: true },
+    { id: "d", title: "", scientist: "", lockedLevel: 3, content: [], withheld: null },
+    { id: "e", title: "", scientist: "", lockedLevel: 3, content: [] },
+  ]);
+  assert.deepEqual(logs.map((log) => log.withheld), [true, true, true, true, undefined]);
+  assert.equal("withheld" in logs[4], false, "no marker stays no key");
+});
+
+test("EDGE LVL-06/ordering: scientist logs keep order and id, an empty list stays empty", () => {
+  const logs = logsOf([
+    { id: "z", title: "1", scientist: "", lockedLevel: 2, content: [] },
+    { id: "a", title: "2", scientist: "", lockedLevel: 3, content: [] },
+    { id: "m", title: "3", scientist: "", lockedLevel: 4, content: [] },
+  ]);
+  assert.deepEqual(logs.map((log) => log.id), ["z", "a", "m"]);
+  assert.deepEqual(logsOf([]), []);
+});
+
+test("EDGE LVL-06/idempotency: normalizing twice equals normalizing once for content with levels, logs, appLevels and redaction", () => {
+  const virus = { ...structuredClone(defaultPortiaContent.viruses[0]), level: 2, scientistLogs: [
+    { id: "a", title: "", scientist: "", lockedLevel: "high", content: ["x"], withheld: "yes" },
+    { id: "b", title: "", scientist: "", content: [] },
+  ] };
+  const input = levelContent({
+    viruses: [virus],
+    infoSections: [{ id: "s", title: "S", body: "", level: 3, subsections: [{ id: "u", title: "U", blocks: [], level: 4 }, { id: "v", title: "V", blocks: [] }] }],
+    guideSections: [{ id: "g", title: "G", photo: "", level: "x", cards: [{ id: "c", title: "C", cover: "", blocks: [], level: 2 }] }],
+    appLevels: { charter: 3, sheet: 9 },
+    redaction: { level: 2, slots: [], viruses: [] },
+  });
+  const once = normalizePortiaContent(JSON.parse(JSON.stringify(input)));
+  assert.ok(once);
+  assert.deepEqual(normalizePortiaContent(structuredClone(once)), once);
+  assert.deepEqual(once.appLevels, { charter: 3 });
+  assert.equal(once.guideSections[0].level, 5);
 });
