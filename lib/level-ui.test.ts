@@ -138,3 +138,65 @@ test("S1 overflow: no placeholder rule is wider than the 210px of a phone row or
 test("D-08 the block keeps sharp corners and uses no token of the site that is not declared", () => {
   assert.doesNotMatch(accessBlock, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:|--muted|#[0-9a-fA-F]{3,8}\b/);
 });
+
+// Phase 24, plan 24-09: «База вирусов», «Информация» and «Справочник» draw the placeholders and switch the open window. Source-level only:
+// the live downgrade in a browser, the focus move and the announcement stay BLOCKED until backstop S6 (plan 24-11).
+const desktop = componentSource("portia-desktop.tsx");
+const between = (text: string, from: string, to: string) => {
+  const start = text.indexOf(from);
+  assert.ok(start >= 0, `${from} is missing`);
+  const end = text.indexOf(to, start + from.length);
+  assert.ok(end > start, `${to} is missing after ${from}`);
+  return text.slice(start, end);
+};
+
+test("D-20/D-22 every answer and the device copy reconcile the three windows through reconcileSelection and the slot chains", () => {
+  const fetchBody = between(desktop, "const fetchContent = useCallback(", "const retryContent = useCallback(");
+  assert.ok(fetchBody.includes("applySelections(contentRef.current, fetched)"), "fetchContent does not reconcile");
+  assert.ok(fetchBody.indexOf("applySelections(") < fetchBody.indexOf("setContent(fetched)"), "the old copy must be read before the new one is set");
+  const cacheBody = between(desktop, "const cachedContent = normalizePortiaContent(parsed.content);", "const savedAt");
+  assert.ok(cacheBody.includes("applySelections(contentRef.current, cachedContent)"), "the device copy does not reconcile");
+  assert.ok((desktop.match(/reconcileSelection\(/g) ?? []).length >= 3, "one rule for virus, info and guide");
+  for (const chain of ["simpleSlotChain(previous, current.id)", "infoSlotChain(previous, current.id)", "guideSlotChain(previous, current.id)"]) assert.ok(desktop.includes(chain), chain);
+  // The old "keep it or take the first" updaters are gone: they would show the first record in place of a closed one.
+  assert.doesNotMatch(desktop, /setActiveVirusId\(\(current\)|setSelectedInfoId\(\(current\)/);
+});
+
+test("T-24-30 a window left on a closed record shows the block and never the first record or the old one", () => {
+  assert.ok(desktop.includes("const activeVirus = virusLostShown ? undefined :"), "no first-record fallback while the record is lost");
+  assert.ok(desktop.includes("const selectedInfoEntry = infoLostShown ? null :"));
+  assert.ok(desktop.includes('<RedactedPlaceholder variant="block" level={virusLostShown.level} />'), "the dossier block");
+  assert.ok(desktop.includes('<RedactedPlaceholder variant="block" level={infoLostShown.level} />'), "the article block");
+  // What is kept of the lost record is its slot and the level of the placeholder, nothing of its copy.
+  assert.ok(desktop.includes("type LostSelection = { slot: string; level: number } | null;"));
+});
+
+test("D-10 the table of contents draws a closed section and a closed subsection as an index line and the marker counts them", () => {
+  assert.ok(desktop.includes('variant="index"'));
+  const index = between(desktop, '<aside className="info-index">', "</aside>");
+  assert.ok(index.includes("mergePlaceholders(section.subsections, content.redaction?.infoSubsections?.[section.id])"));
+  assert.ok(index.includes("{subRows.length}"), "the marker counts placeholders");
+  const closedSection = between(index, 'if (row.kind === "redacted")', "const section = row.item;");
+  assert.doesNotMatch(closedSection, /aria-expanded|onClick|<button/, "a closed section is static");
+  // The pinned buttons of open rows keep their search marks.
+  assert.ok(index.includes('hitAttrs("info", section.id)') && index.includes('hitAttrs("info", sub.id)'));
+});
+
+test("S1 empty: a copy of placeholders only is not an empty database; the dossier, the article and the list say nothing is open", () => {
+  assert.ok(desktop.includes("levelCopy.archiveNoOpen.heading") && desktop.includes("levelCopy.archiveNoOpen.body"));
+  assert.ok(desktop.includes("levelCopy.sectionsNoOpen.heading") && desktop.includes("levelCopy.sectionsNoOpen.body"));
+  assert.ok(desktop.includes("count: virusRecordCount"), "the archive counts placeholders");
+  assert.ok(desktop.includes("content.infoSections.length + (content.redaction?.infoSections.length ?? 0)"));
+  // A database with nothing at all keeps its own empty text.
+  assert.ok(desktop.includes("emptyCopy.archive.heading") && desktop.includes("emptyCopy.info.heading"));
+});
+
+test("UI-SPEC section 4 the focus moves to the next open row, the search box, the window title, or the block; other focus is left alone", () => {
+  assert.ok(desktop.includes("function captureRedactionFocus()"));
+  assert.ok(desktop.includes('.access-redacted-block'), "focus goes to the block of the replaced content");
+  assert.ok(desktop.includes("if (focused.isConnected) return;"), "an element that is still on screen is never moved");
+  assert.ok(desktop.includes("compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING"), "the next row after the focused one");
+  assert.ok(desktop.includes('".window-identity"'), "the window title is the last resort");
+  const fetchBody = between(desktop, "const fetchContent = useCallback(", "const retryContent = useCallback(");
+  assert.ok(fetchBody.indexOf("captureRedactionFocus()") < fetchBody.indexOf("setContent(fetched)") && fetchBody.indexOf("restoreFocus?.()") > fetchBody.indexOf("setContent(fetched)"));
+});

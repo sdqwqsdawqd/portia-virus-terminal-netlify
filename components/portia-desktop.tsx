@@ -15,7 +15,8 @@ import { acceptFetchedContent, isNewerAnswer, normalizeDocumentLinks, viewerKeyO
 import { cacheMatchesSource, cacheMatchesViewer, clearDeviceContentCaches, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
 import { networkSaveError, parseRefusedSections, SaveConflictError, SectionClosedError } from "@/lib/editor-save-status";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
-import { mergePlaceholders, shownViewerLevel } from "@/lib/level-placeholders";
+import { flattenPlaceholders, guideSlotChain, infoSlotChain, mergePlaceholders, reconcileSelection, shownViewerLevel, simpleSlotChain } from "@/lib/level-placeholders";
+import { levelCopy } from "@/lib/level-copy";
 import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { splitEmbeddedMedia } from "@/lib/rich-text-media";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
@@ -31,6 +32,89 @@ import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { infoNextTarget, infoOverviewVisible, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
 import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
+
+// Phase 24, D-20/D-22: a record window whose record became closed keeps its place and shows the block; the slot of the placeholder
+// is what is remembered, never the record. A selection with an id is a normal one; the lost state counts only while the id is empty,
+// so a click on any other row ends it without a second setter.
+type LostSelection = { slot: string; level: number } | null;
+type WindowSelection = { id: string; lost: LostSelection };
+type SelectionSnapshot = { virus: WindowSelection; info: WindowSelection; guide: WindowSelection };
+const lostOf = (selection: WindowSelection) => selection.id === "" ? selection.lost : null;
+const selectionResult = (result: ReturnType<typeof reconcileSelection>, fallbackId: string): WindowSelection => {
+  if (result.id || result.lostSlot) return { id: result.id, lost: result.lostSlot ? { slot: result.lostSlot, level: result.lostLevel ?? 5 } : null };
+  return { id: fallbackId, lost: null };
+};
+const sameLost = (a: LostSelection, b: LostSelection) => a === b || (a !== null && b !== null && a.slot === b.slot && a.level === b.level);
+
+function reconcileVirusSelection(previous: PortiaContent, next: PortiaContent, current: WindowSelection): WindowSelection {
+  const result = reconcileSelection(
+    { id: current.id, lostSlot: lostOf(current)?.slot ?? null },
+    simpleSlotChain(previous, current.id),
+    { ids: next.viruses.map((virus) => virus.id), slots: next.redaction?.slots ?? {}, placeholders: next.redaction?.viruses ?? [] },
+  );
+  return selectionResult(result, next.viruses[0]?.id ?? "");
+}
+
+function reconcileInfoSelection(previous: PortiaContent, next: PortiaContent, current: WindowSelection): WindowSelection {
+  const result = reconcileSelection(
+    { id: current.id, lostSlot: lostOf(current)?.slot ?? null },
+    infoSlotChain(previous, current.id),
+    {
+      ids: next.infoSections.flatMap((section) => [section.id, ...section.subsections.map((sub) => sub.id)]),
+      slots: next.redaction?.slots ?? {},
+      placeholders: [...(next.redaction?.infoSections ?? []), ...flattenPlaceholders(next.redaction?.infoSubsections)],
+    },
+  );
+  return selectionResult(result, next.infoSections[0]?.id ?? "");
+}
+
+function reconcileGuideSelection(previous: PortiaContent, next: PortiaContent, current: WindowSelection): WindowSelection {
+  const result = reconcileSelection(
+    { id: current.id, lostSlot: lostOf(current)?.slot ?? null },
+    guideSlotChain(previous, current.id),
+    {
+      ids: next.guideSections.flatMap((section) => section.cards.map((card) => card.id)),
+      slots: next.redaction?.slots ?? {},
+      placeholders: [...(next.redaction?.guideSections ?? []), ...flattenPlaceholders(next.redaction?.guideCards)],
+    },
+  );
+  return selectionResult(result, "");
+}
+
+// UI-SPEC section 4 (focus): when the focused row or the focused part of a record closes, the focus moves on by itself; focus
+// that was somewhere else is never taken. Called before the new content is set; the returned function runs after it is drawn.
+const redactionFocusZones: Record<string, { list: string; rows: string; record: string; search: string }> = {
+  archive: { list: ".virus-list", rows: "button", record: ".record-view", search: ".archive-browser .search-box input" },
+  info: { list: ".info-index", rows: "button", record: ".info-document", search: "" },
+  guide: { list: ".guide-grid", rows: "button", record: ".guide-page", search: "" },
+};
+
+function captureRedactionFocus(): (() => void) | null {
+  if (typeof document === "undefined") return null;
+  const focused = document.activeElement;
+  if (!(focused instanceof HTMLElement) || focused === document.body) return null;
+  const win = focused.closest<HTMLElement>(".app-window[data-window-app]");
+  const zone = win ? redactionFocusZones[win.dataset.windowApp ?? ""] : undefined;
+  if (!win || !zone) return null;
+  const list = focused.closest<HTMLElement>(zone.list);
+  const inRecord = !list && focused.closest(zone.record) !== null;
+  if (!list && !inRecord) return null;
+  const following = list
+    ? [...list.querySelectorAll<HTMLElement>(zone.rows)].filter((row) => row !== focused && (focused.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0)
+    : [];
+  return () => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      if (focused.isConnected) return;
+      if (inRecord) { win.querySelector<HTMLElement>(".access-redacted-block")?.focus({ preventScroll: true }); return; }
+      const nextRow = following.find((row) => row.isConnected);
+      if (nextRow) { nextRow.focus({ preventScroll: true }); return; }
+      const search = zone.search ? win.querySelector<HTMLElement>(zone.search) : null;
+      if (search) { search.focus({ preventScroll: true }); return; }
+      const title = win.querySelector<HTMLElement>(".window-identity");
+      if (title) { if (!title.hasAttribute("tabindex")) title.setAttribute("tabindex", "-1"); title.focus({ preventScroll: true }); }
+    }));
+  };
+}
 
 const PortiaEditor = dynamic(
   () => import("@/components/portia-editor").then((module) => module.PortiaEditor),
@@ -329,6 +413,10 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
   // D-29: the sections opened in the phone list; each opens and closes on its own and a content poll never touches the set.
   const [infoExpanded, setInfoExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [guideCardId, setGuideCardId] = useState("");
+  // Phase 24 (D-20): the placeholder a window was left on when its record closed; effective only while the id of that window is empty.
+  const [virusLost, setVirusLost] = useState<LostSelection>(null);
+  const [infoLost, setInfoLost] = useState<LostSelection>(null);
+  const [guideLost, setGuideLost] = useState<LostSelection>(null);
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings>(defaultDesktopSettings);
   const [shortcutPositions, setShortcutPositions] = useState<Partial<Record<DesktopShortcutId, ShortcutPosition>>>({});
   const [shortcutPositionsLoaded, setShortcutPositionsLoaded] = useState(false);
@@ -433,6 +521,29 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
   const assistantContentRef = useRef(content);
   const assistantOffendedRef = useRef(false);
 
+  // Phase 24: the copy on screen and the three selections, read by the next answer (a ref: it is read inside async handlers). Handlers write it at once, an effect keeps it in step with clicks.
+  const contentRef = useRef(content);
+  const selectionRef = useRef<SelectionSnapshot>({ virus: { id: activeVirusId, lost: virusLost }, info: { id: selectedInfoId, lost: infoLost }, guide: { id: guideCardId, lost: guideLost } });
+  useEffect(() => {
+    contentRef.current = content;
+    selectionRef.current = { virus: { id: activeVirusId, lost: virusLost }, info: { id: selectedInfoId, lost: infoLost }, guide: { id: guideCardId, lost: guideLost } };
+  }, [content, activeVirusId, virusLost, selectedInfoId, infoLost, guideCardId, guideLost]);
+  // D-20/D-22: every window keeps its record, or is left on the placeholder of its slot, or gives the record back quietly; the old copy only names the slots.
+  const applySelections = useCallback((previous: PortiaContent, next: PortiaContent) => {
+    const current = selectionRef.current;
+    const virus = reconcileVirusSelection(previous, next, current.virus);
+    const info = reconcileInfoSelection(previous, next, current.info);
+    const guide = reconcileGuideSelection(previous, next, current.guide);
+    contentRef.current = next;
+    selectionRef.current = { virus, info, guide };
+    setActiveVirusId(virus.id);
+    setVirusLost((lost) => sameLost(lost, virus.lost) ? lost : virus.lost);
+    setSelectedInfoId(info.id);
+    setInfoLost((lost) => sameLost(lost, info.lost) ? lost : info.lost);
+    setGuideCardId(guide.id);
+    setGuideLost((lost) => sameLost(lost, guide.lost) ? lost : guide.lost);
+  }, []);
+
   // The answer is cut for this viewer and sent no-store (Phase 24), but a late answer can still be older than this tab's copy; answers are ordered by request number and then by revision or viewer (uat-03-owner-broadcast-vanishes, LVL-09).
   const fetchContent = useCallback(async () => {
     const savesAtSend = savesStarted.current;
@@ -470,10 +581,11 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
       knownViewerKey.current = fetchedViewer;
       const fetchedDocuments = normalizeDocumentLinks(payload.documents);
       setDocuments(fetchedDocuments);
+      // Phase 24 (D-20, D-22, UI-SPEC section 4): the focus is read before the new copy is set, the windows are reconciled with the old copy's slots.
+      const restoreFocus = captureRedactionFocus();
+      applySelections(contentRef.current, fetched);
       setContent(fetched);
-      setActiveVirusId((current) => fetched.viruses.some((virus) => virus.id === current) ? current : fetched.viruses[0]?.id ?? "");
-      setSelectedInfoId((current) => findInfo(fetched.infoSections, current) ? current : fetched.infoSections[0]?.id ?? "");
-      setGuideCardId((current) => findGuide(fetched.guideSections, current)?.card ? current : "");
+      restoreFocus?.();
       setRevision(fetchedRevision);
       try {
         window.localStorage.setItem(contentCacheStorageKey, JSON.stringify(stampCacheSource({
@@ -502,7 +614,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
       // Even a failed answer ends the wait: what is on screen then is all there is.
       setContentReady(true);
     }
-  }, []);
+  }, [applySelections]);
 
   // Never clears what is shown: a failed retry leaves the data and the banner time as they were.
   const retryContent = useCallback(async () => {
@@ -624,15 +736,13 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
           // The cache is device-editable and may predate any field, so it gets the same normalizer as the network (D-20, D-22).
           const cachedContent = normalizePortiaContent(parsed.content);
           if (cachedContent) {
+            applySelections(contentRef.current, cachedContent);
             setContent(cachedContent);
             const cachedRevision = typeof parsed.revision === "number" ? parsed.revision : 0;
             knownRevision.current = cachedRevision;
             knownViewerKey.current = typeof parsed.viewer === "string" ? parsed.viewer : "";
             setDocuments(normalizeDocumentLinks(parsed.documents));
             setRevision(cachedRevision);
-            setActiveVirusId((current) => cachedContent.viruses.some((virus) => virus.id === current) ? current : cachedContent.viruses[0]?.id ?? "");
-            setSelectedInfoId((current) => findInfo(cachedContent.infoSections, current) ? current : cachedContent.infoSections[0]?.id ?? "");
-            setGuideCardId((current) => findGuide(cachedContent.guideSections, current)?.card ? current : "");
             const savedAt = (parsed as { savedAt?: unknown }).savedAt;
             // A savedAt that does not parse is ignored (T-19-01): no time is better than "Invalid Date".
             if (!lastGoodRef.current && typeof savedAt === "string" && !Number.isNaN(new Date(savedAt).getTime())) lastGoodRef.current = savedAt;
@@ -701,7 +811,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(employeeSyncTimer);
     };
-  }, [fetchAccess, fetchContent, fetchEmployees]);
+  }, [applySelections, fetchAccess, fetchContent, fetchEmployees]);
 
   // D-23: the gate polls every 5 s; when it reports another viewer (level changed, editor session began or ended) the content is
   // asked for at once instead of at the next 30 s poll.
@@ -1288,7 +1398,11 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
     }
   };
 
-  const activeVirus = content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
+  // Phase 24 (D-20): a window left on a closed record shows the block, not the first record; the lost state counts only while the id is empty.
+  const virusLostShown = activeVirusId === "" ? virusLost : null;
+  const infoLostShown = selectedInfoId === "" ? infoLost : null;
+  const guideLostShown = guideCardId === "" ? guideLost : null;
+  const activeVirus = virusLostShown ? undefined : content.viruses.find((virus) => virus.id === activeVirusId) ?? content.viruses[0];
   const filteredViruses = content.viruses.filter((virus) => normalizeSearch(`${virus.name} ${virus.code} ${virus.status}`).includes(normalizeSearch(virusQuery)));
   const virusListbox = contentReady && filteredViruses.length > 0;
   // Phase 24, D-08: closed records stand where they were, drawn from the server marker only. A search drops them (they have no name or code).
@@ -1298,16 +1412,23 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
   // D-05: the dossier area shows the stale strip only while last-good records are on screen; the other apps join in 19-08.
   // One appViewState rule for every app (D-05..D-08); the window bodies below only choose what to draw.
   const contentBase = { denied: false, ready: contentReady, hasData: contentSync.lastGoodAt !== null, failure: contentSync.failure };
-  const archiveView = appViewState({ ...contentBase, count: content.viruses.length });
-  const infoView = appViewState({ ...contentBase, count: content.infoSections.length });
-  const guideView = appViewState({ ...contentBase, count: content.guideSections.length });
+  // Closed records still stand in the list as placeholders, so a copy of placeholders only is "not empty": the window then says there is nothing open.
+  const archiveView = appViewState({ ...contentBase, count: virusRecordCount });
+  const infoView = appViewState({ ...contentBase, count: content.infoSections.length + (content.redaction?.infoSections.length ?? 0) });
+  const guideView = appViewState({ ...contentBase, count: content.guideSections.length + (content.redaction?.guideSections.length ?? 0) });
   const broadcastsView = appViewState({ ...contentBase, count: content.broadcasts.length });
   const trashView = appViewState({ ...contentBase, count: content.recycleFiles.length + (content.recycledViruses?.length ?? 0) });
   const employeesView = appViewState({ denied: false, ready: employeesReady, hasData: employeesSync.lastGoodAt !== null, count: employees.length, failure: employeesSync.failure });
   const contentStaleBanner = contentSync.lastGoodAt !== null ? <AppStaleBanner lastGoodAt={contentSync.lastGoodAt} retrying={contentSync.retrying} onRetry={() => void retryContent()} /> : null;
   const contentFatal = (illustration: PortiaIllustrationName) => contentSync.failure ? <AppFatalPanel failure={contentSync.failure} retrying={contentSync.retrying} onRetry={() => void retryContent()} illustration={illustration} /> : null;
-  const selectedInfoEntry = findInfo(content.infoSections, selectedInfoId)
+  const selectedInfoEntry = infoLostShown ? null : findInfo(content.infoSections, selectedInfoId)
     ?? (content.infoSections[0] ? { section: content.infoSections[0], subsection: null } : null);
+  // A closed subsection stands in its open section; with no open article the desktop opens that section so the placeholder is on screen.
+  const infoLostParentId = infoLostShown
+    ? Object.entries(content.redaction?.infoSubsections ?? {}).find(([, nodes]) => nodes.some((node) => node.slot === infoLostShown.slot))?.[0] ?? ""
+    : "";
+  const infoRows = mergePlaceholders(content.infoSections, content.redaction?.infoSections);
+  const infoNoOpen = content.infoSections.length === 0 && !infoLostShown;
   const selectedInfo = selectedInfoEntry?.section;
   const selectedSubsection = selectedInfoEntry?.subsection ?? null;
   const infoWindowElement = () => document.querySelector<HTMLElement>('.app-window[data-window-app="info"]');
@@ -1748,7 +1869,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
               </aside>
               <article className="record-view" aria-live="polite">
                 {archiveView === "stale" && contentStaleBanner}
-                {archiveView === "loading" ? <AppSkeleton shape="document" /> : archiveView === "fatal" ? contentFatal("microscopeGuide") : archiveView === "empty" || !activeVirus ? <div className="record-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{emptyCopy.archive.heading}</strong><span>{emptyCopy.archive.body}</span></div> : openLog ? <ScientistDocument key={openLog} virus={activeVirus} logId={openLog} viewerLevel={shownViewerLevel(content)} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} viewerLevel={shownViewerLevel(content)} onOpenLog={setOpenLog} />}
+                {archiveView === "loading" ? <AppSkeleton shape="document" /> : archiveView === "fatal" ? contentFatal("microscopeGuide") : archiveView === "empty" ? <div className="record-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{emptyCopy.archive.heading}</strong><span>{emptyCopy.archive.body}</span></div> : virusLostShown ? <RedactedPlaceholder variant="block" level={virusLostShown.level} /> : !activeVirus ? <div className="record-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{levelCopy.archiveNoOpen.heading}</strong><span>{levelCopy.archiveNoOpen.body}</span></div> : openLog ? <ScientistDocument key={openLog} virus={activeVirus} logId={openLog} viewerLevel={shownViewerLevel(content)} onBack={() => setOpenLog(null)} /> : <VirusRecord virus={activeVirus} formattedText={content.formattedText} viewerLevel={shownViewerLevel(content)} onOpenLog={setOpenLog} />}
               </article>
             </div>
           </AppWindow>
@@ -1814,19 +1935,29 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
               : infoView === "empty" ? <div className="app-state-body"><div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy.info.heading}</strong><span>{emptyCopy.info.body}</span></div></div>
               : <div className="info-library" data-info-screen={infoPhone ? infoScreen : undefined}>
               {infoPhone && infoScreen === "list" && infoView === "stale" && contentStaleBanner}
-              <aside className="info-index">{content.infoSections.map((section, index) => {
-                const hasSubsections = section.subsections.length > 0;
-                const open = infoPhone ? infoExpanded.has(section.id) : section.id === selectedInfo?.id;
+              <aside className="info-index">{infoRows.map((row) => {
+                // D-10: a closed section is one static line in its place, with no marker and no state; its number is its place in the full list.
+                if (row.kind === "redacted") return <RedactedPlaceholder key={row.slot} variant="index" level={row.requiredLevel} index={String(row.position + 1).padStart(2, "0")} />;
+                const section = row.item;
+                const index = row.position;
+                // The subsection group and its marker count the placeholders too (D-10).
+                const subRows = mergePlaceholders(section.subsections, content.redaction?.infoSubsections?.[section.id]);
+                const hasSubsections = subRows.length > 0;
+                const open = infoPhone ? infoExpanded.has(section.id) : section.id === (selectedInfo?.id ?? infoLostParentId);
                 // On a phone a section with subsections only opens its group; an article is chosen from a row of the group.
-                const current = infoPhone ? !hasSubsections && section.id === selectedInfo?.id : open && !selectedSubsection;
+                const current = infoPhone ? !hasSubsections && section.id === selectedInfo?.id : section.id === selectedInfo?.id && !selectedSubsection;
                 return (
                   <div key={section.id}>
-                    <button type="button" className={`${current ? "active" : ""}${section.subsections.length ? " has-subsections" : ""}${hitClass("info", section.id)}`} {...hitAttrs("info", section.id)} data-info-id={infoPhone && hasSubsections ? undefined : section.id} aria-expanded={hasSubsections ? open : undefined} onClick={() => !infoPhone ? setSelectedInfoId(section.id) : hasSubsections ? setInfoExpanded((expanded) => toggleInfoExpanded(expanded, section.id)) : openInfoArticle(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span>{section.subsections.length ? <em className="info-sub-marker" aria-label={`Подразделов: ${section.subsections.length}`}>{open ? "▾" : "▸"} {section.subsections.length}</em> : null}</button>
-                    {open && hasSubsections ? <div className="info-subsections">{infoPhone && infoOverviewVisible(section) ? <button type="button" className={section.id === selectedInfo?.id && !selectedSubsection ? "active" : ""} data-info-id={section.id} onClick={() => openInfoArticle(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>Обзор раздела</span></button> : null}{section.subsections.map((sub, subIndex) => <button key={sub.id} type="button" className={`${sub.id === selectedSubsection?.id ? "active" : ""}${hitClass("info", sub.id)}`} {...hitAttrs("info", sub.id)} data-info-id={sub.id} title={sub.title || "БЕЗ НАЗВАНИЯ"} onClick={() => infoPhone ? openInfoArticle(sub.id) : setSelectedInfoId(sub.id)}><small>{String(index + 1).padStart(2, "0")}.{subIndex + 1}</small><span>{sub.title || "БЕЗ НАЗВАНИЯ"}</span></button>)}</div> : null}
+                    <button type="button" className={`${current ? "active" : ""}${hasSubsections ? " has-subsections" : ""}${hitClass("info", section.id)}`} {...hitAttrs("info", section.id)} data-info-id={infoPhone && hasSubsections ? undefined : section.id} aria-expanded={hasSubsections ? open : undefined} onClick={() => !infoPhone ? setSelectedInfoId(section.id) : hasSubsections ? setInfoExpanded((expanded) => toggleInfoExpanded(expanded, section.id)) : openInfoArticle(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span>{hasSubsections ? <em className="info-sub-marker" aria-label={`Подразделов: ${subRows.length}`}>{open ? "▾" : "▸"} {subRows.length}</em> : null}</button>
+                    {open && hasSubsections ? <div className="info-subsections">{infoPhone && infoOverviewVisible(section) ? <button type="button" className={section.id === selectedInfo?.id && !selectedSubsection ? "active" : ""} data-info-id={section.id} onClick={() => openInfoArticle(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>Обзор раздела</span></button> : null}{subRows.map((subRow) => {
+                      if (subRow.kind === "redacted") return <RedactedPlaceholder key={subRow.slot} variant="index" level={subRow.requiredLevel} index={`${String(index + 1).padStart(2, "0")}.${subRow.position + 1}`} />;
+                      const sub = subRow.item;
+                      return <button key={sub.id} type="button" className={`${sub.id === selectedSubsection?.id ? "active" : ""}${hitClass("info", sub.id)}`} {...hitAttrs("info", sub.id)} data-info-id={sub.id} title={sub.title || "БЕЗ НАЗВАНИЯ"} onClick={() => infoPhone ? openInfoArticle(sub.id) : setSelectedInfoId(sub.id)}><small>{String(index + 1).padStart(2, "0")}.{subRow.position + 1}</small><span>{sub.title || "БЕЗ НАЗВАНИЯ"}</span></button>;
+                    })}</div> : null}
                   </div>
                 );
               })}</aside>
-              <article className="info-document">{infoPhone && <button type="button" className="info-phone-back" aria-label="Назад к разделам" onClick={closeInfoArticle}>←</button>}{infoView === "stale" && !(infoPhone && infoScreen === "list") && contentStaleBanner}{selectedInfo ? (selectedSubsection
+              <article className="info-document">{infoPhone && <button type="button" className="info-phone-back" aria-label="Назад к разделам" onClick={closeInfoArticle}>←</button>}{infoView === "stale" && !(infoPhone && infoScreen === "list") && contentStaleBanner}{infoLostShown ? <RedactedPlaceholder variant="block" level={infoLostShown.level} /> : infoNoOpen ? <div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{levelCopy.sectionsNoOpen.heading}</strong><span>{levelCopy.sectionsNoOpen.body}</span></div> : selectedInfo ? (selectedSubsection
                 ? <div className="content-fade" key={selectedSubsection.id}><span className="eyebrow">{selectedInfo.title}</span><h1 tabIndex={infoPhone ? -1 : undefined}>{selectedSubsection.title || "БЕЗ НАЗВАНИЯ"}</h1><div className="info-blocks">{selectedSubsection.blocks.map((block) => block.type === "text"
                   ? <FormattedText key={block.id} className="info-document-copy" text={block.text} document={content.formattedText[portiaTextKey.infoBlock(block.id)]} />
                   : block.type === "table"
