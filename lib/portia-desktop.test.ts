@@ -936,7 +936,8 @@ test("a failed check replaces the editor body by «Доступ закрыт» w
   assert.doesNotMatch(source, /openTabs=\{accessState/);
   // A failed check takes the save and the shortcuts away.
   const save = editorSource.slice(editorSource.indexOf("const save = async"), editorSource.indexOf("inflight.current = true;"));
-  assert.match(save, /if \(accessFailed\) return false;/);
+  // Phase 24 (24-08, LVL-08): the same guard also refuses a viewer-shaped copy; the access failure is still the first operand.
+  assert.match(save, /if \(accessFailed(?: \|\| contentIncomplete)?\) return false;/);
   assert.match(editorSource, /if \(!active \|\| dialog \|\| closeAsked \|\| accessFailed\) return;/);
 });
 

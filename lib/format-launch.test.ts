@@ -66,7 +66,7 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //   6. PORTIA-24 (24-07; LVL-02, LVL-06, LVL-07) — общий выбор уровня LevelPicker у вируса, записей учёных и «Устава», новая карточка без записей, новая запись уровня 1
 //      (applyLevelPickerHunk); русских строк в файле не добавлено, строки выбора лежат в lib/level-copy.ts. Источник одобрения: 24-CONTEXT D-13, D-14, D-16 и план 24-07.
 //   7. PORTIA-24-08 (24-08; LVL-02, LVL-03, LVL-08) — выбор уровня у разделов, подразделов и карточек «Информации» и «Справочника» с иерархией и строкой автоподъёма
-//      (applyLevelHierarchyHunk); русские строки лежат в lib/level-copy.ts. Источник одобрения: 24-CONTEXT D-16, D-17 и план 24-08.
+//      (applyLevelHierarchyHunk), защита от копии «для зрителя» (contentIncomplete) и строка saveNotice; русские строки лежат в lib/level-copy.ts. Источник одобрения: 24-CONTEXT D-05, D-16, D-17 и план 24-08.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -312,12 +312,80 @@ function applyLevelHierarchyHunk(text: string): string {
     "guide section level picker",
   );
   const cardTitle = '                    <Field label="Заголовок карточки"><input maxLength={300} value={card.title} onChange={(event) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.title = event.target.value; })} /></Field>\n';
-  return replaceOnce(
+  next = replaceOnce(
     next,
     cardTitle,
     `${cardTitle}` +
       "                    <LevelPicker name={`level-card-${card.id}`} min={effectiveLevel(section.level, 1)} value={card.level} onChange={(level) => { changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.level = level; }); setRaisedNotice(null); }} />\n",
     "guide card level picker",
+  );
+  // LVL-08, D-05: the viewer-shaped copy guard (no sync, no save, a block instead of the forms) and the saveNotice line (D-17).
+  next = replaceOnce(
+    next,
+    "  saveError: string;\n};",
+    "  saveError: string;\n" +
+      "  // LVL-08, D-05: the content handed to the editor is the viewer-shaped copy. No sync, no rebase and no save until a full copy arrives; the draft stays.\n" +
+      "  contentIncomplete?: boolean;\n" +
+      "  // D-17: the desktop's line after the server lifted levels on save; shown in the save status area.\n" +
+      "  saveNotice?: string;\n};",
+    "incomplete and notice props",
+  );
+  next = replaceOnce(next, ", saveError }: Props) {", ", saveError, contentIncomplete, saveNotice }: Props) {", "incomplete and notice destructuring");
+  next = replaceOnce(
+    next,
+    "    const syncTimer = window.setTimeout(() => {\n      if (!dirty) {",
+    "    const syncTimer = window.setTimeout(() => {\n" +
+      "      // LVL-08, D-05: a viewer-shaped copy is neither the base nor the draft; the next full copy syncs by the rules below.\n" +
+      "      if (contentIncomplete) return;\n" +
+      "      if (!dirty) {",
+    "sync skips an incomplete copy",
+  );
+  next = replaceOnce(next, "  }, [content, dirty, revision, tab]);", "  }, [content, contentIncomplete, dirty, revision, tab]);", "sync dependencies");
+  next = replaceOnce(
+    next,
+    "    if (accessFailed) return false;\n    // D-23",
+    "    // LVL-08, D-05: the same for a copy with hidden records stubbed out; saving it would erase them.\n    if (accessFailed || contentIncomplete) return false;\n    // D-23",
+    "save refuses an incomplete copy",
+  );
+  next = replaceOnce(
+    next,
+    "  // D-17: the window stays; nothing of the sections is rendered.\n",
+    "  // LVL-08, D-05: a viewer-shaped copy shows no forms and nothing to save; the draft stays in memory until the full copy comes.\n" +
+      "  if (contentIncomplete) {\n" +
+      "    return (\n" +
+      '      <div className="content-editor">\n' +
+      "        {header}\n" +
+      '        <div className="empty-state app-fatal-panel">\n' +
+      '          <div className="app-state-reason" role="alert"><strong>{levelCopy.editorIncomplete.heading}</strong><span>{levelCopy.editorIncomplete.body}</span></div>\n' +
+      "        </div>\n" +
+      "        {closeAsked && (\n" +
+      "          <ConfirmDialog\n" +
+      '            title="Закрыть редактор?"\n' +
+      '            text={`Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}. ${levelCopy.editorIncomplete.heading}`}\n' +
+      "            actions={[\n" +
+      '              { label: "НЕ СОХРАНЯТЬ", tone: "danger", onClick: () => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },\n' +
+      '              { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setHandledCloseRequest(closeRequest) },\n' +
+      "            ]}\n" +
+      "            onCancel={() => setHandledCloseRequest(closeRequest)}\n" +
+      "          />\n" +
+      "        )}\n" +
+      "      </div>\n" +
+      "    );\n" +
+      "  }\n" +
+      "  // D-17: the window stays; nothing of the sections is rendered.\n",
+    "incomplete copy block",
+  );
+  next = replaceOnce(
+    next,
+    'const chipVisible = dirty || saveState === "saving" || saveState === "saved";',
+    'const chipVisible = dirty || saveState === "saving" || saveState === "saved" || !!saveNotice;',
+    "chip shows with a notice",
+  );
+  return replaceOnce(
+    next,
+    "          <button type=\"button\" aria-label={chipLabel} title={`Не сохранено:",
+    "          {saveNotice && <span className=\"editor-save-status saved\" role=\"status\">{saveNotice}</span>}\n          <button type=\"button\" aria-label={chipLabel} title={`Не сохранено:",
+    "save notice line",
   );
 }
 

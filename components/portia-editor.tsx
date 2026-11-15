@@ -68,6 +68,10 @@ type Props = {
   onEmployeeRemoved: (id: string) => void;
   // The server's reason for the last refused save (D-12); empty when there is none.
   saveError: string;
+  // LVL-08, D-05: the content handed to the editor is the viewer-shaped copy. No sync, no rebase and no save until a full copy arrives; the draft stays.
+  contentIncomplete?: boolean;
+  // D-17: the desktop's line after the server lifted levels on save; shown in the save status area.
+  saveNotice?: string;
 };
 const infoBlockHeads = {
   text: { label: "текст", title: "ТЕКСТ" },
@@ -441,7 +445,7 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ accessFailed, content, revision, saveState, canManageEditors, openTabs, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved, saveError }: Props) {
+export function PortiaEditor({ accessFailed, content, revision, saveState, canManageEditors, openTabs, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved, saveError, contentIncomplete, saveNotice }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
   // The revision the draft's baseline came from; a stale draft then gets the 409 instead of overwriting newer content (uat-03-owner-broadcast-vanishes).
   const baseRevision = useRef(revision);
@@ -551,6 +555,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
 
   useEffect(() => {
     const syncTimer = window.setTimeout(() => {
+      // LVL-08, D-05: a viewer-shaped copy is neither the base nor the draft; the next full copy syncs by the rules below.
+      if (contentIncomplete) return;
       if (!dirty) {
         dispatch({ type: "sync", content });
         baseRevision.current = revision;
@@ -574,7 +580,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       repairSelections(decision.present);
     }, 0);
     return () => window.clearTimeout(syncTimer);
-  }, [content, dirty, revision, tab]);
+  }, [content, contentIncomplete, dirty, revision, tab]);
 
   // D-15, D-16: when the owner closes a section, its unsaved edits go back to the stored copy, in the history too, so Ctrl+Z cannot bring them back.
   const closureRef = useRef({ history, employeeDirty });
@@ -939,7 +945,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const save = async (mode: "mine" | "replace" = "mine"): Promise<boolean> => {
     if (!dirty) return true;
     // STAB-APP-09: no save on a stale answer about the rights; the draft stays where it is.
-    if (accessFailed) return false;
+    // LVL-08, D-05: the same for a copy with hidden records stubbed out; saving it would erase them.
+    if (accessFailed || contentIncomplete) return false;
     // D-23: the server would answer 413; the savebar already shows why.
     if (saveBlocked) return false;
     if (saveState === "saving" || inflight.current) return false;
@@ -1122,7 +1129,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const conflict = saveState === "conflict" && dirty && conflictBase !== null;
   const refusedShown = refusedSections.filter((section) => changed.includes(section));
   // The chip stays while anything is unsaved, so a compact chip never hides unsaved work (D-09).
-  const chipVisible = dirty || saveState === "saving" || saveState === "saved";
+  const chipVisible = dirty || saveState === "saving" || saveState === "saved" || !!saveNotice;
   // Derived reset: the popover only lists unsaved sections, so it closes when the draft is clean.
   if (popoverOpen && !dirty) setPopoverOpen(false);
   // A blocked, failed or conflicting save turns the chip red, so a compact chip never hides a failed save (D-10).
@@ -1161,6 +1168,28 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
           <ConfirmDialog
             title="Закрыть редактор?"
             text={`Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}. Права не проверены, сохранить сейчас нельзя.`}
+            actions={[
+              { label: "НЕ СОХРАНЯТЬ", tone: "danger", onClick: () => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },
+              { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setHandledCloseRequest(closeRequest) },
+            ]}
+            onCancel={() => setHandledCloseRequest(closeRequest)}
+          />
+        )}
+      </div>
+    );
+  }
+  // LVL-08, D-05: a viewer-shaped copy shows no forms and nothing to save; the draft stays in memory until the full copy comes.
+  if (contentIncomplete) {
+    return (
+      <div className="content-editor">
+        {header}
+        <div className="empty-state app-fatal-panel">
+          <div className="app-state-reason" role="alert"><strong>{levelCopy.editorIncomplete.heading}</strong><span>{levelCopy.editorIncomplete.body}</span></div>
+        </div>
+        {closeAsked && (
+          <ConfirmDialog
+            title="Закрыть редактор?"
+            text={`Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}. ${levelCopy.editorIncomplete.heading}`}
             actions={[
               { label: "НЕ СОХРАНЯТЬ", tone: "danger", onClick: () => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },
               { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setHandledCloseRequest(closeRequest) },
@@ -1667,6 +1696,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
             chipRef.current?.querySelector<HTMLButtonElement>(":scope > button")?.focus();
           }}
         >
+          {saveNotice && <span className="editor-save-status saved" role="status">{saveNotice}</span>}
           <button type="button" aria-label={chipLabel} title={`Не сохранено: ${shownChanged.length}`} aria-expanded={popoverOpen} aria-haspopup="dialog" aria-controls={popoverId} onClick={() => setPopoverOpen((open) => !open)}>{chipText}</button>
           {popoverOpen && dirty && (
             <div className="editor-save-popover" id={popoverId} role="dialog" aria-label="Несохранённые изменения">

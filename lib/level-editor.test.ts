@@ -193,3 +193,49 @@ test("D-18 the section tabs, the contents and the card heads carry no level labe
 test("A-5 the «Информация» and «Справочник» apps have no level of their own in the editor", () => {
   assert.ok(!editor.includes("appLevels?.info") && !editor.includes("appLevels?.guide"));
 });
+
+// ---- 24-08 Task 2: the viewer-shaped copy and the save notice ----
+
+test("LVL-08/D-05 the props exist and are optional", () => {
+  assert.ok(editor.includes("contentIncomplete?: boolean;"));
+  assert.ok(editor.includes("saveNotice?: string;"));
+  assert.ok(editor.includes("saveError, contentIncomplete, saveNotice }: Props)"));
+});
+
+test("LVL-08/EDGE the sync effect starts with the incomplete check, so such a copy is neither base nor draft nor rebase", () => {
+  assert.match(editor, /window\.setTimeout\(\(\) => \{\s*if \(contentIncomplete\) return;\s*if \(!dirty\) \{/);
+  assert.ok(editor.includes("}, [content, contentIncomplete, dirty, revision, tab]);"));
+  // Both the sync and the rebase are inside that timer, after the check.
+  const timer = editor.slice(editor.indexOf("if (contentIncomplete) return;"));
+  assert.ok(timer.indexOf('dispatch({ type: "sync"') > 0 && timer.indexOf('dispatch({ type: "rebase"') > timer.indexOf('dispatch({ type: "sync"'));
+  assert.ok(editor.indexOf("if (contentIncomplete) return;") < editor.indexOf('dispatch({ type: "sync"'));
+});
+
+test("LVL-08 save never sends an incomplete copy, and the access failure keeps its priority", () => {
+  assert.ok(editor.includes("if (accessFailed || contentIncomplete) return false;"));
+  const failed = editor.indexOf("if (accessFailed) {");
+  const incomplete = editor.indexOf("if (contentIncomplete) {");
+  assert.ok(failed > 0 && incomplete > failed, "the access panel is checked first");
+  assert.ok(editor.indexOf("if (noTabs)") > incomplete, "the block replaces every form");
+});
+
+test("LVL-08/D-05 an incomplete copy shows one alert block and no save button", () => {
+  const start = editor.indexOf("if (contentIncomplete) {");
+  const block = editor.slice(start, editor.indexOf("if (noTabs)", start));
+  assert.ok(block.includes('<div className="empty-state app-fatal-panel">'));
+  assert.ok(block.includes('<div className="app-state-reason" role="alert"><strong>{levelCopy.editorIncomplete.heading}</strong><span>{levelCopy.editorIncomplete.body}</span></div>'));
+  assert.ok(!block.includes("СОХРАНИТЬ") && !block.includes("save("), "nothing in the block saves");
+  assert.ok(block.includes("{header}"));
+  assert.ok(block.includes("closeAsked") && block.includes("levelCopy.editorIncomplete.heading}`"), "closing with unsaved edits still asks");
+  assert.equal(levelCopy.editorIncomplete.heading, "Содержимое загружено не полностью.");
+  assert.equal(levelCopy.editorIncomplete.body, "Сохранение отключено, чтобы не стереть скрытые записи. Обновите страницу.");
+});
+
+test("D-17 the notice of the server's lift is a status line beside the save chip, outside the popover", () => {
+  assert.ok(editor.includes('{saveNotice && <span className="editor-save-status saved" role="status">{saveNotice}</span>}'));
+  assert.ok(editor.includes('|| !!saveNotice;'), "the chip is shown while there is a notice");
+  const chip = editor.indexOf('className="editor-save-chip"');
+  const notice = editor.indexOf("{saveNotice && <span");
+  const popover = editor.indexOf('className="editor-save-popover"');
+  assert.ok(chip > 0 && notice > chip && notice < popover, "the notice stands in the chip, before the popover");
+});
