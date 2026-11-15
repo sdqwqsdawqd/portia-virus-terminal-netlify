@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 24
 current_phase_name: Уровни допуска и закрытие содержимого
 status: executing
-stopped_at: Completed PORTIA-24-02-PLAN.md
-last_updated: "2026-11-15T08:17:40.264Z"
+stopped_at: Completed PORTIA-24-03-PLAN.md
+last_updated: "2026-11-15T08:22:57.015Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-24 execution started
-state_head: af055a3e3b6015f3bbfcffe3522b0f83f7a9f86a
+state_head: 961119d01c530a0ce12758429ea4676d1ae2e7da
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 40
-  completed_plans: 31
+  completed_plans: 32
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-24 (Уровни допуска и закрытие содержимого) — EXECUTING
-Plan: 3 of 11
+Plan: 4 of 11
 Status: Executing Phase PORTIA-24
 Last activity: 2026-11-15 — Phase PORTIA-24 execution started
 
@@ -70,6 +70,7 @@ Progress: [███░░░░░░░] 29% (2/7 phases closed: 21 и 23 — 
 | Phase PORTIA-23 P12 | 9min | 3 tasks | 10 files |
 | Phase PORTIA-24 P01 | 25min | 2 tasks | 15 files |
 | Phase PORTIA-24 P02 | 40min | 3 tasks | 7 files |
+| Phase PORTIA-24 P03 | 15 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -250,6 +251,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-24]: 24-01: level modules named lib/level-*.ts to stay outside the access-* import ban for components; damaged placeholder node level reads as 5
 - [Phase PORTIA-24]: 24-02: reconcileSelection is one pure rule (open stays, reopened slot returns silently, else nearest closed slot in chain gives lostSlot/lostLevel, else empty); result never carries the previous record
 - [Phase PORTIA-24]: 24-02: placeholder number span renamed access-redacted-number to avoid collision with the index form class
+- [Phase PORTIA-24]: 24-03: lockedLevel записи учёного — нет поля = 1, целое 1-5 как есть, мусор = 5 (D-13); withheld сохраняется как true при любом значении
+- [Phase PORTIA-24]: 24-03 (O-2, допущение): appLevels принадлежит разделу info в sectionOfKey; смена места — одна строка
 
 ### Pending Todos
 
@@ -303,8 +306,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T08:17:39.642Z
-Stopped at: Completed PORTIA-24-02-PLAN.md
+Last session: 2026-11-15T08:22:56.385Z
+Stopped at: Completed PORTIA-24-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
