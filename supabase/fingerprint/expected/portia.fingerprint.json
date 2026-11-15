@@ -2706,6 +2706,21 @@
         "src_sha256": "f24bfc4ea7cf53adcb6e45c0da4b5837560bf5d6003ff11eb997b1d5f1675f4d",
         "volatility": "s"
       },
+      "public.portia_content_read(p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "9aae7e8988c5de4394f2cf8a2c645114f3e3cfc3edb13cd47aa65ac0c63c5898",
+        "volatility": "s"
+      },
       "public.portia_editor_is_approved(candidate_email text)": {
         "acl": [
           "anon:EXECUTE",
@@ -2733,6 +2748,21 @@
         "returns": "boolean",
         "secdef": true,
         "src_sha256": "3dd2b7021fa61e03e67ccbb0c19cf15049f98fbbccf014dc0b5ee16b15c169d8",
+        "volatility": "s"
+      },
+      "public.portia_employees_read(p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "be25367052a4635f2f8b85b82bc56db4650ff2b36bfca2ef172008ea5ac49635",
         "volatility": "s"
       },
       "public.portia_has_tab_grant(tab_id text)": {

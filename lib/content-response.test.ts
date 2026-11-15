@@ -175,7 +175,9 @@ test("исходник GET: шлюз, зритель, тело по зрител
   const get = source.slice(start, source.indexOf("export async function PUT"));
   assert.ok(start >= 0 && get.length > 0);
   for (const call of ["resolveGate(", "viewerOf(", "contentBodyFor("]) assert.ok(get.includes(call), call);
-  assert.ok(get.indexOf("viewerOf(") < get.indexOf('.from("portia_content")'), "the row is read only after the viewer is known");
+  assert.ok(get.includes("readContentRow("), "Phase 25: the row is read by the signed server function");
+  assert.ok(!get.includes('.from("portia_content")'), "Phase 25: GET no longer reads the table directly");
+  assert.ok(get.indexOf("viewerOf(") < get.indexOf("readContentRow("), "the row is read only after the viewer is known");
   const responses = get.split("Response.json(").slice(1);
   assert.ok(responses.length >= 4);
   for (const response of responses) assert.ok(response.slice(0, response.indexOf(";\n")).includes("noStoreHeaders"), response.slice(0, 80));

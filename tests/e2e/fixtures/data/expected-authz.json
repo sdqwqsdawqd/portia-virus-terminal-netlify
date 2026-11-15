@@ -12,9 +12,10 @@
     "20261110000000_portia_users_tab.sql",
     "20261112000000_portia_access_decision_mark.sql",
     "20261113000000_portia_access_promotion.sql",
-    "20261114000000_portia_access_closure_default_on.sql"
+    "20261114000000_portia_access_closure_default_on.sql",
+    "20261115000000_portia_server_read_expand.sql"
   ],
-  "generated_from": "all supabase/migrations SQL text replayed in version order (grant/revoke/policy/raise lines); not from observed behavior. Phase 21 adds the portia_access_* functions and tables (migration 20261109000000_portia_access_foundation.sql). Phase 23 adds approved-request Promotion RPC wrappers (offline evidence only). Phase 23 (23-10) turns site closure ON by default (20261114000000_portia_access_closure_default_on.sql restates the grants of portia_access_closure_enabled unchanged).",
+  "generated_from": "all supabase/migrations SQL text replayed in version order (grant/revoke/policy/raise lines); not from observed behavior. Phase 21 adds the portia_access_* functions and tables (migration 20261109000000_portia_access_foundation.sql). Phase 23 adds approved-request Promotion RPC wrappers (offline evidence only). Phase 23 (23-10) turns site closure ON by default (20261114000000_portia_access_closure_default_on.sql restates the grants of portia_access_closure_enabled unchanged). Phase 25 (25-01) adds the server-signed read functions portia_content_read and portia_employees_read (20261115000000_portia_server_read_expand.sql, additive expand; offline evidence only).",
   "roles": {
     "anon": {
       "session": false
@@ -821,6 +822,43 @@
       }
     },
     {
+      "key": "public.portia_content_read(p_issued_at bigint, p_signature text)",
+      "name": "portia_content_read",
+      "identity": "p_issued_at bigint, p_signature text",
+      "args": {
+        "p_issued_at": 0,
+        "p_signature": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "creates_rows": false,
+      "kind": "visitor",
+      "cells": {
+        "anon": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:52"
+        },
+        "outsider": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:52"
+        },
+        "editor-full": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:52"
+        },
+        "editor-restricted": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:52"
+        },
+        "promo-reviewer": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:52"
+        },
+        "owner": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:52"
+        }
+      }
+    },
+    {
       "key": "public.portia_editor_is_approved(candidate_email text)",
       "name": "portia_editor_is_approved",
       "identity": "candidate_email text",
@@ -898,6 +936,43 @@
           "outcome": "allow",
           "source": "supabase/migrations/20261101000000_portia_baseline.sql:202",
           "returns": true
+        }
+      }
+    },
+    {
+      "key": "public.portia_employees_read(p_issued_at bigint, p_signature text)",
+      "name": "portia_employees_read",
+      "identity": "p_issued_at bigint, p_signature text",
+      "args": {
+        "p_issued_at": 0,
+        "p_signature": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "creates_rows": false,
+      "kind": "visitor",
+      "cells": {
+        "anon": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:91"
+        },
+        "outsider": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:91"
+        },
+        "editor-full": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:91"
+        },
+        "editor-restricted": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:91"
+        },
+        "promo-reviewer": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:91"
+        },
+        "owner": {
+          "outcome": "allow",
+          "source": "supabase/migrations/20261115000000_portia_server_read_expand.sql:91"
         }
       }
     },

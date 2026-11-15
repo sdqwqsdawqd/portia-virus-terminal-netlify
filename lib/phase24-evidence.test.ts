@@ -29,6 +29,11 @@ function tracked(path: string, suffix: string) {
   return result.stdout.split(/\r?\n/).filter((name) => name.endsWith(suffix));
 }
 
+// The matrix of Phase 24 is frozen history: migrations after this version are covered by the current matrix of Phase 25
+// (plan 25-10), not by this check.
+const FROZEN_HISTORY_UP_TO = "20261114000000";
+const frozenMigrations = () => tracked("supabase/migrations", ".sql").filter((path) => (/(\d{14})_/.exec(path)?.[1] ?? "") <= FROZEN_HISTORY_UP_TO);
+
 test("Phase 24 reviewer identifies a committed scope with no open critical or high finding", () => {
   assert.match(review, /Reviewer: `supabase-rls-reviewer`/);
   const commit = /Reviewed commit: `([0-9a-f]{40})`/.exec(review)?.[1];
@@ -64,7 +69,7 @@ test("Phase 24 matrix covers each tracked route and migration exactly once and t
   const routeRows = matrix.split("\n").filter((line) => /^\| `app\/api\/[^`]+\/route\.ts`/.test(line)).map((line) => /`([^`]+)`/.exec(line)?.[1]);
   const migrationRows = matrix.split("\n").filter((line) => /^\| `supabase\/migrations\/[^`]+\.sql`/.test(line)).map((line) => /`([^`]+)`/.exec(line)?.[1]);
   assert.deepEqual([...routeRows].sort(), tracked("app/api", "/route.ts").sort());
-  assert.deepEqual([...migrationRows].sort(), tracked("supabase/migrations", ".sql").sort());
+  assert.deepEqual([...migrationRows].sort(), frozenMigrations().sort());
   assert.equal(new Set(routeRows).size, routeRows.length);
   assert.equal(new Set(migrationRows).size, migrationRows.length);
   const covered = section(matrix, "Охват файлов").split("\n").map((line) => /^-\s+`([^`]+)`/.exec(line.trim())?.[1]).filter((path): path is string => Boolean(path));

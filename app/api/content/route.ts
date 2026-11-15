@@ -7,6 +7,7 @@ import { contentAccessRequired, contentBodyFor, slotKeyFactory, type ContentRow 
 import { MAX_CONTENT_BODY_BYTES, utf8Bytes } from "@/lib/content-limits";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
+import { readContentRow, ServerReadError } from "@/lib/server-read";
 import { getEditorAccess } from "@/lib/editor-access";
 import { prepareContentSave } from "@/lib/content-save";
 import { closedSectionsOf, contentRefusal } from "@/lib/editor-tabs";
@@ -19,7 +20,7 @@ const conflictMessage = "Пока вы редактировали, кто-то �
 
 // Built for each viewer (Phase 24, D-04/D-05/D-06), so no CDN or browser may keep it: every answer is no-store and carries no
 // cache tag. The viewer comes from the gate decision only (editor session, then the device cookie). A closed site with no access
-// is refused before the content row is read. The save below still purges the old public copies for one release.
+// is refused before the content row is read, and the row is read by a signed server function (Phase 25). The save below still purges the old public copies for one release.
 export async function GET(request: Request) {
   try {
     const client = await createServerSupabaseClient();
@@ -36,15 +37,15 @@ export async function GET(request: Request) {
     const viewer = viewerOf(decision);
     if (!viewer) return Response.json(contentAccessRequired, { status: 401, headers: noStoreHeaders });
 
-    // Still the public client: Phase 25 closes the anonymous read of the table.
-    const { data: row, error } = await createPublicSupabaseClient()
-      .from("portia_content")
-      .select("payload, revision, updated_at")
-      .eq("id", "main")
-      .maybeSingle<NonNullable<ContentRow>>();
-    if (error) {
-      console.error("PORTIA content read failed", error);
-      return Response.json({ error: "База временно недоступна." }, { status: 503, headers: noStoreHeaders });
+    // Phase 25 (SEC-01): the row comes from a signed server function, not from a direct read of the table. A visitor is read
+    // with the public key plus the server signature, an editor with their own session. Only the kind of a failure is logged.
+    let row: ContentRow;
+    try {
+      row = await readContentRow(viewer, { session: client, anonymous: () => createPublicSupabaseClient() });
+    } catch (error) {
+      if (!(error instanceof ServerReadError)) throw error;
+      console.error("PORTIA content read failed", error.kind);
+      return Response.json({ error: "Данные временно недоступны." }, { status: 503, headers: noStoreHeaders });
     }
 
     return Response.json(contentBodyFor(viewer, row, { slotOf: slotKeyFactory(accessSessionSecret()) }), { headers: noStoreHeaders });

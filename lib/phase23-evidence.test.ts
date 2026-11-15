@@ -29,6 +29,11 @@ function tracked(path: string, suffix: string) {
   return result.stdout.split(/\r?\n/).filter((name) => name.endsWith(suffix));
 }
 
+// The matrices and the apply record of Phase 23-24 are frozen history: migrations after this version are covered by the
+// current matrix of Phase 25 (plan 25-10), not by these checks.
+const FROZEN_HISTORY_UP_TO = "20261114000000";
+const frozenMigrations = () => tracked("supabase/migrations", ".sql").filter((path) => (/(\d{14})_/.exec(path)?.[1] ?? "") <= FROZEN_HISTORY_UP_TO);
+
 test("Phase 23 reviewer identifies a committed scope with no open critical or high finding", () => {
   assert.match(review, /Reviewer: `supabase-rls-reviewer`/);
   const commit = /Reviewed commit: `([0-9a-f]{40})`/.exec(review)?.[1];
@@ -82,7 +87,7 @@ test("Phase 23 matrix covers each tracked route and migration exactly once; all 
   const routeRows = matrix.split("\n").filter((line) => /^\| `app\/api\/[^`]+\/route\.ts`/.test(line)).map((line) => /`([^`]+)`/.exec(line)?.[1]);
   const migrationRows = matrix.split("\n").filter((line) => /^\| `supabase\/migrations\/[^`]+\.sql`/.test(line)).map((line) => /`([^`]+)`/.exec(line)?.[1]);
   assert.deepEqual([...routeRows].sort(), tracked("app/api", "/route.ts").sort());
-  assert.deepEqual([...migrationRows].sort(), tracked("supabase/migrations", ".sql").sort());
+  assert.deepEqual([...migrationRows].sort(), frozenMigrations().sort());
   assert.equal(new Set(routeRows).size, routeRows.length);
   assert.equal(new Set(migrationRows).size, migrationRows.length);
   for (const [lane, verdict] of rows(evidence, "Live boundaries")) {
@@ -105,7 +110,7 @@ test("Phase 23 apply record: owner order, pinned hashes, cache reload, closure O
   ]) assert.ok(section(record, heading).trim().length > 0, `${heading} must not be empty`);
 
   // Order equals the tracked migrations after Phase 16 (20261101000200): a future migration without a record update fails here.
-  const versions = tracked("supabase/migrations", ".sql").map((path) => /(\d{14})_/.exec(path)?.[1] ?? "").filter((version) => version > "20261101000200").sort();
+  const versions = frozenMigrations().map((path) => /(\d{14})_/.exec(path)?.[1] ?? "").filter((version) => version > "20261101000200").sort();
   assert.ok(versions.length >= 8);
   const listed = section(record, "Порядок применения").split("\n").map((line) => /^\d+\. `(\d{14})_[a-z0-9_]+\.sql`/.exec(line)?.[1]).filter((version): version is string => Boolean(version));
   assert.deepEqual(listed, versions);

@@ -38,6 +38,9 @@ const migrationHashes: Record<string, string> = {
   // FROZEN by plan 23-11 (see 23-MIGRATION-APPLY.md, «Закреплённый sha256») after supabase-rls-reviewer round 2; any later
   // change needs a new forward-only migration; this pin must not be re-pinned.
   "20261114000000_portia_access_closure_default_on.sql": "44c07e2f76baccf06017852fdf50843bae6fc005d889715cc898b4fbdc4c47b4",
+  // Phase 25 expand migration (plan 25-01): server-signed reads, additive. Pinned the day it was written; the owner applies it
+  // by hand after review (25-OWNER-CHECKLIST.md). Any later change needs a new forward-only migration.
+  "20261115000000_portia_server_read_expand.sql": "df9b5f552acbb377a55b6c4643244db2553dd6f930ec1e25069be364b8bea5b3",
 };
 
 const baselineName = "20261101000000_portia_baseline.sql";
