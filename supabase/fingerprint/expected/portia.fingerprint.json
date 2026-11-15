@@ -3591,6 +3591,15 @@
         ],
         "using": null
       },
+      "public.portia_content:Editors can read PORTIA content": {
+        "check": null,
+        "cmd": "r",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_can_edit() AS portia_can_edit)"
+      },
       "public.portia_content:Editors can update PORTIA content": {
         "check": "( SELECT portia_can_edit() AS portia_can_edit)",
         "cmd": "w",
@@ -3599,16 +3608,6 @@
           "authenticated"
         ],
         "using": "( SELECT portia_can_edit() AS portia_can_edit)"
-      },
-      "public.portia_content:Public can read PORTIA content": {
-        "check": null,
-        "cmd": "r",
-        "permissive": true,
-        "roles": [
-          "anon",
-          "authenticated"
-        ],
-        "using": "true"
       },
       "public.portia_editors:Editors can see their access": {
         "check": null,
@@ -3655,6 +3654,15 @@
         ],
         "using": null
       },
+      "public.portia_employee_profiles:Editors can read PORTIA employee profiles": {
+        "check": null,
+        "cmd": "r",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_can_edit() AS portia_can_edit)"
+      },
       "public.portia_employee_profiles:Editors can update PORTIA employee profiles": {
         "check": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)",
         "cmd": "w",
@@ -3663,16 +3671,6 @@
           "authenticated"
         ],
         "using": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)"
-      },
-      "public.portia_employee_profiles:Public can read PORTIA employee profiles": {
-        "check": null,
-        "cmd": "r",
-        "permissive": true,
-        "roles": [
-          "anon",
-          "authenticated"
-        ],
-        "using": "true"
       },
       "public.portia_manual_employees:Editors can add PORTIA manual employees": {
         "check": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)",
@@ -3692,6 +3690,15 @@
         ],
         "using": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)"
       },
+      "public.portia_manual_employees:Editors can read PORTIA manual employees": {
+        "check": null,
+        "cmd": "r",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_can_edit() AS portia_can_edit)"
+      },
       "public.portia_manual_employees:Editors can remove PORTIA manual employees": {
         "check": null,
         "cmd": "d",
@@ -3701,19 +3708,18 @@
         ],
         "using": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)"
       },
-      "public.portia_manual_employees:Public can read PORTIA manual employees": {
-        "check": null,
-        "cmd": "r",
-        "permissive": true,
-        "roles": [
-          "anon",
-          "authenticated"
-        ],
-        "using": "true"
-      },
       "storage.objects:Editors can delete PORTIA media": {
         "check": null,
         "cmd": "d",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "((bucket_id = 'portia-media'::text) AND ( SELECT portia_can_edit() AS portia_can_edit))"
+      },
+      "storage.objects:Editors can read PORTIA media": {
+        "check": null,
+        "cmd": "r",
         "permissive": true,
         "roles": [
           "authenticated"
@@ -3737,16 +3743,6 @@
           "authenticated"
         ],
         "using": null
-      },
-      "storage.objects:Public can read PORTIA media": {
-        "check": null,
-        "cmd": "r",
-        "permissive": true,
-        "roles": [
-          "anon",
-          "authenticated"
-        ],
-        "using": "(bucket_id = 'portia-media'::text)"
       }
     },
     "publications": {},
@@ -3877,7 +3873,6 @@
       },
       "public.portia_content": {
         "acl": [
-          "anon:SELECT",
           "authenticated:INSERT",
           "authenticated:SELECT",
           "authenticated:UPDATE",
@@ -3918,7 +3913,6 @@
       },
       "public.portia_employee_profiles": {
         "acl": [
-          "anon:SELECT",
           "authenticated:INSERT",
           "authenticated:SELECT",
           "authenticated:UPDATE",
@@ -3939,7 +3933,6 @@
       },
       "public.portia_manual_employees": {
         "acl": [
-          "anon:SELECT",
           "authenticated:DELETE",
           "authenticated:INSERT",
           "authenticated:SELECT",

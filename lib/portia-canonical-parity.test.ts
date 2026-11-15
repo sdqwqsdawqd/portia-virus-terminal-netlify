@@ -41,6 +41,9 @@ const migrationHashes: Record<string, string> = {
   // Phase 25 expand migration (plan 25-01): server-signed reads, additive. Pinned the day it was written; the owner applies it
   // by hand after review (25-OWNER-CHECKLIST.md). Any later change needs a new forward-only migration.
   "20261115000000_portia_server_read_expand.sql": "df9b5f552acbb377a55b6c4643244db2553dd6f930ec1e25069be364b8bea5b3",
+  // Phase 25 contract migration (plan 25-04): removes the anonymous read of content and employees and the media listing. Pinned the day
+  // it was written; the owner applies it by hand only after the server-read code is live (D-06, 25-OWNER-CHECKLIST.md).
+  "20261115000100_portia_closure_contract.sql": "98599c12c4d0bc9cea40211cdbc28aa6466c84f267f3fbe3b74321b883777cd7",
 };
 
 const baselineName = "20261101000000_portia_baseline.sql";

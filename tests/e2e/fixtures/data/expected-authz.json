@@ -13,9 +13,10 @@
     "20261112000000_portia_access_decision_mark.sql",
     "20261113000000_portia_access_promotion.sql",
     "20261114000000_portia_access_closure_default_on.sql",
-    "20261115000000_portia_server_read_expand.sql"
+    "20261115000000_portia_server_read_expand.sql",
+    "20261115000100_portia_closure_contract.sql"
   ],
-  "generated_from": "all supabase/migrations SQL text replayed in version order (grant/revoke/policy/raise lines); not from observed behavior. Phase 21 adds the portia_access_* functions and tables (migration 20261109000000_portia_access_foundation.sql). Phase 23 adds approved-request Promotion RPC wrappers (offline evidence only). Phase 23 (23-10) turns site closure ON by default (20261114000000_portia_access_closure_default_on.sql restates the grants of portia_access_closure_enabled unchanged). Phase 25 (25-01) adds the server-signed read functions portia_content_read and portia_employees_read (20261115000000_portia_server_read_expand.sql, additive expand; offline evidence only).",
+  "generated_from": "all supabase/migrations SQL text replayed in version order (grant/revoke/policy/raise lines); not from observed behavior. Phase 21 adds the portia_access_* functions and tables (migration 20261109000000_portia_access_foundation.sql). Phase 23 adds approved-request Promotion RPC wrappers (offline evidence only). Phase 23 (23-10) turns site closure ON by default (20261114000000_portia_access_closure_default_on.sql restates the grants of portia_access_closure_enabled unchanged). Phase 25 (25-01) adds the server-signed read functions portia_content_read and portia_employees_read (20261115000000_portia_server_read_expand.sql, additive expand; offline evidence only). Phase 25 (25-04) contract 20261115000100_portia_closure_contract.sql removes the anonymous select grant and the public read policies of portia_content, portia_employee_profiles and portia_manual_employees and the public read policy of the media bucket (offline evidence only; the anonymous refusal and the listing are BLOCKED until an isolated staging project proves them).",
   "roles": {
     "anon": {
       "session": false
@@ -2613,28 +2614,28 @@
       "ops": {
         "select": {
           "anon": {
-            "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:245"
+            "outcome": "42501",
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:23"
           },
           "outsider": {
-            "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:245"
+            "outcome": "rls-empty",
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:27"
           },
           "editor-full": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:245"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:27"
           },
           "editor-restricted": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:245"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:27"
           },
           "promo-reviewer": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:245"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:27"
           },
           "owner": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:245"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:27"
           }
         },
         "insert": {
@@ -2736,28 +2737,28 @@
       "ops": {
         "select": {
           "anon": {
-            "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:273"
+            "outcome": "42501",
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:34"
           },
           "outsider": {
-            "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:273"
+            "outcome": "rls-empty",
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:38"
           },
           "editor-full": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:273"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:38"
           },
           "editor-restricted": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:273"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:38"
           },
           "promo-reviewer": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:273"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:38"
           },
           "owner": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:273"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:38"
           }
         },
         "insert": {
@@ -2872,28 +2873,28 @@
       "ops": {
         "select": {
           "anon": {
-            "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:312"
+            "outcome": "42501",
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:45"
           },
           "outsider": {
-            "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:312"
+            "outcome": "rls-empty",
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:49"
           },
           "editor-full": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:312"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:49"
           },
           "editor-restricted": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:312"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:49"
           },
           "promo-reviewer": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:312"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:49"
           },
           "owner": {
             "outcome": "allow",
-            "source": "supabase/migrations/20261101000000_portia_baseline.sql:312"
+            "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:49"
           }
         },
         "insert": {
@@ -5709,32 +5710,32 @@
       "image/webp",
       "image/gif"
     ],
-    "note": "Tab restrictions (closed_tabs) are not checked by Storage policies: the same API-level class as D-11. Objects live under {prefix}/.",
+    "note": "Tab restrictions (closed_tabs) are not checked by Storage policies: the same API-level class as D-11. Objects live under {prefix}/. Phase 25 (25-04): the public read policy is replaced by an editor-only one, so the listing is closed for anon and outsider; the bucket stays public and an exact file link does not depend on a select policy (assumption A5, BLOCKED until staging).",
     "ops": {
       "read": {
         "anon": {
-          "outcome": "allow",
-          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1648"
+          "outcome": "rls-empty",
+          "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:58"
         },
         "outsider": {
-          "outcome": "allow",
-          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1648"
+          "outcome": "rls-empty",
+          "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:58"
         },
         "editor-full": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1648"
+          "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:58"
         },
         "editor-restricted": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1648"
+          "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:58"
         },
         "promo-reviewer": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1648"
+          "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:58"
         },
         "owner": {
           "outcome": "allow",
-          "source": "supabase/migrations/20261101000000_portia_baseline.sql:1648"
+          "source": "supabase/migrations/20261115000100_portia_closure_contract.sql:58"
         }
       },
       "insert": {
