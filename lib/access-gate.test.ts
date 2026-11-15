@@ -289,19 +289,21 @@ test("gate layout: an approved visitor on an open desktop gets no card and no re
   // Approved but not allowed: the card with its status text stays, no desktop and no notice.
   const notAllowed: GateDecision = { mode: "closed", state: approvedState, allowed: false, level: null, editor: false };
   assert.deepEqual(accessGateLayout({ kind: "decision", decision: notAllowed }, true), { desktop: false, showCard: true, showForm: false, showReopen: false, showError: false, status: "approved", approvedNotice: false });
-  // D-05 unchanged: open mode keeps the card and the reopen button for every non-approved state.
-  const openStates: GateDecision["state"][] = [{ state: "none" }, { state: "pending", nickname: "Visitor_1" }, { state: "rejected", nickname: "Visitor_1", retryAt: null }, { state: "revoked", nickname: "Visitor_1", retryAt: null }];
-  for (const state of openStates) {
+  // D-09, D-21 (owner, 2026-11-15): with closure off, rejected and revoked are read exactly as none: the same collapsible card
+  // with the request form and the reopen button, no rejected or revoked text. Only a pending request keeps its status.
+  const none = accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, true);
+  const noneHidden = accessGateLayout({ kind: "decision", decision: { mode: "open", state: { state: "none" } } }, false);
+  for (const state of [{ state: "rejected", nickname: "Visitor_1", retryAt: null }, { state: "revoked", nickname: "Visitor_1", retryAt: null }] as GateDecision["state"][]) {
     const decision: GateDecision = { mode: "open", state };
-    const shown = accessGateLayout({ kind: "decision", decision }, true);
-    const hidden = accessGateLayout({ kind: "decision", decision }, false);
-    assert.equal(shown.showCard, true, state.state);
-    assert.equal(shown.showReopen, false, state.state);
-    assert.equal(hidden.showCard, false, state.state);
-    assert.equal(hidden.showReopen, true, state.state);
-    assert.equal(shown.approvedNotice, false, state.state);
-    assert.equal(hidden.approvedNotice, false, state.state);
+    assert.deepEqual(accessGateLayout({ kind: "decision", decision }, true), none, state.state);
+    assert.deepEqual(accessGateLayout({ kind: "decision", decision }, false), noneHidden, state.state);
+    assert.equal(none.status, null);
+    assert.equal(none.showForm, true);
+    assert.equal(noneHidden.showReopen, true);
   }
+  const pendingOpen: GateDecision = { mode: "open", state: { state: "pending", nickname: "Visitor_1" } };
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: pendingOpen }, true), { desktop: true, showCard: true, showForm: false, showReopen: false, showError: false, status: "pending", approvedNotice: false });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: pendingOpen }, false), { desktop: true, showCard: false, showForm: false, showReopen: true, showError: false, status: "pending", approvedNotice: false });
   // WR-04, D-03, D-08: a verified editor never sees the notice.
   const editor: GateDecision = { mode: "closed", state: approvedState, allowed: true, level: 5, editor: true };
   for (const cardOpen of [true, false]) {
@@ -440,4 +442,10 @@ test("status poll network budget: an anonymous visitor makes one request and a s
   assert.deepEqual(d.calls.slice(1).sort(), ["GET /rest/v1/portia_editors", "POST /rest/v1/rpc/portia_can_edit", "POST /rest/v1/rpc/portia_is_owner"]);
   assert.equal(d.calls.length, 4);
   assert.ok(d.calls.every((call) => !call.includes("closure")));
+});
+
+test("gate layout: closed mode keeps the rejected and revoked statuses and the form (D-09 does not touch closure on)", () => {
+  const closedDenied = (state: GateDecision["state"]): GateDecision => ({ mode: "closed", state, allowed: false, level: null, editor: false });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closedDenied({ state: "rejected", nickname: "Visitor_1", retryAt: null }) }, true), { desktop: false, showCard: true, showForm: true, showReopen: false, showError: false, status: "rejected", approvedNotice: false });
+  assert.deepEqual(accessGateLayout({ kind: "decision", decision: closedDenied({ state: "revoked", nickname: "Visitor_1", retryAt: null }) }, true), { desktop: false, showCard: true, showForm: true, showReopen: false, showError: false, status: "revoked", approvedNotice: false });
 });

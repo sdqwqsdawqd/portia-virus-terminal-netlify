@@ -146,7 +146,9 @@ test("STAB-DESK-07: app ids, storage keys and API endpoints stay as pinned", () 
     return found;
   };
   assert.equal(/type AppId = ([^;]+);/.exec(source)?.[1], '"archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor"');
-  assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-content-last-success-v1", "portia-desktop-shortcuts-v3", "portia-employees-last-success-v1", "portia-guide-collapsed-v2", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
+  // IN-05 (Phase 25): the two device-cache keys live only in lib/device-cache.ts; the desktop imports them.
+  assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-desktop-shortcuts-v3", "portia-guide-collapsed-v2", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
+  assert.match(source, /import \{[^}]*\bCONTENT_CACHE_KEY\b[^}]*\bEMPLOYEES_CACHE_KEY\b[^}]*\} from "@\/lib\/device-cache";/);
   assert.deepEqual(keys(editorSource), ["portia-format-panel-v1"]);
   assert.deepEqual(endpoints(source), { "/api/content": 2, "/api/access": 1, "/api/employees": 1 });
   assert.deepEqual(endpoints(editorSource), { "/api/uploads": 1, "/api/employees/editor": 1, "/api/employees": 3, "/api/editors": 4 });
@@ -230,11 +232,11 @@ test("every result type opens its owner and marks its record; a vanished record 
 });
 
 test("device copies of content and roster are stamped with their data source and foreign copies are dropped (owner UAT 19-14)", () => {
-  assert.equal((source.match(/setItem\(contentCacheStorageKey, JSON\.stringify\(stampCacheSource\(/g) ?? []).length, 2, "both content writes are stamped");
-  assert.ok(source.includes("setItem(employeesCacheStorageKey, JSON.stringify(stampCacheSource(payload, deviceCacheSource())))"));
-  assert.ok(/!cacheMatchesSource\(JSON\.parse\(cached\), cacheSource\)\) \{ window\.localStorage\.removeItem\(contentCacheStorageKey\)/.test(source));
-  assert.ok(/!cacheMatchesSource\(JSON\.parse\(employeeCache\), cacheSource\)\) \{ window\.localStorage\.removeItem\(employeesCacheStorageKey\)/.test(source));
-  assert.ok(!/setItem\(contentCacheStorageKey, JSON\.stringify\(\{/.test(source), "no unstamped content write");
+  assert.equal((source.match(/setItem\(CONTENT_CACHE_KEY, JSON\.stringify\(stampCacheSource\(/g) ?? []).length, 2, "both content writes are stamped");
+  assert.ok(source.includes("setItem(EMPLOYEES_CACHE_KEY, JSON.stringify(stampCacheSource(payload, deviceCacheSource())))"));
+  assert.ok(/!cacheMatchesSource\(JSON\.parse\(cached\), cacheSource\)\) \{ window\.localStorage\.removeItem\(CONTENT_CACHE_KEY\)/.test(source));
+  assert.ok(/!cacheMatchesSource\(JSON\.parse\(employeeCache\), cacheSource\)\) \{ window\.localStorage\.removeItem\(EMPLOYEES_CACHE_KEY\)/.test(source));
+  assert.ok(!/setItem\(CONTENT_CACHE_KEY, JSON\.stringify\(\{/.test(source), "no unstamped content write");
 });
 
 test("on a phone the trash list grows with its rows and scrolls with the page, like the virus archive (owner UAT 19-14)", () => {

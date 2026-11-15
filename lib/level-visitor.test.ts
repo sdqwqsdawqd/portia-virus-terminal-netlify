@@ -63,15 +63,17 @@ test("D-23: a visitor polls every 30 s, an editor every 10 s, and a new viewer k
 });
 
 test("LVL-05: the content cache is shown only for the viewer key of the gate decision and carries it when written", () => {
-  const read = desktop.indexOf("window.localStorage.getItem(contentCacheStorageKey)");
+  const read = desktop.indexOf("window.localStorage.getItem(CONTENT_CACHE_KEY)");
   const check = desktop.indexOf("cacheMatchesViewer(JSON.parse(cached), viewerKeyRef.current)");
   const show = desktop.indexOf("const cachedContent = normalizePortiaContent(parsed.content)");
   assert.ok(read !== -1 && check > read && show > check, "the viewer check sits between the read and the show");
   assert.ok(desktop.includes("viewer: fetchedViewer"));
   assert.ok(desktop.includes("viewer: knownViewerKey.current"));
-  // The desktop keeps the key literals (lib/portia-desktop.test.ts pins them); they must equal the keys that get cleared.
-  assert.ok(desktop.includes(`const contentCacheStorageKey = "${CONTENT_CACHE_KEY}";`));
-  assert.ok(desktop.includes(`const employeesCacheStorageKey = "${EMPLOYEES_CACHE_KEY}";`));
+  // IN-05 (Phase 25): the desktop holds no key literal; it imports the very constants that clearDeviceContentCaches removes.
+  assert.match(desktop, /import \{[^}]*\bCONTENT_CACHE_KEY\b[^}]*\bEMPLOYEES_CACHE_KEY\b[^}]*\} from "@\/lib\/device-cache";/);
+  assert.ok(!/portia-(?:content|employees)-last-success/.test(desktop), "no cache key literal in the desktop");
+  assert.equal(CONTENT_CACHE_KEY, "portia-content-last-success-v2");
+  assert.equal(EMPLOYEES_CACHE_KEY, "portia-employees-last-success-v2");
 });
 
 test("the gate clears device copies on a closed, not allowed decision and gives the desktop its viewer and access-lost hook", () => {
@@ -80,7 +82,22 @@ test("the gate clears device copies on a closed, not allowed decision and gives 
   assert.ok(gate.indexOf("shouldClearDeviceCaches(decision)") < gate.indexOf("setView({ kind: \"decision\", decision })"));
   assert.match(gate, /<PortiaDesktop[^>]*viewerKey=\{viewerKey\(viewer\)\}/);
   assert.match(gate, /<PortiaDesktop[^>]*onAccessLost=\{onAccessLost\}/);
+  assert.match(gate, /<PortiaDesktop[^>]*viewerPerson=\{/);
   assert.match(gate, /const onAccessLost = useCallback\(\(\) => \{ void refresh\(\); \}, \[refresh\]\)/);
+});
+
+test("SEC-04: the gate wipes both device copies on any identity change and deletes the v1 copies once on mount", () => {
+  assert.ok(gate.includes("const identity = cacheIdentityOf(decision);"));
+  assert.ok(gate.includes("identityChanged(previousIdentity.current, identity)"));
+  assert.ok(gate.includes("previousIdentity.current = identity;"));
+  // The wipe happens before the new view is set, so the desktop never renders against a copy of another identity.
+  assert.ok(gate.indexOf("identityChanged(previousIdentity.current, identity)") < gate.indexOf("setView({ kind: \"decision\", decision })"));
+  // The first answer has nothing to compare with: the ref starts empty (null), not "".
+  assert.match(gate, /previousIdentity = useRef<string \| null>\(null\)/);
+  // The legacy purge runs in the mount effect, independent of any decision.
+  const purge = gate.indexOf("purgeLegacyDeviceCaches(() => window.localStorage)");
+  assert.ok(purge !== -1 && purge > gate.indexOf("useEffect(() => {") && purge < gate.indexOf("queueMicrotask"));
+  assert.ok(gate.includes("viewerPerson={view.kind === \"decision\" ? viewerPersonOf(view.decision) : \"\"}"));
 });
 
 // Phase 24 dossier. "withheld" is set by the server cut of plan 24-05; here only the client side is proved: a row is closed

@@ -1,5 +1,6 @@
 import type { Locator, Page, Route } from "@playwright/test";
 import { emptyCopy, failureCopy, iframeFailureCopy } from "../../../lib/app-state.ts";
+import { EMPLOYEES_CACHE_KEY } from "../../../lib/device-cache.ts";
 import { DesktopPage } from "../pages/desktop.page";
 import type { DiagnosticLedger } from "../fixtures/diagnostics";
 import { expect, test } from "../fixtures/test";
@@ -229,7 +230,7 @@ test("[STAB-APP-02] Сотрудники: a reload that cannot reach the roster 
   const employees = apps[1];
   const window = await openApp(page, employees.name);
   const count = await recordsOrBlocked(employees, window, "a stale strip");
-  const cached = await page.evaluate(() => globalThis.localStorage.getItem("portia-employees-last-success-v1"));
+  const cached = await page.evaluate((key) => globalThis.localStorage.getItem(key), EMPLOYEES_CACHE_KEY);
   test.skip(!cached, "BLOCKED (DATA): this target's roster is degraded, so no device copy was saved to show again.");
   const restore = await abortApi(page, "**/api/employees");
   await page.reload();

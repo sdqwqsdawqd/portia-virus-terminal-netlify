@@ -22,7 +22,10 @@ export function accessGateLayout(view: AccessGateView, cardOpen: boolean): Acces
   // WR-04 (D-03, D-08): a verified editor enters through the editor login and joins Promotion through their own
   // request, so the visitor card, form and reopen button are never offered to them.
   const editor = decision !== null && decision.mode === "closed" && decision.editor;
-  const state = decision?.state.state;
+  // D-09, D-21 (owner, 2026-11-15): with closure off, rejected and revoked are read as "none" - the same card with the request
+  // form, no rejected or revoked text. Closure on keeps both statuses.
+  const rawState = decision?.state.state;
+  const state = decision?.mode === "open" && (rawState === "rejected" || rawState === "revoked") ? "none" : rawState;
   const showForm = !editor && (state === "none" || state === "rejected" || state === "revoked");
   // G-PORTIA-23-3-r2 (owner, 2026-11-15): an approved visitor on the open desktop needs no card (there is no form, and the
   // editor login is in the desktop settings); a single notice confirms the approval instead.

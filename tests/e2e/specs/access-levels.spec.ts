@@ -5,6 +5,7 @@ import { editorSections } from "../../../lib/editor-changes.ts";
 import type { AccessLevel } from "../../../lib/access-levels.ts";
 import { type GuideCard, type GuideSection, type PortiaContent, type ScientistLog, type Virus } from "../../../lib/portia-content.ts";
 import { cloneFixtureContent } from "../../../lib/testing/portia-content-fixture.ts";
+import { CONTENT_CACHE_KEY, EMPLOYEES_CACHE_KEY } from "../../../lib/device-cache.ts";
 import { DesktopPage } from "../pages/desktop.page";
 import { EditorPage } from "../pages/editor.page";
 import { expect, test } from "../fixtures/test";
@@ -325,10 +326,11 @@ test.describe("access-levels backstop (mocked /api/**)", () => {
     await refresh();
     await expect(page.locator(".access-status")).toContainText("Доступ отозван", { timeout: 15_000 });
     await expect(page.getByRole("navigation", { name: "Рабочий стол PORTIA" })).toHaveCount(0);
-    const stored = await page.evaluate(() => ({
-      content: window.localStorage.getItem("portia-content-last-success-v1"),
-      employees: window.localStorage.getItem("portia-employees-last-success-v1"),
-    }));
+    // The key names come from lib/device-cache.ts, so a renamed key cannot make "cleared" pass on an old name.
+    const stored = await page.evaluate((keys) => ({
+      content: window.localStorage.getItem(keys.content),
+      employees: window.localStorage.getItem(keys.employees),
+    }), { content: CONTENT_CACHE_KEY, employees: EMPLOYEES_CACHE_KEY });
     expect(stored.content, "content copy cleared").toBeNull();
     expect(stored.employees, "employees copy cleared").toBeNull();
     expect(await page.evaluate(() => (window as unknown as { __portiaNoReload?: number }).__portiaNoReload)).toBe(1);

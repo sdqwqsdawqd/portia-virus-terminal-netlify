@@ -3,6 +3,7 @@
 import { MIN_ACCESS_LEVEL, EDITOR_ACCESS_LEVEL, type AccessLevel } from "./access-levels.ts";
 import type { GateDecision } from "./access-gate.ts";
 import { viewerKeyOf } from "./content-sync.ts";
+import { nicknameKey } from "./nickname.ts";
 
 export type Viewer = { editor: boolean; level: AccessLevel };
 
@@ -25,4 +26,18 @@ export function viewerKey(viewer: Viewer | null): string {
 // D-21: closed site and this device is not allowed in (never approved, pending, rejected or revoked).
 export function shouldClearDeviceCaches(decision: GateDecision): boolean {
   return decision.mode === "closed" && !decision.allowed;
+}
+
+// SEC-04 (D-16): who this device is for the cache, besides the level: the nickname key of the approved request. Empty for an
+// editor, for a visitor of the open site without an approval, and when nobody is let in. Client-only stamp: the server key
+// payload.viewer stays as it is.
+export function viewerPersonOf(decision: GateDecision): string {
+  const viewer = viewerOf(decision);
+  if (viewer === null || viewer.editor) return "";
+  return decision.state.state === "approved" ? nicknameKey(decision.state.nickname) ?? "" : "";
+}
+
+// The identity compared between two gate answers; any difference wipes the device copies.
+export function cacheIdentityOf(decision: GateDecision): string {
+  return `${viewerKey(viewerOf(decision))}|${viewerPersonOf(decision)}`;
 }

@@ -12,7 +12,7 @@ import { CustomColorPicker } from "@/components/custom-color-picker";
 import { fitGeometry, type WindowGeometry } from "@/lib/window-geometry";
 import { exitedWindow, openedWindow, originOf, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "@/lib/window-open";
 import { acceptFetchedContent, isNewerAnswer, normalizeDocumentLinks, viewerKeyOf } from "@/lib/content-sync";
-import { cacheMatchesSource, cacheMatchesViewer, clearDeviceContentCaches, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
+import { CONTENT_CACHE_KEY, EMPLOYEES_CACHE_KEY, cacheMatchesSource, cacheMatchesViewer, clearDeviceContentCaches, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
 import { networkSaveError, parseRefusedSections, SaveConflictError, SectionClosedError } from "@/lib/editor-save-status";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { flattenPlaceholders, guideSlotChain, infoSlotChain, isViewerShapedContent, mergePlaceholders, reconcileSelection, shownViewerLevel, simpleSlotChain } from "@/lib/level-placeholders";
@@ -216,9 +216,7 @@ function workspaceBounds() {
 
 const broadcastReadStorageKey = "portia-broadcasts-read-signature-v1";
 const questSeenStorageKey = "portia-quests-seen-v1";
-// The literals stay here because lib/portia-desktop.test.ts pins the keys of this file; lib/level-visitor.test.ts keeps them equal to lib/device-cache.ts, which clears them.
-const contentCacheStorageKey = "portia-content-last-success-v1";
-const employeesCacheStorageKey = "portia-employees-last-success-v1";
+// The device-cache keys (CONTENT_CACHE_KEY, EMPLOYEES_CACHE_KEY) come from lib/device-cache.ts, the single source of the names that are written, read and cleared (IN-05).
 // v3: every shortcut gained an explicit independent home; discard v2 coordinates that could preserve the overlapping guide.
 const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3";
 const taskbarOrderStorageKey = "portia-taskbar-order-v1";
@@ -231,9 +229,9 @@ const withEmployee = (list: PortiaEmployee[], employee: PortiaEmployee) => list.
 // Patches only the cached list; no cache, no write, so an editor save never creates a cache from possibly partial state (D-07).
 function patchEmployeesCache(patch: (employees: PortiaEmployee[]) => PortiaEmployee[]) {
   try {
-    const cached = JSON.parse(window.localStorage.getItem(employeesCacheStorageKey) ?? "null") as { employees?: unknown } | null;
+    const cached = JSON.parse(window.localStorage.getItem(EMPLOYEES_CACHE_KEY) ?? "null") as { employees?: unknown } | null;
     if (!cached || !Array.isArray(cached.employees)) return;
-    window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify({ ...cached, employees: patch(cached.employees as PortiaEmployee[]) }));
+    window.localStorage.setItem(EMPLOYEES_CACHE_KEY, JSON.stringify({ ...cached, employees: patch(cached.employees as PortiaEmployee[]) }));
   } catch {}
 }
 
@@ -350,14 +348,16 @@ function richTextLine(document: RichTextDocument | undefined, lines: string[], i
 }
 
 // viewerKey / viewerLevel come from the gate decision (Phase 24): the key tells which cut of the content this device may show
-// (LVL-05), onAccessLost asks the gate to re-check at once when /api/content answers 401 (D-21).
-export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = null, onAccessLost }: { initialContent: PortiaContent; viewerKey?: string; viewerLevel?: number | null; onAccessLost?: () => void }) {
+// (LVL-05), onAccessLost asks the gate to re-check at once when /api/content answers 401 (D-21). viewerPerson (Phase 25, D-16) is
+// the nickname key of the approved request, "" for an editor or an open-site visitor; a device copy is shown only to the same person.
+export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "", viewerLevel = null, onAccessLost }: { initialContent: PortiaContent; viewerKey?: string; viewerPerson?: string; viewerLevel?: number | null; onAccessLost?: () => void }) {
   const [content, setContent] = useState<PortiaContent>(initialContent);
   // Links of the leveled document windows the server sent with the copy (read by the document windows, plan 24-10).
   const [documents, setDocuments] = useState<DocumentLinks>({});
   const onAccessLostRef = useRef(onAccessLost);
   const viewerKeyRef = useRef(viewerKey);
-  useEffect(() => { onAccessLostRef.current = onAccessLost; viewerKeyRef.current = viewerKey; });
+  const viewerPersonRef = useRef(viewerPerson);
+  useEffect(() => { onAccessLostRef.current = onAccessLost; viewerKeyRef.current = viewerKey; viewerPersonRef.current = viewerPerson; });
   // The viewer key of the copy on screen and the number of the newest request already answered (LVL-09, T-24-11).
   const knownViewerKey = useRef("");
   const contentAnsweredSeq = useRef(0);
@@ -612,7 +612,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = nu
       restoreFocus?.();
       setRevision(fetchedRevision);
       try {
-        window.localStorage.setItem(contentCacheStorageKey, JSON.stringify(stampCacheSource({
+        window.localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(stampCacheSource({
           content: fetched,
           revision: fetchedRevision,
           viewer: fetchedViewer,
@@ -714,7 +714,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = nu
       setEmployeesSyncedAt(payload.syncedAt ?? null);
       setSelectedEmployeeId((current) => merged.employees.some((employee) => employee.id === current) ? current : merged.employees[0]?.id ?? "");
       // A degraded answer never replaces the device cache (D-07).
-      if (merged.cacheable) try { window.localStorage.setItem(employeesCacheStorageKey, JSON.stringify(stampCacheSource(payload, deviceCacheSource()))); } catch {}
+      if (merged.cacheable) try { window.localStorage.setItem(EMPLOYEES_CACHE_KEY, JSON.stringify(stampCacheSource(payload, deviceCacheSource()))); } catch {}
       if (payload.degraded !== false) { failure = "unavailable"; shownAt = payload.syncedAt ?? new Date().toISOString(); }
     } catch (error) {
       // The last successful personnel snapshot remains visible on this device.
@@ -750,11 +750,11 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = nu
     const cacheTimer = window.setTimeout(() => {
       try {
         const cacheSource = deviceCacheSource();
-        let cached = window.localStorage.getItem(contentCacheStorageKey);
+        let cached = window.localStorage.getItem(CONTENT_CACHE_KEY);
         // A copy from another data source (or unstamped) is dropped, never shown: its revision is unrelated (owner UAT 19-14).
-        if (cached && !cacheMatchesSource(JSON.parse(cached), cacheSource)) { window.localStorage.removeItem(contentCacheStorageKey); cached = null; }
+        if (cached && !cacheMatchesSource(JSON.parse(cached), cacheSource)) { window.localStorage.removeItem(CONTENT_CACHE_KEY); cached = null; }
         // LVL-05: a copy cut for another viewer (another level, or none recorded) is deleted before anything is shown.
-        if (cached && !cacheMatchesViewer(JSON.parse(cached), viewerKeyRef.current)) { window.localStorage.removeItem(contentCacheStorageKey); cached = null; }
+        if (cached && !cacheMatchesViewer(JSON.parse(cached), viewerKeyRef.current)) { window.localStorage.removeItem(CONTENT_CACHE_KEY); cached = null; }
         if (cached) {
           const parsed = JSON.parse(cached) as { content?: unknown; revision?: number; viewer?: string; documents?: unknown };
           // The cache is device-editable and may predate any field, so it gets the same normalizer as the network (D-20, D-22).
@@ -775,8 +775,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = nu
             setContentReady(true);
           }
         }
-        let employeeCache = window.localStorage.getItem(employeesCacheStorageKey);
-        if (employeeCache && !cacheMatchesSource(JSON.parse(employeeCache), cacheSource)) { window.localStorage.removeItem(employeesCacheStorageKey); employeeCache = null; }
+        let employeeCache = window.localStorage.getItem(EMPLOYEES_CACHE_KEY);
+        if (employeeCache && !cacheMatchesSource(JSON.parse(employeeCache), cacheSource)) { window.localStorage.removeItem(EMPLOYEES_CACHE_KEY); employeeCache = null; }
         if (employeeCache) {
           const parsed = JSON.parse(employeeCache) as { employees?: PortiaEmployee[]; syncedAt?: string | null; profilesRead?: boolean };
           if (Array.isArray(parsed.employees)) {
@@ -1407,7 +1407,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = nu
       setGuideCardId((current) => findGuide(next.guideSections, current)?.card ? current : "");
       setRevision(savedRevision);
       try {
-        window.localStorage.setItem(contentCacheStorageKey, JSON.stringify(stampCacheSource({
+        window.localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(stampCacheSource({
           content: next,
           revision: savedRevision,
           viewer: knownViewerKey.current,

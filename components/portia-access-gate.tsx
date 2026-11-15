@@ -5,8 +5,8 @@ import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 
 import type { GateDecision } from "@/lib/access-gate";
 import { accessGateLayout, accessSubmitFailure, claimApprovedNotice, type AccessGateView, type AccessSubmitFailure } from "@/lib/access-gate-view";
 import type { AccessOrigin } from "@/lib/access-levels";
-import { shouldClearDeviceCaches, viewerKey, viewerOf } from "@/lib/access-viewer";
-import { clearDeviceContentCaches } from "@/lib/device-cache";
+import { cacheIdentityOf, shouldClearDeviceCaches, viewerKey, viewerOf, viewerPersonOf } from "@/lib/access-viewer";
+import { clearDeviceContentCaches, identityChanged, purgeLegacyDeviceCaches } from "@/lib/device-cache";
 import { emptyPortiaContent } from "@/lib/portia-content";
 import { isValidNickname } from "@/lib/nickname";
 
@@ -28,6 +28,8 @@ export function PortiaAccessGate() {
   const [view, setView] = useState<AccessGateView>({ kind: "checking" });
   const epoch = useRef(0);
   const approved = useRef(false);
+  // SEC-04: who the device was for at the previous gate answer (viewer key and person). null until the first answer.
+  const previousIdentity = useRef<string | null>(null);
   const [nickname, setNickname] = useState("");
   const [origin, setOrigin] = useState<AccessOrigin | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -49,6 +51,12 @@ export function PortiaAccessGate() {
       if (decision.mode === "closed" && decision.allowed) approved.current = true;
       // D-21: closed and not allowed (never approved, rejected, revoked) leaves no copy of the content on the device.
       if (shouldClearDeviceCaches(decision)) clearDeviceContentCaches(() => window.localStorage);
+      // SEC-04 (D-16): any change of person or level since the previous answer (approved to rejected or revoked, a level up or
+      // down, an editor leaving) wipes both copies, so the desktop never meets a copy of another identity. The first answer wipes
+      // nothing: there is nothing to compare, and a copy of another identity is dropped by the desktop's load-time check.
+      const identity = cacheIdentityOf(decision);
+      if (identityChanged(previousIdentity.current, identity)) clearDeviceContentCaches(() => window.localStorage);
+      previousIdentity.current = identity;
       setView({ kind: "decision", decision });
       // G-PORTIA-23-3-r2: the approval notice is claimed once per page (ref) and once per device (storage).
       if (!noticeClaimed.current && accessGateLayout({ kind: "decision", decision }, true).approvedNotice) {
@@ -61,6 +69,8 @@ export function PortiaAccessGate() {
   }, []);
 
   useEffect(() => {
+    // T-25-28: the copies taken before the closure (v1) are deleted once, whatever the decision turns out to be.
+    purgeLegacyDeviceCaches(() => window.localStorage);
     queueMicrotask(() => { void refresh(); });
     const requestEpoch = epoch;
     const interval = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 5000);
@@ -118,7 +128,7 @@ export function PortiaAccessGate() {
     : null;
 
   return <>
-    {desktop && <PortiaDesktop initialContent={emptyPortiaContent} viewerKey={viewerKey(viewer)} viewerLevel={viewer?.level ?? null} onAccessLost={onAccessLost} />}
+    {desktop && <PortiaDesktop initialContent={emptyPortiaContent} viewerKey={viewerKey(viewer)} viewerPerson={view.kind === "decision" ? viewerPersonOf(view.decision) : ""} viewerLevel={viewer?.level ?? null} onAccessLost={onAccessLost} />}
     {noticeOpen && layout.approvedNotice && <AccessApprovedToast onDismiss={dismissNotice} />}
     {layout.showReopen && <button type="button" className="access-reopen" onClick={() => setCardOpen(true)}>ПОДАТЬ ЗАЯВКУ</button>}
     {showCard && <main className={desktop ? "access-gate access-gate-open" : "access-gate"}>
