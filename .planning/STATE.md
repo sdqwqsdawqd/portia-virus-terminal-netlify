@@ -4,17 +4,17 @@ milestone: v1.4
 milestone_name: Доступ и единый стиль
 current_phase: 24
 current_phase_name: Уровни допуска и закрытие содержимого
-status: ready_to_plan
-stopped_at: Phase 24 UI-SPEC approved
-last_updated: "2026-11-15T07:40:30.389Z"
+status: executing
+stopped_at: Completed PORTIA-24-01-PLAN.md
+last_updated: "2026-11-15T08:10:44.727Z"
 last_activity: 2026-11-15
-last_activity_desc: Phase PORTIA-23 closed as owner-accepted risk (D-73), not PASS
-state_head: 1278920efc1fdcd3738a50ac10ae882d8c3850c7
+last_activity_desc: Phase PORTIA-24 execution started
+state_head: 22e90c725b245b865f582a3f71ffd5d201cc378b
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 40
-  completed_plans: 29
+  completed_plans: 30
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 
 ## Current Position
 
-Phase: PORTIA-24 (Уровни допуска и закрытие содержимого) — READY TO EXECUTE
-Plan: not planned
-Status: Phase PORTIA-23 closed as owner-accepted risk (D-73), not PASS
-Last activity: 2026-11-15 — Phase PORTIA-23 UAT 9/9 pass, SECURITY threats_open 0; закрыта владельцем как принятый риск
+Phase: PORTIA-24 (Уровни допуска и закрытие содержимого) — EXECUTING
+Plan: 2 of 11
+Status: Executing Phase PORTIA-24
+Last activity: 2026-11-15 — Phase PORTIA-24 execution started
 
 Progress: [███░░░░░░░] 29% (2/7 phases closed: 21 и 23 — принятый риск; Phase 22 не закрыта)
 
@@ -68,6 +68,7 @@ Progress: [███░░░░░░░] 29% (2/7 phases closed: 21 и 23 — 
 | Phase PORTIA-23 P10 | 20min | 2 tasks | 6 files |
 | Phase PORTIA-23 P11 | 45min | 3 tasks | 8 files |
 | Phase PORTIA-23 P12 | 9min | 3 tasks | 10 files |
+| Phase PORTIA-24 P01 | 25min | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -244,6 +245,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-23]: 23-10: closure ON by default via new forward-only migration 20261114000000 (owner 3a, overrides D-01); frozen foundation untouched; not applied anywhere (D-72)
 - [Phase PORTIA-23]: 23-11: RLS23-05 (low) принята, ручной повторный запуск миграции 20261114000000 запрещён инструкцией владельцу; миграция заморожена; D-01 отменён владельцем 2026-11-14
 - [Phase PORTIA-23]: 23-12: RLS23-07 and RLS23-08 (low) accepted; unauthorized client reply unchanged, owner may later choose to send unavailable
+- [Phase PORTIA-24]: 24-01: closed records are left out of PortiaContent arrays and marked in content.redaction (slot HMAC, requiredLevel, at); GET /api/content is built per viewer, no-store, 401 before the row read
+- [Phase PORTIA-24]: 24-01: level modules named lib/level-*.ts to stay outside the access-* import ban for components; damaged placeholder node level reads as 5
 
 ### Pending Todos
 
@@ -297,9 +300,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T06:17:23.939Z
-Stopped at: Phase 24 UI-SPEC approved
-Resume file: .planning/phases/PORTIA-24-urovni-dopuska-i-zakrytie-soderzhimogo/24-UI-SPEC.md
+Last session: 2026-11-15T08:10:44.270Z
+Stopped at: Completed PORTIA-24-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
