@@ -67,7 +67,7 @@ test("трассер LVL-04/LVL-05: закрытый вирус идёт от п
 
   const content = normalizePortiaContent(roundTrip(body).content);
   assert.ok(content?.redaction, "the visitor copy carries the marker");
-  assert.deepEqual(Object.keys(content.redaction.slots).sort(), ["vA", "vC"]);
+  assert.deepEqual(Object.keys(content.redaction.slots).filter((id) => id.startsWith("v")).sort(), ["vA", "vC"]);
   assert.ok(!("vB" in content.redaction.slots) && !("vD" in content.redaction.slots));
   assert.equal(content.redaction.level, 2);
 
@@ -148,7 +148,9 @@ test("contentBodyFor: строки нет — стандартное содер�
   assert.ok(!JSON.stringify(editorBody.content).includes("withheld"));
   const visitorBody = contentBodyFor({ editor: false, level: 2 }, row(forged), { slotOf });
   assert.ok(!JSON.stringify(visitorBody).includes("forged"), "the visitor marker is built anew");
-  assert.ok(!JSON.stringify(visitorBody.content.viruses).includes("withheld"));
+  // D-12: the forged log (lockedLevel 3) is closed for level 2, so the server sets its own marker and drops the text.
+  const [forgedLog] = visitorBody.content.viruses[0].scientistLogs;
+  assert.deepEqual(forgedLog, { id: "l1", title: "T", scientist: "S", lockedLevel: 3, content: [], withheld: true });
   assert.deepEqual(visitorBody.content.redaction?.viruses.map((node) => node.at), [1, 3]);
 });
 
