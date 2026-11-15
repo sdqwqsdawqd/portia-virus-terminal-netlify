@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 25
 current_phase_name: "Переключение закрытия: база, кэш, сборка, хранилище"
 status: executing
-stopped_at: Completed PORTIA-25-01-PLAN.md
-last_updated: "2026-11-15T18:13:27.159Z"
+stopped_at: Completed PORTIA-25-02-PLAN.md
+last_updated: "2026-11-15T18:25:54.642Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-25 execution started
-state_head: 5e6222a87bae4500ec7cb726ce16f7e4f124889b
+state_head: 3cf3df46c22bc642d2887d7c8c4270e3199ec2b5
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 50
-  completed_plans: 41
+  completed_plans: 42
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-25 (Переключение закрытия: база, кэш, сборка, хранилище) — EXECUTING
-Plan: 2 of 10
+Plan: 3 of 10
 Status: Executing Phase PORTIA-25
 Last activity: 2026-11-15 — Phase PORTIA-25 execution started
 
@@ -80,6 +80,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-24 P10 | 35min | 3 tasks | 3 files |
 | Phase PORTIA-24 P11 | continuation about 1h | 3 tasks | 15 files |
 | Phase PORTIA-25 P01 | 55min | 2 tasks | 13 files |
+| Phase PORTIA-25 P02 | 70 min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -276,6 +277,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-24]: 24-11: файл корзины kind virus с пустым или битым virusId закрыт на уровне 5 (fail-closed); прямое anon-чтение portia_content остаётся остаточным риском Phase 25 (SEC-01), transfer, не PASS
 - [Phase PORTIA-25]: 25-01: read scopes content-read-v1 and employees-read-v1 reuse the 'submit' secret (domain separated from access-submit-v1); editor reads by session without signature; read failure is a single 503 with kind-only log
 - [Phase PORTIA-25]: 25-01: Phase 23/24 evidence checks bounded to migration versions <= 20261114000000; later migrations covered by the Phase 25 matrix (25-10)
+- [Phase PORTIA-25]: 25-02: picture address change is POST/DELETE on the existing /api/uploads (no new route); the server checks stored content and employee photos before removing a file (409 referenced, 503 unknown); editor logic lives in components/portia-image-rewrite.tsx to keep the D-64 hunk small
 
 ### Pending Todos
 
@@ -329,8 +331,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T18:13:26.186Z
-Stopped at: Completed PORTIA-25-01-PLAN.md
+Last session: 2026-11-15T18:25:53.639Z
+Stopped at: Completed PORTIA-25-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
