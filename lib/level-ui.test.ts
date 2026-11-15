@@ -283,7 +283,7 @@ test("LVL-05 the search index and the existence check of an app result use the l
 
 test("D-15 the archive window title and the boot line show the level in Arabic digits, from the answer or from the gate decision", () => {
   assert.ok(desktop.includes("levelCopy.archiveMeta("));
-  assert.ok(desktop.includes("contentReady ? shownViewerLevel(content) : viewerLevel"));
+  assert.ok(desktop.includes("contentReady ? shownViewerLevel(content, viewerLevel) : viewerLevel"));
   assert.ok(desktop.includes("levelCopy.bootCheck("));
   assert.ok(desktop.includes("<BootScreen visible={booting} level={viewerLevel} />"));
   for (const name of clientFiles) {

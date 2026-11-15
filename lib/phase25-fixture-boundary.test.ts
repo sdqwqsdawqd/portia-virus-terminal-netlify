@@ -47,3 +47,23 @@ test("production source never imports the content fixture", () => {
   assert.ok(scanned > 0, "the boundary scan found no production files");
   assert.deepEqual(offenders, [], `production imports the content fixture: ${offenders.join(", ")}`);
 });
+
+test("production source declares no seed: no former seed or clone name, no import from lib/testing", () => {
+  const offenders = productionRoots.flatMap((root) =>
+    productionSourceFiles(fileURLToPath(new URL(`../${root}`, import.meta.url))).flatMap((path) => {
+      const text = readFileSync(path, "utf8");
+      const found: string[] = [];
+      if (/(defaultPortiaContent|cloneDefaultContent)/.test(text)) found.push(`${path}: former seed name`);
+      if (/export\s+const\s+\w*(seed|fixture)\w*\s*[:=]/i.test(text)) found.push(`${path}: seed-like export`);
+      if (/from\s+["'][^"']*\/testing\//.test(text) || /import\(\s*["'][^"']*\/testing\//.test(text)) found.push(`${path}: imports lib/testing`);
+      return found;
+    }));
+  assert.deepEqual(offenders, []);
+});
+
+test("the working module keeps the empty structure and the assistant defaults, and no record of the former seed", () => {
+  const contentModule = readFileSync(fileURLToPath(new URL("./portia-content.ts", import.meta.url)), "utf8");
+  assert.ok(contentModule.includes("export const emptyPortiaContent"));
+  assert.ok(contentModule.includes("export const assistantDefaults"));
+  assert.ok(!contentModule.includes("МОРОК") && !contentModule.includes("АРАХНА") && !contentModule.includes("КАЛЛИСТО"), "no record of the former seed in the working module");
+});

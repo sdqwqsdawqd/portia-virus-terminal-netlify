@@ -1,6 +1,6 @@
 // Phase 24: the place of a closed record. Shared by the server (it writes the markers) and the browser (it reads them), so no
 // node: imports. The browser only draws what the server sent; it never decides what is closed (D-04).
-import { EDITOR_ACCESS_LEVEL, MAX_ACCESS_LEVEL, MIN_ACCESS_LEVEL, isAccessLevel, type AccessLevel } from "./access-levels.ts";
+import { MAX_ACCESS_LEVEL, MIN_ACCESS_LEVEL, isAccessLevel, type AccessLevel } from "./access-levels.ts";
 import { LEVELED_APP_IDS, findGuide, findInfo, type ContentRedaction, type PortiaContent, type RedactedSlot } from "./portia-content.ts";
 
 const MAX_KEY_LENGTH = 240;
@@ -108,8 +108,10 @@ export function isViewerShapedContent(content: Pick<PortiaContent, "viruses" | "
   return [...content.viruses, ...content.recycledViruses].some((virus) => virus.scientistLogs.some((log) => log.withheld === true));
 }
 
-export function shownViewerLevel(content: Pick<PortiaContent, "redaction">): AccessLevel {
-  return content.redaction?.level ?? EDITOR_ACCESS_LEVEL;
+// WR-03: the level the visitor sees on screen. The marker of the copy first, then the level of the gate decision (the editor
+// copy has no marker, and the gate says 5 for the editor), and only then the lowest level: an unknown level reads as the least, never as 5.
+export function shownViewerLevel(content: Pick<PortiaContent, "redaction">, viewerLevel?: number | null): AccessLevel {
+  return content.redaction?.level ?? (isAccessLevel(viewerLevel) ? viewerLevel : MIN_ACCESS_LEVEL);
 }
 
 export type SelectionState = { id: string; lostSlot: string | null };

@@ -118,9 +118,14 @@ test("isViewerShapedContent: marker, a withheld log in viruses or in recycledVir
   assert.equal(isViewerShapedContent({ viruses: [], recycledViruses: [] }), false);
 });
 
-test("shownViewerLevel: the level of the marker, the editor copy shows 5", () => {
-  assert.equal(shownViewerLevel({ redaction: normalizeContentRedaction({ level: 3 }) }), 3);
-  assert.equal(shownViewerLevel({}), 5);
+test("shownViewerLevel (WR-03): the marker first, then the gate decision, then the lowest level", () => {
+  assert.equal(shownViewerLevel({ redaction: normalizeContentRedaction({ level: 3 }) }, 1), 3, "the marker of the copy wins");
+  assert.equal(shownViewerLevel({}, 2), 2, "no marker: the level of the gate decision");
+  assert.equal(shownViewerLevel({}, 5), 5, "the editor copy has no marker, the gate says 5");
+  assert.equal(shownViewerLevel({}, null), 1, "unknown reads as the lowest, not 5 (fail closed)");
+  assert.equal(shownViewerLevel({}, undefined), 1);
+  assert.equal(shownViewerLevel({}), 1);
+  for (const damaged of [0, 6, 2.5, NaN]) assert.equal(shownViewerLevel({}, damaged), 1, String(damaged));
 });
 
 // D-20 / D-22: the selection rule.

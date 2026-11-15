@@ -123,7 +123,7 @@ test("LVL-06: the block of scientist records exists only when the virus has reco
 });
 
 test("D-15: every dossier call of the desktop passes the shown viewer level", () => {
-  const calls = desktop.match(/<(VirusRecord|ScientistDocument)\b[^>]*viewerLevel=\{shownViewerLevel\(content\)\}/g) ?? [];
+  const calls = desktop.match(/<(VirusRecord|ScientistDocument)\b[^>]*viewerLevel=\{shownViewerLevel\(content, viewerLevel\)\}/g) ?? [];
   assert.equal(calls.length, 3);
   assert.equal((desktop.match(/<VirusRecord\b/g) ?? []).length, 2);
   assert.equal((desktop.match(/<ScientistDocument\b/g) ?? []).length, 1);
