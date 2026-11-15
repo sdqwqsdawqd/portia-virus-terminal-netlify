@@ -13,6 +13,7 @@ import {
   defaultApprovalLevel,
   effectiveAccessLevel,
   isAccessLevel,
+  requiredLevelOf,
 } from "./access-levels.ts";
 
 // LVL-01 / D-03 / D-04: one module names the levels and decides who is level 5. The SQL side is pinned as text.
@@ -36,6 +37,12 @@ test("D-03 levels are the integers 1..5 labelled Уровень 1 … Урове
 test("isAccessLevel accepts integers 1..5 only", () => {
   for (const level of [1, 2, 3, 4, 5]) assert.equal(isAccessLevel(level), true, String(level));
   for (const value of [0, 6, 2.5, "2", Number.NaN, null, undefined, -1, Infinity]) assert.equal(isAccessLevel(value), false, String(value));
+});
+
+test("D-03 requiredLevelOf: no field is 1, an integer 1..5 is itself, anything damaged is 5", () => {
+  assert.equal(requiredLevelOf(undefined), 1);
+  for (const level of [1, 3, 5]) assert.equal(requiredLevelOf(level), level, String(level));
+  for (const value of [0, 6, 2.5, "3", null, {}, -1, Number.NaN, Infinity, [], true]) assert.equal(requiredLevelOf(value), 5, String(value));
 });
 
 test("D-04 approval defaults: sheet gives level 2, outside gives level 1, with origin labels", () => {

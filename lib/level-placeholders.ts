@@ -1,7 +1,7 @@
 // Phase 24: the place of a closed record. Shared by the server (it writes the markers) and the browser (it reads them), so no
 // node: imports. The browser only draws what the server sent; it never decides what is closed (D-04).
 import { EDITOR_ACCESS_LEVEL, MAX_ACCESS_LEVEL, MIN_ACCESS_LEVEL, isAccessLevel, type AccessLevel } from "./access-levels.ts";
-import { LEVELED_APP_IDS, type ContentRedaction, type PortiaContent, type RedactedSlot } from "./portia-content.ts";
+import { LEVELED_APP_IDS, findGuide, findInfo, type ContentRedaction, type PortiaContent, type RedactedSlot } from "./portia-content.ts";
 
 const MAX_KEY_LENGTH = 240;
 
@@ -110,4 +110,52 @@ export function isViewerShapedContent(content: Pick<PortiaContent, "viruses" | "
 
 export function shownViewerLevel(content: Pick<PortiaContent, "redaction">): AccessLevel {
   return content.redaction?.level ?? EDITOR_ACCESS_LEVEL;
+}
+
+export type SelectionState = { id: string; lostSlot: string | null };
+export type SelectionResult = { id: string; lostSlot: string | null; lostLevel: AccessLevel | null };
+
+// D-20/D-22: one pure rule for a window that lists records. An open record stays; a record that became closed leaves the
+// placeholder of its own slot (a closed parent wins by chain order); a lost slot that is open again gives the record back
+// without a notice; a deleted record gives an empty result and the caller picks the first open one. The result carries only the
+// slot and the level of the placeholder, never the previous copy of the record (T-24-38).
+export function reconcileSelection(
+  prev: SelectionState,
+  prevChain: readonly string[],
+  next: { ids: readonly string[]; slots: Record<string, string>; placeholders: readonly RedactedSlot[] },
+): SelectionResult {
+  const open = { lostSlot: null, lostLevel: null };
+  if (prev.id && next.ids.includes(prev.id)) return { id: prev.id, ...open };
+  if (prev.lostSlot) {
+    const reopened = Object.keys(next.slots).find((id) => next.slots[id] === prev.lostSlot && next.ids.includes(id));
+    if (reopened !== undefined) return { id: reopened, ...open };
+  }
+  const candidates = [prev.lostSlot, ...prevChain].filter((slot): slot is string => typeof slot === "string" && slot !== "");
+  for (const slot of candidates) {
+    const node = next.placeholders.find((placeholder) => placeholder.slot === slot);
+    if (node) return { id: "", lostSlot: slot, lostLevel: node.requiredLevel };
+  }
+  return { id: "", ...open };
+}
+
+export function flattenPlaceholders(map: Record<string, RedactedSlot[]> | undefined): RedactedSlot[] {
+  return map ? Object.values(map).flat() : [];
+}
+
+const presentSlots = (slots: Record<string, string> | undefined, ids: readonly (string | undefined)[]): string[] =>
+  slots ? ids.flatMap((id) => (id !== undefined && slots[id] ? [slots[id]] : [])) : [];
+
+// Slots of a record and of its parents, nearest first. An editor copy has no marker, so the chain is empty.
+export function simpleSlotChain(content: Pick<PortiaContent, "redaction">, id: string): string[] {
+  return presentSlots(content.redaction?.slots, [id]);
+}
+
+export function infoSlotChain(content: Pick<PortiaContent, "infoSections" | "redaction">, id: string): string[] {
+  const found = findInfo(content.infoSections, id);
+  return presentSlots(content.redaction?.slots, found ? [found.subsection?.id, found.section.id] : [id]);
+}
+
+export function guideSlotChain(content: Pick<PortiaContent, "guideSections" | "redaction">, id: string): string[] {
+  const found = findGuide(content.guideSections, id);
+  return presentSlots(content.redaction?.slots, found ? [found.card?.id, found.section.id] : [id]);
 }
