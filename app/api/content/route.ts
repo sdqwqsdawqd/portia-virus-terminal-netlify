@@ -8,6 +8,7 @@ import { MAX_CONTENT_BODY_BYTES, utf8Bytes } from "@/lib/content-limits";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { createPublicSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
+import { prepareContentSave } from "@/lib/content-save";
 import { closedSectionsOf, contentRefusal } from "@/lib/editor-tabs";
 import { contentCacheTag, noStoreHeaders, purgeCacheTag } from "@/lib/portia-cdn";
 import { parseJsonObject } from "@/lib/request-json";
@@ -74,6 +75,11 @@ export async function PUT(request: Request) {
       return Response.json({ error: "Некорректная структура данных." }, { status: 400 });
     }
 
+    // Phase 24, LVL-08 / D-17: a copy built for a viewer is refused before the row is read or written, and the levels of
+    // subsections and cards are lifted to their section before the write.
+    const prepared = prepareContentSave(normalized);
+    if (prepared.kind === "refuse") return Response.json(prepared.body, { status: prepared.status, headers: noStoreHeaders });
+
     // The database does not check sections (D-11, accepted risk in PROJECT.md), so a restricted editor is checked here.
     // The owner and editors with every tab open skip this branch and its extra read (D-00a).
     if (closedSectionsOf(access.openTabs).length) {
@@ -90,7 +96,7 @@ export async function PUT(request: Request) {
 
     // Save only if nobody else saved since this editor loaded the content; otherwise
     // the older copy would silently overwrite the other editor's work.
-    const row = { payload: normalized, revision: baseRevision + 1, updated_at: new Date().toISOString(), updated_by: user.id };
+    const row = { payload: prepared.content, revision: baseRevision + 1, updated_at: new Date().toISOString(), updated_by: user.id };
     const { data: saved, error: saveError } = baseRevision === 0
       ? await supabase.from("portia_content").insert({ id: "main", ...row })
           .select("revision, updated_at").maybeSingle<{ revision: number; updated_at: string }>()
@@ -103,7 +109,10 @@ export async function PUT(request: Request) {
 
     await purgeCacheTag(contentCacheTag);
 
-    return Response.json({ ok: true, revision: saved.revision, updatedAt: saved.updated_at }, { headers: noStoreHeaders });
+    return Response.json(
+      { ok: true, revision: saved.revision, updatedAt: saved.updated_at, levelsRaised: prepared.levelsRaised },
+      { headers: noStoreHeaders },
+    );
   } catch (error) {
     console.error("PORTIA content save failed", error);
     return Response.json({ error: "Не удалось сохранить изменения." }, { status: 500 });
