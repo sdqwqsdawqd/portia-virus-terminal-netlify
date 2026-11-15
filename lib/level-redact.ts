@@ -8,11 +8,13 @@
 // - D-12: the only narrow exception — a closed scientist record of an open virus stays in place with its title and scientist
 //   and `withheld: true`, its text is gone. It does not apply to a virus, a section, a subsection or a card.
 // - O-3 / A-4 (assumption, not an owner decision): a closed virus in the recycle bin is a placeholder at its place in the order.
-// - Free text of broadcasts and assistant phrases is not leveled: if an editor names a closed record there, the server does
-//   not cut it. This is a known limit written in .planning/PROJECT.md, not hidden.
-import { requiredLevelOf, type AccessLevel } from "./access-levels.ts";
+//   A virus file whose virus cannot be found (empty or dangling virusId) is not level 1: it may carry the name and code of a
+//   virus that was closed and deleted, so it fails closed to the top level (review round 1, M-1).
+// - Free text of published broadcasts and assistant phrases is not leveled: if an editor names a closed record there, the
+//   server does not cut it. This is a known limit written in .planning/PROJECT.md, not hidden. A draft broadcast is not sent.
+import { MAX_ACCESS_LEVEL, requiredLevelOf, type AccessLevel } from "./access-levels.ts";
 import { effectiveLevel } from "./level-hierarchy.ts";
-import type { ContentRedaction, PortiaContent, RedactedSlot, ScientistLog, Virus } from "./portia-content.ts";
+import { portiaTextKey, type ContentRedaction, type PortiaContent, type RedactedSlot, type ScientistLog, type Virus } from "./portia-content.ts";
 import { normalizeSearch } from "./search-index.ts";
 
 // Opaque, stable key of one record id (the HMAC lives in content-response.ts). It never contains the id.
@@ -118,7 +120,13 @@ const GUIDE_BLOCK_KEY = /^guide-block:(.+):text$/;
 const BROADCAST_KEY = /^broadcast:(.+):body$/;
 const RECYCLE_KEY = /^recycle:(.+):content$/;
 const SEARCH_RECOMMENDATIONS_KEY = "search:recommendations";
-const ASSISTANT_PREFIX = "assistant:";
+// The four keys the editor writes for the assistant, not any key that starts with "assistant:".
+const ASSISTANT_KEYS: ReadonlySet<string> = new Set([
+  portiaTextKey.assistantAdvice,
+  portiaTextKey.assistantOffended,
+  portiaTextKey.assistantIdle,
+  portiaTextKey.assistantActivity,
+]);
 
 export function redactContentForViewer(content: PortiaContent, level: AccessLevel, slotOf: SlotKey): PortiaContent {
   const slots: Record<string, string> = {};
@@ -140,9 +148,9 @@ export function redactContentForViewer(content: PortiaContent, level: AccessLeve
   });
   for (const virus of [...openViruses, ...openRecycled]) slots[virus.id] = slotOf(virus.id);
 
-  // The recycle bin. A text or image file is level 1; a virus file follows its virus (not found = level 1).
+  // The recycle bin. A text or image file is level 1; a virus file follows its virus (not found = the top level, fail closed).
   const fileLevel = (file: PortiaContent["recycleFiles"][number]): AccessLevel =>
-    file.kind === "virus" ? (virusLevels.get(file.virusId) ?? BASE_LEVEL) : BASE_LEVEL;
+    file.kind === "virus" ? (virusLevels.get(file.virusId) ?? MAX_ACCESS_LEVEL) : BASE_LEVEL;
   const openFiles = content.recycleFiles.filter((file) => fileLevel(file) <= level);
   for (const file of content.recycleFiles) if (fileLevel(file) > level) terms.push(file.name);
   for (const file of openFiles) slots[file.id] = slotOf(file.id);
@@ -188,9 +196,11 @@ export function redactContentForViewer(content: PortiaContent, level: AccessLeve
   const openInfoBlockIds = new Set(info.openChildren.flatMap((subsection) => subsection.blocks.map((block) => block.id)));
   const openGuideBlockIds = new Set(guide.openChildren.flatMap((card) => card.blocks.map((block) => block.id)));
   const openFileIds = new Set(openFiles.map((file) => file.id));
-  const broadcastIds = new Set(content.broadcasts.map((broadcast) => broadcast.id));
+  // The site shows only published broadcasts; a draft may name a closed record and is not sent (review round 1, L-4).
+  const publishedBroadcasts = content.broadcasts.filter((broadcast) => broadcast.published);
+  const broadcastIds = new Set(publishedBroadcasts.map((broadcast) => broadcast.id));
   const textKeyAllowed = (key: string): boolean => {
-    if (key.startsWith(ASSISTANT_PREFIX)) return true;
+    if (ASSISTANT_KEYS.has(key)) return true;
     if (key === SEARCH_RECOMMENDATIONS_KEY) return !recommendationsChanged;
     const pairs: [RegExp, Set<string>][] = [
       [VIRUS_TEXT_KEY, openVirusIds],
@@ -225,7 +235,7 @@ export function redactContentForViewer(content: PortiaContent, level: AccessLeve
     recycledViruses: openRecycled.map((virus) => redactScientistLogs(virus, level)),
     infoSections: info.open,
     guideSections: guide.open,
-    broadcasts: content.broadcasts,
+    broadcasts: publishedBroadcasts,
     recycleFiles: openFiles,
     recycleOrder,
     searchRecommendations,

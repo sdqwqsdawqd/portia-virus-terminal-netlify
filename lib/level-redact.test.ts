@@ -386,13 +386,13 @@ function bin(): PortiaContent {
 test("«Корзина»: закрытый вирус и файл закрытого вируса опущены с ключами; на их месте узел с индексом в полном порядке; смежные открытые на своих местах", () => {
   const input = bin();
   const result = redactContentForViewer(input, 3, slotOf);
-  assert.deepEqual(result.recycleOrder, ["file:a", "file:c", "virus:D", "file:vfile_open", "file:orphan"], "open entries keep their order around the closed ones");
-  assert.deepEqual(result.redaction?.recycle.map((node) => [node.at, node.requiredLevel]), [[1, 4], [2, 4], [6, 4]]);
+  assert.deepEqual(result.recycleOrder, ["file:a", "file:c", "virus:D", "file:vfile_open"], "open entries keep their order around the closed ones");
+  assert.deepEqual(result.redaction?.recycle.map((node) => [node.at, node.requiredLevel]), [[1, 4], [2, 4], [6, 4], [7, 5]]);
   assert.deepEqual(result.recycledViruses.map((item) => item.id), ["D"]);
-  assert.deepEqual(result.recycleFiles.map((item) => item.id), ["a", "c", "vfile_open", "orphan"]);
+  assert.deepEqual(result.recycleFiles.map((item) => item.id), ["a", "c", "vfile_open"]);
   assert.deepEqual(Object.keys(result.formattedText).sort(), ["recycle:a:content", "recycle:c:content", "virus:D:external"]);
   const json = JSON.stringify(result);
-  for (const part of ["LIVE_CLOSED", "vfile_closed", "vfile_rb", "N_B", "C_B", "F_vfile_closed", "R_closed", "V_B"]) assert.ok(!json.includes(part), part);
+  for (const part of ["LIVE_CLOSED", "vfile_closed", "vfile_rb", "N_B", "C_B", "F_vfile_closed", "R_closed", "V_B", "F_orphan", "TXT_orphan"]) assert.ok(!json.includes(part), part);
   for (const node of result.redaction?.recycle ?? []) assert.deepEqual(Object.keys(node).sort(), ["at", "requiredLevel", "slot"]);
 
   const top = redactContentForViewer(input, 5, slotOf);
@@ -488,4 +488,67 @@ test("явная сборка ответа: незнакомое поле вер
   const { content } = surfaces();
   const withExtra = { ...content, futureField: "CANARY_FUTURE_FIELD" } as PortiaContent;
   for (const level of LEVELS) assert.ok(!JSON.stringify(redactContentForViewer(withExtra, level, slotOf)).includes("CANARY_FUTURE_FIELD"));
+});
+
+// RLS24-02 (review round 1, M-1): a virus file whose virus cannot be found (an empty or a dangling virusId) is not level 1: it
+// carries the name and code of a virus that may have been closed and then deleted, so it fails closed to the top level.
+test("«Корзина»: файл вируса с пустым или битым virusId закрыт на уровне 5 (fail closed), открыт только на 5 и не светит имя", () => {
+  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const file = (id: string, kind: string, virusId: unknown) => ({ id, name: kind === "virus" ? `${id}_CLOSED_NAME_CLOSED_CODE.virus` : `${id}.txt`, location: "C:\\X", kind, content: `TXT_${id}`, image: "", virusId });
+  const content = normalizePortiaContent({
+    ...base, viruses: [], recycledViruses: [],
+    recycleFiles: [file("dangling", "virus", "GONE"), file("empty", "virus", ""), file("absent", "virus", undefined), file("plain", "text", "")],
+    recycleOrder: ["file:dangling", "file:empty", "file:absent", "file:plain"],
+    formattedText: { "recycle:dangling:content": doc("SECRET_DANGLING"), "recycle:empty:content": doc("SECRET_EMPTY"), "recycle:plain:content": doc("PLAIN_OK") },
+  });
+  assert.ok(content);
+  for (const level of [1, 2, 3, 4] as AccessLevel[]) {
+    const result = redactContentForViewer(content, level, slotOf);
+    assert.deepEqual(result.recycleOrder, ["file:plain"], `level ${level}`);
+    assert.deepEqual(result.recycleFiles.map((item) => item.id), ["plain"]);
+    assert.deepEqual(result.redaction?.recycle.map((node) => [node.at, node.requiredLevel]), [[0, 5], [1, 5], [2, 5]]);
+    const json = JSON.stringify(result);
+    for (const part of ["CLOSED_NAME", "CLOSED_CODE", "SECRET_DANGLING", "SECRET_EMPTY", "TXT_dangling", "TXT_empty"]) assert.ok(!json.includes(part), `${part} at level ${level}`);
+    assert.deepEqual(Object.keys(result.formattedText), ["recycle:plain:content"]);
+  }
+  const top = redactContentForViewer(content, 5, slotOf);
+  assert.deepEqual(top.recycleOrder, ["file:dangling", "file:empty", "file:absent", "file:plain"]);
+  assert.deepEqual(top.redaction?.recycle, []);
+});
+
+// RLS24-05 (L-4): a draft broadcast is not shown to a visitor by the site, so it does not travel to the visitor at all.
+test("сводки: черновик (published: false) не уходит посетителю ни телом, ни ключом formattedText; опубликованная остаётся", () => {
+  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const bc = (id: string, published: boolean, body: string) => ({ id, type: "news", title: `T_${id}`, body, published, important: false, startsAt: "", endsAt: "", conditions: "" });
+  const content = normalizePortiaContent({
+    ...base, viruses: [], recycledViruses: [], recycleFiles: [], recycleOrder: [],
+    broadcasts: [bc("pub", true, "PUB_BODY"), bc("draft", false, "DRAFT_NAMES_CLOSED_RECORD")],
+    formattedText: { "broadcast:pub:body": doc("PUB_DOC"), "broadcast:draft:body": doc("DRAFT_DOC") },
+  });
+  assert.ok(content);
+  assert.equal(content.broadcasts.length, 2, "fixture: the draft survives normalization");
+  for (const level of LEVELS) {
+    const result = redactContentForViewer(content, level, slotOf);
+    assert.deepEqual(result.broadcasts.map((item) => item.id), ["pub"], `level ${level}`);
+    assert.deepEqual(Object.keys(result.formattedText), ["broadcast:pub:body"], `level ${level}`);
+    const json = JSON.stringify(result);
+    assert.ok(!json.includes("DRAFT_NAMES_CLOSED_RECORD") && !json.includes("DRAFT_DOC"));
+  }
+});
+
+// RLS24-06 (L-5): the assistant keeps its four exact keys, not any key that starts with "assistant:".
+test("formattedText: ассистент — только четыре точных ключа редактора, любой другой суффикс отброшен", () => {
+  const base = structuredClone(defaultPortiaContent) as unknown as Record<string, unknown>;
+  const content = normalizePortiaContent({
+    ...base, viruses: [], recycledViruses: [], recycleFiles: [], recycleOrder: [],
+    formattedText: {
+      "assistant:advice": doc("A1"), "assistant:offended": doc("A2"), "assistant:idle": doc("A3"), "assistant:activity": doc("A4"),
+      "assistant:virus:SOME_ID:external": doc("SMUGGLED_1"), "assistant:": doc("SMUGGLED_2"), "assistant:advice:extra": doc("SMUGGLED_3"),
+    },
+  });
+  assert.ok(content);
+  for (const level of LEVELS) {
+    const keys = Object.keys(redactContentForViewer(content, level, slotOf).formattedText).sort();
+    assert.deepEqual(keys, ["assistant:activity", "assistant:advice", "assistant:idle", "assistant:offended"], `level ${level}`);
+  }
 });
