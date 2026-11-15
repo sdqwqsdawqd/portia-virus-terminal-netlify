@@ -64,13 +64,15 @@ function declarationCount(text: string) {
 export function stripMarkedBlocks(css: string) {
   const lines = lf(css).split("\n");
   const kept: string[] = [];
-  let skipping: "tokens" | "users" | null = null;
+  let skipping: "tokens" | "users" | "access" | null = null;
   for (const line of lines) {
     if (!skipping && line.includes("style-tokens:start")) skipping = "tokens";
     if (!skipping && line.startsWith("/* users-tab:start")) skipping = "users";
+    if (!skipping && line.startsWith("/* access-levels:start")) skipping = "access";
     if (!skipping) kept.push(line);
     if (skipping === "tokens" && line.includes("style-tokens:end")) skipping = null;
     if (skipping === "users" && line === "/* users-tab:end */") skipping = null;
+    if (skipping === "access" && line === "/* access-levels:end */") skipping = null;
   }
   assert.equal(skipping, null, "a marked block is not closed");
   return kept.join("\n");
@@ -162,7 +164,13 @@ test("UI-01: marked additions preserve the pre-phase stylesheet byte shape", () 
   assert.ok(tokenBlock, "style token block is missing");
   assert.doesNotMatch(tokenBlock, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:|--muted\s*:/);
 
+  const accessBlock = css.match(/^\/\* access-levels:start[\s\S]*?^\/\* access-levels:end \*\/$/m)?.[0] ?? "";
+  assert.ok(accessBlock, "the access-levels block is missing");
+  assert.equal(css.match(/^\/\* access-levels:start/gm)?.length, 1, "the access-levels block must be one");
+  assert.doesNotMatch(accessBlock, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:|--muted\s*:|#[0-9a-fA-F]{3,8}\b/);
+
   const usersStart = css.search(/^\/\* users-tab:start/m);
+  if (usersStart >= 0) assert.ok(css.indexOf("/* access-levels:end */") < usersStart, "users-tab must stay the last block of the file");
   if (usersStart >= 0) {
     const usersBlock = css.slice(usersStart);
     assert.match(usersBlock, /^\/\* users-tab:start[\s\S]*\/\* users-tab:end \*\/\n?$/);

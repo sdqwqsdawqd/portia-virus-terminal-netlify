@@ -65,3 +65,74 @@ test("T-24-36 the placeholder file imports only the icons and the copy", () => {
   const imports = [...redacted.matchAll(/^import .* from "([^"]+)";$/gm)].map((entry) => entry[1]);
   assert.deepEqual(imports, ["@/components/portia-icons", "@/lib/level-copy"]);
 });
+
+// The CSS block of the placeholder. app/portia.css is one file; the block is cut out by its markers.
+const portiaCss = lf(readFileSync(new URL("../app/portia.css", import.meta.url), "utf8"));
+const accessBlock = portiaCss.match(/^\/\* access-levels:start[\s\S]*?^\/\* access-levels:end \*\/$/m)?.[0] ?? "";
+
+type CssRule = { selector: string; body: string; media: string | null };
+
+// Rules of the block with the media query they stand in; the block has no deeper nesting than one media query.
+function blockRules(block: string): CssRule[] {
+  const rules: CssRule[] = [];
+  const text = block.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const media of text.matchAll(/@media\s*([^{]+)\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)) {
+    for (const rule of media[2].matchAll(/([^{}]+)\{([^{}]*)\}/g)) rules.push({ selector: rule[1].trim(), body: rule[2], media: media[1].trim() });
+  }
+  const withoutMedia = text.replace(/@media\s*[^{]+\{(?:[^{}]*\{[^{}]*\})*\s*\}/g, "");
+  for (const rule of withoutMedia.matchAll(/([^{}]+)\{([^{}]*)\}/g)) rules.push({ selector: rule[1].trim(), body: rule[2], media: null });
+  return rules;
+}
+
+const rules = blockRules(accessBlock);
+const ruleFor = (selector: string, media: string | null = null) => rules.find((rule) => rule.selector === selector && rule.media === media);
+const declaration = (rule: CssRule | undefined, property: string) => rule?.body.match(new RegExp(String.raw`(?:^|[;\s])${property}\s*:\s*([^;]+)`))?.[1].trim();
+
+test("the access-levels block exists once and the placeholder is styled only inside it", () => {
+  assert.ok(accessBlock.startsWith("/* access-levels:start"), "the block is missing");
+  assert.equal(portiaCss.match(/^\/\* access-levels:start/gm)?.length, 1);
+  assert.equal(portiaCss.match(/^\/\* access-levels:end \*\/$/gm)?.length, 1);
+  const outside = portiaCss.replace(accessBlock, "");
+  assert.doesNotMatch(outside, /\.access-redacted/, "the placeholder is styled outside the block");
+  assert.ok(portiaCss.indexOf("/* access-levels:end */") < portiaCss.indexOf("/* users-tab:start"), "users-tab must stay last");
+  for (const variant of ["row", "index", "tile", "bar", "block"]) assert.ok(ruleFor(`.access-redacted-${variant}`), `.access-redacted-${variant} is not styled`);
+});
+
+test("S2 long-text: the two segments never break, the wrapper wraps anywhere, so a 320px line breaks only at the middle point", () => {
+  assert.equal(declaration(ruleFor(".access-redacted-word"), "white-space"), "nowrap");
+  assert.equal(declaration(ruleFor(".access-redacted-need"), "white-space"), "nowrap");
+  assert.equal(declaration(ruleFor(".access-redacted"), "overflow-wrap"), "anywhere");
+  assert.equal(declaration(ruleFor(".access-redacted"), "max-width"), "100%");
+});
+
+test("D-09 the placeholder is static: no hover, no pointer, no animation in any rule that names it", () => {
+  assert.ok(rules.length > 0);
+  for (const rule of rules) {
+    assert.doesNotMatch(rule.selector, /:hover|:active|:focus/, rule.selector);
+  }
+  assert.equal(declaration(ruleFor(".access-redacted"), "cursor"), "default");
+  assert.doesNotMatch(accessBlock, /cursor\s*:\s*pointer/);
+});
+
+test("S1 populated: a placeholder row has the height of a virus row, on the phone too", () => {
+  assert.equal(declaration(ruleFor(".access-redacted-row"), "min-height"), "65px");
+  const phone = ruleFor(".virus-list > .access-redacted-row", "(max-width: 900px)");
+  assert.ok(phone, "the phone rule is missing");
+  assert.equal(declaration(phone, "min-height"), "62px");
+  assert.equal(declaration(phone, "min-width"), "210px");
+  assert.equal(declaration(phone, "scroll-snap-align"), "start");
+});
+
+test("S1 overflow: no placeholder rule is wider than the 210px of a phone row or scrolls sideways", () => {
+  for (const rule of rules.filter((entry) => entry.selector.includes(".access-redacted"))) {
+    for (const property of ["width", "min-width"]) {
+      const value = declaration(rule, property);
+      if (value?.endsWith("px")) assert.ok(Number.parseFloat(value) <= 210, `${rule.selector} ${property}: ${value}`);
+    }
+    assert.doesNotMatch(rule.body, /overflow-x|white-space\s*:\s*pre\b/, rule.selector);
+  }
+});
+
+test("D-08 the block keeps sharp corners and uses no token of the site that is not declared", () => {
+  assert.doesNotMatch(accessBlock, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:|--muted|#[0-9a-fA-F]{3,8}\b/);
+});

@@ -30,7 +30,7 @@ export function RedactedPlaceholder({ level, variant, index, listItem, className
   const showsIndex = (variant === "row" || variant === "index") && index !== undefined;
   return (
     <div className={classes} {...listProps}>
-      {showsIndex && <span className="access-redacted-index">{index}</span>}
+      {showsIndex && <span className="access-redacted-number">{index}</span>}
       <PortiaIcon name="lock-closed" aria-hidden="true" />
       <span className="access-redacted-text">
         <span className="access-redacted-word">{levelCopy.redactedWord}</span>
