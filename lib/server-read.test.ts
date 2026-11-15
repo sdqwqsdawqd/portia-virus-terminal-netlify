@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 import { ACCESS_SUBMIT_MAX_AGE_SECONDS, ACCESS_SUBMIT_MAX_AHEAD_SECONDS, accessSubmitMessage } from "./access-session.ts";
-import { readContentRow, serverReadMessage, serverReadRpc, ServerReadError, signServerRead } from "./server-read.ts";
+import { readContentRow, readEmployeeRows, serverReadMessage, serverReadRpc, ServerReadError, signServerRead } from "./server-read.ts";
 
 // Offline contract of the server-signed reads (Phase 25, plan 25-01, SEC-01): the TypeScript side is pinned to the text of
 // the expand migration. Postgres/RLS execution, PostgREST and the live roles are BLOCKED and are NOT proved here.
@@ -256,4 +256,92 @@ test("readContentRow: a public client that cannot be created is unavailable, not
     ),
     (error: unknown) => error instanceof ServerReadError && error.kind === "unavailable",
   );
+});
+
+const profileRow = { employee_id: "roblox-1", nickname: "Fox", biography: "bio", photo_url: "", knowledge_rating: 1, paws_rating: 5 };
+const manualRow = { employee_id: "roblox-9", nickname: "Gamma_x", title: "T", rank: "R", callsign: "C" };
+
+test("readEmployeeRows: a visitor is read by the public client with the employees signature, the session client is untouched", async () => {
+  const calls: Call[] = [];
+  const anonymous = fakeClient({ data: { code: "ok", profiles: [profileRow], manual: [manualRow] } }, calls);
+  const rows = await readEmployeeRows({ editor: false, level: 2 }, { session: forbiddenClient, anonymous: () => anonymous }, { secret: () => SECRET, now: () => NOW_MS });
+  assert.deepEqual(rows, { profiles: [profileRow], manual: [manualRow] });
+  assert.deepEqual(calls, [
+    { fn: "portia_employees_read", args: { p_issued_at: NOW_S, p_signature: signServerRead("employees", NOW_S, SECRET) } },
+  ]);
+  assert.notEqual(calls[0].args?.p_signature, signServerRead("content", NOW_S, SECRET), "the content signature does not open the roster");
+});
+
+test("readEmployeeRows: an editor reads with the session client, no signature, no secret, and the public client is untouched", async () => {
+  const calls: Call[] = [];
+  const rows = await readEmployeeRows(
+    { editor: true, level: 5 },
+    {
+      session: fakeClient({ data: { code: "ok", profiles: [], manual: [] } }, calls),
+      anonymous: () => {
+        throw new Error("the public client must not be created for an editor");
+      },
+    },
+    {
+      secret: () => {
+        throw new Error("the secret must not be read for an editor");
+      },
+      now: () => {
+        throw new Error("the clock must not be read for an editor");
+      },
+    },
+  );
+  assert.deepEqual(rows, { profiles: [], manual: [] }, "empty lists are a healthy answer");
+  assert.deepEqual(calls, [{ fn: "portia_employees_read", args: { p_issued_at: 0, p_signature: "" } }]);
+});
+
+test("readEmployeeRows: a profile that still carries updated_by is cleaned in TypeScript too, the input is not mutated", async () => {
+  const reply = { code: "ok", profiles: [{ ...profileRow, updated_by: "user-secret-id" }], manual: [manualRow] };
+  const rows = await readEmployeeRows({ editor: false, level: 1 }, { session: forbiddenClient, anonymous: () => fakeClient({ data: reply }) }, { secret: () => SECRET, now: () => NOW_MS });
+  assert.deepEqual(rows.profiles, [profileRow]);
+  assert.ok(!JSON.stringify(rows).includes("user-secret-id"));
+  assert.equal((reply.profiles[0] as Record<string, unknown>).updated_by, "user-secret-id");
+});
+
+test("readEmployeeRows: unauthorized is kind unauthorized; an error or a reply of an unknown shape is kind unavailable without text", async () => {
+  const options = { secret: () => SECRET, now: () => NOW_MS };
+  const clients = (reply: Parameters<typeof fakeClient>[0]) => ({ session: forbiddenClient, anonymous: () => fakeClient(reply) });
+  await assert.rejects(
+    readEmployeeRows({ editor: false, level: 1 }, clients({ data: { code: "unauthorized" } }), options),
+    (error: unknown) => error instanceof ServerReadError && error.kind === "unauthorized",
+  );
+  const bad: Parameters<typeof fakeClient>[0][] = [
+    { error: { message: `boom ${SECRET}` } },
+    { data: null },
+    { data: { code: "weird" } },
+    { data: { code: "ok" } },
+    { data: { code: "ok", profiles: [] } },
+    { data: { code: "ok", manual: [] } },
+    { data: { code: "ok", profiles: {}, manual: [] } },
+    { data: { code: "ok", profiles: [], manual: "x" } },
+    { data: { code: "ok", profiles: [5], manual: [] } },
+    { data: { code: "ok", profiles: [[]], manual: [] } },
+    { data: { code: "ok", profiles: [], manual: [null] } },
+  ];
+  for (const reply of bad) {
+    await assert.rejects(readEmployeeRows({ editor: false, level: 1 }, clients(reply), options), (error: unknown) => {
+      assert.ok(error instanceof ServerReadError, JSON.stringify(reply));
+      assert.equal(error.kind, "unavailable");
+      assert.ok(!error.message.includes(SECRET));
+      return true;
+    });
+  }
+});
+
+test("readEmployeeRows: a visitor without the secret is unavailable and nothing is sent", async () => {
+  const calls: Call[] = [];
+  await assert.rejects(
+    readEmployeeRows(
+      { editor: false, level: 1 },
+      { session: forbiddenClient, anonymous: () => fakeClient({ data: { code: "ok", profiles: [], manual: [] } }, calls) },
+      { secret: () => { throw new Error(`short: ${SECRET}`); }, now: () => NOW_MS },
+    ),
+    (error: unknown) => error instanceof ServerReadError && error.kind === "unavailable" && !error.message.includes(SECRET),
+  );
+  assert.deepEqual(calls, []);
 });

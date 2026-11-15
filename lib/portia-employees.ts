@@ -142,8 +142,8 @@ export function mergeEmployeesAnswer(
   return { employees, cacheable: false, profilesRead: answer.profilesRead === true || (previousProfilesRead && previous.length > 0) };
 }
 
-// The roster comes live from Google Sheets + Roblox (the CDN caches the API response).
-// Editor-written fields live in Supabase (portia_employee_profiles).
+// The roster comes from Google Sheets + Roblox. The answer is built for each viewer and no CDN keeps it, so a server-side
+// snapshot (lib/employees-snapshot-cache.ts) protects the external calls. Editor-written fields live in Supabase (portia_employee_profiles).
 type ProfileColumns = { biography: string; photo_url: string; knowledge_rating: number; [column: string]: unknown };
 type ProfileRow = ProfileColumns & { employee_id: string; nickname: string };
 type RobloxProfile = { id: number; name: string; avatarUrl: string; fullAvatarUrl: string };
@@ -298,6 +298,18 @@ export function profileFromRow(row: ProfileColumns): EmployeeProfile {
   };
 }
 
+/** Pure row mapping shared by the table read and the signed server read; a row without a text employee_id is skipped. */
+export function profileIndexFromRows(rows: unknown[]): ProfileIndex {
+  const valid = rows.filter((row): row is ProfileRow => typeof row === "object" && row !== null && typeof (row as ProfileRow).employee_id === "string");
+  return {
+    byId: new Map(valid.map((row) => [row.employee_id, profileFromRow(row)])),
+    robloxIdByNickname: new Map(valid.flatMap((row) => {
+      const robloxId = Number(row.employee_id.match(/^roblox-(\d+)$/)?.[1]);
+      return row.nickname && robloxId ? [[nicknameKey(row.nickname), robloxId] as const] : [];
+    })),
+  };
+}
+
 export async function readEmployeeProfiles(supabase: SupabaseClient): Promise<ProfileIndex> {
   // select("*") so columns the database does not have yet cannot fail the whole read.
   const { data, error } = await supabase
@@ -305,14 +317,7 @@ export async function readEmployeeProfiles(supabase: SupabaseClient): Promise<Pr
     .select("*")
     .returns<ProfileRow[]>();
   if (error) throw error;
-  const rows = data ?? [];
-  return {
-    byId: new Map(rows.map((row) => [row.employee_id, profileFromRow(row)])),
-    robloxIdByNickname: new Map(rows.flatMap((row) => {
-      const robloxId = Number(row.employee_id.match(/^roblox-(\d+)$/)?.[1]);
-      return row.nickname && robloxId ? [[nicknameKey(row.nickname), robloxId] as const] : [];
-    })),
-  };
+  return profileIndexFromRows(data ?? []);
 }
 
 export function withProfile(employee: RosterEmployee, profiles: ProfileIndex): PortiaEmployee {
@@ -335,6 +340,16 @@ export function sanitizeManualEmployee(value: unknown): ManualEmployeeInput | nu
   const nickname = typeof candidate.nickname === "string" ? candidate.nickname.trim() : "";
   if (!nickname) return null;
   return { nickname, title: clip64(candidate.title), rank: clip64(candidate.rank), callsign: clip64(candidate.callsign) };
+}
+
+/** Only the five named columns of a manual row, so created_by never reaches an API answer; a row without them is skipped. */
+export function manualRowsFromRows(rows: unknown[]): ManualRow[] {
+  return rows.flatMap((row) => {
+    if (typeof row !== "object" || row === null) return [];
+    const { employee_id, nickname, title, rank, callsign } = row as Record<string, unknown>;
+    if ([employee_id, nickname, title, rank, callsign].some((column) => typeof column !== "string")) return [];
+    return [{ employee_id, nickname, title, rank, callsign } as ManualRow];
+  });
 }
 
 /** Explicit columns, so created_by never reaches an API answer. A missing table is an empty, healthy list. */
@@ -384,6 +399,28 @@ async function fetchSheetRows() {
   return parseCsv(await response.text());
 }
 
+type RobloxLookup = Awaited<ReturnType<typeof resolveRobloxProfiles>>;
+/** What every viewer gets from outside the database: the sheet and the Roblox accounts of its nicknames. No stored profile is in it. */
+export type SheetSnapshot = { rows: string[][]; roblox: RobloxLookup; complete: boolean };
+
+/** The one build of the roster list from the sheet, the Roblox map and what the database stored. */
+function assembleEmployees(rows: string[][], roblox: RobloxLookup, profiles: ProfileIndex | null, manual: { rows: ManualRow[]; ok: boolean }) {
+  const index = profiles ?? { byId: new Map(), robloxIdByNickname: new Map() };
+  const roster = mergeManualEmployees(rosterFromRows(rows, roblox.byName, index.robloxIdByNickname), manual.rows, roblox.byName);
+  return {
+    employees: roster.map((employee) => withProfile(employee, index)),
+    syncedAt: new Date().toISOString(),
+    // An incomplete answer is cached only briefly so avatars and biographies return quickly.
+    complete: Boolean(profiles) && roblox.ok && manual.ok,
+    // Without the stored profiles every employee looks blank; a save from that would wipe them.
+    profilesRead: Boolean(profiles),
+    // Without the manual rows a manual employee is missing from the roster, so a delete would wrongly say not-found.
+    manualRead: manual.ok,
+    profiles: index,
+  };
+}
+
+// The editor paths read the tables with the editor's own session and reach the sheet and Roblox live every time.
 export async function loadEmployees(supabase: SupabaseClient) {
   const [rows, profiles, manual] = await Promise.all([
     fetchSheetRows(),
@@ -397,18 +434,24 @@ export async function loadEmployees(supabase: SupabaseClient) {
   const sheetOnly = rosterFromRows(rows, new Map(), index.robloxIdByNickname);
   // shortcut: manual employees are looked up by their stored nickname; after a Roblox rename the avatar is empty until they are removed and added again.
   const roblox = await resolveRobloxProfiles([...sheetOnly, ...manual.rows].map((employee) => employee.nickname));
-  const roster = mergeManualEmployees(rosterFromRows(rows, roblox.byName, index.robloxIdByNickname), manual.rows, roblox.byName);
-  return {
-    employees: roster.map((employee) => withProfile(employee, index)),
-    syncedAt: new Date().toISOString(),
-    // An incomplete answer is cached only briefly so avatars and biographies return quickly.
-    complete: Boolean(profiles) && roblox.ok && manual.ok,
-    // Without the stored profiles every employee looks blank; a save from that would wipe them.
-    profilesRead: Boolean(profiles),
-    // Without the manual rows a manual employee is missing from the roster, so a delete would wrongly say not-found.
-    manualRead: manual.ok,
-    profiles: index,
-  };
+  return assembleEmployees(rows, roblox, profiles, manual);
+}
+
+async function loadSheetSnapshot(manualNicknames: string[]): Promise<SheetSnapshot> {
+  const rows = await fetchSheetRows();
+  const roblox = await resolveRobloxProfiles([...rosterFromRows(rows, new Map()).map((employee) => employee.nickname), ...manualNicknames]);
+  return { rows, roblox, complete: roblox.ok };
+}
+
+/**
+ * The list for a viewer whose rows came from the signed server read (Phase 25). `null` is a read that did not happen (refused or
+ * failed): the list is then the sheet alone, with the same degraded flags as a failed table read before.
+ */
+export async function loadEmployeesFromRows(stored: { profiles: unknown[]; manual: unknown[] } | null) {
+  const profiles = stored ? profileIndexFromRows(stored.profiles) : null;
+  const manual = stored ? { rows: manualRowsFromRows(stored.manual), ok: true } : { rows: [], ok: false };
+  const snapshot = await loadSheetSnapshot(manual.rows.map((row) => row.nickname));
+  return assembleEmployees(snapshot.rows, snapshot.roblox, profiles, manual);
 }
 
 export type AddManualResult =

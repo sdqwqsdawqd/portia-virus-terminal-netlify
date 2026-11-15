@@ -93,3 +93,25 @@ export async function readContentRow(viewer: Viewer, clients: ServerReadClients,
   if (typeof revision !== "number" || !Number.isInteger(revision) || typeof updatedAt !== "string") throw new ServerReadError("unavailable");
   return { payload, revision, updated_at: updatedAt };
 }
+
+export type EmployeeRows = { profiles: unknown[]; manual: unknown[] };
+
+function recordsOnly(rows: unknown[]): Record<string, unknown>[] {
+  return rows.map((row) => {
+    if (typeof row !== "object" || row === null || Array.isArray(row)) throw new ServerReadError("unavailable");
+    return row as Record<string, unknown>;
+  });
+}
+
+// The stored profiles and the manual employees as the table reads gave them. The function already leaves updated_by out; it is
+// dropped here again so a changed function can never hand an editor's user id to a visitor. An empty list is a healthy answer.
+export async function readEmployeeRows(viewer: Viewer, clients: ServerReadClients, options: ServerReadOptions = {}): Promise<EmployeeRows> {
+  const body = await callServerRead("employees", viewer, clients, options);
+  if (!Array.isArray(body.profiles) || !Array.isArray(body.manual)) throw new ServerReadError("unavailable");
+  const profiles = recordsOnly(body.profiles).map((row) => {
+    const copy = { ...row };
+    delete copy.updated_by;
+    return copy;
+  });
+  return { profiles, manual: recordsOnly(body.manual) };
+}
