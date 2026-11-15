@@ -15,7 +15,7 @@ import { acceptFetchedContent, isNewerAnswer, normalizeDocumentLinks, viewerKeyO
 import { cacheMatchesSource, cacheMatchesViewer, clearDeviceContentCaches, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
 import { networkSaveError, parseRefusedSections, SaveConflictError, SectionClosedError } from "@/lib/editor-save-status";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
-import { flattenPlaceholders, guideSlotChain, infoSlotChain, mergePlaceholders, reconcileSelection, shownViewerLevel, simpleSlotChain } from "@/lib/level-placeholders";
+import { flattenPlaceholders, guideSlotChain, infoSlotChain, isViewerShapedContent, mergePlaceholders, reconcileSelection, shownViewerLevel, simpleSlotChain } from "@/lib/level-placeholders";
 import { levelCopy } from "@/lib/level-copy";
 import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { splitEmbeddedMedia } from "@/lib/rich-text-media";
@@ -375,6 +375,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = nu
   const [openTabs, setOpenTabs] = useState<string[]>([]);
   // The server's reason for the last refused save, shown in the editor's save status (D-12).
   const [saveError, setSaveError] = useState("");
+  // D-17: the line shown after a save in which the server lifted levels to the hierarchy.
+  const [saveNotice, setSaveNotice] = useState("");
   const canEditRef = useRef(false);
   useEffect(() => { canEditRef.current = canEdit; });
   // STAB-APP-09 fail-closed: "failed" means the rights could not be checked. The editor then shows «Доступ закрыт» and takes no edits, whatever the last good answer said.
@@ -1363,6 +1365,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = nu
     // Polls sent before this save may answer with the copy it replaces.
     savesStarted.current += 1;
     setSaveError("");
+    // D-17: the line of the previous save is gone as soon as a new one starts.
+    setSaveNotice("");
     setSaveState("saving");
     try {
       // Up to MAX_CONTENT_BODY_BYTES (5 MB, lib/content-limits.ts) plus auth, upsert and CDN purge: aborting after the server committed would turn the retry into a false conflict.
@@ -1396,7 +1400,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = nu
         if (refusedSections) throw new SectionClosedError(refusedSections, typeof body?.error === "string" ? body.error : "section closed");
         throw new Error("save failed");
       }
-      const payload = (await response.json()) as { revision?: number };
+      const payload = (await response.json()) as { revision?: number; levelsRaised?: unknown };
       const savedRevision = payload.revision ?? baseRevision + 1;
       knownRevision.current = savedRevision;
       setContent(next);
@@ -1411,6 +1415,13 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = nu
           savedAt: new Date().toISOString(),
         }, deviceCacheSource())));
       } catch {}
+      // D-17 (LVL-08): the server lifted levels that broke the hierarchy and saved that copy; say how many, and read the copy it kept.
+      const levelsRaised = payload.levelsRaised;
+      if (typeof levelsRaised === "number" && Number.isInteger(levelsRaised) && levelsRaised > 0) {
+        setSaveNotice(levelCopy.savedRaised(levelsRaised));
+        knownRevision.current = -1;
+        void fetchContent();
+      }
       setSaveState("saved");
       saveStateTimer.current = window.setTimeout(() => setSaveState("idle"), 4000);
       return savedRevision;
@@ -2108,7 +2119,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerLevel = nu
           </AppWindow>
 
           <AppWindow app="editor" state={windows.editor} active={activeApp === "editor"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="editor-window" meta="ДОСТУП ВЛАДЕЛЬЦА">
-            {accessState === "failed" && !canEdit ? <div className="app-state-body"><AppDeniedPanel detail={accessCheckFailedText} /></div> : canEdit ? <PortiaEditor accessFailed={accessState === "failed"} content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} openTabs={openTabs} active={activeApp === "editor" && !windows.editor.minimized} minimized={windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} saveError={saveError} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
+            {accessState === "failed" && !canEdit ? <div className="app-state-body"><AppDeniedPanel detail={accessCheckFailedText} /></div> : canEdit ? <PortiaEditor accessFailed={accessState === "failed"} content={content} revision={revision} saveState={saveState} canManageEditors={canManageEditors} openTabs={openTabs} active={activeApp === "editor" && !windows.editor.minimized} minimized={windows.editor.minimized} onDirtyChange={reportEditorDirty} closeRequest={editorCloseRequest} onCloseApproved={() => requestExit("editor", "close", true)} onSave={saveContent} onEmployeeSaved={updateEmployee} onEmployeeRemoved={removeEmployee} saveError={saveError} contentIncomplete={isViewerShapedContent(content)} saveNotice={saveNotice} /> : <div className="editor-empty">У этого аккаунта нет доступа к редактору.</div>}
           </AppWindow>
         </main>
 

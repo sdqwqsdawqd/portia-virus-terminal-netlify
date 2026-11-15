@@ -25,7 +25,7 @@ export const levelCopy = {
   parentTitle: (level: number) => `не ниже раздела: ${level}`,
   raisedSubsections: (level: number, count: number) => `Уровень подразделов поднят до ${level}: изменено ${count}.`,
   raisedCards: (level: number, count: number) => `Уровень карточек поднят до ${level}: изменено ${count}.`,
-  savedRaised: (count: number) => `Сохранено. Поднято уровней: ${count}.`,
+  savedRaised: (count: number) => `Уровни приведены к иерархии: изменено ${count}.`,
   logsEmptyEditor: "Записей учёных нет. Карточку можно сохранить без них.",
   editorIncomplete: {
     heading: "Содержимое загружено не полностью.",

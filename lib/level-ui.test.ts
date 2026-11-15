@@ -303,3 +303,23 @@ test("SEC-07 no component and no copy of the visitor says that the links of the 
   for (const name of clientFiles) assert.deepEqual(claims(lf(readFileSync(new URL(name, componentsDir), "utf8"))), [], name);
   assert.deepEqual(claims(lf(readFileSync(new URL("../lib/level-copy.ts", import.meta.url), "utf8"))), []);
 });
+
+// Plan 24-10, task 3: the editor wiring (LVL-08, D-05, D-17).
+test("LVL-08 the desktop tells the editor that the content is incomplete and shows the line of the server's level lift", () => {
+  assert.ok(desktop.includes("contentIncomplete={isViewerShapedContent(content)}"));
+  assert.ok(desktop.includes("saveNotice={saveNotice}"));
+  const save = between(desktop, "const saveContent = async", "const virusLostShown");
+  assert.ok(save.includes("setSaveNotice(\"\")"), "the line of the previous save goes when a new save starts");
+  assert.ok(save.includes("payload.levelsRaised") && save.includes("levelCopy.savedRaised("));
+  // The server saved a lifted copy: the known revision is dropped and the copy is read, after the cache of the saved content.
+  const raised = between(save, "if (typeof levelsRaised", 'setSaveState("saved")');
+  assert.ok(raised.includes("levelsRaised > 0") && raised.includes("knownRevision.current = -1") && raised.includes("void fetchContent()"));
+  assert.ok(save.indexOf("localStorage.setItem") < save.indexOf("if (typeof levelsRaised"), "the read follows the cache write of the saved copy");
+});
+
+test("D-17 the refusal of a viewer-shaped PUT shows the reason of the server, and the conflict branch is unchanged", () => {
+  const save = between(desktop, "const saveContent = async", "const virusLostShown");
+  assert.ok(save.includes('if (typeof body?.error === "string") setSaveError(body.error);'), "any refusal shows its reason");
+  assert.ok(/setSaveState\("conflict"\);[\s\S]{0,200}void fetchContent\(\)/.test(save));
+  assert.equal(levelCopy.savedRaised(2), "Уровни приведены к иерархии: изменено 2.", "the line follows 24-UI-SPEC");
+});
