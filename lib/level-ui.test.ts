@@ -221,3 +221,30 @@ test("D-20 the desktop passes the guide placeholders and the lost level, and any
   assert.ok(desktop.includes("const openGuideCard = (id: string) => { setGuideCardId(id); setGuideLost(null); };"));
   assert.ok(desktop.includes("guideSlotChain(previous, current.id)"));
 });
+
+// Plan 24-10, task 1: the recycle bin (O-3, assumption A-4, not an owner decision).
+test("O-3 the recycle bin draws a closed file or virus as a row placeholder on its place, with no name, location or type", () => {
+  assert.ok(desktop.includes("mergePlaceholders(trashOrder, content.redaction?.recycle)"));
+  const list = between(desktop, '<div className="trash-files">', "</div>\n                {trashLostShown");
+  const closedRow = between(list, 'if (row.kind === "redacted")', "const key = row.item;");
+  assert.ok(closedRow.includes('variant="row"') && closedRow.includes("key={row.slot}"));
+  assert.doesNotMatch(closedRow, /<button|onClick|file\.name|file\.location|recycleFileType/, "a closed row is static and names nothing");
+  // The pinned buttons of open rows keep their search marks.
+  assert.ok(list.includes('hitAttrs("file", file.id)') && list.includes('hitAttrs("file", `virus:${virus.id}`)'));
+});
+
+test("O-3 the window counter counts the placeholders, and an empty bin means no files and no placeholders", () => {
+  assert.ok(desktop.includes('meta={`ФАЙЛОВ ${String(trashRows.length).padStart(2, "0")}`}'));
+  assert.ok(desktop.includes("(content.redaction?.recycle.length ?? 0)"), "the empty state counts the placeholders");
+});
+
+test("D-20 a file that became closed while viewed is replaced by the block; the head keeps only the close button", () => {
+  assert.ok(desktop.includes("reconcileTrashSelection(previous, next, current.trash)"));
+  assert.ok(desktop.includes("trashLost"), "the lost placeholder is remembered");
+  const lost = between(desktop, "{trashLostShown && <div", "{activeTrashVirus && <div");
+  assert.ok(lost.includes('<RedactedPlaceholder variant="block" level={trashLostShown.level} />'));
+  assert.ok(lost.includes('aria-label="Закрыть файл"'));
+  assert.doesNotMatch(lost, /\.name|\.code|ТОЛЬКО ДЛЯ ЧТЕНИЯ|ВИРУС В КОРЗИНЕ/, "no name in the head of the block");
+  // The chain of a recycled virus is read through its plain id, the ids of the answer carry the virus: prefix.
+  assert.ok(desktop.includes("simpleSlotChain(previous, trashRecordId(current.id))"));
+});

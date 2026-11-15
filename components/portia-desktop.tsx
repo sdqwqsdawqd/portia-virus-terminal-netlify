@@ -38,7 +38,7 @@ import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, no
 // so a click on any other row ends it without a second setter.
 type LostSelection = { slot: string; level: number } | null;
 type WindowSelection = { id: string; lost: LostSelection };
-type SelectionSnapshot = { virus: WindowSelection; info: WindowSelection; guide: WindowSelection };
+type SelectionSnapshot = { virus: WindowSelection; info: WindowSelection; guide: WindowSelection; trash: WindowSelection };
 const lostOf = (selection: WindowSelection) => selection.id === "" ? selection.lost : null;
 const selectionResult = (result: ReturnType<typeof reconcileSelection>, fallbackId: string): WindowSelection => {
   if (result.id || result.lostSlot) return { id: result.id, lost: result.lostSlot ? { slot: result.lostSlot, level: result.lostLevel ?? 5 } : null };
@@ -77,6 +77,23 @@ function reconcileGuideSelection(previous: PortiaContent, next: PortiaContent, c
       slots: next.redaction?.slots ?? {},
       placeholders: [...(next.redaction?.guideSections ?? []), ...flattenPlaceholders(next.redaction?.guideCards)],
     },
+  );
+  return selectionResult(result, "");
+}
+
+// O-3 (assumption A-4): the recycle bin names a file by its id and a recycled virus as `virus:<id>`; the slots of the answer are keyed by
+// the plain record id, so the chain and the slot index are read through that one rule.
+const trashRecordId = (key: string) => key.startsWith("virus:") ? key.slice(6) : key;
+
+function reconcileTrashSelection(previous: PortiaContent, next: PortiaContent, current: WindowSelection): WindowSelection {
+  const nextSlots = next.redaction?.slots ?? {};
+  const slots: Record<string, string> = {};
+  for (const file of next.recycleFiles) if (nextSlots[file.id]) slots[file.id] = nextSlots[file.id];
+  for (const virus of next.recycledViruses ?? []) if (nextSlots[virus.id]) slots[`virus:${virus.id}`] = nextSlots[virus.id];
+  const result = reconcileSelection(
+    { id: current.id, lostSlot: lostOf(current)?.slot ?? null },
+    simpleSlotChain(previous, trashRecordId(current.id)),
+    { ids: [...next.recycleFiles.map((file) => file.id), ...(next.recycledViruses ?? []).map((virus) => `virus:${virus.id}`)], slots, placeholders: next.redaction?.recycle ?? [] },
   );
   return selectionResult(result, "");
 }
@@ -436,6 +453,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
   const preloadedAssistantMedia = useRef(new Set<string>());
   const assistantMediaInFlight = useRef(new Map<string, HTMLImageElement>());
   const [activeTrashFileId, setActiveTrashFileId] = useState<string | null>(null);
+  // O-3 (D-20): the recycle bin viewer left on the placeholder of a file that became closed; effective only while no file is chosen.
+  const [trashLost, setTrashLost] = useState<LostSelection>(null);
   const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
   const [employeesReady, setEmployeesReady] = useState(false);
   const [employeesSyncedAt, setEmployeesSyncedAt] = useState<string | null>(null);
@@ -523,25 +542,28 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
 
   // Phase 24: the copy on screen and the three selections, read by the next answer (a ref: it is read inside async handlers). Handlers write it at once, an effect keeps it in step with clicks.
   const contentRef = useRef(content);
-  const selectionRef = useRef<SelectionSnapshot>({ virus: { id: activeVirusId, lost: virusLost }, info: { id: selectedInfoId, lost: infoLost }, guide: { id: guideCardId, lost: guideLost } });
+  const selectionRef = useRef<SelectionSnapshot>({ virus: { id: activeVirusId, lost: virusLost }, info: { id: selectedInfoId, lost: infoLost }, guide: { id: guideCardId, lost: guideLost }, trash: { id: activeTrashFileId ?? "", lost: trashLost } });
   useEffect(() => {
     contentRef.current = content;
-    selectionRef.current = { virus: { id: activeVirusId, lost: virusLost }, info: { id: selectedInfoId, lost: infoLost }, guide: { id: guideCardId, lost: guideLost } };
-  }, [content, activeVirusId, virusLost, selectedInfoId, infoLost, guideCardId, guideLost]);
+    selectionRef.current = { virus: { id: activeVirusId, lost: virusLost }, info: { id: selectedInfoId, lost: infoLost }, guide: { id: guideCardId, lost: guideLost }, trash: { id: activeTrashFileId ?? "", lost: trashLost } };
+  }, [content, activeVirusId, virusLost, selectedInfoId, infoLost, guideCardId, guideLost, activeTrashFileId, trashLost]);
   // D-20/D-22: every window keeps its record, or is left on the placeholder of its slot, or gives the record back quietly; the old copy only names the slots.
   const applySelections = useCallback((previous: PortiaContent, next: PortiaContent) => {
     const current = selectionRef.current;
     const virus = reconcileVirusSelection(previous, next, current.virus);
     const info = reconcileInfoSelection(previous, next, current.info);
     const guide = reconcileGuideSelection(previous, next, current.guide);
+    const trash = reconcileTrashSelection(previous, next, current.trash);
     contentRef.current = next;
-    selectionRef.current = { virus, info, guide };
+    selectionRef.current = { virus, info, guide, trash };
     setActiveVirusId(virus.id);
     setVirusLost((lost) => sameLost(lost, virus.lost) ? lost : virus.lost);
     setSelectedInfoId(info.id);
     setInfoLost((lost) => sameLost(lost, info.lost) ? lost : info.lost);
     setGuideCardId(guide.id);
     setGuideLost((lost) => sameLost(lost, guide.lost) ? lost : guide.lost);
+    setActiveTrashFileId(trash.id || null);
+    setTrashLost((lost) => sameLost(lost, trash.lost) ? lost : trash.lost);
   }, []);
 
   // The answer is cut for this viewer and sent no-store (Phase 24), but a late answer can still be older than this tab's copy; answers are ordered by request number and then by revision or viewer (uat-03-owner-broadcast-vanishes, LVL-09).
@@ -1417,7 +1439,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
   const infoView = appViewState({ ...contentBase, count: content.infoSections.length + (content.redaction?.infoSections.length ?? 0) });
   const guideView = appViewState({ ...contentBase, count: content.guideSections.length + (content.redaction?.guideSections.length ?? 0) });
   const broadcastsView = appViewState({ ...contentBase, count: content.broadcasts.length });
-  const trashView = appViewState({ ...contentBase, count: content.recycleFiles.length + (content.recycledViruses?.length ?? 0) });
+  const trashView = appViewState({ ...contentBase, count: content.recycleFiles.length + (content.recycledViruses?.length ?? 0) + (content.redaction?.recycle.length ?? 0) });
   const employeesView = appViewState({ denied: false, ready: employeesReady, hasData: employeesSync.lastGoodAt !== null, count: employees.length, failure: employeesSync.failure });
   const contentStaleBanner = contentSync.lastGoodAt !== null ? <AppStaleBanner lastGoodAt={contentSync.lastGoodAt} retrying={contentSync.retrying} onRetry={() => void retryContent()} /> : null;
   const contentFatal = (illustration: PortiaIllustrationName) => contentSync.failure ? <AppFatalPanel failure={contentSync.failure} retrying={contentSync.retrying} onRetry={() => void retryContent()} illustration={illustration} /> : null;
@@ -1480,6 +1502,10 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
   const activeTrashVirus = activeTrashFileId?.startsWith("virus:")
     ? recycledViruses.find((virus) => virus.id === activeTrashFileId.slice(6)) ?? null
     : null;
+  // O-3: a closed file or virus is a row on its own place of the order; the counter of the window counts the rows, placeholders too.
+  const trashRows = mergePlaceholders(trashOrder, content.redaction?.recycle);
+  const trashLostShown = !activeTrashFileId ? trashLost : null;
+  const closeTrashFile = () => { setActiveTrashFileId(null); setTrashLost(null); };
   const filteredEmployees = employees.filter((employee) => normalizeSearch(`${employee.nickname} ${employee.callsign} ${employee.title} ${employee.rank}`).includes(normalizeSearch(employeeQuery)));
   const selectedEmployee = employees.find((employee) => employee.id === selectedEmployeeId) ?? employees[0] ?? null;
 
@@ -2009,14 +2035,16 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
           {(["sheet", "charter"] as const).map((app) => <AppWindow key={app} app={app} state={windows[app]} active={activeApp === app} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window document-window" meta="ДОКУМЕНТ ОТДЕЛА">
             <EmbeddedDocument src={embeddedApps[app].src} external={embeddedApps[app].external} title={appMeta[app].label} />
           </AppWindow>)}
-          <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashFiles.length + recycledViruses.length).padStart(2, "0")}`}>
-            <div className={`trash-app${activeTrashFile || activeTrashVirus ? " is-viewing" : ""}`}>
+          <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashRows.length).padStart(2, "0")}`}>
+            <div className={`trash-app${activeTrashFile || activeTrashVirus || trashLostShown ? " is-viewing" : ""}`}>
               <header><h1>Корзина</h1><p>Бесполезный хлам — кому вообще придет в голову его перебирать?</p></header>
               {trashView === "stale" && contentStaleBanner}
               {trashView === "loading" ? <AppSkeleton shape="trash" /> : trashView === "fatal" ? contentFatal("flaskEmpty") : <div className="trash-layout">
                 <div className="trash-files">
                   <div className="trash-list-head" aria-hidden="true"><span>ИМЯ</span><span>ИСХОДНОЕ РАСПОЛОЖЕНИЕ</span><span>ТИП</span></div>
-                  {trashOrder.map((key) => {
+                  {trashRows.map((row) => {
+                    if (row.kind === "redacted") return <RedactedPlaceholder key={row.slot} variant="row" level={row.requiredLevel} index={String(row.position + 1).padStart(2, "0")} />;
+                    const key = row.item;
                     if (key.startsWith("virus:")) {
                       const virus = recycledViruses.find((item) => item.id === key.slice(6));
                       return virus ? <button key={key} className={`trash-file-row${activeTrashFileId === `virus:${virus.id}` ? " active" : ""}${hitClass("file", `virus:${virus.id}`)}`} {...hitAttrs("file", `virus:${virus.id}`)} type="button" onClick={() => openTrashVirus(virus)}><span className="trash-file-name"><i className="trash-file-icon virus">V</i><strong>{virus.name}</strong></span><span>C:\PORTIA\VIRUS_ARCHIVE</span><span>Вирус в корзине</span></button> : null;
@@ -2026,9 +2054,10 @@ export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: 
                   })}
                   {trashView === "empty" && <div className="editor-empty empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy.trash.heading}</strong><span>{emptyCopy.trash.body}</span></div>}
                 </div>
-                {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} viewerLevel={shownViewerLevel(content)} onOpenLog={() => undefined} /></div></div>}
+                {trashLostShown && <div className="trash-viewer doc-open"><div className="trash-viewer-head"><div /><button type="button" onClick={closeTrashFile} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body"><RedactedPlaceholder variant="block" level={trashLostShown.level} /></div></div>}
+                {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={closeTrashFile} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} viewerLevel={shownViewerLevel(content)} onOpenLog={() => undefined} /></div></div>}
                 {activeTrashFile && <div className={`trash-viewer ${activeTrashFile.kind} doc-open`} key={activeTrashFile.id}>
-                  <div className="trash-viewer-head"><div><span>ТОЛЬКО ДЛЯ ЧТЕНИЯ</span><strong>{activeTrashFile.name}</strong></div><button type="button" onClick={() => setActiveTrashFileId(null)} aria-label="Закрыть файл">×</button></div>
+                  <div className="trash-viewer-head"><div><span>ТОЛЬКО ДЛЯ ЧТЕНИЯ</span><strong>{activeTrashFile.name}</strong></div><button type="button" onClick={closeTrashFile} aria-label="Закрыть файл">×</button></div>
                   <div className="trash-viewer-body doc-print">
                     {activeTrashFile.kind === "image" ? (
                       <figure className="trash-image-document">
