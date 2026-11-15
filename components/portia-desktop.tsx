@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
-import { findGuide, findInfo, portiaTextKey, type Broadcast, type PortiaContent, type RecycleFile, type RichTextDocument, type Virus } from "@/lib/portia-content";
+import { findGuide, findInfo, portiaTextKey, type Broadcast, type DocumentLinks, type PortiaContent, type RecycleFile, type RichTextDocument, type Virus } from "@/lib/portia-content";
 import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
 import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIllustrationName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
@@ -11,8 +11,8 @@ import { accentTokenNames, deriveAccentTokens } from "@/lib/accent-custom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
 import { fitGeometry, type WindowGeometry } from "@/lib/window-geometry";
 import { exitedWindow, openedWindow, originOf, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "@/lib/window-open";
-import { acceptFetchedContent } from "@/lib/content-sync";
-import { cacheMatchesSource, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
+import { acceptFetchedContent, isNewerAnswer, normalizeDocumentLinks, viewerKeyOf } from "@/lib/content-sync";
+import { cacheMatchesSource, cacheMatchesViewer, clearDeviceContentCaches, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
 import { networkSaveError, parseRefusedSections, SaveConflictError, SectionClosedError } from "@/lib/editor-save-status";
 import { normalizePortiaContent } from "@/lib/portia-content-normalize";
 import { mergePlaceholders } from "@/lib/level-placeholders";
@@ -46,8 +46,9 @@ const embeddedApps = {
 const WINDOW_CLOSE_MS = 180;
 const WINDOW_MINIMIZE_MS = 320;
 const WINDOW_FADE_OUT_MS = 120;
-// shortcut: a 10 s poll of the CDN-cached content, not a push channel; switch to Supabase Realtime if visitors need it within a second or the content grows large
-const contentSyncMs = 10_000;
+// shortcut: a poll of the per-viewer, no-store content answer, not a push channel; a visitor polls every 30 s (D-23), an editor every 10 s so edit conflicts are found fast; switch to Supabase Realtime if visitors need it within a second or the content grows large
+const contentSyncMs = 30_000;
+const editorContentSyncMs = 10_000;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string; spider: string; customAccent: string };
 
@@ -113,6 +114,7 @@ function workspaceBounds() {
 
 const broadcastReadStorageKey = "portia-broadcasts-read-signature-v1";
 const questSeenStorageKey = "portia-quests-seen-v1";
+// The literals stay here because lib/portia-desktop.test.ts pins the keys of this file; lib/level-visitor.test.ts keeps them equal to lib/device-cache.ts, which clears them.
 const contentCacheStorageKey = "portia-content-last-success-v1";
 const employeesCacheStorageKey = "portia-employees-last-success-v1";
 // v3: every shortcut gained an explicit independent home; discard v2 coordinates that could preserve the overlapping guide.
@@ -245,8 +247,19 @@ function richTextLine(document: RichTextDocument | undefined, lines: string[], i
   return sliceRichText(document, start, start + (lines[index]?.length ?? 0));
 }
 
-export function PortiaDesktop({ initialContent }: { initialContent: PortiaContent }) {
+// viewerKey / viewerLevel come from the gate decision (Phase 24): the key tells which cut of the content this device may show
+// (LVL-05), onAccessLost asks the gate to re-check at once when /api/content answers 401 (D-21).
+export function PortiaDesktop({ initialContent, viewerKey = "", onAccessLost }: { initialContent: PortiaContent; viewerKey?: string; viewerLevel?: number | null; onAccessLost?: () => void }) {
   const [content, setContent] = useState<PortiaContent>(initialContent);
+  // Links of the leveled document windows the server sent with the copy (read by the document windows, plan 24-10).
+  const [documents, setDocuments] = useState<DocumentLinks>({});
+  void documents;
+  const onAccessLostRef = useRef(onAccessLost);
+  const viewerKeyRef = useRef(viewerKey);
+  useEffect(() => { onAccessLostRef.current = onAccessLost; viewerKeyRef.current = viewerKey; });
+  // The viewer key of the copy on screen and the number of the newest request already answered (LVL-09, T-24-11).
+  const knownViewerKey = useRef("");
+  const contentAnsweredSeq = useRef(0);
   // False until the cached copy or the first /api/content answer arrives; until then content windows show a loader, not defaults.
   const [contentReady, setContentReady] = useState(false);
   // D-05: why the last /api/content poll failed and when data last really arrived (cache savedAt or a good answer). lastGoodRef moves on every good poll without a redraw; the state copies it when a failure starts.
@@ -420,25 +433,43 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
   const assistantContentRef = useRef(content);
   const assistantOffendedRef = useRef(false);
 
-  // Served from the CDN cache (s-maxage 300, purged only by deployed saves, never from next dev), so it can be older than this tab's copy; such answers are dropped (uat-03-owner-broadcast-vanishes).
+  // The answer is cut for this viewer and sent no-store (Phase 24), but a late answer can still be older than this tab's copy; answers are ordered by request number and then by revision or viewer (uat-03-owner-broadcast-vanishes, LVL-09).
   const fetchContent = useCallback(async () => {
     const savesAtSend = savesStarted.current;
     const requestSeq = ++contentRequestSeq.current;
     // Any answer that is not an authoritative copy of the content is a failure for the stale banner (D-05); a good one, even an unchanged revision, is a success.
     let failure: AppFailure | null = null;
     let responded = false;
+    let accessLost = false;
     try {
       const response = await fetchWithTimeout("/api/content");
       responded = true;
+      if (response.status === 401) {
+        // D-21: the server no longer lets this device in. Nothing of the content stays, and the gate is asked at once.
+        const denied = await response.json().catch(() => null) as { code?: unknown } | null;
+        if (denied?.code === "access-required") {
+          accessLost = true;
+          clearDeviceContentCaches(() => window.localStorage);
+          onAccessLostRef.current?.();
+          return;
+        }
+      }
       if (!response.ok) { failure = failureFromResponse(response.status, false); return; }
       const payload = (await response.json()) as ContentResponse;
       if (!payload.content) { failure = "unexpected"; return; }
+      // T-24-11: an answer to a request sent before one already handled is dropped, whatever its viewer key.
+      if (!isNewerAnswer(requestSeq, contentAnsweredSeq.current)) return;
+      contentAnsweredSeq.current = requestSeq;
       const fetchedRevision = payload.revision ?? 0;
-      // The revision is checked first so an unchanged poll does no work and never hands the editor a new object (SYNC-01).
-      if (!acceptFetchedContent(fetchedRevision, knownRevision.current, savesAtSend, savesStarted.current)) return;
+      const fetchedViewer = viewerKeyOf(payload.viewer);
+      // The revision and the viewer are checked first so an unchanged poll does no work and never hands the editor a new object (SYNC-01).
+      if (!acceptFetchedContent(fetchedRevision, knownRevision.current, savesAtSend, savesStarted.current, fetchedViewer, knownViewerKey.current)) return;
       const fetched = normalizePortiaContent(payload.content);
       if (!fetched) { failure = "unexpected"; return; }
       knownRevision.current = fetchedRevision;
+      knownViewerKey.current = fetchedViewer;
+      const fetchedDocuments = normalizeDocumentLinks(payload.documents);
+      setDocuments(fetchedDocuments);
       setContent(fetched);
       setActiveVirusId((current) => fetched.viruses.some((virus) => virus.id === current) ? current : fetched.viruses[0]?.id ?? "");
       setSelectedInfoId((current) => findInfo(fetched.infoSections, current) ? current : fetched.infoSections[0]?.id ?? "");
@@ -448,6 +479,8 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         window.localStorage.setItem(contentCacheStorageKey, JSON.stringify(stampCacheSource({
           content: fetched,
           revision: fetchedRevision,
+          viewer: fetchedViewer,
+          documents: fetchedDocuments,
           updatedAt: payload.updatedAt ?? null,
           savedAt: new Date().toISOString(),
         }, deviceCacheSource())));
@@ -456,7 +489,9 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       // The last copy saved on this device keeps the terminal usable while offline; the banner only says so.
       failure = !responded ? failureFromResponse(null, error instanceof DOMException && error.name === "AbortError") : "unexpected";
     } finally {
-      if (failure === null) {
+      if (accessLost) {
+        // The desktop is going away; this is neither a good copy nor a failure to show.
+      } else if (failure === null) {
         const at = new Date().toISOString();
         lastGoodRef.current = at;
         setContentSync((sync) => contentSyncSucceeded(sync, at));
@@ -582,14 +617,18 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         let cached = window.localStorage.getItem(contentCacheStorageKey);
         // A copy from another data source (or unstamped) is dropped, never shown: its revision is unrelated (owner UAT 19-14).
         if (cached && !cacheMatchesSource(JSON.parse(cached), cacheSource)) { window.localStorage.removeItem(contentCacheStorageKey); cached = null; }
+        // LVL-05: a copy cut for another viewer (another level, or none recorded) is deleted before anything is shown.
+        if (cached && !cacheMatchesViewer(JSON.parse(cached), viewerKeyRef.current)) { window.localStorage.removeItem(contentCacheStorageKey); cached = null; }
         if (cached) {
-          const parsed = JSON.parse(cached) as { content?: unknown; revision?: number };
+          const parsed = JSON.parse(cached) as { content?: unknown; revision?: number; viewer?: string; documents?: unknown };
           // The cache is device-editable and may predate any field, so it gets the same normalizer as the network (D-20, D-22).
           const cachedContent = normalizePortiaContent(parsed.content);
           if (cachedContent) {
             setContent(cachedContent);
             const cachedRevision = typeof parsed.revision === "number" ? parsed.revision : 0;
             knownRevision.current = cachedRevision;
+            knownViewerKey.current = typeof parsed.viewer === "string" ? parsed.viewer : "";
+            setDocuments(normalizeDocumentLinks(parsed.documents));
             setRevision(cachedRevision);
             setActiveVirusId((current) => cachedContent.viruses.some((virus) => virus.id === current) ? current : cachedContent.viruses[0]?.id ?? "");
             setSelectedInfoId((current) => findInfo(cachedContent.infoSections, current) ? current : cachedContent.infoSections[0]?.id ?? "");
@@ -638,8 +677,16 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
     const clockTimer = window.setInterval(tick, 1000);
     const initialFetchTimer = window.setTimeout(() => { void fetchContent(); void fetchAccess(); }, 0);
     const initialEmployeesTimer = window.setTimeout(() => void fetchEmployees(), 0);
-    // /api/content is CDN-shared and cannot carry per-user data, so the tab list is polled separately and only for someone who may edit.
-    const syncTimer = window.setInterval(() => { if (document.visibilityState === "visible") { void fetchContent(); if (canEditRef.current || accessFailedRef.current) void fetchAccess(); } }, contentSyncMs);
+    // /api/content is answered per viewer and no-store; the tab list is still polled separately and only for someone who may edit.
+    // D-23: the next poll waits 10 s for an editor and 30 s for a visitor; the wait is read at every step because the rights arrive after mount.
+    let syncTimer = 0;
+    const scheduleSync = () => {
+      syncTimer = window.setTimeout(() => {
+        if (document.visibilityState === "visible") { void fetchContent(); if (canEditRef.current || accessFailedRef.current) void fetchAccess(); }
+        scheduleSync();
+      }, canEditRef.current ? editorContentSyncMs : contentSyncMs);
+    };
+    scheduleSync();
     const onVisible = () => { if (document.visibilityState === "visible") { void fetchContent(); if (canEditRef.current || accessFailedRef.current) void fetchAccess(); } };
     document.addEventListener("visibilitychange", onVisible);
     // Cheap: answered by the CDN, so other visitors see profile edits within minutes.
@@ -650,11 +697,17 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
       window.clearTimeout(initialFetchTimer);
       window.clearTimeout(initialEmployeesTimer);
       window.clearInterval(clockTimer);
-      window.clearInterval(syncTimer);
+      window.clearTimeout(syncTimer);
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(employeeSyncTimer);
     };
   }, [fetchAccess, fetchContent, fetchEmployees]);
+
+  // D-23: the gate polls every 5 s; when it reports another viewer (level changed, editor session began or ended) the content is
+  // asked for at once instead of at the next 30 s poll.
+  useEffect(() => {
+    if (viewerKey && viewerKey !== knownViewerKey.current) void fetchContent();
+  }, [viewerKey, fetchContent]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1221,6 +1274,7 @@ export function PortiaDesktop({ initialContent }: { initialContent: PortiaConten
         window.localStorage.setItem(contentCacheStorageKey, JSON.stringify(stampCacheSource({
           content: next,
           revision: savedRevision,
+          viewer: knownViewerKey.current,
           updatedAt: new Date().toISOString(),
           savedAt: new Date().toISOString(),
         }, deviceCacheSource())));

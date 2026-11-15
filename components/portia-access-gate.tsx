@@ -5,6 +5,8 @@ import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 
 import type { GateDecision } from "@/lib/access-gate";
 import { accessGateLayout, accessSubmitFailure, claimApprovedNotice, type AccessGateView, type AccessSubmitFailure } from "@/lib/access-gate-view";
 import type { AccessOrigin } from "@/lib/access-levels";
+import { shouldClearDeviceCaches, viewerKey, viewerOf } from "@/lib/access-viewer";
+import { clearDeviceContentCaches } from "@/lib/device-cache";
 import { defaultPortiaContent } from "@/lib/portia-content";
 import { isValidNickname } from "@/lib/nickname";
 
@@ -45,6 +47,8 @@ export function PortiaAccessGate() {
       if (current !== epoch.current) return;
       if (decision.mode !== "open" && decision.mode !== "closed") throw new Error("Invalid status");
       if (decision.mode === "closed" && decision.allowed) approved.current = true;
+      // D-21: closed and not allowed (never approved, rejected, revoked) leaves no copy of the content on the device.
+      if (shouldClearDeviceCaches(decision)) clearDeviceContentCaches(() => window.localStorage);
       setView({ kind: "decision", decision });
       // G-PORTIA-23-3-r2: the approval notice is claimed once per page (ref) and once per device (storage).
       if (!noticeClaimed.current && accessGateLayout({ kind: "decision", decision }, true).approvedNotice) {
@@ -101,6 +105,9 @@ export function PortiaAccessGate() {
   };
 
   const dismissNotice = useCallback(() => setNoticeOpen(false), []);
+  // The desktop got 401 access-required from /api/content: ask the gate now instead of at the next 5 s poll.
+  const onAccessLost = useCallback(() => { void refresh(); }, [refresh]);
+  const viewer = view.kind === "decision" ? viewerOf(view.decision) : null;
 
   const layout = accessGateLayout(view, cardOpen);
   const { desktop, showCard, showForm } = layout;
@@ -111,7 +118,7 @@ export function PortiaAccessGate() {
     : null;
 
   return <>
-    {desktop && <PortiaDesktop initialContent={defaultPortiaContent} />}
+    {desktop && <PortiaDesktop initialContent={defaultPortiaContent} viewerKey={viewerKey(viewer)} viewerLevel={viewer?.level ?? null} onAccessLost={onAccessLost} />}
     {noticeOpen && layout.approvedNotice && <AccessApprovedToast onDismiss={dismissNotice} />}
     {layout.showReopen && <button type="button" className="access-reopen" onClick={() => setCardOpen(true)}>ПОДАТЬ ЗАЯВКУ</button>}
     {showCard && <main className={desktop ? "access-gate access-gate-open" : "access-gate"}>
