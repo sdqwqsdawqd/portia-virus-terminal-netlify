@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 25
 current_phase_name: "Переключение закрытия: база, кэш, сборка, хранилище"
 status: executing
-stopped_at: Completed PORTIA-25-03-PLAN.md
-last_updated: "2026-11-15T18:51:25.367Z"
+stopped_at: Completed PORTIA-25-04-PLAN.md
+last_updated: "2026-11-15T18:57:26.747Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-25 execution started
-state_head: 58262812b6765579a6369ce1f17a89eaabbf6463
+state_head: c513b89b37189b0fa4d4d62fed78d9955e2d294e
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 50
-  completed_plans: 43
+  completed_plans: 44
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-25 (Переключение закрытия: база, кэш, сборка, хранилище) — EXECUTING
-Plan: 4 of 10
+Plan: 5 of 10
 Status: Executing Phase PORTIA-25
 Last activity: 2026-11-15 — Phase PORTIA-25 execution started
 
@@ -82,6 +82,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-25 P01 | 55min | 2 tasks | 13 files |
 | Phase PORTIA-25 P02 | 70 min | 2 tasks | 12 files |
 | Phase PORTIA-25 P03 | 25 min | 2 tasks | 9 files |
+| Phase PORTIA-25 P04 | 20 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -282,6 +283,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-25]: 25-03: editor paths (loadEmployees) stay live on Sheets and Roblox; only the viewer GET /api/employees uses the 5 min / 30 s server snapshot (TTL [ASSUMED], A6)
 - [Phase PORTIA-25]: 25-03: snapshot holds only sheet rows and the Roblox map; stored profiles and manual rows come from the signed portia_employees_read on every request
 - [Phase PORTIA-25]: 25-03: GET /api/employees answers no-store with no cache tag; purgeCacheTag(employeesCacheTag) stays in writes for one release; live CDN headers and the owner purge are BLOCKED
+- [Phase PORTIA-25]: 25-04: contract migration 20261115000100 guards its own order with a DO block; outsider keeps authenticated grant (rls-empty); editors read employees by portia_can_edit(); emergency file lives in supabase/emergency/ outside the migration CLI; nothing applied (BLOCKED, owner step)
 
 ### Pending Todos
 
@@ -335,8 +337,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T18:51:24.393Z
-Stopped at: Completed PORTIA-25-03-PLAN.md
+Last session: 2026-11-15T18:57:25.709Z
+Stopped at: Completed PORTIA-25-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
