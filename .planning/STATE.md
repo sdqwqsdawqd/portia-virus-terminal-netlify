@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 24
 current_phase_name: Уровни допуска и закрытие содержимого
 status: executing
-stopped_at: Completed PORTIA-24-08-PLAN.md
-last_updated: "2026-11-15T09:00:17.645Z"
+stopped_at: Completed PORTIA-24-09-PLAN.md
+last_updated: "2026-11-15T09:07:46.703Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-24 execution started
-state_head: 06fa4b28266afcb9c680ebb151c44da58fe7b326
+state_head: 017f506bcb0dccd9a79400397944c8cb37c0bfc1
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 40
-  completed_plans: 37
+  completed_plans: 38
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-24 (Уровни допуска и закрытие содержимого) — EXECUTING
-Plan: 9 of 11
+Plan: 10 of 11
 Status: Executing Phase PORTIA-24
 Last activity: 2026-11-15 — Phase PORTIA-24 execution started
 
@@ -76,6 +76,7 @@ Progress: [███░░░░░░░] 29% (2/7 phases closed: 21 и 23 — 
 | Phase PORTIA-24 P06 | 15 min | 2 tasks | 3 files |
 | Phase PORTIA-24 P07 | 40min | 2 tasks | 9 files |
 | Phase PORTIA-24 P08 | 35min | 2 tasks | 5 files |
+| Phase PORTIA-24 P09 | 35min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -263,6 +264,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-24]: 24-06: PUT refuses a viewer copy with 422 viewer-copy before any DB read/write; row stores prepared.content (levels lifted), response carries levelsRaised
 - [Phase PORTIA-24]: 24-07: LevelPicker - один выбор уровня 1-5 у вируса, записей учёных и «Устава»; новая карточка без записей, новая запись с уровнем 1; охрана файла редактора расширена записью PORTIA-24
 - [Phase PORTIA-24]: 24-08: строка автоподъёма принадлежит разделу и сбрасывается при смене раздела и следующем изменении уровня; contentIncomplete блокирует sync, rebase и save, accessFailed сохраняет приоритет
+- [Phase PORTIA-24]: 24-09: потерянный выбор окна (slot, level) действует только при пустом id окна; reconcileSelection для вируса, Информации и Справочника вызывается из applySelections до setContent; appViewState считает записи вместе с заглушками
 
 ### Pending Todos
 
@@ -316,8 +318,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T09:00:17.001Z
-Stopped at: Completed PORTIA-24-08-PLAN.md
+Last session: 2026-11-15T09:07:46.062Z
+Stopped at: Completed PORTIA-24-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
