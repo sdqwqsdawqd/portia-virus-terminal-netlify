@@ -17,6 +17,8 @@ export const sectionLabels: Record<EditorSection, string> = {
 export function sectionOfKey(key: string): EditorSection | null {
   if (key === "viruses") return "viruses";
   if (key === "infoSections") return "info";
+  // O-2 (assumption until the owner answers): the level of «Устав» is edited in the «Информация» tab, so its right follows that tab.
+  if (key === "appLevels") return "info";
   if (key === "guideSections") return "guide";
   if (key === "broadcasts" || key === "broadcastSections") return "broadcasts";
   if (key === "recycledViruses" || key === "recycleFiles" || key === "recycleOrder") return "recycle";

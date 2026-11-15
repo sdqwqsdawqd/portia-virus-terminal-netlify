@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { changedDossierTabs, changedSections, deniedSections, dossierTabs, editorSections, revertSections, sectionOfKey, unclassifiedTextKeys, type EditorSection } from "./editor-changes.ts";
 import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./portia-content.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
+import { contentRefusal } from "./editor-tabs.ts";
 
 const fixture = (): PortiaContent => structuredClone(defaultPortiaContent);
 
@@ -438,4 +439,47 @@ test("a stored virus id ends up in exactly one list for every closed set, and th
     assert.deepEqual(deniedSections(baseline, result, closed), [], `closed ${closed.join(",")}`);
     assert.deepEqual(unclassifiedTextKeys(baseline, result), []);
   }
+});
+
+// Phase 24, O-2: the level of «Устав» is edited in the «Информация» tab, so `appLevels` belongs to the info section.
+test("LVL-03 / O-2 sectionOfKey puts appLevels into the info section", () => {
+  assert.equal(sectionOfKey("appLevels"), "info");
+});
+
+test("LVL-03 / O-2 a change of appLevels marks only the info section", () => {
+  const draft = fixture();
+  draft.appLevels = { charter: 3 };
+  assert.deepEqual(changedSections(fixture(), draft), ["info"]);
+  const same = fixture();
+  same.appLevels = { charter: 3 };
+  assert.deepEqual(changedSections(same, structuredClone(same)), []);
+});
+
+test("LVL-03 / O-2 T-24-08 an editor with «Информация» closed is refused a change of appLevels", () => {
+  const baseline = fixture();
+  baseline.appLevels = { charter: 2 };
+  const draft = structuredClone(baseline);
+  draft.appLevels = { charter: 3 };
+  const closedInfo = editorSections.filter((id) => id !== "info");
+  assert.deepEqual(contentRefusal(baseline, draft, closedInfo), {
+    status: 403, error: "Раздел «Информация» для вас закрыт.", code: "section-closed", sections: ["info"],
+  });
+  assert.equal(contentRefusal(baseline, draft, editorSections), null, "with the tab open the same change is allowed");
+});
+
+test("LVL-03 / O-2 revertSections of info puts the stored appLevels back, and removes it when it was not stored", () => {
+  const baseline = fixture();
+  baseline.appLevels = { charter: 2 };
+  const draft = structuredClone(baseline);
+  draft.appLevels = { charter: 5 };
+  assert.deepEqual(revertSections(baseline, draft, ["info"]).appLevels, { charter: 2 });
+  assert.deepEqual(draft.appLevels, { charter: 5 }, "the draft is not mutated");
+
+  const bare = fixture();
+  const withLevel = structuredClone(bare);
+  withLevel.appLevels = { charter: 4 };
+  const reverted = revertSections(bare, withLevel, ["info"]);
+  assert.equal("appLevels" in reverted, false);
+  assert.deepEqual(changedSections(bare, reverted), []);
+  assert.deepEqual(revertSections(bare, withLevel, ["guide"]).appLevels, { charter: 4 }, "another section leaves it alone");
 });
