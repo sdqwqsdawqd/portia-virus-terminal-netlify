@@ -1,8 +1,9 @@
 // Phase 24: the body of GET /api/content, built per viewer. Server only.
 import { createHmac } from "node:crypto";
 import type { Viewer } from "./access-viewer.ts";
+import { embeddedDocuments } from "./embedded-documents.ts";
 import { redactContentForViewer, withoutViewerMarkers, type SlotKey } from "./level-redact.ts";
-import { defaultPortiaContent, type DocumentLinks, type PortiaContent } from "./portia-content.ts";
+import { defaultPortiaContent, LEVELED_APP_IDS, type DocumentLinks, type PortiaContent } from "./portia-content.ts";
 import { normalizePortiaContent } from "./portia-content-normalize.ts";
 
 export const contentAccessRequired = { error: "Нет доступа к содержимому.", code: "access-required" } as const;
@@ -14,7 +15,7 @@ export type ContentBody = {
   revision: number;
   updatedAt: string | null;
   viewer: { level: Viewer["level"]; editor: boolean };
-  // Filled by plan 24-05 (document windows); empty here.
+  // D-11: the address of a leveled document, only for a viewer whose level opens it (the editor gets all of them).
   documents: DocumentLinks;
 };
 
@@ -29,11 +30,17 @@ export function contentBodyFor(viewer: Viewer, row: ContentRow, options: { slotO
   const stored = (row?.payload ? normalizePortiaContent(row.payload) : null) ?? defaultPortiaContent;
   // Markers are never trusted from storage: the viewer's own are built below.
   const clean = withoutViewerMarkers(stored);
+  const content = viewer.editor ? clean : redactContentForViewer(clean, viewer.level, options.slotOf);
+  const documents: DocumentLinks = {};
+  for (const id of LEVELED_APP_IDS) {
+    // A visitor copy without its marker gets nothing (fail closed).
+    if (viewer.editor || (content.redaction && !content.redaction.apps[id])) documents[id] = embeddedDocuments[id];
+  }
   return {
-    content: viewer.editor ? clean : redactContentForViewer(clean, viewer.level, options.slotOf),
+    content,
     revision: row?.revision ?? 0,
     updatedAt: row?.updated_at ?? null,
     viewer: { level: viewer.level, editor: viewer.editor },
-    documents: {},
+    documents,
   };
 }

@@ -3,9 +3,10 @@
 // claims them. All values are invented.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { componentFamily, lf } from "./component-source.ts";
 import { contentAccessRequired, contentBodyFor, slotKeyFactory } from "./content-response.ts";
+import { embeddedDocuments } from "./embedded-documents.ts";
 import { viewerOf } from "./access-viewer.ts";
 import { mergePlaceholders } from "./level-placeholders.ts";
 import { defaultPortiaContent, type Virus } from "./portia-content.ts";
@@ -138,7 +139,7 @@ test("contentBodyFor: строки нет — стандартное содер�
   assert.equal(empty.revision, 0);
   assert.equal(empty.updatedAt, null);
   assert.ok(empty.content.redaction);
-  assert.deepEqual(empty.documents, {});
+  assert.deepEqual(Object.keys(empty.documents), ["charter"], "the default content has no level on the charter");
 
   const forged = storedPayload();
   forged.redaction = { level: 1, slots: { vB: "forged" }, viruses: [{ slot: "forged", requiredLevel: 1, at: 0 }] };
@@ -188,4 +189,42 @@ test("исходник «Базы вирусов»: список строитс�
   assert.match(source, /<RedactedPlaceholder[^>]*variant="row"/);
   assert.ok(source.includes("row.position + 1"));
   assert.ok(!/level-redact/.test(source), "the browser never runs the redaction");
+});
+
+test("D-11 «Устав»: ссылка приходит редактору и посетителю с достаточным уровнем; ниже — нет ни src, ни external, есть узел apps.charter", () => {
+  const stored = (charter: number | undefined) => ({ ...storedPayload(), ...(charter === undefined ? {} : { appLevels: { charter } }) });
+  const editor = contentBodyFor({ editor: true, level: 5 }, row(stored(4)), { slotOf });
+  assert.deepEqual(editor.documents.charter, embeddedDocuments.charter);
+  assert.ok(editor.content.appLevels?.charter === 4 && !editor.content.redaction, "the editor sees and edits the level itself");
+
+  const enough = contentBodyFor({ editor: false, level: 3 }, row(stored(3)), { slotOf });
+  assert.deepEqual(enough.documents.charter, embeddedDocuments.charter);
+  assert.ok(!enough.content.redaction?.apps.charter, "open: no node");
+
+  const closed = contentBodyFor({ editor: false, level: 3 }, row(stored(4)), { slotOf });
+  assert.deepEqual(closed.documents, {});
+  assert.deepEqual(closed.content.redaction?.apps, { charter: { requiredLevel: 4 } });
+  const json = JSON.stringify(closed);
+  assert.ok(!json.includes(embeddedDocuments.charter.src) && !json.includes(embeddedDocuments.charter.external) && !json.includes("github.io"));
+  assert.ok(!("appLevels" in closed.content));
+
+  // EDGE SEC-07/empty: the «Таблица» address is not leveled and not in the answer (O-1).
+  for (const body of [editor, enough, closed]) assert.ok(!JSON.stringify(body.documents).includes("docs.google.com") && !("sheet" in body.documents));
+  const lowOpen = contentBodyFor({ editor: false, level: 1 }, row(stored(undefined)), { slotOf });
+  assert.ok(lowOpen.documents.charter, "no appLevels = level 1");
+});
+
+test("D-11: ни один файл components/ и app/ (вне app/api) не импортирует embedded-documents", () => {
+  const offenders: string[] = [];
+  for (const root of ["components", "app"]) {
+    for (const entry of readdirSync(root, { recursive: true, encoding: "utf8" })) {
+      const path = entry.replaceAll("\\", "/");
+      if (!/\.(ts|tsx)$/.test(path) || (root === "app" && path.startsWith("api/"))) continue;
+      if (readFileSync(`${root}/${path}`, "utf8").includes("embedded-documents")) offenders.push(`${root}/${path}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+  // The module itself brings in nothing from the client side.
+  const own = readFileSync("lib/embedded-documents.ts", "utf8");
+  assert.ok(!/from "(?:@\/)?(?:components|app)\//.test(own));
 });
