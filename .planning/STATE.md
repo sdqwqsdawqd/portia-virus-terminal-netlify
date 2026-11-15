@@ -4,17 +4,17 @@ milestone: v1.4
 milestone_name: Доступ и единый стиль
 current_phase: 25
 current_phase_name: "Переключение закрытия: база, кэш, сборка, хранилище"
-status: phase_closed
-stopped_at: Phase 25 context gathered
-last_updated: "2026-11-15T17:48:28.118Z"
+status: executing
+stopped_at: Completed PORTIA-25-01-PLAN.md
+last_updated: "2026-11-15T18:13:27.159Z"
 last_activity: 2026-11-15
-last_activity_desc: Phase PORTIA-24 closed as owner-accepted risk (D-74), not PASS
-state_head: 2d806f2c926bbb76cf97a6b67e7d5aeb6d2690a9
+last_activity_desc: Phase PORTIA-25 execution started
+state_head: 5e6222a87bae4500ec7cb726ce16f7e4f124889b
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 50
-  completed_plans: 40
+  completed_plans: 41
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-09)
 
 **Core value:** Участник открывает сайт и сразу находит нужную запись; редактор правит её без потерь и без путаницы — и всё это выглядит как цельная «PORTIA OS».
-**Current focus:** Phase PORTIA-25 — Переключение закрытия: база, кэш, сборка, хранилище (не спланирована)
+**Current focus:** Phase PORTIA-25 — Переключение закрытия: база, кэш, сборка, хранилище
 
 ## Current Position
 
-Phase: PORTIA-25 (Переключение закрытия: база, кэш, сборка, хранилище) — READY TO EXECUTE
-Plan: 11 of 11
-Status: Phase PORTIA-24 closed; next — plan Phase PORTIA-25
-Last activity: 2026-11-15 — Phase PORTIA-24 closed as owner-accepted risk (D-74)
+Phase: PORTIA-25 (Переключение закрытия: база, кэш, сборка, хранилище) — EXECUTING
+Plan: 2 of 10
+Status: Executing Phase PORTIA-25
+Last activity: 2026-11-15 — Phase PORTIA-25 execution started
 
 Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 — принятый риск; Phase 22 не закрыта)
 
@@ -79,6 +79,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-24 P09 | 35min | 2 tasks | 3 files |
 | Phase PORTIA-24 P10 | 35min | 3 tasks | 3 files |
 | Phase PORTIA-24 P11 | continuation about 1h | 3 tasks | 15 files |
+| Phase PORTIA-25 P01 | 55min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -273,6 +274,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-24]: 24-10: savedRaised приведён к UI-SPEC: Уровни приведены к иерархии: изменено k.
 - [Phase PORTIA-24]: 24-11: ревью и матрица Phase 24 привязаны к коммиту a9847aa; после раунда 2 охваченные пути не правятся, RLS24-08 (комментарий proxy.ts о Set-Cookie) и RLS24-09 переданы Phase 25
 - [Phase PORTIA-24]: 24-11: файл корзины kind virus с пустым или битым virusId закрыт на уровне 5 (fail-closed); прямое anon-чтение portia_content остаётся остаточным риском Phase 25 (SEC-01), transfer, не PASS
+- [Phase PORTIA-25]: 25-01: read scopes content-read-v1 and employees-read-v1 reuse the 'submit' secret (domain separated from access-submit-v1); editor reads by session without signature; read failure is a single 503 with kind-only log
+- [Phase PORTIA-25]: 25-01: Phase 23/24 evidence checks bounded to migration versions <= 20261114000000; later migrations covered by the Phase 25 matrix (25-10)
 
 ### Pending Todos
 
@@ -326,9 +329,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T15:41:14.214Z
-Stopped at: Phase 25 context gathered
-Resume file: .planning/phases/PORTIA-25-pereklyuchenie-zakrytiya-baza-kesh-sborka-hranilische/25-CONTEXT.md
+Last session: 2026-11-15T18:13:26.186Z
+Stopped at: Completed PORTIA-25-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

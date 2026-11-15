@@ -53,7 +53,7 @@ key-decisions:
 patterns-established:
   - "Gate dependencies are assembled in one helper (resolveGateFor); routes create the session client and pass it in"
 
-requirements-completed: [SEC-01]
+requirements-completed: []  # SEC-01 is only partly delivered here (plan frontmatter lists it); plans 25-03, 25-04, 25-07, 25-10 finish it and the live proof is BLOCKED, so it is not checked off in REQUIREMENTS.md
 
 coverage:
   - id: D1
@@ -158,6 +158,8 @@ Plan metadata commit: see the docs commit that adds this file.
 
 **4. Test order**
 - The plan asked for RED first. The implementation and tests were written in one pass and run together; the first run caught two assertions of mine (editor check ordering against a `declare` line) and one type error. No separate RED commit exists.
+
+5. **SEC-01 not marked complete.** `requirements mark-complete SEC-01` was run and then reverted (`.planning/REQUIREMENTS.md` restored by path), because the requirement says an anonymous caller cannot read content and roster with the public key, which this plan does not deliver or prove (contract migration is 25-04, live checks BLOCKED).
 
 ## Auth Gates
 
