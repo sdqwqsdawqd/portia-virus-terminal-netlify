@@ -77,6 +77,8 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //      (смысл D-62 сохранён: «+ ДОБАВИТЬ РАЗДЕЛ» перед вкладками разделов, нижней кнопки нет) и «Сводки» («Новости»/«Квесты» с aria-current и плашкой
 //      счётчика) (applyInfoBroadcastNavHunk); PORTIA-26-07c — своя панель «Сотрудников» (кнопка сохранения профиля и статус переехали в неё),
 //      классы etab-* и aria-current у выбранного сотрудника (applyEmployeesBarHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-07.
+//  11. PORTIA-26-13 (26-13; UI-10, WCAG 2.5.3, D-21) — имя кнопки раскрытия карточки строит cardToggleName (имя содержит видимый «{метка} {название}»),
+//      между <strong> и названием пробельный узел {" "} (applyCardToggleNameHunk); русские строки имени лежат в lib/card-toggle-name.ts. Источник одобрения: 26-CONTEXT D-11, D-21 и план 26-13.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -787,6 +789,24 @@ function applyEmployeesBarHunk(text: string): string {
   return replaceOnce(next, "  </div>;\n}\n\ntype TabLists", "  </div>\n  </>;\n}\n\ntype TabLists", "employee fragment close");
 }
 
+/** PORTIA-26-13 (26-13 Task 1; UI-10, WCAG 2.5.3, D-21): the toggle of CollapsibleCard is named by cardToggleName (the name holds the visible «{label} {title}»), a whitespace node separates the label and the title. No Russian text is added: the name's strings live in lib/card-toggle-name.ts. */
+function applyCardToggleNameHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";\n',
+    'import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";\nimport { cardToggleName } from "@/lib/card-toggle-name";\n',
+    "card toggle name import",
+  );
+  next = replaceOnce(next, "  const bodyId = useId();\n  const name = title || label;\n", "  const bodyId = useId();\n", "card toggle old name rule");
+  next = replaceOnce(
+    next,
+    ' aria-label={`${open ? "Свернуть" : "Развернуть"} раздел «${name}»`} onClick={onToggle}>\n          <strong>{label}</strong>\n',
+    ' aria-label={cardToggleName(open, label, title)} onClick={onToggle}>\n          <strong>{label}</strong>{" "}\n',
+    "card toggle name and space",
+  );
+  return next;
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -841,6 +861,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26-07", apply: applySectionNavHunk },
   { id: "PORTIA-26-07b", apply: applyInfoBroadcastNavHunk },
   { id: "PORTIA-26-07c", apply: applyEmployeesBarHunk },
+  { id: "PORTIA-26-13", apply: applyCardToggleNameHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -966,6 +987,9 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutEmployeesBar = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07c").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutEmployeesBar), null, "a file without the PORTIA-26-07c hunk is a difference");
   assert.throws(() => applyEmployeesBarHunk(expected), /exactly one approved anchor/, "the employees bar hunk cannot be applied twice");
+  const withoutCardToggleName = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-13").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutCardToggleName), null, "a file without the PORTIA-26-13 hunk is a difference");
+  assert.throws(() => applyCardToggleNameHunk(expected), /exactly one approved anchor/, "the card toggle name hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");
