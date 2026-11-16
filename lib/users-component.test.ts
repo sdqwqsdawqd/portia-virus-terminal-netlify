@@ -10,6 +10,12 @@ const component = readFileSync(new URL("../components/portia-users-tab.tsx", imp
 const proxy = readFileSync(new URL("../proxy.ts", import.meta.url), "utf8");
 const css = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8").replace(/\r\n/gu, "\n");
 
+// Phase 26 (UI-03): the users block is read from its start marker to its end marker; the ui-unify block that follows it is not part of it.
+function usersBlock() {
+  const start = css.lastIndexOf("/* users-tab:start");
+  return css.slice(start, css.indexOf("/* users-tab:end */", start) + "/* users-tab:end */".length);
+}
+
 function dependencyClosure(path: string, seen = new Set<string>()): Set<string> {
   const resolved = normalize(path);
   if (seen.has(resolved)) return seen;
@@ -73,11 +79,18 @@ test("full users component has search, closed details, accessible phone dialog a
   assert.doesNotMatch(component, /toLocaleString|Intl\./u);
 });
 
-test("users CSS is one sharp marked block at the end", () => {
+// Phase 26 (UI-03): the users block is sharp (no radius of its own) and sits right before the ui-unify block, which ends the file;
+// the radii of its plaques, rows and count pill come from the ui-unify selector lists.
+test("users CSS is one sharp marked block right before the ui-unify block", () => {
   const start = css.lastIndexOf("/* users-tab:start");
   assert.ok(start > 0, "users-tab CSS block must exist");
-  const block = css.slice(start);
-  assert.ok(css.trimEnd().endsWith("/* users-tab:end */"));
+  const end = css.indexOf("/* users-tab:end */", start);
+  assert.ok(end > start, "users-tab CSS block must be closed");
+  const block = css.slice(start, end + "/* users-tab:end */".length);
+  const unify = css.indexOf("/* ui-unify:start");
+  assert.ok(unify > end, "the ui-unify block follows the users-tab block");
+  assert.equal(css.slice(end + "/* users-tab:end */".length, unify).trim(), "", "nothing sits between users-tab and ui-unify");
+  assert.ok(css.trimEnd().endsWith("/* ui-unify:end */"));
   assert.match(block, /\.tab-count/u);
   assert.match(block, /padding:\s*0 8px/u);
   assert.match(block, /min-width:\s*24px/u);
@@ -112,7 +125,7 @@ test("person and cooldown actions are available on PC and in the phone action wi
   assert.match(component, /callerIsOwner/u);
   assert.match(component, /disabled=\{[^}]*level[^}]*===/u);
   assert.match(component, /usersCopy\.revokeDialog/u);
-  const block = css.slice(css.lastIndexOf("/* users-tab:start"));
+  const block = usersBlock();
   assert.match(block, /\.users-row-actions[^}]*gap:\s*8px/u);
   assert.match(block, /\.users-action-note/u);
   assert.match(block, /@media \(max-width: 900px\)[\s\S]*\.users-action-dialog-body \.users-row-actions[\s\S]*min-height:\s*44px/u);
@@ -137,7 +150,7 @@ test("history is accessible inline on PC and always present in the phone action 
   assert.match(component, /usersCopy\.hideHistory/u);
   assert.match(component, /phoneHistory/u);
   assert.doesNotMatch(component, /Показать ещё/iu);
-  const block = css.slice(css.lastIndexOf("/* users-tab:start"));
+  const block = usersBlock();
   assert.match(block, /\.users-history-list[^}]*gap:\s*4px/u);
   assert.match(block, /\.users-history-list[^}]*font:\s*400 11px/u);
   assert.doesNotMatch(block, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:/u);
@@ -161,7 +174,7 @@ test("owner bulk approval is sequential, safe by default and keeps the three-num
 test("roster marks are visible on PC and phone with bounded sharp lists", () => {
   assert.match(component, /users-table-mark/u);
   assert.match(component, /usersCopy\.tableLabel/u);
-  const block = css.slice(css.lastIndexOf("/* users-tab:start"));
+  const block = usersBlock();
   assert.match(block, /\.users-bulk-list[^}]*max-height:\s*min\(40svh,\s*320px\)/u);
   assert.match(block, /\.users-bulk-list[^}]*overflow-y:\s*auto/u);
   assert.match(block, /overflow-wrap:\s*anywhere/u);

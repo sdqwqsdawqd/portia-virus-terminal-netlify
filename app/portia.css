@@ -2237,7 +2237,7 @@ html[data-motion="full"] .promotion-card { animation: promotion-card-enter 160ms
   .promotion-gate { grid-template-columns: 48px minmax(0, 1fr); gap: 16px 8px; }
   .promotion-gate-mark { width: 46px; height: 46px; border-radius: var(--radius-card); font-size: 27px; }
   .promotion-gate form { padding: 16px; }
-  .promotion-action { width: 100%; min-height: 44px; }
+  .promotion-action { min-height: 44px; }
   .promotion-identity { position: static; grid-template-columns: 1fr; margin: -24px -16px 16px; padding: 16px; }
   .promotion-card { padding: 16px; }
   .promotion-qualification-runner { margin-inline: -4px; padding-inline: 4px; }
@@ -2595,3 +2595,11 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .users-action-dialog-body .users-row-actions select { font-size: 16px; }
 }
 /* users-tab:end */
+/* ui-unify:start — Phase 26 (UI-03): общие семейства кнопок, плашек, полей, вкладок и строк; радиусы — роли из style-tokens */
+/* Кнопки: один размер, ширина по содержимому, никогда не растягиваются (D-02); цвета вариантов остаются в своих правилах. */
+.primary-control, .secondary-control, .danger-control, .app-state-action, .info-phone-back, .info-next button, .promotion-action { box-sizing: border-box; flex: 0 0 auto; width: auto; max-width: 100%; min-height: var(--control-height); justify-self: start; padding: 0 16px; border-radius: var(--radius-control); font-size: 11px; font-weight: 700; line-height: 1.35; letter-spacing: .04em; white-space: normal; }
+.info-phone-back { font-size: 20px; }
+@media (max-width: 900px) {
+  .primary-control, .secondary-control, .danger-control, .app-state-action, .info-phone-back, .info-next button, .promotion-action { min-height: var(--tap-target); }
+}
+/* ui-unify:end */

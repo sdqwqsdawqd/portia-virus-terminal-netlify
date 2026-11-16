@@ -98,6 +98,18 @@ export function ruleRadius(css: string, selectorStart: string) {
   assert.fail(`selector not found: ${selectorStart}`);
 }
 
+// Phase 26 (UI-03): the cascade read. The last rule whose selector list names the selector decides its radius
+// (the shared families of the ui-unify block are selector lists, so the first match is not the answer there).
+export function cascadeRadius(css: string, selector: string) {
+  let radius: string | undefined;
+  for (const match of withoutComments(css).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const names = match[1].split(",").map((part) => part.replace(/\s+/g, " ").trim());
+    if (!names.includes(selector)) continue;
+    radius = match[2].match(/border-radius\s*:\s*([^;]+)/)?.[1].trim() ?? radius;
+  }
+  return radius;
+}
+
 function rootBody(css: string) {
   return lf(css).match(/^:root\s*\{([\s\S]*?)^\}/m)?.[1] ?? "";
 }
@@ -201,6 +213,13 @@ test("UI-02: role tokens hold direction C values and the three tracer consumers 
   assert.equal(ruleRadius(css, ".editor-field input"), "var(--radius-field)");
 });
 
+test("UI-03: shared families read their roles through the cascade", () => {
+  const css = lf(portiaCssRaw);
+  assert.equal(cascadeRadius(css, ".primary-control"), "var(--radius-control)");
+  assert.equal(cascadeRadius(css, ".secondary-control"), "var(--radius-control)");
+  assert.equal(cascadeRadius(css, ".danger-control"), "var(--radius-control)");
+});
+
 test("UI-02: marked additions keep their blocks free of radius, animation and colour changes", () => {
   const css = lf(portiaCssRaw);
   // Phase 26 (UI-02): the guard is the radius grammar (see the grammar test); the byte-shape hash is retired.
@@ -214,10 +233,14 @@ test("UI-02: marked additions keep their blocks free of radius, animation and co
   assert.equal(css.match(/^\/\* access-levels:start/gm)?.length, 1, "the access-levels block must be one");
   assert.doesNotMatch(accessBlock, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:|--muted\s*:|#[0-9a-fA-F]{3,8}\b/);
 
+  // Phase 26 (UI-03): ui-unify is now the last block of the file; users-tab stays the block right before it.
   const usersStart = css.search(/^\/\* users-tab:start/m);
-  if (usersStart >= 0) assert.ok(css.indexOf("/* access-levels:end */") < usersStart, "users-tab must stay the last block of the file");
+  const unifyStart = css.search(/^\/\* ui-unify:start/m);
+  assert.ok(unifyStart > usersStart, "ui-unify must come after the users-tab block");
+  assert.ok(css.trimEnd().endsWith("/* ui-unify:end */"), "ui-unify must stay the last block of the file");
+  if (usersStart >= 0) assert.ok(css.indexOf("/* access-levels:end */") < usersStart, "users-tab must come after the access-levels block");
   if (usersStart >= 0) {
-    const usersBlock = css.slice(usersStart);
+    const usersBlock = css.slice(usersStart, unifyStart);
     assert.match(usersBlock, /^\/\* users-tab:start[\s\S]*\/\* users-tab:end \*\/\n?$/);
     assert.doesNotMatch(usersBlock, /border-radius|@keyframes|(?:^|[;\s])(animation|transition)\s*:|--muted\s*:/);
   }
