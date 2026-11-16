@@ -43,6 +43,7 @@ import { AppDeniedPanel } from "@/components/portia-desktop-states";
 import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";
 import { accessCheckFailedText } from "@/lib/app-state";
 import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
+import { cardToggleName } from "@/lib/card-toggle-name";
 import { EditorActionBar, EditorEmptyDetail, EditorTabBody } from "@/components/portia-editor-tab-shell";
 
 type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "users" | "promo" | "access";
@@ -239,13 +240,12 @@ function CollapsibleCard({ id, label, title, open, onToggle, sortIndex, handle, 
   handle?: ReactNode; actions?: ReactNode; cardProps?: Record<string, string>; children: ReactNode;
 }) {
   const bodyId = useId();
-  const name = title || label;
   return (
     <div className="nested-editor-card" id={`card-${id}`} data-sort-index={sortIndex} data-open={open || undefined} {...cardProps}>
       <div className="nested-editor-head">
         {handle}
-        <button type="button" className="nested-editor-toggle" aria-expanded={open} aria-controls={bodyId} aria-label={`${open ? "Свернуть" : "Развернуть"} раздел «${name}»`} onClick={onToggle}>
-          <strong>{label}</strong>
+        <button type="button" className="nested-editor-toggle" aria-expanded={open} aria-controls={bodyId} aria-label={cardToggleName(open, label, title)} onClick={onToggle}>
+          <strong>{label}</strong>{" "}
           {title ? <span className="nested-editor-title" title={title}>{title}</span> : null}
           <span className="nested-editor-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
         </button>

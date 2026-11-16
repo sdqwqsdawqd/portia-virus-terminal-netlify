@@ -103,10 +103,9 @@ async function openInfoTab(page: Page) {
 // Measured on the editor before this plan and NOT caused by D-62 (the guard proves the file differs from the sample only by the D-62 hunk); fixing them needs
 // edits of components/portia-editor.tsx and app/portia.css that D-58/D-64 forbid here, so they go to deferred-items.md for an owner decision.
 // Tolerated node by node (by the markup of the node), never by rule: any other critical or serious node fails the test.
-//  - label-content-name-mismatch: the aria-label of .nested-editor-toggle does not contain its visible text («РАЗДЕЛ 01 …»).
 //  - color-contrast: the eyebrow «УПРАВЛЕНИЕ СОДЕРЖИМЫМ» of the editor header, 4.28:1 (PC).
+// 26-13 (UI-10): the name of .nested-editor-toggle now holds its visible text (lib/card-toggle-name.ts), so its tolerance is gone; the axe lane has not run since (BLOCKED).
 const knownBeforeD62: Record<string, string[]> = {
-  "label-content-name-mismatch": ['class="nested-editor-toggle"'],
   "color-contrast": ['class="eyebrow"'],
 };
 
