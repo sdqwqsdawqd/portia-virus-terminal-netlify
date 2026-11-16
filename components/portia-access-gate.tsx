@@ -133,7 +133,7 @@ export function PortiaAccessGate() {
     {layout.showReopen && <button type="button" className="access-reopen" onClick={() => setCardOpen(true)}>ПОДАТЬ ЗАЯВКУ</button>}
     {showCard && <main className={desktop ? "access-gate access-gate-open" : "access-gate"}>
       <section className="access-card" aria-labelledby="access-title">
-        {desktop && <button type="button" className="access-close" onClick={() => setCardOpen(false)} aria-label="Закрыть заявку">×</button>}
+        {desktop && <button type="button" className="access-close corner-close" onClick={() => setCardOpen(false)} aria-label="Закрыть заявку">×</button>}
         <span className="access-eyebrow">PORTIA // ДОСТУП</span>
         <h1 id="access-title">{view.kind === "checking" ? "Проверяем доступ…" : "Заявка на доступ"}</h1>
         {view.kind === "checking" && <p className="access-loading" role="status">Проверяем доступ<span className="access-dots" aria-hidden="true">…</span></p>}
@@ -183,7 +183,7 @@ function AccessApprovedToast({ onDismiss }: { onDismiss: () => void }) {
       <div>
         <div className="quest-toast-head">
           <span className="quest-toast-eyebrow">PORTIA // ДОСТУП</span>
-          <button type="button" className="quest-toast-close" aria-label="Закрыть уведомление" onClick={onDismiss}>×</button>
+          <button type="button" className="quest-toast-close corner-close" aria-label="Закрыть уведомление" onClick={onDismiss}>×</button>
         </div>
         <h2 id={titleId}>Доступ подтверждён</h2>
         <p className="quest-toast-body">Заявка одобрена. Рабочий стол открыт на этом устройстве.</p>

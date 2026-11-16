@@ -632,7 +632,7 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
           : selectionLabel}
       </small>
       <button type="button" data-sheet-toggle aria-expanded={!collapsed} aria-label={collapsed ? "Развернуть панель оформления" : "Свернуть панель оформления"} onClick={() => setCollapsed((value) => !value)}>{collapsed ? "ОФОРМЛЕНИЕ ▴" : "▾"}</button>
-      <button type="button" onClick={finish} aria-label="Закрыть панель оформления">×</button>
+      <button type="button" className="corner-close" onClick={finish} aria-label="Закрыть панель оформления">×</button>
     </header>
     <div className="format-presets format-choice-row" role="group" aria-label="Готовые стили">
       <button type="button" className={plainMarked ? "selected" : ""} aria-pressed={plainMarked} disabled={!hasTarget} onClick={() => applyOp("reset", resetRichTextStyle)}>Обычный</button>

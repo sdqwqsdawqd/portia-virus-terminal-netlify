@@ -62,7 +62,7 @@ export function CustomColorPicker({ group, title, color, onChange, onClose }: {
   };
 
   return <div className="custom-color-picker" data-tab-group={group} role="group" aria-label={title}>
-    <div className="custom-color-picker-head"><strong>{title}</strong><button type="button" onClick={onClose} aria-label="Закрыть выбор цвета">×</button></div>
+    <div className="custom-color-picker-head"><strong>{title}</strong><button type="button" className="corner-close" onClick={onClose} aria-label="Закрыть выбор цвета">×</button></div>
     <div
       className="custom-color-board"
       style={{ background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hue} 100% 50%))` }}

@@ -2233,7 +2233,7 @@ function QuestToast({ quest, more, document, onDismiss }: { quest: Broadcast; mo
       <div>
         <div className="quest-toast-head">
           <span className="quest-toast-eyebrow">НОВЫЙ КВЕСТ</span>
-          <button type="button" className="quest-toast-close" aria-label="Закрыть уведомление" onClick={() => onDismiss(false)}>×</button>
+          <button type="button" className="quest-toast-close corner-close" aria-label="Закрыть уведомление" onClick={() => onDismiss(false)}>×</button>
         </div>
         <h2 id={titleId}>{quest.title || "БЕЗ НАЗВАНИЯ"}</h2>
         {(quest.startsAt || quest.endsAt) && <div className="broadcast-dates">{quest.startsAt && <span>Начало: {formatQuestDay(quest.startsAt)}</span>}{quest.endsAt && <span>Окончание: {formatQuestDay(quest.endsAt)}</span>}</div>}
@@ -2263,7 +2263,7 @@ function PromotionRetakeToast({ onDismiss }: { onDismiss: (openPromotion: boolea
   }, [onDismiss]);
   return <aside className="portia-dialog quest-toast promotion-retake-toast" aria-labelledby={titleId}>
     <span role="status" className="sr-only">Повторная квалификационная проверка доступна.</span>
-    <div><div className="quest-toast-head"><span className="quest-toast-eyebrow">ПОВТОРНАЯ ПРОВЕРКА ДОСТУПНА</span><button type="button" className="quest-toast-close" aria-label="Закрыть уведомление" onClick={() => onDismiss(false)}>×</button></div><h2 id={titleId}>Можно подать новый запрос</h2><p className="quest-toast-body">Срок ожидания завершён.</p><div className="portia-dialog-actions"><button type="button" className="primary-control" onClick={() => onDismiss(true)}>ОТКРЫТЬ ПОВЫШЕНИЕ</button></div></div>
+    <div><div className="quest-toast-head"><span className="quest-toast-eyebrow">ПОВТОРНАЯ ПРОВЕРКА ДОСТУПНА</span><button type="button" className="quest-toast-close corner-close" aria-label="Закрыть уведомление" onClick={() => onDismiss(false)}>×</button></div><h2 id={titleId}>Можно подать новый запрос</h2><p className="quest-toast-body">Срок ожидания завершён.</p><div className="portia-dialog-actions"><button type="button" className="primary-control" onClick={() => onDismiss(true)}>ОТКРЫТЬ ПОВЫШЕНИЕ</button></div></div>
   </aside>;
 }
 

@@ -608,6 +608,9 @@ html[data-motion="full"] .promotion-retake-toast { animation: fade-in 220ms var(
 html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { animation: none !important; transform: none !important; }
 .access-approved-toast { border-color: var(--teal-dim); }
 .access-approved-toast .quest-toast-eyebrow { color: var(--teal); }
+/* Угловой крестик слоёв (UI-05): цвета и опасное наведение крестика окна; размер и место — в блоке ui-unify (он цветов не задаёт). */
+.corner-close, .custom-color-picker-head .corner-close, .floating-text-format > header .corner-close { background: transparent; color: inherit; }
+.corner-close:hover, .custom-color-picker-head .corner-close:hover, .floating-text-format > header .corner-close:hover { background: #5d2d29; color: #fff; }
 @media (min-width: 901px) {
   /* The panel is a layer of the desktop and is dragged by its header anywhere on the screen (D-06, EDIT-04). */
   .floating-text-format > header { cursor: grab; touch-action: none; user-select: none; }
@@ -798,7 +801,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .formatted-text-field:focus-within .formatted-text-field-head > span { color: var(--teal); }
 /* 950: a layer of the desktop above every window (their z grows with each click) and under the taskbar 960; dialogs are top layer (EDIT-04). */
 .floating-text-format { position: fixed; z-index: 950; right: 16px; bottom: 60px; width: min(680px, calc(100vw - 28px)); color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font-family: var(--sans); max-height: min(48svh, 390px); border: 1px solid oklch(.5 calc(.04 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-dialog); overflow: auto; background: oklch(.187 calc(.02 * var(--accent-chroma)) var(--accent-hue) / .985); box-shadow: 0 18px 52px rgba(0,0,0,.62); backdrop-filter: blur(8px); }
-.floating-text-format > header { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 12px; padding: 9px 12px; border-bottom: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); background: oklch(.224 calc(.022 * var(--accent-chroma)) var(--accent-hue)); }
+.floating-text-format > header { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 9px 12px; border-bottom: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); background: oklch(.224 calc(.022 * var(--accent-chroma)) var(--accent-hue)); }
 .floating-text-format > header > div { min-width: 0; display: flex; align-items: baseline; gap: 9px; }
 .floating-text-format > header span { color: var(--teal); font: 700 11px var(--sans); letter-spacing: .08em; }
 .floating-text-format > header strong { overflow: hidden; color: oklch(.951 calc(.01 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); text-overflow: ellipsis; white-space: nowrap; }
@@ -1441,14 +1444,14 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   /* A bottom sheet from edge to edge above the 44px bottom nav; a fixed height so the save chip can stack exactly above it (D-08). */
   .floating-text-format { left: 0; right: 0; bottom: 44px; width: auto; height: min(34svh, 270px); max-height: none; border-radius: var(--radius-dialog) var(--radius-dialog) 0 0; display: flex; flex-direction: column; overflow: hidden; }
   .floating-text-format > header, .floating-text-format > footer { flex: none; }
-  .floating-text-format > header { grid-template-columns: minmax(0,1fr) auto auto auto; min-height: 44px; }
+  .floating-text-format > header { grid-template-columns: minmax(0,1fr) auto auto; min-height: 44px; }
   .floating-text-format > header button { width: 44px; height: 44px; }
   /* D-12: multi-selection is PC only. */
   .floating-text-format .format-multi-hint, .floating-text-format > header .format-reset-fragments { display: none; }
   /* Folded: only the header strip, «ОФОРМЛЕНИЕ ▴» and the close button remain. */
   .floating-text-format[data-collapsed] { height: 44px; }
   .floating-text-format[data-collapsed] > :not(header) { display: none; }
-  .floating-text-format[data-collapsed] > header { grid-template-columns: minmax(0,1fr) auto; border-bottom: 0; }
+  .floating-text-format[data-collapsed] > header { grid-template-columns: minmax(0,1fr); border-bottom: 0; }
   .floating-text-format[data-collapsed] > header > div, .floating-text-format[data-collapsed] > header small { display: none; }
   .floating-text-format > header > [data-sheet-toggle][aria-expanded="false"] { width: auto; justify-self: start; padding-inline: 12px; font: 700 11px var(--sans); letter-spacing: .08em; }
   /* Phone tabs, one group at a time (D-12). */
@@ -1548,7 +1551,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .taskbar-app { max-width: 42px; overflow: hidden; }
   .editor-tabs { margin-inline: -4px; }
   .nested-editor-card { padding: 12px; }
-  .floating-text-format > header { grid-template-columns: minmax(0,1fr) auto auto; padding: 6px 10px; }
+  .floating-text-format > header { grid-template-columns: minmax(0,1fr) auto; padding: 6px 10px; }
   .floating-text-format > header > div { align-items: flex-start; flex-direction: column; gap: 2px; }
   .floating-text-format > header small { display: none; }
   .rich-text-toolbar { grid-template-columns: 1fr; gap: 6px; padding: 7px; }
@@ -2620,4 +2623,10 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .window-controls { position: relative; z-index: 10; align-self: stretch; align-items: flex-start; gap: 0; }
 .window-controls button { box-sizing: border-box; width: 46px; height: 46px; border: 0; border-left: 1px solid var(--line); border-radius: var(--radius-control); }
 .window-controls button[data-window-action="close"] { font-size: 18px; }
+/* Угловой крестик слоёв (UI-05): один класс .corner-close у карточки заявки, уведомлений, пикера цвета и панели оформления;
+   у двух заголовков свои правила кнопок с большей специфичностью, поэтому они названы. Строка заголовка — 44px, справа 44px под крестик. */
+.corner-close, .custom-color-picker-head .corner-close, .floating-text-format > header .corner-close { position: absolute; top: 0; right: 0; box-sizing: border-box; display: grid; place-items: center; width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: var(--radius-control); font-size: 20px; line-height: 1; cursor: pointer; }
+.custom-color-picker { position: relative; padding-top: 0; }
+.quest-toast > div { padding-top: 0; }
+.quest-toast-head, .custom-color-picker-head, .floating-text-format > header { box-sizing: border-box; min-height: 44px; padding-right: 44px; }
 /* ui-unify:end */

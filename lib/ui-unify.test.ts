@@ -443,3 +443,89 @@ test("UI-05: the window markup keeps three controls with close last and none on 
   assert.deepEqual([...controls.matchAll(/data-window-action="([a-z]+)"/gu)].map((match) => match[1]), ["minimize", "maximize", "close"]);
   assert.match(controls, /aria-label=\{`Закрыть \$\{appMeta\[app\]\.label\}`\}>×<\/button>$/u);
 });
+
+// Phase 26 (UI-05): every layer with a cross closes through one corner button, `.corner-close` (44x44, flush top: 0;
+// right: 0, sharp, a 20px glyph). Two headers keep their own button rules with a higher specificity
+// (`.custom-color-picker-head button`, `.floating-text-format > header button`), so the corner rule names them too.
+const CORNER_SELECTORS = [".corner-close", ".custom-color-picker-head .corner-close", ".floating-text-format > header .corner-close"];
+// The five crosses under guard: the request card, the two notification toasts, the colour picker, the format panel.
+const cornerCrossSites = [
+  { file: "components/portia-access-gate.tsx", label: "Закрыть заявку", count: 1, keep: "access-close" },
+  { file: "components/portia-access-gate.tsx", label: "Закрыть уведомление", count: 1, keep: "quest-toast-close" },
+  { file: "components/portia-desktop.tsx", label: "Закрыть уведомление", count: 2, keep: "quest-toast-close" },
+  { file: "components/custom-color-picker.tsx", label: "Закрыть выбор цвета", count: 1, keep: null },
+  { file: "components/portia-editor-rich-text.tsx", label: "Закрыть панель оформления", count: 1, keep: null },
+] as const;
+// The layer that anchors the cross, and the heading row that leaves 44px on the right so nothing slides under it.
+const CORNER_LAYERS = [".access-card", ".quest-toast", ".custom-color-picker", ".floating-text-format"];
+const CORNER_HEADS = [".quest-toast-head", ".custom-color-picker-head", ".floating-text-format > header"];
+
+function buttonTags(source: string, label: string) {
+  const tags: string[] = [];
+  for (let at = source.indexOf(`aria-label="${label}"`); at >= 0; at = source.indexOf(`aria-label="${label}"`, at + 1)) {
+    tags.push(source.slice(source.lastIndexOf("<button", at), source.indexOf("</button>", at)));
+  }
+  return tags;
+}
+
+test("UI-05: the shared corner cross is 44x44, flush in the corner, sharp, with a 20px glyph", () => {
+  for (const selector of CORNER_SELECTORS) {
+    for (const context of [undefined, PHONE]) {
+      const at = `${selector}${context ? " (phone)" : ""}`;
+      assert.equal(lastDeclaration(portiaCss, selector, "width", context), "44px", `${at} width`);
+      assert.equal(lastDeclaration(portiaCss, selector, "height", context), "44px", `${at} height`);
+      assert.equal(lastDeclaration(portiaCss, selector, "position", context), "absolute", `${at} position`);
+      assert.equal(lastDeclaration(portiaCss, selector, "top", context), "0", `${at} top`);
+      assert.equal(lastDeclaration(portiaCss, selector, "right", context), "0", `${at} right`);
+      assert.equal(lastDeclaration(portiaCss, selector, "border-radius", context), "var(--radius-control)", `${at} radius`);
+      assert.equal(lastDeclaration(portiaCss, selector, "font-size", context), "20px", `${at} glyph`);
+      assert.equal(lastDeclaration(portiaCss, selector, "border", context), "0", `${at} border`);
+      assert.equal(lastDeclaration(portiaCss, selector, "background", context), "transparent", `${at} background`);
+      assert.equal(lastDeclaration(portiaCss, selector, "color", context), "inherit", `${at} colour`);
+    }
+    assert.equal(lastDeclaration(portiaCss, `${selector}:hover`, "background"), "#5d2d29", `${selector} danger hover`);
+  }
+  // The old offsets of the request card cross are gone from the cascade.
+  assert.equal(lastDeclaration(portiaCss, ".access-close", "right"), "12px", "the old rule stays as history, overridden below");
+  assert.ok(lastRuleIndex(portiaCss, ".corner-close", "right") > lastRuleIndex(portiaCss, ".access-close", "right"));
+  assert.ok(lastRuleIndex(portiaCss, ".corner-close", "min-height") > lastRuleIndex(portiaCss, ".quest-toast-close", "min-height"));
+  // The raised selectors are needed: the headers really have their own button rules.
+  assert.equal(lastDeclaration(portiaCss, ".custom-color-picker-head button", "width"), "24px");
+  assert.equal(lastDeclaration(portiaCss, ".floating-text-format > header button", "width"), "28px");
+});
+
+test("UI-05 / T-26-07: the cross is anchored to its layer and the heading row leaves it 44px", () => {
+  for (const layer of CORNER_LAYERS) {
+    for (const context of [undefined, PHONE]) {
+      assert.match(lastDeclaration(portiaCss, layer, "position", context) ?? "", /^(?:relative|fixed|absolute)$/u, `${layer} anchors the cross`);
+    }
+  }
+  assert.equal(lastDeclaration(portiaCss, ".custom-color-picker", "position"), "relative");
+  for (const head of CORNER_HEADS) {
+    for (const context of [undefined, PHONE]) {
+      assert.equal(lastDeclaration(portiaCss, head, "padding-right", context), "44px", `${head} padding-right`);
+      assert.equal(lastDeclaration(portiaCss, head, "min-height", context), "44px", `${head} min-height`);
+    }
+    assert.ok(lastRuleIndex(portiaCss, head, "padding-right") > lastRuleIndex(portiaCss, head, "padding"), `${head}: no later padding shorthand`);
+  }
+  // The heading rows of the toast and the picker touch the top of their layer, so the 44px row is the 44px cross.
+  assert.equal(lastDeclaration(portiaCss, ".quest-toast > div", "padding-top"), "0");
+  assert.equal(lastDeclaration(portiaCss, ".custom-color-picker", "padding-top"), "0");
+  assert.ok(lastRuleIndex(portiaCss, ".custom-color-picker", "padding-top") > lastRuleIndex(portiaCss, ".custom-color-picker", "padding"));
+  assert.ok(lastRuleIndex(portiaCss, ".quest-toast > div", "padding-top") > lastRuleIndex(portiaCss, ".quest-toast > div", "padding"));
+});
+
+test("UI-05: the five crosses carry corner-close and keep their old classes and labels", () => {
+  for (const site of cornerCrossSites) {
+    const source = lf(readFileSync(new URL(`../${site.file}`, import.meta.url), "utf8"));
+    const tags = buttonTags(source, site.label);
+    assert.equal(tags.length, site.count, `${site.file}: ${site.label}`);
+    for (const tag of tags) {
+      const classes = (tag.match(/className="([^"]*)"/u)?.[1] ?? "").split(/\s+/u);
+      assert.ok(classes.includes("corner-close"), `${site.file}: ${site.label} carries corner-close`);
+      if (site.keep) assert.ok(classes.includes(site.keep), `${site.file}: ${site.label} keeps ${site.keep}`);
+      assert.match(tag, /type="button"/u);
+      assert.ok(tag.endsWith(">×"), `${site.file}: ${site.label} keeps the × glyph`);
+    }
+  }
+});

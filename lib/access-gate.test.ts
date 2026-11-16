@@ -352,7 +352,7 @@ test("approved notice looks like the quest notice, never takes focus and closes 
     '<span role="status" className="sr-only">Доступ подтверждён.</span>',
     'className="quest-toast-head"',
     'className="quest-toast-eyebrow"',
-    'className="quest-toast-close"',
+    'className="quest-toast-close corner-close"',
     'aria-label="Закрыть уведомление"',
     "<h2 id={titleId}>Доступ подтверждён</h2>",
     'window.document.addEventListener("keydown"',
