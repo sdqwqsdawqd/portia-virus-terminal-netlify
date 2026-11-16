@@ -278,7 +278,7 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .window-app-mark { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid oklch(.383 calc(.037 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-card); background: oklch(.199 calc(.021 * var(--accent-chroma)) var(--accent-hue)); color: var(--teal); }
 .window-app-mark svg { width: 17px; height: 17px; }
 .window-controls { display: flex; gap: 6px; }
-.window-controls button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 1px solid oklch(.407 calc(.035 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-control); background: oklch(.259 calc(.026 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.782 calc(.023 * var(--accent-chroma)) var(--accent-hue)); font: 15px/1 var(--sans); cursor: pointer; }
+.window-controls button { display: grid; place-items: center; padding: 0; background: transparent; color: oklch(.782 calc(.023 * var(--accent-chroma)) var(--accent-hue)); font: 15px/1 var(--sans); cursor: pointer; }
 .window-controls button:hover { border-color: oklch(.611 calc(.037 * var(--accent-chroma)) var(--accent-hue)); background: oklch(.31 calc(.027 * var(--accent-chroma)) var(--accent-hue)); color: #fff; }
 .window-controls button:last-child:hover { border-color: #a65750; background: #5d2d29; }
 .window-edge { position: absolute; z-index: 9; touch-action: none; }
@@ -1336,9 +1336,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .mobile-app-open .app-window:not(.is-active) { display: none !important; }
   /* The window fills the phone screen, so Vivian would cover its content: she steps out while a window is open and returns when it is minimised or closed (D-16, 18-MOTION-APPROVAL item 8). */
   .workspace.mobile-app-open ~ .desktop-assistant { display: none; }
-  .window-titlebar { grid-template-columns: 1fr auto; height: 42px; padding: 0 11px; }
+  .window-titlebar { grid-template-columns: 1fr auto; height: 42px; padding: 0 0 0 11px; }
   .window-titlebar { cursor: default; touch-action: auto; }
-  .window-controls button { width: 30px; height: 30px; }
   .window-controls button[data-window-action="maximize"] { display: none; }
   .archive-grid { height: auto; display: block; }
   .archive-browser { border-right: 0; border-bottom: 1px solid var(--line); }
@@ -2469,7 +2468,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 
 /* 20-07 (STAB-A11Y-02): on a phone every control takes a tap of at least 44x44 CSS px. The approved frames of the phone home
    (start button idle and open) keep their drawn size: the start button grows only its hit area, with a pseudo-element. Window
-   controls are windows-only, which no approved phone frame shows, so they are drawn at 44 with the old 30px square kept inside. */
+   controls are windows-only; since Phase 26 (D-22) they are 46x46 without a drawn frame, from the ui-unify block. */
 @media (max-width: 900px) {
   .start-button { position: relative; }
   .start-button::before { content: ""; position: absolute; inset: -7px 0 -4px; }
@@ -2478,12 +2477,6 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .taskbar-app { flex: 0 0 44px; height: 44px; }
   .taskbar-app.active::after { bottom: 2px; }
   .window-titlebar { height: 48px; }
-  .window-controls { gap: 0; }
-  .window-controls button { position: relative; isolation: isolate; width: 44px; height: 44px; border-color: transparent; background: transparent; }
-  .window-controls button::before { content: ""; position: absolute; inset: 7px; z-index: -1; border: 1px solid oklch(.407 calc(.035 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-control); background: oklch(.259 calc(.026 * var(--accent-chroma)) var(--accent-hue)); }
-  .window-controls button:hover, .window-controls button:last-child:hover { border-color: transparent; background: transparent; }
-  .window-controls button:hover::before { border-color: oklch(.611 calc(.037 * var(--accent-chroma)) var(--accent-hue)); background: oklch(.31 calc(.027 * var(--accent-chroma)) var(--accent-hue)); }
-  .window-controls button:last-child:hover::before { border-color: #a65750; background: #5d2d29; }
   .search-box, .global-search-box { min-height: 44px; }
   .search-recommendations { margin-bottom: 12px; }
   .search-recommendations > span { margin-bottom: 4px; font-size: 11px; }
@@ -2620,4 +2613,11 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .editor-field input, .editor-field select, .global-search-box, .search-box, .promotion-device-reset input, .promotion-final-decision input, .promotion-bank-settings input, .promotion-bank-editor > label > input, .promotion-bank-editor select, .promotion-preview select, .promotion-question-list-heading input { min-height: var(--tap-target); }
   .editor-tabs button, .editor-section-tabs nav button, .promotion-editor-branches button, .promotion-queue-filters button, .promotion-bank-workflow-tabs button { min-height: var(--tap-target); }
 }
+/* Угол окна (UI-05, D-22): кнопки управления вплотную к правому краю полосы, 46x46 (высота полосы ПК, исключение A10 из правила 44px),
+   крестик — последний, в самом углу; контролы выше рёбер ресайза (z-index 9), поэтому угол NE под ними неактивен. Цвета наведения — прежние. */
+.window-titlebar { padding-right: 0; }
+.app-window.is-modal-locked .window-titlebar { padding-right: 15px; }
+.window-controls { position: relative; z-index: 10; align-self: stretch; align-items: flex-start; gap: 0; }
+.window-controls button { box-sizing: border-box; width: 46px; height: 46px; border: 0; border-left: 1px solid var(--line); border-radius: var(--radius-control); }
+.window-controls button[data-window-action="close"] { font-size: 18px; }
 /* ui-unify:end */

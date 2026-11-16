@@ -369,3 +369,77 @@ test("UI-03: the block changes no colour, font family or animation; the access s
   }
   assert.doesNotMatch(text, /\.access-card|\.owner-login-card/u, "26-09 restyles the access card and the owner login");
 });
+
+// Phase 26 (UI-05, D-22): the close cross of a window sits in the extreme top-right corner. The controls fill the right end
+// of the title bar (46x46, the height of the PC bar; recorded as a legacy exception to the 44px minimum, A10), render above
+// the resize edges and keep their markup: three buttons, close last, none on a locked window.
+const windowSource = lf(readFileSync(new URL("../components/portia-desktop-window.tsx", import.meta.url), "utf8"));
+const WINDOW_BUTTON = ".window-controls button";
+
+test("UI-05: the window controls sit flush in the top-right corner of the title bar, 46x46, above the resize edges", () => {
+  assert.equal(lastDeclaration(portiaCss, ".window-titlebar", "padding-right"), "0");
+  assert.ok(
+    lastRuleIndex(portiaCss, ".window-titlebar", "padding-right") > lastRuleIndex(portiaCss, ".window-titlebar", "padding"),
+    "no later padding shorthand gives the bar a right padding back",
+  );
+  assert.equal(lastDeclaration(portiaCss, ".window-titlebar", "height"), "46px");
+  assert.equal(lastDeclaration(portiaCss, ".window-controls", "gap"), "0");
+  assert.equal(lastDeclaration(portiaCss, ".window-controls", "position"), "relative");
+  assert.equal(lastDeclaration(portiaCss, ".window-controls", "align-self"), "stretch");
+  assert.equal(lastDeclaration(portiaCss, ".window-controls", "align-items"), "flex-start");
+  const controlsZ = Number(lastDeclaration(portiaCss, ".window-controls", "z-index"));
+  const edgeZ = Number(lastDeclaration(portiaCss, ".window-edge", "z-index"));
+  assert.equal(controlsZ, 10);
+  assert.ok(controlsZ > edgeZ, "the controls render above the resize edges, so the NE corner is inert under them");
+  assert.equal(lastDeclaration(portiaCss, WINDOW_BUTTON, "width"), "46px");
+  assert.equal(lastDeclaration(portiaCss, WINDOW_BUTTON, "height"), "46px");
+  assert.equal(lastDeclaration(portiaCss, WINDOW_BUTTON, "border-radius"), "var(--radius-control)");
+  assert.equal(lastDeclaration(portiaCss, WINDOW_BUTTON, "background"), "transparent");
+  assert.equal(lastDeclaration(portiaCss, WINDOW_BUTTON, "border"), "0");
+  assert.equal(lastDeclaration(portiaCss, WINDOW_BUTTON, "border-left"), "1px solid var(--line)");
+  const dividerRule = lastRuleIndex(portiaCss, WINDOW_BUTTON, "border-left");
+  const resetRule = lastRuleIndex(portiaCss, WINDOW_BUTTON, "border");
+  const order = declarations(rulesOf(portiaCss)[dividerRule].body).map(([name]) => name);
+  assert.ok(
+    dividerRule > resetRule || (dividerRule === resetRule && order.lastIndexOf("border-left") > order.lastIndexOf("border")),
+    "the divider survives the border reset",
+  );
+  assert.equal(lastDeclaration(portiaCss, '.window-controls button[data-window-action="close"]', "font-size"), "18px");
+  // Hover keeps the existing neutral and danger colours.
+  assert.match(lastDeclaration(portiaCss, ".window-controls button:hover", "background") ?? "", /^oklch\(\.31 /u);
+  assert.equal(lastDeclaration(portiaCss, ".window-controls button:last-child:hover", "background"), "#5d2d29");
+  assert.equal(lastDeclaration(portiaCss, ".window-controls button:last-child:hover", "border-color"), "#a65750");
+  // N and E edges still resize; the NE corner stays in place under the controls.
+  assert.equal(lastDeclaration(portiaCss, ".window-edge-n", "top"), "0");
+  assert.equal(lastDeclaration(portiaCss, ".window-edge-e", "right"), "0");
+  assert.equal(lastDeclaration(portiaCss, ".window-edge-ne", "cursor"), "nesw-resize");
+});
+
+test("UI-05 / D-22: on a phone the window controls are 46x46 too, flush in the corner, without a drawn frame", () => {
+  assert.equal(lastDeclaration(portiaCss, WINDOW_BUTTON, "width", PHONE), "46px");
+  assert.equal(lastDeclaration(portiaCss, WINDOW_BUTTON, "height", PHONE), "46px");
+  assert.equal(lastDeclaration(portiaCss, WINDOW_BUTTON, "background", PHONE), "transparent");
+  assert.equal(lastDeclaration(portiaCss, ".window-controls", "gap", PHONE), "0");
+  assert.equal(lastDeclaration(portiaCss, ".window-titlebar", "padding-right", PHONE), "0");
+  // The sticky offsets of phone windows (top: 48px) rest on this height.
+  assert.equal(lastDeclaration(portiaCss, ".window-titlebar", "height", PHONE), "48px");
+  assert.equal(lastDeclaration(portiaCss, '.window-controls button[data-window-action="maximize"]', "display", PHONE), "none");
+  // No frame drawn inside the hit area any more, and the phone hover is the desktop hover.
+  for (const rule of rulesOf(portiaCss)) {
+    for (const selector of rule.selectors) {
+      if (!selector.startsWith(WINDOW_BUTTON) || !selector.includes("::before")) continue;
+      assert.ok(!declarations(rule.body).some(([name]) => name === "content"), `${selector} must not draw a frame`);
+    }
+  }
+  assert.doesNotMatch(lastDeclaration(portiaCss, WINDOW_BUTTON, "isolation", PHONE) ?? "", /isolate/u);
+  assert.equal(lastDeclaration(portiaCss, ".window-controls button:last-child:hover", "background", PHONE), "#5d2d29");
+  assert.match(lastDeclaration(portiaCss, ".window-controls button:hover", "background", PHONE) ?? "", /^oklch\(\.31 /u);
+});
+
+test("UI-05: the window markup keeps three controls with close last and none on a locked window", () => {
+  const start = windowSource.indexOf('{!locked && <div className="window-controls">');
+  assert.ok(start > 0, "the controls render only on an unlocked window");
+  const controls = windowSource.slice(start, windowSource.indexOf("</div>}", start));
+  assert.deepEqual([...controls.matchAll(/data-window-action="([a-z]+)"/gu)].map((match) => match[1]), ["minimize", "maximize", "close"]);
+  assert.match(controls, /aria-label=\{`Закрыть \$\{appMeta\[app\]\.label\}`\}>×<\/button>$/u);
+});
