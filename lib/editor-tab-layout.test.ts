@@ -409,3 +409,19 @@ test("D-12/D-13: «Повышение» styles — the bar flush on top, the bra
     }
   }
 });
+
+test("D-12: the banks are list/detail with the same 280px list on a PC; the workflow tabs are as wide as their labels; a phone is unchanged", () => {
+  assert.equal(declaredIn(promotionRules, ".promotion-bank-workflow .promotion-bank-layout.etab-body", "grid-template-columns", DESKTOP), "280px minmax(0, 1fr)");
+  assert.equal(declaredIn(promotionRules, ".promotion-bank-workflow .promotion-bank-layout", "grid-template-columns"), undefined, "the old 180–230px list column is gone");
+  for (const context of [undefined, PHONE]) {
+    for (const list of [rules, promotionRules]) {
+      for (const property of ["flex", "flex-grow"]) {
+        assert.doesNotMatch(declaredIn(list, ".promotion-bank-workflow-tabs button", property, context) ?? "", /^[1-9]/, `workflow tabs ${property} ${context ?? ""}`);
+      }
+      assert.doesNotMatch(declaredIn(list, ".promotion-bank-workflow-tabs button", "width", context) ?? "", /^100%/);
+    }
+  }
+  // The phone keeps the sequential view: the bodies are blocks and the old list or detail steps decide what shows.
+  assert.equal(declaredIn(promotionRules, ".promotion-editor-workbench", "display", PHONE), "block");
+  assert.equal(declaredIn(promotionRules, ".promotion-bank-workflow .promotion-bank-layout", "display", PHONE), "block");
+});

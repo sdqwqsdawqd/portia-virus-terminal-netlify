@@ -162,6 +162,21 @@ test("actual branch and queue controls expose button-tab semantics and arrow nav
   assert.ok(main.includes('"ArrowLeft"'));
 });
 
+test("bank workflow tabs mark the current step with aria-current; the banks are a list/detail body beside the old classes", () => {
+  for (const [editor, layout] of [[ordinary, "promotion-ordinary-editor"], [qualification, "promotion-qualification-editor"]] as const) {
+    // Phase 26 (D-13a): «1. СОЗДАТЬ …» / «2. ВЫДАТЬ …» switch the view of the tab, so the current one is aria-current.
+    assert.ok(editor.includes('aria-current={mode === "create" ? "true" : undefined}'), `${layout}: create`);
+    assert.ok(editor.includes('aria-current={mode === "issue" ? "true" : undefined}'), `${layout}: issue`);
+    assert.ok(!editor.includes("aria-pressed={mode ==="), `${layout}: no aria-pressed on the workflow tabs`);
+    // D-12: list on the left, editor or preview on the right; the phone keeps its list → editor/preview steps.
+    assert.ok(editor.includes(`<div className="promotion-bank-layout ${layout} etab-body" data-mode={mode}>`), `${layout}: body`);
+    assert.ok(editor.includes('{(!isPhone || bankView === "list") && <aside className="promotion-bank-list etab-list">'), `${layout}: list`);
+    assert.ok(editor.includes('{(!isPhone || bankView === "editor") && <section className="promotion-bank-editor etab-detail">'), `${layout}: editor`);
+    assert.ok(editor.includes('{(!isPhone || bankView === "preview") && <aside className="promotion-preview etab-detail">'), `${layout}: preview`);
+    assert.ok(editor.includes("← НАЗАД К БАНКАМ"), `${layout}: phone back`);
+  }
+});
+
 test("promotion reviewer layout has desktop workbench and phone sequential view", () => {
   assert.match(styles, /\.promotion-editor-workbench\s*\{/);
   assert.match(styles, /grid-template-columns:\s*280px minmax\(0,\s*1fr\)/);
