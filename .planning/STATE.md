@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed 26-13-PLAN.md
-last_updated: "2026-11-16T17:01:52.365Z"
+stopped_at: Completed 26-14-PLAN.md
+last_updated: "2026-11-16T17:13:36.712Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase PORTIA-26 execution started
-state_head: bd422e9c768b4a140487c00fce887fd8dc665c40
+state_head: 673eb14d304d786bcca3c443d37875e5ffcdbdbb
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 64
-  completed_plans: 63
+  completed_plans: 64
 ---
 
 # Project State
@@ -102,6 +102,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-26 P11 | 9 min | 2 tasks | 6 files |
 | Phase 26 P12 | 4 min | 2 tasks | 2 files |
 | Phase 26 P13 | 7 min | 2 tasks | 7 files |
+| Phase 26 P14 | 12 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -339,6 +340,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26]: 26-12: залитые части знаков с stroke=none, чтобы корневая обводка PortiaIcon 1.75 не раздувала их
 - [Phase 26]: 26-13: имя кнопки раскрытия карточки строит cardToggleName (lib/card-toggle-name.ts) — «Развернуть/Свернуть раздел «{метка} {название}»»; правка редактора — вставка PORTIA-26-13 (D-21)
 - [Phase 26]: 26-13: .eyebrow — var(--teal), подсказки и small — .658 (подсказка 11px); палитра пресетов не менялась; контраст на --bg/--panel закреплён lib/ui-contrast.test.ts (минимум 4.58:1, red)
+- [Phase 26]: 26-14: регрессии 2026-10-28 пп. 9 (клэмп окна) и 10 (конец анимации ярлыка) — NOT REPRODUCED по тестам на текущем коде, код не менялся; устройство и DPR 1.25 — BLOCKED (DEVICE), Phase 27
+- [Phase 26]: 26-14: will-change ярлыков по Phase 19 (D-17) — постоянный у частей знаков, у контейнера .desktop-icon отсутствует; противоречие UI-SPEC записано владельцу
 
 ### Pending Todos
 
@@ -392,8 +395,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-16T17:01:51.499Z
-Stopped at: Completed 26-13-PLAN.md
+Last session: 2026-11-16T17:13:35.818Z
+Stopped at: Completed 26-14-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

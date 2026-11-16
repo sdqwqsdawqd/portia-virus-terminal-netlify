@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 14
+open_count: 16
 waived_count: 0
 fixed_count: 2
-total_count: 16
-last_updated: 2026-11-16T17:00:21.660Z
+total_count: 18
+last_updated: 2026-11-16T17:11:41.533Z
 ---
 
 # Broken Windows Ledger
@@ -31,6 +31,8 @@ last_updated: 2026-11-16T17:00:21.660Z
 | 14 | 26 | unrun-verify | components/portia-icons.tsx |  | 26-12: 18 знаков классификации (раунд 5) не проверены в браузере и на физическом экране в 16/18/24px — BLOCKED (ENV)/(DEVICE) до Phase 27 | open |  | 2026-11-16T13:04:25.140Z |  |
 | 15 | 26 | unrun-verify | tests/e2e/specs/editor-ui-contract.spec.ts |  | 26-13: линия axe (editor-ui-contract, допуски nested-editor-toggle/eyebrow/подсказка/small сняты) не запускалась — BLOCKED (ENV)/(DATA), не PASS | open |  | 2026-11-16T17:00:21.137Z |  |
 | 16 | 26 | unrun-verify | lib/card-toggle-name.ts |  | 26-13: A11Y-SR-01 — имя кнопки раскрытия карточки скринридером не проверено — BLOCKED (DEVICE), не PASS | open |  | 2026-11-16T17:00:21.660Z |  |
+| 17 | 26 | unrun-verify | lib/window-geometry.ts |  | 26-14: п. 9 (клэмп окна слева/справа) на физическом ПК и DPR 1.25 не проверен — BLOCKED (DEVICE), Phase 27; исходный тест NOT REPRODUCED не заменяет устройство | open |  | 2026-11-16T17:11:41.019Z |  |
+| 18 | 26 | unrun-verify | app/portia.css |  | 26-14: п. 10 (резкость/масштаб ярлыка в конце анимации) на DPR 1.25 и телефоне не проверен — BLOCKED (DEVICE), Phase 27; исходный тест NOT REPRODUCED не заменяет устройство | open |  | 2026-11-16T17:11:41.533Z |  |
 
 ````json
 [
@@ -239,6 +241,32 @@ last_updated: 2026-11-16T17:00:21.660Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-16T17:00:21.660Z",
+    "resolved_at": null,
+    "milestone": "v1.4"
+  },
+  {
+    "id": 17,
+    "kind": "unrun-verify",
+    "phase": "26",
+    "file": "lib/window-geometry.ts",
+    "line": null,
+    "description": "26-14: п. 9 (клэмп окна слева/справа) на физическом ПК и DPR 1.25 не проверен — BLOCKED (DEVICE), Phase 27; исходный тест NOT REPRODUCED не заменяет устройство",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-16T17:11:41.019Z",
+    "resolved_at": null,
+    "milestone": "v1.4"
+  },
+  {
+    "id": 18,
+    "kind": "unrun-verify",
+    "phase": "26",
+    "file": "app/portia.css",
+    "line": null,
+    "description": "26-14: п. 10 (резкость/масштаб ярлыка в конце анимации) на DPR 1.25 и телефоне не проверен — BLOCKED (DEVICE), Phase 27; исходный тест NOT REPRODUCED не заменяет устройство",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-16T17:11:41.533Z",
     "resolved_at": null,
     "milestone": "v1.4"
   }
