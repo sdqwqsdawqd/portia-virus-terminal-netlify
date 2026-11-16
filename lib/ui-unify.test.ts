@@ -529,3 +529,82 @@ test("UI-05: the five crosses carry corner-close and keep their old classes and 
     }
   }
 });
+
+// Phase 26 (UI-06, D-01 … D-04, D-19): a maximized window differs from a normal one only in layout. The only hook is
+// `.app-window.is-maximized` (inset 8px, the window radius); every new rule under it sits in the desktop query, so the
+// normal window and the phone keep their layouts. No container queries on the window (they re-anchor fixed elements).
+const globalsCss = lf(readFileSync(new URL("../app/globals.css", import.meta.url), "utf8"));
+const ALL_STYLESHEETS = [
+  ["app/portia.css", portiaCss],
+  ["app/portia-promotion-editor.css", promotionCss],
+  ["app/globals.css", globalsCss],
+] as const;
+const MAXIMIZED = ".app-window.is-maximized";
+const DESKTOP = "min-width: 901px";
+// R1 (UI-SPEC): 360px minimum card, at most four columns, 2–4 on 1366–2560px screens.
+const R1_COLUMNS = "repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 4)), 1fr))";
+// The two rules that predate Phase 26 and hold on every width: the 8px inset and the hidden resize edges.
+const HISTORIC_MAXIMIZED = [MAXIMIZED, `${MAXIMIZED} .window-edge`];
+const desktopSource = lf(readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8"));
+const searchIndexSource = lf(readFileSync(new URL("./search-index.ts", import.meta.url), "utf8"));
+
+test("UI-06 / D-01: «Доступные записи» are a card grid in a maximized search window and one column otherwise", () => {
+  const results = `${MAXIMIZED} .global-search-results`;
+  assert.equal(lastDeclaration(portiaCss, results, "display", DESKTOP), "grid");
+  assert.equal(lastDeclaration(portiaCss, results, "gap", DESKTOP), "8px");
+  assert.equal(lastDeclaration(portiaCss, results, "grid-template-columns", DESKTOP), R1_COLUMNS);
+  // A normal-size window and the phone keep the single column: the list itself sets no columns at any width.
+  assert.equal(lastDeclaration(portiaCss, ".global-search-results", "grid-template-columns", DESKTOP), undefined);
+  assert.equal(lastDeclaration(portiaCss, ".global-search-results", "grid-template-columns", PHONE), undefined);
+  assert.equal(lastDeclaration(portiaCss, results, "grid-template-columns", PHONE), undefined, "the phone is not touched");
+  // Cards stay row cards that fill their cell; the title ends in an ellipsis.
+  assert.equal(lastDeclaration(portiaCss, ".global-result", "width"), "100%");
+  assert.equal(lastDeclaration(portiaCss, `${MAXIMIZED} .global-result`, "min-width", DESKTOP), "0");
+  assert.equal(lastDeclaration(portiaCss, ".global-result-heading strong", "text-overflow"), "ellipsis");
+  // The empty state spans the grid and stays centred in the pane.
+  assert.equal(lastDeclaration(portiaCss, `${MAXIMIZED} .global-search-empty`, "grid-column", DESKTOP), "1 / -1");
+  assert.equal(lastDeclaration(portiaCss, `${MAXIMIZED} .global-search-empty`, "justify-self", DESKTOP), "stretch");
+  assert.equal(lastDeclaration(portiaCss, ".global-search-empty", "text-align"), "center");
+  assert.equal(lastDeclaration(portiaCss, ".global-search-empty", "align-items"), "center");
+  assert.match(desktopSource, /<div className="global-search-results"[^>]*>[\s\S]*?\{!searchRows\.length && <div className="global-search-empty/u, "the empty state lives inside the result grid");
+});
+
+test("UI-06 / D-02 (R2): the search box and the header of a maximized search window stop at 640px", () => {
+  for (const selector of [`${MAXIMIZED} .global-search-box`, `${MAXIMIZED} .global-search-header`]) {
+    assert.equal(lastDeclaration(portiaCss, selector, "max-width", DESKTOP), "var(--field-max)", selector);
+  }
+  assert.match(portiaCss, /--field-max: 640px;/u);
+  assert.match(portiaCss, /--card-min: 360px;/u);
+});
+
+test("UI-06: keyboard order over the result grid stays the DOM order (Up/Down only, no Left/Right)", () => {
+  assert.match(searchIndexSource, /key === "ArrowDown"/u);
+  assert.match(searchIndexSource, /key === "ArrowUp"/u);
+  assert.doesNotMatch(searchIndexSource, /ArrowLeft|ArrowRight/u);
+  const handlerStart = desktopSource.indexOf("const onSearchKeyDown");
+  assert.ok(handlerStart > 0);
+  assert.doesNotMatch(desktopSource.slice(handlerStart, desktopSource.indexOf("\n  };", handlerStart)), /ArrowLeft|ArrowRight/u);
+});
+
+test("UI-06 / D-03: the maximized hook is unchanged, the only one, and never a container", () => {
+  assert.equal(lastDeclaration(portiaCss, MAXIMIZED, "inset"), "8px");
+  assert.equal(lastDeclaration(portiaCss, MAXIMIZED, "transform"), "none");
+  assert.equal(lastDeclaration(portiaCss, ".app-window", "border-radius"), "var(--radius-window)");
+  assert.equal(lastDeclaration(portiaCss, MAXIMIZED, "border-radius"), undefined, "the maximized window keeps the window radius");
+  for (const [file, css] of ALL_STYLESHEETS) {
+    for (const rule of rulesOf(css)) {
+      const containerHost = rule.selectors.some((selector) => /\.app-window|\.workspace\b/u.test(selector));
+      if (containerHost) {
+        for (const [name] of declarations(rule.body)) {
+          assert.ok(name !== "container-type" && name !== "container", `${file}: ${rule.selectors.join(", ")} must not be a container`);
+        }
+      }
+      for (const selector of rule.selectors) {
+        if (!selector.includes("is-maximized")) continue;
+        assert.ok(selector.startsWith(MAXIMIZED), `${file}: ${selector} must start with ${MAXIMIZED}`);
+        if (HISTORIC_MAXIMIZED.includes(selector)) continue;
+        assert.ok(rule.context?.includes(DESKTOP), `${file}: ${selector} must sit in @media (${DESKTOP}) so the phone is not touched`);
+      }
+    }
+  }
+});

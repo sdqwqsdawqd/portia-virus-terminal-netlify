@@ -2629,4 +2629,13 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .custom-color-picker { position: relative; padding-top: 0; }
 .quest-toast > div { padding-top: 0; }
 .quest-toast-head, .custom-color-picker-head, .floating-text-format > header { box-sizing: border-box; min-height: 44px; padding-right: 44px; }
+/* Развёрнутое окно (UI-06, D-01 … D-04): единственный хук — .app-window.is-maximized (отступ 8px и радиус окна прежние);
+   все правила только на ПК, обычное окно и телефон не затронуты; container-type на окне не ставится (сдвинул бы фиксированные слои).
+   R1 — сетка карточек, не больше 4 колонок; R2 — однострочные поля до var(--field-max) (640px). Порядок чтения и стрелки — по DOM. */
+@media (min-width: 901px) {
+  .app-window.is-maximized .global-search-results { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 4)), 1fr)); }
+  .app-window.is-maximized .global-result { min-width: 0; }
+  .app-window.is-maximized .global-search-header, .app-window.is-maximized .global-search-box { max-width: var(--field-max); }
+  .app-window.is-maximized .global-search-empty { grid-column: 1 / -1; justify-self: stretch; }
+}
 /* ui-unify:end */
