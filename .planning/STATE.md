@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed PORTIA-26-03-PLAN.md
-last_updated: "2026-11-16T08:49:17.099Z"
+stopped_at: Completed PORTIA-26-04-PLAN.md
+last_updated: "2026-11-16T08:58:59.340Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase PORTIA-26 execution started
-state_head: f4202095d0028286d08a4b3f4592d516b04da590
+state_head: 8146fbecd9866a39bfcffb033d63d8169e68629c
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 64
-  completed_plans: 52
+  completed_plans: 53
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-26 (Единый стиль сайта) — EXECUTING
-Plan: 3 of 14
+Plan: 4 of 14
 Status: Executing Phase PORTIA-26
 Last activity: 2026-11-16 — Phase PORTIA-26 execution started
 
@@ -91,6 +91,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-25 P10 | 40min | 3 tasks | 10 files |
 | Phase PORTIA-26 P01 | 5 min | 3 tasks | 5 files |
 | Phase PORTIA-26 P03 | около 1ч | 2 tasks | 5 files |
+| Phase PORTIA-26 P04 | 6min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -306,6 +307,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: 26-01 (D-17): Playwright по умолчанию игнорирует tests/e2e/visual; явный путь = историческое сравнение, красное = дрейф, не PASS
 - [Phase PORTIA-26]: 26-03: семейства кнопок/плашек/полей/вкладок/строк — один блок ui-unify в конце portia.css; шрифтовые семейства не переопределяются (только размер и жирность); исключение A3 (стопка кнопок в диалоге до 420px) названо в тесте
 - [Phase PORTIA-26]: 26-03 (D-02): кнопки не растягиваются ни в portia.css, ни в portia-promotion-editor.css; правила позднего файла Promotion с равной специфичностью переписаны на месте
+- [Phase PORTIA-26]: 26-04: цвета .corner-close и кнопок окна записаны вне блока ui-unify (контракт 26-03: блок без цветов и hex); геометрия — в блоке
+- [Phase PORTIA-26]: 26-04: уведомление и панель оформления остаются position: fixed (relative сломал бы их); строки заголовков уведомления и пикера 44px вплотную к верху, справа 44px под крестик
 
 ### Pending Todos
 
@@ -359,8 +362,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-16T08:49:15.857Z
-Stopped at: Completed PORTIA-26-03-PLAN.md
+Last session: 2026-11-16T08:58:58.438Z
+Stopped at: Completed PORTIA-26-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
