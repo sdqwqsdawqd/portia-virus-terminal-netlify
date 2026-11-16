@@ -173,7 +173,7 @@ test("T-24-30 a window left on a closed record shows the block and never the fir
 
 test("D-10 the table of contents draws a closed section and a closed subsection as an index line and the marker counts them", () => {
   assert.ok(desktop.includes('variant="index"'));
-  const index = between(desktop, '<aside className="info-index">', "</aside>");
+  const index = between(desktop, '<nav className="info-index" aria-label="Разделы информации" id="info-sections-list">', "</nav>");
   assert.ok(index.includes("mergePlaceholders(section.subsections, content.redaction?.infoSubsections?.[section.id])"));
   assert.ok(index.includes("{subRows.length}"), "the marker counts placeholders");
   const closedSection = between(index, 'if (row.kind === "redacted")', "const section = row.item;");

@@ -383,6 +383,8 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .info-index button:hover, .info-index button.active { border-color: oklch(.388 calc(.041 * var(--accent-chroma)) var(--accent-hue)); background: var(--teal-soft); color: oklch(.961 calc(.008 * var(--accent-chroma)) var(--accent-hue)); }
 .info-index button small { color: var(--teal); font: 11px var(--sans); }
 .info-index button span { font-size: 13px; line-height: 1.4; }
+/* UI-08 (D-14): the phone sections bar; at 901px and up the index column is the navigation. */
+.info-sections-bar { display: none; }
 .info-document { overflow-y: auto; padding: clamp(28px, 5vw, 58px); color: oklch(.919 calc(.012 * var(--accent-chroma)) var(--accent-hue)); }
 .info-document h1 { max-width: 780px; margin: 8px 0 30px; color: #f1f5f4; font: 700 clamp(29px, 4vw, 46px)/1.08 var(--display); letter-spacing: -.02em; }
 .formatted-content { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
@@ -1383,7 +1385,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .global-result-status { grid-column: 2; max-width: none; text-align: left; }
   .info-app, .settings-app, .trash-app, .broadcasts-app, .content-editor { min-height: calc(100svh - 140px); padding: 24px 15px 42px; }
   .info-library { min-height: calc(100svh - 140px); height: auto; display: block; }
-  /* D-28: on a phone the sections are a list from top to bottom, one screen at a time (list or article); the PC rules above stay as they are. */
+  /* D-28: on a phone the sections are a list from top to bottom; the PC rules above stay as they are. */
   .info-index { display: block; padding: 13px; overflow: visible; border-right: 0; border-bottom: 0; }
   .info-index > .eyebrow { display: none; }
   .info-index button { min-height: 44px; align-items: center; scroll-margin: 56px 0; }
@@ -1391,10 +1393,14 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .info-index .info-subsections button { min-height: 44px; padding: 8px 9px; align-items: center; }
   /* A subsection title wraps on a phone instead of being cut by an ellipsis. */
   .info-index .info-subsections button span { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
-  .info-library[data-info-screen="list"] .info-document { display: none; }
-  .info-library[data-info-screen="article"] .info-index { display: none; }
-  /* D-30: the only control above the text. It stays in the flow: .app-window clips on a phone, so a sticky button could not hold while the page scrolls. */
-  .info-phone-back { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: 0 0 18px; padding: 0; border: 1px solid var(--teal-dim); border-radius: var(--radius-control); background: var(--panel); color: var(--teal); font: 700 20px var(--sans); cursor: pointer; }
+  /* UI-08 (D-14, D-15): the article is always on screen; the list opens in the flow under the bar and pushes the article down (no overlay, no inner scroll). */
+  .info-library[data-sections-open="false"] .info-index { display: none; }
+  .info-library[data-sections-open] .info-document { padding-top: 0; }
+  /* The bar stays in the flow, never fixed or sticky: it scrolls away with the text and covers nothing (.app-window clips on a phone). */
+  .info-sections-bar { box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; margin: 0 0 16px; padding: 13px 17px 0; }
+  .info-sections-bar > button { white-space: nowrap; }
+  /* The name is plain text, never a tap target; it shrinks first and ends in an ellipsis, the button keeps its width. */
+  .info-sections-current { flex: 0 1 auto; min-width: 0; overflow: hidden; color: oklch(.702 calc(.023 * var(--accent-chroma)) var(--accent-hue)); font: 400 13px/1.35 var(--sans); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
   /* D-31: «Далее» ends the article in the flow of the document, on the right; it is never fixed, sticky or absolute, so it cannot cover text, links or video. */
   .info-next { position: static; display: flex; justify-content: flex-end; margin-top: 24px; }
   .info-next button { position: static; min-height: 44px; max-width: 100%; padding: 10px 14px; border: 1px solid var(--teal-dim); border-radius: var(--radius-control); background: var(--teal-soft); color: var(--teal); font: 700 13px/1.35 var(--sans); text-align: right; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
@@ -2582,8 +2588,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 /* users-tab:end */
 /* ui-unify:start — Phase 26 (UI-03): общие семейства кнопок, плашек, полей, вкладок и строк; радиусы — роли из style-tokens */
 /* Кнопки: один размер, ширина по содержимому, никогда не растягиваются (D-02); цвета вариантов и шрифтовые семейства остаются в своих правилах. */
-.primary-control, .secondary-control, .danger-control, .app-state-action, .info-phone-back, .info-next button, .promotion-action, .promotion-preview-actions > button, .promotion-device-reset button { box-sizing: border-box; flex: 0 0 auto; width: auto; max-width: 100%; min-height: var(--control-height); justify-self: start; padding: 0 16px; border-radius: var(--radius-control); font-size: 11px; font-weight: 700; line-height: 1.35; letter-spacing: .04em; white-space: normal; }
-.info-phone-back { font-size: 20px; }
+.primary-control, .secondary-control, .danger-control, .app-state-action, .info-next button, .promotion-action, .promotion-preview-actions > button, .promotion-device-reset button { box-sizing: border-box; flex: 0 0 auto; width: auto; max-width: 100%; min-height: var(--control-height); justify-self: start; padding: 0 16px; border-radius: var(--radius-control); font-size: 11px; font-weight: 700; line-height: 1.35; letter-spacing: .04em; white-space: normal; }
 /* Плашки: один бокс для меток, статусов и счётчиков; точки остаются круглыми. */
 .quest-badge, .manual-mark, small.manual-mark, .personnel-list > button > .manual-mark, .personnel-profile-identity > small.manual-mark, .users-plaque, .users-table-mark, .promotion-step-badge, .info-sub-marker, .global-result-mark, .search-recommendations button { padding: 4px 8px; border-style: solid; border-width: 1px; border-radius: var(--radius-plaque); font-size: 11px; font-weight: 700; line-height: 1.35; letter-spacing: .09em; white-space: nowrap; }
 .global-result-mark { border-color: var(--teal); }
@@ -2603,7 +2608,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .editor-record-list strong, .users-nickname, .users-row-main strong, .personnel-list > button > strong, .global-result-heading strong { font-size: 13px; font-weight: 700; }
 .editor-record-list small, .personnel-list > button > small { font-size: 11px; font-weight: 400; }
 @media (max-width: 900px) {
-  .primary-control, .secondary-control, .danger-control, .app-state-action, .info-phone-back, .info-next button, .promotion-action, .promotion-preview-actions > button, .promotion-device-reset button { min-height: var(--tap-target); }
+  .primary-control, .secondary-control, .danger-control, .app-state-action, .info-next button, .promotion-action, .promotion-preview-actions > button, .promotion-device-reset button { min-height: var(--tap-target); }
   .editor-field input, .editor-field select, .global-search-box, .search-box, .promotion-device-reset input, .promotion-final-decision input, .promotion-bank-settings input, .promotion-bank-editor > label > input, .promotion-bank-editor select, .promotion-preview select, .promotion-question-list-heading input { min-height: var(--tap-target); }
   .editor-tabs button, .editor-section-tabs nav button, .users-sections button, .promotion-editor-branches button, .promotion-queue-filters button, .promotion-bank-workflow-tabs button { min-height: var(--tap-target); }
 }

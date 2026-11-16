@@ -30,7 +30,7 @@ import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-d
 import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
-import { infoNextTarget, infoOverviewVisible, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
+import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
 import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
 
 // Phase 24, D-20/D-22: a record window whose record became closed keeps its place and shows the block; the slot of the placeholder
@@ -441,10 +441,9 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   const recommendationSeed = useSyncExternalStore(subscribeNothing, pageRecommendationSeed, serverRecommendationSeed);
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [selectedInfoId, setSelectedInfoId] = useState(initialContent.infoSections[0]?.id ?? "");
-  // D-28/D-30: on a phone «Информация» shows the list of sections or one article; infoReturnIdRef is the list item the article was opened from.
+  // Phase 26 (UI-08, D-14): on a phone «Информация» always shows the article; the sections list opens in the flow under a quiet bar above it.
   const infoPhone = useSyncExternalStore(subscribeInfoPhone, infoPhoneSnapshot, infoPhoneServerSnapshot);
-  const [infoScreen, setInfoScreen] = useState<"list" | "article">("list");
-  const infoReturnIdRef = useRef("");
+  const [sectionsOpen, setSectionsOpen] = useState(false);
   // D-29: the sections opened in the phone list; each opens and closes on its own and a content poll never touches the set.
   const [infoExpanded, setInfoExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [guideCardId, setGuideCardId] = useState("");
@@ -1491,35 +1490,20 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   // Any card chosen, or the back arrow, ends a lost selection (D-20); a search result sets the id itself and so ends it too.
   const openGuideCard = (id: string) => { setGuideCardId(id); setGuideLost(null); };
   const infoWindowElement = () => document.querySelector<HTMLElement>('.app-window[data-window-app="info"]');
-  // D-30: choosing an article opens it as its own screen; returnId names the list item «←» gives the focus back to.
-  const openInfoArticle = (id: string, returnId = id) => {
-    infoReturnIdRef.current = returnId;
+  // D-15: picking an article in the phone list shows it under the bar and closes the list; the article itself never leaves the screen.
+  const pickInfoArticle = (id: string) => {
     setSelectedInfoId(id);
-    setInfoScreen("article");
+    setSectionsOpen(false);
   };
-  const closeInfoArticle = () => {
-    setInfoScreen("list");
-    // The section of the article stays opened in the list, so the item the focus returns to is on screen.
-    const openedSection = selectedInfo?.subsections.length ? selectedInfo.id : "";
-    if (openedSection) setInfoExpanded((current) => current.has(openedSection) ? current : new Set(current).add(openedSection));
-    const returnId = infoReturnIdRef.current;
-    window.requestAnimationFrame(() => infoWindowElement()?.querySelector<HTMLElement>(`[data-info-id="${CSS.escape(returnId)}"]`)?.focus());
-  };
-  // D-31: «Далее» stays inside the section, so its section is already opened in the list; the article swaps in place.
+  // D-31: «Далее» stays inside the section and swaps the article in place; the new article starts with the focus on its heading.
   const goInfoNext = (target: InfoNextTarget) => {
-    infoReturnIdRef.current = target.id;
     setSelectedInfoId(target.id);
+    window.requestAnimationFrame(() => infoWindowElement()?.querySelector<HTMLElement>(".info-document h1")?.focus());
   };
   const infoNext = infoPhone && selectedInfo ? infoNextTarget(content.infoSections, selectedSubsection?.id ?? selectedInfo.id) : null;
-  // D-30: an opened article starts at its top with the focus on its heading (the page scrolls on a phone, the window does not).
-  useEffect(() => {
-    if (!infoPhone || infoScreen !== "article") return;
-    const frame = window.requestAnimationFrame(() => {
-      window.scrollTo({ top: 0 });
-      infoWindowElement()?.querySelector<HTMLElement>(".info-document h1")?.focus({ preventScroll: true });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [infoPhone, infoScreen, selectedInfoId]);
+  // D-14: the bar names the current article (the first section by default); the button reads РАЗДЕЛЫ ▾, or ▴ while the list is open.
+  const infoSectionsTitle = selectedInfo ? infoCurrentTitle(content.infoSections, selectedSubsection?.id ?? selectedInfo.id) : "";
+  const infoSectionsLabel = infoSectionsButtonLabel(sectionsOpen, 0);
   // D-11, LVL-05: a «Устав» closed to this viewer is not an app of the index and not a target of a search result; its icon stays.
   const charterClosed = content.redaction?.apps?.charter ?? null;
   const searchApps = useMemo(() => charterClosed ? globalSearchApps.filter((app) => app.id !== "charter") : globalSearchApps, [charterClosed]);
@@ -1775,8 +1759,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     } else if (result.type === "info") {
       setSelectedInfoId(result.id);
       if (infoPhone) {
-        // D-32: on a phone the hit is shown in the list (even from an open article) with its section opened.
-        setInfoScreen("list");
+        // D-32: the section of the hit is opened in the list data, so the list shows it when the visitor opens it.
         const expand = revealInfoForSearch(content.infoSections, result.id)?.expand ?? null;
         if (expand) setInfoExpanded((current) => current.has(expand) ? current : new Set(current).add(expand));
       }
@@ -1999,9 +1982,12 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
             {infoView === "loading" ? <div className="app-state-body"><AppSkeleton shape="info" /></div>
               : infoView === "fatal" ? <div className="app-state-body">{contentFatal("flaskEmpty")}</div>
               : infoView === "empty" ? <div className="app-state-body"><div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy.info.heading}</strong><span>{emptyCopy.info.body}</span></div></div>
-              : <div className="info-library" data-info-screen={infoPhone ? infoScreen : undefined}>
-              {infoPhone && infoScreen === "list" && infoView === "stale" && contentStaleBanner}
-              <aside className="info-index">{infoRows.map((row) => {
+              : <div className="info-library" data-sections-open={infoPhone ? String(sectionsOpen) : undefined}>
+              {infoPhone && infoRows.length > 0 ? <div className="info-sections-bar">
+                <button type="button" className="secondary-control" aria-expanded={sectionsOpen} aria-controls="info-sections-list" aria-label={infoSectionsLabel.ariaLabel} onClick={() => setSectionsOpen((open) => !open)}>{infoSectionsLabel.word} <span aria-hidden="true">{infoSectionsLabel.glyph}</span>{infoSectionsLabel.count}</button>
+                <span className="info-sections-current">{infoSectionsTitle}</span>
+              </div> : null}
+              <nav className="info-index" aria-label="Разделы информации" id="info-sections-list">{infoRows.map((row) => {
                 // D-10: a closed section is one static line in its place, with no marker and no state; its number is its place in the full list.
                 if (row.kind === "redacted") return <RedactedPlaceholder key={row.slot} variant="index" level={row.requiredLevel} index={String(row.position + 1).padStart(2, "0")} />;
                 const section = row.item;
@@ -2014,16 +2000,16 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
                 const current = infoPhone ? !hasSubsections && section.id === selectedInfo?.id : section.id === selectedInfo?.id && !selectedSubsection;
                 return (
                   <div key={section.id}>
-                    <button type="button" className={`${current ? "active" : ""}${hasSubsections ? " has-subsections" : ""}${hitClass("info", section.id)}`} {...hitAttrs("info", section.id)} data-info-id={infoPhone && hasSubsections ? undefined : section.id} aria-expanded={hasSubsections ? open : undefined} onClick={() => !infoPhone ? setSelectedInfoId(section.id) : hasSubsections ? setInfoExpanded((expanded) => toggleInfoExpanded(expanded, section.id)) : openInfoArticle(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span>{hasSubsections ? <em className="info-sub-marker" aria-label={`Подразделов: ${subRows.length}`}>{open ? "▾" : "▸"} {subRows.length}</em> : null}</button>
-                    {open && hasSubsections ? <div className="info-subsections">{infoPhone && infoOverviewVisible(section) ? <button type="button" className={section.id === selectedInfo?.id && !selectedSubsection ? "active" : ""} data-info-id={section.id} onClick={() => openInfoArticle(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>Обзор раздела</span></button> : null}{subRows.map((subRow) => {
+                    <button type="button" className={`${current ? "active" : ""}${hasSubsections ? " has-subsections" : ""}${hitClass("info", section.id)}`} {...hitAttrs("info", section.id)} data-info-id={infoPhone && hasSubsections ? undefined : section.id} aria-expanded={hasSubsections ? open : undefined} onClick={() => !infoPhone ? setSelectedInfoId(section.id) : hasSubsections ? setInfoExpanded((expanded) => toggleInfoExpanded(expanded, section.id)) : pickInfoArticle(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>{section.title}</span>{hasSubsections ? <em className="info-sub-marker" aria-label={`Подразделов: ${subRows.length}`}>{open ? "▾" : "▸"} {subRows.length}</em> : null}</button>
+                    {open && hasSubsections ? <div className="info-subsections">{infoPhone && infoOverviewVisible(section) ? <button type="button" className={section.id === selectedInfo?.id && !selectedSubsection ? "active" : ""} data-info-id={section.id} onClick={() => pickInfoArticle(section.id)}><small>{String(index + 1).padStart(2, "0")}</small><span>Обзор раздела</span></button> : null}{subRows.map((subRow) => {
                       if (subRow.kind === "redacted") return <RedactedPlaceholder key={subRow.slot} variant="index" level={subRow.requiredLevel} index={`${String(index + 1).padStart(2, "0")}.${subRow.position + 1}`} />;
                       const sub = subRow.item;
-                      return <button key={sub.id} type="button" className={`${sub.id === selectedSubsection?.id ? "active" : ""}${hitClass("info", sub.id)}`} {...hitAttrs("info", sub.id)} data-info-id={sub.id} title={sub.title || "БЕЗ НАЗВАНИЯ"} onClick={() => infoPhone ? openInfoArticle(sub.id) : setSelectedInfoId(sub.id)}><small>{String(index + 1).padStart(2, "0")}.{subRow.position + 1}</small><span>{sub.title || "БЕЗ НАЗВАНИЯ"}</span></button>;
+                      return <button key={sub.id} type="button" className={`${sub.id === selectedSubsection?.id ? "active" : ""}${hitClass("info", sub.id)}`} {...hitAttrs("info", sub.id)} data-info-id={sub.id} title={sub.title || "БЕЗ НАЗВАНИЯ"} onClick={() => infoPhone ? pickInfoArticle(sub.id) : setSelectedInfoId(sub.id)}><small>{String(index + 1).padStart(2, "0")}.{subRow.position + 1}</small><span>{sub.title || "БЕЗ НАЗВАНИЯ"}</span></button>;
                     })}</div> : null}
                   </div>
                 );
-              })}</aside>
-              <article className="info-document">{infoPhone && <button type="button" className="info-phone-back" aria-label="Назад к разделам" onClick={closeInfoArticle}>←</button>}{infoView === "stale" && !(infoPhone && infoScreen === "list") && contentStaleBanner}{infoLostShown ? <RedactedPlaceholder variant="block" level={infoLostShown.level} /> : infoNoOpen ? <div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{levelCopy.sectionsNoOpen.heading}</strong><span>{levelCopy.sectionsNoOpen.body}</span></div> : selectedInfo ? (selectedSubsection
+              })}</nav>
+              <article className="info-document">{infoView === "stale" && contentStaleBanner}{infoLostShown ? <RedactedPlaceholder variant="block" level={infoLostShown.level} /> : infoNoOpen ? <div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{levelCopy.sectionsNoOpen.heading}</strong><span>{levelCopy.sectionsNoOpen.body}</span></div> : selectedInfo ? (selectedSubsection
                 ? <div className="content-fade" key={selectedSubsection.id}><span className="eyebrow">{selectedInfo.title}</span><h1 tabIndex={infoPhone ? -1 : undefined}>{selectedSubsection.title || "БЕЗ НАЗВАНИЯ"}</h1><div className="info-blocks">{selectedSubsection.blocks.map((block) => block.type === "text"
                   ? <FormattedText key={block.id} className="info-document-copy" text={block.text} document={content.formattedText[portiaTextKey.infoBlock(block.id)]} />
                   : block.type === "table"

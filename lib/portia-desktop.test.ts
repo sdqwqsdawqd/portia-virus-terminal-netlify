@@ -1059,3 +1059,59 @@ test("the stale banner is a warning strip in the flow with wrapping text (D-11)"
   assert.match(rule, /overflow-wrap:\s*anywhere/);
   assert.match(rule, /oklch\(\.58 \.08 80 \/ \.55\)/);
 });
+
+// Phase 26 (UI-08, D-14 … D-16): «Информация» on a phone — a quiet sections bar above an article that is always shown.
+const infoWindowSource = () => source.slice(source.indexOf('<AppWindow app="info"'), source.indexOf('<AppWindow app="guide"'));
+// The phone media block that holds the «Информация» rules (the one that also turns .info-library into a page).
+const phoneBlock = () => {
+  const anchor = styles.indexOf("  .info-library { min-height: calc(100svh - 140px)");
+  const start = styles.lastIndexOf("@media (max-width: 900px) {", anchor);
+  return anchor > 0 && start > 0 ? styles.slice(start, styles.indexOf("\n}\n", anchor)) : "";
+};
+
+test("UI-08 D-14: on a phone a sections bar stands above the article; the two-screen model and the back arrow are gone", () => {
+  const info = infoWindowSource();
+  assert.ok(source.includes('import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";'));
+  assert.ok(source.includes("const [sectionsOpen, setSectionsOpen] = useState(false);"));
+  assert.ok(info.includes('className="info-sections-bar"'), "the bar");
+  assert.ok(info.includes("aria-expanded={sectionsOpen}") && info.includes('aria-controls="info-sections-list"'));
+  assert.match(info, /<nav className="info-index" aria-label="Разделы информации" id="info-sections-list"/);
+  assert.ok(info.includes("data-sections-open={infoPhone ? String(sectionsOpen) : undefined}"), "the open state is on the library");
+  // The bar sits right above the list, the list right above the article: Tab goes button → list → article.
+  assert.ok(info.indexOf('className="info-sections-bar"') < info.indexOf('id="info-sections-list"'));
+  assert.ok(info.indexOf('id="info-sections-list"') < info.indexOf('<article className="info-document">'));
+  // The article is never conditional on a screen; the bar is not drawn with zero sections.
+  assert.ok(info.includes("{infoPhone && infoRows.length > 0 ? <div className=\"info-sections-bar\""));
+  for (const retired of ["data-info-screen", "info-phone-back", "Назад к разделам", "setInfoScreen", "openInfoArticle", "closeInfoArticle", "infoReturnIdRef"]) {
+    assert.ok(!source.includes(retired), `${retired} is retired`);
+  }
+  // The glyph is decoration; the name of the current section is plain text, not a tap target.
+  assert.ok(info.includes('<span aria-hidden="true">{infoSectionsLabel.glyph}</span>'));
+  assert.ok(info.includes('<span className="info-sections-current">{infoSectionsTitle}</span>'));
+  assert.ok(source.includes("infoCurrentTitle(content.infoSections, selectedSubsection?.id ?? selectedInfo.id)"));
+  // «Далее» stays in the article.
+  assert.ok(info.includes('<div className="info-next">'));
+});
+
+test("UI-08 D-14: the bar exists only on a phone, in the flow; the desktop .info-index rules are unchanged", () => {
+  assert.match(styles, /^\.info-sections-bar \{ display: none; \}$/m, "hidden at 901px and up");
+  const phone = phoneBlock();
+  const bar = /\.info-sections-bar \{([^}]*)\}/.exec(phone)?.[1] ?? "";
+  assert.match(bar, /display: flex/);
+  assert.match(bar, /min-height: 44px/);
+  assert.match(bar, /margin: 0 0 16px/);
+  assert.match(bar, /justify-content: space-between/);
+  assert.match(bar, /gap: 8px/);
+  assert.doesNotMatch(bar, /position:/, "never fixed or sticky");
+  const name = /\.info-sections-current \{([^}]*)\}/.exec(phone)?.[1] ?? "";
+  assert.match(name, /min-width: 0/);
+  assert.match(name, /text-overflow: ellipsis/);
+  assert.match(name, /white-space: nowrap/);
+  assert.match(name, /font: 400 13px/);
+  // The list is out of the page while it is closed and in the flow under the bar when it is open.
+  assert.match(phone, /\.info-library\[data-sections-open="false"\] \.info-index \{ display: none; \}/);
+  assert.doesNotMatch(phone, /data-info-screen|info-phone-back/);
+  assert.doesNotMatch(styles, /info-phone-back|data-info-screen/);
+  // The desktop index keeps its column.
+  assert.match(styles, /^\.info-index \{ min-width: 0; overflow-y: auto; padding: 25px 14px; border-right: 1px solid/m);
+});

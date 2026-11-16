@@ -120,7 +120,6 @@ const BUTTON_FAMILY = [
   ".secondary-control",
   ".danger-control",
   ".app-state-action",
-  ".info-phone-back",
   ".info-next button",
   ".promotion-action",
   ".promotion-preview-actions > button",
@@ -193,8 +192,8 @@ test("UI-03: every button of the family has one geometry and one corner role", (
     assert.equal(lastDeclaration(cascadeCss, selector, "border-radius"), "var(--radius-control)", `${selector} radius`);
     assert.equal(lastDeclaration(cascadeCss, selector, "width"), "auto", `${selector} width`);
     assert.equal(lastDeclaration(cascadeCss, selector, "flex"), "0 0 auto", `${selector} flex`);
-    // The back arrow is an icon glyph (20px), not label text; it is retired later in the phase (UI-08).
-    assert.equal(lastDeclaration(cascadeCss, selector, "font-size"), selector === ".info-phone-back" ? "20px" : "11px", `${selector} font-size`);
+    // UI-08 retired the phone back arrow (.info-phone-back), the one icon-glyph member; every member now reads 11px.
+    assert.equal(lastDeclaration(cascadeCss, selector, "font-size"), "11px", `${selector} font-size`);
     assert.equal(lastDeclaration(cascadeCss, selector, "font-weight"), "700", `${selector} font-weight`);
     // T-26-06: the touch target on a phone.
     assert.equal(lastDeclaration(cascadeCss, selector, "min-height", PHONE), "var(--tap-target)", `${selector} phone min-height`);

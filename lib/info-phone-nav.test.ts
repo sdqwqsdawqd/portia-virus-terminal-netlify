@@ -86,3 +86,50 @@ test("D-29 infoOverviewVisible: only a section with subsections and a non-blank 
   assert.equal(nav.infoOverviewVisible(sections[3]), false);
   assert.equal(nav.infoOverviewVisible(section("x", "X", " \n\t ", [{ id: "x-a", title: "A" }])), false);
 });
+
+// Phase 26 (UI-08, D-14 … D-16): the phone sections bar above the article.
+const hitIds = (...ids: string[]) => (id: string) => ids.includes(id);
+
+test("D-16 infoSectionsHitCount: counts sections with a hit in the section itself or in any subsection", () => {
+  assert.equal(nav.infoSectionsHitCount(sections, hitIds()), 0);
+  assert.equal(nav.infoSectionsHitCount(sections, hitIds("what")), 1);
+  assert.equal(nav.infoSectionsHitCount(sections, hitIds("class-b")), 1);
+  // Two hits inside one section count it once.
+  assert.equal(nav.infoSectionsHitCount(sections, hitIds("class", "class-a", "class-c")), 1);
+  assert.equal(nav.infoSectionsHitCount(sections, hitIds("what", "class-c", "docs-a")), 3);
+  assert.equal(nav.infoSectionsHitCount(sections, hitIds("missing")), 0);
+  assert.equal(nav.infoSectionsHitCount([], hitIds("what")), 0);
+});
+
+test("D-14 infoCurrentTitle: the title of a section or a subsection by id", () => {
+  assert.equal(nav.infoCurrentTitle(sections, "what"), "Что такое вирусы?");
+  assert.equal(nav.infoCurrentTitle(sections, "class-a"), "Класс А");
+  assert.equal(nav.infoCurrentTitle(sections, "class-c"), longTitle);
+});
+
+test("D-14 infoCurrentTitle: an empty or blank title reads «Без названия», an unknown id falls back to the first section", () => {
+  assert.equal(nav.infoCurrentTitle(sections, "class-b"), "Без названия");
+  assert.equal(nav.infoCurrentTitle([section("s", "   ", "")], "s"), "Без названия");
+  assert.equal(nav.infoCurrentTitle(sections, "missing"), "Что такое вирусы?");
+  assert.equal(nav.infoCurrentTitle(sections, ""), "Что такое вирусы?");
+  assert.equal(nav.infoCurrentTitle([section("s", "", "")], "missing"), "Без названия");
+  assert.equal(nav.infoCurrentTitle([], "missing"), "Без названия");
+});
+
+test("D-14/D-16 infoSectionsButtonLabel: closed, closed with hits, open", () => {
+  assert.deepEqual(nav.infoSectionsButtonLabel(false, 0), { text: "РАЗДЕЛЫ ▾", word: "РАЗДЕЛЫ", glyph: "▾", count: "", ariaLabel: undefined });
+  assert.deepEqual(nav.infoSectionsButtonLabel(false, 3), { text: "РАЗДЕЛЫ ▾ · 3", word: "РАЗДЕЛЫ", glyph: "▾", count: " · 3", ariaLabel: "Разделы, найдено в разделах: 3" });
+  // The open list shows the hits itself, so the button drops the count.
+  assert.deepEqual(nav.infoSectionsButtonLabel(true, 3), { text: "РАЗДЕЛЫ ▴", word: "РАЗДЕЛЫ", glyph: "▴", count: "", ariaLabel: undefined });
+  assert.deepEqual(nav.infoSectionsButtonLabel(true, 0), { text: "РАЗДЕЛЫ ▴", word: "РАЗДЕЛЫ", glyph: "▴", count: "", ariaLabel: undefined });
+  // A negative or fractional count is not a count of sections.
+  assert.equal(nav.infoSectionsButtonLabel(false, -1).count, "");
+});
+
+test("D-14 the bar copy is short: every text and accessible name is under 7 words", () => {
+  for (const label of [nav.infoSectionsButtonLabel(false, 0), nav.infoSectionsButtonLabel(false, 12), nav.infoSectionsButtonLabel(true, 0)]) {
+    assert.ok(label.text.split(/\s+/u).length < 7, label.text);
+    if (label.ariaLabel) assert.ok(label.ariaLabel.split(/\s+/u).length < 7, label.ariaLabel);
+  }
+  assert.ok(nav.infoCurrentTitle([], "x").split(/\s+/u).length < 7);
+});

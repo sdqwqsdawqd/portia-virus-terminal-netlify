@@ -43,3 +43,37 @@ export function revealInfoForSearch(sections: readonly InfoSection[], hitId: str
 export function infoOverviewVisible(section: InfoSection): boolean {
   return section.subsections.length > 0 && section.body.trim().length > 0;
 }
+
+// Phase 26 (UI-08, D-14 … D-16): the sections bar above the article on a phone. The bar copy uses the sentence case of UI-SPEC;
+// `untitled` above (capitals) stays the fallback of «Далее» and of the list rows.
+const barUntitled = "Без названия";
+
+/** D-16: how many sections hold a hit, in the section itself or in any of its subsections; a section with several hits counts once. */
+export function infoSectionsHitCount(sections: readonly InfoSection[], isHit: (id: string) => boolean): number {
+  return sections.filter((section) => isHit(section.id) || section.subsections.some((subsection) => isHit(subsection.id))).length;
+}
+
+/** D-14: the name of the current article for the bar: a section or a subsection by id; an unknown id is the first section (the default one). */
+export function infoCurrentTitle(sections: readonly InfoSection[], id: string): string {
+  const named = (title: string) => (title.trim() ? title : barUntitled);
+  for (const section of sections) {
+    if (section.id === id) return named(section.title);
+    const subsection = section.subsections.find((item) => item.id === id);
+    if (subsection) return named(subsection.title);
+  }
+  return named(sections[0]?.title ?? "");
+}
+
+export type InfoSectionsButtonLabel = { text: string; word: string; glyph: "▾" | "▴"; count: string; ariaLabel: string | undefined };
+
+/**
+ * D-14/D-16: the bar button. `text` is what is read on screen; `glyph` is drawn aria-hidden. The count of sections with hits shows only
+ * while the list is closed (the open list marks them itself), and then the button carries a spoken name.
+ */
+export function infoSectionsButtonLabel(open: boolean, hits: number): InfoSectionsButtonLabel {
+  const word = "РАЗДЕЛЫ";
+  const glyph = open ? "▴" : "▾";
+  const counted = !open && Number.isInteger(hits) && hits > 0;
+  const count = counted ? ` · ${hits}` : "";
+  return { text: `${word} ${glyph}${count}`, word, glyph, count, ariaLabel: counted ? `Разделы, найдено в разделах: ${hits}` : undefined };
+}
