@@ -302,9 +302,9 @@ function styleOfStoredLine(document: StoredDocument | undefined, flat: string[],
   return {};
 }
 
+// Phase 26 (26-06, D-13b): «СОХРАНИТЬ» stands in the sticky action bar of the draft tab; there is no chip to open first.
 async function saveEditor(page: Page) {
-  await page.locator(".editor-save-chip > button").click();
-  await page.getByRole("button", { name: "СОХРАНИТЬ", exact: true }).click();
+  await page.locator(".etab-bar").getByRole("button", { name: "СОХРАНИТЬ", exact: true }).click();
   await expect(page.locator("p.sr-only[role='status']")).toContainText("Сохранено");
 }
 

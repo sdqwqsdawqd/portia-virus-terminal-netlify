@@ -381,13 +381,18 @@ type Surface = {
   compare: "frame" | "picture";
 };
 
-/** Unsaved edits sit behind the chip of the save bar: it opens the panel with «СОХРАНИТЬ». */
+/** Phase 26 (26-06, D-13b): «СОХРАНИТЬ» stands in the sticky action bar of the draft tab; nothing has to be opened first. */
 async function save(page: Page) {
-  const popover = page.locator(".editor-save-popover");
-  if (!(await popover.isVisible())) await page.locator(".editor-save-chip > button").click();
-  const button = popover.getByRole("button", { name: "СОХРАНИТЬ", exact: true });
+  const button = page.locator(".etab-bar").getByRole("button", { name: "СОХРАНИТЬ", exact: true });
   await expect(button).toBeEnabled();
   await button.click();
+}
+
+/** The draft is unchanged: «СОХРАНИТЬ» of the action bar is disabled and its status does not say «Есть несохранённые изменения». */
+async function expectDraftUnchanged(page: Page, message: string) {
+  const bar = page.locator(".etab-bar");
+  await expect(bar.getByRole("button", { name: "СОХРАНИТЬ", exact: true }), message).toBeDisabled();
+  await expect(bar.locator(".etab-status"), message).not.toContainText("Есть несохранённые изменения");
 }
 
 // The dialog «Видимая часть» (D-66): the closed block holds the preview and «Изменить»; the dialog is a native <dialog> in the top layer.
@@ -559,7 +564,7 @@ async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Su
   await movePart(open, { x: 35, y: 65 });
   await open.getByRole("button", { name: "Отмена" }).click();
   await expect(open, "«Отмена» closes the dialog").toBeHidden();
-  await expect(page.locator(".editor-save-chip"), "«Отмена» leaves the draft unchanged").toHaveCount(0);
+  await expectDraftUnchanged(page, "«Отмена» leaves the draft unchanged");
   expect(await storedState(), "«Отмена»: the preview is as before").toBe(`${chosenFrame.x}% ${chosenFrame.y}%`);
 
   open = await openFraming(page, framed);
@@ -567,7 +572,7 @@ async function frameChain(page: Page, diagnostics: DiagnosticLedger, surface: Su
   await positionOf(open).press("Escape");
   await expect(open, "Esc closes the dialog").toBeHidden();
   await expect(again.editorNavigation(), "Esc leaves the window of the editor open").toBeVisible();
-  await expect(page.locator(".editor-save-chip"), "Esc leaves the draft unchanged").toHaveCount(0);
+  await expectDraftUnchanged(page, "Esc leaves the draft unchanged");
   expect(await storedState(), "Esc: the preview is as before").toBe(`${chosenFrame.x}% ${chosenFrame.y}%`);
 
   open = await openFraming(page, framed);
@@ -880,7 +885,7 @@ test.describe("[STAB-REL-08] D-67 the frame of the dialog is the place of the si
     await expect(part, "back at 100% the position is 50 / 50 again").toHaveAttribute("aria-valuetext", positionText({ x: 50, y: 50 }));
     await applyFraming(dialog);
     await expect(group.locator(".portia-image").first(), "the default frame is not stored: the preview has no frame").not.toHaveAttribute("data-framing", "true");
-    await expect(page.locator(".editor-save-chip"), "nothing changed, nothing to save").toHaveCount(0);
+    await expectDraftUnchanged(page, "nothing changed, nothing to save");
     expect(writes, "the UI contract never writes").toEqual([]);
   });
 });
@@ -1255,7 +1260,7 @@ test.describe("[STAB-A11Y-01] D-66 the dialog «Видимая часть»: nam
       await expect(editor.editorNavigation(), `${close} leaves the window of the editor open`).toBeVisible();
       await expect(change, `${close} gives the focus back to «Изменить»`).toBeFocused();
       expect(await preview(), `${close}: the preview is as before`).toBe(before);
-      await expect(page.locator(".editor-save-chip"), `${close} leaves the draft unchanged`).toHaveCount(0);
+      await expectDraftUnchanged(page, `${close} leaves the draft unchanged`);
     }
     const again = await openFraming(page, group);
     await expect(positionOf(again), "a dialog opened again starts from the stored frame").toHaveAttribute("aria-valuetext", positionText({ x: 50, y: 50 }));

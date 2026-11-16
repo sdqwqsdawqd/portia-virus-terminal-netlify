@@ -88,9 +88,9 @@ async function infoTitleField(page: Page, editor: EditorPage) {
   return field;
 }
 
+// Phase 26 (26-06, D-13b): «СОХРАНИТЬ» stands in the sticky action bar of the draft tab; there is no chip to open first.
 async function save(page: Page) {
-  await page.locator(".editor-save-chip > button").click();
-  await page.getByRole("button", { name: "СОХРАНИТЬ", exact: true }).click();
+  await page.locator(".etab-bar").getByRole("button", { name: "СОХРАНИТЬ", exact: true }).click();
 }
 
 /** Holds PUT /api/content until released, then sends it on to the real server. Nothing is fulfilled. */
