@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Phase 26 UI-SPEC approved
-last_updated: "2026-11-16T05:49:51.750Z"
-last_activity: 2026-11-15
-last_activity_desc: Phase PORTIA-25 execution started
-state_head: cf8038f42270cacd600eb347faaf36f1c52294ba
+stopped_at: Completed PORTIA-26-01-PLAN.md
+last_updated: "2026-11-16T06:30:10.326Z"
+last_activity: 2026-11-16
+last_activity_desc: Phase PORTIA-26 execution started
+state_head: 4b4edbabeb7d62343754558cee93086b3635de35
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 64
-  completed_plans: 50
+  completed_plans: 51
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-09)
 
 **Core value:** Участник открывает сайт и сразу находит нужную запись; редактор правит её без потерь и без путаницы — и всё это выглядит как цельная «PORTIA OS».
-**Current focus:** Phase PORTIA-25 — Переключение закрытия: база, кэш, сборка, хранилище
+**Current focus:** Phase PORTIA-26 — Единый стиль сайта
 
 ## Current Position
 
-Phase: PORTIA-26 (Единый стиль сайта) — READY TO EXECUTE
-Plan: 10 of 10
-Status: Executing Phase PORTIA-25
-Last activity: 2026-11-15 — Phase PORTIA-25 execution started
+Phase: PORTIA-26 (Единый стиль сайта) — EXECUTING
+Plan: 2 of 14
+Status: Executing Phase PORTIA-26
+Last activity: 2026-11-16 — Phase PORTIA-26 execution started
 
 Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 — принятый риск; Phase 22 не закрыта)
 
@@ -89,6 +89,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-25 P08 | 40 min | 2 tasks | 12 files |
 | Phase PORTIA-25 P09 | 25min | 2 tasks | 3 files |
 | Phase PORTIA-25 P10 | 40min | 3 tasks | 10 files |
+| Phase PORTIA-26 P01 | 5 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -299,6 +300,9 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-25]: 25-09: build scan has 16 content markers (UTF-8 and \uXXXX forms); all passed the fixture/working-code drift check; postbuild on Netlify BLOCKED until deploy preview (A4)
 - [Phase PORTIA-25]: 25-10: RLS review done by the executor from the reviewer instructions (no Agent tool), not independent; critical/high 0 at 1b8f4f2; SEC-01..05 stay open, live lines BLOCKED
 - [Phase PORTIA-25]: 25-10: audit-evidence test left in the owner red window (package.json postbuild line); orchestrator re-captures; run.sh blocked by npm in the temp Node, direct equivalents green
+- [Phase PORTIA-26]: 26-01: роль радиуса выбирается по назначению элемента; спорные кнопки (таскбар, Пуск, ОФОРМЛЕНИЕ, зум документа) = control, строки меню Пуск = card
+- [Phase PORTIA-26]: 26-01: хеш PRE_PHASE_PORTIA_CSS_SHA256 и счётчик радиусов 131/6 упразднены; охрана — грамматика роль|0|композиция с файлом и строкой
+- [Phase PORTIA-26]: 26-01 (D-17): Playwright по умолчанию игнорирует tests/e2e/visual; явный путь = историческое сравнение, красное = дрейф, не PASS
 
 ### Pending Todos
 
@@ -352,9 +356,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-16T04:33:42.576Z
-Stopped at: Phase 26 UI-SPEC approved
-Resume file: .planning/phases/PORTIA-26-edinyy-stil-sayta/26-UI-SPEC.md
+Last session: 2026-11-16T06:30:09.413Z
+Stopped at: Completed PORTIA-26-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
