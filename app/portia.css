@@ -2520,7 +2520,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }
 .users-search { margin: 0; }
-.users-tab section, .users-closed { display: grid; gap: 8px; min-width: 0; }
+.users-tab section, .users-closed, .users-pane { display: grid; gap: 8px; min-width: 0; }
 .users-pending-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
 .users-pending-head > p { flex-basis: 100%; margin: 0; color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.35 var(--sans); overflow-wrap: anywhere; }
 .users-tab h2, .users-closed > summary { margin: 0; color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .07em; }
@@ -2535,16 +2535,23 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .users-table-mark.accent { border-color: var(--teal-dim); color: var(--teal); }
 .users-table-mark.warning { border-color: var(--warning); color: var(--warning); }
 .users-table-mark.neutral { color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); }
-.users-row > a, .users-action-dialog-body a { color: var(--teal); font: 700 11px/1.35 var(--sans); }
+.users-row > a, .users-action-body a { color: var(--teal); font: 700 11px/1.35 var(--sans); }
 .users-row-caption, .users-moscow-note, .users-truncated { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; margin: 0; color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.35 var(--sans); overflow-wrap: anywhere; }
 .users-row-caption { flex-basis: 100%; }
-.users-phone-row { display: grid; gap: 4px; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
+.users-phone-row, .users-pick-row { display: grid; gap: 4px; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
+.users-pick-row { cursor: pointer; }
+.users-row:has(> .users-pick-row:hover) { border-color: var(--teal-dim); }
+.users-row:has(> .users-pick-row[aria-current="true"]) { border-color: var(--teal-dim); background: var(--teal-soft); }
+.users-sections button { border: 1px solid oklch(.358 calc(.031 * var(--accent-chroma)) var(--accent-hue)); background: transparent; color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font-family: var(--sans); white-space: nowrap; cursor: pointer; }
+.users-sections button[aria-current="true"] { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
+.users-bulk-caption { margin: 0; color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.35 var(--sans); overflow-wrap: anywhere; }
+.etab-detail > .users-action-body > h2 { font-size: 16px; letter-spacing: 0; overflow-wrap: anywhere; }
 .users-row-main { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .users-action-dialog-body { max-height: calc(100svh - 24px); overflow-y: auto; overscroll-behavior: contain; }
-.users-action-dialog-body dl { display: grid; gap: 8px; margin: 16px 0; }
-.users-action-dialog-body dl > div { display: grid; gap: 4px; min-width: 0; }
-.users-action-dialog-body dt { color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .07em; }
-.users-action-dialog-body dd { min-width: 0; margin: 0; color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.35 var(--sans); overflow-wrap: anywhere; }
+.users-action-body dl { display: grid; gap: 8px; margin: 16px 0; }
+.users-action-body dl > div { display: grid; gap: 4px; min-width: 0; }
+.users-action-body dt { color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .07em; }
+.users-action-body dd { min-width: 0; margin: 0; color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.35 var(--sans); overflow-wrap: anywhere; }
 .users-row-actions { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: end; gap: 8px; min-width: 0; }
 .users-level-control { flex: 0 1 152px; min-width: 120px; margin: 0; }
 .users-fixed-level, .users-action-caption { margin: 0; color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 400 11px/1.35 var(--sans); }
@@ -2586,8 +2593,8 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .editor-field input, .editor-field select { max-width: var(--field-max); }
 .editor-field textarea { padding: 8px 16px; border-radius: var(--radius-field); }
 /* Вкладки: одна полоса; у текущей вкладки линия 3px на любой ширине, линия ошибки сохранения сильнее. */
-.editor-tabs button, .editor-section-tabs nav button, .promotion-editor-branches button, .promotion-queue-filters button, .promotion-bank-workflow-tabs button { min-height: 40px; padding: 0 16px; border-radius: var(--radius-tab); font-size: 11px; font-weight: 700; }
-.editor-tabs button.active, .editor-section-tabs nav button[aria-pressed="true"], .editor-section-tabs nav button[aria-current="true"], .promotion-editor-branches button.active, .promotion-queue-filters button.active, .promotion-bank-workflow-tabs button.active { box-shadow: inset 0 -3px 0 var(--teal); }
+.editor-tabs button, .editor-section-tabs nav button, .users-sections button, .promotion-editor-branches button, .promotion-queue-filters button, .promotion-bank-workflow-tabs button { min-height: 40px; padding: 0 16px; border-radius: var(--radius-tab); font-size: 11px; font-weight: 700; }
+.editor-tabs button.active, .editor-section-tabs nav button[aria-pressed="true"], .editor-section-tabs nav button[aria-current="true"], .users-sections button[aria-current="true"], .promotion-editor-branches button.active, .promotion-queue-filters button.active, .promotion-bank-workflow-tabs button.active { box-shadow: inset 0 -3px 0 var(--teal); }
 .editor-tabs button[data-save-error], .editor-tabs button.active[data-save-error] { box-shadow: inset 0 -2px 0 var(--danger); }
 /* Строки списков: карточка 7px, отступ 8px 16px, заголовок 13px, подпись 11px, зазор 8px. */
 .editor-record-list button, .users-row, .global-result, .personnel-list > button { padding: 8px 16px; border-radius: var(--radius-card); }
@@ -2597,7 +2604,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 @media (max-width: 900px) {
   .primary-control, .secondary-control, .danger-control, .app-state-action, .info-phone-back, .info-next button, .promotion-action, .promotion-preview-actions > button, .promotion-device-reset button { min-height: var(--tap-target); }
   .editor-field input, .editor-field select, .global-search-box, .search-box, .promotion-device-reset input, .promotion-final-decision input, .promotion-bank-settings input, .promotion-bank-editor > label > input, .promotion-bank-editor select, .promotion-preview select, .promotion-question-list-heading input { min-height: var(--tap-target); }
-  .editor-tabs button, .editor-section-tabs nav button, .promotion-editor-branches button, .promotion-queue-filters button, .promotion-bank-workflow-tabs button { min-height: var(--tap-target); }
+  .editor-tabs button, .editor-section-tabs nav button, .users-sections button, .promotion-editor-branches button, .promotion-queue-filters button, .promotion-bank-workflow-tabs button { min-height: var(--tap-target); }
 }
 /* Угол окна (UI-05, D-22): кнопки управления вплотную к правому краю полосы, 46x46 (высота полосы ПК, исключение A10 из правила 44px),
    крестик — последний, в самом углу; контролы выше рёбер ресайза (z-index 9), поэтому угол NE под ними неактивен. Цвета наведения — прежние. */
@@ -2657,6 +2664,8 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .etab-nav .editor-section-tabs nav { flex-wrap: nowrap; overflow-x: auto; }
 .etab-nav .editor-section-create { width: min(320px, 70vw); white-space: normal; }
 .etab-nav > .dossier-tabs { margin: 0; }
+/* «Пользователи» (26-09): три раздела в слоте nav — вкладки по ширине подписи в одну строку. */
+.etab-nav > .users-sections { display: flex; flex-wrap: nowrap; gap: 8px; margin: 0; }
 /* Переход из оглавления оставляет карточку видимой под липкой панелью (48px панели + 8px зазора + 8px). */
 .content-editor:has(> .etab-bar) .nested-editor-card, .content-editor:has(> .etab-bar) .editor-record-row { scroll-margin-top: 64px; }
 /* Тело вкладки (D-12): список слева, деталь справа; без списка — только деталь, пустой левой колонки нет. Вид строк — семейство строк выше. */
@@ -2667,8 +2676,8 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .etab-empty { display: grid; justify-items: center; align-content: start; gap: 8px; padding: 48px 24px; text-align: center; }
 /* На ПК sticky отсчитывается от внутреннего края панели с отступом 28px: верхний отступ переходит в отступ шапки, и панель прилегает к краю. */
 @media (min-width: 901px) {
-  .content-editor:has(> .etab-bar) { padding-top: 0; }
-  .content-editor:has(> .etab-bar) > .editor-header { margin-top: 28px; }
+  .content-editor:has(> .etab-bar), .content-editor:has(> .users-tab > .etab-bar) { padding-top: 0; }
+  .content-editor:has(> .etab-bar) > .editor-header, .content-editor:has(> .users-tab > .etab-bar) > .editor-header { margin-top: 28px; }
 }
 /* Телефон: та же липкость через overflow: clip, под системной полосой 48px (как .editor-section-addbar); две строки в одном элементе. */
 @media (max-width: 900px) {

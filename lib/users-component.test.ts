@@ -191,3 +191,33 @@ test("single approval keeps the POST decision-time mark through a cached list re
   assert.match(load, /recentDecisionMarks\.current\.get\(row\.id\)[\s\S]*tableMark: recent\.mark/u);
   assert.match(load, /value\.until <= now/u, "the override must expire after the roster cache window");
 });
+
+// Phase 26 (UI-04, D-12, T-26-18): on a PC the picked row opens in the detail pane, which renders the same body as the phone action
+// window; the actions of both come only from visibleControls (the server's flags), the component computes no rights of its own.
+test("the PC detail pane and the phone action window share one UsersActionBody with server-driven controls", () => {
+  assert.match(component, /function UsersActionBody\(/u);
+  const dialog = component.slice(component.indexOf("function UsersActionDialog("), component.indexOf("function UsersBulkDialog("));
+  assert.match(dialog, /<UsersActionBody /u, "the phone window renders the shared body");
+  assert.match(component, /detail=\{selectedContext \? <UsersActionBody /u, "the PC detail renders the shared body");
+  const body = component.slice(component.indexOf("function UsersActionBody("), component.indexOf("function UsersActionDialog("));
+  for (const part of ["<h2 id={titleId}>{row.nickname}</h2>", "usersCopy.typeLabel", "usersCopy.tableLabel", "usersCopy.profileLabel", "<RowCaption row={row} />", "<HistoryPanel", "<RowActions"]) {
+    assert.ok(body.includes(part), part);
+  }
+  assert.equal(component.split("visibleControls(").length - 1, 1, "the controls are read in one place, from the server's row flags");
+  assert.doesNotMatch(body, /canDecide|canSetLevel|canRevoke|retryAt/u, "the body computes no rights");
+  assert.match(component, /aria-current=\{selectedKey === row\.key \? "true" : undefined\}/u, "the picked row is the current one");
+  assert.match(component, /usersCopy\.detailEmptyTitle/u);
+  assert.match(component, /usersCopy\.detailEmptyHint/u);
+});
+
+test("the empty detail and the section labels are short texts in users-copy", async () => {
+  const { usersCopy } = await import("./users-copy.ts");
+  assert.equal(usersCopy.detailEmptyTitle, "Выберите заявку или человека");
+  assert.equal(usersCopy.detailEmptyHint, "Действия появятся справа.");
+  assert.equal(usersCopy.sectionTab("Заявки", 3), "Заявки · 3");
+  assert.deepEqual(usersCopy.sectionTitles, { pending: "Заявки", people: "Люди", closed: "Отклонённые и отозванные" });
+  assert.equal(usersCopy.pendingStatus(12), "Ожидают: 12");
+  for (const text of [usersCopy.detailEmptyTitle, usersCopy.detailEmptyHint, usersCopy.sectionsLabel, ...Object.values(usersCopy.sectionTitles)]) {
+    assert.ok(text.split(/\s+/u).length < 7, `${text}: shorter than 7 words`);
+  }
+});

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { AppDeniedPanel, AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/components/portia-desktop-states";
 import { ConfirmDialog } from "@/components/portia-editor-dossier";
+import { EditorActionBar, EditorEmptyDetail, EditorTabBody } from "@/components/portia-editor-tab-shell";
 import { failureFromResponse, type AppFailure } from "@/lib/app-state";
 import type { AccessLevel } from "@/lib/access-levels";
 import { usersCopy } from "@/lib/users-copy";
@@ -22,6 +23,16 @@ type RowContext = { row: ViewRow; section: UsersSectionKind; index: number };
 type BusyAction = { key: string; action: RowAction } | null;
 type ConfirmState = { kind: "reject" | "revoke"; context: RowContext };
 type HistoryState = { entries: UsersHistoryEntry[]; loading: boolean; error: boolean };
+type ActionHandlers = {
+  onApprove: (context: RowContext, level: AccessLevel | undefined, fromPhone: boolean) => void;
+  onReject: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
+  onSetLevel: (context: RowContext, level: AccessLevel, fromPhone: boolean) => void;
+  onRevoke: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
+  onClearCooldown: (context: RowContext, fromPhone: boolean) => void;
+};
+
+// Phase 26 (UI-04, D-12): the sections of the PC layout, in the order of the bar's nav.
+const USERS_SECTIONS = ["pending", "people", "closed"] as const;
 
 async function responseBody(response: Response): Promise<Record<string, unknown>> {
   try { return await response.json() as Record<string, unknown>; } catch { return {}; }
@@ -148,34 +159,64 @@ function RowActions({
   );
 }
 
+/**
+ * Phase 26 (UI-04, D-12): one body for the phone action window and the PC detail pane — the nickname, «ТИП», «В ТАБЛИЦЕ»,
+ * «ПРОФИЛЬ», the caption of the last decision, the history (always open outside «Заявки») and the actions. The actions come
+ * only from visibleControls in RowActions (the server's row flags); the body itself decides nothing (T-26-18).
+ */
+function UsersActionBody({
+  context,
+  titleId,
+  historyId,
+  historyState,
+  fromPhone,
+  callerIsOwner,
+  busy,
+  handlers,
+}: {
+  context: RowContext;
+  titleId: string;
+  historyId: string;
+  historyState: HistoryState | undefined;
+  fromPhone: boolean;
+  callerIsOwner: boolean;
+  busy: BusyAction;
+  handlers: ActionHandlers;
+}) {
+  const { row } = context;
+  return (
+    <div className="users-action-body">
+      <h2 id={titleId}>{row.nickname}</h2>
+      <dl>
+        <div><dt>{usersCopy.typeLabel}</dt><dd>{row.typePlaque}</dd></div>
+        <div><dt>{usersCopy.tableLabel}</dt><dd><span className={`users-table-mark ${row.tableMark.tone}`}>{row.tableMark.text}</span></dd></div>
+        <div><dt>{usersCopy.profileLabel}</dt><dd><ProfileLink row={row} /></dd></div>
+      </dl>
+      <RowCaption row={row} />
+      {context.section !== "pending" ? <HistoryPanel id={historyId} state={historyState} /> : null}
+      <RowActions context={context} callerIsOwner={callerIsOwner} fromPhone={fromPhone} busy={busy} {...handlers} />
+    </div>
+  );
+}
+
 function UsersActionDialog({
   context,
   callerIsOwner,
   busy,
-  onApprove,
-  onReject,
-  onSetLevel,
-  onRevoke,
-  onClearCooldown,
+  handlers,
   historyState,
   onClose,
 }: {
   context: RowContext;
   callerIsOwner: boolean;
   busy: BusyAction;
-  onApprove: (context: RowContext, level: AccessLevel | undefined, fromPhone: boolean) => void;
-  onReject: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
-  onSetLevel: (context: RowContext, level: AccessLevel, fromPhone: boolean) => void;
-  onRevoke: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
-  onClearCooldown: (context: RowContext, fromPhone: boolean) => void;
+  handlers: ActionHandlers;
   historyState: HistoryState | undefined;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-  const { row } = context;
   const phoneHistory = context.section === "pending" ? undefined : historyState;
-  const historyId = `users-phone-history-${row.source.nicknameKey}`;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -194,15 +235,7 @@ function UsersActionDialog({
       onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
       <div className="users-action-dialog-body">
-        <h2 id={titleId}>{row.nickname}</h2>
-        <dl>
-          <div><dt>{usersCopy.typeLabel}</dt><dd>{row.typePlaque}</dd></div>
-          <div><dt>{usersCopy.tableLabel}</dt><dd><span className={`users-table-mark ${row.tableMark.tone}`}>{row.tableMark.text}</span></dd></div>
-          <div><dt>{usersCopy.profileLabel}</dt><dd><ProfileLink row={row} /></dd></div>
-        </dl>
-        <RowCaption row={row} />
-        {context.section !== "pending" ? <HistoryPanel id={historyId} state={phoneHistory} /> : null}
-        <RowActions context={context} callerIsOwner={callerIsOwner} fromPhone busy={busy} onApprove={onApprove} onReject={onReject} onSetLevel={onSetLevel} onRevoke={onRevoke} onClearCooldown={onClearCooldown} />
+        <UsersActionBody context={context} titleId={titleId} historyId={`users-phone-history-${context.row.source.nicknameKey}`} historyState={phoneHistory} fromPhone callerIsOwner={callerIsOwner} busy={busy} handlers={handlers} />
         <div className="portia-dialog-actions">
           <button type="button" className="secondary-control" data-autofocus onClick={onClose}>{usersCopy.closeWindow}</button>
         </div>
@@ -280,6 +313,8 @@ function UsersRows({
   historyByKey,
   openHistoryKeys,
   onToggleHistory,
+  selectedKey = null,
+  onSelect,
   onOpen,
   onApprove,
   onReject,
@@ -296,13 +331,10 @@ function UsersRows({
   historyByKey: Readonly<Record<string, HistoryState>>;
   openHistoryKeys: ReadonlySet<string>;
   onToggleHistory: (nicknameKey: string) => void;
+  selectedKey?: string | null;
+  onSelect?: (context: RowContext) => void;
   onOpen: (context: RowContext, opener: HTMLButtonElement) => void;
-  onApprove: (context: RowContext, level: AccessLevel | undefined, fromPhone: boolean) => void;
-  onReject: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
-  onSetLevel: (context: RowContext, level: AccessLevel, fromPhone: boolean) => void;
-  onRevoke: (context: RowContext, opener: HTMLButtonElement, fromPhone: boolean) => void;
-  onClearCooldown: (context: RowContext, fromPhone: boolean) => void;
-}) {
+} & ActionHandlers) {
   return (
     <ul className="users-list users-rows">
       {rows.map((row, index) => {
@@ -319,12 +351,10 @@ function UsersRows({
             </button>
           ) : (
             <>
-              <strong className="users-nickname" title={row.nickname}>{row.nickname}</strong>
-              {row.typePlaque !== row.statusPlaque ? <span className="users-plaque">{row.typePlaque}</span> : null}
-              <span className={`users-plaque${row.statusPlaque === usersCopy.pendingPlaque ? " warning" : row.typePlaque === row.statusPlaque ? " danger" : ""}`}>{row.statusPlaque}</span>
-              <span className={`users-table-mark ${row.tableMark.tone}`}>{row.tableMark.text}</span>
-              <ProfileLink row={row} />
-              <RowCaption row={row} />
+              <button type="button" className="users-pick-row" data-users-row-key={row.key} aria-current={selectedKey === row.key ? "true" : undefined} onClick={() => onSelect?.(context)}>
+                <span className="users-row-main"><strong title={row.nickname}>{row.nickname}</strong><span className={`users-plaque${row.statusPlaque === usersCopy.pendingPlaque ? " warning" : row.typePlaque === row.statusPlaque ? " danger" : ""}`}>{row.statusPlaque}</span></span>
+                <RowCaption row={row} />
+              </button>
               <RowActions context={context} callerIsOwner={callerIsOwner} fromPhone={false} busy={busy} onApprove={onApprove} onReject={onReject} onSetLevel={onSetLevel} onRevoke={onRevoke} onClearCooldown={onClearCooldown} />
               {section !== "pending" ? (
                 <>
@@ -374,6 +404,9 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
   const [historyByKey, setHistoryByKey] = useState<Record<string, HistoryState>>({});
   const [openHistoryKeys, setOpenHistoryKeys] = useState<Set<string>>(() => new Set());
   const [announcement, setAnnouncement] = useState("");
+  const [activeSection, setActiveSection] = useState<UsersSectionKind>("pending");
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const detailTitleId = useId();
   const recentDecisionMarks = useRef(new Map<string, { mark: TableMark; until: number }>());
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const confirmReturnRef = useRef<HTMLElement | null>(null);
@@ -485,6 +518,21 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
   const closeDialog = useCallback(() => {
     setDialogContext(null);
     queueMicrotask(() => openerRef.current?.focus());
+  }, []);
+
+  // PC (D-12): picking a row opens it in the detail pane; its history is always open there and reloads with the list.
+  const selectRow = useCallback((context: RowContext) => {
+    setSelectedKey(context.row.key);
+    const nicknameKey = context.row.source.nicknameKey;
+    const next = new Set<string>(context.section === "pending" ? [] : [nicknameKey]);
+    openHistoryKeysRef.current = next;
+    setOpenHistoryKeys(next);
+    if (context.section !== "pending") void loadHistory(nicknameKey);
+  }, [loadHistory]);
+
+  const switchSection = useCallback((kind: UsersSectionKind) => {
+    setActiveSection(kind);
+    setSelectedKey(null);
   }, []);
 
   const toggleHistory = useCallback((nicknameKey: string) => {
@@ -648,9 +696,25 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
   const view = buildUsersView(list, debouncedQuery, new Date());
   const searchEmpty = view.emptyKind === "search";
   const ownerBulk = bulkButtonState({ ...list, callerIsOwner }, bulk);
+  const handlers: ActionHandlers = { onApprove: approve, onReject: requestReject, onSetLevel: setLevel, onRevoke: requestRevoke, onClearCooldown: clearCooldown };
+  const activeView = view[activeSection];
+  const selectedIndex = selectedKey === null ? -1 : activeView.rows.findIndex((row) => row.key === selectedKey);
+  const selectedContext: RowContext | null = selectedIndex >= 0 ? { row: activeView.rows[selectedIndex], section: activeSection, index: selectedIndex } : null;
 
   return (
     <div className="users-tab">
+      {!isPhone ? <EditorActionBar
+        label={usersCopy.sectionsLabel}
+        nav={<nav className="users-sections" aria-label={usersCopy.sectionsLabel}>
+          {USERS_SECTIONS.map((kind) => (
+            <button key={kind} type="button" data-users-tab={kind} aria-current={activeSection === kind ? "true" : undefined} onClick={() => switchSection(kind)}>
+              {usersCopy.sectionTab(usersCopy.sectionTitles[kind], list[kind].total)}
+            </button>
+          ))}
+        </nav>}
+        statusText={usersCopy.pendingStatus(list.pendingTotalAll)}
+        actions={callerIsOwner && ownerBulk.visible ? <button type="button" className="primary-control" disabled={ownerBulk.disabled || bulkLoading} onClick={() => void openBulk()}>{usersCopy.bulkButton}</button> : undefined}
+      /> : null}
       <p role="status" aria-live="polite">{announcement}</p>
       {failure && lastGoodAt ? <AppStaleBanner lastGoodAt={lastGoodAt} retrying={retrying} onRetry={() => void load()} /> : null}
       <label className="editor-field users-search">
@@ -658,30 +722,48 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
         <input type="search" maxLength={20} autoComplete="off" autoCapitalize="off" spellCheck={false} placeholder={usersCopy.searchPlaceholder} value={query} onChange={(event) => setQuery(event.target.value)} />
       </label>
       {searchEmpty ? <EmptyState kind="search" /> : null}
-      <section data-users-section="pending" aria-labelledby="users-pending-title">
-        <div className="users-pending-head">
-          <h2 id="users-pending-title" tabIndex={-1}>{view.pending.title}</h2>
-          {callerIsOwner && ownerBulk.visible ? <button type="button" className="secondary-control" disabled={ownerBulk.disabled || bulkLoading} onClick={() => void openBulk()}>{usersCopy.bulkButton}</button> : null}
-          {ownerBulk.caption ? <p role="status">{ownerBulk.caption}</p> : null}
-        </div>
-        {!searchEmpty && view.pending.emptyKind ? <EmptyState kind={view.pending.emptyKind} /> : null}
-        <UsersRows rows={view.pending.rows} section="pending" isPhone={isPhone} callerIsOwner={callerIsOwner} busy={busy} notes={notes} historyByKey={historyByKey} openHistoryKeys={openHistoryKeys} onToggleHistory={toggleHistory} onOpen={openDialog} onApprove={approve} onReject={requestReject} onSetLevel={setLevel} onRevoke={requestRevoke} onClearCooldown={clearCooldown} />
-        {view.pending.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
-      </section>
-      <section data-users-section="people" aria-labelledby="users-people-title">
-        <h2 id="users-people-title" tabIndex={-1}>{view.people.title}</h2>
-        <p className="users-moscow-note">{usersCopy.moscowNote}</p>
-        {!searchEmpty && view.people.emptyKind ? <EmptyState kind={view.people.emptyKind} /> : null}
-        <UsersRows rows={view.people.rows} section="people" isPhone={isPhone} callerIsOwner={callerIsOwner} busy={busy} notes={notes} historyByKey={historyByKey} openHistoryKeys={openHistoryKeys} onToggleHistory={toggleHistory} onOpen={openDialog} onApprove={approve} onReject={requestReject} onSetLevel={setLevel} onRevoke={requestRevoke} onClearCooldown={clearCooldown} />
-        {view.people.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
-      </section>
-      <details className="users-closed" data-users-section="closed">
-        <summary tabIndex={-1}>{view.closed.title}</summary>
-        {!searchEmpty && view.closed.emptyKind ? <EmptyState kind={view.closed.emptyKind} /> : null}
-        <UsersRows rows={view.closed.rows} section="closed" isPhone={isPhone} callerIsOwner={callerIsOwner} busy={busy} notes={notes} historyByKey={historyByKey} openHistoryKeys={openHistoryKeys} onToggleHistory={toggleHistory} onOpen={openDialog} onApprove={approve} onReject={requestReject} onSetLevel={setLevel} onRevoke={requestRevoke} onClearCooldown={clearCooldown} />
-        {view.closed.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
-      </details>
-      {dialogContext ? <UsersActionDialog context={dialogContext} callerIsOwner={callerIsOwner} busy={busy} onApprove={approve} onReject={requestReject} onSetLevel={setLevel} onRevoke={requestRevoke} onClearCooldown={clearCooldown} historyState={historyByKey[dialogContext.row.source.nicknameKey]} onClose={closeDialog} /> : null}
+      {isPhone ? (
+        <>
+          <section data-users-section="pending" aria-labelledby="users-pending-title">
+            <div className="users-pending-head">
+              <h2 id="users-pending-title" tabIndex={-1}>{view.pending.title}</h2>
+              {callerIsOwner && ownerBulk.visible ? <button type="button" className="secondary-control" disabled={ownerBulk.disabled || bulkLoading} onClick={() => void openBulk()}>{usersCopy.bulkButton}</button> : null}
+              {ownerBulk.caption ? <p role="status">{ownerBulk.caption}</p> : null}
+            </div>
+            {!searchEmpty && view.pending.emptyKind ? <EmptyState kind={view.pending.emptyKind} /> : null}
+            <UsersRows rows={view.pending.rows} section="pending" isPhone callerIsOwner={callerIsOwner} busy={busy} notes={notes} historyByKey={historyByKey} openHistoryKeys={openHistoryKeys} onToggleHistory={toggleHistory} onOpen={openDialog} {...handlers} />
+            {view.pending.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
+          </section>
+          <section data-users-section="people" aria-labelledby="users-people-title">
+            <h2 id="users-people-title" tabIndex={-1}>{view.people.title}</h2>
+            <p className="users-moscow-note">{usersCopy.moscowNote}</p>
+            {!searchEmpty && view.people.emptyKind ? <EmptyState kind={view.people.emptyKind} /> : null}
+            <UsersRows rows={view.people.rows} section="people" isPhone callerIsOwner={callerIsOwner} busy={busy} notes={notes} historyByKey={historyByKey} openHistoryKeys={openHistoryKeys} onToggleHistory={toggleHistory} onOpen={openDialog} {...handlers} />
+            {view.people.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
+          </section>
+          <details className="users-closed" data-users-section="closed">
+            <summary tabIndex={-1}>{view.closed.title}</summary>
+            {!searchEmpty && view.closed.emptyKind ? <EmptyState kind={view.closed.emptyKind} /> : null}
+            <UsersRows rows={view.closed.rows} section="closed" isPhone callerIsOwner={callerIsOwner} busy={busy} notes={notes} historyByKey={historyByKey} openHistoryKeys={openHistoryKeys} onToggleHistory={toggleHistory} onOpen={openDialog} {...handlers} />
+            {view.closed.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
+          </details>
+        </>
+      ) : (
+        <>
+          <p className="users-moscow-note">{usersCopy.moscowNote}</p>
+          {ownerBulk.caption ? <p className="users-bulk-caption" role="status">{ownerBulk.caption}</p> : null}
+          <EditorTabBody
+            list={<div className="users-pane" data-users-section={activeSection}>
+              {!searchEmpty && activeView.emptyKind ? <EmptyState kind={activeView.emptyKind} /> : null}
+              <UsersRows rows={activeView.rows} section={activeSection} isPhone={false} callerIsOwner={callerIsOwner} busy={busy} notes={notes} historyByKey={historyByKey} openHistoryKeys={openHistoryKeys} onToggleHistory={toggleHistory} selectedKey={selectedKey} onSelect={selectRow} onOpen={openDialog} {...handlers} />
+              {activeView.truncated ? <p className="users-truncated">{usersCopy.truncated}</p> : null}
+            </div>}
+            detail={selectedContext ? <UsersActionBody key={selectedContext.row.key} context={selectedContext} titleId={detailTitleId} historyId={`users-detail-history-${selectedContext.row.source.nicknameKey}`} historyState={historyByKey[selectedContext.row.source.nicknameKey]} fromPhone={false} callerIsOwner={callerIsOwner} busy={busy} handlers={handlers} />
+              : <EditorEmptyDetail title={usersCopy.detailEmptyTitle} lines={[usersCopy.detailEmptyHint]} />}
+          />
+        </>
+      )}
+      {dialogContext ? <UsersActionDialog context={dialogContext} callerIsOwner={callerIsOwner} busy={busy} handlers={handlers} historyState={historyByKey[dialogContext.row.source.nicknameKey]} onClose={closeDialog} /> : null}
       {bulkDialog ? <UsersBulkDialog bulkDialog={bulkDialog} bulkRunning={bulkRunning} progress={bulkProgressText} onApprove={() => void approveBulk()} onClose={closeBulk} /> : null}
       {confirmState ? (
         <ConfirmDialog

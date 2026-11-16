@@ -4,6 +4,13 @@ export const usersCopy = {
   pendingTitle: "ЗАЯВКИ",
   peopleTitle: "ЛЮДИ",
   closedTitle: "Отклонённые и отозванные",
+  // Phase 26 (UI-04, D-12): the PC layout — sections in the bar, «Ожидают: N» in its status, the empty detail pane.
+  sectionsLabel: "Разделы пользователей",
+  sectionTitles: { pending: "Заявки", people: "Люди", closed: "Отклонённые и отозванные" },
+  sectionTab: (title: string, count: number) => `${title} · ${count}`,
+  pendingStatus: (count: number) => `Ожидают: ${count}`,
+  detailEmptyTitle: "Выберите заявку или человека",
+  detailEmptyHint: "Действия появятся справа.",
   pendingPlaque: "ОЖИДАЕТ",
   searchLabel: "ПОИСК ПО НИКУ",
   searchPlaceholder: "Начните вводить ник",

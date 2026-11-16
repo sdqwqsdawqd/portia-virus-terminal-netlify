@@ -425,3 +425,54 @@ test("D-12: the banks are list/detail with the same 280px list on a PC; the work
   assert.equal(declaredIn(promotionRules, ".promotion-editor-workbench", "display", PHONE), "block");
   assert.equal(declaredIn(promotionRules, ".promotion-bank-workflow .promotion-bank-layout", "display", PHONE), "block");
 });
+
+// ---- 26-09 (D-12, D-11 step 4): «Пользователи» on a PC — the sections in the bar's nav slot, the rows on the left, the detail on the right ----
+// components/portia-users-tab.tsx is not a part of the portia-editor family; it calls the seam directly. A phone keeps the Phase 22 markup.
+
+const usersTab = stripComments(lf(readFileSync(new URL("../components/portia-users-tab.tsx", import.meta.url), "utf8")));
+
+/** The JSX of the users tab from `from` up to `to`. */
+function usersSlice(from: string, to: string) {
+  const start = usersTab.indexOf(from);
+  const end = usersTab.indexOf(to, start + 1);
+  assert.ok(start >= 0 && end > start, `${from} … ${to} is found`);
+  return usersTab.slice(start, end);
+}
+
+test("D-13b: «Пользователи» on a PC renders the shared action bar: three sections in the nav slot, «Ожидают: N», the owner's bulk approval", () => {
+  assert.match(usersTab, /import \{ EditorActionBar, EditorEmptyDetail, EditorTabBody \} from "@\/components\/portia-editor-tab-shell";/);
+  assert.equal(usersTab.split("<EditorActionBar").length - 1, 1, "one bar for the whole tab");
+  assert.ok(usersTab.includes("{!isPhone ? <EditorActionBar"), "the bar is drawn on a PC only; a phone keeps the action window");
+  const bar = usersSlice("<EditorActionBar", "/> : null}");
+  assert.ok(bar.includes('label={usersCopy.sectionsLabel}'), "the bar's label lives in users-copy");
+  assert.ok(bar.includes('nav={<nav className="users-sections" aria-label={usersCopy.sectionsLabel}>'), "the section nav is the nav slot");
+  assert.ok(bar.includes("{USERS_SECTIONS.map((kind) => ("), "the three sections in their order");
+  assert.ok(bar.includes('aria-current={activeSection === kind ? "true" : undefined}'), "the current section is aria-current");
+  assert.ok(bar.includes("data-users-tab={kind}"), "the nav button of a section can be found to take the focus");
+  assert.ok(bar.includes("{usersCopy.sectionTab(usersCopy.sectionTitles[kind], list[kind].total)}"), "«Заявки · N», «Люди · N», «Отклонённые и отозванные · N»");
+  assert.ok(bar.includes("statusText={usersCopy.pendingStatus(list.pendingTotalAll)}"), "the status is «Ожидают: N»");
+  assert.ok(bar.includes('actions={callerIsOwner && ownerBulk.visible ? <button type="button" className="primary-control" disabled={ownerBulk.disabled || bulkLoading} onClick={() => void openBulk()}>{usersCopy.bulkButton}</button> : undefined}'), "the owner's bulk approval is the primary action, same conditions");
+  for (const gone of ["СОХРАНИТЬ", "ОТМЕНИТЬ", "unsavedCount", "aria-pressed"]) assert.ok(!bar.includes(gone), `${gone}: no draft action on this bar`);
+  assert.ok(usersTab.includes('const USERS_SECTIONS = ["pending", "people", "closed"] as const;'), "the sections and their order");
+});
+
+test("D-12: «Пользователи» on a PC is a list/detail body: the rows of the active section, the detail or the empty detail", () => {
+  const body = usersSlice("<EditorTabBody", "{dialogContext ?");
+  assert.ok(body.includes("list={<div className=\"users-pane\" data-users-section={activeSection}>"), "the list pane holds the active section");
+  assert.ok(body.includes("<UsersRows rows={activeView.rows} section={activeSection} isPhone={false}"), "the rows of the active section");
+  assert.ok(body.includes("detail={selectedContext ? <UsersActionBody key={selectedContext.row.key}"), "the picked row opens in the detail");
+  assert.ok(body.includes(": <EditorEmptyDetail title={usersCopy.detailEmptyTitle} lines={[usersCopy.detailEmptyHint]} />}"), "nothing picked: the empty detail");
+  // A phone keeps the Phase 22 sections and the closed details block.
+  const phone = usersSlice("{isPhone ? (", "<EditorTabBody");
+  for (const kept of ['<section data-users-section="pending"', '<section data-users-section="people"', '<details className="users-closed" data-users-section="closed">']) assert.ok(phone.includes(kept), kept);
+});
+
+test("D-12: «Пользователи» styles — the bar lies on the top edge on a PC; the picked row has the shared selected look", () => {
+  assert.equal(declared(".content-editor:has(> .users-tab > .etab-bar)", "padding-top", DESKTOP), "0", "sticky counts from the inner edge");
+  assert.equal(declared(".content-editor:has(> .users-tab > .etab-bar) > .editor-header", "margin-top", DESKTOP), "28px");
+  assert.equal(declared(".etab-nav > .users-sections", "margin"), "0");
+  assert.match(styles, /\.editor-section-tabs nav button\[aria-current="true"\], \.users-sections button\[aria-current="true"\]/, "the current section has the tab family's 3px line");
+  assert.equal(declared(".users-pick-row", "width"), "100%", "the row button fills its row");
+  assert.equal(declared('.users-row:has(> .users-pick-row[aria-current="true"])', "background"), "var(--teal-soft)");
+  assert.equal(declared('.users-row:has(> .users-pick-row[aria-current="true"])', "border-color"), "var(--teal-dim)");
+});
