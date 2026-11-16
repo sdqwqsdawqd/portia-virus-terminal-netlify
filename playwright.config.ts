@@ -14,10 +14,20 @@ const isCI = Boolean(process.env.CI);
 const visualCandidatesRequested = process.argv.some((argument) =>
   argument.replaceAll("\\", "/").includes("visual-candidates"),
 );
+// D-17 (Phase 26): the approved v1.3 snapshots are history, not the current reference. A default run does not
+// discover tests/e2e/visual; an explicit tests/e2e/visual path is a historical comparison, and its red result
+// is expected drift, never PASS. The folder match stops at "/" or the end, so visual-candidates does not count.
+const visualHistoryPath = /(?:^|\/)tests\/e2e\/visual(?:\/|$)/;
+const visualHistoryRequested = process.argv.some((argument) =>
+  visualHistoryPath.test(argument.replaceAll("\\", "/")),
+);
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testIgnore: visualCandidatesRequested ? [] : ["**/visual-candidates/**"],
+  testIgnore: [
+    ...(visualCandidatesRequested ? [] : ["**/visual-candidates/**"]),
+    ...(visualHistoryRequested ? [] : ["**/visual/**"]),
+  ],
   outputDir: "test-results/playwright",
   expect: {
     toHaveScreenshot: {

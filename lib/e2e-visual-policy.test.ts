@@ -138,3 +138,42 @@ describe("Phase 15 visual policy", () => {
     }
   });
 });
+
+// D-17 (Phase 26): the approved v1.3 snapshots are history. A default Playwright run does not discover them;
+// an explicit tests/e2e/visual path is a historical comparison whose red result is expected drift, never PASS.
+describe("v1.3 visual line is history (D-17)", () => {
+  const configSource = readFileSync(new URL("../playwright.config.ts", import.meta.url), "utf8");
+  const packageScripts = (
+    JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { scripts: Record<string, string> }
+  ).scripts;
+
+  test("testIgnore skips visual and visual-candidates unless a path asks for them", () => {
+    assert.match(configSource, /testIgnore/u);
+    assert.ok(configSource.includes('"**/visual-candidates/**"'), "visual-candidates stays ignored by default");
+    assert.ok(configSource.includes('"**/visual/**"'), "the v1.3 visual folder is ignored by default");
+    assert.match(configSource, /visualCandidatesRequested\s*\?\s*\[\]/u);
+    assert.match(configSource, /visualHistoryRequested\s*\?\s*\[\]/u);
+  });
+
+  test("the history flag matches tests/e2e/visual as a folder, not as a prefix of visual-candidates", () => {
+    const literal = /const visualHistoryPath\s*=\s*\/(.+)\/;/u.exec(configSource)?.[1];
+    assert.ok(literal, "visualHistoryPath is missing");
+    const folder = new RegExp(literal, "u");
+    for (const path of ["tests/e2e/visual", "./tests/e2e/visual", "tests/e2e/visual/", "tests/e2e/visual/motion.spec.ts"]) {
+      assert.ok(folder.test(path), path);
+    }
+    for (const path of ["tests/e2e/visual-candidates", "tests/e2e/visual-candidates/info-phone.spec.ts", "tests/e2e/specs"]) {
+      assert.ok(!folder.test(path), path);
+    }
+    assert.match(configSource, /\.replaceAll\("\\\\", "\/"\)/u);
+  });
+
+  test("the config explains the history status with v1.3 and D-17", () => {
+    assert.match(configSource, /D-17/u);
+    assert.match(configSource, /v1\.3/u);
+  });
+
+  test("test:e2e:visual still passes the explicit folder so the historical comparison stays available", () => {
+    assert.match(packageScripts["test:e2e:visual"] ?? "", /playwright test tests\/e2e\/visual(?:\s|$)/u);
+  });
+});
