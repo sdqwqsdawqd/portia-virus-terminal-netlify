@@ -366,7 +366,7 @@ test("editor form cards keep one fixed width set by a single variable and fill c
     assert.match(editorSource, new RegExp(String.raw`<div className="editor-form flat-editor-form editor-card-columns">\n${appsGroup}          <p className="editor-guidance">${lead}`), `${lead}: form must be in columns`);
   }
   // Phase 26 (26-07, D-12/A2): the column form is the detail pane of the tab body, in the same order (form, then the hint).
-  for (const lead of ["Справочник на рабочем столе"]) {
+  for (const lead of ["Каждый блок становится", "Справочник на рабочем столе", "Публикуйте новости"]) {
     assert.match(editorSource, new RegExp(String.raw`<EditorTabBody list=\{[^\n]*\} detail=\{\n        <div className="editor-form flat-editor-form editor-card-columns">\n${appsGroup}          <p className="editor-guidance">${lead}`), `${lead}: the column form is the detail of the tab body`);
   }
   assert.equal(editorSource.match(/editor-card-columns/g)?.length, 3); // never the sorted recommendation or access lists (D-15)

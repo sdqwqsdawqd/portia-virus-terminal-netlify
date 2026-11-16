@@ -270,3 +270,49 @@ test("D-13b: a jump from the TOC leaves the card clear of the sticky bar", () =>
     assert.equal(declared(selector, "scroll-margin-top", PHONE), "148px", `${selector} phone`);
   }
 });
+
+// ---- 26-07 Task 2: «Информация» and «Сводка» take the same nav slot and the same A2 body ----
+
+test("D-13a/D-62: «Информация» switches sections in the nav slot — the add button before the section tabs", () => {
+  const nav = barNav();
+  const info = nav.indexOf(': tab === "info" ? <>');
+  const end = nav.indexOf(': tab === "broadcasts" ? (', info);
+  assert.ok(info > 0 && end > info, "an info branch of the nav");
+  const slot = nav.slice(info, end);
+  const add = slot.indexOf("<SectionAddBar onCreate={(title) => {");
+  const tabs = slot.indexOf('<SectionTabs label="Разделы информации"');
+  assert.ok(add > 0 && tabs > add, "SectionAddBar stands before SectionTabs «Разделы информации»");
+  assert.ok(slot.includes('const id = makeId("info");'), "the same onCreate");
+  const body = editorSlice('{tab === "info" && (', '{tab === "guide" && (');
+  assert.ok(!body.includes("<SectionAddBar") && !body.includes("<SectionTabs"), "the info body holds neither");
+});
+
+test("D-13a: «Сводка» switches «Новости» / «Квесты» in the nav slot: tab family, aria-current, a count plaque", () => {
+  const nav = barNav();
+  const slot = nav.slice(nav.indexOf(': tab === "broadcasts" ? ('));
+  assert.ok(slot.includes('<nav className="editor-tabs dossier-tabs" aria-label="Разделы сводки">'), "the broadcast nav moved into the bar");
+  assert.ok(slot.includes('aria-current={broadcastEditorTab === id ? "true" : undefined}'), "the current group is aria-current");
+  assert.ok(!slot.includes("aria-pressed"), "no aria-pressed");
+  assert.ok(slot.includes('{label} <span className="tab-count">{draft.broadcasts.filter((item) => broadcastTabOf(item.type) === id).length}</span>'), "the count is a plaque after the label");
+  assert.match(slot, /\) : undefined\}\n$/, "no nav for the other tabs");
+  const body = editorSlice('{tab === "broadcasts" && (', '{tab === "recycle" && (');
+  assert.ok(!body.includes("Разделы сводки"), "the body no longer holds the group nav");
+});
+
+test("A2: «Информация» and «Сводка» bodies are the TOC on the left (only when it shows) and the old form on the right", () => {
+  const info = editorSlice('{tab === "info" && (', '{tab === "guide" && (');
+  assert.ok(info.includes("<EditorTabBody list={infoTocItems.length >= 5 && <EditorToc items={infoTocItems} onJump={jumpInfo} onAll={(open) => setAllOpen(infoCardIds, open)} />} detail={"));
+  const infoDetail = info.slice(info.indexOf("detail={"));
+  const order = ['<div className="editor-form flat-editor-form editor-card-columns">', "<EditorGroup title={levelCopy.appsGroup}>", '<p className="editor-guidance">Каждый блок становится', "Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».", "<SectionColumns items={draft.infoSections}"];
+  order.reduce((last, piece) => { const at = infoDetail.indexOf(piece, last); assert.ok(at > last, `info detail: ${piece}`); return at; }, 0);
+  const broadcasts = editorSlice('{tab === "broadcasts" && (', '{tab === "recycle" && (');
+  assert.ok(broadcasts.includes("<EditorTabBody list={broadcastTocItems.length >= 5 && <EditorToc items={broadcastTocItems} onJump={(id) => { openBroadcast(id); jumpToCard(id); }} onAll={(open) => setAllOpen(broadcastTocItems.map((item) => item.id), open)} />} detail={"));
+  const detail = broadcasts.slice(broadcasts.indexOf("detail={"));
+  const pieces = ['<div className="editor-form flat-editor-form editor-card-columns">', '<p className="editor-guidance">Публикуйте новости', '"+ НОВАЯ НОВОСТЬ" : "+ НОВЫЙ КВЕСТ"', '"Новостей пока нет." : "Квестов и задач пока нет."', '<div className="broadcast-entry-list">{shownBroadcasts.map(renderBroadcastCard)}</div>'];
+  pieces.reduce((last, piece) => { const at = detail.indexOf(piece, last); assert.ok(at > last, `broadcast detail: ${piece}`); return at; }, 0);
+  for (const body of [info, broadcasts]) assert.match(body, /<\/div>\n\s*\} \/>\n\s*\)\}/, "the detail closes after the form");
+});
+
+test("D-13a: the broadcast group nav sits flush in the bar", () => {
+  assert.equal(declared(".etab-nav > .dossier-tabs", "margin"), "0");
+});

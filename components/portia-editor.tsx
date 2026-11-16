@@ -1228,7 +1228,24 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#card-${id} > .nested-editor-body input`)?.focus());
             }} />
             <SectionTabs label="Разделы справочника" sections={draft.guideSections} activeId={activeGuideSection} onSelect={setSelectedGuideSection} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.guideSections, from, to))} />
-          </> : undefined}
+          </> : tab === "info" ? <>
+            <SectionAddBar onCreate={(title) => {
+              const id = makeId("info");
+              changeDraft((next) => { next.infoSections.push({ id, title: title || "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] }); });
+              setSelectedInfoSection(id);
+              setOpen([id], true);
+              requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#card-${id} > .nested-editor-body input`)?.focus());
+            }} />
+            <SectionTabs label="Разделы информации" sections={draft.infoSections} activeId={activeInfoSection} onSelect={setSelectedInfoSection} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} />
+          </> : tab === "broadcasts" ? (
+            <nav className="editor-tabs dossier-tabs" aria-label="Разделы сводки">
+              {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([id, label]) => (
+                <button key={id} type="button" className={broadcastEditorTab === id ? "active" : ""} aria-current={broadcastEditorTab === id ? "true" : undefined} onClick={() => selectBroadcastTab(id)}>
+                  {label} <span className="tab-count">{draft.broadcasts.filter((item) => broadcastTabOf(item.type) === id).length}</span>
+                </button>
+              ))}
+            </nav>
+          ) : undefined}
           actions={<>
             <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
             <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>
@@ -1356,20 +1373,12 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       )}
 
       {tab === "info" && (
+        <EditorTabBody list={infoTocItems.length >= 5 && <EditorToc items={infoTocItems} onJump={jumpInfo} onAll={(open) => setAllOpen(infoCardIds, open)} />} detail={
         <div className="editor-form flat-editor-form editor-card-columns">
           <EditorGroup title={levelCopy.appsGroup}>
             {LEVELED_APP_IDS.map((id) => <LevelPicker key={id} name={`level-app-${id}`} caption={levelCopy.appLabels[id]} value={draft.appLevels?.[id]} onChange={(level) => changeDraft((next) => { next.appLevels = { ...(next.appLevels ?? {}), [id]: level }; })} />)}
           </EditorGroup>
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация». Раздел может содержать подразделы, собранные из блоков в любом порядке.</p>
-          <SectionAddBar onCreate={(title) => {
-            const id = makeId("info");
-            changeDraft((next) => { next.infoSections.push({ id, title: title || "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] }); });
-            setSelectedInfoSection(id);
-            setOpen([id], true);
-            requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#card-${id} > .nested-editor-body input`)?.focus());
-          }} />
-          <SectionTabs label="Разделы информации" sections={draft.infoSections} activeId={activeInfoSection} onSelect={setSelectedInfoSection} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} />
-          <EditorToc items={infoTocItems} onJump={jumpInfo} onAll={(open) => setAllOpen(infoCardIds, open)} />
           {draft.infoSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
           <SectionColumns items={draft.infoSections} render={(section, index) => section.id === activeInfoSection && (
             <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${String(index + 1).padStart(2, "0")}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
@@ -1421,6 +1430,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
             </CollapsibleCard>
           )} />
         </div>
+        } />
       )}
 
       {tab === "guide" && (
@@ -1513,20 +1523,14 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       )}
 
       {tab === "broadcasts" && (
+        <EditorTabBody list={broadcastTocItems.length >= 5 && <EditorToc items={broadcastTocItems} onJump={(id) => { openBroadcast(id); jumpToCard(id); }} onAll={(open) => setAllOpen(broadcastTocItems.map((item) => item.id), open)} />} detail={
         <div className="editor-form flat-editor-form editor-card-columns">
           <p className="editor-guidance">Публикуйте новости, еженедельные квесты и задачи. Выключенные записи сохраняются как черновики: снимите «Показывать посетителям», чтобы убрать запись с сайта.</p>
-          <nav className="editor-tabs dossier-tabs" aria-label="Разделы сводки">
-            {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([id, label]) => (
-              <button key={id} type="button" className={broadcastEditorTab === id ? "active" : ""} aria-pressed={broadcastEditorTab === id} onClick={() => selectBroadcastTab(id)}>
-                {label} {draft.broadcasts.filter((item) => broadcastTabOf(item.type) === id).length}
-              </button>
-            ))}
-          </nav>
-          <EditorToc items={broadcastTocItems} onJump={(id) => { openBroadcast(id); jumpToCard(id); }} onAll={(open) => setAllOpen(broadcastTocItems.map((item) => item.id), open)} />
           <button className="secondary-control" type="button" onClick={addBroadcastEntry}>{broadcastEditorTab === "news" ? "+ НОВАЯ НОВОСТЬ" : "+ НОВЫЙ КВЕСТ"}</button>
           {shownBroadcasts.length === 0 && <div className="editor-empty">{broadcastEditorTab === "news" ? "Новостей пока нет." : "Квестов и задач пока нет."}</div>}
           <div className="broadcast-entry-list">{shownBroadcasts.map(renderBroadcastCard)}</div>
         </div>
+        } />
       )}
 
       {tab === "recycle" && (

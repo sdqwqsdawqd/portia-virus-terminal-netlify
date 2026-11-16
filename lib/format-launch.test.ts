@@ -73,7 +73,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //      components/portia-editor-tab-shell.tsx (applyTabShellHunk); PORTIA-26-06b — классы «список — деталь» (etab-body/etab-list/etab-detail)
 //      рядом с прежними, aria-current у выбранной строки и пустая деталь из шва (applyTabBodiesHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-06.
 //  10. PORTIA-26-07 (26-07; UI-04, D-13a, A2) — «Справочник»: «+ ДОБАВИТЬ РАЗДЕЛ» и вкладки разделов в слоте nav панели, aria-current и прокрутка
-//      текущего раздела, тело — оглавление слева и активный раздел справа (applySectionNavHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-07.
+//      текущего раздела, тело — оглавление слева и активный раздел справа (applySectionNavHunk); PORTIA-26-07b — то же для «Информации»
+//      (смысл D-62 сохранён: «+ ДОБАВИТЬ РАЗДЕЛ» перед вкладками разделов, нижней кнопки нет) и «Сводки» («Новости»/«Квесты» с aria-current и плашкой
+//      счётчика) (applyInfoBroadcastNavHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-07.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -690,6 +692,69 @@ function applySectionNavHunk(text: string): string {
   );
 }
 
+// PORTIA-26-07b (UI-04, D-13a, D-62): the section tabs line and the TOC line of «Информация», byte for byte.
+const INFO_TABS_LINE = '<SectionTabs label="Разделы информации" sections={draft.infoSections} activeId={activeInfoSection} onSelect={setSelectedInfoSection} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} />';
+const INFO_TOC_LINE = "<EditorToc items={infoTocItems} onJump={jumpInfo} onAll={(open) => setAllOpen(infoCardIds, open)} />";
+const BROADCAST_TOC_LINE = "<EditorToc items={broadcastTocItems} onJump={(id) => { openBroadcast(id); jumpToCard(id); }} onAll={(open) => setAllOpen(broadcastTocItems.map((item) => item.id), open)} />";
+// The «Сводка» group nav before and after: aria-pressed gives way to aria-current, the count becomes a plaque after the label.
+const BROADCAST_NAV_BLOCK: readonly string[] = [
+  '<nav className="editor-tabs dossier-tabs" aria-label="Разделы сводки">',
+  '  {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([id, label]) => (',
+  '    <button key={id} type="button" className={broadcastEditorTab === id ? "active" : ""} aria-pressed={broadcastEditorTab === id} onClick={() => selectBroadcastTab(id)}>',
+  "      {label} {draft.broadcasts.filter((item) => broadcastTabOf(item.type) === id).length}",
+  "    </button>",
+  "  ))}",
+  "</nav>",
+];
+const BROADCAST_NAV_SLOT: readonly string[] = [
+  '<nav className="editor-tabs dossier-tabs" aria-label="Разделы сводки">',
+  '  {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([id, label]) => (',
+  '    <button key={id} type="button" className={broadcastEditorTab === id ? "active" : ""} aria-current={broadcastEditorTab === id ? "true" : undefined} onClick={() => selectBroadcastTab(id)}>',
+  '      {label} <span className="tab-count">{draft.broadcasts.filter((item) => broadcastTabOf(item.type) === id).length}</span>',
+  "    </button>",
+  "  ))}",
+  "</nav>",
+];
+
+/** PORTIA-26-07b (26-07 Task 2; UI-04, D-13a, D-62, A2): «Информация» and «Сводка» switch sections in the nav slot of the bar; their bodies are the TOC on the left and the old form on the right. No Russian text is added. */
+function applyInfoBroadcastNavHunk(text: string): string {
+  const infoNav = [...INFO_ADD_SECTION_BLOCK, INFO_TABS_LINE];
+  let next = replaceOnce(
+    text,
+    "          </> : undefined}\n          actions={<>\n",
+    `          </> : tab === "info" ? <>\n${indented(infoNav, "            ")}\n          </> : tab === "broadcasts" ? (\n${indented(BROADCAST_NAV_SLOT, "            ")}\n          ) : undefined}\n          actions={<>\n`,
+    "info and broadcast nav slot",
+  );
+  // «Информация»: list = the TOC when it shows, detail = the old form; the add bar and the tabs leave the body (D-62 keeps its meaning in the nav).
+  next = replaceOnce(
+    next,
+    '      {tab === "info" && (\n        <div className="editor-form flat-editor-form editor-card-columns">\n',
+    `      {tab === "info" && (\n        <EditorTabBody list={infoTocItems.length >= 5 && ${INFO_TOC_LINE}} detail={\n        <div className="editor-form flat-editor-form editor-card-columns">\n`,
+    "info body open",
+  );
+  next = replaceOnce(next, `${indented(infoNav, "          ")}\n          ${INFO_TOC_LINE}\n`, "", "info nav out of the body");
+  next = replaceOnce(
+    next,
+    '          )} />\n        </div>\n      )}\n\n      {tab === "guide" && (',
+    '          )} />\n        </div>\n        } />\n      )}\n\n      {tab === "guide" && (',
+    "info body close",
+  );
+  // «Сводка»: the same body; the group nav leaves it.
+  next = replaceOnce(
+    next,
+    '      {tab === "broadcasts" && (\n        <div className="editor-form flat-editor-form editor-card-columns">\n',
+    `      {tab === "broadcasts" && (\n        <EditorTabBody list={broadcastTocItems.length >= 5 && ${BROADCAST_TOC_LINE}} detail={\n        <div className="editor-form flat-editor-form editor-card-columns">\n`,
+    "broadcast body open",
+  );
+  next = replaceOnce(next, `${indented(BROADCAST_NAV_BLOCK, "          ")}\n          ${BROADCAST_TOC_LINE}\n`, "", "broadcast nav out of the body");
+  return replaceOnce(
+    next,
+    '          <div className="broadcast-entry-list">{shownBroadcasts.map(renderBroadcastCard)}</div>\n        </div>\n      )}\n',
+    '          <div className="broadcast-entry-list">{shownBroadcasts.map(renderBroadcastCard)}</div>\n        </div>\n        } />\n      )}\n',
+    "broadcast body close",
+  );
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -742,6 +807,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26-06", apply: applyTabShellHunk },
   { id: "PORTIA-26-06b", apply: applyTabBodiesHunk },
   { id: "PORTIA-26-07", apply: applySectionNavHunk },
+  { id: "PORTIA-26-07b", apply: applyInfoBroadcastNavHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -798,15 +864,22 @@ test("D-57: the editor renders the shared launch button", () => {
   assert.ok(imported.split(",").map((name) => name.trim()).includes("FormatLaunchButton"), "FormatLaunchButton comes from the rich text module");
 });
 
+// Phase 26 (26-07, D-13a): the add-section bar and the section tabs of «Информация» moved together into the nav slot of the sticky action bar.
+// The meaning of D-62 is unchanged: the add-section control stands before the section tabs, and there is no add-section button below the columns.
 test("D-62: the «Информация» tab starts with the add-section bar and has no add-section button below the columns", () => {
   const code = stripComments(currentEditor());
+  const navStart = code.indexOf(': tab === "info" ? <>');
+  const navEnd = code.indexOf(': tab === "broadcasts" ? (', navStart);
+  assert.ok(navStart > 0 && navEnd > navStart, "the «Информация» branch of the bar's nav slot is found");
+  const nav = code.slice(navStart, navEnd);
+  const bar = nav.indexOf("<SectionAddBar");
+  const tabs = nav.indexOf(INFO_TABS_LINE_START);
+  assert.ok(bar >= 0 && tabs > bar, "SectionAddBar stands above the section tabs");
   const start = code.indexOf('{tab === "info" && (');
   const end = code.indexOf('{tab === "guide" && (');
   assert.ok(start > 0 && end > start, "the «Информация» tab block is found");
   const info = code.slice(start, end);
-  const bar = info.indexOf("<SectionAddBar");
-  const tabs = info.indexOf(INFO_TABS_LINE_START);
-  assert.ok(bar >= 0 && tabs > bar, "SectionAddBar stands above the section tabs");
+  assert.ok(!info.includes("<SectionAddBar") && !info.includes(INFO_TABS_LINE_START), "the tab body holds neither the add bar nor the section tabs");
   assert.equal(info.split("+ ДОБАВИТЬ РАЗДЕЛ</button>").length - 1, 0, "no add-section button below the columns");
   assert.ok(info.includes("+ ПОДРАЗДЕЛ</button>"), "the add-subsection button stays at the bottom of the section card");
 });
@@ -851,9 +924,12 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b" && !edit.id.startsWith("PORTIA-26-07")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabBodies), null, "a file without the PORTIA-26-06b hunk is a difference");
   assert.throws(() => applyTabBodiesHunk(expected), /exactly one approved anchor/, "the tab bodies hunk cannot be applied twice");
-  const withoutSectionNav = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07").reduce((text, edit) => edit.apply(text), sample);
+  const withoutSectionNav = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-07")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutSectionNav), null, "a file without the PORTIA-26-07 hunk is a difference");
   assert.throws(() => applySectionNavHunk(expected), /exactly one approved anchor/, "the section nav hunk cannot be applied twice");
+  const withoutInfoBroadcastNav = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07b").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutInfoBroadcastNav), null, "a file without the PORTIA-26-07b hunk is a difference");
+  assert.throws(() => applyInfoBroadcastNavHunk(expected), /exactly one approved anchor/, "the info and broadcast nav hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

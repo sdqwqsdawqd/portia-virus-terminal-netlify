@@ -438,9 +438,12 @@ test("D-41 section editing stays in Справочник; Сводка and Ре�
   // D-62 (20-50): «Информация» takes the same pinned bar as «Справочник»; the other tabs never get one.
   assert.equal((editor.match(/<SectionAddBar/g) ?? []).length, 2);
   const tabBlock = (name: string, next: string) => editor.slice(editor.indexOf(`{tab === "${name}" && (`), editor.indexOf(`{tab === "${next}" && (`));
-  assert.equal((tabBlock("info", "guide").match(/<SectionAddBar/g) ?? []).length, 1, "«Информация» has the bar");
+  // Phase 26 (26-07, D-13a): the «Информация» add bar stands in the nav slot of the sticky action bar too (D-62 keeps its meaning there).
+  const infoNav = editor.slice(editor.indexOf(': tab === "info" ? <>'), editor.indexOf(': tab === "broadcasts" ? ('));
+  assert.equal((infoNav.match(/<SectionAddBar/g) ?? []).length, 1, "«Информация» has the bar in the nav slot");
+  assert.equal((tabBlock("info", "guide").match(/<SectionAddBar/g) ?? []).length, 0, "and not in its body");
   // Phase 26 (26-07, D-13a): the «Справочник» add bar stands in the nav slot of the sticky action bar, not in the tab body.
-  const guideNav = editor.slice(editor.indexOf('nav={tab === "guide" ? <>'), editor.indexOf("actions={<>"));
+  const guideNav = editor.slice(editor.indexOf('nav={tab === "guide" ? <>'), editor.indexOf(': tab === "info" ? <>'));
   assert.equal((guideNav.match(/<SectionAddBar/g) ?? []).length, 1, "«Справочник» has the bar in the nav slot");
   assert.equal((tabBlock("guide", "broadcasts").match(/<SectionAddBar/g) ?? []).length, 0, "and not in its body");
   assert.match(editor, /next\.searchRecommendationSections = \[\]/);

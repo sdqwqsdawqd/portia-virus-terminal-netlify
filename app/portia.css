@@ -2659,6 +2659,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .etab-nav > .editor-section-tabs { flex: 1 1 auto; min-width: 0; }
 .etab-nav .editor-section-tabs nav { flex-wrap: nowrap; overflow-x: auto; }
 .etab-nav .editor-section-create { width: min(320px, 70vw); white-space: normal; }
+.etab-nav > .dossier-tabs { margin: 0; }
 /* Переход из оглавления оставляет карточку видимой под липкой панелью (48px панели + 8px зазора + 8px). */
 .content-editor:has(> .etab-bar) .nested-editor-card, .content-editor:has(> .etab-bar) .editor-record-row { scroll-margin-top: 64px; }
 /* Тело вкладки (D-12): список слева, деталь справа; без списка — только деталь, пустой левой колонки нет. Вид строк — семейство строк выше. */
