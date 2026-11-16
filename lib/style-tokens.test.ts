@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 
@@ -20,34 +19,39 @@ const directionRecord = readFileSync(
 const PORTIA_RADIUS_DECLARATIONS = 131;
 // Phase 26 restyle changes these on purpose and updates them in the same commit.
 const PROMO_RADIUS_DECLARATIONS = 6;
-// Phase 23 adds access and promotion states to app/portia.css; keep the current unmarked stylesheet pinned; 23-12 adds the approved-access notice modifier.
-const PRE_PHASE_PORTIA_CSS_SHA256 = "2e4f25b46ee6327ad428e1c408d79b9ad88f00eacf902993a5ca1f2c1e95ef45";
 
+// Phase 26 (UI-02): direction C roles (22-STYLE-DIRECTION.md, column C), in the order the block declares them.
 const TOKEN_NAMES = [
-  "--radius-0",
-  "--radius-2",
-  "--radius-3",
-  "--radius-4",
-  "--radius-5",
-  "--radius-6",
-  "--radius-7",
-  "--radius-8",
-  "--radius-9",
-  "--radius-10",
-  "--radius-12",
-  "--radius-14",
-  "--radius-18",
-  "--radius-19",
-  "--radius-round",
-  "--radius-pill",
   "--radius-window",
   "--radius-dialog",
+  "--radius-card",
   "--radius-control",
   "--radius-field",
-  "--radius-plaque",
   "--radius-tab",
+  "--radius-plaque",
+  "--radius-round",
   "--tap-target",
+  "--control-height",
+  "--control-height-compact",
+  "--field-max",
+  "--card-min",
 ] as const;
+
+const ROLE_VALUES: Record<(typeof TOKEN_NAMES)[number], string> = {
+  "--radius-window": "10px",
+  "--radius-dialog": "10px",
+  "--radius-card": "7px",
+  "--radius-control": "0",
+  "--radius-field": "0",
+  "--radius-tab": "0",
+  "--radius-plaque": "999px",
+  "--radius-round": "50%",
+  "--tap-target": "44px",
+  "--control-height": "40px",
+  "--control-height-compact": "32px",
+  "--field-max": "640px",
+  "--card-min": "360px",
+};
 
 function lf(text: string) {
   return text.replace(/\r\n/g, "\n");
@@ -119,7 +123,7 @@ test("UI-01: radius counts, root count and stylesheet order stay pinned", () => 
   );
 });
 
-test("UI-01: declare-only tokens sit in the first root at today's values", () => {
+test("UI-02: role tokens hold direction C values and the three tracer consumers read them", () => {
   const css = lf(portiaCssRaw);
   const firstRoot = rootBody(css);
   const assistant = firstRoot.indexOf('  --assistant-font: "Segoe UI", Arial, sans-serif;');
@@ -131,34 +135,17 @@ test("UI-01: declare-only tokens sit in the first root at today's values", () =>
   const block = firstRoot.slice(start, end);
   const tokens = declarations(block);
   assert.deepEqual([...tokens.keys()], TOKEN_NAMES);
+  for (const name of TOKEN_NAMES) assert.equal(tokens.get(name), ROLE_VALUES[name], name);
+  assert.doesNotMatch(block, /--radius-\d|--radius-pill/, "numeric radius primitives and the pill primitive are gone");
 
-  const outside = withoutComments(stripMarkedBlocks(css));
-  const simpleRadiusValues = new Set(
-    [...outside.matchAll(/border-radius\s*:\s*([^;]+);/g)]
-      .map((match) => match[1].replace(/\s*!important\s*$/, "").trim())
-      .filter((value) => !value.includes(" ")),
-  );
-  for (const name of TOKEN_NAMES.slice(0, 16)) {
-    assert.ok(simpleRadiusValues.has(tokens.get(name) ?? ""), `${name} is outside the current radius census`);
-  }
-
-  assert.equal(tokens.get("--radius-window"), ruleRadius(css, ".app-window"));
-  assert.equal(tokens.get("--radius-dialog"), ruleRadius(css, ".portia-dialog"));
-  assert.equal(tokens.get("--radius-field"), ruleRadius(css, ".editor-field input"));
-  assert.equal(tokens.get("--radius-control"), "0");
-  assert.equal(ruleRadius(css, ".primary-control, .secondary-control, .danger-control"), "0");
-  assert.equal(tokens.get("--radius-plaque"), "0");
-  assert.equal(ruleRadius(css, ".manual-mark,"), "0");
-  assert.equal(ruleRadius(css, ".quest-badge"), "0");
-  assert.equal(tokens.get("--radius-tab"), "0");
-  assert.equal(ruleRadius(css, ".editor-tabs button"), "0");
-  assert.equal(tokens.get("--tap-target"), "44px");
+  assert.equal(ruleRadius(css, ".app-window"), "var(--radius-window)");
+  assert.equal(ruleRadius(css, ".portia-dialog"), "var(--radius-dialog)");
+  assert.equal(ruleRadius(css, ".editor-field input"), "var(--radius-field)");
 });
 
-test("UI-01: marked additions preserve the pre-phase stylesheet byte shape", () => {
+test("UI-02: marked additions keep their blocks free of radius, animation and colour changes", () => {
   const css = lf(portiaCssRaw);
-  const stripped = stripMarkedBlocks(css);
-  assert.equal(createHash("sha256").update(stripped).digest("hex"), PRE_PHASE_PORTIA_CSS_SHA256);
+  // Phase 26 (UI-02): the guard is the radius grammar (see the grammar test); the byte-shape hash is retired.
 
   const tokenBlock = css.match(/^.*style-tokens:start[\s\S]*?^.*style-tokens:end.*$/m)?.[0] ?? "";
   assert.ok(tokenBlock, "style token block is missing");
@@ -182,9 +169,11 @@ test("UI-01: marked additions preserve the pre-phase stylesheet byte shape", () 
   assert.ok(crlfCount === 0 || crlfCount === lfCount, "app/portia.css has mixed line endings");
 });
 
-test("UI-01: radius and tap tokens remain declarations only", () => {
+test("UI-02: role tokens are read by the stylesheet and no source sets an inline borderRadius", () => {
+  assert.ok(withoutComments(portiaCssRaw).includes("var(--radius-window)"), "app/portia.css never reads --radius-window");
   for (const file of [...sourceFiles("app"), ...sourceFiles("components")]) {
-    assert.doesNotMatch(readFileSync(file, "utf8"), /var\(--(?:radius-|tap-target)/, file.replace(repoRoot.pathname, ""));
+    if (extname(file) === ".css") continue;
+    assert.doesNotMatch(readFileSync(file, "utf8"), /borderRadius/, file.replace(repoRoot.pathname, ""));
   }
 });
 
