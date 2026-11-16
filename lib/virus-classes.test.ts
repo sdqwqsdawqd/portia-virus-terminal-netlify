@@ -1,4 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { classificationOptions, legacyClassificationNames } from "./portia-content.ts";
@@ -79,12 +81,17 @@ const iconPathsBlock = between("const iconPaths:", "// The badge for each canoni
 const iconMapBlock = between("export const classificationIcon", "// Content values are editor input");
 const typeBlock = between("export type PortiaIconName", "// Classification badges");
 
-function drawing(key: string) {
-  const start = iconPathsBlock.indexOf(`"${key}":`);
+function entryIn(block: string, key: string) {
+  const quoted = key.includes("-") ? `"${key}":` : `${key}:`;
+  const start = block.indexOf(`\n  ${quoted}`);
   assert.ok(start >= 0, `${key} is drawn`);
-  const rest = iconPathsBlock.slice(start + key.length + 3);
+  const rest = block.slice(start + quoted.length + 3);
   const next = rest.search(/\n  ("[a-z-]+"|[a-z]+):/);
   return next < 0 ? rest : rest.slice(0, next);
+}
+
+function drawing(key: string) {
+  return entryIn(iconPathsBlock, key);
 }
 
 test("D-39 the nine new icon keys exist in the type, the drawings and the class map; the old nine are gone", () => {
@@ -138,4 +145,106 @@ test("D-39 every static path of the icon file is complete: command argument coun
       else assert.ok(numbers >= size && numbers % size === 0, `${command}${args} (${numbers} numbers) in ${d}`);
     }
   }
+});
+
+// PORTIA-26-12 (UI-07): the classification signs are the owner's round-5 drawing, recorded in 26-ICON-DECISION.md
+// («Геометрия (источник для 26-12)»). The file is the only source of the drawing: each <symbol id="s-<name>"> becomes the entry
+// "class-<name>" verbatim, only the attribute names change to JSX. PortiaIcon sets stroke on the root <svg>, while the symbol's
+// filled group had no stroke, so the filled group says stroke="none" to keep the filled shapes at their drawn size.
+const decisionSource = readFileSync(new URL("../.planning/phases/PORTIA-26-edinyy-stil-sayta/26-ICON-DECISION.md", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+
+function decisionSymbols() {
+  const from = decisionSource.indexOf("## Геометрия (источник для 26-12)");
+  assert.ok(from >= 0, "26-ICON-DECISION.md has the geometry section");
+  const open = decisionSource.indexOf("```svg\n", from);
+  const close = decisionSource.indexOf("\n```", open + 7);
+  assert.ok(open > from && close > open, "the geometry section holds one svg block");
+  const symbols = new Map<string, string>();
+  for (const line of decisionSource.slice(open + 7, close).split("\n")) {
+    const match = /^<symbol id="s-([a-z]+)" viewBox="0 0 24 24">(.*)<\/symbol>$/.exec(line);
+    assert.ok(match, `every line of the svg block is one 24x24 symbol: ${line.slice(0, 60)}`);
+    assert.ok(!symbols.has(match[1]), `s-${match[1]} appears once`);
+    symbols.set(match[1], match[2]);
+  }
+  return symbols;
+}
+
+function symbolToJsx(inner: string) {
+  const jsx = inner
+    .replaceAll("stroke-width=", "strokeWidth=")
+    .replaceAll("stroke-linecap=", "strokeLinecap=")
+    .replaceAll("stroke-linejoin=", "strokeLinejoin=")
+    .replaceAll('<g fill="currentColor">', '<g fill="currentColor" stroke="none">')
+    .replaceAll('"/>', '" />');
+  assert.doesNotMatch(jsx, / [a-z]+-[a-z-]+=/, "no SVG attribute is left in dash-case");
+  return `<>${jsx}</>,`;
+}
+
+test("26-12 the drawing starts only from the owner's recorded choice: one «Выбрано: » line in 26-ICON-DECISION.md", () => {
+  assert.equal(decisionSource.split("\n").filter((line) => line.startsWith("Выбрано: ")).length, 1);
+});
+
+test("26-12 tracer: the three danger signs are the owner's round-5 drawing, verbatim", () => {
+  const symbols = decisionSymbols();
+  for (const name of ["hephaestus", "proteus", "apeiron"]) {
+    const inner = symbols.get(name);
+    assert.ok(inner, `s-${name} is recorded`);
+    assert.equal(drawing(`class-${name}`).trim(), symbolToJsx(inner), `class-${name}`);
+  }
+});
+
+// Everything except the class signs stays as it was at the sample commit (D-05; the owner's amendment in 26-ICON-DECISION.md
+// keeps the byte check for route-*, lock-* and the other icons, the class map, its keys and the canonical terms).
+// The guard reads the sample from git history, so it needs a full clone; it fails with a clear message instead of skipping.
+const ICON_SAMPLE_COMMIT = "cf8038f42270cacd600eb347faaf36f1c52294ba";
+const ICONS_PATH = "components/portia-icons.tsx";
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+function git(args: string[]): string {
+  return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+}
+
+function readSampleIcons(): string {
+  const short = ICON_SAMPLE_COMMIT.slice(0, 7);
+  const fix = "run git fetch --unshallow (the clone must have full history)";
+  let shallow: string;
+  try {
+    shallow = git(["rev-parse", "--is-shallow-repository"]).trim();
+  } catch (error) {
+    assert.fail(`26-12 icon guard needs git history: git is unavailable or this is not a git checkout (${(error as Error).message}); ${fix}`);
+  }
+  assert.notEqual(shallow, "true", `26-12 icon guard needs full git history: commit ${short} may be missing because the clone is shallow; ${fix}`);
+  try {
+    return git(["show", `${ICON_SAMPLE_COMMIT}:${ICONS_PATH}`]).replace(/\r\n/g, "\n");
+  } catch (error) {
+    assert.fail(`26-12 icon guard: commit ${short} or ${ICONS_PATH} in it is missing (${(error as Error).message}); ${fix}`);
+  }
+}
+
+function sliceOf(source: string, start: string, end: string) {
+  const from = source.indexOf(start);
+  const to = source.indexOf(end, from);
+  assert.ok(from >= 0 && to > from, `${start} .. ${end}`);
+  return source.slice(from, to);
+}
+
+function lineOf(source: string, start: string) {
+  const line = source.split("\n").find((item) => item.startsWith(start));
+  assert.ok(line, `${start} exists`);
+  return line;
+}
+
+test("26-12 route-*, lock-* and all non-class icons, their helpers, the type, the class map and PortiaIcon equal ICON_SAMPLE_COMMIT byte for byte", () => {
+  const sample = readSampleIcons();
+  const sampleIconPaths = sliceOf(sample, "const iconPaths:", "// The badge for each canonical term");
+  const keys = [...sampleIconPaths.matchAll(/\n  ("[a-z-]+"|[a-z]+):/g)].map((match) => match[1].replaceAll('"', ""));
+  const kept = keys.filter((key) => !key.startsWith("class-"));
+  assert.ok(kept.includes("route-droplet") && kept.includes("lock-closed") && kept.length === 20, `kept icons: ${kept.join(",")}`);
+  for (const key of kept) assert.equal(drawing(key), entryIn(sampleIconPaths, key), `${key} is unchanged since ${ICON_SAMPLE_COMMIT.slice(0, 7)}`);
+  for (const helper of ["const drop =", "const lockBody ="]) assert.equal(lineOf(iconsSource, helper), lineOf(sample, helper), helper);
+  const typeOf = (source: string) => /export type PortiaIconName =[\s\S]*?;\n/.exec(source)?.[0];
+  assert.equal(typeOf(iconsSource), typeOf(sample), "PortiaIconName keeps every key");
+  assert.equal(iconMapBlock, sliceOf(sample, "export const classificationIcon", "// Content values are editor input"), "classificationIcon");
+  assert.equal(sliceOf(iconsSource, "export function classificationIconFor", "\n}\n"), sliceOf(sample, "export function classificationIconFor", "\n}\n"), "classificationIconFor");
+  assert.equal(sliceOf(iconsSource, "export function PortiaIcon(", "\n}\n"), sliceOf(sample, "export function PortiaIcon(", "\n}\n"), "PortiaIcon");
 });
