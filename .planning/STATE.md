@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed PORTIA-26-08-PLAN.md
-last_updated: "2026-11-16T12:07:03.041Z"
+stopped_at: Completed PORTIA-26-09-PLAN.md
+last_updated: "2026-11-16T12:23:51.755Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase PORTIA-26 execution started
-state_head: 1b37d1f7a1b496e9fc83b1da253caa72c21c6c62
+state_head: eeccc94d844b3c24fc639e63df8ca8ef96c7b132
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 64
-  completed_plans: 57
+  completed_plans: 58
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-26 (Единый стиль сайта) — EXECUTING
-Plan: 8 of 14
+Plan: 9 of 14
 Status: Executing Phase PORTIA-26
 Last activity: 2026-11-16 — Phase PORTIA-26 execution started
 
@@ -96,6 +96,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-26 P06 | 13 min | 3 tasks | 11 files |
 | Phase PORTIA-26 P07 | 22min | 3 tasks | 7 files |
 | Phase PORTIA-26 P08 | 9 min | 2 tasks | 7 files |
+| Phase PORTIA-26 P09 | 10 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -321,6 +322,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: 26-07: «Сотрудники» — своя EditorActionBar (СОХРАНИТЬ ПРОФИЛЬ + статус saveStatusText), подпись из tabRegistry; липкая только .etab-bar
 - [Phase PORTIA-26]: 26-08: «Повышение» — ветки в nav-слоте EditorActionBar с aria-current и плашкой .tab-count; фильтры типа запроса остаются aria-pressed; сообщение очереди — statusText с tone="error"
 - [Phase PORTIA-26]: 26-08: очередь и банки Повышения — классы etab-body/etab-list/etab-detail на прежних элементах (без обёртки EditorTabBody), список 280px на ПК; на телефоне .promotion-editor с панелью — overflow: clip
+- [Phase PORTIA-26]: 26-09: «Пользователи» на ПК — EditorActionBar (разделы «Заявки · N»/«Люди · N»/«Отклонённые и отозванные · N» с aria-current, «Ожидают: N», «ОДОБРИТЬ ИЗ ТАБЛИЦЫ» primary) и EditorTabBody; деталь — UsersActionBody, общий с окном телефона; права только из visibleControls; телефон без изменений
+- [Phase PORTIA-26]: 26-09: после решения на ПК решённая строка остаётся выбранной, пока она в разделе, иначе nextUsersSelection; нет строки — фокус на кнопку раздела; карточка заявки и вход владельца — мягкий primary (цвета в базовых правилах, геометрия в ui-unify)
 
 ### Pending Todos
 
@@ -374,8 +377,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-16T12:07:02.070Z
-Stopped at: Completed PORTIA-26-08-PLAN.md
+Last session: 2026-11-16T12:23:50.786Z
+Stopped at: Completed PORTIA-26-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
