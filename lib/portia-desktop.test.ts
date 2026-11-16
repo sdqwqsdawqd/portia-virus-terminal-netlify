@@ -1022,11 +1022,15 @@ test("every long editor list scrolls inside its own pane (UI E3 overflow)", () =
   assert.match(styles, /\.promotion-bank-editor, \.promotion-preview\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto/);
 });
 
-test("sticky and floating editor layers never cover the content: notices are in the flow, the one sticky chip sits under the panel (UI E3 overflow)", () => {
+test("sticky and floating editor layers never cover the content: notices are in the flow, the sticky action bar sits under the panel (UI E3 overflow)", () => {
   const rules = styles.split("\n").filter((line) => /^\.[^{]*\{/.test(line));
-  const stickyEditor = rules.filter((line) => /position:\s*sticky/.test(line) && /editor/.test(line.slice(0, line.indexOf("{")))).map((line) => line.slice(0, line.indexOf("{")).trim());
+  const stickyEditor = rules.filter((line) => /position:\s*sticky/.test(line) && /editor|etab/.test(line.slice(0, line.indexOf("{")))).map((line) => line.slice(0, line.indexOf("{")).trim());
   // 20-22 (D-41): the «Справочник» add-section bar is the one other sticky editor layer. It sits in the flow at the top of the tab, above the TOC, on an opaque panel.
-  assert.deepEqual(stickyEditor, [".editor-save-chip", ".editor-section-tabs", ".editor-section-addbar"]);
+  // Phase 26 (26-06, D-13b): the floating save chip is retired; the action bar of the draft tabs (.etab-bar) is the sticky save layer.
+  assert.deepEqual(stickyEditor, [".editor-section-tabs", ".editor-section-addbar", ".etab-bar"]);
+  const bar = rules.find((line) => line.startsWith(".etab-bar {") && /position:\s*sticky/.test(line)) ?? "";
+  assert.match(bar, /top:\s*0/);
+  assert.match(styles, /\.etab-bar\s*\{[^}]*background:\s*var\(--panel\)/, "the bar is opaque");
   const addbar = rules.find((line) => line.startsWith(".editor-section-addbar {")) ?? "";
   assert.match(addbar, /top:\s*0/);
   assert.match(addbar, /background:\s*var\(--panel\)/);
@@ -1037,8 +1041,9 @@ test("sticky and floating editor layers never cover the content: notices are in 
     assert.doesNotMatch(rule, /position:\s*(sticky|fixed|absolute)/, notice);
   }
   const z = (selector: string) => Number(new RegExp(`${selector.replace(/[.\[\]]/g, "\\$&")} \\{[^}]*z-index:\\s*(\\d+)`).exec(styles)?.[1] ?? NaN);
-  assert.ok(z(".floating-text-format") > z(".editor-save-chip"), "the format panel is above the save chip");
-  assert.match(styles, /\.editor-save-chip\s*\{[^}]*bottom:\s*12px/);
+  assert.ok(z(".floating-text-format") > z(".etab-bar"), "the format panel is above the action bar");
+  assert.ok(z(".etab-bar") > z(".editor-toc") && z(".etab-bar") < 10, "the bar is above the TOC and stays a low layer: dialogs and toasts are above it");
+  assert.doesNotMatch(styles, /\.editor-save-chip/, "the floating chip is retired");
 });
 
 test("the stale banner is a warning strip in the flow with wrapping text (D-11)", () => {

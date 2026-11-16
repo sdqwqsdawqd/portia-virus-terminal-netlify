@@ -69,6 +69,8 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //      (applyLevelHierarchyHunk), защита от копии «для зрителя» (contentIncomplete) и строка saveNotice; русские строки лежат в lib/level-copy.ts. Источник одобрения: 24-CONTEXT D-05, D-16, D-17 и план 24-08.
 //   8. PORTIA-25 (25-02; SEC-05, D-13, D-14) — «Сменить адрес картинки» у выбора уровня: хук useImageRewrite (components/portia-image-rewrite.tsx), вызов после подъёма уровня и после сохранения
 //      (applyImageRewriteHunk); русских строк в файле не добавлено, строки лежат в lib/level-copy.ts, запросы — в lib/media-rewrite-client.ts. Источник одобрения: 25-CONTEXT D-13, D-14 и план 25-02.
+//   9. PORTIA-26 (26-06; UI-04, D-12, D-13, D-21) — панель действий из шва вместо чипа; русские строки лежат в шве
+//      components/portia-editor-tab-shell.tsx (applyTabShellHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-06.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -448,6 +450,116 @@ function applyImageRewriteHunk(text: string): string {
   );
 }
 
+// PORTIA-26-06 (UI-04, D-12, D-13b): the floating save chip of the sample after PORTIA-24-08, removed whole (byte-exact).
+const SAVE_CHIP_BLOCK: readonly string[] = [
+  "      {chipVisible && (",
+  "        <div",
+  "          className=\"editor-save-chip\"",
+  "          data-dirty={dirty || undefined}",
+  "          data-blocked={alarm || undefined}",
+  "          ref={chipRef}",
+  "          onKeyDown={(event) => {",
+  "            if (event.key !== \"Escape\" || !popoverOpen) return;",
+  "            event.preventDefault();",
+  "            event.stopPropagation();",
+  "            setPopoverOpen(false);",
+  "            chipRef.current?.querySelector<HTMLButtonElement>(\":scope > button\")?.focus();",
+  "          }}",
+  "        >",
+  "          {saveNotice && <span className=\"editor-save-status saved\" role=\"status\">{saveNotice}</span>}",
+  "          <button type=\"button\" aria-label={chipLabel} title={`Не сохранено: ${shownChanged.length}`} aria-expanded={popoverOpen} aria-haspopup=\"dialog\" aria-controls={popoverId} onClick={() => setPopoverOpen((open) => !open)}>{chipText}</button>",
+  "          {popoverOpen && dirty && (",
+  "            <div className=\"editor-save-popover\" id={popoverId} role=\"dialog\" aria-label=\"Несохранённые изменения\">",
+  "              <strong>НЕ СОХРАНЕНО</strong>",
+  "              <ul>{shownChanged.map((id) => <li key={id} title={sectionLabels[id]}>{sectionLabels[id]}</li>)}</ul>",
+  "              {statusText && <span className={`editor-save-status ${status}`}>{statusText}</span>}",
+  "              {status === \"error\" && saveError && <span className=\"editor-save-reason\">{saveError}</span>}",
+  "              {oversize.length > 0 && <span className=\"editor-save-reason\">{oversizeMessage(oversize)}</span>}",
+  "              {bodyMessage && <span className=\"editor-save-status error\">{bodyMessage}</span>}",
+  "              {badQuest && <button type=\"button\" className=\"editor-save-fix\" onClick={() => { setPopoverOpen(false); revealCard(badQuest.id, \"endsAt\", \"quests\"); }}>{dateMessage}</button>}",
+  "              <div className=\"editor-save-actions\">",
+  "                <button type=\"button\" className=\"secondary-control editor-undo-step\" aria-label=\"Отменить последнее действие\" disabled={!history.past.length} onClick={() => step(\"undo\")}>↶</button>",
+  "                <button type=\"button\" className=\"secondary-control\" disabled={!dirty} aria-disabled={saveState === \"saving\" || undefined} onClick={() => { if (saveState !== \"saving\") setDialog(\"discard\"); }}>ОТМЕНИТЬ</button>",
+  "                <button type=\"button\" className=\"primary-control\" disabled={!dirty || saveBlocked} aria-disabled={saveState === \"saving\" || undefined} onClick={() => { if (saveState !== \"saving\") void save(); }}>СОХРАНИТЬ</button>",
+  "              </div>",
+  "            </div>",
+  "          )}",
+  "        </div>",
+  "      )}",
+];
+// PORTIA-26-06: the derived values of the chip (visibility, popover reset, alarm, label, text) give way to one comment line.
+const SAVE_CHIP_VALUES: readonly string[] = [
+  "  // The chip stays while anything is unsaved, so a compact chip never hides unsaved work (D-09).",
+  "  const chipVisible = dirty || saveState === \"saving\" || saveState === \"saved\" || !!saveNotice;",
+  "  // Derived reset: the popover only lists unsaved sections, so it closes when the draft is clean.",
+  "  if (popoverOpen && !dirty) setPopoverOpen(false);",
+  "  // A blocked, failed or conflicting save turns the chip red, so a compact chip never hides a failed save (D-10).",
+  "  const alarm = dirty && (saveBlocked || saveState === \"error\" || conflict || refusedShown.length > 0);",
+  "  const chipLabel = saveState === \"saving\" ? saveStatusText(\"saving\")",
+  "    : dirty ? `Не сохранено разделов: ${shownChanged.length}${alarm ? (saveBlocked ? \", сохранение невозможно\" : \", ошибка сохранения\") : \"\"}`",
+  "    : saveStatusText(\"saved\");",
+  "  const chipText = saveState === \"saving\" ? \"…\" : dirty ? `${alarm ? \"!\" : \"\"}${shownChanged.length}` : \"✓\";",
+];
+// PORTIA-26-06: the action bar under the tab strip; the three buttons are the chip's, byte for byte, and the reasons of its popover are lines under the bar.
+const TAB_SHELL_BAR: readonly string[] = [
+  "      {editorSections.some((section) => section === tab) && (",
+  "        <EditorActionBar",
+  "          label={sectionLabels[tab as EditorSection]}",
+  "          statusText={statusText}",
+  "          tone={status}",
+  "          unsavedCount={dirty ? shownChanged.length : 0}",
+  "          notice={saveNotice}",
+  "          actions={<>",
+  "            <button type=\"button\" className=\"secondary-control editor-undo-step\" aria-label=\"Отменить последнее действие\" disabled={!history.past.length} onClick={() => step(\"undo\")}>↶</button>",
+  "            <button type=\"button\" className=\"secondary-control\" disabled={!dirty} aria-disabled={saveState === \"saving\" || undefined} onClick={() => { if (saveState !== \"saving\") setDialog(\"discard\"); }}>ОТМЕНИТЬ</button>",
+  "            <button type=\"button\" className=\"primary-control\" disabled={!dirty || saveBlocked} aria-disabled={saveState === \"saving\" || undefined} onClick={() => { if (saveState !== \"saving\") void save(); }}>СОХРАНИТЬ</button>",
+  "          </>}",
+  "          messages={dirty ? [",
+  "            status === \"error\" && saveError,",
+  "            oversize.length > 0 && oversizeMessage(oversize),",
+  "            bodyMessage,",
+  "            badQuest && <button type=\"button\" className=\"editor-save-fix\" onClick={() => revealCard(badQuest.id, \"endsAt\", \"quests\")}>{dateMessage}</button>,",
+  "          ] : []}",
+  "        />",
+  "      )}",
+];
+
+/** PORTIA-26-06 (26-06; UI-04, D-12, D-13b, D-21): the action bar from the tab shell replaces the floating save chip. No Russian text is added: the bar's own texts live in components/portia-editor-tab-shell.tsx. */
+function applyTabShellHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";\n',
+    'import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";\n' +
+      'import { EditorActionBar } from "@/components/portia-editor-tab-shell";\n',
+    "tab shell import",
+  );
+  next = replaceOnce(
+    next,
+    "  const [popoverOpen, setPopoverOpen] = useState(false);\n  const chipRef = useRef<HTMLDivElement>(null);\n  const popoverId = useId();\n",
+    "",
+    "chip state",
+  );
+  next = replaceOnce(
+    next,
+    "  useEffect(() => {\n" +
+      "    if (!popoverOpen) return;\n" +
+      "    const away = (event: PointerEvent) => { if (!chipRef.current?.contains(event.target as Node)) setPopoverOpen(false); };\n" +
+      '    document.addEventListener("pointerdown", away);\n' +
+      '    return () => document.removeEventListener("pointerdown", away);\n' +
+      "  }, [popoverOpen]);\n\n",
+    "",
+    "chip popover effect",
+  );
+  next = replaceOnce(
+    next,
+    `${SAVE_CHIP_VALUES.join("\n")}\n`,
+    "  // Phase 26 (26-06, D-13b): the floating save chip is retired; the action bar of the draft tabs shows the status, the reasons and the buttons.\n",
+    "chip values",
+  );
+  next = replaceOnce(next, "        })}\n      </nav>\n      {refusedShown.map(", `        })}\n      </nav>\n${TAB_SHELL_BAR.join("\n")}\n      {refusedShown.map(`, "action bar under the tab strip");
+  return replaceOnce(next, `${SAVE_CHIP_BLOCK.join("\n")}\n`, "", "chip block");
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -497,6 +609,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-24-08", apply: applyLevelHierarchyHunk },
   { id: "PORTIA-22", apply: applyUsersTabHunk },
   { id: "PORTIA-25", apply: applyImageRewriteHunk },
+  { id: "PORTIA-26-06", apply: applyTabShellHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -594,12 +707,15 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, applyLaunchButtonHunk(sample)), null, "a file without the D-62 hunk is a difference");
   const withoutUsers = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-22").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutUsers), null, "a file without the PORTIA-22 hunk is a difference");
-  const withoutLevels = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-24") && edit.id !== "PORTIA-25").reduce((text, edit) => edit.apply(text), sample);
+  const withoutLevels = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-24") && edit.id !== "PORTIA-25" && !edit.id.startsWith("PORTIA-26-06")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutLevels), null, "a file without the PORTIA-24 hunk is a difference");
-  const withoutHierarchy = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-24-08" && edit.id !== "PORTIA-25").reduce((text, edit) => edit.apply(text), sample);
+  const withoutHierarchy = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-24-08" && edit.id !== "PORTIA-25" && !edit.id.startsWith("PORTIA-26-06")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutHierarchy), null, "a file without the PORTIA-24-08 hunk is a difference");
   const withoutRewrite = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-25").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutRewrite), null, "a file without the PORTIA-25 hunk is a difference");
+  const withoutTabShell = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-06")).reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutTabShell), null, "a file without the PORTIA-26-06 hunk is a difference");
+  assert.throws(() => applyTabShellHunk(expected), /exactly one approved anchor/, "the tab shell hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

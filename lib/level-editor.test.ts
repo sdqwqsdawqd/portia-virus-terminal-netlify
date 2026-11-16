@@ -231,13 +231,16 @@ test("LVL-08/D-05 an incomplete copy shows one alert block and no save button", 
   assert.equal(levelCopy.editorIncomplete.body, "Сохранение отключено, чтобы не стереть скрытые записи. Обновите страницу.");
 });
 
-test("D-17 the notice of the server's lift is a status line beside the save chip, outside the popover", () => {
-  assert.ok(editor.includes('{saveNotice && <span className="editor-save-status saved" role="status">{saveNotice}</span>}'));
-  assert.ok(editor.includes('|| !!saveNotice;'), "the chip is shown while there is a notice");
-  const chip = editor.indexOf('className="editor-save-chip"');
-  const notice = editor.indexOf("{saveNotice && <span");
-  const popover = editor.indexOf('className="editor-save-popover"');
-  assert.ok(chip > 0 && notice > chip && notice < popover, "the notice stands in the chip, before the popover");
+// Phase 26 (26-06, D-13b): the chip is retired; the notice is the status line of the action bar of the draft tabs.
+test("D-17 the notice of the server's lift is the status line of the action bar, not hidden in a popover", () => {
+  const bar = editor.indexOf("<EditorActionBar");
+  const notice = editor.indexOf("notice={saveNotice}", bar);
+  const end = editor.indexOf("/>", editor.indexOf("messages={", bar));
+  assert.ok(bar > 0 && notice > bar && notice < end, "the editor hands the notice to the bar");
+  const shell = lf(readFileSync(new URL("components/portia-editor-tab-shell.tsx", root), "utf8"));
+  assert.match(shell, /const shown = notice \|\| statusText;/, "the notice takes the status slot");
+  assert.match(shell, /className=\{`etab-status[^`]*`\} role="status" aria-live="polite"/, "the slot is a polite status line");
+  assert.ok(!editor.includes("editor-save-popover"), "no popover is left to hide it");
 });
 
 // ---- Phase 25, 25-02: WR-02 and the action slot ----

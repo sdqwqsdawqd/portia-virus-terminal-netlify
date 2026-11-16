@@ -43,6 +43,7 @@ import { AppDeniedPanel } from "@/components/portia-desktop-states";
 import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";
 import { accessCheckFailedText } from "@/lib/app-state";
 import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
+import { EditorActionBar } from "@/components/portia-editor-tab-shell";
 
 type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "users" | "promo" | "access";
 
@@ -504,9 +505,6 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const leaving = employeeDirty && (leaveTo !== null || closeAsked);
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const chipRef = useRef<HTMLDivElement>(null);
-  const popoverId = useId();
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
   const [broadcastEditorTab, setBroadcastEditorTab] = useState<BroadcastTab>("news");
   const [selectedInfoSection, setSelectedInfoSection] = useState("");
@@ -1123,26 +1121,10 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
-  useEffect(() => {
-    if (!popoverOpen) return;
-    const away = (event: PointerEvent) => { if (!chipRef.current?.contains(event.target as Node)) setPopoverOpen(false); };
-    document.addEventListener("pointerdown", away);
-    return () => document.removeEventListener("pointerdown", away);
-  }, [popoverOpen]);
-
   // Only a save starts a new saveState, so after ОТМЕНИТЬ or undo back to clean the conflict text would sit over a current editor.
   const conflict = saveState === "conflict" && dirty && conflictBase !== null;
   const refusedShown = refusedSections.filter((section) => changed.includes(section));
-  // The chip stays while anything is unsaved, so a compact chip never hides unsaved work (D-09).
-  const chipVisible = dirty || saveState === "saving" || saveState === "saved" || !!saveNotice;
-  // Derived reset: the popover only lists unsaved sections, so it closes when the draft is clean.
-  if (popoverOpen && !dirty) setPopoverOpen(false);
-  // A blocked, failed or conflicting save turns the chip red, so a compact chip never hides a failed save (D-10).
-  const alarm = dirty && (saveBlocked || saveState === "error" || conflict || refusedShown.length > 0);
-  const chipLabel = saveState === "saving" ? saveStatusText("saving")
-    : dirty ? `Не сохранено разделов: ${shownChanged.length}${alarm ? (saveBlocked ? ", сохранение невозможно" : ", ошибка сохранения") : ""}`
-    : saveStatusText("saved");
-  const chipText = saveState === "saving" ? "…" : dirty ? `${alarm ? "!" : ""}${shownChanged.length}` : "✓";
+  // Phase 26 (26-06, D-13b): the floating save chip is retired; the action bar of the draft tabs shows the status, the reasons and the buttons.
   // UI E3: «Сохранено» only once the server answered (saveState "saved") and nothing was typed since; the text of a failure is the server's reason beside the status.
   const partial = partialResult !== null && dirty ? partialResult : null;
   const status: SaveStatus = saveState === "saving" ? "saving"
@@ -1225,6 +1207,26 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
           );
         })}
       </nav>
+      {editorSections.some((section) => section === tab) && (
+        <EditorActionBar
+          label={sectionLabels[tab as EditorSection]}
+          statusText={statusText}
+          tone={status}
+          unsavedCount={dirty ? shownChanged.length : 0}
+          notice={saveNotice}
+          actions={<>
+            <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
+            <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>
+            <button type="button" className="primary-control" disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>
+          </>}
+          messages={dirty ? [
+            status === "error" && saveError,
+            oversize.length > 0 && oversizeMessage(oversize),
+            bodyMessage,
+            badQuest && <button type="button" className="editor-save-fix" onClick={() => revealCard(badQuest.id, "endsAt", "quests")}>{dateMessage}</button>,
+          ] : []}
+        />
+      )}
       {refusedShown.map((section) => <p key={section} id={`${errorIdBase}-${section}`} className="editor-section-error" role="alert">{closedMessage([section])} Правки остались в черновике.</p>)}
       {closureNotice && <p className="editor-guidance" role="status">{closureNotice}</p>}
       {stale && dirty && !conflict && (
@@ -1689,40 +1691,6 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={runBatch} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
       <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? `${status === "dirty" ? ":" : ". Не сохранено:"} ${shownChanged.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>
-      {chipVisible && (
-        <div
-          className="editor-save-chip"
-          data-dirty={dirty || undefined}
-          data-blocked={alarm || undefined}
-          ref={chipRef}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape" || !popoverOpen) return;
-            event.preventDefault();
-            event.stopPropagation();
-            setPopoverOpen(false);
-            chipRef.current?.querySelector<HTMLButtonElement>(":scope > button")?.focus();
-          }}
-        >
-          {saveNotice && <span className="editor-save-status saved" role="status">{saveNotice}</span>}
-          <button type="button" aria-label={chipLabel} title={`Не сохранено: ${shownChanged.length}`} aria-expanded={popoverOpen} aria-haspopup="dialog" aria-controls={popoverId} onClick={() => setPopoverOpen((open) => !open)}>{chipText}</button>
-          {popoverOpen && dirty && (
-            <div className="editor-save-popover" id={popoverId} role="dialog" aria-label="Несохранённые изменения">
-              <strong>НЕ СОХРАНЕНО</strong>
-              <ul>{shownChanged.map((id) => <li key={id} title={sectionLabels[id]}>{sectionLabels[id]}</li>)}</ul>
-              {statusText && <span className={`editor-save-status ${status}`}>{statusText}</span>}
-              {status === "error" && saveError && <span className="editor-save-reason">{saveError}</span>}
-              {oversize.length > 0 && <span className="editor-save-reason">{oversizeMessage(oversize)}</span>}
-              {bodyMessage && <span className="editor-save-status error">{bodyMessage}</span>}
-              {badQuest && <button type="button" className="editor-save-fix" onClick={() => { setPopoverOpen(false); revealCard(badQuest.id, "endsAt", "quests"); }}>{dateMessage}</button>}
-              <div className="editor-save-actions">
-                <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
-                <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>
-                <button type="button" className="primary-control" disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
       {dialog === "discard" && (
         <ConfirmDialog
           title="Отменить несохранённые правки?"

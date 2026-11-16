@@ -567,21 +567,13 @@ html[data-motion="full"] .portia-image-skeleton { background: linear-gradient(10
 @media (max-width: 900px) {
   .editor-their-edits button, .editor-conflict-panel button { min-height: 44px; }
 }
-.editor-save-chip { position: sticky; z-index: 120; bottom: 12px; align-self: flex-end; margin: auto -16px 0 0; display: flex; }
-.editor-save-chip > button { min-width: 32px; min-height: 32px; padding: 0 8px; border: 1px solid oklch(.5 calc(.04 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-control); background: oklch(.208 calc(.02 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .04em; box-shadow: 0 6px 18px rgba(0,0,0,.35); cursor: pointer; }
-.editor-save-chip[data-dirty] > button { border-color: var(--warning); color: var(--warning); }
-.editor-save-chip[data-blocked] > button { border-color: var(--danger); color: #e07d74; }
-.editor-save-chip > button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
-.editor-save-popover { position: absolute; right: 0; bottom: calc(100% + 8px); display: flex; flex-direction: column; gap: 8px; width: min(320px, calc(100vw - 24px)); max-height: min(60svh, 360px); overflow: auto; box-sizing: border-box; padding: 12px; border: 1px solid oklch(.5 calc(.04 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-dialog); background: oklch(.187 calc(.02 * var(--accent-chroma)) var(--accent-hue) / .985); box-shadow: 0 14px 40px rgba(0,0,0,.5); font: 400 13px/1.35 var(--sans); }
-.editor-save-popover > strong { font: 700 11px/1.35 var(--sans); letter-spacing: .04em; }
-.editor-save-popover > ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
-.editor-save-popover > ul > li { min-width: 0; overflow: hidden; color: var(--warning); font: 700 11px/1.35 var(--sans); letter-spacing: .04em; text-overflow: ellipsis; white-space: nowrap; }
-.editor-save-popover .editor-save-status { font: 400 13px/1.35 var(--sans); letter-spacing: 0; }
-.editor-save-reason { color: var(--warning); }
 .editor-save-fix { display: block; min-width: 0; max-width: 100%; padding: 0; border: 0; background: none; color: #e07d74; font: 700 11px/1.35 var(--sans); letter-spacing: .04em; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .editor-save-fix:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
-.editor-save-actions { display: flex; flex: 0 0 auto; gap: 8px; }
 .editor-undo-step { min-width: 40px; font-size: 16px; line-height: 1; }
+/* Phase 26 (UI-04, D-13b): the action bar of the editor tabs on an opaque panel; the reasons of a refused save are warning lines under it.
+   Only colours and fonts here: the layout of the bar is in the ui-unify block at the end of the file. */
+.etab-bar { background: var(--panel); }
+.etab-message { color: var(--warning); font: 400 13px/1.35 var(--sans); }
 .tab-dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: var(--radius-round); background: var(--warning); vertical-align: middle; }
 .portia-dialog { width: min(420px, calc(100vw - 24px)); padding: 0; border: 1px solid oklch(.5 calc(.04 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-dialog); background: oklch(.208 calc(.02 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); box-shadow: 0 22px 60px rgba(0,0,0,.55); }
 .portia-dialog::backdrop { background: rgba(0,0,0,.55); }
@@ -918,7 +910,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 /* The editor pane has 28px of padding and sticky measures from inside it: -28px makes the bar sit flush with the top edge of the pane. */
 @media (min-width: 901px) { .editor-section-addbar { top: -28px; } }
 @media (max-width: 900px) {
-  /* The page scrolls on a phone and .app-window clips with overflow: hidden, which makes it the scroll container sticky looks at (the reason .editor-save-chip is fixed). overflow: clip keeps the clipping but is no scroll container, so the bar holds against the page, under the 48px system bar. */
+  /* The page scrolls on a phone and .app-window clips with overflow: hidden, which makes it the scroll container sticky looks at (the reason the old save chip was fixed). overflow: clip keeps the clipping but is no scroll container, so the bar holds against the page, under the 48px system bar. */
   .app-window:has(.editor-section-addbar), .content-editor:has(.editor-section-addbar) { overflow: clip; }
   .editor-section-addbar { top: 48px; padding-inline: 0; }
   .editor-section-addbar-row > button { min-height: 44px; }
@@ -926,6 +918,8 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
   .editor-section-addbar + .editor-section-tabs { top: 108px; }
   .editor-section-tabs nav button, .editor-section-tab-order button { min-height: 44px; }
 }
+/* Phase 26 (26-06): under the sticky action bar the old add bar and section tabs stay in the flow, so they never cover it; 26-07 moves them into its nav slot. */
+.etab-bar ~ * .editor-section-addbar, .etab-bar ~ * .editor-section-tabs { position: static; }
 /* D-41 «Сводка»: entries live in the «Без раздела» list or inside a section; the list keeps the width of the old form cards on a PC. */
 .broadcast-group-title { margin: 6px 0 0; color: var(--teal); font: 700 11px var(--sans); letter-spacing: .07em; text-transform: uppercase; }
 .broadcast-entry-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; margin-top: 8px; }
@@ -1460,12 +1454,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .rich-text-toolbar[data-tab="color"] > [data-tab-group]:not([data-tab-group="color"]) { display: none; }
   .rich-text-toolbar[data-tab="size"] > [data-tab-group]:not([data-tab-group="size"]) { display: none; }
   .rich-text-toolbar[data-tab="background"] > [data-tab-group]:not([data-tab-group="background"]) { display: none; }
-  /* The chip is fixed here: the page scrolls and .app-window clips, so sticky cannot hold. It sits above the 44px nav, and above the format sheet when one is open (D-11). */
-  .editor-save-chip { position: fixed; right: 8px; bottom: 52px; margin: 0; }
-  .editor-save-chip > button { min-width: 44px; min-height: 44px; }
-  .desktop:has(> .floating-text-format:not([data-collapsed])) .editor-save-chip { bottom: calc(52px + min(34svh, 270px)); }
-  .desktop:has(> .floating-text-format[data-collapsed]) .editor-save-chip { bottom: 96px; }
-  .content-editor:has(> .editor-save-chip) { padding-bottom: 110px; }
   /* Lets the last field scroll above the format panel, which sits where the keyboard was. */
   .desktop:has(> .floating-text-format) .content-editor { padding-bottom: calc(min(34svh, 270px) + 96px); }
   .rich-text-toolbar { grid-template-columns: 1fr; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
@@ -1522,7 +1510,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .assistant-formatted-text { max-height: min(36svh, 180px); overflow-y: auto; padding: 8px 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .formatted-text-field-head { align-items: flex-start; flex-direction: column; }
   .global-format-launch { top: auto; right: 8px; bottom: 54px; transform: none; }
-  .editor-save-chip { right: 54px; }
   .global-format-launch > button, .global-format-launch > button:hover, .global-format-launch > button:focus-visible, .global-format-launch > button[aria-expanded="true"] { width: 38px; padding-inline: 9px; }
 }
 
@@ -2661,5 +2648,27 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .app-window.is-maximized .employee-profile-editor { max-width: 1320px; }
   .app-window.is-maximized .settings-app { display: grid; grid-template-columns: repeat(2, minmax(0, 648px)); column-gap: 24px; align-content: start; }
   .app-window.is-maximized .settings-app > header, .app-window.is-maximized .settings-app > .content-control-entry, .app-window.is-maximized .settings-app > .settings-footer { grid-column: 1 / -1; }
+}
+/* Раскладка вкладок редактора (UI-04, D-13b): одна липкая панель nav · status · actions под строкой вкладок; цвета — вне блока.
+   z-index 4: выше оглавления (.editor-toc, 3), ниже панели оформления, диалогов и уведомлений. Причины отказа — строки под панелью. */
+.etab-bar { position: sticky; top: 0; z-index: 4; box-sizing: border-box; display: flex; align-items: center; gap: 8px; min-height: 48px; margin: 0 0 8px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.etab-nav { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; overflow-x: auto; white-space: nowrap; }
+.etab-status { flex: 0 1 auto; min-width: 0; margin: 0 0 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.etab-actions { display: flex; flex: none; align-items: center; gap: 8px; }
+.etab-actions .editor-undo-step { width: 40px; min-width: 40px; padding: 0; }
+.etab-message { margin: 0 0 8px; padding: 0 16px; overflow-wrap: anywhere; }
+/* На ПК sticky отсчитывается от внутреннего края панели с отступом 28px: верхний отступ переходит в отступ шапки, и панель прилегает к краю. */
+@media (min-width: 901px) {
+  .content-editor:has(> .etab-bar) { padding-top: 0; }
+  .content-editor:has(> .etab-bar) > .editor-header { margin-top: 28px; }
+}
+/* Телефон: та же липкость через overflow: clip, под системной полосой 48px (как .editor-section-addbar); две строки в одном элементе. */
+@media (max-width: 900px) {
+  .app-window:has(.etab-bar), .content-editor:has(.etab-bar) { overflow: clip; }
+  .etab-bar { top: 48px; flex-wrap: wrap; row-gap: 0; padding: 0; }
+  .etab-status { flex: 1 1 0; margin: 0; line-height: 44px; }
+  .etab-nav { order: 1; flex-basis: 100%; min-height: 44px; }
+  .etab-actions .editor-undo-step { width: 44px; min-width: 44px; }
+  .etab-message { padding: 0; }
 }
 /* ui-unify:end */
