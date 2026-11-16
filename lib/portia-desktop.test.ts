@@ -1185,7 +1185,7 @@ test("UI-09 tracer: useShortcutPlacement measures .desktop-icons with a ResizeOb
 test("UI-09: the 521–900px rule no longer pins shortcuts by right/bottom, does not clip the workspace and lets a finger scroll from a shortcut", () => {
   const block = tabletShortcutBlock();
   assert.doesNotMatch(block, /var\(--shortcut-right\)|var\(--shortcut-bottom\)/, "no PC right/bottom anchors on this width");
-  assert.doesNotMatch(block, /overflow:\s*hidden/, "the workspace is not clipped");
+  for (const rule of block.matchAll(/\.workspace[^{]*\{([^}]*)\}/g)) assert.doesNotMatch(rule[1], /overflow/, "the workspace is not clipped");
   assert.match(block, /\.workspace \{[^}]*min-height: max\(calc\(100svh - 82px\), var\(--shortcut-content-height, 0px\)\)/);
   assert.match(block, /\.workspace \{[^}]*padding: 0 0 56px;/, "the 56px taskbar reserve stays");
   assert.match(block, /\n  \.desktop-icon \{[^}]*touch-action: pan-y pinch-zoom;/);
@@ -1202,4 +1202,34 @@ test("UI-09: no stylesheet rule puts overflow: hidden or touch-action on html/bo
     assert.doesNotMatch(match[2], /overflow(-y)?:\s*hidden|touch-action/, `${match[1].trim()} locks the page`);
   }
   assert.doesNotMatch(`${source}\n${shortcutsSource}`, /document\.body\.style\.(overflow|touchAction)|documentElement\.style\.overflow/);
+});
+
+test("UI-09: at 521–900px drag and Alt+Arrow work again; only the ≤520px grid stays without free drag", () => {
+  const down = /const handlePointerDown = [\s\S]*?\n  \};/.exec(shortcutsSource)?.[0] ?? "";
+  const key = /const handleKeyDown = [\s\S]*?\n  \};/.exec(shortcutsSource)?.[0] ?? "";
+  for (const [name, handler] of [["handlePointerDown", down], ["handleKeyDown", key]] as const) {
+    assert.ok(handler.includes('window.matchMedia("(max-width: 520px)").matches'), name + " gates at 520px");
+    assert.ok(!handler.includes("max-width: 900px"), name + " no longer gates at 900px");
+  }
+  assert.match(shortcutsSource, /≤520px — сетка телефона без свободного перетаскивания; 521–900 — то же правило, что и ПК, с расстановкой JS/);
+  // On this width a drop and a key press are held by the same area and cell as the placement, with the assistant and format button as obstacles.
+  const move = /const handlePointerMove = [\s\S]*?\n  \};/.exec(shortcutsSource)?.[0] ?? "";
+  const finish = /const finishDrag = [\s\S]*?\n  \};/.exec(shortcutsSource)?.[0] ?? "";
+  for (const handler of [move, finish, key]) assert.ok(handler.includes("dropBounds("), "the handler clamps inside the placement area on 521–900px");
+  assert.match(shortcutsSource, /const dropBounds = [^\n]*placed \? \{ size: placed\.cell, area: shortcutDropArea\(placed\.area\) \}/);
+  assert.ok(finish.includes("shortcutObstacles(") && key.includes("shortcutObstacles("));
+  // The move is saved where it always was and announced the same way.
+  assert.match(key, /onAnnounce\?\.\(.Ярлык «\$\{label\}» перемещён.\);/);
+  assert.ok(source.includes("try { window.localStorage.setItem(shortcutPositionsStorageKey, JSON.stringify(shortcutPositions)); } catch {}"));
+});
+
+test("UI-09: at 521–900px a shortcut label wraps inside the icon width, two lines at most, then an ellipsis", () => {
+  assert.ok(shortcutsSource.includes('<span className="desktop-icon-label">{label}</span>'));
+  const block = tabletShortcutBlock();
+  const label = /\.desktop-icon-label \{([^}]*)\}/.exec(block)?.[1] ?? "";
+  for (const declaration of ["display: -webkit-box;", "max-width: 100%;", "-webkit-line-clamp: 2;", "-webkit-box-orient: vertical;", "overflow: hidden;", "overflow-wrap: anywhere;"]) {
+    assert.ok(label.includes(declaration), "label rule has " + declaration);
+  }
+  // The PC label is not touched: no rule for the label outside this width.
+  assert.doesNotMatch(styles.replace(block, ""), /\.desktop-icon-label/);
 });

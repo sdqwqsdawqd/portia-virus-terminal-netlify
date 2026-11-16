@@ -53,10 +53,10 @@ test("arguments are not mutated", () => {
   assert.equal(JSON.stringify([position, size, area, obstacles]), before);
 });
 
-test("DraggableDesktopIcon starts the cycle first, gates free drag at 900px, clamps through the pure function and opens immediately", () => {
+test("DraggableDesktopIcon starts the cycle first, gates free drag at 520px (UI-09), clamps through the pure function and opens immediately", () => {
   const down = /const handlePointerDown = [\s\S]*?\n  \};/.exec(shortcuts)?.[0] ?? "";
   assert.match(down, /handlePointerDown = \(event[^\n]*\n\s*iconAnimation\.play\(\);/);
-  assert.ok(down.includes('window.matchMedia("(max-width: 900px)").matches'));
+  assert.ok(down.includes('window.matchMedia("(max-width: 520px)").matches'));
   assert.ok(!shortcuts.includes("window.innerWidth <= 520"));
   assert.ok(/handlePointerMove[\s\S]*clampShortcutPosition\(/.test(shortcuts));
   assert.ok(/finishDrag[\s\S]*clampShortcutPosition\(/.test(shortcuts));
@@ -184,4 +184,19 @@ test("UI-09 placeShortcuts never mutates its arguments", () => {
   const before = JSON.stringify([ids, area, cell, saved]);
   place(ids, area, cell, gap, saved);
   assert.equal(JSON.stringify([ids, area, cell, saved]), before);
+});
+
+test("UI-09: a drop at 521–900px lands where placeShortcuts keeps it — the next placement does not move the released shortcut", () => {
+  const cell = cellOf("default");
+  const area = { width: 768, height: 700 };
+  const dropArea = (layout as unknown as { shortcutDropArea: (area: { width: number; height: number }) => { width: number; height: number } }).shortcutDropArea;
+  assert.equal(typeof dropArea, "function");
+  const assistant: Rect = { x: 690, y: 560, width: 70, height: 100 };
+  // Inside the area, in the middle of the auto columns, past the bottom edge, and onto the assistant.
+  for (const raw of [{ x: 320, y: 240 }, { x: 8, y: 8 }, { x: 400, y: 5000 }, { x: 700, y: 560 }]) {
+    const dropped = clampShortcutPosition(raw, cell, dropArea(area), [assistant]);
+    const result = place(order, area, cell, gap, { trash: dropped });
+    assert.deepEqual(result.positions.trash, dropped, `drop ${JSON.stringify(raw)} stays where it was released`);
+    assertClean(result, area, cell, `drop ${JSON.stringify(raw)}`);
+  }
 });
