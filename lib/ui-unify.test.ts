@@ -123,10 +123,28 @@ const BUTTON_FAMILY = [
   ".info-phone-back",
   ".info-next button",
   ".promotion-action",
+  ".promotion-preview-actions > button",
+  ".promotion-device-reset button",
+];
+// Other buttons that were stretched before Phase 26 and are audited by the same ban (D-02): they are not members of the
+// geometry family (they keep their own dense or compact size) but they may not fill a row either.
+const STRETCH_AUDITED_EXTRA = [
+  ".format-choice-row > button",
+  ".content-control-actions button",
+  ".content-control-actions a",
+  ".archive-document-bar button",
+  ".promotion-bank-workflow-tabs button",
+  ".promotion-preview li button",
+  ".users-pending-head button",
 ];
 // A3 (UI-SPEC): a stacked list of actions inside a container narrower than 480px (the dialog is 420px at most) fills it;
 // that is stacking, not stretching. Named one by one: nothing else may stretch a button.
-const NARROW_STACK_EXCEPTIONS: string[] = [];
+const NARROW_STACK_EXCEPTIONS = [
+  ".users-action-dialog-body .portia-dialog-actions button",
+  ".users-action-dialog-body .users-row-actions button",
+];
+// Rows of lists are rows, not buttons: they fill their cell (UI-SPEC "List rows").
+const ROW_SELECTORS = [".editor-record-list button", ".users-row", ".global-result", ".personnel-list > button"];
 
 function stretchViolations(css: string, audited: string[], exceptions: string[]) {
   const found: string[] = [];
@@ -197,6 +215,157 @@ test("UI-03: button variants keep their own colours (T-26-05)", () => {
 });
 
 test("UI-03 / D-02: no button of the family is stretched, in either stylesheet", () => {
-  assert.deepEqual(stretchViolations(portiaCss, BUTTON_FAMILY, NARROW_STACK_EXCEPTIONS), []);
-  assert.deepEqual(stretchViolations(promotionCss, BUTTON_FAMILY, NARROW_STACK_EXCEPTIONS), []);
+  const audited = [...BUTTON_FAMILY, ...STRETCH_AUDITED_EXTRA, ...NARROW_STACK_EXCEPTIONS];
+  assert.deepEqual(stretchViolations(portiaCss, audited, NARROW_STACK_EXCEPTIONS), []);
+  assert.deepEqual(stretchViolations(promotionCss, audited, NARROW_STACK_EXCEPTIONS), []);
+  assert.doesNotMatch(promotionCss, /flex:\s*1 1 (?:140|150|160)px/u);
+});
+
+test("UI-03 / D-02: the narrow-stack exceptions are named, real and only inside the 420px dialog", () => {
+  for (const selector of NARROW_STACK_EXCEPTIONS) {
+    assert.equal(lastDeclaration(portiaCss, selector, "width", PHONE), "100%", `${selector} is the stacked-action exception`);
+    assert.equal(lastDeclaration(portiaCss, selector, "width"), undefined, `${selector} stacks on a phone only`);
+    assert.ok(selector.startsWith(".users-action-dialog-body"), "the exception stays inside the action dialog");
+  }
+  assert.match(lastDeclaration(portiaCss, ".portia-dialog", "width") ?? "", /^min\(420px,/u, "the dialog that holds the stack is narrower than 480px");
+  // Rows of lists are rows, not buttons: they may fill the cell, and they are not audited as buttons.
+  for (const row of [".editor-record-list button", ".global-result", ".personnel-list > button"]) {
+    assert.equal(lastDeclaration(portiaCss, row, "width"), "100%", row);
+    assert.ok(!BUTTON_FAMILY.includes(row) && !STRETCH_AUDITED_EXTRA.includes(row));
+  }
+});
+
+// Plaques: one box for every label, status and count. Font families and colours stay with each member.
+const PLAQUES = [
+  ".quest-badge",
+  ".manual-mark",
+  "small.manual-mark",
+  ".personnel-list > button > .manual-mark",
+  ".personnel-profile-identity > small.manual-mark",
+  ".users-plaque",
+  ".users-table-mark",
+  ".promotion-step-badge",
+  ".info-sub-marker",
+  ".global-result-mark",
+  ".search-recommendations button",
+];
+// The count pill: the same family with `padding: 0 8px; min-width: 24px`.
+const COUNT_PILLS = [".tab-count", ".promotion-editor-branches button span", ".promotion-queue-filters button span"];
+
+test("UI-03: every plaque is one pill box", () => {
+  for (const selector of [...PLAQUES, ...COUNT_PILLS]) {
+    assert.equal(lastDeclaration(cascadeCss, selector, "border-radius"), "var(--radius-plaque)", `${selector} radius`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "font-size"), "11px", `${selector} font-size`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "font-weight"), "700", `${selector} font-weight`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "letter-spacing"), ".09em", `${selector} letter-spacing`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "line-height"), "1.35", `${selector} line-height`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "white-space"), "nowrap", `${selector} white-space`);
+    assert.match(lastDeclaration(cascadeCss, selector, "border") ?? lastDeclaration(cascadeCss, selector, "border-width") ?? "", /^1px/u, `${selector} has a 1px border`);
+  }
+  for (const selector of PLAQUES) assert.equal(lastDeclaration(cascadeCss, selector, "padding"), "4px 8px", `${selector} padding`);
+  for (const selector of COUNT_PILLS) {
+    assert.equal(lastDeclaration(cascadeCss, selector, "padding"), "0 8px", `${selector} padding`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "min-width"), "24px", `${selector} min-width`);
+  }
+  // Dots stay round.
+  for (const selector of [".tab-dot", ".status-dot"]) assert.equal(lastDeclaration(cascadeCss, selector, "border-radius"), "var(--radius-round)");
+});
+
+// Fields: single-line controls share one box; textareas fill their column.
+const SINGLE_LINE_FIELDS = [
+  ".editor-field input",
+  ".editor-field select",
+  ".global-search-box",
+  ".search-box",
+  ".promotion-device-reset input",
+  ".promotion-final-decision input",
+  ".promotion-bank-settings input",
+  ".promotion-bank-editor > label > input",
+  ".promotion-bank-editor select",
+  ".promotion-preview select",
+  ".promotion-question-list-heading input",
+];
+
+test("UI-03: single-line fields share one box and a phone touch target", () => {
+  for (const selector of SINGLE_LINE_FIELDS) {
+    assert.equal(lastDeclaration(cascadeCss, selector, "min-height"), "var(--control-height)", `${selector} min-height`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "padding"), "8px 16px", `${selector} padding`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "border-radius"), "var(--radius-field)", `${selector} radius`);
+    assert.match(lastDeclaration(cascadeCss, selector, "min-height", PHONE) ?? "", /^(?:44px|var\(--tap-target\))$/u, `${selector} phone min-height`);
+  }
+  assert.equal(lastDeclaration(cascadeCss, ".editor-field textarea", "padding"), "8px 16px");
+  assert.equal(lastDeclaration(cascadeCss, ".editor-field textarea", "border-radius"), "var(--radius-field)");
+  assert.equal(lastDeclaration(cascadeCss, ".editor-field input", "max-width"), "var(--field-max)");
+  assert.equal(lastDeclaration(cascadeCss, ".editor-field select", "max-width"), "var(--field-max)");
+  // iOS keeps a 16px field on a phone (existing rule, Heading size).
+  assert.equal(lastDeclaration(cascadeCss, ".editor-field input", "font-size", PHONE), "16px");
+  assert.equal(lastDeclaration(cascadeCss, ".editor-field input", "font-size"), "13px");
+});
+
+// Tabs: one strip look, an active line that does not rely on colour alone, an error line that outranks it.
+const TABS = [
+  ".editor-tabs button",
+  ".editor-section-tabs nav button",
+  ".promotion-editor-branches button",
+  ".promotion-queue-filters button",
+  ".promotion-bank-workflow-tabs button",
+];
+const ACTIVE_TABS = [
+  ".editor-tabs button.active",
+  '.editor-section-tabs nav button[aria-pressed="true"]',
+  '.editor-section-tabs nav button[aria-current="true"]',
+  ".promotion-editor-branches button.active",
+  ".promotion-queue-filters button.active",
+  ".promotion-bank-workflow-tabs button.active",
+];
+
+test("UI-03: tabs share one box and the active tab carries a 3px line at every width", () => {
+  for (const selector of TABS) {
+    assert.equal(lastDeclaration(cascadeCss, selector, "min-height"), "40px", `${selector} min-height`);
+    assert.match(lastDeclaration(cascadeCss, selector, "min-height", PHONE) ?? "", /^(?:44px|var\(--tap-target\))$/u, `${selector} phone min-height`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "padding"), "0 16px", `${selector} padding`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "border-radius"), "var(--radius-tab)", `${selector} radius`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "font-size"), "11px", `${selector} font-size`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "font-weight"), "700", `${selector} font-weight`);
+  }
+  // No context argument: the line is declared outside any media query, so it holds on every width.
+  for (const selector of ACTIVE_TABS) {
+    assert.match(lastDeclaration(cascadeCss, selector, "box-shadow") ?? "", /inset 0 -3px 0 var\(--teal\)/u, `${selector} active line`);
+  }
+});
+
+test("UI-03: the save-error line of a tab outranks the active line", () => {
+  for (const selector of [".editor-tabs button[data-save-error]", ".editor-tabs button.active[data-save-error]"]) {
+    assert.match(lastDeclaration(cascadeCss, selector, "box-shadow") ?? "", /inset 0 -2px 0 var\(--danger\)/u, selector);
+  }
+  assert.ok(
+    lastRuleIndex(cascadeCss, ".editor-tabs button.active[data-save-error]", "box-shadow") > lastRuleIndex(cascadeCss, ".editor-tabs button.active", "box-shadow"),
+    "the error line comes after the active line",
+  );
+});
+
+test("UI-03: list rows share one card box, one title size and one caption size", () => {
+  for (const selector of ROW_SELECTORS) {
+    assert.equal(lastDeclaration(cascadeCss, selector, "border-radius"), "var(--radius-card)", `${selector} radius`);
+    assert.equal(lastDeclaration(cascadeCss, selector, "padding"), "8px 16px", `${selector} padding`);
+  }
+  assert.equal(lastDeclaration(cascadeCss, ".editor-record-list", "gap"), "8px");
+  for (const title of [".editor-record-list strong", ".users-nickname", ".users-row-main strong", ".personnel-list > button > strong", ".global-result-heading strong"]) {
+    assert.equal(lastDeclaration(cascadeCss, title, "font-size"), "13px", `${title} title size`);
+    assert.equal(lastDeclaration(cascadeCss, title, "font-weight"), "700", `${title} title weight`);
+  }
+  for (const caption of [".editor-record-list small", ".personnel-list > button > small"]) {
+    assert.equal(lastDeclaration(cascadeCss, caption, "font-size"), "11px", `${caption} caption size`);
+  }
+});
+
+test("UI-03: the block changes no colour, font family or animation; the access screens wait for step 4", () => {
+  const { text } = unifyBlock(portiaCss);
+  for (const rule of rulesOf(text)) {
+    for (const [name, value] of declarations(rule.body)) {
+      assert.ok(!["color", "background", "background-color", "font-family", "font"].includes(name), `${rule.selectors.join(", ")} sets ${name}`);
+      assert.doesNotMatch(value, /var\(--(?:sans|mono|doc|display|serif)\)/u, `${rule.selectors.join(", ")} sets a font family`);
+    }
+  }
+  assert.doesNotMatch(text, /\.access-card|\.owner-login-card/u, "26-09 restyles the access card and the owner login");
 });

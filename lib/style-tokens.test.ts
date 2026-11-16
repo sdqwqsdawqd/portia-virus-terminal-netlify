@@ -218,6 +218,11 @@ test("UI-03: shared families read their roles through the cascade", () => {
   assert.equal(cascadeRadius(css, ".primary-control"), "var(--radius-control)");
   assert.equal(cascadeRadius(css, ".secondary-control"), "var(--radius-control)");
   assert.equal(cascadeRadius(css, ".danger-control"), "var(--radius-control)");
+  assert.equal(cascadeRadius(css, ".quest-badge"), "var(--radius-plaque)");
+  assert.equal(cascadeRadius(css, ".editor-tabs button"), "var(--radius-tab)");
+  assert.equal(cascadeRadius(css, ".editor-record-list button"), "var(--radius-card)");
+  assert.equal(cascadeRadius(css, ".users-plaque"), "var(--radius-plaque)");
+  assert.equal(cascadeRadius(css, ".users-row"), "var(--radius-card)");
 });
 
 test("UI-02: marked additions keep their blocks free of radius, animation and colour changes", () => {

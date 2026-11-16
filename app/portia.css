@@ -822,7 +822,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .format-swatches > button.no-background { width: auto; padding-inline: 10px; color: oklch(.741 calc(.022 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); }
 .format-swatches > button.no-background::before { content: ""; width: 18px; height: 1px; margin-right: 6px; background: #c3655c; transform: rotate(-35deg); }
 .custom-color > span { color: var(--teal); font: 700 16px var(--sans); pointer-events: none; }
-.format-choice-row > button { min-height: 30px; flex: 1 1 auto; padding: 5px 7px; border: 1px solid oklch(.426 calc(.034 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-control); background: oklch(.179 calc(.017 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.698 calc(.024 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); cursor: pointer; }
+.format-choice-row > button { min-height: 30px; flex: 0 0 auto; padding: 5px 7px; border: 1px solid oklch(.426 calc(.034 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-control); background: oklch(.179 calc(.017 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.698 calc(.024 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); cursor: pointer; }
 .format-choice-row > button:not(:disabled):hover, .format-choice-row > button.selected { border-color: var(--teal); background: var(--teal-soft); color: oklch(.957 calc(.013 * var(--accent-chroma)) var(--accent-hue)); }
 /* Ready-made styles row (D-01), above the manual controls. */
 .format-tabs { display: none; }
@@ -860,7 +860,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .access-editor-intro h2 { margin: 7px 0 9px; color: oklch(.964 calc(.008 * var(--accent-chroma)) var(--accent-hue)); font: 700 25px var(--sans); }
 .access-editor-intro p { margin: 0; color: oklch(.691 calc(.025 * var(--accent-chroma)) var(--accent-hue)); font-size: 13px; line-height: 1.6; }
 .access-editor-add { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 10px; }
-.access-editor-add .primary-control { min-height: 39px; }
+.access-editor-add .primary-control { min-height: var(--control-height); }
 .access-editor-message { padding: 11px 13px; border: 1px solid oklch(.465 calc(.063 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.826 calc(.077 * var(--accent-chroma)) var(--accent-hue)); font-size: 12px; }
 .access-editor-message.error { border-color: #754b46; color: #e0aaa3; }
 .access-editor-list { display: grid; gap: 7px; max-width: 760px; }
@@ -1372,7 +1372,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .log-lock { width: 12px; height: 12px; }
   .log-action { grid-column: 2 / -1; justify-self: stretch; text-align: center; }
   .archive-document-bar { align-items: flex-start; flex-direction: column; gap: 7px; padding: 11px; }
-  .archive-document-bar button { width: 100%; }
   .archive-document-bar span { width: 100%; }
   .archive-document-paper { width: calc(100% - 18px); min-height: 600px; margin-top: 9px; padding: 30px 22px; }
   .archive-document-stamp { position: relative; top: auto; right: auto; display: inline-block; margin: 18px 0 0; }
@@ -1473,7 +1472,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   /* D-16: in a column the 260px flex-basis became a 260px height, an empty band above the buttons. */
   .content-control-entry > div:first-child { flex: 0 0 auto; }
   .content-control-actions { width: 100%; }
-  .content-control-actions button, .content-control-actions a { flex: 1 1 180px; }
   .info-ledger > div { grid-template-columns: 1fr; gap: 7px; padding: 14px; }
   .info-table-row { grid-template-columns: 44px minmax(0, 1fr); align-items: stretch; }
   .info-table-head { display: flex; gap: 10px; }
@@ -2283,7 +2281,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) :is(.promotion-card, .prom
 .promotion-cleanup-disclosure article { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-card); font: 400 12px/1.45 var(--doc); }
 .promotion-cleanup-disclosure article span, .promotion-cleanup-disclosure time { color: var(--muted); }
 .promotion-request-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
-.promotion-request-actions button, .promotion-bank-editor button, .promotion-preview button { min-height: 40px; padding: 0 12px; }
+.promotion-request-actions button, .promotion-bank-editor button, .promotion-preview button { min-height: 40px; padding: 0 16px; }
 .promotion-grading-workspace { display: grid; gap: 16px; margin: 24px 0; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-card); background: rgba(0,0,0,.1); }
 .promotion-grading-workspace > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .promotion-grading-workspace > header span, .promotion-final-decision span { color: var(--muted); font: 700 11px/1.35 var(--sans); letter-spacing: .06em; }
@@ -2346,7 +2344,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) :is(.promotion-card, .prom
 .promotion-preview-actions, .promotion-preview > ol { display: grid; gap: 8px; margin-top: 16px; }
 .promotion-preview > ol { padding-left: 24px; }
 .promotion-preview li { padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-card); font: 400 12px/1.45 var(--doc); }
-.promotion-preview li button { width: 100%; margin-top: 8px; }
+.promotion-preview li button { margin-top: 8px; }
 .promotion-confirm-backdrop { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.7); }
 .promotion-confirm { width: min(420px, 100%); padding: 24px; border: 1px solid var(--line-bright); border-radius: var(--radius-dialog); background: var(--panel); box-shadow: 0 20px 70px #000; }
 .promotion-confirm h3 { margin: 0 0 8px; }
@@ -2585,7 +2583,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .users-bulk-dialog .portia-dialog-actions { position: sticky; bottom: 0; padding-top: 8px; background: var(--panel); }
 @media (max-width: 900px) {
   .users-pending-head { align-items: stretch; }
-  .users-pending-head h2, .users-pending-head button { flex-basis: 100%; }
+  .users-pending-head h2 { flex-basis: 100%; }
   .users-closed > summary, .users-phone-row { min-height: 44px; }
   .users-row { padding: 8px 16px; }
   .users-row-main strong, .users-row-caption { overflow-wrap: anywhere; white-space: normal; }
@@ -2596,10 +2594,30 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 }
 /* users-tab:end */
 /* ui-unify:start — Phase 26 (UI-03): общие семейства кнопок, плашек, полей, вкладок и строк; радиусы — роли из style-tokens */
-/* Кнопки: один размер, ширина по содержимому, никогда не растягиваются (D-02); цвета вариантов остаются в своих правилах. */
-.primary-control, .secondary-control, .danger-control, .app-state-action, .info-phone-back, .info-next button, .promotion-action { box-sizing: border-box; flex: 0 0 auto; width: auto; max-width: 100%; min-height: var(--control-height); justify-self: start; padding: 0 16px; border-radius: var(--radius-control); font-size: 11px; font-weight: 700; line-height: 1.35; letter-spacing: .04em; white-space: normal; }
+/* Кнопки: один размер, ширина по содержимому, никогда не растягиваются (D-02); цвета вариантов и шрифтовые семейства остаются в своих правилах. */
+.primary-control, .secondary-control, .danger-control, .app-state-action, .info-phone-back, .info-next button, .promotion-action, .promotion-preview-actions > button, .promotion-device-reset button { box-sizing: border-box; flex: 0 0 auto; width: auto; max-width: 100%; min-height: var(--control-height); justify-self: start; padding: 0 16px; border-radius: var(--radius-control); font-size: 11px; font-weight: 700; line-height: 1.35; letter-spacing: .04em; white-space: normal; }
 .info-phone-back { font-size: 20px; }
+/* Плашки: один бокс для меток, статусов и счётчиков; точки остаются круглыми. */
+.quest-badge, .manual-mark, small.manual-mark, .personnel-list > button > .manual-mark, .personnel-profile-identity > small.manual-mark, .users-plaque, .users-table-mark, .promotion-step-badge, .info-sub-marker, .global-result-mark, .search-recommendations button { padding: 4px 8px; border-style: solid; border-width: 1px; border-radius: var(--radius-plaque); font-size: 11px; font-weight: 700; line-height: 1.35; letter-spacing: .09em; white-space: nowrap; }
+.global-result-mark { border-color: var(--teal); }
+.tab-count, .promotion-editor-branches button span, .promotion-queue-filters button span { min-width: 24px; padding: 0 8px; border-style: solid; border-width: 1px; border-radius: var(--radius-plaque); font-size: 11px; font-weight: 700; line-height: 1.35; letter-spacing: .09em; white-space: nowrap; }
+.promotion-editor-branches button span, .promotion-queue-filters button span { border-color: oklch(.358 calc(.031 * var(--accent-chroma)) var(--accent-hue)); }
+/* Поля: однострочные поля и select — один бокс; textarea заполняет колонку. */
+.editor-field input, .editor-field select, .global-search-box, .search-box, .promotion-device-reset input, .promotion-final-decision input, .promotion-bank-settings input, .promotion-bank-editor > label > input, .promotion-bank-editor select, .promotion-preview select, .promotion-question-list-heading input { box-sizing: border-box; min-height: var(--control-height); padding: 8px 16px; border-radius: var(--radius-field); }
+.editor-field input, .editor-field select { max-width: var(--field-max); }
+.editor-field textarea { padding: 8px 16px; border-radius: var(--radius-field); }
+/* Вкладки: одна полоса; у текущей вкладки линия 3px на любой ширине, линия ошибки сохранения сильнее. */
+.editor-tabs button, .editor-section-tabs nav button, .promotion-editor-branches button, .promotion-queue-filters button, .promotion-bank-workflow-tabs button { min-height: 40px; padding: 0 16px; border-radius: var(--radius-tab); font-size: 11px; font-weight: 700; }
+.editor-tabs button.active, .editor-section-tabs nav button[aria-pressed="true"], .editor-section-tabs nav button[aria-current="true"], .promotion-editor-branches button.active, .promotion-queue-filters button.active, .promotion-bank-workflow-tabs button.active { box-shadow: inset 0 -3px 0 var(--teal); }
+.editor-tabs button[data-save-error], .editor-tabs button.active[data-save-error] { box-shadow: inset 0 -2px 0 var(--danger); }
+/* Строки списков: карточка 7px, отступ 8px 16px, заголовок 13px, подпись 11px, зазор 8px. */
+.editor-record-list button, .users-row, .global-result, .personnel-list > button { padding: 8px 16px; border-radius: var(--radius-card); }
+.editor-record-list { gap: 8px; }
+.editor-record-list strong, .users-nickname, .users-row-main strong, .personnel-list > button > strong, .global-result-heading strong { font-size: 13px; font-weight: 700; }
+.editor-record-list small, .personnel-list > button > small { font-size: 11px; font-weight: 400; }
 @media (max-width: 900px) {
-  .primary-control, .secondary-control, .danger-control, .app-state-action, .info-phone-back, .info-next button, .promotion-action { min-height: var(--tap-target); }
+  .primary-control, .secondary-control, .danger-control, .app-state-action, .info-phone-back, .info-next button, .promotion-action, .promotion-preview-actions > button, .promotion-device-reset button { min-height: var(--tap-target); }
+  .editor-field input, .editor-field select, .global-search-box, .search-box, .promotion-device-reset input, .promotion-final-decision input, .promotion-bank-settings input, .promotion-bank-editor > label > input, .promotion-bank-editor select, .promotion-preview select, .promotion-question-list-heading input { min-height: var(--tap-target); }
+  .editor-tabs button, .editor-section-tabs nav button, .promotion-editor-branches button, .promotion-queue-filters button, .promotion-bank-workflow-tabs button { min-height: var(--tap-target); }
 }
 /* ui-unify:end */
