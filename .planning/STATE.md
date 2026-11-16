@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed PORTIA-26-05-PLAN.md
-last_updated: "2026-11-16T09:13:38.017Z"
+stopped_at: Completed PORTIA-26-06-PLAN.md
+last_updated: "2026-11-16T09:34:53.690Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase PORTIA-26 execution started
-state_head: fb8af9d5bc5f12e3f311b59d03b43cc8f15be467
+state_head: 049b2961543b3bab7e1a76181e69bf5803e01c7c
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 64
-  completed_plans: 54
+  completed_plans: 55
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-26 (Единый стиль сайта) — EXECUTING
-Plan: 5 of 14
+Plan: 6 of 14
 Status: Executing Phase PORTIA-26
 Last activity: 2026-11-16 — Phase PORTIA-26 execution started
 
@@ -93,6 +93,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-26 P03 | около 1ч | 2 tasks | 5 files |
 | Phase PORTIA-26 P04 | 6min | 2 tasks | 7 files |
 | Phase PORTIA-26 P05 | 10 min | 2 tasks | 5 files |
+| Phase PORTIA-26 P06 | 13 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -312,6 +313,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: 26-04: уведомление и панель оформления остаются position: fixed (relative сломал бы их); строки заголовков уведомления и пикера 44px вплотную к верху, справа 44px под крестик
 - [Phase PORTIA-26]: 26-05: правила развёрнутого окна только под .app-window.is-maximized внутри @media (min-width: 901px) (R3 — 1281px), телефон и обычное окно не меняются; R3 только у плоских форм (профиль сотрудника, форма вируса, Настройки колонками 2x648px), карточки редактора — больше колонок по 340px без 1fr (D-19)
 - [Phase PORTIA-26]: 26-05: корзина и Таблица — already conformant (таблица fr-столбцов, iframe масштабируется из кода); лист записи вируса 1060px и окно соискателя Повышения 680px — меры, не меняются; пиксели 1366/1920/2560 — BLOCKED (ENV)
+- [Phase PORTIA-26]: 26-06: плавающий чип сохранения заменён липкой панелью .etab-bar из шва portia-editor-tab-shell.tsx во всех черновых вкладках; z-index панели 4 (выше .editor-toc), на ПК верхний отступ панели редактора перенесён в шапку; до 26-07 старые липкие слои Справочника/Информации под панелью static
+- [Phase PORTIA-26]: 26-06: База вирусов и Корзина — etab-body/etab-list/etab-detail рядом с прежними классами, aria-current у выбранной строки, пустая деталь «Выберите запись» из шва; причины отказа под панелью только при несохранённых правках; вставки D-21 PORTIA-26-06 и PORTIA-26-06b
 
 ### Pending Todos
 
@@ -365,8 +368,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-16T09:13:37.103Z
-Stopped at: Completed PORTIA-26-05-PLAN.md
+Last session: 2026-11-16T09:34:52.735Z
+Stopped at: Completed PORTIA-26-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
