@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed PORTIA-26-01-PLAN.md
-last_updated: "2026-11-16T06:30:10.326Z"
+stopped_at: Completed PORTIA-26-03-PLAN.md
+last_updated: "2026-11-16T08:49:17.099Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase PORTIA-26 execution started
-state_head: 4b4edbabeb7d62343754558cee93086b3635de35
+state_head: f4202095d0028286d08a4b3f4592d516b04da590
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 64
-  completed_plans: 51
+  completed_plans: 52
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-26 (Единый стиль сайта) — EXECUTING
-Plan: 2 of 14
+Plan: 3 of 14
 Status: Executing Phase PORTIA-26
 Last activity: 2026-11-16 — Phase PORTIA-26 execution started
 
@@ -90,6 +90,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-25 P09 | 25min | 2 tasks | 3 files |
 | Phase PORTIA-25 P10 | 40min | 3 tasks | 10 files |
 | Phase PORTIA-26 P01 | 5 min | 3 tasks | 5 files |
+| Phase PORTIA-26 P03 | около 1ч | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -303,6 +304,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: 26-01: роль радиуса выбирается по назначению элемента; спорные кнопки (таскбар, Пуск, ОФОРМЛЕНИЕ, зум документа) = control, строки меню Пуск = card
 - [Phase PORTIA-26]: 26-01: хеш PRE_PHASE_PORTIA_CSS_SHA256 и счётчик радиусов 131/6 упразднены; охрана — грамматика роль|0|композиция с файлом и строкой
 - [Phase PORTIA-26]: 26-01 (D-17): Playwright по умолчанию игнорирует tests/e2e/visual; явный путь = историческое сравнение, красное = дрейф, не PASS
+- [Phase PORTIA-26]: 26-03: семейства кнопок/плашек/полей/вкладок/строк — один блок ui-unify в конце portia.css; шрифтовые семейства не переопределяются (только размер и жирность); исключение A3 (стопка кнопок в диалоге до 420px) названо в тесте
+- [Phase PORTIA-26]: 26-03 (D-02): кнопки не растягиваются ни в portia.css, ни в portia-promotion-editor.css; правила позднего файла Promotion с равной специфичностью переписаны на месте
 
 ### Pending Todos
 
@@ -356,8 +359,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-16T06:30:09.413Z
-Stopped at: Completed PORTIA-26-01-PLAN.md
+Last session: 2026-11-16T08:49:15.857Z
+Stopped at: Completed PORTIA-26-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
