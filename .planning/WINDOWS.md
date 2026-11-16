@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 12
+open_count: 14
 waived_count: 0
 fixed_count: 2
-total_count: 14
-last_updated: 2026-11-16T13:04:25.140Z
+total_count: 16
+last_updated: 2026-11-16T17:00:21.660Z
 ---
 
 # Broken Windows Ledger
@@ -29,6 +29,8 @@ last_updated: 2026-11-16T13:04:25.140Z
 | 12 | 26 | unrun-verify | .planning/phases/PORTIA-26-edinyy-stil-sayta/26-MAXIMIZED-AUDIT.md |  | 26-05 maximized windows: no horizontal overflow / no empty band at 1366x768, 1920x1080, 2560x1440 not rendered - BLOCKED (ENV), Playwright lane without preflight | open |  | 2026-11-16T09:11:55.234Z |  |
 | 13 | 26 | unrun-verify | components/portia-desktop-shortcuts.tsx |  | 26-11 shortcuts at 521-900px: render at 521/600/768/900px x compact/default/large, drag/Alt+Arrow, page scroll from a shortcut and 2-line label not checked in a browser or on a device - BLOCKED (ENV)/(DEVICE) until Phase 27; unit test of placeShortcuts only | open |  | 2026-11-16T12:55:38.075Z |  |
 | 14 | 26 | unrun-verify | components/portia-icons.tsx |  | 26-12: 18 знаков классификации (раунд 5) не проверены в браузере и на физическом экране в 16/18/24px — BLOCKED (ENV)/(DEVICE) до Phase 27 | open |  | 2026-11-16T13:04:25.140Z |  |
+| 15 | 26 | unrun-verify | tests/e2e/specs/editor-ui-contract.spec.ts |  | 26-13: линия axe (editor-ui-contract, допуски nested-editor-toggle/eyebrow/подсказка/small сняты) не запускалась — BLOCKED (ENV)/(DATA), не PASS | open |  | 2026-11-16T17:00:21.137Z |  |
+| 16 | 26 | unrun-verify | lib/card-toggle-name.ts |  | 26-13: A11Y-SR-01 — имя кнопки раскрытия карточки скринридером не проверено — BLOCKED (DEVICE), не PASS | open |  | 2026-11-16T17:00:21.660Z |  |
 
 ````json
 [
@@ -211,6 +213,32 @@ last_updated: 2026-11-16T13:04:25.140Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-16T13:04:25.140Z",
+    "resolved_at": null,
+    "milestone": "v1.4"
+  },
+  {
+    "id": 15,
+    "kind": "unrun-verify",
+    "phase": "26",
+    "file": "tests/e2e/specs/editor-ui-contract.spec.ts",
+    "line": null,
+    "description": "26-13: линия axe (editor-ui-contract, допуски nested-editor-toggle/eyebrow/подсказка/small сняты) не запускалась — BLOCKED (ENV)/(DATA), не PASS",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-16T17:00:21.137Z",
+    "resolved_at": null,
+    "milestone": "v1.4"
+  },
+  {
+    "id": 16,
+    "kind": "unrun-verify",
+    "phase": "26",
+    "file": "lib/card-toggle-name.ts",
+    "line": null,
+    "description": "26-13: A11Y-SR-01 — имя кнопки раскрытия карточки скринридером не проверено — BLOCKED (DEVICE), не PASS",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-16T17:00:21.660Z",
     "resolved_at": null,
     "milestone": "v1.4"
   }

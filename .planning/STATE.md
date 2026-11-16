@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed 26-12-PLAN.md
-last_updated: "2026-11-16T16:51:29.197Z"
+stopped_at: Completed 26-13-PLAN.md
+last_updated: "2026-11-16T17:01:52.365Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase PORTIA-26 execution started
-state_head: 7cb6bb92b4abc149ae9767c303bae68ae1ebc137
+state_head: bd422e9c768b4a140487c00fce887fd8dc665c40
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 64
-  completed_plans: 62
+  completed_plans: 63
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-26 (Единый стиль сайта) — EXECUTING
-Plan: 13 of 14
+Plan: 14 of 14
 Status: Executing Phase PORTIA-26
 Last activity: 2026-11-16 — Phase PORTIA-26 execution started
 
@@ -101,6 +101,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-26 P02 | 5 раундов показа + 15min | 3 tasks | 1 files |
 | Phase PORTIA-26 P11 | 9 min | 2 tasks | 6 files |
 | Phase 26 P12 | 4 min | 2 tasks | 2 files |
+| Phase 26 P13 | 7 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -336,6 +337,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: Измеряемая высота .desktop-icons — естественная (calc(100svh - 82px)), рост только через --shortcut-content-height на .workspace: без залипания длинных колонок после поворота
 - [Phase 26]: 26-12: 18 знаков классификации — дословный перенос геометрии раунда 5 из 26-ICON-DECISION.md; уровень показывает рисунок, без метки D-08; линия 1.5
 - [Phase 26]: 26-12: залитые части знаков с stroke=none, чтобы корневая обводка PortiaIcon 1.75 не раздувала их
+- [Phase 26]: 26-13: имя кнопки раскрытия карточки строит cardToggleName (lib/card-toggle-name.ts) — «Развернуть/Свернуть раздел «{метка} {название}»»; правка редактора — вставка PORTIA-26-13 (D-21)
+- [Phase 26]: 26-13: .eyebrow — var(--teal), подсказки и small — .658 (подсказка 11px); палитра пресетов не менялась; контраст на --bg/--panel закреплён lib/ui-contrast.test.ts (минимум 4.58:1, red)
 
 ### Pending Todos
 
@@ -389,8 +392,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-16T16:51:28.351Z
-Stopped at: Completed 26-12-PLAN.md
+Last session: 2026-11-16T17:01:51.499Z
+Stopped at: Completed 26-13-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
