@@ -221,7 +221,7 @@ export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUploa
   dossierChanged: DossierTab[];
 }) {
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
-  return <div className="editor-form virus-editor-form">
+  return <div className="editor-form virus-editor-form etab-detail">
     <p className="editor-guidance">Полная запись вируса в Корзине.</p>
     <DossierTabs active={dossierTab} changed={dossierChanged} onSelect={setDossierTab} />
     {dossierTab === "main" && <EditorGroup title="Основные данные">

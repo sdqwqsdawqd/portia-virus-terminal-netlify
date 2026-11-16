@@ -134,3 +134,64 @@ test("D-13b phone: one sticky bar in two rows under the 48px system bar, held by
   assert.equal(declared(".etab-nav", "order", PHONE), "1");
   assert.equal(declared(".etab-nav", "flex-basis", PHONE), "100%");
 });
+
+// ---- 26-06 Task 2 (D-12): list on the left, detail on the right; a tab without a list shows only the detail ----
+
+const dossier = family.find((part) => part.file === "portia-editor-dossier.tsx")?.text ?? "";
+
+test("D-12: «База вирусов» is a list/detail body; the old classes stay beside the new ones", () => {
+  const viruses = editorSlice('{tab === "viruses" && (', '{tab === "info" && (');
+  assert.ok(viruses.includes('<div className="virus-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>'), "the body keeps its phone view switch");
+  assert.ok(viruses.includes('<aside className="editor-record-list etab-list">'), "the list pane");
+  assert.ok(viruses.includes('<div className="editor-form virus-editor-form etab-detail">'), "the detail pane");
+  assert.ok(viruses.includes('aria-current={virus.id === selectedVirusId ? "true" : undefined}'), "the picked row is the current one");
+  assert.ok(viruses.includes(') : draft.viruses.length ? <EditorEmptyDetail /> : <div className="editor-empty">Добавьте первую запись вируса.</div>}'), "nothing picked: the empty detail; no record at all: the old line");
+  assert.ok(viruses.includes("editor-back-to-list"), "the phone back button stays");
+});
+
+test("D-12: «Корзина» is a list/detail body with a read-only viewer on the right", () => {
+  const recycle = editorSlice('{tab === "recycle" && (', '{tab === "search" && (');
+  assert.ok(recycle.includes('<div className="virus-editor-layout recycle-editor-layout etab-body" ref={layoutRef}'));
+  assert.ok(recycle.includes('<aside className="editor-record-list etab-list">'));
+  assert.ok(recycle.includes('aria-current={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "true" : undefined}'));
+  assert.ok(recycle.includes('<div className="editor-form etab-detail">'), "the file form is the detail pane");
+  assert.match(dossier, /export function ArchivedVirusEditor[\s\S]*?return <div className="editor-form virus-editor-form etab-detail">/, "the archived virus is the detail pane too");
+  assert.ok(recycle.includes("Корзина пуста. Добавьте файл или создайте полную запись вируса."), "h-46 stays word for word");
+});
+
+test("D-12: «Рекомендации», «Помощник» and «Доступ» are only a detail pane, with no empty left column", () => {
+  const search = editorSlice('{tab === "search" && (', '{tab === "assistant" && (');
+  const assistant = editorSlice('{tab === "assistant" && (', '{tab === "employees" &&');
+  assert.ok(search.includes('<div className="editor-form flat-editor-form etab-detail">'));
+  assert.ok(assistant.includes('<div className="editor-form flat-editor-form assistant-editor etab-detail">'));
+  assert.ok(stripComments(editor).includes('return <div className="editor-form flat-editor-form access-editor etab-detail">'));
+  for (const [name, body] of [["search", search], ["assistant", assistant]]) {
+    assert.ok(!body.includes("etab-list") && !body.includes("etab-body"), `${name}: no list column`);
+  }
+});
+
+test("D-12: the empty detail says what to do in short lines that live in the seam", () => {
+  assert.match(shell, /title: "Выберите запись"/);
+  assert.match(shell, /lines: \["Она откроется справа\.", "Выберите строку в списке слева\."\]/);
+  for (const text of ["Выберите запись", "Она откроется справа.", "Выберите строку в списке слева."]) {
+    assert.ok(text.split(/\s+/).length < 7, `${text}: shorter than 7 words`);
+    assert.ok(!editor.includes(text), `${text}: not in the editor file (D-58)`);
+  }
+  assert.match(shell, /<div className="etab-detail etab-empty">/);
+  assert.match(shell, /<div className="etab-body" data-detail-only=\{list \? undefined : true\}>/, "a body without a list says so");
+});
+
+test("D-12: list column 240–320px, detail 24px (PC) / 16px (phone), one column and the old list-or-record switch on a phone", () => {
+  assert.equal(declared(".etab-body", "grid-template-columns"), "clamp(240px, 24%, 320px) minmax(0, 1fr)");
+  assert.equal(declared(".etab-body[data-detail-only]", "grid-template-columns"), "minmax(0, 1fr)");
+  assert.equal(declared(".etab-detail", "padding"), "24px");
+  assert.equal(declared(".etab-detail", "min-width"), "0");
+  assert.equal(declared(".etab-detail", "padding", PHONE), "16px");
+  assert.equal(declared(".etab-body", "grid-template-columns", PHONE), "minmax(0, 1fr)");
+  assert.equal(declared('.etab-body[data-mobile-view="list"] > .etab-detail', "display", PHONE), "none", "a phone shows the list or the record");
+  assert.equal(declared(".etab-empty", "padding"), "48px 24px");
+  assert.match(styles, /\.etab-empty > strong\s*\{[^}]*font:\s*700 16px/);
+  assert.match(styles, /\.etab-empty > p\s*\{[^}]*font:\s*400 13px/);
+  // 26-05: the maximized rules of the old classes still reach the new bodies.
+  assert.match(styles, /\.app-window\.is-maximized \.virus-editor-form \{/);
+});

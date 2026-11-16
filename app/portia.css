@@ -574,6 +574,9 @@ html[data-motion="full"] .portia-image-skeleton { background: linear-gradient(10
    Only colours and fonts here: the layout of the bar is in the ui-unify block at the end of the file. */
 .etab-bar { background: var(--panel); }
 .etab-message { color: var(--warning); font: 400 13px/1.35 var(--sans); }
+/* D-12: the empty detail pane (nothing picked): heading 16px 700, lines 13px 400 in the secondary text colour. */
+.etab-empty > strong { color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 700 16px/1.35 var(--sans); }
+.etab-empty > p { margin: 0; color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 400 13px/1.5 var(--sans); }
 .tab-dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: var(--radius-round); background: var(--warning); vertical-align: middle; }
 .portia-dialog { width: min(420px, calc(100vw - 24px)); padding: 0; border: 1px solid oklch(.5 calc(.04 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-dialog); background: oklch(.208 calc(.02 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); box-shadow: 0 22px 60px rgba(0,0,0,.55); }
 .portia-dialog::backdrop { background: rgba(0,0,0,.55); }
@@ -2657,6 +2660,12 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .etab-actions { display: flex; flex: none; align-items: center; gap: 8px; }
 .etab-actions .editor-undo-step { width: 40px; min-width: 40px; padding: 0; }
 .etab-message { margin: 0 0 8px; padding: 0 16px; overflow-wrap: anywhere; }
+/* Тело вкладки (D-12): список слева, деталь справа; без списка — только деталь, пустой левой колонки нет. Вид строк — семейство строк выше. */
+.etab-body { display: grid; grid-template-columns: clamp(240px, 24%, 320px) minmax(0, 1fr); }
+.etab-body[data-detail-only] { grid-template-columns: minmax(0, 1fr); }
+.etab-list { min-width: 0; }
+.etab-detail { box-sizing: border-box; min-width: 0; padding: 24px; }
+.etab-empty { display: grid; justify-items: center; align-content: start; gap: 8px; padding: 48px 24px; text-align: center; }
 /* На ПК sticky отсчитывается от внутреннего края панели с отступом 28px: верхний отступ переходит в отступ шапки, и панель прилегает к краю. */
 @media (min-width: 901px) {
   .content-editor:has(> .etab-bar) { padding-top: 0; }
@@ -2670,5 +2679,9 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .etab-nav { order: 1; flex-basis: 100%; min-height: 44px; }
   .etab-actions .editor-undo-step { width: 44px; min-width: 44px; }
   .etab-message { padding: 0; }
+  .etab-body { grid-template-columns: minmax(0, 1fr); }
+  .etab-detail { padding: 16px; }
+  .etab-empty { padding: 48px 16px; }
+  .etab-body[data-mobile-view="list"] > .etab-detail { display: none; }
 }
 /* ui-unify:end */

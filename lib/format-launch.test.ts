@@ -70,7 +70,8 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //   8. PORTIA-25 (25-02; SEC-05, D-13, D-14) — «Сменить адрес картинки» у выбора уровня: хук useImageRewrite (components/portia-image-rewrite.tsx), вызов после подъёма уровня и после сохранения
 //      (applyImageRewriteHunk); русских строк в файле не добавлено, строки лежат в lib/level-copy.ts, запросы — в lib/media-rewrite-client.ts. Источник одобрения: 25-CONTEXT D-13, D-14 и план 25-02.
 //   9. PORTIA-26 (26-06; UI-04, D-12, D-13, D-21) — панель действий из шва вместо чипа; русские строки лежат в шве
-//      components/portia-editor-tab-shell.tsx (applyTabShellHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-06.
+//      components/portia-editor-tab-shell.tsx (applyTabShellHunk); PORTIA-26-06b — классы «список — деталь» (etab-body/etab-list/etab-detail)
+//      рядом с прежними, aria-current у выбранной строки и пустая деталь из шва (applyTabBodiesHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-06.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -560,6 +561,71 @@ function applyTabShellHunk(text: string): string {
   return replaceOnce(next, `${SAVE_CHIP_BLOCK.join("\n")}\n`, "", "chip block");
 }
 
+/** PORTIA-26-06b (26-06 Task 2; UI-04, D-12): list/detail classes beside the old ones, the current row, the empty detail of the seam. No Russian text is added. */
+function applyTabBodiesHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { EditorActionBar } from "@/components/portia-editor-tab-shell";',
+    'import { EditorActionBar, EditorEmptyDetail } from "@/components/portia-editor-tab-shell";',
+    "empty detail import",
+  );
+  // «База вирусов»: body, list, current row, detail and the empty detail when no row is picked.
+  next = replaceOnce(
+    next,
+    '        <div className="virus-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>\n',
+    '        <div className="virus-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>\n',
+    "virus body",
+  );
+  next = replaceOnce(
+    next,
+    '          <aside className="editor-record-list">\n            <EditorToc items={virusTocItems}',
+    '          <aside className="editor-record-list etab-list">\n            <EditorToc items={virusTocItems}',
+    "virus list",
+  );
+  next = replaceOnce(
+    next,
+    '<button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => openVirus(virus.id)}>',
+    '<button type="button" className={virus.id === selectedVirusId ? "active" : ""} aria-current={virus.id === selectedVirusId ? "true" : undefined} onClick={() => openVirus(virus.id)}>',
+    "virus current row",
+  );
+  next = replaceOnce(next, '<div className="editor-form virus-editor-form">', '<div className="editor-form virus-editor-form etab-detail">', "virus detail");
+  next = replaceOnce(
+    next,
+    ') : <div className="editor-empty">Добавьте первую запись вируса.</div>}',
+    ') : draft.viruses.length ? <EditorEmptyDetail /> : <div className="editor-empty">Добавьте первую запись вируса.</div>}',
+    "virus empty detail",
+  );
+  // «Корзина»: body, list, current row and the file form as the detail (the archived virus is the detail in portia-editor-dossier.tsx).
+  next = replaceOnce(next, '<div className="virus-editor-layout recycle-editor-layout" ref={layoutRef}', '<div className="virus-editor-layout recycle-editor-layout etab-body" ref={layoutRef}', "recycle body");
+  next = replaceOnce(
+    next,
+    '          <aside className="editor-record-list">\n            <EditorToc items={recycleTocItems}',
+    '          <aside className="editor-record-list etab-list">\n            <EditorToc items={recycleTocItems}',
+    "recycle list",
+  );
+  next = replaceOnce(
+    next,
+    '<button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} onClick={() => openRecycleEntry(key)}>',
+    '<button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} aria-current={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "true" : undefined} onClick={() => openRecycleEntry(key)}>',
+    "recycle current row",
+  );
+  next = replaceOnce(
+    next,
+    '            <div className="editor-form">\n              <p className="editor-guidance">Посетители могут',
+    '            <div className="editor-form etab-detail">\n              <p className="editor-guidance">Посетители могут',
+    "recycle file detail",
+  );
+  // «Рекомендации», «Помощник», «Доступ»: only the detail pane.
+  next = replaceOnce(
+    next,
+    '        <div className="editor-form flat-editor-form">\n          <p className="editor-guidance">Введите варианты',
+    '        <div className="editor-form flat-editor-form etab-detail">\n          <p className="editor-guidance">Введите варианты',
+    "search detail",
+  );
+  next = replaceOnce(next, '<div className="editor-form flat-editor-form assistant-editor">', '<div className="editor-form flat-editor-form assistant-editor etab-detail">', "assistant detail");
+  return replaceOnce(next, 'return <div className="editor-form flat-editor-form access-editor">', 'return <div className="editor-form flat-editor-form access-editor etab-detail">', "access detail");
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -610,6 +676,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-22", apply: applyUsersTabHunk },
   { id: "PORTIA-25", apply: applyImageRewriteHunk },
   { id: "PORTIA-26-06", apply: applyTabShellHunk },
+  { id: "PORTIA-26-06b", apply: applyTabBodiesHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -716,6 +783,9 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutTabShell = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-06")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabShell), null, "a file without the PORTIA-26-06 hunk is a difference");
   assert.throws(() => applyTabShellHunk(expected), /exactly one approved anchor/, "the tab shell hunk cannot be applied twice");
+  const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutTabBodies), null, "a file without the PORTIA-26-06b hunk is a difference");
+  assert.throws(() => applyTabBodiesHunk(expected), /exactly one approved anchor/, "the tab bodies hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

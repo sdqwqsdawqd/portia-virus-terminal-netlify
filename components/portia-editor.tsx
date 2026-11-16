@@ -43,7 +43,7 @@ import { AppDeniedPanel } from "@/components/portia-desktop-states";
 import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";
 import { accessCheckFailedText } from "@/lib/app-state";
 import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
-import { EditorActionBar } from "@/components/portia-editor-tab-shell";
+import { EditorActionBar, EditorEmptyDetail } from "@/components/portia-editor-tab-shell";
 
 type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "users" | "promo" | "access";
 
@@ -1255,14 +1255,14 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       <FormatLaunchButton target={formatTarget} open={formatterOpen} onToggle={() => setFormatterOpen((current) => !current)} />
 
       {tab === "viruses" && (
-        <div className="virus-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>
+        <div className="virus-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>
           <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
-          <aside className="editor-record-list">
+          <aside className="editor-record-list etab-list">
             <EditorToc items={virusTocItems} onJump={(id) => { openVirus(id); jumpToCard(id); }} />
             {draft.viruses.map((virus, index) => (
               <div className="editor-record-row" id={`card-${virus.id}`} data-sort-index={index} key={virus.id}>
                 <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => moveArrayItem(next.viruses, from, to)); }} />
-                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => openVirus(virus.id)}>
+                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} aria-current={virus.id === selectedVirusId ? "true" : undefined} onClick={() => openVirus(virus.id)}>
                   <strong title={virus.name || "БЕЗ НАЗВАНИЯ"}>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small title={virus.code || "БЕЗ КОДА"}>{virus.code || "БЕЗ КОДА"}</small>
                 </button>
               </div>
@@ -1276,7 +1276,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
           </aside>
 
           {selectedVirus ? (
-            <div className="editor-form virus-editor-form">
+            <div className="editor-form virus-editor-form etab-detail">
               <DossierTabs active={dossierTab} changed={liveDossierChanged} onSelect={selectDossierTab} />
               {dossierTab === "main" && <EditorGroup title="Основные данные">
                 <Field label="Название"><input value={selectedVirus.name} onChange={(event) => updateVirus((virus) => { virus.name = event.target.value; })} /></Field>
@@ -1336,7 +1336,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
 
               <button className="danger-control" type="button" onClick={() => setDialog("recycle")}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
             </div>
-          ) : <div className="editor-empty">Добавьте первую запись вируса.</div>}
+          ) : draft.viruses.length ? <EditorEmptyDetail /> : <div className="editor-empty">Добавьте первую запись вируса.</div>}
         </div>
       )}
 
@@ -1522,9 +1522,9 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       )}
 
       {tab === "recycle" && (
-        <div className="virus-editor-layout recycle-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && (selectedRecycledVirus || selectedRecycleFile) ? "record" : "list"}>
+        <div className="virus-editor-layout recycle-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen && (selectedRecycledVirus || selectedRecycleFile) ? "record" : "list"}>
           <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
-          <aside className="editor-record-list">
+          <aside className="editor-record-list etab-list">
             <EditorToc items={recycleTocItems} onJump={(key) => { openRecycleEntry(key); jumpToCard(key); }} />
             {orderedRecycleKeys.map((key, index) => {
               const isVirus = key.startsWith("virus:");
@@ -1536,7 +1536,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               const kindText = virus ? "ВИРУС В КОРЗИНЕ" : file!.kind === "virus" ? "ФАЙЛ ВИРУСА" : file!.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ";
               return <div className="editor-record-row" id={`card-${key}`} data-sort-index={index} key={key}>
                 <OrderDragHandle index={index} label={title} onMove={(from, to) => changeDraft((next) => { const order = recycleKeys(next); moveArrayItem(order, from, to); next.recycleOrder = order; })} />
-                <button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} onClick={() => openRecycleEntry(key)}>
+                <button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} aria-current={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "true" : undefined} onClick={() => openRecycleEntry(key)}>
                   <strong title={title}>{title}</strong><small title={kindText}>{kindText}</small>
                 </button>
               </div>;
@@ -1585,7 +1585,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               restoreBlocked={closedSections.includes("viruses")}
             />
           ) : selectedRecycleFile ? (
-            <div className="editor-form">
+            <div className="editor-form etab-detail">
               <p className="editor-guidance">Посетители могут только открыть файл. Создание, изменение и удаление доступны здесь владельцу.</p>
               <EditorGroup title="Свойства файла">
                 <Field label="Имя файла"><input value={selectedRecycleFile.name} onChange={(event) => updateRecycleFile((file) => { file.name = event.target.value; })} /></Field>
@@ -1627,7 +1627,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       )}
 
       {tab === "search" && (
-        <div className="editor-form flat-editor-form">
+        <div className="editor-form flat-editor-form etab-detail">
           <p className="editor-guidance">Введите варианты рекомендаций по одному на строку. При каждом новом заходе сайт случайно показывает посетителю от 5 до 10 вариантов из этого списка.</p>
           <FormattedTextarea area="search" label="Варианты рекомендаций — по одному на строку" tall value={draft.searchRecommendations.join("\n")}
             document={draft.formattedText[portiaTextKey.searchRecommendations]} formatKey={portiaTextKey.searchRecommendations}
@@ -1646,7 +1646,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       )}
 
       {tab === "assistant" && (
-        <div className="editor-form flat-editor-form assistant-editor">
+        <div className="editor-form flat-editor-form assistant-editor etab-detail">
           <p className="editor-guidance">Каждая строка — отдельный совет. В одной строке можно совместить текст и GIF.</p>
           <div className="assistant-switches">
             <label className="publish-toggle"><input type="checkbox" checked={draft.assistantIdleEnabled} onChange={(event) => changeDraft((next) => { next.assistantIdleEnabled = event.target.checked; })} /><span>Фразы при долгом бездействии</span></label>
@@ -2354,7 +2354,7 @@ function EditorAccessManager() {
     void flushRow(editor.email);
   };
 
-  return <div className="editor-form flat-editor-form access-editor">
+  return <div className="editor-form flat-editor-form access-editor etab-detail">
     <div className="access-editor-intro"><span className="eyebrow">ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА</span><h2>Аккаунты редакторов</h2><p>Укажите email человека, которому разрешено менять сайт. Затем он откроет страницу входа, создаст собственный аккаунт с этим email и войдёт со своим паролем.</p></div>
     <div className="access-editor-add"><label className="editor-field"><span>Email нового редактора</span><input type="email" value={email} placeholder="name@example.com" onChange={(event) => setEmail(event.target.value)} /></label><button className="primary-control" type="button" disabled={!email.trim() || state === "saving"} onClick={() => void addEditor()}>ВЫДАТЬ ДОСТУП</button></div>
     {message && <div className={`access-editor-message ${state}`}>{message}</div>}
