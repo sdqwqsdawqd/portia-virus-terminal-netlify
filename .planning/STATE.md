@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed PORTIA-26-11-PLAN.md
-last_updated: "2026-11-16T12:57:31.632Z"
+stopped_at: Completed 26-12-PLAN.md
+last_updated: "2026-11-16T16:51:29.197Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase PORTIA-26 execution started
-state_head: 1e4befc38b44dcc8184754fcf5145095af8d458f
+state_head: 7cb6bb92b4abc149ae9767c303bae68ae1ebc137
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 64
-  completed_plans: 61
+  completed_plans: 62
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-26 (Единый стиль сайта) — EXECUTING
-Plan: 12 of 14
+Plan: 13 of 14
 Status: Executing Phase PORTIA-26
 Last activity: 2026-11-16 — Phase PORTIA-26 execution started
 
@@ -100,6 +100,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-26 P10 | 9 min | 3 tasks | 10 files |
 | Phase PORTIA-26 P02 | 5 раундов показа + 15min | 3 tasks | 1 files |
 | Phase PORTIA-26 P11 | 9 min | 2 tasks | 6 files |
+| Phase 26 P12 | 4 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -333,6 +334,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: Иконки классификации (UI-07): владелец отклонил выбор А/Б/В и одобрил раунд 5 — свой рисунок по шести осям, 18 знаков, уровень читается по искажению рисунка («да мне нравиться, продолжай», 2026-11-16); 26-12 рисует 18 знаков по геометрии 26-ICON-DECISION.md, включая class-stabilar/impulsar/infernar
 - [Phase PORTIA-26]: 26-11: ярлыки на 521–900px расставляет placeShortcuts (колонки сверху вниз, ячейка с местом на 2 строки подписи, рост contentHeight вместо обрезки); сохранённые позиции первыми, общий ключ portia-desktop-shortcuts-v3; перетаскивание и Alt+стрелки включены на 521–900 (порог 520px); ПК не изменён
 - [Phase PORTIA-26]: Измеряемая высота .desktop-icons — естественная (calc(100svh - 82px)), рост только через --shortcut-content-height на .workspace: без залипания длинных колонок после поворота
+- [Phase 26]: 26-12: 18 знаков классификации — дословный перенос геометрии раунда 5 из 26-ICON-DECISION.md; уровень показывает рисунок, без метки D-08; линия 1.5
+- [Phase 26]: 26-12: залитые части знаков с stroke=none, чтобы корневая обводка PortiaIcon 1.75 не раздувала их
 
 ### Pending Todos
 
@@ -386,8 +389,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-16T12:57:30.799Z
-Stopped at: Completed PORTIA-26-11-PLAN.md
+Last session: 2026-11-16T16:51:28.351Z
+Stopped at: Completed 26-12-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

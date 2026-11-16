@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 11
+open_count: 12
 waived_count: 0
 fixed_count: 2
-total_count: 13
-last_updated: 2026-11-16T12:55:38.075Z
+total_count: 14
+last_updated: 2026-11-16T13:04:25.140Z
 ---
 
 # Broken Windows Ledger
@@ -28,6 +28,7 @@ last_updated: 2026-11-16T12:55:38.075Z
 | 11 | 22 | unrun-verify | .planning/phases/PORTIA-22-vkladka-polzovateli-i-karkas-tokenov-stilya/22-MIGRATION-APPLY.md |  | Next build BLOCKED (ENV): prohibited .env.local read in plan 22-09 execution | fixed | Isolated clean worktree, Node 22.13.1, no real .env file, Next build exit 0 (22-MIGRATION-APPLY.md) | 2026-11-12T07:03:01.066Z | 2026-11-12T07:09:29.000Z |
 | 12 | 26 | unrun-verify | .planning/phases/PORTIA-26-edinyy-stil-sayta/26-MAXIMIZED-AUDIT.md |  | 26-05 maximized windows: no horizontal overflow / no empty band at 1366x768, 1920x1080, 2560x1440 not rendered - BLOCKED (ENV), Playwright lane without preflight | open |  | 2026-11-16T09:11:55.234Z |  |
 | 13 | 26 | unrun-verify | components/portia-desktop-shortcuts.tsx |  | 26-11 shortcuts at 521-900px: render at 521/600/768/900px x compact/default/large, drag/Alt+Arrow, page scroll from a shortcut and 2-line label not checked in a browser or on a device - BLOCKED (ENV)/(DEVICE) until Phase 27; unit test of placeShortcuts only | open |  | 2026-11-16T12:55:38.075Z |  |
+| 14 | 26 | unrun-verify | components/portia-icons.tsx |  | 26-12: 18 знаков классификации (раунд 5) не проверены в браузере и на физическом экране в 16/18/24px — BLOCKED (ENV)/(DEVICE) до Phase 27 | open |  | 2026-11-16T13:04:25.140Z |  |
 
 ````json
 [
@@ -197,6 +198,19 @@ last_updated: 2026-11-16T12:55:38.075Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-16T12:55:38.075Z",
+    "resolved_at": null,
+    "milestone": "v1.4"
+  },
+  {
+    "id": 14,
+    "kind": "unrun-verify",
+    "phase": "26",
+    "file": "components/portia-icons.tsx",
+    "line": null,
+    "description": "26-12: 18 знаков классификации (раунд 5) не проверены в браузере и на физическом экране в 16/18/24px — BLOCKED (ENV)/(DEVICE) до Phase 27",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-16T13:04:25.140Z",
     "resolved_at": null,
     "milestone": "v1.4"
   }
