@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed PORTIA-26-09-PLAN.md
-last_updated: "2026-11-16T12:23:51.755Z"
+stopped_at: Completed PORTIA-26-10-PLAN.md
+last_updated: "2026-11-16T12:36:43.542Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase PORTIA-26 execution started
-state_head: eeccc94d844b3c24fc639e63df8ca8ef96c7b132
+state_head: 74b5755c3d4b9db2ee04c04205c11a1870399b32
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 64
-  completed_plans: 58
+  completed_plans: 59
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-26 (Единый стиль сайта) — EXECUTING
-Plan: 9 of 14
+Plan: 10 of 14
 Status: Executing Phase PORTIA-26
 Last activity: 2026-11-16 — Phase PORTIA-26 execution started
 
@@ -97,6 +97,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-26 P07 | 22min | 3 tasks | 7 files |
 | Phase PORTIA-26 P08 | 9 min | 2 tasks | 7 files |
 | Phase PORTIA-26 P09 | 10 min | 3 tasks | 9 files |
+| Phase PORTIA-26 P10 | 9 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -324,6 +325,9 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: 26-08: очередь и банки Повышения — классы etab-body/etab-list/etab-detail на прежних элементах (без обёртки EditorTabBody), список 280px на ПК; на телефоне .promotion-editor с панелью — overflow: clip
 - [Phase PORTIA-26]: 26-09: «Пользователи» на ПК — EditorActionBar (разделы «Заявки · N»/«Люди · N»/«Отклонённые и отозванные · N» с aria-current, «Ожидают: N», «ОДОБРИТЬ ИЗ ТАБЛИЦЫ» primary) и EditorTabBody; деталь — UsersActionBody, общий с окном телефона; права только из visibleControls; телефон без изменений
 - [Phase PORTIA-26]: 26-09: после решения на ПК решённая строка остаётся выбранной, пока она в разделе, иначе nextUsersSelection; нет строки — фокус на кнопку раздела; карточка заявки и вход владельца — мягкий primary (цвета в базовых правилах, геометрия в ui-unify)
+- [Phase PORTIA-26]: 26-10: на телефоне «Информация» — статья всегда видна, над ней полоса «РАЗДЕЛЫ ▾» в потоке; список .info-index (<nav id=info-sections-list>) раскрывается под полосой; два экрана и «←» удалены
+- [Phase PORTIA-26]: 26-10: выбор и Escape закрывают список и возвращают фокус на кнопку; полоса прокручивается назад только если выше экрана; попадание поиска открывает статью под закрытым списком, кнопка показывает «· N»
+- [Phase PORTIA-26]: 26-10: .info-index стал <nav> и на ПК (UI-SPEC); вид ПК не меняется, роль ориентира complementary → navigation
 
 ### Pending Todos
 
@@ -377,8 +381,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-16T12:23:50.786Z
-Stopped at: Completed PORTIA-26-09-PLAN.md
+Last session: 2026-11-16T12:36:42.561Z
+Stopped at: Completed PORTIA-26-10-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
