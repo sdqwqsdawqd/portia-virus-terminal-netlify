@@ -13,9 +13,9 @@ export type PortiaIconName =
   | "route-droplet" | "route-dust" | "route-contact" | "route-oral" | "route-sexual" | "route-unknown"
   | "lock-open" | "lock-closed";
 
-// Classification badges: the first three lines are small illustrations of a breached containment cell,
-// a spreading cluster, and a broken containment gate. Each level changes the silhouette.
-const dangerCore = <><circle cx="12" cy="12" r="3.2" /><path d="M12 8.8V6.8M15 13.2l1.8 1M9 13.2l-1.8 1" /></>;
+// Classification badges: the danger signs are the owner's round-5 drawing (26-ICON-DECISION.md, «Геометрия»), copied verbatim:
+// one base sign per axis, the level reads from growing distortion, no separate level mark. Line 1.5, the filled parts carry no stroke.
+// The spread line is a spreading cluster and the escape line a broken containment gate; each level changes the silhouette.
 const spreadCore = <><circle cx="12" cy="12" r="3.2" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /></>;
 const escapeGate = <><path d="M5 20V7.5a7 7 0 0 1 14 0V20M3.5 20h17" /><path d="M8 20V8a4 4 0 0 1 8 0v12" /></>;
 // The additional line (D-39) is drawn as pictures, not as framed badges: mind is a brain that goes out, behaviour a line
@@ -99,9 +99,9 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
     <path d="M5 4v16M5 7h3M5 12h5M5 17h3" />
     <path d="m19.5 6.5-7.8 7.8-.9 3.1 3.1-.9 7.8-7.8a1.6 1.6 0 0 0-2.2-2.2Z" />
   </>,
-  "class-hephaestus": <>{dangerCore}<path d="M12 3.4 18.8 7v8.5L12 20l-6.8-4.5V7Z" /><path d="M7.4 8.3 9.2 7" /></>,
-  "class-proteus": <>{dangerCore}<path d="M12 3.4 18.8 7v5.1l-2.4 1.4 1.2 3.3L12 20l-6.8-4.5V7Z" /><path d="m16.4 13.5-2.2 1.1M5.2 11.2l-2.1 1.2" /></>,
-  "class-apeiron": <>{dangerCore}<path d="M12 2.4 16 6l3.6.1-.6 4.3 2.1 2.8-3.7 2.2-.6 4.4L12 22l-3.1-3.5-4.6.5.7-4.4-2.5-2.5 3.1-2.8.1-4.2 4.1.8Z" /><path d="m4.9 14.6-2.1 2.1m15.4-6.3 2.9-1.5M10 18l-1.2 3" /></>,
+  "class-hephaestus": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13.73 5.25L19.8 15.75A2 2 0 0 1 18.07 18.75L5.93 18.75A2 2 0 0 1 4.2 15.75L10.27 5.25A2 2 0 0 1 13.73 5.25Z" /></g><g fill="currentColor" stroke="none"><path d="M10.25 13.25A1.75 1.75 0 1 0 13.75 13.25A1.75 1.75 0 1 0 10.25 13.25Z" /></g></>,
+  "class-proteus": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13.73 5.25L19.8 15.75A2 2 0 0 1 18.07 18.75L5.93 18.75A2 2 0 0 1 4.2 15.75L10.27 5.25A2 2 0 0 1 13.73 5.25Z" /><path d="M12 13.25L14.86 11.6" /><path d="M12 13.25L12 16.55" /><path d="M12 13.25L9.14 11.6" /></g><g fill="currentColor" stroke="none"><path d="M10.25 13.25A1.75 1.75 0 1 0 13.75 13.25A1.75 1.75 0 1 0 10.25 13.25Z" /></g></>,
+  "class-apeiron": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13.73 5.25L19.8 15.75A2 2 0 0 1 18.07 18.75L5.93 18.75A2 2 0 0 1 4.2 15.75L10.27 5.25A2 2 0 0 1 13.73 5.25Z" /><path d="M12 13.25L19.14 9.13" /><path d="M12 13.25L12 21.5" /><path d="M12 13.25L4.86 9.13" /></g><g fill="currentColor" stroke="none"><path d="M9.75 13.25A2.25 2.25 0 1 0 14.25 13.25A2.25 2.25 0 1 0 9.75 13.25Z" /></g></>,
   "class-nomos": <>{spreadCore}<path d="M12 8.8V5.5M15.2 12h3.3M8.8 12H5.5M12 15.2v3.3" /><circle cx="12" cy="4.3" r="1.2" /><circle cx="19.7" cy="12" r="1.2" /><circle cx="4.3" cy="12" r="1.2" /><circle cx="12" cy="19.7" r="1.2" /></>,
   "class-theseus": <>{spreadCore}<path d="M9.6 9.6 6.5 6.5M14.4 9.6l3.1-3.1M9.6 14.4l-3.1 3.1M14.4 14.4l3.1 3.1" /><circle cx="5.5" cy="5.5" r="1.4" /><circle cx="18.5" cy="5.5" r="1.4" /><circle cx="5.5" cy="18.5" r="1.4" /><circle cx="18.5" cy="18.5" r="1.4" /><path d="M5.5 5.5 3 7m15.5-1.5L21 7" /></>,
   "class-abraxas": <>{spreadCore}<path d="M9.4 9.4 5.5 5.5M14.6 9.4l3.9-3.9M9.4 14.6l-3.9 3.9M14.6 14.6l3.9 3.9M12 8.8V3M15.2 12H21M12 15.2v5.8M8.8 12H3" /><circle cx="4.5" cy="4.5" r="1.2" /><circle cx="19.5" cy="4.5" r="1.2" /><circle cx="4.5" cy="19.5" r="1.2" /><circle cx="19.5" cy="19.5" r="1.2" /><circle cx="12" cy="2" r="1" /><circle cx="22" cy="12" r="1" /><circle cx="12" cy="22" r="1" /><circle cx="2" cy="12" r="1" /></>,
