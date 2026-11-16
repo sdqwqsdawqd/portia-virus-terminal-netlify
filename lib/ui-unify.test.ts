@@ -603,7 +603,177 @@ test("UI-06 / D-03: the maximized hook is unchanged, the only one, and never a c
         if (!selector.includes("is-maximized")) continue;
         assert.ok(selector.startsWith(MAXIMIZED), `${file}: ${selector} must start with ${MAXIMIZED}`);
         if (HISTORIC_MAXIMIZED.includes(selector)) continue;
-        assert.ok(rule.context?.includes(DESKTOP), `${file}: ${selector} must sit in @media (${DESKTOP}) so the phone is not touched`);
+        assert.ok(/min-width: (?:901|1281)px/u.test(rule.context ?? ""), `${file}: ${selector} must sit in a desktop @media (min-width) so the phone is not touched`);
+      }
+    }
+  }
+});
+
+// D-04: every window is checked maximized against the UI-SPEC recipes. Each entry names its outcome; the checks below
+// hold the evidence (selectors in the cascade, never "looks fine"). Pixel lanes at 1366/1920/2560 are BLOCKED (ENV).
+const R3 = "min-width: 1281px";
+const R3_COLUMNS = "repeat(2, minmax(0, 1fr))";
+const LIST_COLUMN = "clamp(270px, 24%, 340px) minmax(0, 1fr)";
+const EDITOR_CARD_COLUMNS = "repeat(auto-fill, minmax(min(100%, var(--editor-card-width)), var(--editor-card-width)))";
+const guideR1 = R1_COLUMNS.replace("var(--card-min)", "220px");
+const documentsSource = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
+const at = (selector: string) => `${MAXIMIZED} ${selector}`;
+
+/** R5: the pane of a window fills it under the 46px title bar and scrolls inside (no band below the content). */
+function assertFillsWindow(selector: string) {
+  assert.equal(lastDeclaration(portiaCss, selector, "height", DESKTOP), "calc(100% - 46px)", `${selector} fills the window`);
+}
+
+const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant"; check: () => void }[] = [
+  { app: "search", outcome: "fixed", check: () => {
+    assert.equal(lastDeclaration(portiaCss, at(".global-search-results"), "grid-template-columns", DESKTOP), R1_COLUMNS);
+    assert.equal(lastDeclaration(portiaCss, at(".global-search-box"), "max-width", DESKTOP), "var(--field-max)");
+    assertFillsWindow(".global-search-app");
+  } },
+  { app: "archive", outcome: "fixed", check: () => {
+    assert.equal(lastDeclaration(portiaCss, at(".archive-grid"), "grid-template-columns", DESKTOP), LIST_COLUMN);
+    assertFillsWindow(".archive-grid");
+    // The record is the shared 1060px paper (D-55, also the template builder) and the scientist document an 820px paper:
+    // both are measures that the window size does not change, so no maximized rule reaches inside them.
+    assert.equal(lastDeclaration(portiaCss, ".record-document", "width"), "min(1060px, 100%)");
+    assert.equal(lastDeclaration(portiaCss, ".archive-document-paper", "width"), "min(820px, calc(100% - 42px))");
+  } },
+  { app: "employees", outcome: "fixed", check: () => {
+    assert.equal(lastDeclaration(portiaCss, at(".personnel-app"), "grid-template-columns", DESKTOP), LIST_COLUMN);
+    const body = at(".personnel-profile-body");
+    assert.equal(lastDeclaration(portiaCss, body, "display", R3), "grid");
+    assert.equal(lastDeclaration(portiaCss, body, "grid-template-columns", R3), R3_COLUMNS);
+    assert.equal(lastDeclaration(portiaCss, body, "gap", R3), "24px");
+    assert.equal(lastDeclaration(portiaCss, body, "max-width", R3), "1320px");
+    for (const whole of [".personnel-profile-head", ".personnel-biography", ".personnel-stats:only-of-type"]) {
+      assert.equal(lastDeclaration(portiaCss, at(`.personnel-profile-body > ${whole}`), "grid-column", R3), "1 / -1", whole);
+    }
+    assertFillsWindow(".personnel-app");
+  } },
+  { app: "info", outcome: "fixed", check: () => {
+    // The index column stays as it is; the document is a reading column.
+    assert.equal(lastDeclaration(portiaCss, ".info-library", "grid-template-columns", DESKTOP), "minmax(210px, 28%) minmax(0, 1fr)");
+    assert.equal(lastDeclaration(portiaCss, at(".info-library"), "grid-template-columns", DESKTOP), undefined);
+    assert.equal(lastDeclaration(portiaCss, at(".info-document > .content-fade"), "max-width", DESKTOP), "820px");
+    assertFillsWindow(".info-library");
+  } },
+  { app: "guide", outcome: "fixed", check: () => {
+    assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "grid-template-columns", DESKTOP), guideR1);
+    assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "gap", DESKTOP), "8px");
+    // The open article is already an 820px reading column.
+    assert.equal(lastDeclaration(portiaCss, ".guide-page", "max-width"), "820px");
+    assertFillsWindow(".guide-app");
+  } },
+  { app: "promotion", outcome: "fixed", check: () => {
+    // The applicant's shell is a 680px test column (a measure); the reviewer workbench lives in the editor's «Повышение» tab.
+    assert.equal(lastDeclaration(portiaCss, ".promotion-shell", "width"), "min(680px, 100%)");
+    assert.equal(lastDeclaration(cascadeCss, at(".promotion-editor-workbench"), "grid-template-columns", DESKTOP), "280px minmax(0, 1fr)");
+    assert.equal(lastDeclaration(cascadeCss, at(".promotion-bank-workflow .promotion-bank-layout"), "grid-template-columns", DESKTOP), "280px minmax(0, 1fr)");
+    for (const cards of [".promotion-bank-items", ".promotion-request-detail dl"]) {
+      assert.equal(lastDeclaration(cascadeCss, at(cards), "grid-template-columns", DESKTOP), R1_COLUMNS, cards);
+      assert.equal(lastDeclaration(cascadeCss, at(cards), "gap", DESKTOP), "8px", cards);
+    }
+    assertFillsWindow(".promotion-app");
+  } },
+  { app: "settings", outcome: "fixed", check: () => {
+    // R3 on the pane that carries the background: two columns of at most 648px each (24px gap) = the 1320px form, so the
+    // background and the scroll bar still reach the window edge.
+    assert.equal(lastDeclaration(portiaCss, at(".settings-app"), "display", R3), "grid");
+    assert.equal(lastDeclaration(portiaCss, at(".settings-app"), "grid-template-columns", R3), "repeat(2, minmax(0, 648px))");
+    assert.equal(lastDeclaration(portiaCss, at(".settings-app"), "column-gap", R3), "24px");
+    for (const whole of ["header", ".content-control-entry", ".settings-footer"]) {
+      assert.equal(lastDeclaration(portiaCss, at(`.settings-app > ${whole}`), "grid-column", R3), "1 / -1", whole);
+    }
+    assertFillsWindow(".settings-app");
+  } },
+  { app: "broadcasts", outcome: "fixed", check: () => {
+    assert.equal(lastDeclaration(portiaCss, at(".broadcast-grid"), "grid-template-columns", DESKTOP), R1_COLUMNS);
+    assert.equal(lastDeclaration(portiaCss, at(".broadcast-grid"), "gap", DESKTOP), "8px");
+    assert.equal(lastDeclaration(portiaCss, ".broadcast-grid > .broadcast-empty", "grid-column", DESKTOP), "1 / -1");
+    assertFillsWindow(".broadcasts-app");
+  } },
+  { app: "trash", outcome: "already conformant", check: () => {
+    // A table list with a column header is not turned into cards: its columns are fr tracks that already fill the width;
+    // the read-only viewer covers the list and its documents are 760/800px measures.
+    assert.match(lastDeclaration(portiaCss, ".trash-list-head", "grid-template-columns") ?? "", /fr\) minmax\(220px, 1fr\)/u);
+    assert.equal(lastDeclaration(portiaCss, ".trash-viewer", "inset"), "0");
+    assert.equal(lastDeclaration(portiaCss, ".trash-text-document", "width"), "min(760px, 100%)");
+    assert.equal(lastDeclaration(portiaCss, ".trash-image-document", "width"), "min(800px, 100%)");
+    assertFillsWindow(".trash-app");
+  } },
+  { app: "sheet", outcome: "already conformant", check: () => {
+    assertFillsWindow(".document-app");
+    assert.equal(lastDeclaration(portiaCss, ".document-app-viewport", "inset"), "0");
+    // The frame is sized inline from the zoom (100% at 100%); a CSS width would break the zoom.
+    assert.match(documentsSource, /style=\{\{ width: `\$\{100 \/ zoom\}%`, height: `\$\{100 \/ zoom\}%`/u);
+  } },
+  { app: "charter", outcome: "fixed", check: () => {
+    assertFillsWindow(".document-app");
+    // A closed charter replaces the frame with the redacted block, centred in the whole window below the title bar.
+    const block = `${MAXIMIZED} > .access-redacted-block`;
+    assert.equal(lastDeclaration(portiaCss, block, "height", DESKTOP), "calc(100% - 46px)");
+    assert.equal(lastDeclaration(portiaCss, block, "max-height", DESKTOP), "none");
+    assert.equal(lastDeclaration(portiaCss, ".access-redacted-block", "justify-content"), "center");
+    assert.equal(lastDeclaration(portiaCss, ".access-redacted-block", "align-items"), "center");
+  } },
+  { app: "editor", outcome: "fixed", check: () => {
+    // D-19: card forms only gain more 340px columns; flat forms (the virus form, the employee form) follow R3.
+    for (const columns of [".editor-card-columns", ".editor-section-columns"]) {
+      assert.equal(lastDeclaration(portiaCss, at(columns), "grid-template-columns", DESKTOP), EDITOR_CARD_COLUMNS, columns);
+    }
+    const virus = at(".virus-editor-form");
+    assert.equal(lastDeclaration(portiaCss, virus, "display", R3), "grid");
+    assert.equal(lastDeclaration(portiaCss, virus, "grid-template-columns", R3), R3_COLUMNS);
+    assert.equal(lastDeclaration(portiaCss, virus, "gap", R3), "24px");
+    assert.equal(lastDeclaration(portiaCss, virus, "max-width", R3), "1320px");
+    for (const whole of [":not(.editor-group)", ".editor-group.stack"]) {
+      assert.equal(lastDeclaration(portiaCss, at(`.virus-editor-form > ${whole}`), "grid-column", R3), "1 / -1", whole);
+    }
+    // The employee form has one group whose fields are already two columns: R3 caps it at 1320px.
+    assert.equal(lastDeclaration(portiaCss, at(".employee-profile-editor"), "max-width", R3), "1320px");
+    assertFillsWindow(".content-editor");
+  } },
+];
+
+test("UI-06 / D-04: the audit list names every window of the desktop once", () => {
+  const start = windowSource.indexOf("export const appMeta");
+  const ids = [...windowSource.slice(start, windowSource.indexOf("};", start)).matchAll(/^ {2}([a-z]+): \{/gmu)].map((match) => match[1]);
+  assert.equal(ids.length, 12);
+  assert.deepEqual(MAXIMIZED_WINDOWS.map((entry) => entry.app).sort(), [...ids].sort());
+});
+
+for (const entry of MAXIMIZED_WINDOWS) {
+  test(`UI-06 / D-04: maximized ${entry.app} follows the UI-SPEC recipe (${entry.outcome})`, () => entry.check());
+}
+
+test("UI-06 / D-19: two columns only for flat forms; editor cards keep their 340px width and never stretch", () => {
+  assert.match(portiaCss, /--editor-card-width: 340px;/u);
+  const r3Hosts: string[] = [];
+  for (const [file, css] of ALL_STYLESHEETS) {
+    for (const rule of rulesOf(css)) {
+      if (!rule.selectors.some((selector) => selector.includes("is-maximized"))) continue;
+      for (const [name, value] of declarations(rule.body)) {
+        if (name === "grid-template-columns" && value === R3_COLUMNS) r3Hosts.push(...rule.selectors);
+        if (rule.selectors.some((selector) => /editor-(?:card|section)-columns/u.test(selector)) && name === "grid-template-columns") {
+          assert.doesNotMatch(value, /1fr/u, `${file}: ${rule.selectors.join(", ")} must not stretch editor cards`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(r3Hosts.sort(), [at(".personnel-profile-body"), at(".virus-editor-form")].sort(), "R3 only on flat forms (D-19)");
+  for (const host of r3Hosts) {
+    assert.ok(rulesOf(portiaCss).some((rule) => rule.selectors.includes(host) && rule.context?.includes(R3)), `${host} waits for 1281px`);
+  }
+});
+
+test("UI-06 / D-02: no maximized rule stretches a control and the caps are 640/820/1320px", () => {
+  for (const [file, css] of ALL_STYLESHEETS) {
+    for (const rule of rulesOf(css)) {
+      if (!rule.selectors.some((selector) => selector.includes("is-maximized"))) continue;
+      for (const [name, value] of declarations(rule.body)) {
+        const stretches = (name === "width" && /^100%/u.test(value)) || (/^flex(?:-grow)?$/u.test(name) && /^[1-9]/u.test(value));
+        assert.ok(!stretches, `${file}: ${rule.selectors.join(", ")} { ${name}: ${value} }`);
+        if (name === "max-width") assert.match(value, /^(?:var\(--field-max\)|820px|1320px)$/u, `${file}: ${rule.selectors.join(", ")} cap`);
       }
     }
   }

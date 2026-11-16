@@ -333,6 +333,14 @@ test("window tiles keep their own size and the search shows the picked recommend
   assert.match(styles, /\.broadcast-grid\s*\{[^}]*align-items:\s*start/);
   assert.match(styles, /\.broadcast-grid > \.broadcast-empty\s*\{[^}]*grid-column:\s*1 \/ -1/);
   assert.match(styles, /\.guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*176px\),\s*176px\)\)/);
+  // Phase 26 (UI-06, D-01): a maximized window turns these tiles into a card grid, but only under the maximized hook; the
+  // normal window keeps the fixed 340px / 176px tiles above. No rule outside the hook gives them a stretched track.
+  for (const tiles of ["broadcast-grid", "guide-grid"]) {
+    const rules = [...styles.matchAll(new RegExp(String.raw`([^{}]*\.${tiles}\s*)\{([^}]*)\}`, "g"))];
+    const stretched = rules.filter(([, selector, body]) => /grid-template-columns:[^;]*1fr/.test(body) && !selector.includes(".app-window.is-maximized"));
+    assert.deepEqual(stretched.map(([, selector]) => selector.trim()).filter((selector) => !(tiles === "guide-grid" && selector === ".guide-grid")), [], `${tiles}: only the maximized rule may stretch`);
+    assert.ok(rules.some(([, selector]) => selector.includes(".app-window.is-maximized")), `${tiles}: a maximized rule exists`);
+  }
   assert.ok(source.includes("shownRecommendations.map("), "only the picked recommendations are rendered");
   assert.ok(!source.includes("content.searchRecommendations.map("));
 });
@@ -343,6 +351,10 @@ test("editor form cards keep one fixed width set by a single variable and fill c
   const desktop = /@media \(min-width: 901px\) \{\s*\.editor-card-columns \{[^}]*\}/.exec(styles)?.[0] ?? "";
   assert.match(desktop, /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*var\(--editor-card-width\)\),\s*var\(--editor-card-width\)\)\)/);
   assert.match(desktop, /align-items:\s*start/);
+  // Phase 26 (D-19): a maximized editor only gains more columns of the same var(--editor-card-width); no 1fr stretch.
+  const maximized = /\.app-window\.is-maximized \.editor-card-columns, \.app-window\.is-maximized \.editor-section-columns \{([^}]*)\}/.exec(styles)?.[1] ?? "";
+  assert.match(maximized, /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*var\(--editor-card-width\)\),\s*var\(--editor-card-width\)\)\)/);
+  assert.doesNotMatch(maximized, /1fr/);
   assert.match(styles, /\.editor-card-columns > :not\(\.nested-editor-card\)\s*\{[^}]*grid-column:\s*1 \/ -1/);
   assert.match(styles, /\.editor-card-columns > \.nested-editor-card \+ \.nested-editor-card\s*\{[^}]*margin-top:\s*0/);
   // It must follow .flat-editor-form (same specificity) to win the cascade, and the sorted lists stay one column.

@@ -2532,6 +2532,10 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 @media (max-width: 900px) {
   .access-level-option { width: 44px; height: 44px; }
 }
+/* Phase 26 (UI-06, R5): закрытый «Устав» в развёрнутом окне — блок на всё окно под полосой, содержимое по центру; только раскладка, данные не показываются. */
+@media (min-width: 901px) {
+  .app-window.is-maximized > .access-redacted-block { box-sizing: border-box; height: calc(100% - 46px); max-height: none; }
+}
 /* access-levels:end */
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
@@ -2637,5 +2641,25 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .app-window.is-maximized .global-result { min-width: 0; }
   .app-window.is-maximized .global-search-header, .app-window.is-maximized .global-search-box { max-width: var(--field-max); }
   .app-window.is-maximized .global-search-empty { grid-column: 1 / -1; justify-self: stretch; }
+  /* Аудит окон (D-04): колонка списка у базы вирусов и сотрудников, сводка и справочник сеткой R1 (плитки справочника от 220px),
+     документ «Информации» — колонка чтения 820px (R4). Закрытый «Устав» (R5) — в блоке access-levels: заглушку стилизует только он. */
+  .app-window.is-maximized .archive-grid, .app-window.is-maximized .personnel-app { grid-template-columns: clamp(270px, 24%, 340px) minmax(0, 1fr); }
+  .app-window.is-maximized .broadcast-grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 4)), 1fr)); }
+  .app-window.is-maximized .guide-grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(max(220px, calc((100% - 24px) / 4)), 1fr)); }
+  .app-window.is-maximized .info-document > .content-fade { max-width: 820px; }
+  /* D-19: карточки редактора в развёрнутом окне — только больше колонок той же ширины var(--editor-card-width), без 1fr. */
+  .app-window.is-maximized .editor-card-columns, .app-window.is-maximized .editor-section-columns { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--editor-card-width)), var(--editor-card-width))); }
+}
+/* R3 (D-19): две колонки только у плоских форм — профиль сотрудника, форма вируса в редакторе, группы настроек; не шире 1320px.
+   Блоки, одноколоночные по природе, занимают обе колонки. У «Настроек» сетка стоит на самой панели с фоном: 2 × 648px + 24px = 1320px. */
+@media (min-width: 1281px) {
+  .app-window.is-maximized .personnel-profile-body, .app-window.is-maximized .virus-editor-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; max-width: 1320px; }
+  .app-window.is-maximized .personnel-profile-body > .personnel-profile-head, .app-window.is-maximized .personnel-profile-body > .personnel-biography, .app-window.is-maximized .personnel-profile-body > .personnel-stats:only-of-type { grid-column: 1 / -1; }
+  .app-window.is-maximized .personnel-profile-body > .personnel-stats, .app-window.is-maximized .personnel-profile-body > .personnel-biography { margin-top: 0; }
+  .app-window.is-maximized .virus-editor-form > :not(.editor-group), .app-window.is-maximized .virus-editor-form > .editor-group.stack { grid-column: 1 / -1; }
+  .app-window.is-maximized .virus-editor-form > .editor-group { margin-bottom: 0; }
+  .app-window.is-maximized .employee-profile-editor { max-width: 1320px; }
+  .app-window.is-maximized .settings-app { display: grid; grid-template-columns: repeat(2, minmax(0, 648px)); column-gap: 24px; align-content: start; }
+  .app-window.is-maximized .settings-app > header, .app-window.is-maximized .settings-app > .content-control-entry, .app-window.is-maximized .settings-app > .settings-footer { grid-column: 1 / -1; }
 }
 /* ui-unify:end */

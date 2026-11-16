@@ -171,3 +171,10 @@
   .promotion-bank-editor .promotion-bank-items article > label { flex-basis: auto; }
   .promotion-bank-workflow-tabs button { min-height: var(--tap-target); }
 }
+
+/* Phase 26 (UI-06, D-04): развёрнутое окно, только на ПК — список запросов и банков 280px рядом с деталью,
+   карточки банка и сведения заявки сеткой R1 (до 4 колонок по var(--card-min)). Обычное окно и телефон не затронуты. */
+@media (min-width: 901px) {
+  .app-window.is-maximized .promotion-editor-workbench, .app-window.is-maximized .promotion-bank-workflow .promotion-bank-layout { grid-template-columns: 280px minmax(0, 1fr); }
+  .app-window.is-maximized .promotion-bank-items, .app-window.is-maximized .promotion-request-detail dl { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 4)), 1fr)); }
+}
