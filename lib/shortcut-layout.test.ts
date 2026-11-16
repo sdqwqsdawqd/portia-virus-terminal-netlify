@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import * as layout from "./shortcut-layout.ts";
 import { clampShortcutPosition, type Rect } from "./shortcut-layout.ts";
 
 const shortcuts = readFileSync(new URL("../components/portia-desktop-shortcuts.tsx", import.meta.url), "utf8");
@@ -66,4 +67,121 @@ test("DraggableDesktopIcon starts the cycle first, gates free drag at 900px, cla
   assert.ok(shortcuts.includes("onFocus: iconAnimation.play"));
   assert.ok(shortcuts.includes("max(8px, min(${position.x}px, calc(100% - 118px)))"));
   assert.ok(shortcuts.includes("max(8px, min(${position.y}px, calc(100% - 128px)))"));
+});
+
+// ---- Phase 26-11 (UI-09): one placement rule for the shortcuts at 521–900px ----
+// Order of defaultShortcutLayout in components/portia-desktop-shortcuts.tsx (left column, second column, the bottom pair, trash).
+const order = ["search", "archive", "broadcasts", "info", "employees", "settings", "guide", "promotion", "charter", "sheet", "trash"] as const;
+const widths = [521, 600, 768, 900] as const;
+const iconSizes = ["compact", "default", "large"] as const;
+const areas = [{ width: 521, height: 600 }, { width: 600, height: 700 }, { width: 768, height: 900 }, { width: 900, height: 600 }, { width: 521, height: 400 }];
+const gap = 8;
+
+type Placement = { positions: Record<string, { x: number; y: number }>; contentHeight: number };
+type Cell = { width: number; height: number };
+const place = (...args: unknown[]): Placement => {
+  assert.equal(typeof (layout as Record<string, unknown>).placeShortcuts, "function", "lib/shortcut-layout.ts exports placeShortcuts");
+  return ((layout as Record<string, unknown>).placeShortcuts as (...a: unknown[]) => Placement)(...args);
+};
+const cellOf = (size: string): Cell => {
+  assert.equal(typeof (layout as Record<string, unknown>).shortcutCell, "function", "lib/shortcut-layout.ts exports shortcutCell");
+  return ((layout as Record<string, unknown>).shortcutCell as (size: string) => Cell)(size);
+};
+
+function assertClean(result: Placement, area: { width: number; height: number }, cell: Cell, label: string) {
+  const rects = order.map((id) => {
+    const point = result.positions[id];
+    assert.ok(point && Number.isFinite(point.x) && Number.isFinite(point.y), `${label}: ${id} has a position`);
+    return { id, x: point.x, y: point.y, width: cell.width, height: cell.height };
+  });
+  assert.ok(result.contentHeight >= area.height, `${label}: the content is never shorter than the area`);
+  for (const rect of rects) {
+    assert.ok(rect.x >= 8 && rect.x + rect.width <= area.width - 8, `${label}: ${rect.id} is cut by a side (x ${rect.x})`);
+    assert.ok(rect.y >= 8, `${label}: ${rect.id} is cut by the top`);
+    assert.ok(rect.y + rect.height <= result.contentHeight - 56, `${label}: ${rect.id} reaches the taskbar reserve`);
+  }
+  for (let a = 0; a < rects.length; a += 1) for (let b = a + 1; b < rects.length; b += 1) {
+    assert.ok(!overlaps(rects[a], rects[b]), `${label}: ${rects[a].id} overlaps ${rects[b].id}`);
+  }
+}
+
+test("UI-09 shortcutCell: the cell holds the icon of each size plus two label lines", () => {
+  const compact = cellOf("compact");
+  const standard = cellOf("default");
+  const large = cellOf("large");
+  assert.deepEqual([compact.width, standard.width, large.width], [80, 94, 110]);
+  // border 2 + padding + symbol + gap 6 + two lines of font-size × 1.25, never below the CSS min-height.
+  assert.equal(compact.height, Math.ceil(2 + 10 + 44 + 6 + 2 * 11 * 1.25));
+  assert.equal(standard.height, Math.ceil(2 + 14 + 52 + 6 + 2 * 12 * 1.25));
+  assert.equal(large.height, Math.ceil(2 + 16 + 62 + 6 + 2 * 13 * 1.25));
+  assert.ok(compact.height >= 72 && standard.height >= 86 && large.height >= 98);
+  assert.deepEqual(cellOf("standard"), standard, "the settings value «standard» is the default size");
+});
+
+test("UI-09 shortcutCell numbers are the ones the 521–900px stylesheet draws", () => {
+  const css = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const start = css.indexOf("@media (min-width: 521px) and (max-width: 900px) {");
+  assert.ok(start > 0);
+  const block = css.slice(start, css.indexOf("\n}\n", start));
+  assert.match(block, /\n  \.desktop-icon \{[^}]*width: 94px; min-height: 86px; padding: 7px 5px; font-size: 12px;/);
+  assert.match(block, /html\[data-icon-size="compact"\] \.desktop-icon \{ width: 80px; min-height: 72px; padding: 5px 3px; font-size: 11px; \}/);
+  assert.match(block, /html\[data-icon-size="large"\] \.desktop-icon \{ width: 110px; min-height: 98px; padding: 8px 5px; font-size: 13px; \}/);
+  assert.match(block, /\n  \.desktop-icon-symbol \{ width: 52px; height: 52px; \}/);
+  assert.match(block, /html\[data-icon-size="compact"\] \.desktop-icon-symbol \{ width: 44px; height: 44px; \}/);
+  assert.match(block, /html\[data-icon-size="large"\] \.desktop-icon-symbol \{ width: 62px; height: 62px; \}/);
+  const base = /\n\.desktop-icon \{[\s\S]*?\n\}/.exec(css)?.[0] ?? "";
+  assert.match(base, /gap: 6px;/);
+  assert.match(base, /line-height: 1\.25;/);
+  assert.match(base, /border: 1px solid transparent;/);
+});
+
+test("UI-09 placeShortcuts: at 521/600/768/900px and every icon size no shortcut overlaps another, a side, the top or the taskbar reserve", () => {
+  for (const area of areas) for (const size of iconSizes) {
+    const cell = cellOf(size);
+    assertClean(place(order, area, cell, gap), area, cell, `${area.width}×${area.height} ${size}`);
+  }
+  assert.deepEqual([...new Set(areas.map((area) => area.width))].sort((a, b) => a - b), [...widths]);
+});
+
+test("UI-09 placeShortcuts: columns fill from the top-left corner downwards, the next column starts when one is full", () => {
+  const cell = cellOf("default");
+  const area = { width: 768, height: 600 };
+  const result = place(order, area, cell, gap);
+  assert.deepEqual(result.positions.search, { x: 8, y: 8 });
+  assert.deepEqual(result.positions.archive, { x: 8, y: 8 + cell.height + gap });
+  const rows = Math.floor((area.height - 56 - 8 + gap) / (cell.height + gap));
+  const firstOfSecond = order[rows];
+  assert.deepEqual(result.positions[firstOfSecond], { x: 8 + cell.width + gap, y: 8 }, "the shortcut after a full column starts the next one at the top");
+  assert.equal(result.positions[order[rows - 1]].x, 8);
+  assert.equal(result.contentHeight, area.height, "everything fits, so the content is the area");
+});
+
+test("UI-09 placeShortcuts: when the width runs out the content grows downwards instead of cutting a shortcut off", () => {
+  const cell = cellOf("large");
+  const area = { width: 521, height: 400 };
+  const result = place(order, area, cell, gap);
+  assert.ok(result.contentHeight > area.height, `contentHeight ${result.contentHeight} grows past ${area.height}`);
+  assertClean(result, area, cell, "521×400 large");
+});
+
+test("UI-09 placeShortcuts: a saved position outside the area is held inside and off the shortcuts already placed", () => {
+  const cell = cellOf("default");
+  const area = { width: 600, height: 700 };
+  const saved = { trash: { x: 5000, y: 5000 }, info: { x: -40, y: -40 }, sheet: { x: 300, y: 200 } };
+  const result = place(order, area, cell, gap, saved);
+  assertClean(result, area, cell, "saved");
+  assert.deepEqual(result.positions.sheet, { x: 300, y: 200 }, "a saved spot inside the area is kept");
+  assert.deepEqual(result.positions.info, { x: 8, y: 8 }, "a spot above-left of the area is pulled to the inset");
+  const trash = result.positions.trash;
+  assert.ok(trash.x + cell.width <= area.width - 8 && trash.y + cell.height <= area.height - 56, "the far-away saved shortcut is pulled inside, above the taskbar reserve");
+});
+
+test("UI-09 placeShortcuts never mutates its arguments", () => {
+  const ids = [...order];
+  const area = { width: 521, height: 400 };
+  const cell = cellOf("large");
+  const saved = { trash: { x: 5000, y: 5000 } };
+  const before = JSON.stringify([ids, area, cell, saved]);
+  place(ids, area, cell, gap, saved);
+  assert.equal(JSON.stringify([ids, area, cell, saved]), before);
 });

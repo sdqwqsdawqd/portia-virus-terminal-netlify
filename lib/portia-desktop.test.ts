@@ -1158,3 +1158,48 @@ test("UI-08 D-16: the closed button counts the sections with search hits by the 
   assert.match(phone, /\.info-index \.info-subsections button \{ min-height: 44px;/);
   assert.match(styles, /^\.search-hit, \.app-window\[data-search-hit="true"\] \{ outline: 1px solid var\(--teal\);/m);
 });
+
+// ---- Phase 26-11 (UI-09): the shortcuts at 521–900px follow one JS placement rule ----
+function tabletShortcutBlock() {
+  const start = styles.indexOf("@media (min-width: 521px) and (max-width: 900px) {");
+  assert.ok(start > 0, "the 521–900px rule exists");
+  return styles.slice(start, closingBrace(styles, styles.indexOf("{", start)) + 1);
+}
+
+test("UI-09 tracer: useShortcutPlacement measures .desktop-icons with a ResizeObserver at 521–900px and places through placeShortcuts", () => {
+  assert.ok(shortcutsSource.includes("export function useShortcutPlacement("), "the hook lives next to the shortcuts");
+  assert.ok(shortcutsSource.includes("new ResizeObserver("));
+  assert.ok(shortcutsSource.includes('"(min-width: 521px) and (max-width: 900px)"'));
+  assert.ok(/placeShortcuts\(/.test(shortcutsSource), "the hook calls the pure rule");
+  assert.ok(shortcutsSource.includes("shortcutCell("), "the cell follows the icon size");
+  // The desktop hands the ref of nav.desktop-icons to the hook and the placed spots to every shortcut.
+  assert.ok(source.includes("useShortcutPlacement(desktopIconsRef"), "the desktop calls the hook with the nav ref");
+  assert.match(source, /<nav className="desktop-icons" ref=\{desktopIconsRef\}/);
+  assert.equal((source.match(/placed=\{placedShortcut\(shortcutPlacement, "/g) ?? []).length, 11, "all eleven shortcuts get their placed spot");
+  assert.ok(source.includes('"--shortcut-content-height"'), "the workspace grows to the content height");
+  // A placed spot wins on this width only; the PC default and the saved-position style stay as they were.
+  assert.ok(shortcutsSource.includes("placed ? placedShortcutLayout(placed.position) : position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId]"));
+  assert.ok(source.includes('const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3"'), "storage key unchanged");
+});
+
+test("UI-09: the 521–900px rule no longer pins shortcuts by right/bottom, does not clip the workspace and lets a finger scroll from a shortcut", () => {
+  const block = tabletShortcutBlock();
+  assert.doesNotMatch(block, /var\(--shortcut-right\)|var\(--shortcut-bottom\)/, "no PC right/bottom anchors on this width");
+  assert.doesNotMatch(block, /overflow:\s*hidden/, "the workspace is not clipped");
+  assert.match(block, /\.workspace \{[^}]*min-height: max\(calc\(100svh - 82px\), var\(--shortcut-content-height, 0px\)\)/);
+  assert.match(block, /\.workspace \{[^}]*padding: 0 0 56px;/, "the 56px taskbar reserve stays");
+  assert.match(block, /\n  \.desktop-icon \{[^}]*touch-action: pan-y pinch-zoom;/);
+  assert.doesNotMatch(block, /touch-action: none/);
+  // ≤520px keeps its grid reset.
+  assert.match(styles, /@media \(max-width: 520px\) \{\n  \.desktop-icon \{ inset: auto !important; \}/);
+});
+
+test("UI-09: no stylesheet rule puts overflow: hidden or touch-action on html/body, and no script locks the page scroll", () => {
+  const css = [styles, lf(readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")), lf(readFileSync(new URL("../app/portia-promotion-editor.css", import.meta.url), "utf8"))].join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const subjects = match[1].split(",").map((selector) => selector.trim().split(/\s+/).pop() ?? "");
+    if (!subjects.some((subject) => /^(html|body)(?![\w-])/.test(subject))) continue;
+    assert.doesNotMatch(match[2], /overflow(-y)?:\s*hidden|touch-action/, `${match[1].trim()} locks the page`);
+  }
+  assert.doesNotMatch(`${source}\n${shortcutsSource}`, /document\.body\.style\.(overflow|touchAction)|documentElement\.style\.overflow/);
+});
