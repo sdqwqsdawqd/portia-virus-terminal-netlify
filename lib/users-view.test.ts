@@ -251,3 +251,20 @@ test("Одобрить 1 заявку: roster marks and owner bulk copy stay exp
   });
   assert.deepEqual(view.bulkButtonState?.(owner, null), { visible: true, disabled: false, caption: null });
 });
+
+// Phase 26 (UI-04, D-12): after a decision on a PC the next row of the section is picked; the function is pure.
+test("nextUsersSelection picks the row after the decided one, the previous one at the end, null when none is left", async () => {
+  const { nextUsersSelection } = await import("./users-view.ts");
+  const rows = Object.freeze([{ key: "a" }, { key: "b" }, { key: "c" }].map((row) => Object.freeze(row)));
+  assert.equal(nextUsersSelection(rows, "a"), "b", "first → the second");
+  assert.equal(nextUsersSelection(rows, "b"), "c", "middle → the next one");
+  assert.equal(nextUsersSelection(rows, "c"), "b", "last → the previous one");
+  assert.deepEqual(rows.map((row) => row.key), ["a", "b", "c"], "the rows are not mutated");
+});
+
+test("nextUsersSelection returns null for zero rows, a single decided row or a key that is not in the list", async () => {
+  const { nextUsersSelection } = await import("./users-view.ts");
+  assert.equal(nextUsersSelection([], "a"), null, "zero rows");
+  assert.equal(nextUsersSelection([{ key: "a" }], "a"), null, "the decided row was the only one");
+  assert.equal(nextUsersSelection([{ key: "a" }, { key: "b" }], "x"), null, "an unknown key anchors nothing");
+});

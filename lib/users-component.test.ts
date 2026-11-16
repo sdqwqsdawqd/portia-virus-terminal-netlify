@@ -115,7 +115,8 @@ test("request decisions use the shared confirmation dialog and honest busy state
   assert.match(component, /tone:\s*"secondary"[\s\S]*autoFocus:\s*true/u);
 });
 
-test("person and cooldown actions are available on PC and in the phone action window", () => {
+// Phase 26 (UI-04, D-12): on a PC the actions live in the detail pane, not in the rows; the phone keeps its action window.
+test("person and cooldown actions are available in the PC detail pane and in the phone action window", () => {
   assert.match(component, /usersCopy\.setLevel/u);
   assert.match(component, /usersCopy\.revoke/u);
   assert.match(component, /usersCopy\.clearCooldown/u);
@@ -125,6 +126,11 @@ test("person and cooldown actions are available on PC and in the phone action wi
   assert.match(component, /callerIsOwner/u);
   assert.match(component, /disabled=\{[^}]*level[^}]*===/u);
   assert.match(component, /usersCopy\.revokeDialog/u);
+  assert.equal(component.split("<RowActions").length - 1, 1, "one place renders the actions: the shared body");
+  const rows = component.slice(component.indexOf("function UsersRows("), component.indexOf("function focusAfterRefresh("));
+  assert.doesNotMatch(rows, /RowActions|onApprove|onReject|onSetLevel|onRevoke|onClearCooldown/u, "the rows carry no inline actions");
+  const body = component.slice(component.indexOf("function UsersActionBody("), component.indexOf("function UsersActionDialog("));
+  assert.match(body, /<RowActions context=\{context\} callerIsOwner=\{callerIsOwner\} fromPhone=\{fromPhone\}/u);
   const block = usersBlock();
   assert.match(block, /\.users-row-actions[^}]*gap:\s*8px/u);
   assert.match(block, /\.users-action-note/u);
@@ -141,14 +147,15 @@ test("history stays open across list refresh and reloads by nicknameKey", () => 
   assert.doesNotMatch(component, /setOpenHistoryKeys\(new Set\(\)\)/u, "list refresh must not close history panels");
 });
 
-test("history is accessible inline on PC and always present in the phone action window", () => {
-  assert.match(component, /aria-expanded=/u);
-  assert.match(component, /aria-controls=/u);
+// Phase 26 (UI-04, D-12): the history is always open in the PC detail pane (no toggle in the rows) and in the phone window.
+test("history is always open in the PC detail pane and in the phone action window", () => {
   assert.match(component, /<ol/u);
   assert.match(component, /usersCopy\.historyHeading/u);
   assert.match(component, /usersCopy\.historyEmpty/u);
-  assert.match(component, /usersCopy\.hideHistory/u);
   assert.match(component, /phoneHistory/u);
+  assert.match(component, /historyState=\{historyByKey\[selectedContext\.row\.source\.nicknameKey\]\}/u, "the detail shows the history of the picked row");
+  assert.doesNotMatch(component, /usersCopy\.hideHistory|aria-expanded=|toggleHistory|users-history-toggle/u, "no history toggle any more");
+  assert.doesNotMatch(css, /\.users-history-toggle/u, "and no rule for it");
   assert.doesNotMatch(component, /Показать ещё/iu);
   const block = usersBlock();
   assert.match(block, /\.users-history-list[^}]*gap:\s*4px/u);
@@ -220,4 +227,17 @@ test("the empty detail and the section labels are short texts in users-copy", as
   for (const text of [usersCopy.detailEmptyTitle, usersCopy.detailEmptyHint, usersCopy.sectionsLabel, ...Object.values(usersCopy.sectionTitles)]) {
     assert.ok(text.split(/\s+/u).length < 7, `${text}: shorter than 7 words`);
   }
+});
+
+// Phase 26 (UI-04, D-12, T-26-20): after a decision on a PC the next row of the section is picked and focused (nothing left: the
+// section's nav button); the pick never acts by itself, and the phone keeps the Phase 22 focus return.
+test("after a PC decision the next row is picked and focused; none left focuses the section nav", () => {
+  assert.match(component, /import \{[^}]*nextUsersSelection[^}]*\} from "@\/lib\/users-view";/u);
+  const postAction = component.slice(component.indexOf("const postAction ="), component.indexOf("const approve ="));
+  assert.match(postAction, /nextUsersSelection\(rowsBefore, decidedKey\)/u);
+  assert.match(postAction, /if \(fromPhone\) focusAfterRefresh\(context\.section, context\.index\);/u, "the phone keeps its focus return");
+  assert.doesNotMatch(postAction, /approve\(|requestReject\(|setLevel\(|requestRevoke\(/u, "picking the next row performs nothing");
+  const focus = component.slice(component.indexOf("function focusPcSelection("), component.indexOf("export function UsersTab("));
+  assert.match(focus, /\[data-users-row-key\]/u);
+  assert.match(focus, /\[data-users-tab="\$\{section\}"\]/u);
 });

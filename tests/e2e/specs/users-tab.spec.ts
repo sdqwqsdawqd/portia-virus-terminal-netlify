@@ -211,3 +211,46 @@ test.describe("[PORTIA-22] Users tab mocked responsive backstop", () => {
     expect(writes, "cancelling bulk approval never sends a POST").toEqual([]);
   });
 });
+
+// Phase 26 (UI-04, D-12): on a PC the sections sit in the sticky bar, the rows of the active section on the left and the picked row
+// in the detail pane (.etab-detail) with the actions and the history; the rows carry no actions. The phone steps above are unchanged.
+test.describe("[PORTIA-26] Users tab on a PC: sections in the bar, rows on the left, the detail on the right", () => {
+  test("1280px picking a row opens it in the detail pane; the actions live there, not in the row", async ({ page }) => {
+    const writes = await openUsersTab(page, { width: 1280 });
+    const bar = page.locator(".users-tab > .etab-bar");
+    const detail = page.locator(".users-tab .etab-body > .etab-detail");
+    await expect(bar.getByRole("button", { name: "Заявки · 73" })).toHaveAttribute("aria-current", "true");
+    await expect(bar.getByRole("status")).toHaveText("Ожидают: 73");
+    await expect(detail).toContainText("Выберите заявку или человека");
+    await expect(detail).toContainText("Действия появятся справа.");
+
+    const firstPending = page.locator(".etab-list .users-pick-row").first();
+    await firstPending.click();
+    await expect(firstPending).toHaveAttribute("aria-current", "true");
+    await expect(detail.getByRole("heading", { name: searchNickname })).toBeVisible();
+    await expect(detail.getByRole("button", { name: `Одобрить заявку: ${searchNickname}` })).toBeVisible();
+    await expect(detail.getByRole("button", { name: "ОТКЛОНИТЬ", exact: true })).toBeVisible();
+    await expect(page.locator(".etab-list .users-row-actions")).toHaveCount(0);
+
+    await bar.getByRole("button", { name: "Люди · 81" }).click();
+    await expect(bar.getByRole("button", { name: "Люди · 81" })).toHaveAttribute("aria-current", "true");
+    await expect(detail).toContainText("Выберите заявку или человека");
+    await page.locator(".etab-list .users-pick-row").first().click();
+    await expect(detail.locator(".users-history")).toBeVisible();
+    await expect(detail.getByRole("button", { name: "СМЕНИТЬ УРОВЕНЬ" })).toBeVisible();
+    await expectNoHorizontalOverflow(page, "1280px users detail");
+    expect(writes, "picking rows never sends a write").toEqual([]);
+  });
+
+  test("1280px owner bulk approval is the primary action of the bar", async ({ page }) => {
+    const writes = await openUsersTab(page, { width: 1280, canManageEditors: true, callerIsOwner: true });
+    const bulk = page.locator(".users-tab > .etab-bar .etab-actions").getByRole("button", { name: "ОДОБРИТЬ ИЗ ТАБЛИЦЫ" });
+    await expect(bulk).toHaveClass(/primary-control/);
+    await bulk.click();
+    const dialog = page.getByRole("alertdialog", { name: /Одобрить 200 заявок/ });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "НЕ ОДОБРЯТЬ", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    expect(writes, "cancelling bulk approval never sends a POST").toEqual([]);
+  });
+});

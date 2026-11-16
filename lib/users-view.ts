@@ -183,6 +183,16 @@ export function successAnnouncement(kind: string, nickname: string, level?: Acce
   return usersCopy.actionFailed;
 }
 
+/**
+ * Phase 26 (UI-04, D-12): the row to pick after a decision on a PC — the one after the decided row in the same order, the
+ * previous one when the decided row was last, null when no other row is left or the key is not in the list. Pure: reads only.
+ */
+export function nextUsersSelection(rows: readonly { readonly key: string }[], decidedKey: string): string | null {
+  const index = rows.findIndex((row) => row.key === decidedKey);
+  if (index < 0) return null;
+  return rows[index + 1]?.key ?? rows[index - 1]?.key ?? null;
+}
+
 export function buildUsersView(list: UsersList, query: string, now: Date): UsersView {
   const pendingRows: ViewRow[] = list.pending.rows.map((row) => ({
     key: row.id,
