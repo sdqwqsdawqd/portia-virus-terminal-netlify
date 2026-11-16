@@ -65,11 +65,11 @@
 .promotion-request-actions > button:not(.primary-control):not(.danger-control),
 .promotion-preview-actions > button:not(.primary-control):not(.danger-control) {
   border: 1px solid var(--line-bright);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: rgba(255,255,255,.045);
   color: inherit;
 }
-.promotion-preview-actions > button { flex: 1 1 160px; min-height: 44px; border-radius: 6px; text-align: center; }
+.promotion-preview-actions > button { flex: 1 1 160px; min-height: 44px; border-radius: var(--radius-control); text-align: center; }
 .promotion-preview-actions > button.primary-control {
   border: 1px solid var(--line-bright);
   background: rgba(255,255,255,.045);
@@ -92,7 +92,7 @@
   min-height: 44px;
   padding: 8px 15px;
   border: 1px solid var(--line-bright);
-  border-radius: 7px;
+  border-radius: var(--radius-tab);
   background: rgba(255,255,255,.025);
   color: var(--muted);
   font: 700 11px/1.3 var(--sans);
@@ -122,18 +122,18 @@
 .promotion-bank-workflow .promotion-bank-editor,
 .promotion-bank-workflow .promotion-preview { overflow: visible; border-left: 1px solid var(--line); }
 .promotion-bank-layout[data-mode="create"] .promotion-preview-actions { display: none; }
-.promotion-issue-controls { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; }
+.promotion-issue-controls { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-card); }
 .promotion-issue-controls strong { font: 700 14px/1.4 var(--sans); }
 .promotion-issue-controls p { margin: 0; color: var(--muted); font: 400 12px/1.45 var(--doc); }
 .promotion-manual-pool { display: grid; gap: 5px; max-height: 230px; overflow-y: auto; }
-.promotion-manual-pool label { display: flex; align-items: start; gap: 8px; padding: 7px; border: 1px solid var(--line); border-radius: 6px; font: 400 12px/1.4 var(--doc); }
+.promotion-manual-pool label { display: flex; align-items: start; gap: 8px; padding: 7px; border: 1px solid var(--line); border-radius: var(--radius-card); font: 400 12px/1.4 var(--doc); }
 .promotion-manual-pool input { flex: none; margin-top: 2px; }
 .promotion-manual-pool span { overflow-wrap: anywhere; }
 .promotion-issue-controls .promotion-preview-actions { display: flex; flex-wrap: wrap; margin: 0; }
 
 .promotion-question-list-heading { display: flex; align-items: end; justify-content: space-between; gap: 10px; margin-top: 16px; }
 .promotion-question-list-heading h3 { margin: 0; font: 700 14px/1.3 var(--sans); }
-.promotion-question-list-heading input { width: min(260px, 100%); min-height: 40px; padding: 0 10px; border: 1px solid var(--line-bright); border-radius: 6px; background: rgba(0,0,0,.16); color: inherit; }
+.promotion-question-list-heading input { width: min(260px, 100%); min-height: 40px; padding: 0 10px; border: 1px solid var(--line-bright); border-radius: var(--radius-field); background: rgba(0,0,0,.16); color: inherit; }
 .promotion-bank-editor .promotion-bank-items { margin-top: 8px; }
 .promotion-bank-editor .promotion-bank-items article { display: flex; align-items: center; gap: 10px; padding: 7px 9px; }
 .promotion-bank-editor .promotion-bank-items article > label { flex: 1 1 220px; min-width: 0; align-items: center; }
