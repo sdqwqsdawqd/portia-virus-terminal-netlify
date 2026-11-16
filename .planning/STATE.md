@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed PORTIA-26-06-PLAN.md
-last_updated: "2026-11-16T09:34:53.690Z"
+stopped_at: Completed PORTIA-26-07-PLAN.md
+last_updated: "2026-11-16T11:55:13.223Z"
 last_activity: 2026-11-16
 last_activity_desc: Phase PORTIA-26 execution started
-state_head: 049b2961543b3bab7e1a76181e69bf5803e01c7c
+state_head: 073b8b92423a6756292cc74b49e3f559b20a60e1
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 64
-  completed_plans: 55
+  completed_plans: 56
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: PORTIA-26 (Единый стиль сайта) — EXECUTING
-Plan: 6 of 14
+Plan: 7 of 14
 Status: Executing Phase PORTIA-26
 Last activity: 2026-11-16 — Phase PORTIA-26 execution started
 
@@ -94,6 +94,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-26 P04 | 6min | 2 tasks | 7 files |
 | Phase PORTIA-26 P05 | 10 min | 2 tasks | 5 files |
 | Phase PORTIA-26 P06 | 13 min | 3 tasks | 11 files |
+| Phase PORTIA-26 P07 | 22min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -315,6 +316,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: 26-05: корзина и Таблица — already conformant (таблица fr-столбцов, iframe масштабируется из кода); лист записи вируса 1060px и окно соискателя Повышения 680px — меры, не меняются; пиксели 1366/1920/2560 — BLOCKED (ENV)
 - [Phase PORTIA-26]: 26-06: плавающий чип сохранения заменён липкой панелью .etab-bar из шва portia-editor-tab-shell.tsx во всех черновых вкладках; z-index панели 4 (выше .editor-toc), на ПК верхний отступ панели редактора перенесён в шапку; до 26-07 старые липкие слои Справочника/Информации под панелью static
 - [Phase PORTIA-26]: 26-06: База вирусов и Корзина — etab-body/etab-list/etab-detail рядом с прежними классами, aria-current у выбранной строки, пустая деталь «Выберите запись» из шва; причины отказа под панелью только при несохранённых правках; вставки D-21 PORTIA-26-06 и PORTIA-26-06b
+- [Phase PORTIA-26]: 26-07: A2 — список вкладок «Справочник»/«Информация»/«Сводка» = оглавление EditorToc (только при >= 5 пунктах), разделы — вкладки в nav-слоте липкой панели с aria-current
+- [Phase PORTIA-26]: 26-07: «Сотрудники» — своя EditorActionBar (СОХРАНИТЬ ПРОФИЛЬ + статус saveStatusText), подпись из tabRegistry; липкая только .etab-bar
 
 ### Pending Todos
 
@@ -368,8 +371,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-16T09:34:52.735Z
-Stopped at: Completed PORTIA-26-06-PLAN.md
+Last session: 2026-11-16T11:55:12.267Z
+Stopped at: Completed PORTIA-26-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
