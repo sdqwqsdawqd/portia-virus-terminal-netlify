@@ -1514,10 +1514,14 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .global-format-launch > button, .global-format-launch > button:hover, .global-format-launch > button:focus-visible, .global-format-launch > button[aria-expanded="true"] { width: 38px; padding-inline: 9px; }
 }
 
+/* UI-09: at 521–900px one JS rule (placeShortcuts in lib/shortcut-layout.ts) sets --shortcut-left/top; the workspace is not clipped and
+   grows to --shortcut-content-height, so the page scrolls instead of cutting shortcuts off. A finger scrolls the page from a shortcut. */
 @media (min-width: 521px) and (max-width: 900px) {
-  .workspace { overflow: hidden; padding: 0 0 56px; }
-  .desktop-icons { position: absolute; inset: 0; width: auto; margin: 0; display: block; padding: 0; }
-  .desktop-icon { position: absolute; left: var(--shortcut-left); top: var(--shortcut-top); right: var(--shortcut-right); bottom: var(--shortcut-bottom); width: 94px; min-height: 86px; padding: 7px 5px; font-size: 12px; touch-action: none; }
+  .workspace { min-height: max(calc(100svh - 82px), var(--shortcut-content-height, 0px)); padding: 0 0 56px; }
+  .workspace.mobile-app-open { min-height: calc(100svh - 82px); }
+  /* The measured area keeps the natural workspace height, so a grown workspace never feeds back into the placement. */
+  .desktop-icons { position: absolute; inset: 0 0 auto; height: calc(100svh - 82px); width: auto; margin: 0; display: block; padding: 0; }
+  .desktop-icon { position: absolute; left: var(--shortcut-left); top: var(--shortcut-top); right: auto; bottom: auto; width: 94px; min-height: 86px; padding: 7px 5px; font-size: 12px; touch-action: pan-y pinch-zoom; }
   .desktop-icon-trash { position: absolute; }
   .desktop-icon-symbol { width: 52px; height: 52px; }
   html[data-icon-size="compact"] .desktop-icon { width: 80px; min-height: 72px; padding: 5px 3px; font-size: 11px; }

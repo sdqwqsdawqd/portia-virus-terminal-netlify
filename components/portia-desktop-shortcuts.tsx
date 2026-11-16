@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PortiaIcon, type PortiaIconName } from "@/components/portia-icons";
 import { appMeta, type AppId } from "@/components/portia-desktop-window";
 import { originOf, type OpenOrigin } from "@/lib/window-open";
-import { clampShortcutPosition, type Rect } from "@/lib/shortcut-layout";
+import { clampShortcutPosition, placeShortcuts, shortcutCell, type Rect, type ShortcutCell } from "@/lib/shortcut-layout";
 
 export type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "promotion" | "settings" | "charter" | "sheet" | "trash";
 export type ShortcutPosition = { x: number; y: number };
@@ -50,8 +50,71 @@ function savedShortcutLayout(position: ShortcutPosition): ShortcutLayoutStyle {
   };
 }
 
-export function DesktopIcon({ app, onOpen, position, onMove, onAnnounce, className = "", badge = false }: { app: Exclude<AppId, "editor">; onOpen: (app: AppId, origin?: OpenOrigin) => void; position?: ShortcutPosition; onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void; onAnnounce?: (message: string) => void; className?: string; badge?: boolean }) {
-  return <DraggableDesktopIcon shortcutId={app} label={appMeta[app].label} icon={appMeta[app].icon} position={position} onMove={onMove} onAnnounce={onAnnounce} onActivate={(origin) => onOpen(app, origin)} className={className} badge={badge} />;
+// At 521–900px the spot comes from placeShortcuts, already inside the area and off the other shortcuts, so no CSS clamp is needed.
+function placedShortcutLayout(position: ShortcutPosition): ShortcutLayoutStyle {
+  return { "--shortcut-left": `${position.x}px`, "--shortcut-top": `${position.y}px`, "--shortcut-right": "auto", "--shortcut-bottom": "auto" };
+}
+
+// ---- UI-09: one JS placement rule for the shortcuts at 521–900px ----
+// Same order as the PC homes above: left column, second column, the bottom pair, trash.
+export const desktopShortcutOrder = Object.keys(defaultShortcutLayout) as DesktopShortcutId[];
+const tabletShortcutQuery = "(min-width: 521px) and (max-width: 900px)";
+const shortcutGap = 8;
+const subscribeTabletShortcuts = (notify: () => void) => {
+  const query = window.matchMedia(tabletShortcutQuery);
+  query.addEventListener("change", notify);
+  return () => query.removeEventListener("change", notify);
+};
+const tabletShortcutsSnapshot = () => window.matchMedia(tabletShortcutQuery).matches;
+const tabletShortcutsServerSnapshot = () => false;
+
+export type ShortcutPlacementState = {
+  positions: Partial<Record<DesktopShortcutId, ShortcutPosition>>;
+  contentHeight: number;
+  area: { width: number; height: number };
+  cell: ShortcutCell;
+};
+export type PlacedShortcut = { position: ShortcutPosition; area: { width: number; height: number }; cell: ShortcutCell };
+
+/**
+ * At 521–900px measures .desktop-icons (a ResizeObserver: rotation, window size, icon size) and places every shortcut through
+ * placeShortcuts; null on the PC (≥901px, the approved absolute homes) and on a phone (≤520px, the CSS grid).
+ */
+export function useShortcutPlacement(
+  ref: React.RefObject<HTMLElement | null>,
+  ids: readonly DesktopShortcutId[],
+  iconSize: string,
+  saved: Partial<Record<DesktopShortcutId, ShortcutPosition>>,
+): ShortcutPlacementState | null {
+  const tablet = useSyncExternalStore(subscribeTabletShortcuts, tabletShortcutsSnapshot, tabletShortcutsServerSnapshot);
+  const [placement, setPlacement] = useState<ShortcutPlacementState | null>(null);
+  // A layout effect, so the first frame on this width already shows the placed shortcuts and not the PC homes.
+  useLayoutEffect(() => {
+    const nav = ref.current;
+    if (!tablet || !nav) return;
+    const cell = shortcutCell(iconSize);
+    const measure = () => {
+      // While an app window covers the desktop the nav is not drawn; the last placement stays until it comes back.
+      if (!nav.clientWidth || !nav.clientHeight) return;
+      const area = { width: nav.clientWidth, height: nav.clientHeight };
+      const next: ShortcutPlacementState = { ...placeShortcuts(ids, area, cell, shortcutGap, saved), area, cell };
+      setPlacement((current) => (current && JSON.stringify(current) === JSON.stringify(next) ? current : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, [ref, tablet, ids, iconSize, saved]);
+  return tablet ? placement : null;
+}
+
+export function placedShortcut(placement: ShortcutPlacementState | null, id: DesktopShortcutId): PlacedShortcut | undefined {
+  const position = placement?.positions[id];
+  return placement && position ? { position, area: placement.area, cell: placement.cell } : undefined;
+}
+
+export function DesktopIcon({ app, onOpen, position, placed, onMove, onAnnounce, className = "", badge = false }: { app: Exclude<AppId, "editor">; onOpen: (app: AppId, origin?: OpenOrigin) => void; position?: ShortcutPosition; placed?: PlacedShortcut; onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void; onAnnounce?: (message: string) => void; className?: string; badge?: boolean }) {
+  return <DraggableDesktopIcon shortcutId={app} label={appMeta[app].label} icon={appMeta[app].icon} position={position} placed={placed} onMove={onMove} onAnnounce={onAnnounce} onActivate={(origin) => onOpen(app, origin)} className={className} badge={badge} />;
 }
 
 // What a moved shortcut must leave free: the assistant and the format button (same set for a drop and for a key press).
@@ -92,11 +155,12 @@ export function StartPanelButton({ icon, label, onClick }: { icon: PortiaIconNam
   return <button className={animation.playing ? "is-icon-animating" : undefined} type="button" onPointerEnter={animation.play} onFocus={animation.play} onClick={onClick}><span className="start-panel-icon" data-icon={icon}><PortiaIcon name={icon} /></span>{label}</button>;
 }
 
-function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAnnounce, onActivate, className = "", badge = false }: {
+function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMove, onAnnounce, onActivate, className = "", badge = false }: {
   shortcutId: DesktopShortcutId;
   label: string;
   icon: PortiaIconName;
   position?: ShortcutPosition;
+  placed?: PlacedShortcut;
   onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void;
   onAnnounce?: (message: string) => void;
   onActivate?: (origin: OpenOrigin) => void;
@@ -214,8 +278,8 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, onMove, onAnn
   const sharedProps = {
     className: `desktop-icon${className ? ` ${className}` : ""}${dragging ? " is-dragging" : ""}${dropping ? " is-dropping" : ""}${iconAnimation.playing ? " is-icon-animating" : ""}`,
     "data-shortcut": shortcutId,
-    // A position saved on a bigger screen is held inside the desktop so the icon never disappears.
-    style: position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId],
+    // 521–900px: the spot placeShortcuts gave it. Otherwise a position saved on a bigger screen is held inside the desktop so the icon never disappears.
+    style: placed ? placedShortcutLayout(placed.position) : position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId],
     onPointerDown: handlePointerDown,
     onPointerMove: handlePointerMove,
     onPointerUp: finishDrag,

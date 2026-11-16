@@ -21,7 +21,7 @@ import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { splitEmbeddedMedia } from "@/lib/rich-text-media";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
-import { DesktopIcon, StartPanelButton, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
+import { DesktopIcon, StartPanelButton, desktopShortcutOrder, placedShortcut, useShortcutPlacement, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
 import { AppDeniedPanel, AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/components/portia-desktop-states";
 import { accessCheckFailedText, appViewState, contentSyncFailed, contentSyncSucceeded, emptyCopy, failureFromResponse, type AppFailure, type ContentSync } from "@/lib/app-state";
@@ -456,6 +456,9 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings>(defaultDesktopSettings);
   const [shortcutPositions, setShortcutPositions] = useState<Partial<Record<DesktopShortcutId, ShortcutPosition>>>({});
   const [shortcutPositionsLoaded, setShortcutPositionsLoaded] = useState(false);
+  // UI-09: at 521–900px one JS rule places the shortcuts inside nav.desktop-icons (PC and ≤520px keep their own layouts).
+  const desktopIconsRef = useRef<HTMLElement>(null);
+  const shortcutPlacement = useShortcutPlacement(desktopIconsRef, desktopShortcutOrder, desktopSettings.iconSize, shortcutPositions);
   const [desktopSettingsLoaded, setDesktopSettingsLoaded] = useState(false);
   const [taskbarOrder, setTaskbarOrder] = useState<AppId[]>(() => Object.keys(appMeta) as AppId[]);
   const [taskbarOrderLoaded, setTaskbarOrderLoaded] = useState(false);
@@ -1902,19 +1905,19 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
           <div className="system-status" aria-label="Состояние системы"><span className="status-item"><i className="status-dot" />В СЕТИ</span><time>{clock}</time></div>
         </header>
 
-        <main className={`workspace${windows[activeApp].open && !windows[activeApp].minimized ? " mobile-app-open" : ""}`}>
-          <nav className="desktop-icons" aria-label="Рабочий стол PORTIA" style={desktopSettingsLoaded && shortcutPositionsLoaded ? undefined : { visibility: "hidden" }}>
-            <DesktopIcon app="search" onOpen={openApp} position={shortcutPositions.search} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
-            <DesktopIcon app="archive" onOpen={openApp} position={shortcutPositions.archive} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
-            <DesktopIcon app="employees" onOpen={openApp} position={shortcutPositions.employees} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
-            <DesktopIcon app="broadcasts" onOpen={openApp} position={shortcutPositions.broadcasts} onMove={moveDesktopShortcut} onAnnounce={announceLayout} badge={broadcastUnread} />
-            <DesktopIcon app="info" onOpen={openApp} position={shortcutPositions.info} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
-            <DesktopIcon app="guide" onOpen={openApp} position={shortcutPositions.guide} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
-            <DesktopIcon app="promotion" onOpen={openApp} position={shortcutPositions.promotion} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
-            <DesktopIcon app="settings" onOpen={openApp} position={shortcutPositions.settings} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
-            <DesktopIcon app="charter" onOpen={openApp} position={shortcutPositions.charter} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
-            <DesktopIcon app="sheet" onOpen={openApp} position={shortcutPositions.sheet} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
-            <DesktopIcon app="trash" onOpen={openApp} position={shortcutPositions.trash} onMove={moveDesktopShortcut} onAnnounce={announceLayout} className="desktop-icon-trash" />
+        <main className={`workspace${windows[activeApp].open && !windows[activeApp].minimized ? " mobile-app-open" : ""}`} style={shortcutPlacement ? { "--shortcut-content-height": `${shortcutPlacement.contentHeight}px` } as React.CSSProperties : undefined}>
+          <nav className="desktop-icons" ref={desktopIconsRef} aria-label="Рабочий стол PORTIA" style={desktopSettingsLoaded && shortcutPositionsLoaded ? undefined : { visibility: "hidden" }}>
+            <DesktopIcon app="search" onOpen={openApp} position={shortcutPositions.search} placed={placedShortcut(shortcutPlacement, "search")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="archive" onOpen={openApp} position={shortcutPositions.archive} placed={placedShortcut(shortcutPlacement, "archive")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="employees" onOpen={openApp} position={shortcutPositions.employees} placed={placedShortcut(shortcutPlacement, "employees")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="broadcasts" onOpen={openApp} position={shortcutPositions.broadcasts} placed={placedShortcut(shortcutPlacement, "broadcasts")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} badge={broadcastUnread} />
+            <DesktopIcon app="info" onOpen={openApp} position={shortcutPositions.info} placed={placedShortcut(shortcutPlacement, "info")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="guide" onOpen={openApp} position={shortcutPositions.guide} placed={placedShortcut(shortcutPlacement, "guide")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="promotion" onOpen={openApp} position={shortcutPositions.promotion} placed={placedShortcut(shortcutPlacement, "promotion")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="settings" onOpen={openApp} position={shortcutPositions.settings} placed={placedShortcut(shortcutPlacement, "settings")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="charter" onOpen={openApp} position={shortcutPositions.charter} placed={placedShortcut(shortcutPlacement, "charter")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="sheet" onOpen={openApp} position={shortcutPositions.sheet} placed={placedShortcut(shortcutPlacement, "sheet")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="trash" onOpen={openApp} position={shortcutPositions.trash} placed={placedShortcut(shortcutPlacement, "trash")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} className="desktop-icon-trash" />
           </nav>
 
           {qualificationLocked && <div className="qualification-focus-backdrop" aria-hidden="true"><span>ИДЁТ КВАЛИФИКАЦИОННАЯ ПРОВЕРКА</span></div>}
