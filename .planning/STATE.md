@@ -5,11 +5,11 @@ milestone_name: Доступ и единый стиль
 current_phase: 25
 current_phase_name: "Переключение закрытия: база, кэш, сборка, хранилище"
 status: executing
-stopped_at: Completed PORTIA-25-10-PLAN.md
-last_updated: "2026-11-15T20:03:20.323Z"
+stopped_at: Phase 26 context gathered
+last_updated: "2026-11-16T03:46:31.584Z"
 last_activity: 2026-11-15
 last_activity_desc: Phase PORTIA-25 execution started
-state_head: 4e0dff01b2c261ac7d76539de294ff8eb1f61738
+state_head: e76ec61c695dfd5bb5cd8ffec1f22401d6ac84db
 progress:
   total_phases: 7
   completed_phases: 3
@@ -352,9 +352,9 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-15T20:03:19.436Z
-Stopped at: Completed PORTIA-25-10-PLAN.md
-Resume file: None
+Last session: 2026-11-16T03:46:30.009Z
+Stopped at: Phase 26 context gathered
+Resume file: .planning/phases/PORTIA-26-edinyy-stil-sayta/26-CONTEXT.md
 
 ## Operator Next Steps
 
