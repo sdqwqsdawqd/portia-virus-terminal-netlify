@@ -9,13 +9,14 @@
 .access-card fieldset { min-width: 0; border: 0; padding: 4px 0; margin: 0; }
 .access-card fieldset label { display: flex; align-items: center; min-height: 44px; gap: 10px; cursor: pointer; }
 .access-card fieldset input { width: 18px; height: 18px; accent-color: var(--teal); }
-.access-card button:not(.access-close), .access-reopen { min-height: 44px; padding: 8px 14px; border: 1px solid var(--teal); background: var(--teal); color: var(--desktop-base); font: inherit; font-weight: 700; cursor: pointer; }
+.access-card button:not(.access-close), .access-reopen { min-height: 44px; padding: 8px 14px; border: 1px solid var(--teal-dim); background: var(--teal-soft); color: var(--teal); font: inherit; font-weight: 700; cursor: pointer; }
+.access-card button:not(.access-close):hover:not(:disabled), .access-reopen:hover { border-color: var(--teal); }
 .access-card button:disabled { opacity: .65; cursor: wait; }
 .access-card a { display: inline-block; margin-top: 20px; color: var(--paper); text-decoration: underline; text-underline-offset: 4px; }
 .access-error { margin: 0; color: #ffaaa2; font-size: 13px; }
 .access-status { margin-bottom: 20px; line-height: 1.5; }
 .access-close { position: absolute; right: 12px; top: 12px; width: 44px; height: 44px; border: 0; background: transparent; color: var(--paper); font-size: 28px; cursor: pointer; }
-.access-reopen { position: fixed; z-index: 1000; top: 16px; right: 16px; }
+.access-reopen { position: fixed; z-index: 1000; top: 16px; right: 16px; background: linear-gradient(var(--teal-soft), var(--teal-soft)), var(--panel); }
 .access-dots { display: inline-block; animation: access-dots 1200ms infinite; }
 @keyframes access-dots { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
 html:is([data-motion="reduced"], [data-motion="off"]) .access-dots { animation: none; opacity: 1; }
@@ -85,9 +86,10 @@ html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-
 .owner-login-card label { display: grid; gap: 7px; color: oklch(.691 calc(.025 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
 .owner-login-card input { min-height: 44px; padding: 10px 12px; border: 1px solid oklch(.425 calc(.041 * var(--accent-chroma)) var(--accent-hue)); outline: none; background: oklch(.167 calc(.016 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.966 calc(.01 * var(--accent-chroma)) var(--accent-hue)); font-size: 16px; }
 .owner-login-card input:focus { border-color: var(--teal); }
-.owner-login-card button { min-height: 42px; border: 1px solid var(--teal-dim); background: var(--teal-soft); color: var(--teal); font: 700 11px var(--sans); letter-spacing: .06em; cursor: pointer; }
+.owner-login-card button { border: 1px solid var(--teal-dim); background: var(--teal-soft); color: var(--teal); font: 700 11px var(--sans); letter-spacing: .06em; cursor: pointer; }
 .owner-login-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.owner-login-actions button:last-child { background: transparent; color: oklch(.77 calc(.026 * var(--accent-chroma)) var(--accent-hue)); }
+.owner-login-actions button:last-child { background: transparent; color: oklch(.812 calc(.02 * var(--accent-chroma)) var(--accent-hue)); }
+.owner-login-card button:hover { border-color: var(--teal); }
 .owner-login-card > a { display: inline-block; margin-top: 22px; color: oklch(.66 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); text-decoration: none; }
 .owner-login-alert, .owner-login-success { padding: 12px; border: 1px solid #754b46; color: #e0aaa3; font-size: 13px; line-height: 1.45; }
 .owner-login-success { border-color: #2d6559; color: #8ed7c6; }
@@ -2593,7 +2595,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .editor-field textarea { padding: 8px 16px; border-radius: var(--radius-field); }
 /* Вкладки: одна полоса; у текущей вкладки линия 3px на любой ширине, линия ошибки сохранения сильнее. */
 .editor-tabs button, .editor-section-tabs nav button, .users-sections button, .promotion-editor-branches button, .promotion-queue-filters button, .promotion-bank-workflow-tabs button { min-height: 40px; padding: 0 16px; border-radius: var(--radius-tab); font-size: 11px; font-weight: 700; }
-.editor-tabs button.active, .editor-section-tabs nav button[aria-pressed="true"], .editor-section-tabs nav button[aria-current="true"], .users-sections button[aria-current="true"], .promotion-editor-branches button.active, .promotion-queue-filters button.active, .promotion-bank-workflow-tabs button.active { box-shadow: inset 0 -3px 0 var(--teal); }
+.editor-tabs button.active, .editor-section-tabs nav button[aria-current="true"], .users-sections button[aria-current="true"], .promotion-editor-branches button.active, .promotion-queue-filters button.active, .promotion-bank-workflow-tabs button.active { box-shadow: inset 0 -3px 0 var(--teal); }
 .editor-tabs button[data-save-error], .editor-tabs button.active[data-save-error] { box-shadow: inset 0 -2px 0 var(--danger); }
 /* Строки списков: карточка 7px, отступ 8px 16px, заголовок 13px, подпись 11px, зазор 8px. */
 .editor-record-list button, .users-row, .global-result, .personnel-list > button { padding: 8px 16px; border-radius: var(--radius-card); }
@@ -2693,4 +2695,9 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .etab-empty { padding: 48px 16px; }
   .etab-body[data-mobile-view="list"] > .etab-detail { display: none; }
 }
+/* Экран заявки и вход владельца (UI-03, D-11 шаг 4): угол диалога, поля роли field (44px сохранены), кнопки 44px с углом
+   control; цвета мягкого primary и secondary — в своих правилах в начале файла. Ширина карточек, радиокнопки и тексты не меняются. */
+.access-card, .owner-login-card { border-radius: var(--radius-dialog); }
+.access-card input:not([type=radio]), .owner-login-card input { box-sizing: border-box; min-height: 44px; border-radius: var(--radius-field); }
+.access-card button:not(.access-close), .access-reopen, .owner-login-card button { min-height: 44px; border-radius: var(--radius-control); }
 /* ui-unify:end */

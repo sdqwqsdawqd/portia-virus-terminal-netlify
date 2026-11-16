@@ -306,14 +306,15 @@ test("UI-03: single-line fields share one box and a phone touch target", () => {
 const TABS = [
   ".editor-tabs button",
   ".editor-section-tabs nav button",
+  ".users-sections button",
   ".promotion-editor-branches button",
   ".promotion-queue-filters button",
   ".promotion-bank-workflow-tabs button",
 ];
 const ACTIVE_TABS = [
   ".editor-tabs button.active",
-  '.editor-section-tabs nav button[aria-pressed="true"]',
   '.editor-section-tabs nav button[aria-current="true"]',
+  '.users-sections button[aria-current="true"]',
   ".promotion-editor-branches button.active",
   ".promotion-queue-filters button.active",
   ".promotion-bank-workflow-tabs button.active",
@@ -332,6 +333,8 @@ test("UI-03: tabs share one box and the active tab carries a 3px line at every w
   for (const selector of ACTIVE_TABS) {
     assert.match(lastDeclaration(cascadeCss, selector, "box-shadow") ?? "", /inset 0 -3px 0 var\(--teal\)/u, `${selector} active line`);
   }
+  // 26-07 moved the section tabs to aria-current; the old aria-pressed selector matched nothing and is gone (26-09).
+  assert.doesNotMatch(portiaCss, /\.editor-section-tabs nav button\[aria-pressed="true"\]/u);
 });
 
 test("UI-03: the save-error line of a tab outranks the active line", () => {
@@ -359,7 +362,7 @@ test("UI-03: list rows share one card box, one title size and one caption size",
   }
 });
 
-test("UI-03: the block changes no colour, font family or animation; the access screens wait for step 4", () => {
+test("UI-03: the block changes no colour, font family or animation; the access screens take only geometry from it", () => {
   const { text } = unifyBlock(portiaCss);
   for (const rule of rulesOf(text)) {
     for (const [name, value] of declarations(rule.body)) {
@@ -367,7 +370,47 @@ test("UI-03: the block changes no colour, font family or animation; the access s
       assert.doesNotMatch(value, /var\(--(?:sans|mono|doc|display|serif)\)/u, `${rule.selectors.join(", ")} sets a font family`);
     }
   }
-  assert.doesNotMatch(text, /\.access-card|\.owner-login-card/u, "26-09 restyles the access card and the owner login");
+});
+
+// Phase 26 (UI-03, D-11 step 4): the request card and the owner login use the dialog corner, the field box (44px kept) and the
+// shared soft primary instead of a solid fill; the secondary owner action is the shared secondary. Width, radios, copy stay.
+const ACCESS_SUBMIT = ".access-card button:not(.access-close)";
+
+function borderColour(selector: string) {
+  return lastDeclaration(portiaCss, selector, "border-color") ?? lastDeclaration(portiaCss, selector, "border") ?? "";
+}
+
+test("UI-03 (D-11 step 4): the request card and the owner login have the dialog corner and the field box", () => {
+  for (const card of [".access-card", ".owner-login-card"]) {
+    assert.equal(lastDeclaration(portiaCss, card, "border-radius"), "var(--radius-dialog)", `${card} corner`);
+    assert.equal(lastDeclaration(portiaCss, card, "width"), "min(440px, 100%)", `${card} keeps its width`);
+  }
+  for (const field of [".access-card input:not([type=radio])", ".owner-login-card input"]) {
+    assert.equal(lastDeclaration(portiaCss, field, "border-radius"), "var(--radius-field)", `${field} radius`);
+    assert.equal(lastDeclaration(portiaCss, field, "min-height"), "44px", `${field} height`);
+  }
+  // The fieldset radios stay as they were.
+  assert.equal(lastDeclaration(portiaCss, ".access-card fieldset input", "width"), "18px");
+  assert.equal(lastDeclaration(portiaCss, ".access-card fieldset input", "height"), "18px");
+  assert.equal(lastDeclaration(portiaCss, ".access-card fieldset input", "accent-color"), "var(--teal)");
+});
+
+test("UI-03 (D-11 step 4): the submit buttons are the soft primary, 44px; the second owner action is the secondary", () => {
+  for (const button of [ACCESS_SUBMIT, ".owner-login-card button"]) {
+    assert.equal(lastDeclaration(portiaCss, button, "background"), "var(--teal-soft)", `${button}: no solid fill`);
+    assert.match(borderColour(button), /var\(--teal-dim\)/u, `${button} border`);
+    assert.equal(lastDeclaration(portiaCss, button, "color"), "var(--teal)", `${button} text`);
+    assert.equal(lastDeclaration(portiaCss, button, "min-height"), "44px", `${button} height`);
+    assert.equal(lastDeclaration(portiaCss, button, "border-radius"), "var(--radius-control)", `${button} corner`);
+  }
+  // The reopen button floats over the desktop: the same soft fill over an opaque panel, so it stays readable.
+  assert.match(lastDeclaration(portiaCss, ".access-reopen", "background") ?? "", /var\(--teal-soft\)[\s\S]*var\(--panel\)/u);
+  assert.match(borderColour(".access-reopen"), /var\(--teal-dim\)/u);
+  assert.equal(lastDeclaration(portiaCss, ".access-reopen", "color"), "var(--teal)");
+  assert.equal(lastDeclaration(portiaCss, `${ACCESS_SUBMIT}:hover:not(:disabled)`, "border-color"), "var(--teal)", "hover strengthens the border");
+  assert.doesNotMatch(portiaCss, /background:\s*var\(--teal\);\s*color:\s*var\(--desktop-base\)/u, "the solid accent fill is gone");
+  assert.equal(lastDeclaration(portiaCss, ".owner-login-actions button:last-child", "background"), "transparent");
+  assert.equal(lastDeclaration(portiaCss, ".owner-login-actions button:last-child", "color"), lastDeclaration(portiaCss, ".secondary-control", "color"), "the shared secondary text");
 });
 
 // Phase 26 (UI-05, D-22): the close cross of a window sits in the extreme top-right corner. The controls fill the right end
