@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 import { PortiaIcon, type PortiaIconName } from "@/components/portia-icons";
 import { appMeta, type AppId } from "@/components/portia-desktop-window";
 import { originOf, type OpenOrigin } from "@/lib/window-open";
-import { clampShortcutPosition, placeShortcuts, shortcutCell, type Rect, type ShortcutCell } from "@/lib/shortcut-layout";
+import { clampShortcutPosition, placeShortcuts, shortcutCell, shortcutDropArea, type Rect, type ShortcutCell } from "@/lib/shortcut-layout";
 
 export type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "promotion" | "settings" | "charter" | "sheet" | "trash";
 export type ShortcutPosition = { x: number; y: number };
@@ -178,10 +178,13 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
     if (dropTimer.current !== null) window.clearTimeout(dropTimer.current);
   }, []);
 
+  // 521–900px: the cell and area of the placement, so a drop lands where the next placement keeps it; PC: the shortcut and the workspace.
+  const dropBounds = (workspace: HTMLElement, target: HTMLElement) => placed ? { size: placed.cell, area: shortcutDropArea(placed.area) } : { size: { width: target.offsetWidth, height: target.offsetHeight }, area: { width: workspace.clientWidth, height: workspace.clientHeight } };
+
   const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {
     iconAnimation.play();
-    // Same breakpoint as windows: the phone grid has no free drag.
-    if (window.matchMedia("(max-width: 900px)").matches || event.button !== 0) return;
+    // ≤520px — сетка телефона без свободного перетаскивания; 521–900 — то же правило, что и ПК, с расстановкой JS.
+    if (window.matchMedia("(max-width: 520px)").matches || event.button !== 0) return;
     if (dropTimer.current !== null) window.clearTimeout(dropTimer.current);
     setDropping(false);
     const workspace = event.currentTarget.closest<HTMLElement>(".workspace");
@@ -211,11 +214,8 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
     operation.moved = true;
     setDragging(true);
     event.preventDefault();
-    operation.last = clampShortcutPosition(
-      { x: operation.originX + deltaX, y: operation.originY + deltaY },
-      { width: operation.target.offsetWidth, height: operation.target.offsetHeight },
-      { width: operation.workspace.clientWidth, height: operation.workspace.clientHeight },
-    );
+    const bounds = dropBounds(operation.workspace, operation.target);
+    operation.last = clampShortcutPosition({ x: operation.originX + deltaX, y: operation.originY + deltaY }, bounds.size, bounds.area);
     onMove(shortcutId, operation.last);
   };
 
@@ -226,12 +226,8 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
     if (operation.moved) {
       // On drop the shortcut also leaves the assistant and the format button free.
       const obstacles = shortcutObstacles(operation.workspace);
-      onMove(shortcutId, clampShortcutPosition(
-        operation.last,
-        { width: operation.target.offsetWidth, height: operation.target.offsetHeight },
-        { width: operation.workspace.clientWidth, height: operation.workspace.clientHeight },
-        obstacles,
-      ));
+      const bounds = dropBounds(operation.workspace, operation.target);
+      onMove(shortcutId, clampShortcutPosition(operation.last, bounds.size, bounds.area, obstacles));
       suppressActivation.current = true;
       window.setTimeout(() => { suppressActivation.current = false; }, 0);
       setDropping(true);
@@ -247,7 +243,8 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
   // The keyboard alternative to the drag (WCAG 2.5.7): Alt+Arrow moves the focused shortcut, Shift makes the step larger. Plain arrows and Enter keep their meaning.
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (!event.altKey || event.ctrlKey || !event.key.startsWith("Arrow")) return;
-    if (window.matchMedia("(max-width: 900px)").matches) return;
+    // ≤520px — сетка телефона без свободного перетаскивания; 521–900 — то же правило, что и ПК, с расстановкой JS.
+    if (window.matchMedia("(max-width: 520px)").matches) return;
     const workspace = event.currentTarget.closest<HTMLElement>(".workspace");
     if (!workspace) return;
     const step = event.shiftKey ? keyboardMoveLargeStep : keyboardMoveStep;
@@ -257,10 +254,11 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
     event.preventDefault();
     const iconRect = event.currentTarget.getBoundingClientRect();
     const workspaceRect = workspace.getBoundingClientRect();
+    const bounds = dropBounds(workspace, event.currentTarget);
     onMove(shortcutId, clampShortcutPosition(
       { x: iconRect.left - workspaceRect.left + deltaX, y: iconRect.top - workspaceRect.top + deltaY },
-      { width: event.currentTarget.offsetWidth, height: event.currentTarget.offsetHeight },
-      { width: workspace.clientWidth, height: workspace.clientHeight },
+      bounds.size,
+      bounds.area,
       shortcutObstacles(workspace),
     ));
     onAnnounce?.(`Ярлык «${label}» перемещён`);
@@ -290,7 +288,7 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
     onFocus: iconAnimation.play,
     onDragStart: (event: React.DragEvent<HTMLElement>) => event.preventDefault(),
   };
-  const content = <><span data-icon={icon} className="desktop-icon-symbol"><PortiaIcon name={icon} />{badge && <i className="desktop-icon-badge" aria-label="Есть новая сводка" />}</span><span>{label}</span></>;
+  const content = <><span data-icon={icon} className="desktop-icon-symbol"><PortiaIcon name={icon} />{badge && <i className="desktop-icon-badge" aria-label="Есть новая сводка" />}</span><span className="desktop-icon-label">{label}</span></>;
 
   return <button {...sharedProps} type="button">{content}</button>;
 }

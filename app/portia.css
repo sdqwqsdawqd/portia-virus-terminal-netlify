@@ -1528,6 +1528,8 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   html[data-icon-size="compact"] .desktop-icon-symbol { width: 44px; height: 44px; }
   html[data-icon-size="large"] .desktop-icon { width: 110px; min-height: 98px; padding: 8px 5px; font-size: 13px; }
   html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
+  /* A long label wraps inside the icon width: two lines at most (the room shortcutCell reserves), then an ellipsis. */
+  .desktop-icon-label { display: -webkit-box; max-width: 100%; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 }
 
 @media (max-width: 430px) {
