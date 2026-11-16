@@ -128,6 +128,18 @@ test("WR-01: a tab outside the draft tabs shows the unsaved draft through the co
   assert.match(users, /\/> : <EditorDraftBar \/>\}/, "the phone list of «Пользователи» has no bar, so it renders the draft bar");
 });
 
+test("WR-04: «Повышение» tells a success from a failure; the status of a bar stays one line with an ellipsis whatever its tone", () => {
+  assert.match(promotionMain, /const \[note, setNote\] = useState\(\{ text: "", ok: false \}\); const message = note\.text; const setMessage = useCallback\(\(text: string, ok = false\) => setNote\(\{ text, ok \}\), \[\]\);/, "a message is an error unless the call says it is a success");
+  const successes = ['"Запрос отклонён и удалён из активной очереди." : "Запрос удалён.", true)', "Привязка ${nicknameKey} сброшена.`, true)"];
+  for (const success of successes) assert.ok(promotionMain.includes(success), `${success} is a success`);
+  assert.equal(promotionMain.split(", true)").length - 1, 2, "only the two successes pass the flag; every other message keeps the error tone");
+  // .editor-save-status.error (0,2,0) sets white-space: normal; the bar rule is (0,3,0), so it wins whatever the order.
+  assert.equal(declared(".etab-bar .etab-status.editor-save-status", "white-space"), "nowrap");
+  assert.equal(declared(".editor-save-status.error", "white-space"), "normal", "the old tone rule stays for other places");
+  assert.equal(declared(".etab-status", "text-overflow"), "ellipsis");
+  assert.equal(declared(".etab-status", "overflow"), "hidden");
+});
+
 test("WR-05: exactly one live region announces the save status: the bar's status on the draft tabs, the hidden line on the other tabs", () => {
   const code = stripComments(editor);
   const hidden = '{!editorSections.some((section) => section === tab) && <p className="sr-only" role="status" aria-live="polite">';
@@ -421,7 +433,7 @@ test("D-13b: «Повышение» renders the shared action bar: the branches 
   assert.ok(bar.includes("aria-label={`${label}: ${count}`} onKeyDown={moveButtonTab}"), "the accessible name with its count and the arrow keys stay");
   assert.ok(bar.includes('{label}<span className="tab-count" aria-hidden="true">{count}</span>'), "the count is the house plaque");
   assert.ok(bar.includes("['requests','ЗАПРОСЫ',ordinaryCount + qualificationCount],['tasks','ЗАДАНИЯ',banks.taskBanks.length],['qualification','КВАЛИФИКАЦИЯ',qualificationCount]"), "the same three branches and counts");
-  assert.ok(bar.includes('statusText={message} tone={message ? "error" : ""} />'), "the queue message is the polite status of the bar");
+  assert.ok(bar.includes('statusText={message} tone={message ? (note.ok ? "saved" : "error") : ""} />'), "the queue message is the polite status of the bar; WR-04: a success is not red");
   for (const gone of ["actions=", "СОХРАНИТЬ", "ОТМЕНИТЬ", "unsavedCount"]) assert.ok(!bar.includes(gone), `${gone}: no editor draft action on this bar`);
   assert.ok(!promotionMain.includes("promotion-editor-message"), "the old message line is gone");
   assert.doesNotMatch(styles, /\.promotion-editor-message/, "and so is its rule");

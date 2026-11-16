@@ -2667,6 +2667,8 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .etab-bar { position: sticky; top: 0; z-index: 4; box-sizing: border-box; display: flex; align-items: center; gap: 8px; min-height: 48px; margin: 0 0 8px; padding: 0 16px; border-bottom: 1px solid var(--line); }
 .etab-nav { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; overflow-x: auto; white-space: nowrap; }
 .etab-status { flex: 0 1 auto; min-width: 0; margin: 0 0 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* WR-04: .editor-save-status.error даёт white-space: normal (0,2,0) и перебивал бы .etab-status (0,1,0): в панели статус остаётся одной строкой с многоточием, полный текст — в title. Здесь (0,3,0). */
+.etab-bar .etab-status.editor-save-status { white-space: nowrap; }
 .etab-actions { display: flex; flex: none; align-items: center; gap: 8px; }
 .etab-actions .editor-undo-step { width: 40px; min-width: 40px; padding: 0; }
 .etab-message { margin: 0 0 8px; padding: 0 16px; overflow-wrap: anywhere; }
