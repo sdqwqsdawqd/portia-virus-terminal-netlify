@@ -671,7 +671,8 @@ test.describe("[STAB-A11Y-02] phone touch, overflow, occlusion", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
   });
 
-  test("«Информация» on a phone: the list and an article screen have no critical or serious axe violations", async ({ page }, testInfo) => {
+  // UI-08 (D-14, D-15): the article is always on screen; the list opens in the flow under the «РАЗДЕЛЫ» bar. Both states are scanned.
+  test("«Информация» on a phone: the open sections list and the picked article have no critical or serious axe violations", async ({ page }, testInfo) => {
     const response = await page.request.get("/api/content");
     const content = response.ok() ? ((await response.json()) as { content?: { infoSections?: { id: string; title: string }[] } }).content : undefined;
     const sections = content?.infoSections ?? [];
@@ -680,14 +681,19 @@ test.describe("[STAB-A11Y-02] phone touch, overflow, occlusion", () => {
     await desktop.goto();
     await desktop.openApp("Информация");
     const window = desktop.window("Информация");
-    await expect(window.locator(".info-index")).toBeVisible();
+    await expect(window.locator(".info-document")).toBeVisible();
+    const sectionsButton = window.getByRole("button", { name: /^РАЗДЕЛЫ/i });
+    await sectionsButton.click();
+    await expect(sectionsButton).toHaveAttribute("aria-expanded", "true");
+    await expect(window.locator("#info-sections-list")).toBeVisible();
     await settle(page);
     const list = summary(await scan(page, testInfo, "info-phone-list"));
     const plain = sections.find((section) => section.title.trim());
     const article: string[] = [];
     if (plain) {
       await window.locator(`[data-info-id="${plain.id}"]`).click();
-      await expect(window.locator(".info-library")).toHaveAttribute("data-info-screen", "article");
+      await expect(sectionsButton).toHaveAttribute("aria-expanded", "false");
+      await expect(window.locator("#info-sections-list")).toBeHidden();
       await settle(page);
       article.push(...summary(await scan(page, testInfo, "info-phone-article")));
     }

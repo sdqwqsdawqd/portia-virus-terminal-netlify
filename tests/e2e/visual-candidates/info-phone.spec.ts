@@ -4,6 +4,7 @@ import { expect, test } from "../fixtures/test";
 import { captureCandidate, recordBlockedCandidate } from "./support";
 
 // Phase 20-16 (D-28..D-32): «Информация» on a phone, before and after the list-navigation change.
+// Phase 26-10 (UI-08, D-14 … D-16): the article is always on screen; the list opens in the flow under the «РАЗДЕЛЫ ▾» bar.
 // Candidates only: every frame goes under visual-candidates/.runs; nothing here touches tests/e2e/visual/__screenshots__.
 // STAB-BASE-03 is the only requirement family support.ts accepts; the evidence belongs to STAB-A11Y-02/03.
 // The records come from the target's own /api/content answer (read, never replaced). A frame the target has no data for is recorded
@@ -31,13 +32,21 @@ async function openInfo(page: Page) {
   await desktop.openApp("Информация");
   const window = desktop.window("Информация");
   await expect(window.getByRole("status").filter({ hasText: /Загрузка/ })).toHaveCount(0);
-  await expect(window.locator(".info-index")).toBeVisible();
+  await expect(window.locator(".info-document")).toBeVisible();
   return window;
 }
 
-test("[STAB-A11Y-02] info-phone-open: the list of sections as first seen", async ({ page, browser, determinism }, testInfo) => {
+// The phone list waits behind the РАЗДЕЛЫ button (UI-08); before 26-10 it was on screen already and there was no such button.
+async function openSections(window: Awaited<ReturnType<typeof openInfo>>) {
+  const button = window.getByRole("button", { name: /^РАЗДЕЛЫ/i });
+  if ((await button.count()) === 0) return;
+  if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+  await expect(window.locator("#info-sections-list")).toBeVisible();
+}
+
+test("[STAB-A11Y-02] info-phone-open: «Информация» as first seen (since 26-10 the first article under the closed РАЗДЕЛЫ bar)", async ({ page, browser, determinism }, testInfo) => {
   const window = await openInfo(page);
-  await expect(window.locator(".info-index > div").first()).toBeVisible();
+  await expect(window.locator(".info-document h1")).toBeVisible();
   await captureCandidate({ page, browser, determinism, testInfo }, {
     ...base, id: "info-phone-open", state: "open", intendedSnapshot,
   });
@@ -55,14 +64,16 @@ test("[STAB-A11Y-02] info-phone-article: the article of the first section withou
     test.skip(true, "BLOCKED (DATA): no section without subsections on this target.");
     return;
   }
+  await openSections(window);
   await window.locator(".info-index > div > button").filter({ has: page.getByText(plain.title, { exact: true }) }).first().click();
   await expect(window.locator(".info-document h1")).toHaveText(plain.title);
   await captureCandidate(context, spec);
 });
 
-// The two frames below exist only after 20-16: they are taken when the library carries data-info-screen, otherwise nothing is recorded.
+// The two frames below exist only on the phone layout of the library: they are taken when it carries data-sections-open (26-10),
+// otherwise nothing is recorded.
 async function afterChangeOnly(window: Awaited<ReturnType<typeof openInfo>>) {
-  return (await window.locator(".info-library").getAttribute("data-info-screen")) !== null;
+  return (await window.locator(".info-library").getAttribute("data-sections-open")) !== null;
 }
 
 const withSubsections = (sections: Section[]) => sections.find((section) => section.title.trim() && section.subsections.length >= 2);
@@ -78,6 +89,7 @@ test("[STAB-A11Y-02] info-phone-expanded: a section with subsections opened in t
     test.skip(true, "BLOCKED (DATA): no section with two or more subsections on this target.");
     return;
   }
+  await openSections(window);
   await window.locator(".info-index > div > button[aria-expanded]").filter({ has: page.getByText(section.title, { exact: true }) }).click();
   await expect(window.locator(`[data-info-id="${section.subsections[0].id}"]`)).toBeVisible();
   await captureCandidate(context, spec);
@@ -94,6 +106,7 @@ test("[STAB-A11Y-02] info-phone-next: the end of the first subsection article wi
     test.skip(true, "BLOCKED (DATA): no section with two or more subsections on this target.");
     return;
   }
+  await openSections(window);
   await window.locator(".info-index > div > button[aria-expanded]").filter({ has: page.getByText(section.title, { exact: true }) }).click();
   await window.locator(`[data-info-id="${section.subsections[0].id}"]`).click();
   const next = window.locator(".info-next button");
