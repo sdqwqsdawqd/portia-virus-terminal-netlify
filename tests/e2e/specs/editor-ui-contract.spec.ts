@@ -103,11 +103,11 @@ async function openInfoTab(page: Page) {
 // Measured on the editor before this plan and NOT caused by D-62 (the guard proves the file differs from the sample only by the D-62 hunk); fixing them needs
 // edits of components/portia-editor.tsx and app/portia.css that D-58/D-64 forbid here, so they go to deferred-items.md for an owner decision.
 // Tolerated node by node (by the markup of the node), never by rule: any other critical or serious node fails the test.
-//  - color-contrast: the eyebrow «УПРАВЛЕНИЕ СОДЕРЖИМЫМ» of the editor header, 4.28:1 (PC).
-// 26-13 (UI-10): the name of .nested-editor-toggle now holds its visible text (lib/card-toggle-name.ts), so its tolerance is gone; the axe lane has not run since (BLOCKED).
-const knownBeforeD62: Record<string, string[]> = {
-  "color-contrast": ['class="eyebrow"'],
-};
+// 26-13 (UI-10): both findings are fixed in code, so their tolerances are gone and the list is empty:
+//  - label-free name: the name of the card toggle now holds its visible text (lib/card-toggle-name.ts);
+//  - color-contrast: the editor header eyebrow is --teal text now (lib/ui-contrast.test.ts, D-20).
+// The axe lane has not run since the fix (BLOCKED): this list is what the next run must prove, not a recorded pass.
+const knownBeforeD62: Record<string, string[]> = {};
 
 const isPhone = () => test.info().project.name.endsWith("-phone");
 
@@ -295,7 +295,7 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
     const moved = await new AxeBuilder({ page }).include(".editor-section-addbar").include(".editor-section-tabs").analyze();
     expect(blockingOf(moved.violations).map(describe), "critical or serious axe violations in the add-section bar and the section tabs").toEqual([]);
 
-    // The whole page: only the two findings measured before this plan (see knownBeforeD62) are tolerated, node by node.
+    // The whole page: only the findings listed in knownBeforeD62 are tolerated, node by node (none since 26-13).
     const results = await new AxeBuilder({ page }).analyze();
     await testInfo.attach("axe-editor-info", {
       body: Buffer.from(JSON.stringify(results.violations.map((violation) => ({
@@ -309,7 +309,7 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
       .map((violation) => ({ ...violation, nodes: violation.nodes.filter((node) => !(knownBeforeD62[violation.id] ?? []).some((marker) => node.html.includes(marker))) }))
       .filter((violation) => violation.nodes.length > 0)
       .map(describe);
-    expect(unexpected, "critical or serious axe violations other than the two known ones").toEqual([]);
+    expect(unexpected, "critical or serious axe violations other than the known ones (knownBeforeD62)").toEqual([]);
     expect(writes, "the UI contract never writes").toEqual([]);
   });
 });
@@ -930,11 +930,11 @@ test.describe("[STAB-REL-08] D-66 the closed block is compact", () => {
 
 test.describe("[STAB-A11Y-02] D-66 the closed block «Видимая часть» is accessible", () => {
 
-  // Found while D-63 was checked, in nodes the plan does not touch (the hint under a text field with GIF, the small caption of a record row of «База вирусов» and «Корзина»; deferred-items.md 20-53):
-  // tolerated node by node, together with the two known before D-62. Anything inside the block «Видимая часть» is tolerated never.
+  // Found while D-63 was checked (the hint under a text field with GIF, the small caption of a record row of «База вирусов» and «Корзина»; deferred-items.md 20-53).
+  // 26-13 (UI-10): both moved to the .658 text colour (the hint is 11px now) and their tolerances are gone; node-by-node tolerance stays the mechanism.
+  // Anything inside the block «Видимая часть» is tolerated never. The axe lane has not run since the fix (BLOCKED).
   const knownBeforeD63: Record<string, string[]> = {
     ...knownBeforeD62,
-    "color-contrast": [...knownBeforeD62["color-contrast"], 'class="formatted-text-field-hint"', '<small title="'],
   };
   const axeSurfaces: [string, Surface][] = [["Справочник", guideSectionSurface], ["База вирусов", virusPhotoSurface], ["Информация", infoPhotoSurface], ["Корзина", recycleFileSurface]];
   for (const [tabName, surface] of axeSurfaces) {
