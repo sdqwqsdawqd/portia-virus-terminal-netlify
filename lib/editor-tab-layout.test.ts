@@ -120,12 +120,29 @@ test("WR-01: a tab outside the draft tabs shows the unsaved draft through the co
   assert.ok(provider.includes('{tab === "access" && canManageEditors && <EditorDraftBar />}'), "the access tab has no bar of its own, so it renders the draft bar");
   assert.equal(code.split("<EditorActionBar").length - 1, 2, "no third action bar: the other tabs reuse their own");
   assert.match(shell, /export const EditorDraftBarContext = createContext<EditorDraftBarState \| null>\(null\)/);
-  assert.match(stripComments(shell), /export function EditorDraftBar\(\)/);
+  assert.match(stripComments(shell), /export function EditorDraftBar\(\{ banner \}/);
   const bar = stripComments(shell);
   assert.match(bar, /const draft = useContext\(EditorDraftBarContext\);[\s\S]*\{draft && <DraftRow draft=\{draft\} \/>\}/, "EditorActionBar carries the draft row inside its own section");
   assert.match(bar, /className="etab-draft" role="group"/);
   const users = lf(readFileSync(new URL("../components/portia-users-tab.tsx", import.meta.url), "utf8"));
-  assert.match(users, /\/> : <EditorDraftBar \/>\}/, "the phone list of «Пользователи» has no bar, so it renders the draft bar");
+  assert.match(users, /\/> : <EditorDraftBar banner=\{staleBanner\} \/>\}/, "the phone list of «Пользователи» has no bar, so it renders the draft bar");
+});
+
+test("WR-06: the «data is stale» banner of «Пользователи» rides inside the sticky bar, so the bar never covers it", () => {
+  const code = stripComments(shell);
+  assert.match(code, /\{banner && <div className="etab-banner">\{banner\}<\/div>\}\n\s*<\/section>/, "the banner is the last row of the bar's own section");
+  assert.equal(code.split('className="etab-banner"').length - 1, 2, "the action bar and the draft bar carry it");
+  assert.match(code, /if \(!draft\) return banner \? <>\{banner\}<\/> : null;/, "without a bar the banner stands alone as before");
+  const users = lf(readFileSync(new URL("../components/portia-users-tab.tsx", import.meta.url), "utf8"));
+  assert.equal(users.split("<AppStaleBanner").length - 1, 1, "one banner element");
+  assert.ok(users.includes("banner={staleBanner}\n      /> : <EditorDraftBar banner={staleBanner} />}"), "PC: in the action bar; phone: in the draft bar or alone");
+  assert.ok(!/<\/EditorActionBar>|\{failure && lastGoodAt \? <AppStaleBanner/.test(users), "no separate sticky banner beside the bar");
+  assert.equal(declared(".etab-banner", "order"), "3", "the last row, after the draft row (order 2)");
+  assert.equal(declared(".etab-banner", "flex"), "0 0 100%");
+  assert.equal(declared(".etab-banner > .app-stale-banner", "position"), "static", "not a second sticky layer");
+  assert.equal(declared(".etab-bar:has(> .etab-banner)", "flex-wrap"), "wrap");
+  assert.equal(declared(".etab-banner > .app-stale-banner", "margin"), "0 -16px", "full width inside the 16px padding of a PC bar");
+  assert.equal(declared(".etab-banner > .app-stale-banner", "margin", PHONE), "0", "the phone bar has no side padding");
 });
 
 test("WR-04: «Повышение» tells a success from a failure; the status of a bar stays one line with an ellipsis whatever its tone", () => {
@@ -499,7 +516,7 @@ test("D-13b: «Пользователи» on a PC renders the shared action bar:
   assert.match(usersTab, /import \{ EditorActionBar, EditorDraftBar, EditorEmptyDetail, EditorTabBody \} from "@\/components\/portia-editor-tab-shell";/);
   assert.equal(usersTab.split("<EditorActionBar").length - 1, 1, "one bar for the whole tab");
   assert.ok(usersTab.includes("{!isPhone ? <EditorActionBar"), "the bar is drawn on a PC only; a phone keeps the action window (WR-01: and the draft bar, if the draft is unsaved)");
-  const bar = usersSlice("<EditorActionBar", "/> : <EditorDraftBar />}");
+  const bar = usersSlice("<EditorActionBar", "/> : <EditorDraftBar banner={staleBanner} />}");
   assert.ok(bar.includes('label={usersCopy.sectionsLabel}'), "the bar's label lives in users-copy");
   assert.ok(bar.includes('nav={<nav className="users-sections" aria-label={usersCopy.sectionsLabel}>'), "the section nav is the nav slot");
   assert.ok(bar.includes("{USERS_SECTIONS.map((kind) => ("), "the three sections in their order");

@@ -2677,6 +2677,10 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .etab-draft { display: flex; flex: 0 0 100%; order: 2; align-items: center; gap: 8px; box-sizing: border-box; min-width: 0; min-height: 44px; }
 .etab-draft-label { flex: none; }
 .etab-draft > .etab-status { flex: 1 1 0; margin: 0; }
+/* Плашка «данные устарели» (WR-06) — последняя строка той же липкой панели: отдельная липкая плашка уходила под панель с тем же краем. */
+.etab-bar:has(> .etab-banner) { flex-wrap: wrap; }
+.etab-banner { flex: 0 0 100%; order: 3; min-width: 0; }
+.etab-banner > .app-stale-banner { position: static; margin: 0 -16px; }
 /* Разделы вкладки в слоте nav (D-13a): сначала «+ ДОБАВИТЬ РАЗДЕЛ» (форма заголовка раскрывается под кнопкой, панель растёт),
    затем вкладки разделов в одну строку с прокруткой; кнопки порядка «←/→» остаются видимыми справа от них. */
 .etab-nav > .editor-section-addbar { flex: none; }
@@ -2708,6 +2712,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .etab-nav { order: 1; flex-basis: 100%; min-height: 44px; }
   .etab-actions .editor-undo-step { width: 44px; min-width: 44px; }
   .etab-message { padding: 0; }
+  .etab-banner > .app-stale-banner { margin: 0; }
   /* 48px системной полосы + две строки панели по 44px + 12px. */
   .content-editor:has(> .etab-bar) .nested-editor-card, .content-editor:has(> .etab-bar) .editor-record-row { scroll-margin-top: 148px; }
   .etab-body { grid-template-columns: minmax(0, 1fr); }

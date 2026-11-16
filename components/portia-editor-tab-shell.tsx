@@ -58,7 +58,7 @@ function BarMessages({ messages }: { messages: ReactNode[] }) {
  * `statusText` is the existing saveStatusText vocabulary; the server's `notice` takes its place while there is one.
  * `messages` keeps its slots: an empty slot renders nothing, so the keys of the others stay put.
  */
-export function EditorActionBar({ label, nav, statusText, tone = "", unsavedCount = 0, notice, actions, messages = [] }: {
+export function EditorActionBar({ label, nav, statusText, tone = "", unsavedCount = 0, notice, actions, messages = [], banner }: {
   label: string;
   nav?: ReactNode;
   statusText: string;
@@ -67,6 +67,8 @@ export function EditorActionBar({ label, nav, statusText, tone = "", unsavedCoun
   notice?: string;
   actions?: ReactNode;
   messages?: ReactNode[];
+  /** Review WR-06: a sticky warning (the «data is stale» line) rides inside the bar, as its last row, so the bar never covers it. */
+  banner?: ReactNode;
 }) {
   const draft = useContext(EditorDraftBarContext);
   const status = statusLine(statusText, unsavedCount, notice);
@@ -77,6 +79,7 @@ export function EditorActionBar({ label, nav, statusText, tone = "", unsavedCoun
         <p className={`etab-status editor-save-status ${notice ? "saved" : tone}`} role="status" aria-live="polite" title={status || undefined}>{status}</p>
         {actions && <div className="etab-actions">{actions}</div>}
         {draft && <DraftRow draft={draft} />}
+        {banner && <div className="etab-banner">{banner}</div>}
       </section>
       <BarMessages messages={messages} />
       {draft?.messages && <BarMessages messages={draft.messages} />}
@@ -85,13 +88,15 @@ export function EditorActionBar({ label, nav, statusText, tone = "", unsavedCoun
 }
 
 /** Review WR-01: the bar of a tab that has none (the access tab, the phone list of «Пользователи») while the shared draft is unsaved; nothing without a draft state. */
-export function EditorDraftBar() {
+export function EditorDraftBar({ banner }: { banner?: ReactNode } = {}) {
   const draft = useContext(EditorDraftBarContext);
-  if (!draft) return null;
+  // Without a draft there is no bar: the banner then stands alone, as it did before the bar existed.
+  if (!draft) return banner ? <>{banner}</> : null;
   return (
     <>
       <section className="etab-bar etab-draft-bar" aria-label={draftCopy.bar}>
         <DraftRow draft={draft} />
+        {banner && <div className="etab-banner">{banner}</div>}
       </section>
       {draft.messages && <BarMessages messages={draft.messages} />}
     </>

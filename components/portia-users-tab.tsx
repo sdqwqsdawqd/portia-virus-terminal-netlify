@@ -696,6 +696,8 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
   const view = buildUsersView(list, debouncedQuery, new Date());
   const searchEmpty = view.emptyKind === "search";
   const ownerBulk = bulkButtonState({ ...list, callerIsOwner }, bulk);
+  // WR-06: the stale line rides inside the sticky bar (PC, or the draft bar of a phone), so the bar never covers it.
+  const staleBanner = failure && lastGoodAt ? <AppStaleBanner lastGoodAt={lastGoodAt} retrying={retrying} onRetry={() => void load()} /> : null;
   const handlers: ActionHandlers = { onApprove: approve, onReject: requestReject, onSetLevel: setLevel, onRevoke: requestRevoke, onClearCooldown: clearCooldown };
   const activeView = view[activeSection];
   const selectedIndex = selectedKey === null ? -1 : activeView.rows.findIndex((row) => row.key === selectedKey);
@@ -714,9 +716,9 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
         </nav>}
         statusText={usersCopy.pendingStatus(list.pendingTotalAll)}
         actions={callerIsOwner && ownerBulk.visible ? <button type="button" className="primary-control" disabled={ownerBulk.disabled || bulkLoading} onClick={() => void openBulk()}>{usersCopy.bulkButton}</button> : undefined}
-      /> : <EditorDraftBar />}
+        banner={staleBanner}
+      /> : <EditorDraftBar banner={staleBanner} />}
       <p role="status" aria-live="polite">{announcement}</p>
-      {failure && lastGoodAt ? <AppStaleBanner lastGoodAt={lastGoodAt} retrying={retrying} onRetry={() => void load()} /> : null}
       <label className="editor-field users-search">
         <span>{usersCopy.searchLabel}</span>
         <input type="search" maxLength={20} autoComplete="off" autoCapitalize="off" spellCheck={false} placeholder={usersCopy.searchPlaceholder} value={query} onChange={(event) => setQuery(event.target.value)} />
