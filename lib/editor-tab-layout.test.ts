@@ -97,12 +97,45 @@ test("D-13b: the editor renders one action bar under the tab strip for the draft
   for (const prop of ["label={sectionLabels[tab as EditorSection]}", "statusText={statusText}", "tone={status}", "unsavedCount={dirty ? shownChanged.length : 0}", "notice={saveNotice}"]) {
     assert.ok(bar.includes(prop), prop);
   }
-  assert.ok(bar.includes('aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>'), "the undo step");
-  assert.ok(bar.includes('disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>'), "ОТМЕНИТЬ opens the discard dialog");
-  assert.ok(bar.includes('disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>'), "СОХРАНИТЬ saves");
+  // WR-01: the buttons and the reasons are two constants, shared by this bar and by the bars of the other tabs (EditorDraftBarContext).
+  assert.ok(bar.includes("actions={draftActions}") && bar.includes("messages={draftMessages}"), "the draft tabs' bar takes the shared buttons and reasons");
+  const shared = editorSlice("const draftActions = <>", "const draftBar: EditorDraftBarState");
+  assert.ok(shared.includes('aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>'), "the undo step");
+  assert.ok(shared.includes('disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>'), "ОТМЕНИТЬ opens the discard dialog");
+  assert.ok(shared.includes('disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>'), "СОХРАНИТЬ saves");
   for (const reason of ['status === "error" && saveError', "oversize.length > 0 && oversizeMessage(oversize)", "bodyMessage", 'className="editor-save-fix" onClick={() => revealCard(badQuest.id, "endsAt", "quests")}>{dateMessage}</button>']) {
-    assert.ok(bar.includes(reason), reason);
+    assert.ok(shared.includes(reason), reason);
   }
+});
+
+// ---- Review WR-01: the shared draft stays visible and savable on the tabs outside the draft tabs ----
+
+test("WR-01: a tab outside the draft tabs shows the unsaved draft through the context, in the one sticky bar of that tab", () => {
+  const code = stripComments(editor);
+  const draft = editorSlice("const draftBar: EditorDraftBarState", "const header = (");
+  assert.ok(draft.includes('!editorSections.some((section) => section === tab) && (dirty || saveState !== "idle")'), "only outside the draft tabs, while unsaved or a save is under way");
+  for (const prop of ["statusText", "tone: status", "unsavedCount: dirty ? shownChanged.length : 0", "notice: saveNotice", "actions: draftActions", "messages: draftMessages"]) assert.ok(draft.includes(prop), prop);
+  const provider = editorSlice("<EditorDraftBarContext.Provider value={draftBar}>", "</EditorDraftBarContext.Provider>");
+  for (const tab of ["employees", "users", "promo"]) assert.ok(provider.includes(`{tab === "${tab}"`), `${tab} sits under the provider`);
+  assert.ok(provider.includes('{tab === "access" && canManageEditors && <EditorDraftBar />}'), "the access tab has no bar of its own, so it renders the draft bar");
+  assert.equal(code.split("<EditorActionBar").length - 1, 2, "no third action bar: the other tabs reuse their own");
+  assert.match(shell, /export const EditorDraftBarContext = createContext<EditorDraftBarState \| null>\(null\)/);
+  assert.match(stripComments(shell), /export function EditorDraftBar\(\)/);
+  const bar = stripComments(shell);
+  assert.match(bar, /const draft = useContext\(EditorDraftBarContext\);[\s\S]*\{draft && <DraftRow draft=\{draft\} \/>\}/, "EditorActionBar carries the draft row inside its own section");
+  assert.match(bar, /className="etab-draft" role="group"/);
+  const users = lf(readFileSync(new URL("../components/portia-users-tab.tsx", import.meta.url), "utf8"));
+  assert.match(users, /\/> : <EditorDraftBar \/>\}/, "the phone list of «Пользователи» has no bar, so it renders the draft bar");
+});
+
+test("WR-01: the draft row is one more line of the same sticky bar, after the nav and the actions, on PC and on a phone", () => {
+  assert.equal(declared(".etab-bar:has(> .etab-draft)", "flex-wrap"), "wrap", "the bar wraps instead of a second sticky bar");
+  assert.equal(declared(".etab-draft", "flex"), "0 0 100%");
+  assert.equal(declared(".etab-draft", "order"), "2", "after the nav (order 1 on a phone)");
+  assert.equal(declared(".etab-draft", "min-height"), "44px", "a 44px touch row");
+  assert.equal(declared(".etab-draft > .etab-status", "flex"), "1 1 0");
+  const draftRules = rules.filter((rule) => rule.selectors.some((selector) => selector.includes("etab-draft") && !selector.includes("etab-draft-label")) && rule.body.includes("position"));
+  assert.equal(draftRules.length, 0, "the draft row is not sticky on its own");
 });
 
 test("D-13b: the floating save chip and its popover are gone; the sr-only live region and the discard dialog stay", () => {
@@ -207,7 +240,7 @@ test("D-12: list column 240–320px, detail 24px (PC) / 16px (phone), one column
 
 /** The JSX expression the bar receives as `nav` (from `nav={` up to the `actions={` prop). */
 function barNav() {
-  return editorSlice("          nav={", "          actions={<>");
+  return editorSlice("          nav={", "          actions={draftActions}");
 }
 
 test("D-13a: section tabs mark the current section with aria-current, not aria-pressed, and keep it in view", () => {
@@ -440,10 +473,10 @@ function usersSlice(from: string, to: string) {
 }
 
 test("D-13b: «Пользователи» on a PC renders the shared action bar: three sections in the nav slot, «Ожидают: N», the owner's bulk approval", () => {
-  assert.match(usersTab, /import \{ EditorActionBar, EditorEmptyDetail, EditorTabBody \} from "@\/components\/portia-editor-tab-shell";/);
+  assert.match(usersTab, /import \{ EditorActionBar, EditorDraftBar, EditorEmptyDetail, EditorTabBody \} from "@\/components\/portia-editor-tab-shell";/);
   assert.equal(usersTab.split("<EditorActionBar").length - 1, 1, "one bar for the whole tab");
-  assert.ok(usersTab.includes("{!isPhone ? <EditorActionBar"), "the bar is drawn on a PC only; a phone keeps the action window");
-  const bar = usersSlice("<EditorActionBar", "/> : null}");
+  assert.ok(usersTab.includes("{!isPhone ? <EditorActionBar"), "the bar is drawn on a PC only; a phone keeps the action window (WR-01: and the draft bar, if the draft is unsaved)");
+  const bar = usersSlice("<EditorActionBar", "/> : <EditorDraftBar />}");
   assert.ok(bar.includes('label={usersCopy.sectionsLabel}'), "the bar's label lives in users-copy");
   assert.ok(bar.includes('nav={<nav className="users-sections" aria-label={usersCopy.sectionsLabel}>'), "the section nav is the nav slot");
   assert.ok(bar.includes("{USERS_SECTIONS.map((kind) => ("), "the three sections in their order");

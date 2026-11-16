@@ -79,6 +79,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //      классы etab-* и aria-current у выбранного сотрудника (applyEmployeesBarHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-07.
 //  11. PORTIA-26-13 (26-13; UI-10, WCAG 2.5.3, D-21) — имя кнопки раскрытия карточки строит cardToggleName (имя содержит видимый «{метка} {название}»),
 //      между <strong> и названием пробельный узел {" "} (applyCardToggleNameHunk); русские строки имени лежат в lib/card-toggle-name.ts. Источник одобрения: 26-CONTEXT D-11, D-21 и план 26-13.
+//  12. PORTIA-26-R01 (код-ревью 26, WR-01; UI-04, D-13b, D-21) — общий черновик виден и сохраняется на вкладках вне вкладок черновика:
+//      кнопки и причины панели стали константами draftActions/draftMessages, EditorDraftBarContext.Provider оборачивает «Сотрудников», «Пользователей», «Повышение» и «Доступ»
+//      (applyReviewDraftBarHunk); русских строк в файле не добавлено, подпись строки лежит в шве. Источник одобрения: 26-REVIEW WR-01 и поручение владельца исправить все предупреждения.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -807,6 +810,78 @@ function applyCardToggleNameHunk(text: string): string {
   return next;
 }
 
+/**
+ * PORTIA-26-R01 (review WR-01; UI-04, D-13b, D-21): the shared draft stays visible and savable on the tabs outside the draft tabs.
+ * The buttons and the reasons of the draft bar become two constants used by that bar and by EditorDraftBarContext; the provider wraps the
+ * tabs without a draft bar of their own. No Russian text is added: the label of the row lives in components/portia-editor-tab-shell.tsx.
+ */
+function applyReviewDraftBarHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { EditorActionBar, EditorEmptyDetail, EditorTabBody } from "@/components/portia-editor-tab-shell";',
+    'import { EditorActionBar, EditorDraftBar, EditorDraftBarContext, EditorEmptyDetail, EditorTabBody, type EditorDraftBarState } from "@/components/portia-editor-tab-shell";',
+    "draft bar import",
+  );
+  next = replaceOnce(
+    next,
+    "  const statusText = saveStatusText(status, partial ?? undefined);\n",
+    [
+      "  const statusText = saveStatusText(status, partial ?? undefined);",
+      "  // Review WR-01: the draft is shared by every tab. The draft tabs have the bar below; on any other tab the same buttons and reasons go through EditorDraftBarContext into that tab's bar.",
+      "  const draftActions = <>",
+      '    <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>',
+      '    <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>',
+      '    <button type="button" className="primary-control" disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>',
+      "  </>;",
+      "  const draftMessages = dirty ? [",
+      "    status === \"error\" && saveError,",
+      "    oversize.length > 0 && oversizeMessage(oversize),",
+      "    bodyMessage,",
+      '    badQuest && <button type="button" className="editor-save-fix" onClick={() => revealCard(badQuest.id, "endsAt", "quests")}>{dateMessage}</button>,',
+      "  ] : [];",
+      "  const draftBar: EditorDraftBarState | null = !editorSections.some((section) => section === tab) && (dirty || saveState !== \"idle\")",
+      "    ? { statusText, tone: status, unsavedCount: dirty ? shownChanged.length : 0, notice: saveNotice, actions: draftActions, messages: draftMessages }",
+      "    : null;",
+      "",
+    ].join("\n"),
+    "draft bar constants",
+  );
+  next = replaceOnce(
+    next,
+    `${TAB_SHELL_BAR.slice(7, 18).join("\n")}\n`,
+    "          actions={draftActions}\n          messages={draftMessages}\n",
+    "draft bar actions and reasons",
+  );
+  return replaceOnce(
+    next,
+    [
+      '      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}',
+      "",
+      '      {tab === "users" && openTabs.includes("users") && <UsersTab visible={active && !minimized} canManageEditors={canManageEditors} onPendingCount={usersPending.report} />}',
+      "",
+      '      {tab === "promo" && openTabs.includes("promo") && <PromotionEditor visible={active && !minimized} canManageEditors={canManageEditors} />}',
+      "",
+      '      {tab === "access" && canManageEditors && <EditorAccessManager />}',
+      "",
+    ].join("\n"),
+    [
+      "      <EditorDraftBarContext.Provider value={draftBar}>",
+      '        {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}',
+      "",
+      '        {tab === "users" && openTabs.includes("users") && <UsersTab visible={active && !minimized} canManageEditors={canManageEditors} onPendingCount={usersPending.report} />}',
+      "",
+      '        {tab === "promo" && openTabs.includes("promo") && <PromotionEditor visible={active && !minimized} canManageEditors={canManageEditors} />}',
+      "",
+      '        {tab === "access" && canManageEditors && <EditorDraftBar />}',
+      "      </EditorDraftBarContext.Provider>",
+      "",
+      '      {tab === "access" && canManageEditors && <EditorAccessManager />}',
+      "",
+    ].join("\n"),
+    "draft bar provider",
+  );
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -862,6 +937,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26-07b", apply: applyInfoBroadcastNavHunk },
   { id: "PORTIA-26-07c", apply: applyEmployeesBarHunk },
   { id: "PORTIA-26-13", apply: applyCardToggleNameHunk },
+  { id: "PORTIA-26-R01", apply: applyReviewDraftBarHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -964,7 +1040,7 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.throws(() => applyInfoAddSectionHunk(expected), /exactly one bottom add-section button/, "a file without the bottom button cannot be turned into the expected one");
   // Без правки D-62 (только D-57) файл отличается от ожидаемого.
   assert.notEqual(firstDifference(expected, applyLaunchButtonHunk(sample)), null, "a file without the D-62 hunk is a difference");
-  const withoutUsers = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-22").reduce((text, edit) => edit.apply(text), sample);
+  const withoutUsers = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-22" && edit.id !== "PORTIA-26-R01").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutUsers), null, "a file without the PORTIA-22 hunk is a difference");
   const withoutLevels = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-24") && edit.id !== "PORTIA-25" && !edit.id.startsWith("PORTIA-26")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutLevels), null, "a file without the PORTIA-24 hunk is a difference");
@@ -975,10 +1051,10 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutTabShell = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabShell), null, "a file without the PORTIA-26-06 hunk is a difference");
   assert.throws(() => applyTabShellHunk(expected), /exactly one approved anchor/, "the tab shell hunk cannot be applied twice");
-  const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b" && !edit.id.startsWith("PORTIA-26-07")).reduce((text, edit) => edit.apply(text), sample);
+  const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b" && edit.id !== "PORTIA-26-R01" && !edit.id.startsWith("PORTIA-26-07")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabBodies), null, "a file without the PORTIA-26-06b hunk is a difference");
   assert.throws(() => applyTabBodiesHunk(expected), /exactly one approved anchor/, "the tab bodies hunk cannot be applied twice");
-  const withoutSectionNav = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-07")).reduce((text, edit) => edit.apply(text), sample);
+  const withoutSectionNav = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-07") && edit.id !== "PORTIA-26-R01").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutSectionNav), null, "a file without the PORTIA-26-07 hunk is a difference");
   assert.throws(() => applySectionNavHunk(expected), /exactly one approved anchor/, "the section nav hunk cannot be applied twice");
   const withoutInfoBroadcastNav = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07b").reduce((text, edit) => edit.apply(text), sample);
@@ -990,6 +1066,9 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutCardToggleName = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-13").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutCardToggleName), null, "a file without the PORTIA-26-13 hunk is a difference");
   assert.throws(() => applyCardToggleNameHunk(expected), /exactly one approved anchor/, "the card toggle name hunk cannot be applied twice");
+  const withoutReviewDraftBar = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-R01").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutReviewDraftBar), null, "a file without the PORTIA-26-R01 hunk is a difference");
+  assert.throws(() => applyReviewDraftBarHunk(expected), /exactly one approved anchor/, "the review draft bar hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

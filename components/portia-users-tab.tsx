@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { AppDeniedPanel, AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/components/portia-desktop-states";
 import { ConfirmDialog } from "@/components/portia-editor-dossier";
-import { EditorActionBar, EditorEmptyDetail, EditorTabBody } from "@/components/portia-editor-tab-shell";
+import { EditorActionBar, EditorDraftBar, EditorEmptyDetail, EditorTabBody } from "@/components/portia-editor-tab-shell";
 import { failureFromResponse, type AppFailure } from "@/lib/app-state";
 import type { AccessLevel } from "@/lib/access-levels";
 import { usersCopy } from "@/lib/users-copy";
@@ -714,7 +714,7 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
         </nav>}
         statusText={usersCopy.pendingStatus(list.pendingTotalAll)}
         actions={callerIsOwner && ownerBulk.visible ? <button type="button" className="primary-control" disabled={ownerBulk.disabled || bulkLoading} onClick={() => void openBulk()}>{usersCopy.bulkButton}</button> : undefined}
-      /> : null}
+      /> : <EditorDraftBar />}
       <p role="status" aria-live="polite">{announcement}</p>
       {failure && lastGoodAt ? <AppStaleBanner lastGoodAt={lastGoodAt} retrying={retrying} onRetry={() => void load()} /> : null}
       <label className="editor-field users-search">

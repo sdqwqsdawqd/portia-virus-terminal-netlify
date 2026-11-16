@@ -578,6 +578,8 @@ html[data-motion="full"] .portia-image-skeleton { background: linear-gradient(10
    Only colours and fonts here: the layout of the bar is in the ui-unify block at the end of the file. */
 .etab-bar { background: var(--panel); }
 .etab-message { color: var(--warning); font: 400 13px/1.35 var(--sans); }
+/* Review WR-01: the label of the draft row that a tab outside the draft tabs shows while the shared draft is unsaved. */
+.etab-draft-label { color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1 var(--sans); letter-spacing: .07em; }
 /* D-12: the empty detail pane (nothing picked): heading 16px 700, lines 13px 400 in the secondary text colour. */
 .etab-empty > strong { color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 700 16px/1.35 var(--sans); }
 .etab-empty > p { margin: 0; color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 400 13px/1.5 var(--sans); }
@@ -2668,6 +2670,11 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .etab-actions { display: flex; flex: none; align-items: center; gap: 8px; }
 .etab-actions .editor-undo-step { width: 40px; min-width: 40px; padding: 0; }
 .etab-message { margin: 0 0 8px; padding: 0 16px; overflow-wrap: anywhere; }
+/* Черновик на вкладке вне вкладок черновика (WR-01): вторая строка той же липкой панели — метка, статус, кнопки; панель переносится, вторая липкая панель не нужна. */
+.etab-bar:has(> .etab-draft) { flex-wrap: wrap; }
+.etab-draft { display: flex; flex: 0 0 100%; order: 2; align-items: center; gap: 8px; box-sizing: border-box; min-width: 0; min-height: 44px; }
+.etab-draft-label { flex: none; }
+.etab-draft > .etab-status { flex: 1 1 0; margin: 0; }
 /* Разделы вкладки в слоте nav (D-13a): сначала «+ ДОБАВИТЬ РАЗДЕЛ» (форма заголовка раскрывается под кнопкой, панель растёт),
    затем вкладки разделов в одну строку с прокруткой; кнопки порядка «←/→» остаются видимыми справа от них. */
 .etab-nav > .editor-section-addbar { flex: none; }

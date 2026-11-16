@@ -44,7 +44,7 @@ import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/port
 import { accessCheckFailedText } from "@/lib/app-state";
 import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
 import { cardToggleName } from "@/lib/card-toggle-name";
-import { EditorActionBar, EditorEmptyDetail, EditorTabBody } from "@/components/portia-editor-tab-shell";
+import { EditorActionBar, EditorDraftBar, EditorDraftBarContext, EditorEmptyDetail, EditorTabBody, type EditorDraftBarState } from "@/components/portia-editor-tab-shell";
 
 type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "users" | "promo" | "access";
 
@@ -1140,6 +1140,21 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
     : dirty ? "dirty"
     : "clean";
   const statusText = saveStatusText(status, partial ?? undefined);
+  // Review WR-01: the draft is shared by every tab. The draft tabs have the bar below; on any other tab the same buttons and reasons go through EditorDraftBarContext into that tab's bar.
+  const draftActions = <>
+    <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
+    <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>
+    <button type="button" className="primary-control" disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>
+  </>;
+  const draftMessages = dirty ? [
+    status === "error" && saveError,
+    oversize.length > 0 && oversizeMessage(oversize),
+    bodyMessage,
+    badQuest && <button type="button" className="editor-save-fix" onClick={() => revealCard(badQuest.id, "endsAt", "quests")}>{dateMessage}</button>,
+  ] : [];
+  const draftBar: EditorDraftBarState | null = !editorSections.some((section) => section === tab) && (dirty || saveState !== "idle")
+    ? { statusText, tone: status, unsavedCount: dirty ? shownChanged.length : 0, notice: saveNotice, actions: draftActions, messages: draftMessages }
+    : null;
 
   const header = (
     <header className="editor-header">
@@ -1246,17 +1261,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               ))}
             </nav>
           ) : undefined}
-          actions={<>
-            <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
-            <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>
-            <button type="button" className="primary-control" disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>
-          </>}
-          messages={dirty ? [
-            status === "error" && saveError,
-            oversize.length > 0 && oversizeMessage(oversize),
-            bodyMessage,
-            badQuest && <button type="button" className="editor-save-fix" onClick={() => revealCard(badQuest.id, "endsAt", "quests")}>{dateMessage}</button>,
-          ] : []}
+          actions={draftActions}
+          messages={draftMessages}
         />
       )}
       {refusedShown.map((section) => <p key={section} id={`${errorIdBase}-${section}`} className="editor-section-error" role="alert">{closedMessage([section])} Правки остались в черновике.</p>)}
@@ -1694,11 +1700,15 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
         </div>
       )}
 
-      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
+      <EditorDraftBarContext.Provider value={draftBar}>
+        {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
 
-      {tab === "users" && openTabs.includes("users") && <UsersTab visible={active && !minimized} canManageEditors={canManageEditors} onPendingCount={usersPending.report} />}
+        {tab === "users" && openTabs.includes("users") && <UsersTab visible={active && !minimized} canManageEditors={canManageEditors} onPendingCount={usersPending.report} />}
 
-      {tab === "promo" && openTabs.includes("promo") && <PromotionEditor visible={active && !minimized} canManageEditors={canManageEditors} />}
+        {tab === "promo" && openTabs.includes("promo") && <PromotionEditor visible={active && !minimized} canManageEditors={canManageEditors} />}
+
+        {tab === "access" && canManageEditors && <EditorDraftBar />}
+      </EditorDraftBarContext.Provider>
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
       {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={runBatch} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
