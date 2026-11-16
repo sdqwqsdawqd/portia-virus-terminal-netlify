@@ -82,6 +82,8 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  12. PORTIA-26-R01 (код-ревью 26, WR-01; UI-04, D-13b, D-21) — общий черновик виден и сохраняется на вкладках вне вкладок черновика:
 //      кнопки и причины панели стали константами draftActions/draftMessages, EditorDraftBarContext.Provider оборачивает «Сотрудников», «Пользователей», «Повышение» и «Доступ»
 //      (applyReviewDraftBarHunk); русских строк в файле не добавлено, подпись строки лежит в шве. Источник одобрения: 26-REVIEW WR-01 и поручение владельца исправить все предупреждения.
+//  13. PORTIA-26-R05 (код-ревью 26, WR-05; UI-04, D-13b, D-21) — скрытая строка статуса (sr-only, живая область) остаётся только на вкладках не из черновика: на вкладках черновика
+//      статус панели и есть единственная живая область (applyReviewLiveRegionHunk); русских строк не добавлено. Источник одобрения: 26-REVIEW WR-05 и поручение владельца исправить все предупреждения.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -882,6 +884,24 @@ function applyReviewDraftBarHunk(text: string): string {
   );
 }
 
+/**
+ * PORTIA-26-R05 (review WR-05; UI-04, D-13b, D-21): one live region announces the save status. The hidden status line stays only on the tabs whose bar
+ * does not carry the status as the live region (the draft tabs' bar does). No Russian text is added: the line is the sample's own, byte for byte, inside the condition.
+ */
+function applyReviewLiveRegionHunk(text: string): string {
+  const line = '      <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? `${status === "dirty" ? ":" : ". Не сохранено:"} ${shownChanged.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>\n';
+  return replaceOnce(
+    text,
+    line,
+    [
+      "      {/* Review WR-05: one live region for the save status. On the draft tabs it is the status of the bar; on the other tabs the draft row is not live and this hidden line is. */}",
+      `      {!editorSections.some((section) => section === tab) && ${line.trimStart().trimEnd()}}`,
+      "",
+    ].join("\n"),
+    "hidden live region",
+  );
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -938,6 +958,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26-07c", apply: applyEmployeesBarHunk },
   { id: "PORTIA-26-13", apply: applyCardToggleNameHunk },
   { id: "PORTIA-26-R01", apply: applyReviewDraftBarHunk },
+  { id: "PORTIA-26-R05", apply: applyReviewLiveRegionHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1069,6 +1090,9 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutReviewDraftBar = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-R01").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutReviewDraftBar), null, "a file without the PORTIA-26-R01 hunk is a difference");
   assert.throws(() => applyReviewDraftBarHunk(expected), /exactly one approved anchor/, "the review draft bar hunk cannot be applied twice");
+  const withoutReviewLiveRegion = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-R05").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutReviewLiveRegion), null, "a file without the PORTIA-26-R05 hunk is a difference");
+  assert.throws(() => applyReviewLiveRegionHunk(expected), /exactly one approved anchor/, "the review live region hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

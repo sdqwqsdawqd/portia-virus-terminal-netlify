@@ -128,6 +128,17 @@ test("WR-01: a tab outside the draft tabs shows the unsaved draft through the co
   assert.match(users, /\/> : <EditorDraftBar \/>\}/, "the phone list of «Пользователи» has no bar, so it renders the draft bar");
 });
 
+test("WR-05: exactly one live region announces the save status: the bar's status on the draft tabs, the hidden line on the other tabs", () => {
+  const code = stripComments(editor);
+  const hidden = '{!editorSections.some((section) => section === tab) && <p className="sr-only" role="status" aria-live="polite">';
+  assert.equal(code.split('<p className="sr-only" role="status" aria-live="polite">').length - 1, 1, "one hidden status line");
+  assert.ok(code.includes(hidden), "the hidden line exists only outside the draft tabs");
+  // The draft row of a bar is a plain paragraph: no role, no aria-live, so it never doubles the hidden line.
+  const row = stripComments(shell).slice(stripComments(shell).indexOf("function DraftRow"), stripComments(shell).indexOf("function BarMessages"));
+  assert.ok(row.includes("etab-draft-status") && !/role="status"|aria-live/.test(row), "the draft row is not a live region");
+  assert.match(stripComments(shell), /className=\{`etab-status editor-save-status \$\{notice \? "saved" : tone\}`\} role="status" aria-live="polite"/, "the bar's own status is the live region on the draft tabs");
+});
+
 test("WR-01: the draft row is one more line of the same sticky bar, after the nav and the actions, on PC and on a phone", () => {
   assert.equal(declared(".etab-bar:has(> .etab-draft)", "flex-wrap"), "wrap", "the bar wraps instead of a second sticky bar");
   assert.equal(declared(".etab-draft", "flex"), "0 0 100%");
