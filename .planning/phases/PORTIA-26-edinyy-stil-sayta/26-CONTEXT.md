@@ -51,6 +51,13 @@ Out of boundary: new capabilities, palette/font/spacing/animation changes (direc
 ### Снимки v1.3
 - **D-17:** The approved v1.3 snapshots are frozen as history: snapshots and signatures stay in the archive but are no longer the reference for the current look. Phase 26 does not capture a new signed reference; changes are described as text and device acceptance is the owner's in Phase 27. — **Reversibility:** costly — tests and scripts that treat v1.3 snapshots as the current reference must be re-scoped to "historical", and re-establishing a signed reference later needs a new capture.
 
+### Решения после исследования (owner, 2026-11-16, open questions from 26-RESEARCH.md)
+- **D-18:** Colour swatches and the web/wallpaper pickers stay soft: `.swatch` uses the `round` role, `.setting-options > button` uses the `card` role (7px). They are an explicit exception to "controls = 0" in the corner rule and the radius test must allow exactly these.
+- **D-19:** The maximized-window two-column rule (UI-SPEC R3) applies only to flat forms (viruses, staff, settings). `editor-card-columns` in a maximized window only gain more 340px columns (no `1fr` stretch); `--editor-card-width: 340px` stays.
+- **D-20:** The contrast contract (≥4.5:1 for text) is checked only on `--bg` and `--panel` surfaces, for all accent presets. `--panel-2` is not part of the contract; the red preset palette is not changed.
+- **D-21:** Guarding `components/portia-editor.tsx`: follow UI-SPEC — every edit to the editor is recorded as a byte-exact hunk in the `lib/format-launch.test.ts` edit registry; `SAMPLE_COMMIT` is NOT re-baselined. (A separate shell file `portia-editor-tab-shell.tsx` may still be used to keep hunks small, but every editor edit is registered.)
+- **D-22:** Window close/control buttons are 46×46 everywhere, phone included (today the phone uses 44×44 in a 48px bar): phone controls become 46×46, cross flush in the top-right corner, no extra padding or frame around it.
+
 ### Claude's Discretion
 - Shortcut label placement at 521–900px (UI-09): one JS rule, no immovable absolute labels, no scroll lock — mechanism is the planner's choice.
 - Exact card size/gap for D-01 grid, the two-column breakpoint for D-02, the sticky action bar details for D-13 — decided in UI-SPEC and described to the owner as text.
