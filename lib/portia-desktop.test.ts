@@ -365,6 +365,10 @@ test("editor form cards keep one fixed width set by a single variable and fill c
   for (const lead of ["Каждый блок становится", "Справочник на рабочем столе", "Публикуйте новости"]) {
     assert.match(editorSource, new RegExp(String.raw`<div className="editor-form flat-editor-form editor-card-columns">\n${appsGroup}          <p className="editor-guidance">${lead}`), `${lead}: form must be in columns`);
   }
+  // Phase 26 (26-07, D-12/A2): the column form is the detail pane of the tab body, in the same order (form, then the hint).
+  for (const lead of ["Справочник на рабочем столе"]) {
+    assert.match(editorSource, new RegExp(String.raw`<EditorTabBody list=\{[^\n]*\} detail=\{\n        <div className="editor-form flat-editor-form editor-card-columns">\n${appsGroup}          <p className="editor-guidance">${lead}`), `${lead}: the column form is the detail of the tab body`);
+  }
   assert.equal(editorSource.match(/editor-card-columns/g)?.length, 3); // never the sorted recommendation or access lists (D-15)
 });
 
@@ -1027,14 +1031,16 @@ test("sticky and floating editor layers never cover the content: notices are in 
   const stickyEditor = rules.filter((line) => /position:\s*sticky/.test(line) && /editor|etab/.test(line.slice(0, line.indexOf("{")))).map((line) => line.slice(0, line.indexOf("{")).trim());
   // 20-22 (D-41): the «Справочник» add-section bar is the one other sticky editor layer. It sits in the flow at the top of the tab, above the TOC, on an opaque panel.
   // Phase 26 (26-06, D-13b): the floating save chip is retired; the action bar of the draft tabs (.etab-bar) is the sticky save layer.
-  assert.deepEqual(stickyEditor, [".editor-section-tabs", ".editor-section-addbar", ".etab-bar"]);
+  // Phase 26 (26-07, D-13a): the add bar and the section tabs moved into the bar's nav slot, so the bar is the only sticky editor layer.
+  assert.deepEqual(stickyEditor, [".etab-bar"]);
   const bar = rules.find((line) => line.startsWith(".etab-bar {") && /position:\s*sticky/.test(line)) ?? "";
   assert.match(bar, /top:\s*0/);
   assert.match(styles, /\.etab-bar\s*\{[^}]*background:\s*var\(--panel\)/, "the bar is opaque");
-  const addbar = rules.find((line) => line.startsWith(".editor-section-addbar {")) ?? "";
-  assert.match(addbar, /top:\s*0/);
-  assert.match(addbar, /background:\s*var\(--panel\)/);
-  assert.ok(Number(/z-index:\s*(\d+)/.exec(addbar)?.[1]) > Number(/\.editor-toc \{[^}]*z-index:\s*(\d+)/.exec(styles)?.[1]), "the add bar is above the TOC");
+  for (const old of [".editor-section-addbar {", ".editor-section-tabs {"]) {
+    const rule = rules.find((line) => line.startsWith(old)) ?? "";
+    assert.ok(rule, `${old} rule found`);
+    assert.doesNotMatch(rule, /position:|top:|z-index:/, `${old} has no layer of its own`);
+  }
   for (const notice of [".editor-conflict-panel", ".editor-stale-banner", ".editor-their-edits", ".editor-section-error"]) {
     const rule = rules.find((line) => line.startsWith(`${notice} {`));
     if (!rule) continue;

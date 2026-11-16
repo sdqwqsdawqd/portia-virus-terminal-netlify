@@ -72,6 +72,8 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //   9. PORTIA-26 (26-06; UI-04, D-12, D-13, D-21) — панель действий из шва вместо чипа; русские строки лежат в шве
 //      components/portia-editor-tab-shell.tsx (applyTabShellHunk); PORTIA-26-06b — классы «список — деталь» (etab-body/etab-list/etab-detail)
 //      рядом с прежними, aria-current у выбранной строки и пустая деталь из шва (applyTabBodiesHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-06.
+//  10. PORTIA-26-07 (26-07; UI-04, D-13a, A2) — «Справочник»: «+ ДОБАВИТЬ РАЗДЕЛ» и вкладки разделов в слоте nav панели, aria-current и прокрутка
+//      текущего раздела, тело — оглавление слева и активный раздел справа (applySectionNavHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-07.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -626,6 +628,68 @@ function applyTabBodiesHunk(text: string): string {
   return replaceOnce(next, 'return <div className="editor-form flat-editor-form access-editor">', 'return <div className="editor-form flat-editor-form access-editor etab-detail">', "access detail");
 }
 
+// PORTIA-26-07 (UI-04, D-13a): the add-section bar and the section tabs of «Справочник», byte for byte; indents are relative (the body had them at 10 spaces, the nav slot at 12).
+const GUIDE_NAV_BLOCK: readonly string[] = [
+  "<SectionAddBar onCreate={(title) => {",
+  '  const id = makeId("guide");',
+  '  changeDraft((next) => { next.guideSections.push({ id, title: title || "НОВЫЙ РАЗДЕЛ", photo: "", cards: [] }); });',
+  "  setSelectedGuideSection(id);",
+  "  setOpen([id], true);",
+  "  requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#card-${id} > .nested-editor-body input`)?.focus());",
+  "}} />",
+  '<SectionTabs label="Разделы справочника" sections={draft.guideSections} activeId={activeGuideSection} onSelect={setSelectedGuideSection} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.guideSections, from, to))} />',
+];
+const GUIDE_TOC_LINE = "<EditorToc items={guideTocItems} onJump={jumpGuide} onAll={(open) => setAllOpen(guideCardIds, open)} />";
+
+function indented(lines: readonly string[], indent: string): string {
+  return lines.map((line) => `${indent}${line}`).join("\n");
+}
+
+/** PORTIA-26-07 (26-07 Task 1; UI-04, D-13a, A2): «Справочник» switches sections in the nav slot of the bar; its body is the TOC on the left and the active section on the right. No Russian text is added. */
+function applySectionNavHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { EditorActionBar, EditorEmptyDetail } from "@/components/portia-editor-tab-shell";',
+    'import { EditorActionBar, EditorEmptyDetail, EditorTabBody } from "@/components/portia-editor-tab-shell";',
+    "tab body import",
+  );
+  // SectionTabs: the current section is aria-current and is scrolled into view when it changes.
+  next = replaceOnce(
+    next,
+    "  const activeIndex = sections.findIndex((section) => section.id === activeId);\n  return <div className=\"editor-section-tabs\">\n    <nav aria-label={label}>\n",
+    "  const activeIndex = sections.findIndex((section) => section.id === activeId);\n" +
+      "  const navRef = useRef<HTMLElement>(null);\n" +
+      "  // D-13a: the current section stays in view of the bar's nav when it changes; instant unless the house motion switch is on.\n" +
+      "  useEffect(() => {\n" +
+      "    navRef.current?.querySelector<HTMLElement>('[aria-current=\"true\"]')?.scrollIntoView({ block: \"nearest\", inline: \"nearest\", behavior: document.documentElement.dataset.motion === \"full\" ? \"smooth\" : \"auto\" });\n" +
+      "  }, [activeId]);\n" +
+      "  return <div className=\"editor-section-tabs\">\n    <nav aria-label={label} ref={navRef}>\n",
+    "section tabs ref and scroll",
+  );
+  next = replaceOnce(next, 'type="button" aria-pressed={section.id === activeId} onClick={() => onSelect(section.id)}>', 'type="button" aria-current={section.id === activeId ? "true" : undefined} onClick={() => onSelect(section.id)}>', "section tabs current");
+  // The bar: the nav slot of «Справочник».
+  next = replaceOnce(
+    next,
+    "          notice={saveNotice}\n          actions={<>\n",
+    `          notice={saveNotice}\n          nav={tab === "guide" ? <>\n${indented(GUIDE_NAV_BLOCK, "            ")}\n          </> : undefined}\n          actions={<>\n`,
+    "guide nav slot",
+  );
+  // The body: list = the TOC when it shows, detail = the old form.
+  next = replaceOnce(
+    next,
+    '      {tab === "guide" && (\n        <div className="editor-form flat-editor-form editor-card-columns">\n',
+    `      {tab === "guide" && (\n        <EditorTabBody list={guideTocItems.length >= 5 && ${GUIDE_TOC_LINE}} detail={\n        <div className="editor-form flat-editor-form editor-card-columns">\n`,
+    "guide body open",
+  );
+  next = replaceOnce(next, `${indented(GUIDE_NAV_BLOCK, "          ")}\n          ${GUIDE_TOC_LINE}\n`, "", "guide nav out of the body");
+  return replaceOnce(
+    next,
+    '          )} />\n        </div>\n      )}\n\n      {tab === "broadcasts" && (',
+    '          )} />\n        </div>\n        } />\n      )}\n\n      {tab === "broadcasts" && (',
+    "guide body close",
+  );
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -677,6 +741,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-25", apply: applyImageRewriteHunk },
   { id: "PORTIA-26-06", apply: applyTabShellHunk },
   { id: "PORTIA-26-06b", apply: applyTabBodiesHunk },
+  { id: "PORTIA-26-07", apply: applySectionNavHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -774,18 +839,21 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, applyLaunchButtonHunk(sample)), null, "a file without the D-62 hunk is a difference");
   const withoutUsers = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-22").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutUsers), null, "a file without the PORTIA-22 hunk is a difference");
-  const withoutLevels = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-24") && edit.id !== "PORTIA-25" && !edit.id.startsWith("PORTIA-26-06")).reduce((text, edit) => edit.apply(text), sample);
+  const withoutLevels = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-24") && edit.id !== "PORTIA-25" && !edit.id.startsWith("PORTIA-26")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutLevels), null, "a file without the PORTIA-24 hunk is a difference");
-  const withoutHierarchy = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-24-08" && edit.id !== "PORTIA-25" && !edit.id.startsWith("PORTIA-26-06")).reduce((text, edit) => edit.apply(text), sample);
+  const withoutHierarchy = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-24-08" && edit.id !== "PORTIA-25" && !edit.id.startsWith("PORTIA-26")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutHierarchy), null, "a file without the PORTIA-24-08 hunk is a difference");
   const withoutRewrite = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-25").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutRewrite), null, "a file without the PORTIA-25 hunk is a difference");
-  const withoutTabShell = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-06")).reduce((text, edit) => edit.apply(text), sample);
+  const withoutTabShell = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabShell), null, "a file without the PORTIA-26-06 hunk is a difference");
   assert.throws(() => applyTabShellHunk(expected), /exactly one approved anchor/, "the tab shell hunk cannot be applied twice");
-  const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b").reduce((text, edit) => edit.apply(text), sample);
+  const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b" && !edit.id.startsWith("PORTIA-26-07")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabBodies), null, "a file without the PORTIA-26-06b hunk is a difference");
   assert.throws(() => applyTabBodiesHunk(expected), /exactly one approved anchor/, "the tab bodies hunk cannot be applied twice");
+  const withoutSectionNav = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutSectionNav), null, "a file without the PORTIA-26-07 hunk is a difference");
+  assert.throws(() => applySectionNavHunk(expected), /exactly one approved anchor/, "the section nav hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

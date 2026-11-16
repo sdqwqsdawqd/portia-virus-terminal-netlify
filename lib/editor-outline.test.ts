@@ -439,7 +439,10 @@ test("D-41 section editing stays in Справочник; Сводка and Ре�
   assert.equal((editor.match(/<SectionAddBar/g) ?? []).length, 2);
   const tabBlock = (name: string, next: string) => editor.slice(editor.indexOf(`{tab === "${name}" && (`), editor.indexOf(`{tab === "${next}" && (`));
   assert.equal((tabBlock("info", "guide").match(/<SectionAddBar/g) ?? []).length, 1, "«Информация» has the bar");
-  assert.equal((tabBlock("guide", "broadcasts").match(/<SectionAddBar/g) ?? []).length, 1, "«Справочник» has the bar");
+  // Phase 26 (26-07, D-13a): the «Справочник» add bar stands in the nav slot of the sticky action bar, not in the tab body.
+  const guideNav = editor.slice(editor.indexOf('nav={tab === "guide" ? <>'), editor.indexOf("actions={<>"));
+  assert.equal((guideNav.match(/<SectionAddBar/g) ?? []).length, 1, "«Справочник» has the bar in the nav slot");
+  assert.equal((tabBlock("guide", "broadcasts").match(/<SectionAddBar/g) ?? []).length, 0, "and not in its body");
   assert.match(editor, /next\.searchRecommendationSections = \[\]/);
   assert.match(editor, /draft\.searchRecommendations\.join\("\\n"\)/);
   assert.match(editor, /trimRecommendationSections\(/);

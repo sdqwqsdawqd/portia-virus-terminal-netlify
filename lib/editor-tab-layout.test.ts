@@ -128,8 +128,9 @@ test("D-13b: the bar is sticky, opaque and above the content; the chip rules are
 test("D-13b phone: one sticky bar in two rows under the 48px system bar, held by overflow: clip", () => {
   const clip = rules.find((rule) => rule.context?.includes(PHONE) && rule.selectors.includes(".app-window:has(.etab-bar)") && rule.selectors.includes(".content-editor:has(.etab-bar)"));
   assert.ok(clip && /overflow:\s*clip/.test(clip.body), "the window and the pane clip instead of scrolling");
+  // 48px: the offset the old sticky add bar used on a phone before 26-07 moved it into the bar's nav slot.
   assert.equal(declared(".etab-bar", "top", PHONE), "48px");
-  assert.equal(declared(".etab-bar", "top", PHONE), declared(".editor-section-addbar", "top", PHONE), "the same offset as the add bar today");
+  assert.equal(declared(".editor-section-addbar", "top", PHONE), undefined, "the add bar has no sticky offset of its own any more");
   assert.equal(declared(".etab-bar", "flex-wrap", PHONE), "wrap");
   assert.equal(declared(".etab-nav", "order", PHONE), "1");
   assert.equal(declared(".etab-nav", "flex-basis", PHONE), "100%");
@@ -194,4 +195,78 @@ test("D-12: list column 240–320px, detail 24px (PC) / 16px (phone), one column
   assert.match(styles, /\.etab-empty > p\s*\{[^}]*font:\s*400 13px/);
   // 26-05: the maximized rules of the old classes still reach the new bodies.
   assert.match(styles, /\.app-window\.is-maximized \.virus-editor-form \{/);
+});
+
+// ---- 26-07 (D-13a, A2): section navigation in the bar's nav slot, the TOC on the left, the active section on the right ----
+
+/** The JSX expression the bar receives as `nav` (from `nav={` up to the `actions={` prop). */
+function barNav() {
+  return editorSlice("          nav={", "          actions={<>");
+}
+
+test("D-13a: section tabs mark the current section with aria-current, not aria-pressed, and keep it in view", () => {
+  const tabs = editorSlice("function SectionTabs(", "function GuidePhotoLayoutEditor(");
+  assert.ok(tabs.includes('aria-current={section.id === activeId ? "true" : undefined}'), "the current section is aria-current");
+  assert.ok(!tabs.includes("aria-pressed"), "no aria-pressed on section buttons");
+  assert.ok(tabs.includes('{section.title || "Без названия"}'), "an empty title still reads «Без названия» (T-26-14)");
+  assert.ok(tabs.includes("<nav aria-label={label} ref={navRef}>"), "the nav holds a ref");
+  assert.match(tabs, /useEffect\(\(\) => \{\n\s*navRef\.current\?\.querySelector<HTMLElement>\('\[aria-current="true"\]'\)\?\.scrollIntoView\(\{ block: "nearest", inline: "nearest", behavior: document\.documentElement\.dataset\.motion === "full" \? "smooth" : "auto" \}\);\n\s*\}, \[activeId\]\);/, "the current item is scrolled into view on change, instantly unless motion is full");
+  assert.ok(tabs.includes('aria-label="Порядок разделов"'), "the order buttons stay beside the tabs");
+  assert.doesNotMatch(tabs, /dangerouslySetInnerHTML/);
+});
+
+test("D-13a: «Справочник» switches sections in the nav slot of the bar: the add button first, then the section tabs", () => {
+  const nav = barNav();
+  const guide = nav.indexOf('nav={tab === "guide" ? <>');
+  const add = nav.indexOf("<SectionAddBar onCreate={(title) => {", guide);
+  const tabs = nav.indexOf('<SectionTabs label="Разделы справочника"', guide);
+  assert.ok(guide >= 0 && add > guide && tabs > add, "SectionAddBar, then SectionTabs «Разделы справочника» in the nav");
+  assert.ok(nav.includes('const id = makeId("guide");'), "the same onCreate");
+  assert.ok(nav.includes("onSelect={setSelectedGuideSection} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.guideSections, from, to))} />"), "the same props");
+  const body = editorSlice('{tab === "guide" && (', '{tab === "broadcasts" && (');
+  assert.ok(!body.includes("<SectionAddBar") && !body.includes("<SectionTabs"), "the guide body holds neither the add bar nor the section tabs");
+});
+
+test("A2: the «Справочник» body is the TOC on the left (only when it shows) and the active section on the right", () => {
+  const body = editorSlice('{tab === "guide" && (', '{tab === "broadcasts" && (');
+  assert.ok(body.includes("<EditorTabBody list={guideTocItems.length >= 5 && <EditorToc items={guideTocItems} onJump={jumpGuide} onAll={(open) => setAllOpen(guideCardIds, open)} />} detail={"), "list = the TOC with the same threshold");
+  assert.match(stripComments(editor), /if \(items\.length < 5\) return null;/, "the TOC threshold is still 5");
+  const detail = body.slice(body.indexOf("detail={"));
+  const form = detail.indexOf('<div className="editor-form flat-editor-form editor-card-columns">');
+  const hint = detail.indexOf('<p className="editor-guidance">Справочник на рабочем столе');
+  const empty = detail.indexOf("Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».");
+  const columns = detail.indexOf("<SectionColumns items={draft.guideSections} render={(section, index) => section.id === activeGuideSection && (");
+  assert.ok(form > 0 && hint > form && empty > hint && columns > empty, "detail = the form, its hint (h-41), the empty state (h-43), the active section");
+  assert.match(body, /<\/div>\n\s*\} \/>\n\s*\)\}/, "the detail closes after the form");
+  assert.match(shell, /export function EditorTabBody/);
+});
+
+test("D-13b: only the action bar is sticky; the old add bar and section tabs have no sticky layer or top offset of their own", () => {
+  for (const selector of [".editor-section-tabs", ".editor-section-addbar", ".editor-section-addbar + .editor-section-tabs"]) {
+    for (const context of [undefined, PHONE, "min-width: 901px"]) {
+      assert.notEqual(declared(selector, "position", context), "sticky", `${selector} ${context ?? ""}`);
+      assert.equal(declared(selector, "top", context), undefined, `${selector} top ${context ?? ""}`);
+    }
+  }
+  assert.doesNotMatch(styles, /top:\s*-28px/, "no PC correction of the old add bar");
+  assert.doesNotMatch(styles, /\.etab-bar ~ \* \.editor-section-addbar/, "the 26-06 transitional rule is gone");
+  assert.doesNotMatch(styles, /:has\(\.editor-section-addbar\)/, "the old phone clip of the add bar is gone: the bar's own clip holds");
+});
+
+test("D-13a: in the nav slot the section tabs run in one scrolling row; the title form opens under the add button", () => {
+  assert.equal(declared(".etab-nav > .editor-section-addbar", "flex"), "none");
+  assert.equal(declared(".etab-nav > .editor-section-tabs", "flex"), "1 1 auto");
+  assert.equal(declared(".etab-nav > .editor-section-tabs", "min-width"), "0");
+  assert.equal(declared(".etab-nav .editor-section-tabs nav", "flex-wrap"), "nowrap");
+  assert.equal(declared(".etab-nav .editor-section-tabs nav", "overflow-x"), "auto");
+  assert.equal(declared(".etab-nav .editor-section-create", "white-space"), "normal");
+  assert.match(styles, /\.editor-section-tabs nav button\[aria-current="true"\]\s*\{[^}]*background:\s*var\(--teal-soft\)/, "the current section keeps the soft fill");
+  assert.match(styles, /\.editor-section-addbar \{ display: grid; gap: 8px; \}/, "the add bar is a plain grid: button row, then the form under it");
+});
+
+test("D-13b: a jump from the TOC leaves the card clear of the sticky bar", () => {
+  for (const selector of [".content-editor:has(> .etab-bar) .nested-editor-card", ".content-editor:has(> .etab-bar) .editor-record-row"]) {
+    assert.equal(declared(selector, "scroll-margin-top"), "64px", selector);
+    assert.equal(declared(selector, "scroll-margin-top", PHONE), "148px", `${selector} phone`);
+  }
 });

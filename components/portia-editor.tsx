@@ -43,7 +43,7 @@ import { AppDeniedPanel } from "@/components/portia-desktop-states";
 import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";
 import { accessCheckFailedText } from "@/lib/app-state";
 import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
-import { EditorActionBar, EditorEmptyDetail } from "@/components/portia-editor-tab-shell";
+import { EditorActionBar, EditorEmptyDetail, EditorTabBody } from "@/components/portia-editor-tab-shell";
 
 type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "users" | "promo" | "access";
 
@@ -277,9 +277,14 @@ function SectionTabs({ label, sections, activeId, onSelect, onMove }: {
   onMove: (from: number, to: number) => void;
 }) {
   const activeIndex = sections.findIndex((section) => section.id === activeId);
+  const navRef = useRef<HTMLElement>(null);
+  // D-13a: the current section stays in view of the bar's nav when it changes; instant unless the house motion switch is on.
+  useEffect(() => {
+    navRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" });
+  }, [activeId]);
   return <div className="editor-section-tabs">
-    <nav aria-label={label}>
-      {sections.map((section) => <button key={section.id} type="button" aria-pressed={section.id === activeId} onClick={() => onSelect(section.id)}>{section.title || "Без названия"}</button>)}
+    <nav aria-label={label} ref={navRef}>
+      {sections.map((section) => <button key={section.id} type="button" aria-current={section.id === activeId ? "true" : undefined} onClick={() => onSelect(section.id)}>{section.title || "Без названия"}</button>)}
     </nav>
     {activeIndex >= 0 && <div className="editor-section-tab-order" aria-label="Порядок разделов">
       <button type="button" disabled={activeIndex === 0} onClick={() => onMove(activeIndex, activeIndex - 1)} aria-label="Переместить раздел левее">←</button>
@@ -1214,6 +1219,16 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
           tone={status}
           unsavedCount={dirty ? shownChanged.length : 0}
           notice={saveNotice}
+          nav={tab === "guide" ? <>
+            <SectionAddBar onCreate={(title) => {
+              const id = makeId("guide");
+              changeDraft((next) => { next.guideSections.push({ id, title: title || "НОВЫЙ РАЗДЕЛ", photo: "", cards: [] }); });
+              setSelectedGuideSection(id);
+              setOpen([id], true);
+              requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#card-${id} > .nested-editor-body input`)?.focus());
+            }} />
+            <SectionTabs label="Разделы справочника" sections={draft.guideSections} activeId={activeGuideSection} onSelect={setSelectedGuideSection} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.guideSections, from, to))} />
+          </> : undefined}
           actions={<>
             <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
             <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>
@@ -1409,17 +1424,9 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       )}
 
       {tab === "guide" && (
+        <EditorTabBody list={guideTocItems.length >= 5 && <EditorToc items={guideTocItems} onJump={jumpGuide} onAll={(open) => setAllOpen(guideCardIds, open)} />} detail={
         <div className="editor-form flat-editor-form editor-card-columns">
           <p className="editor-guidance">Справочник на рабочем столе состоит из разделов, в разделах лежат карточки-плитки. Нажатие на плитку открывает страницу карточки из блоков в любом порядке. Подразделы раздела — его карточки-плитки.</p>
-          <SectionAddBar onCreate={(title) => {
-            const id = makeId("guide");
-            changeDraft((next) => { next.guideSections.push({ id, title: title || "НОВЫЙ РАЗДЕЛ", photo: "", cards: [] }); });
-            setSelectedGuideSection(id);
-            setOpen([id], true);
-            requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#card-${id} > .nested-editor-body input`)?.focus());
-          }} />
-          <SectionTabs label="Разделы справочника" sections={draft.guideSections} activeId={activeGuideSection} onSelect={setSelectedGuideSection} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.guideSections, from, to))} />
-          <EditorToc items={guideTocItems} onJump={jumpGuide} onAll={(open) => setAllOpen(guideCardIds, open)} />
           {draft.guideSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
           <SectionColumns items={draft.guideSections} render={(section, index) => section.id === activeGuideSection && (
             <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${guideNo(index)}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)} cardProps={{ "data-drop-group": section.id }}
@@ -1502,6 +1509,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
             </CollapsibleCard>
           )} />
         </div>
+        } />
       )}
 
       {tab === "broadcasts" && (
