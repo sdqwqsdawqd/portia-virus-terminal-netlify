@@ -41,8 +41,12 @@ const rules = parseRules(styles.replace(/\/\*[\s\S]*?\*\//g, ""));
 
 /** The value the last rule naming `selector` gives `property`; with a context the media rules of that query count too. */
 function declared(selector: string, property: string, context?: string): string | undefined {
+  return declaredIn(rules, selector, property, context);
+}
+
+function declaredIn(list: Rule[], selector: string, property: string, context?: string): string | undefined {
   let value: string | undefined;
-  for (const rule of rules) {
+  for (const rule of list) {
     if (!rule.selectors.includes(selector)) continue;
     if (rule.context !== null && !(context && rule.context.includes(context))) continue;
     for (const part of rule.body.split(";")) {
@@ -345,4 +349,63 @@ test("D-12: «Сотрудники» is a list/detail body; the picked employee 
   assert.ok(employees.includes('<div className="editor-form employee-profile-editor etab-detail">'));
   assert.ok(employees.includes("editor-back-to-list"), "the phone back button stays");
   assert.doesNotMatch(styles, /\.employee-editor-save/, "no rule of the retired save line");
+});
+
+// ---- 26-08 (D-12, D-13): «Повышение» — the branches in the bar's nav slot, the queue and the banks as list/detail ----
+// components/portia-promotion-editor-main.tsx is not a part of the portia-editor family (no D-21 hunk guard); it calls the seam directly.
+
+const promotionMain = stripComments(lf(readFileSync(new URL("../components/portia-promotion-editor-main.tsx", import.meta.url), "utf8")));
+const promotionCss = lf(readFileSync(new URL("../app/portia-promotion-editor.css", import.meta.url), "utf8"));
+const promotionRules = parseRules(promotionCss.replace(/\/\*[\s\S]*?\*\//g, ""));
+const DESKTOP = "min-width: 901px";
+
+/** The JSX of the reviewer workspace from `from` up to `to`. */
+function promotionSlice(from: string, to: string) {
+  const start = promotionMain.indexOf(from);
+  const end = promotionMain.indexOf(to, start + 1);
+  assert.ok(start >= 0 && end > start, `${from} … ${to} is found`);
+  return promotionMain.slice(start, end);
+}
+
+test("D-13b: «Повышение» renders the shared action bar: the branches in the nav slot, the queue message in the status slot, no draft buttons", () => {
+  assert.match(promotionMain, /import \{ EditorActionBar \} from "@\/components\/portia-editor-tab-shell";/);
+  assert.equal(promotionMain.split("<EditorActionBar").length - 1, 1, "one bar for the whole tab");
+  const bar = promotionSlice("<EditorActionBar", "{message && conflict &&");
+  assert.ok(bar.includes('<EditorActionBar label="Разделы повышения" nav={<nav className="promotion-editor-branches" aria-label="Разделы повышения">'), "the branch nav is the nav slot, its label is the bar's");
+  assert.ok(bar.includes('aria-current={branch === id ? "true" : undefined}'), "the current branch is aria-current");
+  assert.ok(!bar.includes("aria-pressed"), "branches are sections, not toggles");
+  assert.ok(bar.includes("aria-label={`${label}: ${count}`} onKeyDown={moveButtonTab}"), "the accessible name with its count and the arrow keys stay");
+  assert.ok(bar.includes('{label}<span className="tab-count" aria-hidden="true">{count}</span>'), "the count is the house plaque");
+  assert.ok(bar.includes("['requests','ЗАПРОСЫ',ordinaryCount + qualificationCount],['tasks','ЗАДАНИЯ',banks.taskBanks.length],['qualification','КВАЛИФИКАЦИЯ',qualificationCount]"), "the same three branches and counts");
+  assert.ok(bar.includes('statusText={message} tone={message ? "error" : ""} />'), "the queue message is the polite status of the bar");
+  for (const gone of ["actions=", "СОХРАНИТЬ", "ОТМЕНИТЬ", "unsavedCount"]) assert.ok(!bar.includes(gone), `${gone}: no editor draft action on this bar`);
+  assert.ok(!promotionMain.includes("promotion-editor-message"), "the old message line is gone");
+  assert.doesNotMatch(styles, /\.promotion-editor-message/, "and so is its rule");
+  // T-26-16: the closed workspace is returned before the bar is ever drawn.
+  const denied = promotionMain.indexOf('if (denied) return <div className="promotion-editor"><div className="empty-state" role="alert"><strong>Доступ закрыт</strong></div></div>;');
+  assert.ok(denied > 0 && denied < promotionMain.indexOf("<EditorActionBar"), "the denied state stays first");
+});
+
+test("D-12: the request queue is a list/detail body under the filters; a phone keeps the queue-or-detail switch", () => {
+  const requests = promotionSlice('{branch === "requests" ? <>', "{confirm && <PromotionConfirmDialog");
+  const toolbar = requests.indexOf('<div className="promotion-requests-toolbar">');
+  const workbench = requests.indexOf('<div className="promotion-editor-workbench etab-body">');
+  assert.ok(toolbar > 0 && workbench > toolbar, "the filters and the device reset stay above the workbench");
+  assert.ok(requests.includes('<div className="promotion-queue-filters" role="group" aria-label="Типы запросов">'), "the filters are a group");
+  assert.ok(requests.includes('{(!isPhone || requestView === "queue") && <aside className="promotion-request-list etab-list">'), "the list pane");
+  assert.ok(requests.includes('{(!isPhone || requestView === "detail") && <article className="promotion-request-detail etab-detail">'), "the detail pane");
+  assert.ok(requests.includes("← НАЗАД К ЗАПРОСАМ"), "the phone back button stays");
+});
+
+test("D-12/D-13: «Повышение» styles — the bar flush on top, the branches flush in the nav, the request list 280px on a PC", () => {
+  assert.equal(declaredIn(promotionRules, ".etab-nav > .promotion-editor-branches", "margin"), "0");
+  assert.equal(declaredIn(promotionRules, ".promotion-editor-branches .tab-count", "margin-left"), "0", "the button gap spaces the plaque");
+  assert.equal(declaredIn(promotionRules, ".promotion-editor:has(> .etab-bar)", "padding-top", DESKTOP), "0", "sticky counts from the inner edge, so the bar lies on it");
+  assert.equal(declaredIn(promotionRules, ".promotion-editor:has(> .etab-bar)", "overflow", PHONE), "clip", "the page scrolls on a phone and the bar sticks under the system bar");
+  assert.equal(declaredIn(promotionRules, ".promotion-editor-workbench.etab-body", "grid-template-columns", DESKTOP), "280px minmax(0, 1fr)");
+  for (const selector of [".promotion-editor-branches button", ".promotion-queue-filters button"]) {
+    for (const context of [undefined, PHONE]) {
+      for (const list of [rules, promotionRules]) assert.doesNotMatch(declaredIn(list, selector, "flex", context) ?? "", /^[1-9]/, `${selector}: as wide as its label`);
+    }
+  }
 });

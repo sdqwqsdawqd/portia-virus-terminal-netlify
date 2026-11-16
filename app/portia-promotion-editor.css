@@ -178,3 +178,17 @@
   .app-window.is-maximized .promotion-editor-workbench, .app-window.is-maximized .promotion-bank-workflow .promotion-bank-layout { grid-template-columns: 280px minmax(0, 1fr); }
   .app-window.is-maximized .promotion-bank-items, .app-window.is-maximized .promotion-request-detail dl { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 4)), 1fr)); }
 }
+
+/* Phase 26 (26-08, UI-04, D-12, D-13): «Повышение» в общей раскладке вкладок редактора. Ветки стоят в слоте nav липкой панели
+   (.etab-bar из шва), очередь запросов — «список — деталь» (.etab-body). Счётчик ветки — плашка .tab-count, как у «Сводки». */
+.etab-nav > .promotion-editor-branches { margin: 0; }
+.promotion-editor-branches .tab-count { margin-left: 0; border-color: var(--warning); background: transparent; }
+@media (min-width: 901px) {
+  /* Sticky отсчитывается от внутреннего края прокрутки, поэтому верхнего отступа нет и панель прилегает к краю (как у .content-editor). */
+  .promotion-editor:has(> .etab-bar) { padding-top: 0; }
+  .promotion-editor-workbench.etab-body { grid-template-columns: 280px minmax(0, 1fr); }
+}
+/* Телефон: прокручивает страница; clip вместо auto, чтобы панель держалась под системной полосой 48px, как у остальных вкладок. */
+@media (max-width: 900px) {
+  .promotion-editor:has(> .etab-bar) { overflow: clip; }
+}

@@ -103,7 +103,8 @@ test("bank actions use the established control hierarchy and announce results", 
   assert.ok(editors.includes('className="secondary-control"'));
   assert.ok(editors.includes('className="danger-control"'));
   assert.ok(editors.includes('role="status"'));
-  assert.ok(main.includes('<p className="promotion-editor-message" role="status">'));
+  // Phase 26 (D-13b): the queue message is the status slot of the shared action bar (role="status", aria-live="polite").
+  assert.match(main, /<EditorActionBar[\s\S]*?statusText=\{message\}/);
   assert.match(styles, /\.promotion-command-state\s*\{/);
   assert.match(styles, /\.promotion-command-state\.error\s*\{/);
 });
@@ -150,8 +151,12 @@ test("all destructive actions share one focus-managed confirmation dialog", () =
 test("actual branch and queue controls expose button-tab semantics and arrow navigation", () => {
   assert.ok(main.includes('aria-label="Разделы повышения"'));
   assert.ok(main.includes('aria-label="Типы запросов"'));
-  assert.ok(main.includes("aria-pressed={branch === id}"));
+  // Phase 26 (D-13a): a branch is a section of the tab, so the current one is aria-current (the 26-07 section tabs);
+  // the request types are filters of one list, so they stay toggles with aria-pressed.
+  assert.ok(main.includes('aria-current={branch === id ? "true" : undefined}'));
+  assert.ok(!main.includes("aria-pressed={branch === id}"));
   assert.ok(main.includes('aria-pressed={kind === "ordinary"}'));
+  assert.ok(main.includes('aria-pressed={kind === "qualification"}'));
   assert.ok(main.includes("moveButtonTab"));
   assert.ok(main.includes('event.key === "ArrowRight"'));
   assert.ok(main.includes('"ArrowLeft"'));
