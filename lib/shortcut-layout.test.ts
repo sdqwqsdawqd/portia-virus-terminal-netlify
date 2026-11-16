@@ -56,7 +56,8 @@ test("arguments are not mutated", () => {
 test("DraggableDesktopIcon starts the cycle first, gates free drag at 520px (UI-09), clamps through the pure function and opens immediately", () => {
   const down = /const handlePointerDown = [\s\S]*?\n  \};/.exec(shortcuts)?.[0] ?? "";
   assert.match(down, /handlePointerDown = \(event[^\n]*\n\s*iconAnimation\.play\(\);/);
-  assert.ok(down.includes('window.matchMedia("(max-width: 520px)").matches'));
+  assert.ok(down.includes("window.matchMedia(phoneShortcutQuery).matches"));
+  assert.ok(shortcuts.includes('const phoneShortcutQuery = "(max-width: 520px)";'), "the phone query is the one the stylesheet uses");
   assert.ok(!shortcuts.includes("window.innerWidth <= 520"));
   assert.ok(/handlePointerMove[\s\S]*clampShortcutPosition\(/.test(shortcuts));
   assert.ok(/finishDrag[\s\S]*clampShortcutPosition\(/.test(shortcuts));
@@ -120,7 +121,7 @@ test("UI-09 shortcutCell: the cell holds the icon of each size plus two label li
 
 test("UI-09 shortcutCell numbers are the ones the 521–900px stylesheet draws", () => {
   const css = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const start = css.indexOf("@media (min-width: 521px) and (max-width: 900px) {");
+  const start = css.indexOf("@media (520px < width <= 900px) {");
   assert.ok(start > 0);
   const block = css.slice(start, css.indexOf("\n}\n", start));
   assert.match(block, /\n  \.desktop-icon \{[^}]*width: 94px; min-height: 86px; padding: 7px 5px; font-size: 12px;/);
@@ -199,4 +200,24 @@ test("UI-09: a drop at 521–900px lands where placeShortcuts keeps it — the n
     assert.deepEqual(result.positions.trash, dropped, `drop ${JSON.stringify(raw)} stays where it was released`);
     assertClean(result, area, cell, `drop ${JSON.stringify(raw)}`);
   }
+});
+
+// ---- Review WR-02: the 520/521 and 900/901 borders leave no gap on a fractional width (a zoomed 520.8px) ----
+
+test("WR-02: phone, tablet and PC queries cover every width exactly once, in the stylesheet and in the shortcuts code", () => {
+  const phoneQuery = /const phoneShortcutQuery = "([^"]+)";/.exec(shortcuts)?.[1] ?? "";
+  const tabletQuery = /const tabletShortcutQuery = "([^"]+)";/.exec(shortcuts)?.[1] ?? "";
+  assert.equal(phoneQuery, "(max-width: 520px)");
+  assert.equal(tabletQuery, "(520px < width <= 900px)");
+  const phone = (width: number) => width <= 520;
+  const tablet = (width: number) => 520 < width && width <= 900;
+  const pc = (width: number) => width > 900;
+  for (const width of [320, 520, 520.5, 520.8, 520.98, 520.99, 521, 600, 900, 900.5, 900.99, 901, 1280, 1920]) {
+    assert.equal([phone(width), tablet(width), pc(width)].filter(Boolean).length, 1, `${width}px is in exactly one band`);
+  }
+  const css = ["../app/portia.css", "../app/portia-promotion-editor.css"].map((file) => readFileSync(new URL(file, import.meta.url), "utf8")).join("\n");
+  assert.ok(css.includes(`@media ${phoneQuery} {`), "the phone block is the JS phone query");
+  assert.ok(css.includes(`@media ${tabletQuery} {`), "the tablet block is the JS tablet query");
+  assert.doesNotMatch(css, /@media \(min-width: 521px\)|@media \(min-width: 901px\)|min-width: 521px\) and|\(min-width: 901px\)/, "no min-width border that pairs with a max-width one and leaves a gap");
+  assert.ok(css.includes("@media (width > 900px) {"), "the PC blocks start where the phone blocks (max-width: 900px) end");
 });

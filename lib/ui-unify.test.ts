@@ -582,7 +582,7 @@ const ALL_STYLESHEETS = [
   ["app/globals.css", globalsCss],
 ] as const;
 const MAXIMIZED = ".app-window.is-maximized";
-const DESKTOP = "min-width: 901px";
+const DESKTOP = "width > 900px";
 // R1 (UI-SPEC): 360px minimum card, at most four columns, 2–4 on 1366–2560px screens.
 const R1_COLUMNS = "repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 4)), 1fr))";
 // The two rules that predate Phase 26 and hold on every width: the 8px inset and the hidden resize edges.
@@ -645,7 +645,7 @@ test("UI-06 / D-03: the maximized hook is unchanged, the only one, and never a c
         if (!selector.includes("is-maximized")) continue;
         assert.ok(selector.startsWith(MAXIMIZED), `${file}: ${selector} must start with ${MAXIMIZED}`);
         if (HISTORIC_MAXIMIZED.includes(selector)) continue;
-        assert.ok(/min-width: (?:901|1281)px/u.test(rule.context ?? ""), `${file}: ${selector} must sit in a desktop @media (min-width) so the phone is not touched`);
+        assert.ok(/(?:width > 900|min-width: 1281)px/u.test(rule.context ?? ""), `${file}: ${selector} must sit in a desktop @media (min-width) so the phone is not touched`);
       }
     }
   }

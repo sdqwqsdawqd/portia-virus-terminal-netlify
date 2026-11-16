@@ -612,7 +612,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 /* Угловой крестик слоёв (UI-05): цвета и опасное наведение крестика окна; размер и место — в блоке ui-unify (он цветов не задаёт). */
 .corner-close, .custom-color-picker-head .corner-close, .floating-text-format > header .corner-close { background: transparent; color: inherit; }
 .corner-close:hover, .custom-color-picker-head .corner-close:hover, .floating-text-format > header .corner-close:hover { background: #5d2d29; color: #fff; }
-@media (min-width: 901px) {
+@media (width > 900px) {
   /* The panel is a layer of the desktop and is dragged by its header anywhere on the screen (D-06, EDIT-04). */
   .floating-text-format > header { cursor: grab; touch-action: none; user-select: none; }
   .floating-text-format > header:active { cursor: grabbing; }
@@ -886,7 +886,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 /* One column that may shrink below its content: a nowrap card title would otherwise widen the whole form past a phone screen. */
 .flat-editor-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 /* Form cards keep one fixed width and add columns as the window widens (D-15). After .flat-editor-form so it wins the cascade; the sorted recommendation and access lists stay one column. */
-@media (min-width: 901px) {
+@media (width > 900px) {
   .editor-card-columns { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--editor-card-width)), var(--editor-card-width))); gap: 10px; align-items: start; }
   .editor-card-columns > :not(.nested-editor-card) { grid-column: 1 / -1; }
   .editor-card-columns > .nested-editor-card + .nested-editor-card { margin-top: 0; }
@@ -905,7 +905,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .editor-section-tab-order button:disabled { opacity: .4; cursor: default; }
 .editor-section-tabs button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .editor-section-column > .nested-editor-card + .nested-editor-card { margin-top: 0; }
-@media (min-width: 901px) {
+@media (width > 900px) {
   /* The form of a tab with section columns is one track wide: the columns divide the width themselves. */
   .editor-card-columns:has(> .editor-section-columns) { grid-template-columns: minmax(0, 1fr); }
   .editor-section-columns { grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--editor-card-width)), 1fr)); gap: 10px; align-items: start; }
@@ -925,7 +925,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .broadcast-entry-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; margin-top: 8px; }
 .broadcast-entry-list:empty { display: none; }
 .broadcast-entry-list > .nested-editor-card + .nested-editor-card { margin-top: 0; }
-@media (min-width: 901px) { .broadcast-entry-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--editor-card-width)), var(--editor-card-width))); align-items: start; margin-top: 0; } }
+@media (width > 900px) { .broadcast-entry-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--editor-card-width)), var(--editor-card-width))); align-items: start; margin-top: 0; } }
 .editor-section-create { display: grid; gap: 8px; }
 .editor-section-create[hidden] { display: none; }
 .editor-section-create .editor-section-create-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -1518,7 +1518,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
 
 /* UI-09: at 521–900px one JS rule (placeShortcuts in lib/shortcut-layout.ts) sets --shortcut-left/top; the workspace is not clipped and
    grows to --shortcut-content-height, so the page scrolls instead of cutting shortcuts off. A finger scrolls the page from a shortcut. */
-@media (min-width: 521px) and (max-width: 900px) {
+@media (520px < width <= 900px) {
   .workspace { min-height: max(calc(100svh - 82px), var(--shortcut-content-height, 0px)); padding: 0 0 56px; }
   .workspace.mobile-app-open { min-height: calc(100svh - 82px); }
   /* The measured area keeps the natural workspace height, so a grown workspace never feeds back into the placement. */
@@ -2035,7 +2035,7 @@ html[data-motion="reduced"] .assistant-button img { transition-duration: var(--m
 .guide-section-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 16px; align-items: start; margin-top: 16px; }
 .guide-grid[hidden] { display: none; }
-@media (min-width: 901px) { .guide-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 176px), 176px)); } } /* after the base rule so it wins the cascade */
+@media (width > 900px) { .guide-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 176px), 176px)); } } /* after the base rule so it wins the cascade */
 .guide-tile { display: block; min-width: 0; padding: 0; border: 1px solid var(--line); background: var(--panel-2); color: oklch(.919 calc(.012 * var(--accent-chroma)) var(--accent-hue)); text-align: left; cursor: pointer; }
 .guide-tile:hover, .guide-tile:focus-visible { border-color: var(--teal); background: var(--teal-soft); }
 .guide-tile-cover { position: relative; display: block; aspect-ratio: 4 / 3; background: var(--panel); overflow: hidden; }
@@ -2528,7 +2528,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .access-level-option { width: 44px; height: 44px; }
 }
 /* Phase 26 (UI-06, R5): закрытый «Устав» в развёрнутом окне — блок на всё окно под полосой, содержимое по центру; только раскладка, данные не показываются. */
-@media (min-width: 901px) {
+@media (width > 900px) {
   .app-window.is-maximized > .access-redacted-block { box-sizing: border-box; height: calc(100% - 46px); max-height: none; }
 }
 /* access-levels:end */
@@ -2636,7 +2636,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 /* Развёрнутое окно (UI-06, D-01 … D-04): единственный хук — .app-window.is-maximized (отступ 8px и радиус окна прежние);
    все правила только на ПК, обычное окно и телефон не затронуты; container-type на окне не ставится (сдвинул бы фиксированные слои).
    R1 — сетка карточек, не больше 4 колонок; R2 — однострочные поля до var(--field-max) (640px). Порядок чтения и стрелки — по DOM. */
-@media (min-width: 901px) {
+@media (width > 900px) {
   .app-window.is-maximized .global-search-results { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 4)), 1fr)); }
   .app-window.is-maximized .global-result { min-width: 0; }
   .app-window.is-maximized .global-search-header, .app-window.is-maximized .global-search-box { max-width: var(--field-max); }
@@ -2696,7 +2696,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .etab-detail { box-sizing: border-box; min-width: 0; padding: 24px; }
 .etab-empty { display: grid; justify-items: center; align-content: start; gap: 8px; padding: 48px 24px; text-align: center; }
 /* На ПК sticky отсчитывается от внутреннего края панели с отступом 28px: верхний отступ переходит в отступ шапки, и панель прилегает к краю. */
-@media (min-width: 901px) {
+@media (width > 900px) {
   .content-editor:has(> .etab-bar), .content-editor:has(> .users-tab > .etab-bar) { padding-top: 0; }
   .content-editor:has(> .etab-bar) > .editor-header, .content-editor:has(> .users-tab > .etab-bar) > .editor-header { margin-top: 28px; }
 }

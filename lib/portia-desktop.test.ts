@@ -348,7 +348,7 @@ test("window tiles keep their own size and the search shows the picked recommend
 test("editor form cards keep one fixed width set by a single variable and fill columns on desktop only (D-15)", () => {
   assert.equal(styles.match(/--editor-card-width:/g)?.length, 1);
   assert.match(styles, /--editor-card-width:\s*340px/); // 18-MOTION-APPROVAL item 5
-  const desktop = /@media \(min-width: 901px\) \{\s*\.editor-card-columns \{[^}]*\}/.exec(styles)?.[0] ?? "";
+  const desktop = /@media \(width > 900px\) \{\s*\.editor-card-columns \{[^}]*\}/.exec(styles)?.[0] ?? "";
   assert.match(desktop, /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*var\(--editor-card-width\)\),\s*var\(--editor-card-width\)\)\)/);
   assert.match(desktop, /align-items:\s*start/);
   // Phase 26 (D-19): a maximized editor only gains more columns of the same var(--editor-card-width); no 1fr stretch.
@@ -1161,7 +1161,7 @@ test("UI-08 D-16: the closed button counts the sections with search hits by the 
 
 // ---- Phase 26-11 (UI-09): the shortcuts at 521–900px follow one JS placement rule ----
 function tabletShortcutBlock() {
-  const start = styles.indexOf("@media (min-width: 521px) and (max-width: 900px) {");
+  const start = styles.indexOf("@media (520px < width <= 900px) {");
   assert.ok(start > 0, "the 521–900px rule exists");
   return styles.slice(start, closingBrace(styles, styles.indexOf("{", start)) + 1);
 }
@@ -1169,7 +1169,7 @@ function tabletShortcutBlock() {
 test("UI-09 tracer: useShortcutPlacement measures .desktop-icons with a ResizeObserver at 521–900px and places through placeShortcuts", () => {
   assert.ok(shortcutsSource.includes("export function useShortcutPlacement("), "the hook lives next to the shortcuts");
   assert.ok(shortcutsSource.includes("new ResizeObserver("));
-  assert.ok(shortcutsSource.includes('"(min-width: 521px) and (max-width: 900px)"'));
+  assert.ok(shortcutsSource.includes('const tabletShortcutQuery = "(520px < width <= 900px)";'));
   assert.ok(/placeShortcuts\(/.test(shortcutsSource), "the hook calls the pure rule");
   assert.ok(shortcutsSource.includes("shortcutCell("), "the cell follows the icon size");
   // The desktop hands the ref of nav.desktop-icons to the hook and the placed spots to every shortcut.
@@ -1208,7 +1208,8 @@ test("UI-09: at 521–900px drag and Alt+Arrow work again; only the ≤520px gri
   const down = /const handlePointerDown = [\s\S]*?\n  \};/.exec(shortcutsSource)?.[0] ?? "";
   const key = /const handleKeyDown = [\s\S]*?\n  \};/.exec(shortcutsSource)?.[0] ?? "";
   for (const [name, handler] of [["handlePointerDown", down], ["handleKeyDown", key]] as const) {
-    assert.ok(handler.includes('window.matchMedia("(max-width: 520px)").matches'), name + " gates at 520px");
+    assert.ok(handler.includes("window.matchMedia(phoneShortcutQuery).matches"), name + " gates at 520px");
+    assert.ok(shortcutsSource.includes('const phoneShortcutQuery = "(max-width: 520px)";'), name + " uses the phone query of the stylesheet");
     assert.ok(!handler.includes("max-width: 900px"), name + " no longer gates at 900px");
   }
   assert.match(shortcutsSource, /≤520px — сетка телефона без свободного перетаскивания; 521–900 — то же правило, что и ПК, с расстановкой JS/);

@@ -305,7 +305,7 @@ test("A2: the «Справочник» body is the TOC on the left (only when it
 
 test("D-13b: only the action bar is sticky; the old add bar and section tabs have no sticky layer or top offset of their own", () => {
   for (const selector of [".editor-section-tabs", ".editor-section-addbar", ".editor-section-addbar + .editor-section-tabs"]) {
-    for (const context of [undefined, PHONE, "min-width: 901px"]) {
+    for (const context of [undefined, PHONE, "width > 900px"]) {
       assert.notEqual(declared(selector, "position", context), "sticky", `${selector} ${context ?? ""}`);
       assert.equal(declared(selector, "top", context), undefined, `${selector} top ${context ?? ""}`);
     }
@@ -413,7 +413,7 @@ test("D-12: «Сотрудники» is a list/detail body; the picked employee 
 const promotionMain = stripComments(lf(readFileSync(new URL("../components/portia-promotion-editor-main.tsx", import.meta.url), "utf8")));
 const promotionCss = lf(readFileSync(new URL("../app/portia-promotion-editor.css", import.meta.url), "utf8"));
 const promotionRules = parseRules(promotionCss.replace(/\/\*[\s\S]*?\*\//g, ""));
-const DESKTOP = "min-width: 901px";
+const DESKTOP = "width > 900px";
 
 /** The JSX of the reviewer workspace from `from` up to `to`. */
 function promotionSlice(from: string, to: string) {

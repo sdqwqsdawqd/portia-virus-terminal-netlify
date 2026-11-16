@@ -58,7 +58,10 @@ function placedShortcutLayout(position: ShortcutPosition): ShortcutLayoutStyle {
 // ---- UI-09: one JS placement rule for the shortcuts at 521–900px ----
 // Same order as the PC homes above: left column, second column, the bottom pair, trash.
 export const desktopShortcutOrder = Object.keys(defaultShortcutLayout) as DesktopShortcutId[];
-const tabletShortcutQuery = "(min-width: 521px) and (max-width: 900px)";
+// Review WR-02: three queries that cover every width exactly once, including a fractional one (a zoomed 520.8px): ≤520, (520–900], >900.
+// The stylesheet uses the same strings (app/portia.css: `(max-width: 520px)`, `(520px < width <= 900px)`, `(width > 900px)`).
+const phoneShortcutQuery = "(max-width: 520px)";
+const tabletShortcutQuery = "(520px < width <= 900px)";
 const shortcutGap = 8;
 const subscribeTabletShortcuts = (notify: () => void) => {
   const query = window.matchMedia(tabletShortcutQuery);
@@ -184,7 +187,7 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
   const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {
     iconAnimation.play();
     // ≤520px — сетка телефона без свободного перетаскивания; 521–900 — то же правило, что и ПК, с расстановкой JS.
-    if (window.matchMedia("(max-width: 520px)").matches || event.button !== 0) return;
+    if (window.matchMedia(phoneShortcutQuery).matches || event.button !== 0) return;
     if (dropTimer.current !== null) window.clearTimeout(dropTimer.current);
     setDropping(false);
     const workspace = event.currentTarget.closest<HTMLElement>(".workspace");
@@ -244,7 +247,7 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (!event.altKey || event.ctrlKey || !event.key.startsWith("Arrow")) return;
     // ≤520px — сетка телефона без свободного перетаскивания; 521–900 — то же правило, что и ПК, с расстановкой JS.
-    if (window.matchMedia("(max-width: 520px)").matches) return;
+    if (window.matchMedia(phoneShortcutQuery).matches) return;
     const workspace = event.currentTarget.closest<HTMLElement>(".workspace");
     if (!workspace) return;
     const step = event.shiftKey ? keyboardMoveLargeStep : keyboardMoveStep;
