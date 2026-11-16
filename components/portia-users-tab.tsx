@@ -400,6 +400,9 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
   const openHistoryKeysRef = useRef(openHistoryKeys);
   // The last list the server sent: after a PC decision its rows give the order the next row is picked from.
   const latestList = useRef<UsersList | null>(null);
+  // WR-03: what a decision does with the selection and the focus once the list after it is accepted. load() runs it on the first accepted list,
+  // whichever request that is: a poll or a new query that took over the epoch would otherwise swallow the follow-up of the decision.
+  const afterDecision = useRef<((list: UsersList) => void) | null>(null);
   const callerIsOwner = Boolean(list?.callerIsOwner && canManageEditors);
 
   useEffect(() => { openHistoryKeysRef.current = openHistoryKeys; }, [openHistoryKeys]);
@@ -456,6 +459,9 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
       });
       latestList.current = parsed;
       setList(parsed);
+      const settle = afterDecision.current;
+      afterDecision.current = null;
+      settle?.(parsed);
       setBulk(null);
       setLastGoodAt(new Date().toISOString());
       setFailure(null);
@@ -510,6 +516,7 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
 
   // PC (D-12): picking a row opens it in the detail pane; its history is always open there and reloads with the list.
   const selectRow = useCallback((context: RowContext) => {
+    afterDecision.current = null; // a pick of the user wins over the pending follow-up of a decision
     setSelectedKey(context.row.key);
     const nicknameKey = context.row.source.nicknameKey;
     const next = new Set<string>(context.section === "pending" ? [] : [nicknameKey]);
@@ -526,6 +533,7 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
   }, []);
 
   const switchSection = useCallback((kind: UsersSectionKind) => {
+    afterDecision.current = null;
     setActiveSection(kind);
     clearSelection();
   }, [clearSelection]);
@@ -566,19 +574,23 @@ export function UsersTab({ visible, canManageEditors, onPendingCount }: UsersTab
       }
       setDialogContext(null);
       setConfirmState(null);
-      const refreshed = await load();
-      if (!refreshed) return;
-      if (fromPhone) focusAfterRefresh(context.section, context.index);
-      else {
-        // PC (D-12, T-26-20): the decided row stays picked while it is still in its section (a level change, a refusal note);
-        // otherwise the next row of the section is picked and focused, none left — the section's button. Picking performs nothing.
-        const rowsAfter = buildUsersView(refreshed, "", new Date())[context.section].rows;
-        const candidate = rowsAfter.some((row) => row.key === decidedKey) ? decidedKey : nextUsersSelection(rowsBefore, decidedKey);
-        const nextIndex = candidate === null ? -1 : rowsAfter.findIndex((row) => row.key === candidate);
-        if (nextIndex >= 0) selectRow({ row: rowsAfter[nextIndex], section: context.section, index: nextIndex });
-        else clearSelection();
-        focusPcSelection(context.section, nextIndex >= 0 ? rowsAfter[nextIndex].key : null);
-      }
+      // WR-03: the follow-up is bound to the next accepted list, not to the return value of this load(): a poll or a query that took over
+      // the epoch makes this load() return nothing, but its own list still carries the decision.
+      afterDecision.current = (refreshed) => {
+        if (fromPhone) focusAfterRefresh(context.section, context.index);
+        else {
+          // PC (D-12, T-26-20): the decided row stays picked while it is still in its section (a level change, a refusal note);
+          // otherwise the next row of the section is picked and focused, none left — the section's button. Picking performs nothing.
+          const rowsAfter = buildUsersView(refreshed, "", new Date())[context.section].rows;
+          const candidate = rowsAfter.some((row) => row.key === decidedKey) ? decidedKey : nextUsersSelection(rowsBefore, decidedKey);
+          const nextIndex = candidate === null ? -1 : rowsAfter.findIndex((row) => row.key === candidate);
+          if (nextIndex >= 0) selectRow({ row: rowsAfter[nextIndex], section: context.section, index: nextIndex });
+          else clearSelection();
+          focusPcSelection(context.section, nextIndex >= 0 ? rowsAfter[nextIndex].key : null);
+        }
+      };
+      // false: this reload itself failed or was refused, so there is no list to follow; undefined: a newer request owns the epoch and settles it.
+      if ((await load()) === false) afterDecision.current = null;
     } catch {
       setNotes((current) => ({ ...current, [noteKey]: usersCopy.actionFailed }));
       setDialogContext(null);

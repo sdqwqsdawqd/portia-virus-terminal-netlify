@@ -241,3 +241,21 @@ test("after a PC decision the next row is picked and focused; none left focuses 
   assert.match(focus, /\[data-users-row-key\]/u);
   assert.match(focus, /\[data-users-tab="\$\{section\}"\]/u);
 });
+
+// Review WR-03: load() returns nothing for a request that a poll or a new query took over; the follow-up of a decision must not depend on it.
+test("the follow-up of a PC decision is bound to the next accepted list, so a superseded reload does not lose the pick and the focus", () => {
+  const load = component.slice(component.indexOf("const load = useCallback("), component.indexOf("const openDialog ="));
+  const postAction = component.slice(component.indexOf("const postAction ="), component.indexOf("const approve ="));
+  assert.match(component, /const afterDecision = useRef<\(\(list: UsersList\) => void\) \| null>\(null\);/u);
+  // The accepted list runs the follow-up once, right after it is stored, whichever request it came from.
+  assert.match(load, /setList\(parsed\);\s*const settle = afterDecision\.current;\s*afterDecision\.current = null;\s*settle\?\.\(parsed\);/u);
+  assert.ok(load.indexOf("settle?.(parsed)") > load.indexOf("if (requestId !== requestEpoch.current) return;"), "a stale response never settles it");
+  assert.doesNotMatch(postAction, /if \(!refreshed\) return;/u, "an undefined return (superseded) no longer drops the follow-up");
+  assert.match(postAction, /afterDecision\.current = \(refreshed\) => \{[\s\S]*nextUsersSelection\(rowsBefore, decidedKey\)[\s\S]*focusPcSelection\(/u, "the follow-up closes over the rows before the decision");
+  assert.match(postAction, /if \(\(await load\(\)\) === false\) afterDecision\.current = null;/u, "only a failed reload cancels it");
+  // A pick or a section switch of the user wins over a pending follow-up.
+  for (const name of ["selectRow", "switchSection"]) {
+    const body = component.slice(component.indexOf(`const ${name} = useCallback(`), component.indexOf("}, [", component.indexOf(`const ${name} = useCallback(`)));
+    assert.match(body, /afterDecision\.current = null;/u, `${name} cancels the pending follow-up`);
+  }
+});
