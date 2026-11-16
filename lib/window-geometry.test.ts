@@ -126,3 +126,41 @@ test("zero or tiny bounds never produce negative geometry", () => {
     assert.ok(next.x >= 0 && next.y >= 0 && next.width >= 0 && next.height >= 0);
   }
 });
+
+// Phase 26 UI-11a (todo 2026-10-28, item 9): the reachable inset is the same 8px on the left and on the right,
+// from a mirrored start, for drag by -Δ/+Δ, for east/west resize to the edge, and for fitGeometry.
+test("mirrored start (Phase 26 UI-11a): left and right insets are equal for drag, resize and fit", () => {
+  const near = (actual: number, expected: number, label: string) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} != ${expected}`);
+  for (const bounds of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }, { width: 1536, height: 864 }, { width: 1535.2, height: 763.2 }]) {
+    for (const size of [{ width: 680, height: 320 }, { width: 900, height: 600 }]) {
+      const starts = [8, bounds.width - size.width - 8];
+      for (const startX of starts) {
+        const start = { x: startX, y: 40, width: size.width, height: size.height };
+        for (const delta of [1, 50, 5000]) {
+          const left = dragGeometry(start, -delta, 0, bounds);
+          const right = dragGeometry(start, delta, 0, bounds);
+          assert.equal(left.width, size.width);
+          assert.equal(right.width, size.width);
+          assert.ok(left.x >= 8 - 1e-9 && bounds.width - (left.x + left.width) >= 8 - 1e-9, `drag -${delta} stays inside`);
+          assert.ok(right.x >= 8 - 1e-9 && bounds.width - (right.x + right.width) >= 8 - 1e-9, `drag +${delta} stays inside`);
+        }
+        const farLeft = dragGeometry(start, -5000, 0, bounds);
+        const farRight = dragGeometry(start, 5000, 0, bounds);
+        near(farLeft.x, 8, "far left inset");
+        near(bounds.width - (farRight.x + farRight.width), 8, "far right inset");
+        const east = resizeGeometry(start, "e", 5000, 0, bounds, minimum);
+        const west = resizeGeometry(start, "w", -5000, 0, bounds, minimum);
+        near(bounds.width - (east.x + east.width), 8, "east resize inset");
+        near(west.x, 8, "west resize inset");
+      }
+      const fitLeft = fitGeometry({ x: -5000, y: 40, ...size }, bounds, minimum);
+      const fitRight = fitGeometry({ x: 5000, y: 40, ...size }, bounds, minimum);
+      near(fitLeft.x, 8, "fit left inset");
+      near(bounds.width - (fitRight.x + fitRight.width), 8, "fit right inset");
+      const mirroredLeft = fitGeometry({ x: 8, y: 40, ...size }, bounds, minimum);
+      const mirroredRight = fitGeometry({ x: bounds.width - size.width - 8, y: 40, ...size }, bounds, minimum);
+      near(mirroredLeft.x, 8, "fit keeps mirrored left start");
+      near(bounds.width - (mirroredRight.x + mirroredRight.width), 8, "fit keeps mirrored right start");
+    }
+  }
+});
