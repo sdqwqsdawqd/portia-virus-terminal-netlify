@@ -85,7 +85,9 @@ test("D-13b: the bar has a nav slot only when given, a polite status slot and an
 test("D-13b: the editor renders one action bar under the tab strip for the draft tabs, with the old buttons", () => {
   assert.match(editor, /import \{ EditorActionBar[^}]*\} from "@\/components\/portia-editor-tab-shell";/);
   const code = stripComments(editor);
-  assert.equal(code.split("<EditorActionBar").length - 1, 1, "one call");
+  // Two calls since 26-07: the draft tabs share one bar; «Сотрудники» renders its own with its own save (D-12).
+  assert.equal(code.split("<EditorActionBar").length - 1, 2, "one bar for the draft tabs and one for «Сотрудники»");
+  assert.equal(code.slice(0, code.indexOf("function EmployeeProfilesEditor(")).split("<EditorActionBar").length - 1, 1, "one call for the draft tabs");
   const bar = editorSlice('<nav className="editor-tabs" aria-label="Разделы редактора"', "{refusedShown.map(");
   assert.match(bar, /<\/nav>\n\s*\{editorSections\.some\(\(section\) => section === tab\) && \(\n\s*<EditorActionBar/, "the bar follows the tab strip, only in a draft tab");
   for (const prop of ["label={sectionLabels[tab as EditorSection]}", "statusText={statusText}", "tone={status}", "unsavedCount={dirty ? shownChanged.length : 0}", "notice={saveNotice}"]) {
@@ -315,4 +317,32 @@ test("A2: «Информация» and «Сводка» bodies are the TOC on th
 
 test("D-13a: the broadcast group nav sits flush in the bar", () => {
   assert.equal(declared(".etab-nav > .dossier-tabs", "margin"), "0");
+});
+
+// ---- 26-07 Task 3 (D-12): «Сотрудники» — its own action bar, the employee list on the left, the profile on the right ----
+
+test("D-12: «Сотрудники» renders its own action bar with the profile save and its own status; no editor draft buttons", () => {
+  const employees = editorSlice("function EmployeeProfilesEditor(", "type TabLists =");
+  const ret = employees.slice(employees.indexOf("  return <>\n    <EditorActionBar"));
+  assert.ok(ret.length > 0, "the bar opens the component's markup, above the layout");
+  const bar = ret.slice(0, ret.indexOf('<div className="virus-editor-layout employee-editor-layout etab-body"'));
+  assert.ok(bar.includes('label={tabRegistry.find((entry) => entry.id === "employees")?.label ?? ""}'), "the tab's own label, no new text");
+  assert.ok(bar.includes('statusText={selected && draft ? (saveStatus === "saving" ? saveStatusText("saving") : saveStatus === "saved" ? saveStatusText("saved") : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ") : ""}'), "the status of the profile save (saveStatusText vocabulary)");
+  assert.ok(bar.includes("tone={saveStatus}"));
+  assert.ok(bar.includes('<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button>'), "the same save button and handler");
+  assert.ok(bar.includes('href="/owner-login">ВОЙТИ СНОВА</a>'), "the sign-in link after an expired session stays beside it");
+  for (const gone of ["↶", "ОТМЕНИТЬ", 'setDialog("discard")', "editor-undo-step"]) assert.ok(!bar.includes(gone), `${gone}: no editor draft action on this bar`);
+  assert.ok(!employees.includes("employee-editor-save"), "the old save line under the profile is gone");
+  assert.ok(employees.includes("leaving: boolean;") && employees.includes("onLeave(true);") && employees.includes('title="Несохранённые правки сотрудника"'), "the leave guard is unchanged");
+  assert.match(employees, /<\/div>\n {2}<\/>;\n\}/, "the fragment closes after the layout");
+});
+
+test("D-12: «Сотрудники» is a list/detail body; the picked employee is the current row", () => {
+  const employees = editorSlice("function EmployeeProfilesEditor(", "type TabLists =");
+  assert.ok(employees.includes('<div className="virus-editor-layout employee-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>'));
+  assert.ok(employees.includes('<aside className="editor-record-list etab-list">'));
+  assert.ok(employees.includes('aria-current={employee.id === selected?.id ? "true" : undefined}'), "the picked employee is aria-current");
+  assert.ok(employees.includes('<div className="editor-form employee-profile-editor etab-detail">'));
+  assert.ok(employees.includes("editor-back-to-list"), "the phone back button stays");
+  assert.doesNotMatch(styles, /\.employee-editor-save/, "no rule of the retired save line");
 });

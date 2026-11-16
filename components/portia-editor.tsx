@@ -2143,10 +2143,17 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
   // «СОХРАНЕНО» never shows over a draft that is dirty again.
   const saveStatus = state === "saved" && dirty ? "idle" : state;
   const preview = selected && draft ? draft.photoUrl || selected.robloxAvatarUrl : "";
-  return <div className="virus-editor-layout employee-editor-layout" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
+  return <>
+    <EditorActionBar
+      label={tabRegistry.find((entry) => entry.id === "employees")?.label ?? ""}
+      statusText={selected && draft ? (saveStatus === "saving" ? saveStatusText("saving") : saveStatus === "saved" ? saveStatusText("saved") : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ") : ""}
+      tone={saveStatus}
+      actions={selected && draft ? <>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></> : undefined}
+    />
+    <div className="virus-editor-layout employee-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
     <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
-    <aside className="editor-record-list">
-      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected?.id ? "active" : ""} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+    <aside className="editor-record-list etab-list">
+      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected?.id ? "active" : ""} aria-current={employee.id === selected?.id ? "true" : undefined} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
       <button className="add-record" type="button" aria-expanded={addOpen} onClick={() => setAddOpen((open) => !open)}>+ ВНЕ ТАБЛИЦЫ</button>
       {addOpen && <form className="employee-add-form" onSubmit={(event) => { event.preventDefault(); void addEmployee(); }}>
         <Field label="Ник Roblox"><input value={addDraft.nickname} required maxLength={20} autoCapitalize="none" spellCheck={false} onChange={(event) => setAddDraft((current) => ({ ...current, nickname: event.target.value }))} /></Field>
@@ -2157,7 +2164,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
         <button className="primary-control" type="submit" disabled={addState === "adding" || !addDraft.nickname.trim()}>{addState === "adding" ? "ДОБАВЛЕНИЕ…" : "ДОБАВИТЬ"}</button>
       </form>}
     </aside>
-    <div className="editor-form employee-profile-editor">
+    <div className="editor-form employee-profile-editor etab-detail">
       {selected && draft ? <>
       <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять фотографию, оценки и биографию. Людей вне таблицы добавляют по нику Roblox; их звание, ранг и позывной можно менять здесь.</p>
       <div className="employee-editor-summary">
@@ -2177,7 +2184,6 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
       {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
       {detailsPending && <p className="editor-guidance" role="status">Профиль сохранён, но звание, ранг и позывной — нет: база данных ещё не обновлена.</p>}
       {selected.source === "manual" && <button type="button" className="danger-control employee-remove" disabled={state === "saving" || deleting} onClick={() => setDeleteAsked(true)}>УДАЛИТЬ СОТРУДНИКА</button>}
-      <div className="employee-editor-save"><span className={`editor-save-status ${saveStatus}`}>{saveStatus === "saving" ? saveStatusText("saving") : saveStatus === "saved" ? saveStatusText("saved") : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
       </> : <div className="editor-empty">Сотрудников пока нет. Добавьте человека вне таблицы кнопкой «+ ВНЕ ТАБЛИЦЫ».</div>}
     </div>
     {deleteAsked && selected?.source === "manual" && (
@@ -2214,7 +2220,8 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage
         onCancel={cancelLeave}
       />
     )}
-  </div>;
+  </div>
+  </>;
 }
 
 type TabLists = { closedTabs: string[]; grantedTabs: string[] };

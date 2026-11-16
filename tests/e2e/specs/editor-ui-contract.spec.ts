@@ -133,7 +133,7 @@ async function createSection(page: Page, title: string) {
   await form.getByLabel("Заголовок раздела").fill(title);
   await form.getByRole("button", { name: "Создать раздел" }).click();
   await expect(form).toBeHidden();
-  await expect(infoTabsNav(page).getByRole("button", { name: title, exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(infoTabsNav(page).getByRole("button", { name: title, exact: true })).toHaveAttribute("aria-current", "true");
 }
 
 // Only the selected section is rendered; its card is the one top-level card of a column.
@@ -149,12 +149,14 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
 
     const button = addSectionButton(page);
     await expect(button, "one add-section button in the tab, and it is the top one").toHaveCount(1);
-    await expect(page.locator(".editor-section-addbar").getByRole("button", { name: "+ ДОБАВИТЬ РАЗДЕЛ", exact: true }), "the button lives in the pinned bar of «Справочник»").toHaveCount(1);
+    // Phase 26 (26-07, D-13a): the add button and the section tabs stand in the nav slot of the sticky action bar, the button first.
+    await expect(page.locator(".etab-bar .etab-nav .editor-section-addbar").getByRole("button", { name: "+ ДОБАВИТЬ РАЗДЕЛ", exact: true }), "the button lives in the nav slot of the sticky bar").toHaveCount(1);
+    await expect(page.locator(".etab-bar .etab-nav").getByRole("navigation", { name: "Разделы информации" }), "the section tabs live in the same nav slot").toHaveCount(1);
     const nav = infoTabsNav(page);
     const buttonBox = await box(button);
     const navBox = await box(nav);
-    testInfo.annotations.push({ type: "measure", description: `button top ${buttonBox.y}, height ${buttonBox.height}; section tabs top ${navBox.y}` });
-    expect(buttonBox.y + buttonBox.height, `the button (top ${buttonBox.y}) is above the section tabs (top ${navBox.y})`).toBeLessThanOrEqual(navBox.y + 1);
+    testInfo.annotations.push({ type: "measure", description: `button left ${buttonBox.x}, width ${buttonBox.width}; section tabs left ${navBox.x}` });
+    expect(buttonBox.x + buttonBox.width, `the button (left ${buttonBox.x}) stands before the section tabs (left ${navBox.x}) in the bar row`).toBeLessThanOrEqual(navBox.x + 1);
     await expect(page.locator(".editor-section-columns ~ button"), "nothing is left below the columns of sections").toHaveCount(0);
     await expect(nav.getByRole("button")).toHaveCount(infoSectionCount);
 
@@ -175,7 +177,7 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
     await expect(form).toBeHidden();
     await expect(nav.getByRole("button")).toHaveCount(infoSectionCount + 1);
     const tab = nav.getByRole("button", { name: title, exact: true });
-    await expect(tab).toHaveAttribute("aria-pressed", "true");
+    await expect(tab).toHaveAttribute("aria-current", "true");
     const card = page.locator(".editor-section-column > .nested-editor-card");
     await expect(card, "only the selected section is shown").toHaveCount(1);
     await expect(card.locator(":scope > .nested-editor-head .nested-editor-toggle")).toHaveAttribute("aria-expanded", "true");
@@ -186,7 +188,7 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
     // An empty title keeps the old default name.
     await button.click();
     await form.getByRole("button", { name: "Создать раздел" }).click();
-    await expect(nav.getByRole("button", { name: "НОВЫЙ РАЗДЕЛ", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(nav.getByRole("button", { name: "НОВЫЙ РАЗДЕЛ", exact: true })).toHaveAttribute("aria-current", "true");
     await expect(nav.getByRole("button")).toHaveCount(infoSectionCount + 2);
 
     expect(writes, "the UI contract never writes").toEqual([]);
@@ -262,7 +264,7 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
     });
     expect(await columnOfSelected(), "the sixth section is in the second column").toBe(1);
     await nav.getByRole("button", { name: "Пятый раздел", exact: true }).click();
-    await expect(nav.getByRole("button", { name: "Пятый раздел", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(nav.getByRole("button", { name: "Пятый раздел", exact: true })).toHaveAttribute("aria-current", "true");
     expect(await columnOfSelected(), "the fifth section is in the first column").toBe(0);
 
     const card = sectionCard(page);

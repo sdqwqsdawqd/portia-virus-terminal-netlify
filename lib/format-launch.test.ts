@@ -75,7 +75,8 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  10. PORTIA-26-07 (26-07; UI-04, D-13a, A2) — «Справочник»: «+ ДОБАВИТЬ РАЗДЕЛ» и вкладки разделов в слоте nav панели, aria-current и прокрутка
 //      текущего раздела, тело — оглавление слева и активный раздел справа (applySectionNavHunk); PORTIA-26-07b — то же для «Информации»
 //      (смысл D-62 сохранён: «+ ДОБАВИТЬ РАЗДЕЛ» перед вкладками разделов, нижней кнопки нет) и «Сводки» («Новости»/«Квесты» с aria-current и плашкой
-//      счётчика) (applyInfoBroadcastNavHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-07.
+//      счётчика) (applyInfoBroadcastNavHunk); PORTIA-26-07c — своя панель «Сотрудников» (кнопка сохранения профиля и статус переехали в неё),
+//      классы etab-* и aria-current у выбранного сотрудника (applyEmployeesBarHunk). Источник одобрения: 26-CONTEXT D-12, D-13, D-21 и план 26-07.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -755,6 +756,37 @@ function applyInfoBroadcastNavHunk(text: string): string {
   );
 }
 
+// PORTIA-26-07c (UI-04, D-12): the save line under the employee profile, byte for byte; its status and buttons move into the bar.
+const EMPLOYEE_SAVE_LINE = '      <div className="employee-editor-save"><span className={`editor-save-status ${saveStatus}`}>{saveStatus === "saving" ? saveStatusText("saving") : saveStatus === "saved" ? saveStatusText("saved") : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>\n';
+const EMPLOYEE_BAR: readonly string[] = [
+  "  return <>",
+  "    <EditorActionBar",
+  '      label={tabRegistry.find((entry) => entry.id === "employees")?.label ?? ""}',
+  '      statusText={selected && draft ? (saveStatus === "saving" ? saveStatusText("saving") : saveStatus === "saved" ? saveStatusText("saved") : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ") : ""}',
+  "      tone={saveStatus}",
+  '      actions={selected && draft ? <>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></> : undefined}',
+  "    />",
+];
+
+/** PORTIA-26-07c (26-07 Task 3; UI-04, D-12): «Сотрудники» get their own action bar (the profile save and its status), the list/detail classes and the current row. No Russian text is added. */
+function applyEmployeesBarHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    '  return <div className="virus-editor-layout employee-editor-layout" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>\n',
+    `${EMPLOYEE_BAR.join("\n")}\n    <div className="virus-editor-layout employee-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>\n`,
+    "employee bar and body",
+  );
+  next = replaceOnce(
+    next,
+    '    <aside className="editor-record-list">\n      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected?.id ? "active" : ""} onClick={() => chooseEmployee(employee)}>',
+    '    <aside className="editor-record-list etab-list">\n      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected?.id ? "active" : ""} aria-current={employee.id === selected?.id ? "true" : undefined} onClick={() => chooseEmployee(employee)}>',
+    "employee list and current row",
+  );
+  next = replaceOnce(next, '    <div className="editor-form employee-profile-editor">\n', '    <div className="editor-form employee-profile-editor etab-detail">\n', "employee detail");
+  next = replaceOnce(next, EMPLOYEE_SAVE_LINE, "", "employee save line into the bar");
+  return replaceOnce(next, "  </div>;\n}\n\ntype TabLists", "  </div>\n  </>;\n}\n\ntype TabLists", "employee fragment close");
+}
+
 const FRAMING_ATTRIBUTE = /\s(framing|framingBox|onFramingChange)=/;
 
 /** Конец значения атрибута JSX, которое начинается в `start`: строка в кавычках или выражение `{…}` (скобки сбалансированы, строки и шаблоны пропускаются). */
@@ -808,6 +840,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26-06b", apply: applyTabBodiesHunk },
   { id: "PORTIA-26-07", apply: applySectionNavHunk },
   { id: "PORTIA-26-07b", apply: applyInfoBroadcastNavHunk },
+  { id: "PORTIA-26-07c", apply: applyEmployeesBarHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -930,6 +963,9 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutInfoBroadcastNav = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07b").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutInfoBroadcastNav), null, "a file without the PORTIA-26-07b hunk is a difference");
   assert.throws(() => applyInfoBroadcastNavHunk(expected), /exactly one approved anchor/, "the info and broadcast nav hunk cannot be applied twice");
+  const withoutEmployeesBar = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07c").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutEmployeesBar), null, "a file without the PORTIA-26-07c hunk is a difference");
+  assert.throws(() => applyEmployeesBarHunk(expected), /exactly one approved anchor/, "the employees bar hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");
