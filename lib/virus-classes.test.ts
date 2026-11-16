@@ -114,12 +114,19 @@ test("D-39 the nine drawings are pairwise different and use no colour beyond cur
   }
 });
 
-test("G2 Transitium right brain has the left brain's opacity and keeps its dashed contour", () => {
-  const transitium = drawing("class-transitium");
-  assert.doesNotMatch(transitium, /opacity\s*=/, "both right-hand groups are fully opaque");
-  assert.match(transitium, /strokeDasharray="2 2\.4"/, "the right contour remains dashed");
-  assert.doesNotMatch(drawing("class-lucidium"), /strokeDasharray/, "Lucidium remains solid");
-  assert.match(drawing("class-oblivium"), /strokeDasharray/, "Oblivium remains dashed throughout");
+// 26-12 (owner's round 5, 26-ICON-DECISION.md): the old G2 check pinned the dashed brain; the mind level now reads from the drawing
+// on one base sign (a head profile): Lucidium a mind circle, Transitium a pupil in it, Oblivium a spiral instead of it. No dashes.
+test("26-12 mind levels read from one head profile: a circle, then a pupil in it, then a spiral; nothing is dashed", () => {
+  const head = 'd="M8 21.5V17.4A7.5 7.5 0 1 1 17.95 13.3L19.9 14.8L17.8 15.7L17 18.6L14.5 19.6V21.5"';
+  const circle = 'd="M7.6 10.5A3.4 3.4 0 1 0 14.4 10.5A3.4 3.4 0 1 0 7.6 10.5Z"';
+  const [lucidium, transitium, oblivium] = ["class-lucidium", "class-transitium", "class-oblivium"].map(drawing);
+  for (const item of [lucidium, transitium, oblivium]) {
+    assert.equal(count(item, head), 1, "each mind sign keeps the same head profile");
+    assert.doesNotMatch(item, /strokeDasharray|opacity\s*=/, "levels are drawn, not dashed or faded");
+  }
+  assert.ok(lucidium.includes(circle) && !lucidium.includes('fill="currentColor"'), "Lucidium: an empty mind circle");
+  assert.ok(transitium.includes(circle) && transitium.includes('<g fill="currentColor" stroke="none">'), "Transitium: a pupil in the circle");
+  assert.ok(!oblivium.includes(circle), "Oblivium: a spiral replaces the circle");
 });
 
 test("D-39 every new class name from classificationOptions maps to one of the new icons", () => {
@@ -184,12 +191,30 @@ test("26-12 the drawing starts only from the owner's recorded choice: one «Вы
   assert.equal(decisionSource.split("\n").filter((line) => line.startsWith("Выбрано: ")).length, 1);
 });
 
-test("26-12 tracer: the three danger signs are the owner's round-5 drawing, verbatim", () => {
+// The 18 signs of the six axes (the owner added «Поведение и агрессия» to the five groups of D-05), in level order.
+const classSignNames = [
+  "hephaestus", "proteus", "apeiron",
+  "nomos", "theseus", "abraxas",
+  "warning", "risk", "esnov",
+  "lucidium", "transitium", "oblivium",
+  "stabilar", "impulsar", "infernar",
+  "isomorph", "polymorph", "xenomorph",
+];
+
+test("26-12 all 18 class signs are the owner's round-5 drawing, verbatim, and the decision records exactly these 18", () => {
   const symbols = decisionSymbols();
-  for (const name of ["hephaestus", "proteus", "apeiron"]) {
-    const inner = symbols.get(name);
-    assert.ok(inner, `s-${name} is recorded`);
-    assert.equal(drawing(`class-${name}`).trim(), symbolToJsx(inner), `class-${name}`);
+  assert.deepEqual([...symbols.keys()].sort(), [...classSignNames].sort(), "26-ICON-DECISION.md records the 18 signs");
+  const typed = [...typeBlock.matchAll(/"(class-[a-z]+)"/g)].map((match) => match[1]).sort();
+  assert.deepEqual(typed, classSignNames.map((name) => `class-${name}`).sort(), "PortiaIconName has the same 18 class keys");
+  for (const name of classSignNames) assert.equal(drawing(`class-${name}`).trim(), symbolToJsx(symbols.get(name) ?? ""), `class-${name}`);
+});
+
+test("26-12 every class sign: line 1.5 with round caps, currentColor only, no dashes, no fading and no separate level mark", () => {
+  for (const name of classSignNames) {
+    const item = drawing(`class-${name}`);
+    assert.ok(item.trim().startsWith('<><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">'), `class-${name} line group`);
+    assert.doesNotMatch(item, /#[0-9a-fA-F]{3,8}\b|rgb\(|hsl\(/, `class-${name} has no colour beyond currentColor`);
+    assert.doesNotMatch(item, /strokeDasharray|opacity\s*=|levelMark|\{[a-zA-Z]/, `class-${name} draws its level, no mark or shared helper`);
   }
 });
 
