@@ -1071,7 +1071,7 @@ const phoneBlock = () => {
 
 test("UI-08 D-14: on a phone a sections bar stands above the article; the two-screen model and the back arrow are gone", () => {
   const info = infoWindowSource();
-  assert.ok(source.includes('import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";'));
+  assert.ok(source.includes('import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, infoSectionsHitCount, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";'));
   assert.ok(source.includes("const [sectionsOpen, setSectionsOpen] = useState(false);"));
   assert.ok(info.includes('className="info-sections-bar"'), "the bar");
   assert.ok(info.includes("aria-expanded={sectionsOpen}") && info.includes('aria-controls="info-sections-list"'));
@@ -1114,4 +1114,47 @@ test("UI-08 D-14: the bar exists only on a phone, in the flow; the desktop .info
   assert.doesNotMatch(styles, /info-phone-back|data-info-screen/);
   // The desktop index keeps its column.
   assert.match(styles, /^\.info-index \{ min-width: 0; overflow-y: auto; padding: 25px 14px; border-right: 1px solid/m);
+});
+
+test("UI-08 D-15: picking an article or Escape closes the list and gives the focus back to РАЗДЕЛЫ; the bar comes back into view only from above", () => {
+  const info = infoWindowSource();
+  assert.ok(source.includes("const infoSectionsButtonRef = useRef<HTMLButtonElement>(null);"));
+  assert.ok(source.includes("const infoSectionsBarRef = useRef<HTMLDivElement>(null);"));
+  assert.ok(info.includes('<div className="info-sections-bar" ref={infoSectionsBarRef}'));
+  assert.ok(info.includes("ref={infoSectionsButtonRef}"));
+  const back = source.slice(source.indexOf("const returnToInfoSections = () => {"), source.indexOf("const pickInfoArticle = "));
+  assert.ok(back.length > 0, "returnToInfoSections exists before pickInfoArticle");
+  assert.match(back, /getBoundingClientRect\(\)\.top < 0/, "only a bar above the screen is scrolled back");
+  assert.match(back, /motion === "off" \|\| motion === "reduced" \? "auto" : "smooth"/);
+  assert.match(back, /infoSectionsButtonRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
+  const pick = source.slice(source.indexOf("const pickInfoArticle = "), source.indexOf("const closeInfoSections = "));
+  assert.ok(pick.includes("setSelectedInfoId(id);") && pick.includes("setSectionsOpen(false);") && pick.includes("returnToInfoSections();"));
+  const close = source.slice(source.indexOf("const closeInfoSections = "), source.indexOf("const onInfoSectionsKeyDown = "));
+  assert.ok(close.includes("setSectionsOpen(false);") && close.includes("returnToInfoSections();"));
+  const key = source.slice(source.indexOf("const onInfoSectionsKeyDown = "), source.indexOf("const goInfoNext = "));
+  assert.match(key, /event\.key !== "Escape" \|\| !infoPhone \|\| !sectionsOpen/);
+  assert.ok(key.includes("event.preventDefault();") && key.includes("closeInfoSections();"));
+  // The button and the list both hear Escape; section and subsection rows pick through pickInfoArticle.
+  assert.ok(info.includes("onKeyDown={onInfoSectionsKeyDown}") && info.split("onKeyDown={onInfoSectionsKeyDown}").length - 1 >= 2);
+  assert.ok(info.includes(": pickInfoArticle(section.id)}") && info.includes("infoPhone ? pickInfoArticle(sub.id) : setSelectedInfoId(sub.id)"));
+  assert.ok(source.split("setSectionsOpen(false)").length - 1 >= 3, "pick, Escape and a search hit close the list");
+});
+
+test("UI-08 D-16: the closed button counts the sections with search hits by the same test as the highlight; a hit keeps the list closed", () => {
+  assert.ok(source.includes("infoSectionsHitCount"), "imported and used");
+  assert.ok(source.includes('const infoSectionsLabel = infoSectionsButtonLabel(sectionsOpen, infoSectionsHitCount(content.infoSections, (id) => isSearchHit("info", id)));'));
+  // The label is read after isSearchHit is declared (a const arrow function used before its line would throw).
+  assert.ok(source.indexOf("const infoSectionsLabel = ") > source.indexOf("const isSearchHit = "));
+  const info = infoWindowSource();
+  assert.ok(info.includes('hitAttrs("info", section.id)') && info.includes('hitAttrs("info", sub.id)'), "rows keep the search look");
+  const hit = source.slice(source.indexOf('} else if (result.type === "info") {'), source.indexOf('} else if (result.type === "guide") {'));
+  assert.ok(hit.includes("setSelectedInfoId(result.id);"));
+  assert.ok(hit.includes("setSectionsOpen(false);"), "the hit opens its article, not the list");
+  assert.ok(hit.includes("revealInfoForSearch(content.infoSections, result.id)"), "its section is opened in the list data");
+  assert.ok(!hit.includes("setInfoScreen"));
+  // Open list rows are touch targets; the hit look is the shared .search-hit.
+  const phone = phoneBlock();
+  assert.match(phone, /\.info-index button \{ min-height: 44px;/);
+  assert.match(phone, /\.info-index \.info-subsections button \{ min-height: 44px;/);
+  assert.match(styles, /^\.search-hit, \.app-window\[data-search-hit="true"\] \{ outline: 1px solid var\(--teal\);/m);
 });

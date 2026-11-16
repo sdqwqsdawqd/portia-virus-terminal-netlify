@@ -30,7 +30,7 @@ import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-d
 import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
-import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
+import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, infoSectionsHitCount, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
 import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
 
 // Phase 24, D-20/D-22: a record window whose record became closed keeps its place and shows the block; the slot of the placeholder
@@ -444,6 +444,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   // Phase 26 (UI-08, D-14): on a phone «Информация» always shows the article; the sections list opens in the flow under a quiet bar above it.
   const infoPhone = useSyncExternalStore(subscribeInfoPhone, infoPhoneSnapshot, infoPhoneServerSnapshot);
   const [sectionsOpen, setSectionsOpen] = useState(false);
+  const infoSectionsBarRef = useRef<HTMLDivElement>(null);
+  const infoSectionsButtonRef = useRef<HTMLButtonElement>(null);
   // D-29: the sections opened in the phone list; each opens and closes on its own and a content poll never touches the set.
   const [infoExpanded, setInfoExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [guideCardId, setGuideCardId] = useState("");
@@ -1490,10 +1492,33 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   // Any card chosen, or the back arrow, ends a lost selection (D-20); a search result sets the id itself and so ends it too.
   const openGuideCard = (id: string) => { setGuideCardId(id); setGuideLost(null); };
   const infoWindowElement = () => document.querySelector<HTMLElement>('.app-window[data-window-app="info"]');
+  // D-15: the focus goes back to РАЗДЕЛЫ. The bar is scrolled back only when its top is above the screen (a long list was scrolled through),
+  // instantly when motion is off or reduced; a bar already on screen never moves the page.
+  const returnToInfoSections = () => {
+    window.requestAnimationFrame(() => {
+      const bar = infoSectionsBarRef.current;
+      if (bar && bar.getBoundingClientRect().top < 0) {
+        const motion = document.documentElement.dataset.motion;
+        bar.scrollIntoView({ block: "start", behavior: motion === "off" || motion === "reduced" ? "auto" : "smooth" });
+      }
+      infoSectionsButtonRef.current?.focus({ preventScroll: true });
+    });
+  };
   // D-15: picking an article in the phone list shows it under the bar and closes the list; the article itself never leaves the screen.
   const pickInfoArticle = (id: string) => {
     setSelectedInfoId(id);
     setSectionsOpen(false);
+    returnToInfoSections();
+  };
+  const closeInfoSections = () => {
+    setSectionsOpen(false);
+    returnToInfoSections();
+  };
+  // D-15: Escape on the button or inside the open list closes it; the handled key is not heard by the notices behind (defaultPrevented).
+  const onInfoSectionsKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape" || !infoPhone || !sectionsOpen) return;
+    event.preventDefault();
+    closeInfoSections();
   };
   // D-31: «Далее» stays inside the section and swaps the article in place; the new article starts with the focus on its heading.
   const goInfoNext = (target: InfoNextTarget) => {
@@ -1503,7 +1528,6 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   const infoNext = infoPhone && selectedInfo ? infoNextTarget(content.infoSections, selectedSubsection?.id ?? selectedInfo.id) : null;
   // D-14: the bar names the current article (the first section by default); the button reads РАЗДЕЛЫ ▾, or ▴ while the list is open.
   const infoSectionsTitle = selectedInfo ? infoCurrentTitle(content.infoSections, selectedSubsection?.id ?? selectedInfo.id) : "";
-  const infoSectionsLabel = infoSectionsButtonLabel(sectionsOpen, 0);
   // D-11, LVL-05: a «Устав» closed to this viewer is not an app of the index and not a target of a search result; its icon stays.
   const charterClosed = content.redaction?.apps?.charter ?? null;
   const searchApps = useMemo(() => charterClosed ? globalSearchApps.filter((app) => app.id !== "charter") : globalSearchApps, [charterClosed]);
@@ -1678,6 +1702,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   const isSearchHit = (type: string, id: string) => searchHit?.type === type && searchHit.id === id;
   const hitClass = (type: string, id: string) => isSearchHit(type, id) ? " search-hit" : "";
   const hitAttrs = (type: string, id: string) => isSearchHit(type, id) ? { "data-search-hit": "true", "aria-current": "true" as const } : {};
+  // D-16: the closed РАЗДЕЛЫ button counts the sections that hold a hit, by the same test as the highlight of the rows.
+  const infoSectionsLabel = infoSectionsButtonLabel(sectionsOpen, infoSectionsHitCount(content.infoSections, (id) => isSearchHit("info", id)));
 
   // D-14: scroll the named record to the middle, then drop the highlight after 2400ms or at the next click or focus inside its app.
   useEffect(() => {
@@ -1759,7 +1785,9 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     } else if (result.type === "info") {
       setSelectedInfoId(result.id);
       if (infoPhone) {
-        // D-32: the section of the hit is opened in the list data, so the list shows it when the visitor opens it.
+        // D-16: the hit opens its article under a closed list (the bar names it, the button counts it);
+        // D-32: its section is opened in the list data, so the list shows the hit when the visitor opens it.
+        setSectionsOpen(false);
         const expand = revealInfoForSearch(content.infoSections, result.id)?.expand ?? null;
         if (expand) setInfoExpanded((current) => current.has(expand) ? current : new Set(current).add(expand));
       }
@@ -1983,11 +2011,11 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
               : infoView === "fatal" ? <div className="app-state-body">{contentFatal("flaskEmpty")}</div>
               : infoView === "empty" ? <div className="app-state-body"><div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy.info.heading}</strong><span>{emptyCopy.info.body}</span></div></div>
               : <div className="info-library" data-sections-open={infoPhone ? String(sectionsOpen) : undefined}>
-              {infoPhone && infoRows.length > 0 ? <div className="info-sections-bar">
-                <button type="button" className="secondary-control" aria-expanded={sectionsOpen} aria-controls="info-sections-list" aria-label={infoSectionsLabel.ariaLabel} onClick={() => setSectionsOpen((open) => !open)}>{infoSectionsLabel.word} <span aria-hidden="true">{infoSectionsLabel.glyph}</span>{infoSectionsLabel.count}</button>
+              {infoPhone && infoRows.length > 0 ? <div className="info-sections-bar" ref={infoSectionsBarRef}>
+                <button type="button" ref={infoSectionsButtonRef} className="secondary-control" onKeyDown={onInfoSectionsKeyDown} aria-expanded={sectionsOpen} aria-controls="info-sections-list" aria-label={infoSectionsLabel.ariaLabel} onClick={() => setSectionsOpen((open) => !open)}>{infoSectionsLabel.word} <span aria-hidden="true">{infoSectionsLabel.glyph}</span>{infoSectionsLabel.count}</button>
                 <span className="info-sections-current">{infoSectionsTitle}</span>
               </div> : null}
-              <nav className="info-index" aria-label="Разделы информации" id="info-sections-list">{infoRows.map((row) => {
+              <nav className="info-index" aria-label="Разделы информации" id="info-sections-list" onKeyDown={onInfoSectionsKeyDown}>{infoRows.map((row) => {
                 // D-10: a closed section is one static line in its place, with no marker and no state; its number is its place in the full list.
                 if (row.kind === "redacted") return <RedactedPlaceholder key={row.slot} variant="index" level={row.requiredLevel} index={String(row.position + 1).padStart(2, "0")} />;
                 const section = row.item;
