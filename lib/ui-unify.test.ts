@@ -480,9 +480,10 @@ test("UI-05 (UAT 2026-11-16): the window frame is a non-interactive overlay, so 
   assert.ok(Number.isInteger(frameZ) && frameZ > Number(lastDeclaration(portiaCss, ".window-controls", "z-index")), "the frame is above the controls");
   assert.equal(lastDeclaration(cascadeCss, ".app-window.is-active::after", "border-color"), ACTIVE_BORDER, "the active frame colour is the old one");
   assert.equal(lastDeclaration(cascadeCss, ".app-window.is-active", "border-color"), ACTIVE_BORDER, "the old active rule stays as history");
-  // D-03: the window radius and the 8px gap of the maximized window do not change.
+  // D-03: the window radius of a normal window does not change. The 8px gap of the maximized window is gone at the owner's
+  // request of 2026-11-17 (quick 261117-bi1 R1): a maximized window is flush with the work area, so the close button owns the corner.
   assert.equal(lastDeclaration(cascadeCss, ".app-window", "border-radius"), "var(--radius-window)");
-  assert.match(lastDeclaration(cascadeCss, ".app-window.is-maximized", "inset") ?? "", /^8px/u);
+  assert.equal(lastDeclaration(cascadeCss, ".app-window.is-maximized", "inset"), "0");
   // The overlay lives in the ui-unify block, after the rules it overrides.
   assert.ok(unifyBlock(portiaCss).text.includes(".app-window::after"), "the frame rule is inside the ui-unify block");
   assert.ok(lastRuleIndex(portiaCss, ".app-window", "border") > lastRuleIndex(portiaCss, ".app-window.is-active", "border-color"));
@@ -604,7 +605,7 @@ test("UI-05: the five crosses carry corner-close and keep their old classes and 
 });
 
 // Phase 26 (UI-06, D-01 … D-04, D-19): a maximized window differs from a normal one only in layout. The only hook is
-// `.app-window.is-maximized` (inset 8px, the window radius); every new rule under it sits in the desktop query, so the
+// `.app-window.is-maximized` (inset 0 and square corners since quick 261117-bi1); every new rule under it sits in the desktop query, so the
 // normal window and the phone keep their layouts. No container queries on the window (they re-anchor fixed elements).
 const globalsCss = lf(readFileSync(new URL("../app/globals.css", import.meta.url), "utf8"));
 const ALL_STYLESHEETS = [
@@ -616,7 +617,7 @@ const MAXIMIZED = ".app-window.is-maximized";
 const DESKTOP = "width > 900px";
 // R1 (UI-SPEC): 360px minimum card, at most four columns, 2–4 on 1366–2560px screens.
 const R1_COLUMNS = "repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 4)), 1fr))";
-// The two rules that predate Phase 26 and hold on every width: the 8px inset and the hidden resize edges.
+// The two rules that predate Phase 26 and hold on every width: the inset and the hidden resize edges.
 const HISTORIC_MAXIMIZED = [MAXIMIZED, `${MAXIMIZED} .window-edge`];
 const desktopSource = lf(readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8"));
 const searchIndexSource = lf(readFileSync(new URL("./search-index.ts", import.meta.url), "utf8"));
@@ -660,10 +661,12 @@ test("UI-06: keyboard order over the result grid stays the DOM order (Up/Down on
 });
 
 test("UI-06 / D-03: the maximized hook is unchanged, the only one, and never a container", () => {
-  assert.equal(lastDeclaration(portiaCss, MAXIMIZED, "inset"), "8px");
+  // quick 261117-bi1 R1 (owner, 2026-11-17): the inset is 0 and the corners are square, on a PC only; a normal window keeps its radius.
+  assert.equal(lastDeclaration(portiaCss, MAXIMIZED, "inset"), "0");
   assert.equal(lastDeclaration(portiaCss, MAXIMIZED, "transform"), "none");
   assert.equal(lastDeclaration(portiaCss, ".app-window", "border-radius"), "var(--radius-window)");
-  assert.equal(lastDeclaration(portiaCss, MAXIMIZED, "border-radius"), undefined, "the maximized window keeps the window radius");
+  assert.equal(lastDeclaration(portiaCss, MAXIMIZED, "border-radius"), undefined, "no top-level radius on the maximized window");
+  assert.equal(lastDeclaration(portiaCss, MAXIMIZED, "border-radius", DESKTOP), "0", "square corners in the desktop query");
   for (const [file, css] of ALL_STYLESHEETS) {
     for (const rule of rulesOf(css)) {
       const containerHost = rule.selectors.some((selector) => /\.app-window|\.workspace\b/u.test(selector));
@@ -680,6 +683,66 @@ test("UI-06 / D-03: the maximized hook is unchanged, the only one, and never a c
       }
     }
   }
+});
+
+// quick 261117-bi1 (R1): the owner could not hit the close button in the very corner of a maximized window: the window sat 8px inside the
+// work area. The hit area cannot grow outside the window (`overflow: hidden` clips clicks), so the window moves: inset 0, square corners.
+test("quick 261117-bi1 R1: a maximized window is flush with the work area and square; a normal window keeps its frame", () => {
+  assert.equal(lastDeclaration(cascadeCss, MAXIMIZED, "inset"), "0");
+  assert.equal(lastDeclaration(cascadeCss, MAXIMIZED, "border-radius", DESKTOP), "0", "the window clips with square corners, so no corner pixel of the button falls through");
+  assert.equal(lastDeclaration(cascadeCss, `${MAXIMIZED}::after`, "border-radius", DESKTOP), "0", "the frame layer is square too");
+  assert.equal(lastDeclaration(cascadeCss, ".app-window", "border-radius"), "var(--radius-window)");
+  assert.equal(lastDeclaration(cascadeCss, ".app-window::after", "border-radius"), "var(--radius-window)");
+  assert.equal(lastDeclaration(cascadeCss, ".window-titlebar", "padding-right"), "0", "the controls reach the right edge");
+  assert.equal(lastDeclaration(cascadeCss, ".window-controls button", "width"), "46px");
+  assert.equal(lastDeclaration(cascadeCss, ".window-controls button", "height"), "46px");
+  assert.equal(lastDeclaration(cascadeCss, ".app-window::after", "pointer-events"), "none", "the frame never takes the click");
+  assert.equal(lastDeclaration(cascadeCss, MAXIMIZED, "width"), "auto");
+  assert.equal(lastDeclaration(cascadeCss, MAXIMIZED, "height"), "auto");
+});
+
+// quick 261117-bi1 (R3): only in a maximized editor window on a PC, the list column of the page-scrolling list/detail tabs is a sticky column
+// as tall as the visible area, under a bar of one row. The 218px is the sum of the stylesheet's own heights, proved below.
+const ONE_ROW_BAR = ".content-editor:not(:has(.etab-draft)):not(:has(.etab-banner)):not(:has(.editor-section-create:not([hidden])))";
+const FULL_LISTS = [
+  `${MAXIMIZED} ${ONE_ROW_BAR} > .etab-body:not(.employee-editor-layout) > .etab-list`,
+  `${MAXIMIZED} ${ONE_ROW_BAR} > .users-tab > .etab-body > .etab-list`,
+];
+const px = (value: string | undefined) => Number.parseFloat(value ?? "NaN");
+
+test("quick 261117-bi1 R3: the maximized editor list column is sticky and calc(100svh - 218px) tall, 218 derived from the stylesheet", () => {
+  const systemBar = px(lastDeclaration(portiaCss, ".system-bar", "height"));
+  const taskbar = px(lastDeclaration(portiaCss, ".taskbar", "height"));
+  const titlebar = px(lastDeclaration(portiaCss, ".window-titlebar", "height"));
+  const barHeight = px(lastDeclaration(cascadeCss, ".etab-bar", "min-height"));
+  const barGap = px((lastDeclaration(cascadeCss, ".etab-bar", "margin") ?? "").split(" ")[2]);
+  const padding = px(lastDeclaration(portiaCss, ".content-editor", "padding"));
+  assert.deepEqual([systemBar, taskbar, titlebar, barHeight, barGap, padding], [44, 44, 46, 48, 8, 28], "the heights the 218px is made of");
+  const stickyTop = barHeight + barGap;
+  const total = systemBar + taskbar + titlebar + stickyTop + padding;
+  assert.equal(total, 218);
+  assert.equal(lastDeclaration(cascadeCss, ".workspace", "min-height"), "calc(100svh - 88px)", "the work area is the viewport less the two 44px bars");
+  assert.equal(lastDeclaration(cascadeCss, ".content-editor", "height"), "calc(100% - 46px)", "the editor is the window less its 46px title bar");
+  for (const selector of FULL_LISTS) {
+    assert.equal(lastDeclaration(portiaCss, selector, "position", DESKTOP), "sticky", selector);
+    assert.equal(lastDeclaration(portiaCss, selector, "top", DESKTOP), `${stickyTop}px`, "it sticks under the bar");
+    assert.equal(lastDeclaration(portiaCss, selector, "align-self", DESKTOP), "start");
+    assert.equal(lastDeclaration(portiaCss, selector, "overflow-y", DESKTOP), "auto");
+    assert.equal(lastDeclaration(portiaCss, selector, "max-height", DESKTOP), `calc(100svh - ${total}px)`);
+    assert.equal(lastDeclaration(portiaCss, selector, "max-height"), undefined, "nothing outside the desktop query");
+    assert.ok(selector.startsWith(MAXIMIZED), "only a maximized window");
+    assert.ok(selector.includes(":not(.employee-editor-layout)") || selector.includes("> .users-tab >"), "never the «Сотрудники» body");
+    assert.doesNotMatch(selector, /promotion/u, "never «Повышение»");
+    assert.ok(!selector.includes(","), "no comma inside the selector (the parsers split on it)");
+  }
+  for (const selector of FULL_LISTS.map((list) => `${list} .editor-toc ol`)) {
+    assert.equal(lastDeclaration(portiaCss, selector, "max-height", DESKTOP), "none", "the TOC list uses the column height");
+  }
+  // The old lists stay as they were.
+  assert.equal(lastDeclaration(portiaCss, ".editor-record-list", "max-height"), "min(62svh, 620px)");
+  assert.equal(lastDeclaration(portiaCss, ".editor-record-list", "position"), "static");
+  assert.equal(lastDeclaration(portiaCss, ".editor-toc ol", "max-height"), "40svh");
+  assert.equal(lastDeclaration(portiaCss, ".content-editor > .employee-editor-layout", "flex", DESKTOP), "1 1 0", "«Сотрудники» keeps its own full-height layout");
 });
 
 // D-04: every window is checked maximized against the UI-SPEC recipes. Each entry names its outcome; the checks below
