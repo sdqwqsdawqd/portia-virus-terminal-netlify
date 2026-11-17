@@ -697,6 +697,30 @@ function assertFillsWindow(selector: string) {
   assert.equal(lastDeclaration(portiaCss, selector, "height", DESKTOP), "calc(100% - 46px)", `${selector} fills the window`);
 }
 
+/**
+ * UAT 2026-11-16 gap 3 — владелец: маленькая карточка «Повышения» посреди развёрнутого окна. Вход — всё окно (знак слева, шапка
+ * справа, форма и пояснения рядом в две колонки), статус — шапка и карточки заявок на всю ширину, карточки в 2 колонки.
+ */
+function assertPromotionFillsWindow() {
+  for (const host of [at(".promotion-gate"), at(".promotion-shell")]) {
+    assert.equal(lastDeclaration(portiaCss, host, "width", DESKTOP), "auto", `${host} no longer a 680px column`);
+    assert.equal(lastDeclaration(portiaCss, host, "margin", DESKTOP), "0", `${host} is not centred`);
+  }
+  const gate = at(".promotion-gate");
+  assert.equal(lastDeclaration(portiaCss, gate, "align-content", DESKTOP), "start");
+  assert.equal(lastDeclaration(portiaCss, gate, "grid-template-columns", DESKTOP), "72px minmax(0, 1fr) minmax(0, 1fr)");
+  assert.equal(lastDeclaration(portiaCss, at(".promotion-gate > header"), "grid-column", DESKTOP), "2 / -1");
+  assert.equal(lastDeclaration(portiaCss, at(".promotion-gate > form"), "grid-column", DESKTOP), "2");
+  assert.equal(lastDeclaration(portiaCss, at(".promotion-gate:has(> form) > p"), "grid-column", DESKTOP), "3");
+  assert.equal(lastDeclaration(portiaCss, at(".promotion-gate:not(:has(> form)) > p"), "grid-column", DESKTOP), "2 / -1");
+  const flow = at(".promotion-flow-list");
+  assert.equal(lastDeclaration(portiaCss, flow, "display", DESKTOP), "grid");
+  assert.equal(lastDeclaration(portiaCss, flow, "gap", DESKTOP), "24px");
+  assert.equal(lastDeclaration(portiaCss, flow, "grid-template-columns", DESKTOP), "repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 2)), 1fr))");
+  // R2: the nickname field still stops at 640px.
+  assert.equal(lastDeclaration(portiaCss, at(".promotion-gate input"), "max-width", DESKTOP), "var(--field-max)");
+}
+
 const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant"; check: () => void }[] = [
   { app: "search", outcome: "fixed", check: () => {
     assert.equal(lastDeclaration(portiaCss, at(".global-search-results"), "grid-template-columns", DESKTOP), R1_COLUMNS);
@@ -738,8 +762,10 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
     assertFillsWindow(".guide-app");
   } },
   { app: "promotion", outcome: "fixed", check: () => {
-    // The applicant's shell is a 680px test column (a measure); the reviewer workbench lives in the editor's «Повышение» tab.
+    // UAT 2026-11-16 — владелец: маленькая карточка посреди развёрнутого окна. The 680px column stays in a normal window only;
+    // a maximized window shows the gate and the status over its whole width. The reviewer workbench lives in the editor's «Повышение» tab.
     assert.equal(lastDeclaration(portiaCss, ".promotion-shell", "width"), "min(680px, 100%)");
+    assertPromotionFillsWindow();
     assert.equal(lastDeclaration(cascadeCss, at(".promotion-editor-workbench"), "grid-template-columns", DESKTOP), "280px minmax(0, 1fr)");
     assert.equal(lastDeclaration(cascadeCss, at(".promotion-bank-workflow .promotion-bank-layout"), "grid-template-columns", DESKTOP), "280px minmax(0, 1fr)");
     for (const cards of [".promotion-bank-items", ".promotion-request-detail dl"]) {
@@ -876,4 +902,33 @@ test("UI-03 (UAT 2026-11-16): native confirm dialogs sit in the centre of the sc
     }
   }
   assert.ok(dialogs >= 4, `the scan found ${dialogs} native dialogs, expected at least 4`);
+});
+
+// UAT 2026-11-16 gap 8: «Заявка ожидает решения…» is a plain paragraph, but the grid of the gate is `72px minmax(0, 1fr)` and the paragraph
+// set no column, so it fell into the 72px column of the mark and broke into one word per line. Every paragraph of the gate spans the grid.
+test("UI-03 (UAT 2026-11-16 gap 8): every paragraph of the promotion gate spans the whole grid", () => {
+  for (const context of [undefined, PHONE, "max-width: 520px"]) {
+    assert.equal(lastDeclaration(cascadeCss, ".promotion-gate > p", "grid-column", context), "1 / -1", `context ${String(context)}`);
+  }
+  const promotionSource = lf(readFileSync(new URL("../components/portia-promotion.tsx", import.meta.url), "utf8"));
+  const start = promotionSource.indexOf("export function PromotionIdentityGate");
+  const gate = promotionSource.slice(start, promotionSource.indexOf("function activeCopy", start));
+  assert.ok(start > 0 && gate.length > 0, "PromotionIdentityGate is found");
+  assert.match(gate, /<\/form> : <p className="promotion-binding-note">/u, "the binding note of a participant is a direct child of the gate");
+  assert.match(gate, /^ {4}\{accessState === "pending" && <p className="promotion-next-note" role="status">/mu, "the pending note is a direct child of the gate");
+  assert.match(gate, /^ {4}\{error && <p className="promotion-error" role="alert">/mu, "the error is a direct child of the gate");
+  assert.match(promotionSource, /<div className="promotion-gate" role="status"><p>Проверяем доступ к повышению…<\/p><\/div>/u, "the loading paragraph is a direct child of the gate");
+});
+
+test("UI-06 (UAT 2026-11-16 gap 3): the promotion gate and status fill a maximized window", () => {
+  assertPromotionFillsWindow();
+  // A normal window and the phone keep the 680px column and the 72px/48px mark column.
+  assert.equal(lastDeclaration(portiaCss, ".promotion-shell", "width"), "min(680px, 100%)");
+  assert.equal(lastDeclaration(portiaCss, ".promotion-gate", "grid-template-columns"), "72px minmax(0, 1fr)");
+  assert.equal(lastDeclaration(portiaCss, ".promotion-flow-list", "grid-template-columns"), undefined);
+  assert.equal(lastDeclaration(portiaCss, at(".promotion-gate"), "grid-template-columns", PHONE), undefined, "the phone is not touched");
+  // The template card keeps the 1060px file width (D-55): no maximized rule reaches it.
+  for (const rule of rulesOf(cascadeCss)) {
+    for (const selector of rule.selectors) assert.ok(!(selector.includes("is-maximized") && selector.includes("template-card-preview")), selector);
+  }
 });
