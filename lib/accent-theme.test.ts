@@ -342,6 +342,62 @@ test("animations are full by default; reduced and off only by the saved setting,
   assert.deepEqual([...group.matchAll(/'([^']+)'\]/g)].map((m) => m[1]), ["Включены", "Уменьшены", "Выключены"]);
 });
 
+// quick 261117-bi1 (R4): Vivian under «Уменьшены» answers with a small translate-only bounce (no opacity dip, no fade from zero);
+// under «Выключены» she does not move at all (no keyframes, no hover/focus/press lean). The static sulking pose still shows the state.
+type MotionRule = { selectors: string[]; body: string };
+const motionRules = (mode: "reduced" | "off"): MotionRule[] => [...css.matchAll(new RegExp(`(?:^|\\n)(html\\[data-motion="${mode}"\\][^{}\\n]*)\\{([^{}]*)\\}`, "g"))]
+  .map((match) => ({ selectors: match[1].split(",").map((selector) => selector.trim()), body: match[2] }));
+const keyframeBody = (name: string) => css.match(new RegExp(`@keyframes ${name}\\s*\\{((?:[^{}]*\\{[^{}]*\\})*)\\s*\\}`))?.[1];
+const keyframeProperties = (body: string) => new Set([...body.matchAll(/([a-z-]+)\s*:/g)].map((match) => match[1]).filter((property) => property !== "animation-timing-function"));
+
+test("quick 261117-bi1 R4a: under «Уменьшены» Vivian bounces by translate only, within 240ms, with no opacity change and no fade-in", () => {
+  assert.match(css, /--motion-fast:\s*160ms;/);
+  assert.match(css, /--motion-base:\s*240ms;/);
+  const figure = motionRules("reduced").filter((rule) => rule.selectors.some((selector) => selector.endsWith(".assistant-button img")) && /(^|;|\s)animation:/.test(rule.body));
+  assert.ok(figure.length >= 5, "click a, click b, phrase, sulk and recovery all have a rule");
+  const names = new Map<string, string>();
+  for (const rule of figure) {
+    const animation = /animation:\s*([^;]+?)\s*(?:!important)?\s*(?:;|$)/.exec(rule.body)?.[1] ?? "";
+    const [name, duration] = animation.split(/\s+/);
+    assert.notEqual(name, "fade-in", `${rule.selectors[0]}: no fade from zero`);
+    assert.match(duration, /^var\(--motion-(?:fast|base)\)$/, `${rule.selectors[0]}: at most 240ms`);
+    assert.match(rule.body, /!important/, `${rule.selectors[0]}: beats the global .01ms rule`);
+    const frames = keyframeBody(name);
+    assert.ok(frames, `${name} is defined`);
+    assert.deepEqual([...keyframeProperties(frames)], ["translate"], `${name} animates translate only (no opacity, scale or rotate)`);
+    for (const selector of rule.selectors) names.set(selector, name);
+  }
+  const rule = (needle: string) => [...names].find(([selector]) => selector.includes(needle));
+  const clickA = rule('[data-squish="a"]');
+  const clickB = rule('[data-squish="b"]');
+  assert.ok(clickA && clickB && clickA[1] !== clickB[1], "a click alternates two keyframe names, so it restarts without remounting");
+  assert.equal(keyframeBody(clickA[1])?.replace(/\s+/g, " "), keyframeBody(clickB[1])?.replace(/\s+/g, " "), "the two are identical");
+  assert.ok(rule(".is-speaking[data-auto]"), "the automatic phrase bounces");
+  assert.ok(rule(".is-recovering"), "recovery bounces");
+  const sulk = figure.find((candidate) => candidate.selectors.some((selector) => selector.includes(".is-offended .assistant-button img")));
+  assert.ok(sulk, "sulking has its own rule");
+  assert.match(sulk.body, /\bboth\b/, "sulking keeps its last frame");
+  const sink = keyframeBody(/animation:\s*(\S+)/.exec(sulk.body)?.[1] ?? "") ?? "";
+  assert.match(sink, /(?:100%|to)\s*\{\s*translate:\s*0 4px;?\s*\}/, "it ends on the pose offset of the static sulking pose");
+  // The old dips and fades are gone, and nothing else still names them.
+  assert.doesNotMatch(css, /vivian-soft/, "the opacity-dip keyframes are removed");
+  assert.match(css, /html\[data-motion="reduced"\] \.assistant-button img \{ transition-duration: var\(--motion-fast\); \}/, "the hover transition pin stays");
+});
+
+test("quick 261117-bi1 R4b: under «Выключены» Vivian has no keyframe animation and no hover, focus or press lean", () => {
+  const rules = motionRules("off");
+  const stillAnimation = rules.find((rule) => rule.selectors.includes('html[data-motion="off"] .desktop-assistant .assistant-button img') && rule.selectors.includes('html[data-motion="off"] .assistant-bubble'));
+  assert.ok(stillAnimation, "the image and the bubble are named together");
+  assert.match(stillAnimation.body, /animation:\s*none !important/);
+  for (const state of [":hover", ":focus-visible", ":active"]) {
+    const lean = rules.find((rule) => rule.selectors.includes(`html[data-motion="off"] .assistant-button${state} img`));
+    assert.ok(lean, `${state} is overridden`);
+    assert.match(lean.body, /transform:\s*none/, `${state}: no lean or press`);
+  }
+  // The static sulking pose and the hover glow stay: they show state, they do not move.
+  assert.match(css, /(^|\n)\.desktop-assistant\.is-offended \.assistant-button img \{[^}]*rotate:[^}]*grayscale\([^}]*opacity:/);
+});
+
 const rgbToHex = (rgb: Rgb) => "#" + rgb.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("");
 
 test("custom accents derive every preset token in the preset formats", () => {
