@@ -114,7 +114,9 @@ test("component families import only their own seams and the known shared compon
   const allowed = {
     // portia-virus-card: the archive's virus card, shared with the template builder (D-55, 20-43).
     // portia-redacted: the static «ЗАСЕКРЕЧЕНО · нужен допуск N» placeholder (Phase 24, D-08/D-09).
-    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card", "portia-redacted"],
+    // portia-companion-items: the visitor's items of the assistant and the spider, kept on the device (2026-11-18).
+    // portia-template-builder: the dossier template is its own app «Шаблон» since 2026-11-18 (it lived inside «Повышение»).
+    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card", "portia-redacted", "portia-template-builder", "portia-companion-items"],
     // portia-desktop-states: the shared «Доступ закрыт» panel the editor shows when the rights check fails (STAB-APP-09).
     // portia-image-framing: the block «Видимая часть» under a picture field (D-63, 20-53), shared with the template builder through ImageEditorField.
     // portia-users-tab: the «Пользователи» tab body (USR-01, Phase 22).
@@ -145,9 +147,9 @@ test("STAB-DESK-07: app ids, storage keys and API endpoints stay as pinned", () 
     for (const match of text.matchAll(/["`](\/api\/[a-z/-]+)/g)) found[match[1]] = (found[match[1]] ?? 0) + 1;
     return found;
   };
-  assert.equal(/type AppId = ([^;]+);/.exec(source)?.[1], '"archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor"');
+  assert.equal(/type AppId = ([^;]+);/.exec(source)?.[1], '"archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor" | "template"');
   // IN-05 (Phase 25): the two device-cache keys live only in lib/device-cache.ts; the desktop imports them.
-  assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-desktop-shortcuts-v3", "portia-guide-collapsed-v2", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
+  assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-desktop-shortcuts-v3", "portia-guide-expanded-v3", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
   assert.match(source, /import \{[^}]*\bCONTENT_CACHE_KEY\b[^}]*\bEMPLOYEES_CACHE_KEY\b[^}]*\} from "@\/lib\/device-cache";/);
   assert.deepEqual(keys(editorSource), ["portia-format-panel-v1"]);
   assert.deepEqual(endpoints(source), { "/api/content": 2, "/api/access": 1, "/api/employees": 1 });
@@ -554,8 +556,10 @@ test("animated shortcuts keep one precise vector artwork through the resting han
 });
 
 test("guide sections start folded and the compact back control does not cover card content", () => {
-  assert.ok(source.includes('const guideCollapsedStorageKey = "portia-guide-collapsed-v2"'));
-  assert.ok(source.includes("useState<string[]>(() => sections.map((section) => section.id))"));
+  // Owner 2026-11-18: the device stores the OPENED sections, so a section it never saw (a new one) starts folded too.
+  assert.ok(source.includes('const guideExpandedStorageKey = "portia-guide-expanded-v3"'));
+  assert.ok(source.includes("const [expanded, setExpanded] = useState<string[]>([]);"));
+  assert.ok(source.includes("const folded = !expanded.includes(section.id);"));
   assert.doesNotMatch(source, /initialCollapsed\.current/);
   const back = /\.guide-back-bar \{([^}]*)\}/.exec(styles)?.[1] ?? "";
   assert.match(back, /height:\s*36px/);
@@ -811,7 +815,7 @@ test("«Корзина» shows no restore or delete control on the desktop; the 
 test("«Таблица» and «Устав»: skeleton until onLoad, fatal panel after the 15s timeout, retry remounts the frame; sandbox and zoom stay (STAB-APP-06, T-19-20)", () => {
   const documents = desktopFamily.find((part) => part.file === "portia-desktop-documents.tsx")?.text ?? "";
   const start = documents.indexOf("export function EmbeddedDocument");
-  const embedded = documents.slice(start, documents.indexOf("// v2 starts every section folded", start));
+  const embedded = documents.slice(start, documents.indexOf("// Owner 2026-11-18: v3 stores the sections", start));
   assert.match(embedded, /<iframe[^>]*key=\{frameKey\}[^>]*onLoad=/);
   assert.ok(embedded.includes("sandbox={embedSandbox}"));
   assert.equal(count(documents, "sandbox={embedSandbox}"), 2, "the document frame and the YouTube frame");
@@ -1176,7 +1180,7 @@ test("UI-09 tracer: useShortcutPlacement measures .desktop-icons with a ResizeOb
   // The desktop hands the ref of nav.desktop-icons to the hook and the placed spots to every shortcut.
   assert.ok(source.includes("useShortcutPlacement(desktopIconsRef"), "the desktop calls the hook with the nav ref");
   assert.match(source, /<nav className="desktop-icons" ref=\{desktopIconsRef\}/);
-  assert.equal((source.match(/placed=\{placedShortcut\(shortcutPlacement, "/g) ?? []).length, 11, "all eleven shortcuts get their placed spot");
+  assert.equal((source.match(/placed=\{placedShortcut\(shortcutPlacement, "/g) ?? []).length, 12, "all twelve shortcuts get their placed spot");
   assert.ok(source.includes('"--shortcut-content-height"'), "the workspace grows to the content height");
   // A placed spot wins on this width only; the PC default and the saved-position style stay as they were.
   assert.ok(shortcutsSource.includes("placed ? placedShortcutLayout(placed.position) : position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId]"));

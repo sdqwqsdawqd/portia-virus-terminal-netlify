@@ -884,6 +884,11 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
     assert.equal(lastDeclaration(portiaCss, ".trash-image-document", "width"), "min(800px, 100%)");
     assertFillsWindow(".trash-app");
   } },
+  // Owner 2026-11-18: «Шаблон» is its own window; maximized, the builder takes the whole width instead of a centred 1240px column.
+  { app: "template", outcome: "fixed", check: () => {
+    assert.equal(lastDeclaration(portiaCss, `${MAXIMIZED} .template-shell`, "width", DESKTOP), "auto");
+    assert.equal(lastDeclaration(portiaCss, `${MAXIMIZED} .template-shell`, "margin", DESKTOP), "0");
+  } },
   { app: "sheet", outcome: "already conformant", check: () => {
     assertFillsWindow(".document-app");
     assert.equal(lastDeclaration(portiaCss, ".document-app-viewport", "inset"), "0");
@@ -921,7 +926,7 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
 test("UI-06 / D-04: the audit list names every window of the desktop once", () => {
   const start = windowSource.indexOf("export const appMeta");
   const ids = [...windowSource.slice(start, windowSource.indexOf("};", start)).matchAll(/^ {2}([a-z]+): \{/gmu)].map((match) => match[1]);
-  assert.equal(ids.length, 12);
+  assert.equal(ids.length, 13);
   assert.deepEqual(MAXIMIZED_WINDOWS.map((entry) => entry.app).sort(), [...ids].sort());
 });
 

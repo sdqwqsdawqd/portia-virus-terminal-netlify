@@ -74,8 +74,10 @@ export function CustomColorPicker({ group, title, color, onChange, onClose }: {
     <label className="custom-hue"><span>ТОН</span><input type="range" min="0" max="359" value={Math.round(hue)} onChange={(event) => choose(Number(event.target.value), saturation, value)} /></label>
     <div className="custom-color-value">
       <i style={{ backgroundColor: hex }} />
-      <label><span>HEX</span><input value={hex} maxLength={7} onChange={(event) => {
-        const nextHex = event.target.value.toUpperCase();
+      <label><span>HEX</span><input value={hex} maxLength={7} spellCheck={false} autoComplete="off" onChange={(event) => {
+        // Owner 2026-11-18: the «#» is always there — typed digits (or a pasted «b1244c») get it in front, other characters are dropped.
+        const digits = event.target.value.toUpperCase().replace(/[^0-9A-F]/g, "").slice(0, 6);
+        const nextHex = `#${digits}`;
         setHex(nextHex);
         if (/^#[0-9A-F]{6}$/.test(nextHex)) {
           const next = hexToHsv(nextHex);

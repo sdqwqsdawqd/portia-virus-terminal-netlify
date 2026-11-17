@@ -12,7 +12,7 @@ export type Rect = { x: number; y: number; width: number; height: number };
 /** The part of the picture inside the frame, in fractions of the whole picture (0..1). */
 export type VisibleWindow = { left: number; top: number; width: number; height: number };
 /** The kind of place a picture is shown in (ImageFramingBox of the component): a band across a «Справочник» section, a 4:3 cover, or the picture as it lies. */
-export type FrameKind = "natural" | "band" | "tile";
+export type FrameKind = "natural" | "band" | "tile" | "free";
 /** The share of the picture, per axis, that the frame sees at 100%. */
 export type Cover = { fw: number; fh: number };
 export type StageLayout = {
@@ -55,8 +55,10 @@ export function bandFrameWidth(viewportWidth: number): number {
 }
 
 /** The proportions (width / height) of the place the picture of this kind is shown in. A natural picture not loaded yet gets the 4:3 of its skeleton. */
-export function frameAspectFor(box: FrameKind, { image, viewportWidth }: { image: Size | undefined; viewportWidth: number }): number {
+export function frameAspectFor(box: FrameKind, { image, viewportWidth, ratio }: { image: Size | undefined; viewportWidth: number; ratio?: number }): number {
   if (box === "tile") return tileAspect;
+  // A free frame (owner 2026-11-18) has the proportions it was dragged to; before that, the picture's own.
+  if (box === "free" && ratio && Number.isFinite(ratio) && ratio > 0) return ratio / 1000;
   if (box === "band") return bandFrameWidth(viewportWidth) / bandFrameHeight;
   return image && image.width > 0 && image.height > 0 ? image.width / image.height : tileAspect;
 }
@@ -143,4 +145,69 @@ export function framingFromKey(framing: ImageFraming | undefined, key: string, l
     y: layout.canMoveY ? clampPosition(y) : defaultImageFraming.y,
     zoom: from.zoom,
   };
+}
+
+/** The smallest side of a frame dragged by its handles, in pixels of the stage. */
+export const minFrameSide = 24;
+
+export type FrameHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+/** The frame rectangle after a handle was dragged by `dx`, `dy` (owner 2026-11-18): it stays inside the picture, never smaller than minFrameSide,
+ *  and never shows less than a third of the covered share (the zoom limit). With `keepAspect` the frame keeps the proportions of its place: a corner
+ *  follows the larger move, an edge grows the other side around the middle. */
+export function frameFromHandle(start: Rect, image: Rect, handle: FrameHandle, delta: { dx: number; dy: number }, keepAspect: boolean, minWidth: number, minHeight: number): Rect {
+  const dx = finite(delta.dx, 0);
+  const dy = finite(delta.dy, 0);
+  const left0 = start.x, top0 = start.y, right0 = start.x + start.width, bottom0 = start.y + start.height;
+  const imageRight = image.x + image.width, imageBottom = image.y + image.height;
+  const minW = Math.max(minFrameSide, minWidth), minH = Math.max(minFrameSide, minHeight);
+  if (!keepAspect) {
+    let left = left0, top = top0, right = right0, bottom = bottom0;
+    if (handle.includes("w")) left = clamp(left0 + dx, image.x, right0 - minW);
+    if (handle.includes("e")) right = clamp(right0 + dx, left0 + minW, imageRight);
+    if (handle.includes("n")) top = clamp(top0 + dy, image.y, bottom0 - minH);
+    if (handle.includes("s")) bottom = clamp(bottom0 + dy, top0 + minH, imageBottom);
+    return { x: left, y: top, width: right - left, height: bottom - top };
+  }
+  const aspect = start.width / start.height;
+  // The growth in width the pointer asks for; an edge handle on the other axis converts through the proportions.
+  const grow = handle === "e" ? dx : handle === "w" ? -dx : handle === "s" ? dy * aspect : handle === "n" ? -dy * aspect
+    : (() => {
+      const gx = handle.includes("e") ? dx : -dx;
+      const gy = (handle.includes("s") ? dy : -dy) * aspect;
+      return Math.abs(gx) > Math.abs(gy) ? gx : gy;
+    })();
+  // The fixed point: the opposite corner, or the middle of the opposite edge.
+  const anchorX = handle.includes("e") ? left0 : handle.includes("w") ? right0 : left0 + start.width / 2;
+  const anchorY = handle.includes("s") ? top0 : handle.includes("n") ? bottom0 : top0 + start.height / 2;
+  const roomX = handle.includes("e") ? imageRight - anchorX : handle.includes("w") ? anchorX - image.x : 2 * Math.min(anchorX - image.x, imageRight - anchorX);
+  const roomY = handle.includes("s") ? imageBottom - anchorY : handle.includes("n") ? anchorY - image.y : 2 * Math.min(anchorY - image.y, imageBottom - anchorY);
+  const maxWidth = Math.max(0, Math.min(roomX, roomY * aspect));
+  const floor = Math.min(maxWidth, Math.max(minW, minH * aspect));
+  const width = clamp(start.width + grow, floor, maxWidth);
+  const height = width / aspect;
+  const x = handle.includes("e") ? anchorX : handle.includes("w") ? anchorX - width : anchorX - width / 2;
+  const y = handle.includes("s") ? anchorY : handle.includes("n") ? anchorY - height : anchorY - height / 2;
+  return { x, y, width, height };
+}
+
+/** The framing that shows exactly `frame` of the picture drawn at `image` (both in pixels of the stage). A free frame also stores its proportions. */
+export function framingFromWindow(image: Rect, frame: Rect, kind: FrameKind): ImageFraming {
+  const widthShare = clamp(frame.width / image.width, epsilon, 1);
+  const leftShare = clamp((frame.x - image.x) / image.width, 0, 1);
+  const topShare = clamp((frame.y - image.y) / image.height, 0, 1);
+  const imageAspect = image.width / image.height;
+  const frameAspect = frame.width / frame.height;
+  const cover = coverFractions({ width: imageAspect, height: 1 }, frameAspect);
+  const zoom = clampZoom((cover.fw / widthShare) * 100);
+  const factor = zoom / 100;
+  const spanX = 1 - cover.fw / factor;
+  const spanY = 1 - cover.fh / factor;
+  const framing: ImageFraming = {
+    x: spanX > epsilon ? clampPosition((leftShare / spanX) * 100) : defaultImageFraming.x,
+    y: spanY > epsilon ? clampPosition((topShare / spanY) * 100) : defaultImageFraming.y,
+    zoom,
+  };
+  if (kind === "free") framing.ratio = clamp(Math.round(frameAspect * 1000), imageFramingLimits.ratio.min, imageFramingLimits.ratio.max);
+  return framing;
 }

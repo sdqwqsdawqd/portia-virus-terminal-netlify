@@ -160,9 +160,11 @@ export type GuideBlock =
   | { id: string; type: "heading"; text: string }
   | { id: string; type: "text"; text: string }
   | { id: string; type: "table"; rows: { id: string; key: string; value: string }[] }
-  | { id: string; type: "photo"; url: string; caption: string; width?: number; height?: number; align?: "left" | "center" | "right"; focusX?: number; focusY?: number }
+  | { id: string; type: "photo"; url: string; caption: string; width?: number; height?: number; align?: "left" | "center" | "right"; focusX?: number; focusY?: number; framing?: ImageFraming }
   | { id: string; type: "video"; videoId: string }
-  | { id: string; type: "callout"; label: string; text: string };
+  | { id: string; type: "callout"; label: string; text: string }
+  // Owner 2026-11-18: cards inside a card — the ids of other «Справочник» cards, shown as tiles on the page. A card the visitor may not open is simply not shown.
+  | { id: string; type: "cards"; cardIds: string[] };
 
 export type GuideCard = {
   id: string;

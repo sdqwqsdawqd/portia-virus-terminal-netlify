@@ -83,8 +83,9 @@ export function EmbeddedDocument({ src, external, title }: { src: string; extern
   </div>;
 }
 
-// v2 starts every section folded; v1 stored the former open-by-default behaviour.
-const guideCollapsedStorageKey = "portia-guide-collapsed-v2";
+// Owner 2026-11-18: v3 stores the sections the visitor OPENED. v2 stored the folded ones, so every section created later (and every section after
+// the list was trimmed) came up open by itself. Whatever is not in this list is folded.
+const guideExpandedStorageKey = "portia-guide-expanded-v3";
 
 // «Справочник»: the grid and the card page are one derived view of openCardId; a card that vanished simply means the grid (D-00d).
 export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitId = "", banner, placeholders, lostLevel = null }: {
@@ -103,9 +104,11 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
   const scroller = useRef<HTMLDivElement>(null);
   const page = useRef<HTMLElement>(null);
   // Folded sections live on this device only (D-08): first visit starts with compact section headers only.
-  const [collapsed, setCollapsed] = useState<string[]>(() => sections.map((section) => section.id));
-  const [collapsedLoaded, setCollapsedLoaded] = useState(false);
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const [expandedLoaded, setExpandedLoaded] = useState(false);
   const returnTo = useRef<{ cardId: string; scrollTop: number; sections: string } | null>(null);
+  // Owner 2026-11-18: cards opened from the block «Карточки» of another card; «Назад» goes back up this chain before it returns to the grid.
+  const [parentCards, setParentCards] = useState<string[]>([]);
   const backIntent = useRef(false);
   const lastShown = useRef("");
   const found = findGuide(sections, openCardId);
@@ -134,23 +137,36 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
   useEffect(() => {
     let ids: string[] | null = null;
     try {
-      const stored = window.localStorage.getItem(guideCollapsedStorageKey);
+      const stored = window.localStorage.getItem(guideExpandedStorageKey);
       const saved: unknown = stored === null ? null : JSON.parse(stored);
       if (Array.isArray(saved)) ids = saved.filter((id): id is string => typeof id === "string");
     } catch {}
     const restoreTimer = window.setTimeout(() => {
-      if (ids) setCollapsed(ids);
-      setCollapsedLoaded(true);
+      if (ids) setExpanded(ids);
+      setExpandedLoaded(true);
     }, 0);
     return () => window.clearTimeout(restoreTimer);
   }, []);
 
   useEffect(() => {
-    if (!collapsedLoaded) return;
-    try { window.localStorage.setItem(guideCollapsedStorageKey, JSON.stringify(collapsed.filter((id) => sections.some((section) => section.id === id)))); } catch {}
-  }, [collapsed, collapsedLoaded, sections]);
+    if (!expandedLoaded) return;
+    try { window.localStorage.setItem(guideExpandedStorageKey, JSON.stringify(expanded.filter((id) => sections.some((section) => section.id === id)))); } catch {}
+  }, [expanded, expandedLoaded, sections]);
+
+  const openNested = (cardId: string) => {
+    if (shownId) setParentCards((current) => [...current, shownId]);
+    onOpenCard(cardId);
+  };
+  const goBack = () => {
+    const parent = parentCards[parentCards.length - 1];
+    if (parent && findGuide(sections, parent)?.card) { setParentCards(parentCards.slice(0, -1)); onOpenCard(parent); return; }
+    setParentCards([]);
+    backIntent.current = true;
+    onOpenCard("");
+  };
 
   const openTile = (cardId: string) => {
+    setParentCards([]);
     returnTo.current = { cardId, scrollTop: scroller.current?.scrollTop ?? 0, sections: JSON.stringify(sections) };
     onOpenCard(cardId);
   };
@@ -158,13 +174,13 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
   return <div className="guide-app" ref={scroller} tabIndex={-1}>
     {banner}
     {found && card ? <>
-      <div className="guide-back-bar"><button type="button" aria-label="Назад к списку карточек" onClick={() => { backIntent.current = true; onOpenCard(""); }}><span aria-hidden="true">←</span><span className="guide-back-label">Назад</span></button></div>
+      <div className="guide-back-bar"><button type="button" aria-label={parentCards.length ? "Назад к предыдущей карточке" : "Назад к списку карточек"} onClick={goBack}><span aria-hidden="true">←</span><span className="guide-back-label">Назад</span></button></div>
       <article className="guide-page" tabIndex={-1} ref={page}>
         <span className="eyebrow">{found.section.title || "Без названия"}</span>
         {/* The title carries the mark: a long page centred as a whole would hide its top. */}
         <h1 className={hitId === card.id ? "search-hit" : undefined} {...(hitId === card.id ? { "data-search-hit": "true", "aria-current": "true" as const } : {})}>{card.title || "Без названия"}</h1>
         {!card.blocks.length && <p className="guide-section-empty">В карточке пока нет содержимого</p>}
-        <div className="guide-blocks">{card.blocks.map((block) => <GuideBlockView key={block.id} block={block} formattedText={formattedText} cardTitle={card.title} />)}</div>
+        <div className="guide-blocks">{card.blocks.map((block) => <GuideBlockView key={block.id} block={block} formattedText={formattedText} cardTitle={card.title} sections={sections} onOpenCard={openNested} />)}</div>
       </article>
     </> : lostLevel !== null ? <>
       <div className="guide-back-bar"><button type="button" aria-label="Назад к списку карточек" onClick={() => { backIntent.current = true; onOpenCard(""); }}><span aria-hidden="true">←</span><span className="guide-back-label">Назад</span></button></div>
@@ -176,11 +192,11 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
       // D-10: a closed section is one bar in its place: no button, no photo, no chevron, no grid.
       if (row.kind === "redacted") return <section className="guide-section" key={row.slot}><RedactedPlaceholder variant="bar" level={row.requiredLevel} /></section>;
       const section = row.item;
-      const folded = collapsed.includes(section.id);
+      const folded = !expanded.includes(section.id);
       const gridId = `guide-grid-${section.id}`;
       const cardRows = mergePlaceholders(section.cards, placeholders?.cards[section.id]);
       return <section className="guide-section" key={section.id}>
-        <button type="button" className={`guide-section-head${section.photo ? " has-photo" : ""}`} aria-expanded={!folded} aria-controls={gridId} onClick={() => setCollapsed((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}>
+        <button type="button" className={`guide-section-head${section.photo ? " has-photo" : ""}`} aria-expanded={!folded} aria-controls={gridId} onClick={() => setExpanded((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}>
           {section.photo && <PortiaImage src={section.photo} alt="" recordId={`${section.id}:band`} priority="lazy" icon="guide" className="guide-section-band is-fill is-quiet" framing={section.photoFraming} />}
           <span className="guide-section-title">{section.title || "Без названия"}</span>
           <span className="guide-section-chevron" aria-hidden="true" />
@@ -202,7 +218,15 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
   </div>;
 }
 
-function GuideBlockView({ block, formattedText, cardTitle }: { block: GuideBlock; formattedText: PortiaContent["formattedText"]; cardTitle: string }) {
+function GuideBlockView({ block, formattedText, cardTitle, sections, onOpenCard }: { block: GuideBlock; formattedText: PortiaContent["formattedText"]; cardTitle: string; sections: GuideSection[]; onOpenCard: (id: string) => void }) {
+  if (block.type === "cards") {
+    // Only cards this visitor has: a closed or deleted card is left out, and an empty block draws nothing.
+    const cards = block.cardIds.map((id) => findGuide(sections, id)?.card).filter((item): item is NonNullable<typeof item> => !!item);
+    return cards.length ? <div className="guide-grid guide-nested-cards">{cards.map((item) => <button key={item.id} type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}`} data-card-id={item.id} onClick={() => onOpenCard(item.id)}>
+      {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" framing={item.coverFraming} /></span>}
+      <span className="guide-tile-title">{item.title || "Без названия"}</span>
+    </button>)}</div> : null;
+  }
   if (block.type === "heading") return block.text.trim() ? <h2 className="guide-heading">{block.text}</h2> : null;
   if (block.type === "text") return <FormattedText className="info-document-copy" text={block.text} document={formattedText[portiaTextKey.guideBlock(block.id)]} />;
   if (block.type === "table") return <div className="guide-table"><dl className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row) => <div key={row.id}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl></div>;
@@ -215,10 +239,14 @@ function GuideBlockView({ block, formattedText, cardTitle }: { block: GuideBlock
 }
 
 // A page photo is full width, not a link and has no zoom; a failed image is said so in words by the placeholder, never a broken icon (A11Y-03).
+// Owner 2026-11-18: a photo without a chosen position stands on the left (it used to centre itself), and its size is capped in the style sheet, so a maximized
+// window no longer blows it up to the whole width. A block framed in «Видимая часть» shows exactly that frame; an older block keeps its height and focus numbers.
 function GuidePhoto({ block }: { block: Extract<GuideBlock, { type: "photo" }> }) {
-  const alignment = block.align ?? "center";
-  return <figure className={`info-block-photo guide-photo guide-photo-${alignment}`} style={{ width: `${block.width ?? 100}%` }}>
-    <PortiaImage src={block.url} alt={block.caption} recordId={block.id} priority="lazy" icon="guide" style={{ height: block.height ? `${block.height}px` : undefined, objectFit: block.height ? "cover" : "contain", objectPosition: `${block.focusX ?? 50}% ${block.focusY ?? 50}%` }} />
+  const alignment = block.align ?? "left";
+  const framed = !!block.framing;
+  return <figure className={`info-block-photo guide-photo guide-photo-${alignment}${framed ? " is-framed" : ""}`} style={{ width: `${block.width ?? 100}%`, ...(block.framing?.ratio ? { maxWidth: `min(100%, 820px, calc(min(70svh, 620px) * ${block.framing.ratio / 1000}))` } : {}) }}>
+    {framed ? <PortiaImage src={block.url} alt={block.caption} recordId={block.id} priority="lazy" icon="guide" framing={block.framing} />
+      : <PortiaImage src={block.url} alt={block.caption} recordId={block.id} priority="lazy" icon="guide" style={{ height: block.height ? `${block.height}px` : undefined, objectFit: block.height ? "cover" : "contain", objectPosition: `${block.focusX ?? 50}% ${block.focusY ?? 50}%` }} />}
     {block.caption.trim() && <figcaption>{block.caption}</figcaption>}
   </figure>;
 }

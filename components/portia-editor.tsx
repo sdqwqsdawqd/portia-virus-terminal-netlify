@@ -1,5 +1,6 @@
 "use client";
 
+import { ImageFramingEditor } from "@/components/portia-image-framing";
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { changedDossierTabs, changedSections, deniedSections, editorSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
@@ -91,6 +92,7 @@ const guideBlockHeads = {
   photo: { label: "фото", title: "ФОТО" },
   video: { label: "видео", title: "ВИДЕО" },
   callout: { label: "врезка", title: "ВРЕЗКА" },
+  cards: { label: "карточки", title: "КАРТОЧКИ" },
 } as const;
 
 const clone = (content: PortiaContent) => JSON.parse(JSON.stringify(content)) as PortiaContent;
@@ -141,7 +143,7 @@ function findGuideBlock(content: PortiaContent, cardId: string, blockId: string)
 
 const guideNo = (index: number) => String(index + 1).padStart(2, "0");
 const firstLine = (value: string) => value.split("\n").map((line) => line.trim()).find(Boolean);
-const guideBlockTitle = (block: GuideBlock) => (block.type === "heading" || block.type === "text" ? firstLine(block.text) : block.type === "callout" ? firstLine(block.label) ?? firstLine(block.text) : undefined);
+const guideBlockTitle = (block: GuideBlock) => (block.type === "heading" || block.type === "text" ? firstLine(block.text) : block.type === "callout" ? firstLine(block.label) ?? firstLine(block.text) : block.type === "cards" && block.cardIds.length ? `${block.cardIds.length} шт.` : undefined);
 
 function editGuideTableRows(content: PortiaContent, cardId: string, blockId: string, edit: (rows: { id: string; key: string; value: string }[]) => void) {
   const block = findGuideBlock(content, cardId, blockId);
@@ -292,27 +294,56 @@ function SectionTabs({ label, sections, activeId, onSelect, onMove }: {
   </div>;
 }
 
+// Owner 2026-11-18: one standard for every picture — the photo block of a card is framed in the same window «Видимая часть» as covers and bands
+// (a free frame: its proportions are dragged by the handles), not by the old sliders «Кадр по горизонтали / вертикали». Applying a frame drops the
+// old height and focus numbers of the block, so the site shows exactly what the window showed.
 function GuidePhotoLayoutEditor({ block, onChange }: {
   block: Extract<GuideBlock, { type: "photo" }>;
   onChange: (edit: (photo: Extract<GuideBlock, { type: "photo" }>) => void) => void;
 }) {
   const width = block.width ?? 100;
-  const height = block.height ?? 0;
-  const align = block.align ?? "center";
-  const focusX = block.focusX ?? 50;
-  const focusY = block.focusY ?? 50;
+  const align = block.align ?? "left";
   return <div className="guide-photo-layout">
-    <strong>Расположение и видимая часть фото</strong>
+    <strong>Расположение фото</strong>
     <div className="guide-photo-layout-controls">
       <label>Ширина: {width}%<input type="range" min="40" max="100" step="5" value={width} onChange={(event) => onChange((photo) => { photo.width = Number(event.target.value); })} /></label>
-      <label>Высота: {height ? `${height} px` : "по изображению"}<input type="range" min="0" max="600" step="20" value={height} onChange={(event) => onChange((photo) => { photo.height = Number(event.target.value); })} /></label>
       <label>Положение<select value={align} onChange={(event) => onChange((photo) => { photo.align = event.target.value as "left" | "center" | "right"; })}><option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option></select></label>
-      <label>Кадр по горизонтали: {focusX}%<input type="range" min="0" max="100" step="5" value={focusX} onChange={(event) => onChange((photo) => { photo.focusX = Number(event.target.value); })} /></label>
-      <label>Кадр по вертикали: {focusY}%<input type="range" min="0" max="100" step="5" value={focusY} onChange={(event) => onChange((photo) => { photo.focusY = Number(event.target.value); })} /></label>
     </div>
-    <div className={`guide-photo-layout-preview guide-photo-${align}`} style={{ width: `${width}%` }}>
-      {block.url ? <img src={block.url} alt="Предпросмотр расположения фото" loading="lazy" style={{ width: "100%", height: height ? `${height}px` : "auto", objectPosition: `${focusX}% ${focusY}%` }} /> : <span>Выберите фото, чтобы увидеть результат.</span>}
-    </div>
+    {block.url && <ImageFramingEditor src={block.url} framing={block.framing} box="free" label="Фото" onChange={(framing) => onChange((photo) => {
+      if (framing) photo.framing = framing; else delete photo.framing;
+      delete photo.height; delete photo.focusX; delete photo.focusY;
+    })} />}
+  </div>;
+}
+
+// Owner 2026-11-18: the block «Карточки» — other cards of «Справочник» shown inside this card. Picked from one list grouped by section, kept in the chosen order.
+function GuideCardsBlockEditor({ block, cardId, sections, onChange }: {
+  block: Extract<GuideBlock, { type: "cards" }>;
+  cardId: string;
+  sections: PortiaContent["guideSections"];
+  onChange: (cardIds: string[]) => void;
+}) {
+  const titleOf = (id: string) => {
+    const found = findGuide(sections, id);
+    return found?.card ? `${found.card.title || "Без названия"} · ${found.section.title || "Без названия"}` : "Карточка удалена";
+  };
+  return <div className="guide-cards-editor">
+    {block.cardIds.length ? <ol className="guide-cards-editor-list">
+      {block.cardIds.map((id, index) => <li key={id}>
+        <span>{titleOf(id)}</span>
+        <button type="button" className="secondary-control" aria-label={`Выше: ${titleOf(id)}`} disabled={index === 0} onClick={() => { const next = [...block.cardIds]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; onChange(next); }}>↑</button>
+        <button type="button" className="secondary-control" aria-label={`Убрать: ${titleOf(id)}`} onClick={() => onChange(block.cardIds.filter((item) => item !== id))}>×</button>
+      </li>)}
+    </ol> : <p className="guide-section-empty">Карточки ещё не выбраны</p>}
+    <label className="editor-field">
+      <span>Добавить карточку</span>
+      <select value="" disabled={block.cardIds.length >= 24} onChange={(event) => { if (event.target.value) onChange([...block.cardIds, event.target.value]); }}>
+        <option value="">Выберите карточку…</option>
+        {sections.map((section) => <optgroup key={section.id} label={section.title || "Без названия"}>
+          {section.cards.filter((item) => item.id !== cardId && !block.cardIds.includes(item.id)).map((item) => <option key={item.id} value={item.id}>{item.title || "Без названия"}</option>)}
+        </optgroup>)}
+      </select>
+    </label>
   </div>;
 }
 
@@ -1489,7 +1520,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                           {block.type === "table" && <TableBlockEditor blockId={block.id} rows={block.rows} onEdit={(edit) => changeDraft((next) => editGuideTableRows(next, card.id, block.id, edit))} />}
                           {block.type === "photo" && (
                             <>
-                              <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="Размер и кадр настраиваются ниже" showPreview={false} uploadState={uploadState} uploadMessage={uploadMessage}
+                              <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="Размер и видимая часть настраиваются ниже" showPreview={false} uploadState={uploadState} uploadMessage={uploadMessage}
                                 onChange={(value) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.url = value; })}
                                 onUpload={(file) => uploadImage(file, (url) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.url = url; }))} />
                               <GuidePhotoLayoutEditor block={block} onChange={(edit) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") edit(item); })} />
@@ -1497,6 +1528,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                             </>
                           )}
                           {block.type === "video" && <YoutubeField videoId={block.videoId} onChange={(videoId) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "video") item.videoId = videoId; })} />}
+                          {block.type === "cards" && <GuideCardsBlockEditor block={block} cardId={card.id} sections={draft.guideSections} onChange={(cardIds) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "cards") item.cardIds = cardIds; })} />}
                           {block.type === "callout" && (
                             <>
                               <Field label="Подпись врезки"><input maxLength={300} value={block.label} onChange={(event) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "callout") item.label = event.target.value; })} /></Field>
@@ -1514,6 +1546,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                         <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "photo", url: "", caption: "" }))}>+ ФОТО</button>
                         <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "video", videoId: "" }))}>+ ВИДЕО</button>
                         <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "callout", label: "", text: "" }))}>+ ВРЕЗКА</button>
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "cards", cardIds: [] }))}>+ КАРТОЧКИ</button>
                       </div>
                       <LimitNote id={`limit-blocks-${card.id}`} count={card.blocks.length} max={MAX_BLOCKS} />
                     </div>

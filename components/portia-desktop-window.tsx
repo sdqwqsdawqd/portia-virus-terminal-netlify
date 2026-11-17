@@ -5,7 +5,7 @@ import { PortiaIcon, type PortiaIconName } from "@/components/portia-icons";
 import { dragGeometry, resizeGeometry, type ResizeEdge, type WindowGeometry } from "@/lib/window-geometry";
 import { originOf, type WindowState } from "@/lib/window-open";
 
-export type AppId = "archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor";
+export type AppId = "archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor" | "template";
 
 export const appMeta: Record<AppId, { label: string; path: string; icon: PortiaIconName }> = {
   archive: { label: "База вирусов", path: "PORTIA://VIRUS_ARCHIVE", icon: "virus" },
@@ -20,6 +20,8 @@ export const appMeta: Record<AppId, { label: string; path: string; icon: PortiaI
   sheet: { label: "Таблица", path: "PORTIA://DEPARTMENT_SHEET", icon: "sheet" },
   charter: { label: "Устав", path: "PORTIA://CHARTER", icon: "charter" },
   editor: { label: "Редактор", path: "PORTIA://CONTENT_CONTROL", icon: "editor" },
+  // Owner 2026-11-18: the dossier template is its own app, open to everyone (it used to live inside «Повышение», closed to most visitors).
+  template: { label: "Шаблон", path: "PORTIA://DOSSIER_TEMPLATE", icon: "template" },
 };
 
 // Sized from each window's layout (personnel: 260 px list + a stacked profile), so shrinking never squashes it (D-03).
@@ -36,6 +38,7 @@ const windowMinimums: Record<AppId, { width: number; height: number }> = {
   trash: { width: 640, height: 440 },
   sheet: { width: 640, height: 440 },
   charter: { width: 640, height: 440 },
+  template: { width: 620, height: 480 },
 };
 
 export function minimumWindowSize(appId: AppId) {

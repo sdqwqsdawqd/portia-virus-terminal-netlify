@@ -146,7 +146,7 @@ test("the web stands still in every mode, with the spider shown or hidden (owner
   assert.doesNotMatch(styles, /wallpaper-web-drift|web-idle-drift/, "no sway layer, rule or keyframes anywhere in the stylesheet");
   assert.doesNotMatch(styles, /\.wallpaper-web\s*\{[^}]*animation/, "the web itself carries no animation rule (only its threads and dew draw in)");
   assert.doesNotMatch(wallpaper, /wallpaper-web-drift/);
-  assert.match(wallpaper, /<WallpaperArt kind=\{value\} \/>\s*\n\s*\{value === "radar" \? <WallpaperSpider \/> : value === "gel" \? <WallpaperGelStrip \/> : null\}/);
+  assert.match(wallpaper, /<WallpaperArt kind=\{value\} \/>\s*\n\s*\{value === "radar" \? <WallpaperSpider \/> : value === "gel" \? <WallpaperGelStrip \/> : value === "grid" \? <WallpaperTiltedHelices \/> : null\}/);
 });
 
 test("the spider stays where it is, without waves and in a neutral pose, once motion leaves «Включены»", () => {

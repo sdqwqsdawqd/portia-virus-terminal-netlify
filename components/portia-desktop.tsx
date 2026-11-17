@@ -23,6 +23,8 @@ import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuests
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
 import { DesktopIcon, StartPanelButton, desktopShortcutOrder, placedShortcut, useShortcutPlacement, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
+import { PortiaTemplateBuilder } from "@/components/portia-template-builder";
+import { AssistantItems, CompanionItemsSettings } from "@/components/portia-companion-items";
 import { AppDeniedPanel, AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/components/portia-desktop-states";
 import { accessCheckFailedText, appViewState, contentSyncFailed, contentSyncSucceeded, emptyCopy, failureFromResponse, type AppFailure, type ContentSync } from "@/lib/app-state";
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
@@ -164,7 +166,7 @@ const settingValues: Record<Exclude<keyof DesktopSettings, "customAccent">, read
   spider: spiderModes,
 };
 
-const globalSearchAppIds: AppId[] = ["archive", "employees", "info", "guide", "broadcasts", "trash", "promotion", "settings", "sheet", "charter"];
+const globalSearchAppIds: AppId[] = ["archive", "employees", "info", "guide", "broadcasts", "trash", "promotion", "template", "settings", "sheet", "charter"];
 // The one access filter of the index: «Редактор» is gated by canEdit and is not in the list; a «Устав» closed to the viewer is left out of the
 // index by searchApps below (D-11, LVL-05) while its icon stays on the desktop (a deliberate asymmetry). «Устав» is found by its name only (owner verdict 8).
 const globalSearchApps = globalSearchAppIds.map((id) => ({ id, label: appMeta[id].label, path: appMeta[id].path }));
@@ -182,6 +184,7 @@ const initialWindows: Record<AppId, WindowState> = {
   sheet: { open: false, minimized: false, maximized: false, z: 10 },
   charter: { open: false, minimized: false, maximized: false, z: 10 },
   editor: { open: false, minimized: false, maximized: false, z: 10 },
+  template: { open: false, minimized: false, maximized: false, z: 10 },
 };
 
 function createWindowGeometry(appId: AppId, cascadeIndex: number): WindowGeometry | undefined {
@@ -201,6 +204,7 @@ function createWindowGeometry(appId: AppId, cascadeIndex: number): WindowGeometr
     sheet: [1180, 760],
     charter: [980, 760],
     editor: [1120, 760],
+    template: [1120, 760],
   }[appId];
   const width = Math.min(preferred[0], workspaceWidth - 32);
   const height = Math.min(preferred[1], workspaceHeight - 24);
@@ -223,6 +227,9 @@ const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3";
 const taskbarOrderStorageKey = "portia-taskbar-order-v1";
 const TASKBAR_BOUNCE_MS = 520;
 const ASSISTANT_RECOVER_MS = 780;
+// Owner 2026-11-18: rights are taken away only after this many answers in a row say so, rechecked this fast in between.
+const accessLossConfirmations = 3;
+const accessRecheckMs = 2500;
 
 // A saved profile replaces its entry; an id not in the list yet is a newly added manual employee (appended).
 const withEmployee = (list: PortiaEmployee[], employee: PortiaEmployee) => list.some((item) => item.id === employee.id) ? list.map((item) => item.id === employee.id ? employee : item) : [...list, employee];
@@ -668,10 +675,27 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     }
   }, [fetchContent]);
 
-  const fetchAccess = useCallback(async () => {
+  // Owner 2026-11-18: one slow or refused answer while editing must not swap the editor for «Доступ закрыт». A loss of rights (a failed check,
+  // or a refusal after the rights were granted) is applied only when accessLossConfirmations answers in a row agree; between them a quick recheck runs.
+  // The server still checks every save, so keeping the last good rights for a few seconds never lets an edit through that it would refuse.
+  const accessLossStreak = useRef(0);
+  const accessRecheckTimer = useRef<number | null>(null);
+  // The quick recheck calls the newest fetchAccess through this ref (set after each render).
+  const fetchAccessRef = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => () => { if (accessRecheckTimer.current !== null) window.clearTimeout(accessRecheckTimer.current); }, []);
+  const fetchAccess = useCallback(async (): Promise<void> => {
     const seq = ++accessRequestSeq.current;
+    // True when the loss is applied now; false when it waits for a recheck.
+    const confirmLoss = () => {
+      accessLossStreak.current += 1;
+      if (accessLossStreak.current >= accessLossConfirmations || !canEditRef.current) return true;
+      if (accessRecheckTimer.current !== null) window.clearTimeout(accessRecheckTimer.current);
+      accessRecheckTimer.current = window.setTimeout(() => { accessRecheckTimer.current = null; void fetchAccessRef.current(); }, accessRecheckMs);
+      return false;
+    };
     const markFailed = () => {
       if (seq < accessAppliedSeq.current) return;
+      if (!confirmLoss()) return;
       accessAppliedSeq.current = seq;
       setAccessState("failed");
     };
@@ -682,6 +706,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
       if (!response.ok && !denied) { markFailed(); return; }
       const access: { canEdit?: boolean; canManageEditors?: boolean; openTabs?: unknown } = denied ? {} : await response.json();
       if (seq < accessAppliedSeq.current) return;
+      if (!access.canEdit && !confirmLoss()) return;
+      if (access.canEdit) accessLossStreak.current = 0;
       accessAppliedSeq.current = seq;
       setAccessState("ok");
       setCanEdit(Boolean(access.canEdit));
@@ -693,6 +719,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
       markFailed();
     }
   }, []);
+  useEffect(() => { fetchAccessRef.current = fetchAccess; }, [fetchAccess]);
 
   // Keeps the Personnel window in step with the editor without waiting for the next sync.
   const updateEmployee = useCallback((saved: PortiaEmployee) => {
@@ -952,7 +979,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     try {
       const saved = window.localStorage.getItem(shortcutPositionsStorageKey);
       const parsed = saved ? JSON.parse(saved) as Record<string, ShortcutPosition> : {};
-      const allowed = new Set<DesktopShortcutId>(["search", "archive", "employees", "broadcasts", "info", "guide", "promotion", "settings", "charter", "sheet", "trash"]);
+      const allowed = new Set<DesktopShortcutId>(["search", "archive", "employees", "broadcasts", "info", "guide", "promotion", "settings", "charter", "sheet", "trash", "template"]);
       const restored = Object.fromEntries(Object.entries(parsed).filter(([key, value]) => allowed.has(key as DesktopShortcutId) && Number.isFinite(value?.x) && Number.isFinite(value?.y))) as Partial<Record<DesktopShortcutId, ShortcutPosition>>;
       restoreTimer = window.setTimeout(() => {
         setShortcutPositions(restored);
@@ -1948,6 +1975,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
             <DesktopIcon app="info" onOpen={openApp} position={shortcutPositions.info} placed={placedShortcut(shortcutPlacement, "info")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="guide" onOpen={openApp} position={shortcutPositions.guide} placed={placedShortcut(shortcutPlacement, "guide")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="promotion" onOpen={openApp} position={shortcutPositions.promotion} placed={placedShortcut(shortcutPlacement, "promotion")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="template" onOpen={openApp} position={shortcutPositions.template} placed={placedShortcut(shortcutPlacement, "template")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="settings" onOpen={openApp} position={shortcutPositions.settings} placed={placedShortcut(shortcutPlacement, "settings")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="charter" onOpen={openApp} position={shortcutPositions.charter} placed={placedShortcut(shortcutPlacement, "charter")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="sheet" onOpen={openApp} position={shortcutPositions.sheet} placed={placedShortcut(shortcutPlacement, "sheet")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
@@ -2097,7 +2125,12 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
           </AppWindow>
 
           <AppWindow app="promotion" state={windows.promotion} active={activeApp === "promotion"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window promotion-window" meta="Повышение" locked={qualificationLocked}>
-            <PortiaPromotion visible={activeApp === "promotion" && !windows.promotion.minimized} onRetakeReady={setPromotionRetakeToast} onQualificationLockChange={updateQualificationLock} />
+            <PortiaPromotion visible={activeApp === "promotion" && !windows.promotion.minimized} onRetakeReady={setPromotionRetakeToast} onQualificationLockChange={updateQualificationLock} onOpenTemplate={() => openApp("template")} />
+          </AppWindow>
+
+          {/* Owner 2026-11-18: «Шаблон» is a window of its own; like every window it unmounts when closed, so closing it ends the draft (the builder asks first when nothing was downloaded). */}
+          <AppWindow app="template" state={windows.template} active={activeApp === "template"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window template-window" meta="Шаблон досье">
+            <PortiaTemplateBuilder standalone onClose={() => closeApp("template")} />
           </AppWindow>
 
           <AppWindow app="broadcasts" state={windows.broadcasts} active={activeApp === "broadcasts"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window broadcasts-window" meta="КАНАЛ СТАНЦИИ">
@@ -2188,6 +2221,9 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
               <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)}><p className="setting-hint">Системная настройка движения не учитывается.</p></SettingGroup>
               <SettingGroup title="Паук" values={[['on','Показывать'],['off','Скрыть']]} current={desktopSettings.spider} onSelect={(value) => updateDesktopSetting("spider", value)} />
+              {/* Owner 2026-11-18: things for Вивьян and for the spider; pictures of this device only, never uploaded. */}
+              <CompanionItemsSettings target="assistant" />
+              <CompanionItemsSettings target="spider" />
               <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2>{!canEdit && <p>Войдите в разрешённый аккаунт редактора.</p>}</div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>
             </div>
@@ -2200,7 +2236,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
 
         <div className={`desktop-assistant${assistantSpeaking ? " is-speaking" : ""}${assistantOffended ? " is-offended" : ""}${assistantRecovering ? " is-recovering" : ""}`} data-mood={assistantMood || undefined} data-squish={assistantSquish ? (assistantSquish % 2 ? "a" : "b") : undefined} data-auto={assistantAutomaticKind ?? undefined}>
           {assistantSpeaking && <div className="assistant-bubble" role="status"><span>{assistantMessageHeading}</span><FormattedText className="assistant-formatted-text" text={assistantMessageText} document={assistantMessageDocument} trimLeadingBlankLines eagerMedia /></div>}
-          <button className="assistant-button" type="button" onClick={activateAssistant} onContextMenu={(event) => event.preventDefault()} aria-disabled={assistantOffended} aria-label="Получить совет Вивьян"><img src="/assets/portia-assistant.png" alt="" draggable={false} /></button>
+          <button className="assistant-button" type="button" onClick={activateAssistant} onContextMenu={(event) => event.preventDefault()} aria-disabled={assistantOffended} aria-label="Получить совет Вивьян"><img src="/assets/portia-assistant.png" alt="" draggable={false} /><AssistantItems /></button>
           <span className="assistant-label">ВИВЬЯН // ПОМОЩНИК</span>
         </div>
 
@@ -2229,6 +2265,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
           <StartPanelButton icon="virus" label="База вирусов" onClick={() => openApp("archive")} />
           <StartPanelButton icon="employees" label="Сотрудники" onClick={() => openApp("employees")} />
           <StartPanelButton icon="promotion" label="Повышение" onClick={() => openApp("promotion")} />
+          <StartPanelButton icon="template" label="Шаблон" onClick={() => openApp("template")} />
           <StartPanelButton icon="settings" label="Настройки" onClick={() => openApp("settings")} />
         </div>}
 
