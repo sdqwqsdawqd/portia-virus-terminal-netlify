@@ -1166,7 +1166,7 @@ html[data-motion="full"] .boot-lines p { clip-path: inset(0 100% 0 0); animation
 /* Every label reserves two lines and sits on their bottom, so values line up across a row even when one label wraps. */
 .class-cell span { min-height: 2.6em; display: flex; align-items: flex-end; color: oklch(.47 calc(.014 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); line-height: 1.3; text-transform: uppercase; }
 /* Badge and name share one centre line (D-08). */
-.class-cell strong { display: flex; align-items: center; gap: 6px; color: oklch(.237 calc(.015 * var(--accent-chroma)) var(--accent-hue)); font: 700 15px var(--sans); overflow-wrap: anywhere; }
+.class-cell strong { display: flex; align-items: center; gap: 6px; color: oklch(.237 calc(.015 * var(--accent-chroma)) var(--accent-hue)); font: 700 15px var(--sans); flex-wrap: wrap; gap: 2px 6px; overflow-wrap: normal; word-break: normal; hyphens: manual; font-size: clamp(12px, calc((100cqw - 24px) / 8.6), 15px); }
 .class-badge { flex: none; width: 18px; height: 18px; }
 .class-cell small { color: oklch(.577 calc(.012 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--mono); letter-spacing: .06em; }
 .class-cell.level-1 strong, .class-cell.level-1 small { color: #167a4d; }
@@ -1174,6 +1174,14 @@ html[data-motion="full"] .boot-lines p { clip-path: inset(0 100% 0 0); animation
 .class-cell.level-3 strong, .class-cell.level-3 small { color: #b43632; }
 .class-cell.transmission { grid-column: 1 / -1; }
 .class-cell.transmission strong { color: #0b7568; }
+/* UAT 2026-11-16 gap 11 (UI-07): a class name is read in full, in whole words. "Предупреждение" is 14 glyphs x 0.6em x 12px = 101px; with the cell's 24px of padding
+   and 1px of border a cell needs 126px. The name's size follows its cell (12-15px, 13px on a phone), a name that does not fit beside the badge goes under it,
+   and the grid is 3 columns only while the panel holds three such cells (3 x 126 = 378px, 380px here), 2 columns while it holds two (2 x 126 = 252px, 254px here),
+   else 1. The panel, not the viewport, decides: the card also lives in a narrow window and in the template file. The archive card is the template card's rule (D-65) for all. */
+.class-cell { container-type: inline-size; }
+.classification-panel { container-type: inline-size; }
+@container (max-width: 380px) { .classification-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 254px) { .classification-grid { grid-template-columns: minmax(0, 1fr); } }
 
 .dossier-section { margin-top: clamp(34px, 5vw, 58px); }
 .lead-copy { display: block; max-width: 86ch; margin: 0; color: oklch(.363 calc(.017 * var(--accent-chroma)) var(--accent-hue)); }
@@ -1356,7 +1364,7 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .media-empty { aspect-ratio: 16 / 11; min-height: 220px; }
   .subject-media .portia-image { --portia-image-ratio: 16 / 11; }
   .class-cell { min-height: 70px; padding: 10px; }
-  .class-cell strong { font-size: 13px; }
+  .class-cell strong { font-size: clamp(12px, calc((100cqw - 20px) / 8.6), 13px); }
   .lead-copy, .formatted-rich-input[data-area="lead"] { font-size: 15px; line-height: 1.7; }
   .mutation-card { grid-template-columns: 1fr; }
   .mutation-card .subject-media { border-right: 0; border-bottom: 1px solid #c4beb0; }
