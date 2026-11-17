@@ -759,7 +759,6 @@ const R3 = "min-width: 1281px";
 const R3_COLUMNS = "repeat(2, minmax(0, 1fr))";
 const LIST_COLUMN = "clamp(270px, 24%, 340px) minmax(0, 1fr)";
 const EDITOR_CARD_COLUMNS = "repeat(auto-fill, minmax(min(100%, var(--editor-card-width)), var(--editor-card-width)))";
-const guideR1 = R1_COLUMNS.replace("var(--card-min)", "220px");
 const documentsSource = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
 const at = (selector: string) => `${MAXIMIZED} ${selector}`;
 
@@ -833,12 +832,19 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
     assertFillsWindow(".info-library");
   } },
   { app: "guide", outcome: "fixed", check: () => {
-    assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "grid-template-columns", DESKTOP), guideR1);
-    assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "gap", DESKTOP), "8px");
-    // UAT 2026-11-16 gap 3 — владелец: статья в узкой колонке. The open article takes the whole pane of a maximized window;
-    // a normal window keeps the 820px reading column.
+    // Owner 2026-11-18 (round 2) replaces the UAT 2026-11-16 stretched grid and full-pane article: a maximized «Справочник» is built like
+    // «Информация» — a sections index column (the columns of .info-library), compact fixed tiles that do not grow, the open card in an 820px reading column.
+    assert.equal(lastDeclaration(portiaCss, ".guide-index", "display"), "none", "the index is hidden outside a maximized window");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-index"), "display", DESKTOP), "block");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-layout"), "display", DESKTOP), "grid");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-layout"), "grid-template-columns", DESKTOP), lastDeclaration(portiaCss, ".info-library", "grid-template-columns", DESKTOP));
+    assert.equal(lastDeclaration(portiaCss, at(".guide-layout"), "grid-template-columns", DESKTOP), "minmax(210px, 28%) minmax(0, 1fr)");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-layout"), "height", DESKTOP), "calc(100% - 46px)");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-app"), "height", DESKTOP), "100%");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "grid-template-columns", DESKTOP), undefined, "the tiles keep their 176px");
+    assert.equal(lastDeclaration(portiaCss, ".guide-grid", "grid-template-columns", DESKTOP), "repeat(auto-fill, minmax(min(100%, 176px), 176px))");
     assert.equal(lastDeclaration(portiaCss, ".guide-page", "max-width"), "820px");
-    assert.equal(lastDeclaration(portiaCss, at(".guide-page"), "max-width", DESKTOP), "none");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-page"), "max-width", DESKTOP), undefined, "the card keeps the 820px column");
     assertFillsWindow(".guide-app");
   } },
   { app: "promotion", outcome: "fixed", check: () => {
@@ -954,17 +960,15 @@ test("UI-06 / D-19: two columns only for flat forms; editor cards keep their 340
   }
 });
 
-test("UI-06 / D-02: no maximized rule stretches a control and the caps are 640/820/1320px or none for the guide article", () => {
+test("UI-06 / D-02: no maximized rule stretches a control and the caps are 640/820/1320px", () => {
   for (const [file, css] of ALL_STYLESHEETS) {
     for (const rule of rulesOf(css)) {
       if (!rule.selectors.some((selector) => selector.includes("is-maximized"))) continue;
       for (const [name, value] of declarations(rule.body)) {
         const stretches = (name === "width" && /^100%/u.test(value)) || (/^flex(?:-grow)?$/u.test(name) && /^[1-9]/u.test(value));
         assert.ok(!stretches, `${file}: ${rule.selectors.join(", ")} { ${name}: ${value} }`);
-        if (name === "max-width" && value === "none") {
-          // UAT 2026-11-16 gap 3: the open article of «Справочник» is the only column that a maximized window releases.
-          assert.deepEqual(rule.selectors, [at(".guide-page")], `${file}: only the guide article may drop its cap`);
-        } else if (name === "max-width") assert.match(value, /^(?:var\(--field-max\)|820px|1320px)$/u, `${file}: ${rule.selectors.join(", ")} cap`);
+        // Owner 2026-11-18 (round 2): the guide article exception is withdrawn, no maximized rule releases a cap any more.
+        if (name === "max-width") assert.match(value, /^(?:var\(--field-max\)|820px|1320px)$/u, `${file}: ${rule.selectors.join(", ")} cap`);
       }
     }
   }

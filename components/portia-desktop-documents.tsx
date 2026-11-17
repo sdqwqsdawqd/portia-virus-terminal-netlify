@@ -7,6 +7,7 @@ import { levelCopy } from "@/lib/level-copy";
 import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { PortiaIllustration } from "@/components/portia-icons";
 import { emptyCopy, iframeLoadTimeoutMs } from "@/lib/app-state";
+import type { ImageFraming } from "@/lib/image-framing";
 import { FormattedText } from "@/components/portia-desktop-dossier";
 import { PortiaImage, useVisibleTimeout } from "@/components/portia-desktop-media";
 import { AppFatalPanel, AppSkeleton } from "@/components/portia-desktop-states";
@@ -111,6 +112,9 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
   const [parentCards, setParentCards] = useState<string[]>([]);
   const backIntent = useRef(false);
   const lastShown = useRef("");
+  // Owner 2026-11-18 (round 2): the sections index of a maximized window. `activeSection` is the last one clicked; `pendingSection` waits for the list to render.
+  const [activeSection, setActiveSection] = useState("");
+  const pendingSection = useRef("");
   const found = findGuide(sections, openCardId);
   const sectionRows = mergePlaceholders(sections, placeholders?.sections);
   const card = found?.card ?? null;
@@ -133,6 +137,21 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
     returnTo.current = null; // a card opened from search later must not inherit this position
     if (back) (root.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(previous)}"]`) ?? root).focus({ preventScroll: true });
   }, [shownId, sections]);
+
+  // Scrolls the head of a section to the top of the scroller (an instant jump: this view has no animated property).
+  const scrollToSection = (id: string) => {
+    const root = scroller.current;
+    const head = root?.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(id)}"]`);
+    if (!root || !head) return;
+    root.scrollTop += head.getBoundingClientRect().top - root.getBoundingClientRect().top - parseFloat(getComputedStyle(root).paddingTop || "0");
+  };
+  // After the restore effect above: a click in the index while a card was open returns to the list first, then lands on its section.
+  useLayoutEffect(() => {
+    if (shownId || !pendingSection.current) return;
+    const id = pendingSection.current;
+    pendingSection.current = "";
+    scrollToSection(id);
+  });
 
   useEffect(() => {
     let ids: string[] | null = null;
@@ -171,7 +190,28 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
     onOpenCard(cardId);
   };
 
-  return <div className="guide-app" ref={scroller} tabIndex={-1}>
+  const indexRows = sectionRows.flatMap((row) => (row.kind === "redacted" ? [] : [row.item]));
+  const openIndex = (id: string) => {
+    setActiveSection(id);
+    if (shownId) {
+      setParentCards([]);
+      returnTo.current = null;
+      pendingSection.current = id;
+      onOpenCard("");
+      return;
+    }
+    setExpanded((current) => (current.includes(id) ? current : [...current, id]));
+    scrollToSection(id);
+  };
+
+  // The sections index shows only in a maximized window (style sheet), like the contents of «Информация».
+  return <div className="guide-layout">
+    <nav className="guide-index" aria-label="Разделы справочника">
+      {indexRows.map((section, index) => <button key={section.id} type="button" aria-current={(found && card ? found.section.id === section.id : activeSection === section.id) ? "true" : undefined} onClick={() => openIndex(section.id)}>
+        <small>{String(index + 1).padStart(2, "0")}</small><span>{section.title || "Без названия"}</span>
+      </button>)}
+    </nav>
+    <div className="guide-app" ref={scroller} tabIndex={-1}>
     {banner}
     {found && card ? <>
       <div className="guide-back-bar"><button type="button" aria-label={parentCards.length ? "Назад к предыдущей карточке" : "Назад к списку карточек"} onClick={goBack}><span aria-hidden="true">←</span><span className="guide-back-label">Назад</span></button></div>
@@ -195,7 +235,7 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
       const folded = !expanded.includes(section.id);
       const gridId = `guide-grid-${section.id}`;
       const cardRows = mergePlaceholders(section.cards, placeholders?.cards[section.id]);
-      return <section className="guide-section" key={section.id}>
+      return <section className="guide-section" key={section.id} data-section-id={section.id}>
         <button type="button" className={`guide-section-head${section.photo ? " has-photo" : ""}`} aria-expanded={!folded} aria-controls={gridId} onClick={() => setExpanded((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}>
           {section.photo && <PortiaImage src={section.photo} alt="" recordId={`${section.id}:band`} priority="lazy" icon="guide" className="guide-section-band is-fill is-quiet" framing={section.photoFraming} />}
           <span className="guide-section-title">{section.title || "Без названия"}</span>
@@ -205,27 +245,32 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
           {!cardRows.length && <p className="guide-section-empty">В разделе пока нет карточек</p>}
           {cardRows.map((cardRow) => {
             if (cardRow.kind === "redacted") return <RedactedPlaceholder key={cardRow.slot} variant="tile" level={cardRow.requiredLevel} />;
-            const item = cardRow.item;
-            return <button key={item.id} type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}${hitId === item.id ? " search-hit" : ""}`} data-card-id={item.id} {...(hitId === item.id ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => openTile(item.id)}>
-            {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" framing={item.coverFraming} /></span>}
-            <span className="guide-tile-title">{item.title || "Без названия"}</span>
-          </button>;
+            return <GuideTile key={cardRow.item.id} item={cardRow.item} hit={hitId === cardRow.item.id} onOpen={openTile} />;
           })}
         </div>
       </section>;
     })}
     </>}
+    </div>
   </div>;
+}
+
+// Owner 2026-11-18 (round 2): one tile for the section grid and for the block «Карточки». A tile is always 4:3, so a cover keeps the position and zoom
+// the editor saved but never the free proportions of its frame (an old frame with its own ratio cropped some covers differently from the rest).
+const tileFraming = (framing: ImageFraming | undefined): ImageFraming | undefined => (framing && framing.ratio !== undefined ? { x: framing.x, y: framing.y, zoom: framing.zoom } : framing);
+
+function GuideTile({ item, hit, onOpen }: { item: GuideSection["cards"][number]; hit: boolean; onOpen: (id: string) => void }) {
+  return <button type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}${hit ? " search-hit" : ""}`} data-card-id={item.id} {...(hit ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => onOpen(item.id)}>
+    {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" framing={tileFraming(item.coverFraming)} /></span>}
+    <span className="guide-tile-title">{item.title || "Без названия"}</span>
+  </button>;
 }
 
 function GuideBlockView({ block, formattedText, cardTitle, sections, onOpenCard }: { block: GuideBlock; formattedText: PortiaContent["formattedText"]; cardTitle: string; sections: GuideSection[]; onOpenCard: (id: string) => void }) {
   if (block.type === "cards") {
     // Only cards this visitor has: a closed or deleted card is left out, and an empty block draws nothing.
     const cards = block.cardIds.map((id) => findGuide(sections, id)?.card).filter((item): item is NonNullable<typeof item> => !!item);
-    return cards.length ? <div className="guide-grid guide-nested-cards">{cards.map((item) => <button key={item.id} type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}`} data-card-id={item.id} onClick={() => onOpenCard(item.id)}>
-      {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" framing={item.coverFraming} /></span>}
-      <span className="guide-tile-title">{item.title || "Без названия"}</span>
-    </button>)}</div> : null;
+    return cards.length ? <div className="guide-grid guide-nested-cards">{cards.map((item) => <GuideTile key={item.id} item={item} hit={false} onOpen={onOpenCard} />)}</div> : null;
   }
   if (block.type === "heading") return block.text.trim() ? <h2 className="guide-heading">{block.text}</h2> : null;
   if (block.type === "text") return <FormattedText className="info-document-copy" text={block.text} document={formattedText[portiaTextKey.guideBlock(block.id)]} />;

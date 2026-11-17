@@ -35,7 +35,7 @@ import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, infoSectionsHitCount, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
 import { startMenuCloseReason, type StartMenuEvent } from "@/lib/start-menu";
-import { availableRecordsLimit, broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
+import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, searchFirstPage, searchMaxShown, searchShownCount, type SearchItem } from "@/lib/search-index";
 
 // Phase 24, D-20/D-22: a record window whose record became closed keeps its place and shows the block; the slot of the placeholder
 // is what is remembered, never the record. A selection with an id is a normal one; the lost state counts only while the id is empty,
@@ -1762,7 +1762,10 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     recycleFiles: content.recycleFiles,
     recycledViruses,
   }), [content, employees, recycledViruses, rosterOutOfSearch, searchApps]);
-  const searchResults = useMemo(() => matchSearch(searchIndex, globalQuery, availableRecordsLimit(windows.search.maximized)), [searchIndex, globalQuery, windows.search.maximized]);
+  const searchResults = useMemo(() => matchSearch(searchIndex, globalQuery), [searchIndex, globalQuery]);
+  // Owner 2026-11-18 (round 2): 10 rows first, «Показать ещё» up to 25; the query changing folds the list again.
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const searchFocusAfterExpand = useRef(false);
 
   const isSearchHit = (type: string, id: string) => searchHit?.type === type && searchHit.id === id;
   const hitClass = (type: string, id: string) => isSearchHit(type, id) ? " search-hit" : "";
@@ -1879,12 +1882,20 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
 
   // A vanished record leaves its row for a moment as «Запись недоступна», in the place it had; the next input, click or a few seconds remove it.
   const searchRows = useMemo(() => {
-    const rows = searchResults.map((item) => ({ item, unavailable: false }));
+    const rows = searchResults.slice(0, searchShownCount(searchResults.length, searchExpanded)).map((item) => ({ item, unavailable: false }));
     for (const { item, position } of unavailableResults) {
       if (!searchResults.some((result) => result.key === item.key)) rows.splice(Math.min(position, rows.length), 0, { item, unavailable: true });
     }
     return rows;
-  }, [searchResults, unavailableResults]);
+  }, [searchResults, searchExpanded, unavailableResults]);
+  const searchHidden = Math.min(searchResults.length, searchMaxShown) - searchFirstPage;
+  const expandSearch = () => { searchFocusAfterExpand.current = true; setSearchExpanded(true); setSearchFocusIndex(searchFirstPage); };
+  // The first newly shown row takes the focus after the click (the button that was clicked has just left the page).
+  useEffect(() => {
+    if (!searchExpanded || !searchFocusAfterExpand.current) return;
+    searchFocusAfterExpand.current = false;
+    searchResultsRef.current?.querySelectorAll<HTMLElement>(".global-result[data-result-index]")[searchFirstPage]?.focus();
+  }, [searchExpanded]);
   useEffect(() => {
     if (!unavailableResults.length) return;
     const timer = window.setTimeout(() => setUnavailableResults([]), 3200);
@@ -1913,7 +1924,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     if (action === "focus-input") searchInputRef.current?.focus();
     else if (action === "next") focusSearchResult(resultElement ? index + 1 : 0);
     else if (action === "prev") focusSearchResult(resultElement ? index - 1 : searchRows.length - 1);
-    else if (action === "clear") { setGlobalQuery(""); setUnavailableResults([]); setSearchFocusIndex(0); searchInputRef.current?.focus(); }
+    else if (action === "clear") { setGlobalQuery(""); setSearchExpanded(false); setUnavailableResults([]); setSearchFocusIndex(0); searchInputRef.current?.focus(); }
     else if (action === "close") closeApp("search");
     else {
       const at = resultElement ? index : 0;
@@ -2051,8 +2062,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
           <AppWindow app="search" state={windows.search} active={activeApp === "search"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="global-search-window" meta="ГЛОБАЛЬНЫЙ ПОИСК">
             <div className="global-search-app" onKeyDown={onSearchKeyDown}>
               <header className="global-search-header"><h1>Глобальный поиск</h1></header>
-              <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input ref={searchInputRef} value={globalQuery} onChange={(event) => { setGlobalQuery(event.target.value); setUnavailableResults([]); setSearchFocusIndex(0); }} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
-              {shownRecommendations.length > 0 && <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{shownRecommendations.map((index) => { const item = content.searchRecommendations[index]; return <button key={`${item}-${index}`} type="button" onClick={() => { setGlobalQuery(item); setUnavailableResults([]); setSearchFocusIndex(0); }}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>; })}</div></div>}
+              <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input ref={searchInputRef} value={globalQuery} onChange={(event) => { setGlobalQuery(event.target.value); setSearchExpanded(false); setUnavailableResults([]); setSearchFocusIndex(0); }} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
+              {shownRecommendations.length > 0 && <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{shownRecommendations.map((index) => { const item = content.searchRecommendations[index]; return <button key={`${item}-${index}`} type="button" onClick={() => { setGlobalQuery(item); setSearchExpanded(false); setUnavailableResults([]); setSearchFocusIndex(0); }}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>; })}</div></div>}
               <div className="global-search-summary"><span>{!contentReady ? "Ищем…" : globalQuery ? `Результаты для «${globalQuery}»` : "Доступные записи"}</span>{contentReady && <strong>{String(searchResults.length).padStart(2, "0")}</strong>}</div>
               <div className="global-search-results" ref={searchResultsRef} aria-busy={!contentReady}>
                 {!contentReady ? <>
@@ -2069,6 +2080,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
                 {!searchRows.length && <div className="global-search-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>Совпадений нет</strong><span>Измените запрос или выберите рекомендацию.</span></div>}
                 </>}
               </div>
+              {contentReady && !searchExpanded && searchHidden > 0 && <button type="button" className="global-search-more" onClick={expandSearch}>Показать ещё {searchHidden}</button>}
+              {contentReady && searchExpanded && searchResults.length > searchMaxShown && <p className="global-search-more-note">Уточните запрос, чтобы увидеть остальные</p>}
             </div>
           </AppWindow>
 

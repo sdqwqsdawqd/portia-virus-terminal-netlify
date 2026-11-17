@@ -183,8 +183,11 @@ test("promotion is a standalone desktop application with its own window geometry
 test("global search is built by buildSearchIndex from every existing collection and opens the owner app (D-13, D-14)", () => {
   assert.ok(source.includes("globalSearchAppIds.map"));
   assert.ok(source.includes("buildSearchIndex({"));
-  assert.ok(source.includes("matchSearch(searchIndex, globalQuery, availableRecordsLimit(windows.search.maximized))"));
-  assert.ok(source.includes("[searchIndex, globalQuery, windows.search.maximized]"));
+  // Owner 2026-11-18 (round 2): the search lists every match and draws the first 10 (up to 25 after «Показать ещё»).
+  assert.ok(source.includes("matchSearch(searchIndex, globalQuery)"));
+  assert.ok(source.includes("searchShownCount("), "the rendered rows are a slice of searchShownCount");
+  assert.ok(source.includes('className="global-search-more"'));
+  assert.ok(source.includes("[searchIndex, globalQuery]"), "the maximized flag no longer widens the list");
   assert.ok(!source.includes("const escapeSearch"), "one normalisation: normalizeSearch from lib/search-index");
   assert.ok(source.includes('openApp("employees")'));
   for (const collection of ["content.viruses", "content.infoSections", "content.guideSections", "content.broadcasts", "content.recycleFiles", "recycledViruses", "employees"]) {
@@ -337,13 +340,15 @@ test("window tiles keep their own size and the search shows the picked recommend
   assert.match(styles, /\.broadcast-grid\s*\{[^}]*align-items:\s*start/);
   assert.match(styles, /\.broadcast-grid > \.broadcast-empty\s*\{[^}]*grid-column:\s*1 \/ -1/);
   assert.match(styles, /\.guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*176px\),\s*176px\)\)/);
-  // Phase 26 (UI-06, D-01): a maximized window turns these tiles into a card grid, but only under the maximized hook; the
-  // normal window keeps the fixed 340px / 176px tiles above. No rule outside the hook gives them a stretched track.
+  // Phase 26 (UI-06, D-01): a maximized window turns the broadcast tiles into a card grid, but only under the maximized hook; the
+  // normal window keeps the fixed 340px tiles above. No rule outside the hook gives them a stretched track.
+  // Owner 2026-11-18 (round 2): the guide tiles stay 176px in a maximized window too (compact tiles, like «Информация»): no maximized rule touches their columns.
+  assert.ok(!/\.app-window\.is-maximized[^{}]*\.guide-grid[^{}]*\{/.test(styles), "guide-grid: no maximized rule changes the tiles");
   for (const tiles of ["broadcast-grid", "guide-grid"]) {
     const rules = [...styles.matchAll(new RegExp(String.raw`([^{}]*\.${tiles}\s*)\{([^}]*)\}`, "g"))];
     const stretched = rules.filter(([, selector, body]) => /grid-template-columns:[^;]*1fr/.test(body) && !selector.includes(".app-window.is-maximized"));
     assert.deepEqual(stretched.map(([, selector]) => selector.trim()).filter((selector) => !(tiles === "guide-grid" && selector === ".guide-grid")), [], `${tiles}: only the maximized rule may stretch`);
-    assert.ok(rules.some(([, selector]) => selector.includes(".app-window.is-maximized")), `${tiles}: a maximized rule exists`);
+    if (tiles === "broadcast-grid") assert.ok(rules.some(([, selector]) => selector.includes(".app-window.is-maximized")), `${tiles}: a maximized rule exists`);
   }
   assert.ok(source.includes("shownRecommendations.map("), "only the picked recommendations are rendered");
   assert.ok(!source.includes("content.searchRecommendations.map("));
@@ -1239,4 +1244,15 @@ test("UI-09: at 521–900px a shortcut label wraps inside the icon width, two li
   }
   // The PC label is not touched: no rule for the label outside this width.
   assert.doesNotMatch(styles.replace(block, ""), /\.desktop-icon-label/);
+});
+
+test("owner 2026-11-18 (round 2): «Справочник» draws every tile through GuideTile and has a sections index", () => {
+  const documents = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
+  assert.equal((documents.match(/className=\{`guide-tile/g) ?? []).length, 1, "the tile markup exists once");
+  assert.equal((documents.match(/<GuideTile /g) ?? []).length, 2, "the section grid and the block «Карточки» use it");
+  assert.ok(documents.includes('<nav className="guide-index" aria-label="Разделы справочника">'));
+  assert.ok(documents.includes('<div className="guide-layout">'));
+  // A tile is always 4:3: the cover never gets the free ratio of an old frame.
+  assert.ok(documents.includes("tileFraming(item.coverFraming)") && /ratio !== undefined \? \{ x: framing\.x, y: framing\.y, zoom: framing\.zoom \}/.test(documents));
+  assert.match(styles, /\.guide-tile-cover img \{[^}]*object-position: 50% 50%/);
 });
