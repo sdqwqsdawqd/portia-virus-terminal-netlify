@@ -2671,9 +2671,18 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .app-window.is-maximized .promotion-gate:not(:has(> form)) > p { grid-column: 2 / -1; }
   .app-window.is-maximized .promotion-gate input { max-width: var(--field-max); }
   .app-window.is-maximized .promotion-flow-list { display: grid; gap: 24px; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 2)), 1fr)); }
+  /* UAT 2026-11-16 gap 3 (владелец: пустая треть «Настроек», статья и запись в узкой колонке): «Настройки» — группы сеткой до 3 колонок
+     на всю панель (она несёт фон, поэтому фон и полоса прокрутки доходят до края окна); заголовок, «Содержимое сайта» и подвал — на все колонки.
+     Статья «Справочника» и запись/документ «Базы вирусов» — на всю панель; запись привязана к .archive-grid, шаблон «Повышения»
+     (.template-card-preview, файл 1060px, D-55) не затронут. «Информация», «Сводка», «Сотрудники», «Корзина» не менялись: жалобы не было (D-10). */
+  .app-window.is-maximized .settings-app { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 48px) / 3)), 1fr)); column-gap: 24px; align-content: start; }
+  .app-window.is-maximized .settings-app > header, .app-window.is-maximized .settings-app > .content-control-entry, .app-window.is-maximized .settings-app > .settings-footer { grid-column: 1 / -1; }
+  .app-window.is-maximized .guide-page { max-width: none; }
+  .app-window.is-maximized .archive-grid .record-document { width: auto; }
+  .app-window.is-maximized .archive-document-paper { width: calc(100% - 42px); }
 }
-/* R3 (D-19): две колонки только у плоских форм — профиль сотрудника, форма вируса в редакторе, группы настроек; не шире 1320px.
-   Блоки, одноколоночные по природе, занимают обе колонки. У «Настроек» сетка стоит на самой панели с фоном: 2 × 648px + 24px = 1320px. */
+/* R3 (D-19): две колонки только у плоских форм — профиль сотрудника и форма вируса в редакторе; не шире 1320px.
+   Блоки, одноколоночные по природе, занимают обе колонки. «Настройки» — из R3 перенесены в блок развёрнутого окна (UAT 2026-11-16 gap 3). */
 @media (min-width: 1281px) {
   .app-window.is-maximized .personnel-profile-body, .app-window.is-maximized .virus-editor-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; max-width: 1320px; }
   .app-window.is-maximized .personnel-profile-body > .personnel-profile-head, .app-window.is-maximized .personnel-profile-body > .personnel-biography, .app-window.is-maximized .personnel-profile-body > .personnel-stats:only-of-type { grid-column: 1 / -1; }
@@ -2681,8 +2690,6 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .app-window.is-maximized .virus-editor-form > :not(.editor-group), .app-window.is-maximized .virus-editor-form > .editor-group.stack { grid-column: 1 / -1; }
   .app-window.is-maximized .virus-editor-form > .editor-group { margin-bottom: 0; }
   .app-window.is-maximized .employee-profile-editor { max-width: 1320px; }
-  .app-window.is-maximized .settings-app { display: grid; grid-template-columns: repeat(2, minmax(0, 648px)); column-gap: 24px; align-content: start; }
-  .app-window.is-maximized .settings-app > header, .app-window.is-maximized .settings-app > .content-control-entry, .app-window.is-maximized .settings-app > .settings-footer { grid-column: 1 / -1; }
 }
 /* Раскладка вкладок редактора (UI-04, D-13b): одна липкая панель nav · status · actions под строкой вкладок; цвета — вне блока.
    z-index 4: выше оглавления (.editor-toc, 3), ниже панели оформления, диалогов и уведомлений. Причины отказа — строки под панелью. */
