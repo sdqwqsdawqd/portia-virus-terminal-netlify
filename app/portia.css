@@ -2699,6 +2699,10 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 /* Раскладка вкладок редактора (UI-04, D-13b): одна липкая панель nav · status · actions под строкой вкладок; цвета — вне блока.
    z-index 4: выше оглавления (.editor-toc, 3), ниже панели оформления, диалогов и уведомлений. Причины отказа — строки под панелью. */
 .etab-bar { position: sticky; top: 0; z-index: 4; box-sizing: border-box; display: flex; align-items: center; gap: 8px; min-height: 48px; margin: 0 0 8px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+/* UAT 2026-11-16 gap 7: в колоночном flex «Повышения» панель с min-height: 48px сжималась до 48px, и вторая строка черновика рисовалась поверх фильтров и кнопки сброса привязки; панель, строки сообщений, конфликт, панель инструментов и раскрывашка очистки не сжимаются, а при нехватке высоты редактор прокручивается (рабочее место — flex: 1 1 0, не тронуто). */
+.etab-bar { flex-shrink: 0; }
+.promotion-editor > .etab-bar, .promotion-editor > .etab-message, .promotion-editor > .promotion-editor-conflict, .promotion-editor > .promotion-requests-toolbar, .promotion-editor > .promotion-cleanup-disclosure { flex: none; }
+.promotion-editor { overflow-y: auto; }
 .etab-nav { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; overflow-x: auto; white-space: nowrap; }
 .etab-status { flex: 0 1 auto; min-width: 0; margin: 0 0 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* WR-04: .editor-save-status.error даёт white-space: normal (0,2,0) и перебивал бы .etab-status (0,1,0): в панели статус остаётся одной строкой с многоточием, полный текст — в title. Здесь (0,3,0). */
