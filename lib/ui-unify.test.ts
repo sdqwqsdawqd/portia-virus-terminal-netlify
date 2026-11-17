@@ -457,6 +457,36 @@ test("UI-05: the window controls sit flush in the top-right corner of the title 
   assert.equal(lastDeclaration(portiaCss, ".window-edge-ne", "cursor"), "nesw-resize");
 });
 
+// UAT 2026-11-16 gap 2: the 1px frame of the window used to lie between the 46x46 close button and the window edge (the border sat
+// outside the overflow clip), so the top and right strip, and the radius step (inner 9px against outer 10px), belonged to the window.
+// Now the frame is a non-interactive overlay and the button reaches the outer edge; the radius 10px clips it to the window outline.
+test("UI-05 (UAT 2026-11-16): the window frame is a non-interactive overlay, so the close button owns the corner", () => {
+  const ACTIVE_BORDER = "oklch(.536 calc(.043 * var(--accent-chroma)) var(--accent-hue))";
+  assert.equal(lastDeclaration(cascadeCss, ".app-window", "border"), "0", "the window box itself has no border");
+  assert.equal(lastDeclaration(cascadeCss, ".app-window", "border", PHONE), "0", "the phone rules do not give the border back");
+  for (const property of ["border-width", "border-top", "border-right", "border-top-width", "border-right-width"]) {
+    assert.equal(lastDeclaration(cascadeCss, ".app-window", property, PHONE), undefined, `.app-window has no ${property}`);
+  }
+  const frame = ".app-window::after";
+  assert.equal(lastDeclaration(cascadeCss, frame, "content"), '""');
+  assert.equal(lastDeclaration(cascadeCss, frame, "position"), "absolute");
+  assert.equal(lastDeclaration(cascadeCss, frame, "inset"), "0");
+  assert.equal(lastDeclaration(cascadeCss, frame, "border"), "1px solid var(--line-bright)");
+  assert.equal(lastDeclaration(cascadeCss, frame, "border-radius"), "inherit");
+  assert.equal(lastDeclaration(cascadeCss, frame, "pointer-events"), "none", "the frame never takes a click from the controls (T-26-35)");
+  assert.equal(lastDeclaration(cascadeCss, frame, "background"), undefined, "the frame draws a line only, no fill (T-26-35)");
+  const frameZ = Number(lastDeclaration(cascadeCss, frame, "z-index"));
+  assert.ok(Number.isInteger(frameZ) && frameZ > Number(lastDeclaration(portiaCss, ".window-controls", "z-index")), "the frame is above the controls");
+  assert.equal(lastDeclaration(cascadeCss, ".app-window.is-active::after", "border-color"), ACTIVE_BORDER, "the active frame colour is the old one");
+  assert.equal(lastDeclaration(cascadeCss, ".app-window.is-active", "border-color"), ACTIVE_BORDER, "the old active rule stays as history");
+  // D-03: the window radius and the 8px gap of the maximized window do not change.
+  assert.equal(lastDeclaration(cascadeCss, ".app-window", "border-radius"), "var(--radius-window)");
+  assert.match(lastDeclaration(cascadeCss, ".app-window.is-maximized", "inset") ?? "", /^8px/u);
+  // The overlay lives in the ui-unify block, after the rules it overrides.
+  assert.ok(unifyBlock(portiaCss).text.includes(".app-window::after"), "the frame rule is inside the ui-unify block");
+  assert.ok(lastRuleIndex(portiaCss, ".app-window", "border") > lastRuleIndex(portiaCss, ".app-window.is-active", "border-color"));
+});
+
 test("UI-05 / D-22: on a phone the window controls are 46x46 too, flush in the corner, without a drawn frame", () => {
   assert.equal(lastDeclaration(portiaCss, WINDOW_BUTTON, "width", PHONE), "46px");
   assert.equal(lastDeclaration(portiaCss, WINDOW_BUTTON, "height", PHONE), "46px");
