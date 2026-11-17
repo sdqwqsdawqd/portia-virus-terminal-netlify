@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed 26-15-PLAN.md
-last_updated: "2026-11-17T02:24:14.504Z"
+stopped_at: Completed PORTIA-26-16-PLAN.md
+last_updated: "2026-11-17T02:28:17.229Z"
 last_activity: 2026-11-17
 last_activity_desc: Phase PORTIA-26 execution resumed (wave continue)
-state_head: 86ffd298703249f379ca55056eb7543bf3793701
+state_head: f89e1f2a86adbcb899a9dcfbc6aace9cb40957a2
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 70
-  completed_plans: 65
+  completed_plans: 66
 ---
 
 # Project State
@@ -104,6 +104,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase 26 P13 | 7 min | 2 tasks | 7 files |
 | Phase 26 P14 | 12 min | 3 tasks | 4 files |
 | Phase PORTIA-26 P15 | 14 min | 2 tasks | 6 files |
+| Phase PORTIA-26 P16 | 12 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -345,6 +346,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26]: 26-14: will-change ярлыков по Phase 19 (D-17) — постоянный у частей знаков, у контейнера .desktop-icon отсутствует; противоречие UI-SPEC записано владельцу
 - [Phase PORTIA-26]: 26-15: PORTIA start menu keydown/pointerdown listeners run in the capture phase; Escape is marked handled before the quest toast listener
 - [Phase PORTIA-26]: 26-15: availableRecordsLimit(maximized) is the single place for the Available records limit (8 normal, unbounded maximized)
+- [Phase PORTIA-26]: 26-16: рамка окна — неинтерактивный слой .app-window::after (border окна 0), крестик доходит до края; .portia-dialog margin: auto
 
 ### Pending Todos
 
@@ -398,8 +400,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-17T02:24:13.436Z
-Stopped at: Completed 26-15-PLAN.md
+Last session: 2026-11-17T02:28:16.124Z
+Stopped at: Completed PORTIA-26-16-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
