@@ -178,6 +178,21 @@ test("WR-01: the draft row is one more line of the same sticky bar, after the na
   assert.equal(draftRules.length, 0, "the draft row is not sticky on its own");
 });
 
+// UAT 2026-11-16 gap 7: in the column flex of the promotion editor the sticky bar (min-height 48px) was shrunk to 48px, so the
+// second row of the draft was painted over the filters and the reset button below it.
+test("UAT 2026-11-16 gap 7: the sticky bar never shrinks under its rows in a column flex", () => {
+  assert.equal(declared(".etab-bar", "flex-shrink"), "0");
+  assert.equal(declared(".etab-bar", "flex-shrink", PHONE), "0", "a phone rule does not give the shrink back");
+  for (const child of ["etab-bar", "etab-message", "promotion-editor-conflict", "promotion-requests-toolbar", "promotion-cleanup-disclosure"]) {
+    assert.equal(declared(`.promotion-editor > .${child}`, "flex"), "none", `${child} keeps its own height`);
+  }
+  assert.equal(declared(".promotion-editor", "overflow-y"), "auto", "a short window scrolls the editor instead of cutting it");
+  assert.equal(declared(".promotion-editor-workbench", "flex"), "1 1 0", "the workbench still takes the rest");
+  const main = stripComments(lf(readFileSync(new URL("../components/portia-promotion-editor-main.tsx", import.meta.url), "utf8")));
+  assert.match(main, /<div className="promotion-editor">\s*<EditorActionBar/, "the bar is a direct child of div.promotion-editor");
+  assert.match(main, /<>\s*<div className="promotion-requests-toolbar">/, "the toolbar is a direct child of div.promotion-editor (inside a fragment)");
+});
+
 test("D-13b: the floating save chip and its popover are gone; the sr-only live region and the discard dialog stay", () => {
   const code = stripComments(editor);
   for (const gone of ["chipVisible", "chipLabel", "chipText", "popoverOpen", "chipRef", "popoverId", "editor-save-chip", "editor-save-popover"]) {
