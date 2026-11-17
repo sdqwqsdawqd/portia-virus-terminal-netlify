@@ -1,14 +1,14 @@
 ---
-status: diagnosed
+status: partial
 phase: PORTIA-26-edinyy-stil-sayta
 source: [26-VERIFICATION.md]
 started: 2026-11-16T18:10:00Z
-updated: 2026-11-16T23:10:00Z
+updated: 2026-11-17T04:07:19.444Z
 ---
 
 ## Current Test
 
-[testing complete — owner reported issues 2026-11-16, screenshots in C:/Users/User/Downloads/Screenshot 2026-11-16 2255*.png … 2303*.png, asdasdas.png]
+[testing complete]
 
 ## Tests
 
@@ -38,7 +38,7 @@ reason: Контент не загружается локально (`GET /api/c
 
 ### 5. Ярлыки 521–900px (UI-09)
 expected: Перетаскивание, прокрутка, поворот.
-result: [pending]
+result: pass
 
 ### 6. Иконки классификации на 16–24px (UI-07)
 expected: Уровень читается по рисунку.
@@ -48,18 +48,18 @@ severity: minor
 
 ### 7. axe и скринридер (UI-10, A11Y-SR-01)
 expected: Без нарушений.
-result: [pending]
+result: pass
 
 ### 8. Регрессии 2026-10-28 на устройстве (UI-11)
 expected: Клэмп окна, резкость ярлыка.
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 8
-passed: 0
+passed: 3
 issues: 4
-pending: 3
+pending: 0
 skipped: 0
 blocked: 1
 
