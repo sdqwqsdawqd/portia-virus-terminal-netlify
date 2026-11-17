@@ -6,10 +6,10 @@ current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
 stopped_at: Completed PORTIA-26-20-PLAN.md
-last_updated: "2026-11-17T02:52:13.803Z"
+last_updated: "2026-11-17T03:40:51.350Z"
 last_activity: 2026-11-17
 last_activity_desc: Phase PORTIA-26 execution resumed (wave continue)
-state_head: 00945baf721d6928bd4cc03863fba66756ba639b
+state_head: f8222d35993bf430539153a9178928856e203c9e
 progress:
   total_phases: 7
   completed_phases: 3
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 Phase: PORTIA-26 (Единый стиль сайта) — READY TO EXECUTE
 Plan: 14 of 14
 Status: Executing Phase PORTIA-26
-Last activity: 2026-11-17 — Phase PORTIA-26 execution resumed (wave continue)
+Last activity: 2026-11-17 - Completed quick task 261117-bi1: крестик развёрнутого окна в углу, отзыв привязки ника в строке вкладок, список редактора до низа, анимации помощницы
 
 Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 — принятый риск; Phase 22 не закрыта)
 
@@ -390,6 +390,7 @@ Full decision history: `.planning/PROJECT.md`.
 | 261104-lkn | Редактор «Повышения»: очередь, раздельные создание и выдача заданий, прокрутка и мобильная ширина | 2026-11-04 | 97d7abb, 2f54ba9 | [261104-lkn-pererabotat-interfeys-redaktora-povyshen](./quick/261104-lkn-pererabotat-interfeys-redaktora-povyshen/) |
 | 261104-m6g | Мобильная ширина, кнопки и список квалификаций, GIF помощника и свой цвет | 2026-11-04 | 23c1c85, 7e5e17a | [261104-m6g-ispravit-mobilnyy-sdvig-stranitsy-pri-ot](./quick/261104-m6g-ispravit-mobilnyy-sdvig-stranitsy-pri-ot/) |
 | 261109-brj | Папки фаз v1.3 перенесены в milestones/v1.3-phases, тесты и гейты релиза читают архив v1.3 | 2026-11-09 | 3bfa520, 9b3230e | [261109-brj-repoint-tests-and-scripts-to-the-v1-3-ar](./quick/261109-brj-repoint-tests-and-scripts-to-the-v1-3-ar/) |
+| 261117-bi1 | Крестик развёрнутого окна в углу, отзыв привязки ника в строке вкладок, список редактора до низа, анимации помощницы | 2026-11-17 | f8222d3 | [261117-bi1-krestik-v-ugol-otzyv-privyazki-nika-v-od](./quick/261117-bi1-krestik-v-ugol-otzyv-privyazki-nika-v-od/) |
 
 ### Roadmap Evolution
 
