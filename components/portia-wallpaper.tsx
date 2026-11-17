@@ -62,20 +62,22 @@ const helices = [
   { x: 880, amplitude: 18, period: 144, opacity: 0.12 },
 ].map((column) => ({ ...column, ...helixColumn(column.x, 0, HELIX_LOOP * 3, column.amplitude, column.period) }));
 
-// Owner 2026-11-18: more helices, some lying at ±45°. Each tilted one is drawn along its own axis (five loops long, centred on its point, so its ends stay off screen while it drifts) and
-// drifts along that axis by one loop, half of them the other way; the vertical columns keep scrolling together as before.
-// Only transform animates; reduced and off motion stop it through the global `.desktop-wallpaper *` rule.
+// Owner 2026-11-18 (round 2): the tilted helices are one parallel family, not a mix of angles and directions.
+// Same angle (axis from upper-left to lower-right), amplitude, period and opacity; the centres lie on the lines x - y = -200, -420, -640,
+// evenly spaced, in the lower left, so they never meet each other or the vertical columns (the leftmost column starts at x 862).
+// Each one is drawn along its own axis (five loops long, centred on its point, so its ends stay off screen) and drifts along it by one loop
+// in the same direction at the same pace as the vertical scroll. Only transform animates; reduced and off motion stop it through the global
+// `.desktop-wallpaper *` rule.
 const tiltedHelices = [
-  { x: 1180, y: 520, angle: 45, amplitude: 26, period: 240, opacity: 0.18, seconds: 70, reverse: false },
-  { x: 760, y: 300, angle: -45, amplitude: 18, period: 180, opacity: 0.11, seconds: 54, reverse: true },
-  { x: 1320, y: 140, angle: -45, amplitude: 14, period: 144, opacity: 0.12, seconds: 46, reverse: false },
-  { x: 960, y: 780, angle: 45, amplitude: 20, period: 360, opacity: 0.1, seconds: 84, reverse: true },
+  { x: 350, y: 550, angle: -45, amplitude: 20, period: 240, opacity: 0.12 },
+  { x: 240, y: 660, angle: -45, amplitude: 20, period: 240, opacity: 0.12 },
+  { x: 130, y: 770, angle: -45, amplitude: 20, period: 240, opacity: 0.12 },
 ].map((helix) => ({ ...helix, ...helixColumn(0, -HELIX_LOOP * 2.5, HELIX_LOOP * 5, helix.amplitude, helix.period) }));
 
 function WallpaperTiltedHelices() {
   return <svg className="desktop-wallpaper desktop-wallpaper-tilted" viewBox="0 0 1440 900" preserveAspectRatio="xMaxYMin slice">
     {tiltedHelices.map((helix) => <g key={`${helix.x}-${helix.y}`} transform={`translate(${helix.x} ${helix.y}) rotate(${helix.angle})`}>
-      <g className={`wallpaper-helix wallpaper-helix-drift${helix.reverse ? " is-reverse" : ""}`} style={{ opacity: helix.opacity, animationDuration: `${helix.seconds}s` }}>
+      <g className="wallpaper-helix wallpaper-helix-drift" style={{ opacity: helix.opacity }}>
         <path d={helix.a} /><path d={helix.b} /><path d={helix.rungs} className="wallpaper-rungs" />
       </g>
     </g>)}

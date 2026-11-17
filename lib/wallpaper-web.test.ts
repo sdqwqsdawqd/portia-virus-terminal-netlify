@@ -921,3 +921,29 @@ test("D-53 (20-37) the footfall wave runs along the heading or against it, one w
   assert.equal(forward.slots[0].dir, 1, "along the heading: toward the b end of a thread that points that way");
   assert.equal(backward.slots[0].dir, -1, "against the heading: toward the a end");
 });
+
+test("owner 2026-11-18 (round 2): the tilted helices are one parallel family that crosses nothing", () => {
+  const source = readFileSync(new URL("../components/portia-wallpaper.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
+  const body = /const tiltedHelices = \[([\s\S]*?)\]\.map\(/.exec(source)?.[1] ?? "";
+  const entries = [...body.matchAll(/\{([^{}]*)\}/g)].map((match) => Object.fromEntries([...match[1].matchAll(/(\w+):\s*(-?[\d.]+|true|false)/g)].map(([, key, value]) => [key, value])));
+  assert.ok(entries.length >= 3, "a family of at least three helices");
+  const num = (entry: Record<string, string>, key: string) => Number(entry[key]);
+  for (const key of ["angle", "amplitude", "period", "opacity"]) assert.equal(new Set(entries.map((entry) => entry[key])).size, 1, `${key} is shared by the whole family`);
+  assert.ok(entries.every((entry) => entry.reverse === undefined && entry.seconds === undefined), "no per-helix direction or speed");
+  assert.equal(num(entries[0], "angle"), -45);
+  // The strands run along x - y = const; evenly spaced lines, all left of the leftmost vertical column (x 880, amplitude 18) with a margin.
+  const offsets = entries.map((entry) => num(entry, "x") - num(entry, "y")).sort((a, b) => a - b);
+  const gaps = offsets.slice(1).map((value, index) => value - offsets[index]);
+  assert.ok(gaps.every((gap) => gap > 0 && Math.abs(gap - gaps[0]) < 1e-9), `evenly spaced: ${offsets.join(", ")}`);
+  for (const entry of entries) {
+    assert.ok(900 + (num(entry, "x") - num(entry, "y")) + num(entry, "amplitude") * 1.5 <= 820, `${entry.x},${entry.y} stays left of the vertical columns`);
+    assert.equal(720 % num(entry, "period"), 0, "one loop of 720 keeps the drift seamless");
+  }
+  const tilted = /function WallpaperTiltedHelices\(\) \{[\s\S]*?\n\}/.exec(source.replace(/\r\n/g, "\n"))?.[0] ?? "";
+  assert.ok(tilted.includes("wallpaper-helix-drift"), "the family component is found");
+  assert.doesNotMatch(tilted, /is-reverse|animationDuration/);
+  assert.equal((css.match(/animation:\s*helix-drift\b/g) ?? []).length, 1, "one helix-drift animation");
+  assert.doesNotMatch(css, /wallpaper-helix-drift\.is-reverse|animation-direction:\s*reverse/);
+  assert.match(css, /@keyframes helix-drift \{ from \{ transform: translateY\(0\); \} to \{ transform: translateY\(-720px\); \} \}/, "one loop of 720");
+});

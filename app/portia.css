@@ -1672,9 +1672,9 @@ html[data-motion="full"] .desktop-wallpaper-grid { animation: helix-scroll 60s l
 @keyframes helix-scroll { to { transform: translate3d(0, calc(100% / -3), 0); } }
 .wallpaper-helix path { stroke-width: 1.5; }
 .wallpaper-helix .wallpaper-rungs { stroke-width: 1; opacity: .7; }
-/* Владелец 2026-11-18: наклонные спирали (±45°) ползут вдоль своей оси на одну петлю (720 единиц), половина — в обратную сторону. */
+/* Owner 2026-11-18 (round 2): the tilted helices form one parallel family; each drifts along its own axis by one loop (720 units) in 60 s,
+   the same 12 units/s as the vertical scroll (rotate(-45) makes local -y point up-left), so every helix rises at one pace. One loop keeps the seam invisible. */
 html[data-motion="full"] .wallpaper-helix-drift { animation: helix-drift 60s linear infinite; }
-html[data-motion="full"] .wallpaper-helix-drift.is-reverse { animation-direction: reverse; }
 @keyframes helix-drift { from { transform: translateY(0); } to { transform: translateY(-720px); } }
 /* «Гель»: soft lane columns fading downward, wells, a labelled ladder. Sample bands creep down their lanes, leave
    through the bottom fade and come back in at the top; the ladder and its labels stay still, and the glow breathes
@@ -2665,29 +2665,32 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .app-window.is-maximized > .access-redacted-block { box-sizing: border-box; height: calc(100% - 46px); max-height: none; }
 }
 /* access-levels:end */
-/* Владелец 2026-11-18: предметы Вивьян (svg .assistant-items поверх картинки, components/portia-companion-items.tsx) двигаются вместе с ней:
-   копии всех правил картинки в том же порядке — наведение, нажатие, обида, прыжки, уменьшенные и выключенные анимации. Сами правила картинки не тронуты. */
-.assistant-button .assistant-items { display: block; width: 100%; height: auto; object-fit: contain; user-select: none; pointer-events: none; filter: none; transform-origin: 50% 100%; transition: transform 220ms var(--ease-out), filter 360ms ease, opacity 360ms ease; }
-.assistant-button:hover .assistant-items, .assistant-button:focus-visible .assistant-items { transform: translate(-2px, -3px) rotate(-4deg) scale(1.03); filter: drop-shadow(0 0 8px rgba(var(--desktop-glow), .28)); }
-.assistant-button:active .assistant-items { transform: translateY(1px) scale(.97); }
-.desktop-assistant.is-offended .assistant-button .assistant-items { transform: none; translate: 0 4px; rotate: -3deg; scale: -1 .94; filter: brightness(.92) grayscale(.85) saturate(.4); opacity: .78; }
-.desktop-assistant[data-mood="3"]:not(.is-offended) .assistant-button .assistant-items { filter: brightness(1.02); }
-html[data-motion="full"] .desktop-assistant.is-speaking[data-auto]:not(.is-offended) .assistant-button .assistant-items { animation: vivian-hop 620ms; }
-html[data-motion="full"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-button .assistant-items { animation: vivian-squish-a 320ms var(--ease-out); }
-html[data-motion="full"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-button .assistant-items { animation: vivian-squish-b 320ms var(--ease-out); }
-html[data-motion="full"] .desktop-assistant[data-mood="3"][data-squish="a"]:not(.is-offended) .assistant-button .assistant-items { animation: vivian-huff-a 500ms ease-out; }
-html[data-motion="full"] .desktop-assistant[data-mood="3"][data-squish="b"]:not(.is-offended) .assistant-button .assistant-items { animation: vivian-huff-b 500ms ease-out; }
-html[data-motion="full"] .desktop-assistant.is-offended .assistant-button .assistant-items { animation: vivian-offended 660ms cubic-bezier(.3, .7, .3, 1) both; }
-html[data-motion="full"] .desktop-assistant.is-recovering .assistant-button .assistant-items { animation: vivian-recover 780ms var(--ease-out) both; }
-html[data-motion="reduced"] .desktop-assistant.is-speaking[data-auto]:not(.is-offended) .assistant-button .assistant-items { animation: vivian-bounce var(--motion-base) var(--ease-out) !important; }
-html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-button .assistant-items { animation: vivian-bounce-a var(--motion-base) var(--ease-out) !important; }
-html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-button .assistant-items { animation: vivian-bounce-b var(--motion-base) var(--ease-out) !important; }
-html[data-motion="reduced"] .desktop-assistant.is-offended .assistant-button .assistant-items { animation: vivian-sink var(--motion-base) var(--ease-out) both !important; }
-html[data-motion="reduced"] .desktop-assistant.is-recovering .assistant-button .assistant-items { animation: vivian-bounce var(--motion-base) var(--ease-out) !important; }
-html[data-motion="reduced"] .assistant-button .assistant-items { transition-duration: var(--motion-fast); }
-html[data-motion="off"] .desktop-assistant .assistant-button .assistant-items { animation: none !important; }
-html[data-motion="off"] .assistant-button:hover .assistant-items, html[data-motion="off"] .assistant-button:focus-visible .assistant-items, html[data-motion="off"] .assistant-button:active .assistant-items { transform: none; }
-.assistant-button .assistant-items { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+/* Owner 2026-11-18 (round 2): Vivian's items (svg .assistant-items, components/portia-companion-items.tsx) sit next to her button inside .assistant-figure,
+   NOT inside it, so the accent filter on .assistant-button never reaches them and they keep their own colours. They still move with her:
+   copies of every picture rule in the same order (hover, press, sulking, hops, reduced and off motion) through the sibling selector.
+   The temporary sulking state (grey, 0.78 opacity) is a mood of the figure, not the accent, so the items mirror it. The picture rules are untouched. */
+.assistant-figure { position: relative; display: block; width: 100%; }
+.assistant-items { display: block; width: 100%; height: auto; object-fit: contain; user-select: none; pointer-events: none; filter: none; transform-origin: 50% 100%; transition: transform 220ms var(--ease-out), filter 360ms ease, opacity 360ms ease; }
+.assistant-button:hover + .assistant-items, .assistant-button:focus-visible + .assistant-items { transform: translate(-2px, -3px) rotate(-4deg) scale(1.03); filter: drop-shadow(0 0 8px rgba(var(--desktop-glow), .28)); }
+.assistant-button:active + .assistant-items { transform: translateY(1px) scale(.97); }
+.desktop-assistant.is-offended .assistant-items { transform: none; translate: 0 4px; rotate: -3deg; scale: -1 .94; filter: brightness(.92) grayscale(.85) saturate(.4); opacity: .78; }
+.desktop-assistant[data-mood="3"]:not(.is-offended) .assistant-items { filter: brightness(1.02); }
+html[data-motion="full"] .desktop-assistant.is-speaking[data-auto]:not(.is-offended) .assistant-items { animation: vivian-hop 620ms; }
+html[data-motion="full"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-items { animation: vivian-squish-a 320ms var(--ease-out); }
+html[data-motion="full"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-items { animation: vivian-squish-b 320ms var(--ease-out); }
+html[data-motion="full"] .desktop-assistant[data-mood="3"][data-squish="a"]:not(.is-offended) .assistant-items { animation: vivian-huff-a 500ms ease-out; }
+html[data-motion="full"] .desktop-assistant[data-mood="3"][data-squish="b"]:not(.is-offended) .assistant-items { animation: vivian-huff-b 500ms ease-out; }
+html[data-motion="full"] .desktop-assistant.is-offended .assistant-items { animation: vivian-offended 660ms cubic-bezier(.3, .7, .3, 1) both; }
+html[data-motion="full"] .desktop-assistant.is-recovering .assistant-items { animation: vivian-recover 780ms var(--ease-out) both; }
+html[data-motion="reduced"] .desktop-assistant.is-speaking[data-auto]:not(.is-offended) .assistant-items { animation: vivian-bounce var(--motion-base) var(--ease-out) !important; }
+html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-items { animation: vivian-bounce-a var(--motion-base) var(--ease-out) !important; }
+html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-items { animation: vivian-bounce-b var(--motion-base) var(--ease-out) !important; }
+html[data-motion="reduced"] .desktop-assistant.is-offended .assistant-items { animation: vivian-sink var(--motion-base) var(--ease-out) both !important; }
+html[data-motion="reduced"] .desktop-assistant.is-recovering .assistant-items { animation: vivian-bounce var(--motion-base) var(--ease-out) !important; }
+html[data-motion="reduced"] .assistant-items { transition-duration: var(--motion-fast); }
+html[data-motion="off"] .desktop-assistant .assistant-items { animation: none !important; }
+html[data-motion="off"] .assistant-button:hover + .assistant-items, html[data-motion="off"] .assistant-button:focus-visible + .assistant-items, html[data-motion="off"] .assistant-button:active + .assistant-items { transform: none; }
+.assistant-items { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 /* Настройки предметов: список и добавление файла или ссылки, компактно, на всю ширину группы. */
 .companion-settings { display: grid; gap: 8px; }
 .companion-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
