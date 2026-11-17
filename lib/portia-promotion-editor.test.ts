@@ -45,7 +45,7 @@ test("claim is the gate for mutations and cleanup stays an unobtrusive hint", ()
 test("owner/admin can reset a binding by exact nickname while selected reset keeps its existing guard", () => {
   assert.ok(main.includes("promotion-device-reset"));
   assert.ok(main.includes('maxLength={64}'));
-  assert.ok(main.includes("СБРОСИТЬ ПРИВЯЗКУ ПО НИКУ"));
+  assert.ok(main.includes("disabled={!resetNickname.trim()}>СБРОСИТЬ ПРИВЯЗКУ</button>"));
   assert.ok(main.includes("{canManageEditors && <form"));
   assert.ok(main.includes('reviewerCommand("reset-device"'));
 });

@@ -192,10 +192,11 @@
    Форма — потомок nav веток (тест D-13b закрепляет nav как первый узел слота), узкое окно переносит её на вторую строку полосы. */
 @media (width > 900px) {
   .promotion-editor-branches:has(> .promotion-device-reset) { flex: 1 1 auto; flex-wrap: wrap; row-gap: 4px; min-width: 0; }
-  .promotion-editor-branches > .promotion-device-reset { flex: none; margin: 0 0 0 auto; padding: 0; border: 0; background: transparent; width: auto; align-items: center; }
+  /* Подпись — только для экранного диктора, подсказка в самом поле: форма — один ряд по центру кнопок веток (снимок владельца 2026-11-17). */
+  .promotion-editor-branches > .promotion-device-reset { flex: none; align-self: center; margin: 0 0 0 auto; padding: 0; border: 0; background: transparent; width: auto; align-items: center; }
   .promotion-editor-branches > .promotion-device-reset label { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; font-size: 10px; white-space: nowrap; }
-  .promotion-editor-branches > .promotion-device-reset input { flex: 0 1 200px; width: 200px; min-width: 0; }
-  .promotion-editor-branches > .promotion-device-reset button { flex: none; max-width: none; white-space: nowrap; box-shadow: none; }
+  .promotion-editor-branches > .promotion-device-reset input { flex: 0 1 180px; width: 180px; min-width: 0; min-height: 40px; }
+  .promotion-editor-branches > .promotion-device-reset button { flex: none; max-width: none; min-height: 40px; white-space: nowrap; box-shadow: none; }
 }
 /* Телефон: прокручивает страница; clip вместо auto, чтобы панель держалась под системной полосой 48px, как у остальных вкладок. */
 @media (max-width: 900px) {

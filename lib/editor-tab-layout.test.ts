@@ -602,7 +602,7 @@ test("261117-bi1 R2: the device-reset form is defined once, stands in the branch
   const toolbar = promotionSlice('<div className="promotion-requests-toolbar">', '<div className="promotion-editor-workbench etab-body">');
   assert.ok(toolbar.includes("{isPhone && deviceReset}"), "on a phone the form keeps its place in the request toolbar");
   assert.ok(toolbar.indexOf("{isPhone && deviceReset}") > toolbar.indexOf("promotion-queue-filters"), "after the filters, as before");
-  for (const text of ["Точный ник для отзыва привязки", "СБРОСИТЬ ПРИВЯЗКУ ПО НИКУ", "maxLength={64}", 'confirmLabel: "Сбросить привязку", cancelLabel: "Не сбрасывать", run: () => void resetDevice(key)']) {
+  for (const text of ['<span className="sr-only">Точный ник для отзыва привязки</span>', 'placeholder="Ник для сброса привязки"', "disabled={!resetNickname.trim()}>СБРОСИТЬ ПРИВЯЗКУ</button>", "maxLength={64}", 'confirmLabel: "Сбросить привязку", cancelLabel: "Не сбрасывать", run: () => void resetDevice(key)']) {
     assert.equal(promotionMain.split(text).length - 1, 1, `${text}: unchanged, once`);
   }
 });
@@ -616,6 +616,15 @@ test("261117-bi1 R2: the form in the strip is inline and frameless, wraps to a s
   assert.equal(declaredIn(promotionRules, `${form} label`, "display", DESKTOP), "flex");
   assert.equal(declaredIn(promotionRules, `${form} label`, "align-items", DESKTOP), "center");
   assert.equal(declaredIn(promotionRules, ".promotion-editor-branches:has(> .promotion-device-reset)", "flex-wrap", DESKTOP), "wrap", "a narrow window wraps the form instead of hiding it in a scroll");
+});
+
+test("261117-bi1 R2 fix: in the strip the form is one compact row, centred on the branch buttons (owner screenshot 2026-11-17)", () => {
+  const form = ".promotion-editor-branches > .promotion-device-reset";
+  assert.equal(declaredIn(promotionRules, form, "align-self", DESKTOP), "center", "centred on the 40px branch buttons, not dropped to the bottom");
+  assert.equal(declaredIn(promotionRules, form, "align-items", DESKTOP), "center");
+  assert.equal(declaredIn(promotionRules, `${form} input`, "width", DESKTOP), "180px", "the field carries its own hint, so it can be short");
+  assert.equal(declaredIn(promotionRules, `${form} input`, "min-height", DESKTOP), "40px", "same height as the branch buttons");
+  assert.equal(declaredIn(promotionRules, `${form} button`, "min-height", DESKTOP), "40px");
 });
 
 // ---- 26-09 (D-12, D-11 step 4): «Пользователи» on a PC — the sections in the bar's nav slot, the rows on the left, the detail on the right ----
